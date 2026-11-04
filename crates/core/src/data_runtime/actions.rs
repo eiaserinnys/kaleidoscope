@@ -146,6 +146,7 @@ pub(crate) fn act(
                         data_meta: &runtime.data_meta_values(),
                         storage: &storage,
                         storage_meta: &storage_meta,
+                        apps: runtime.apps.as_deref(),
                         event: &event,
                         item: &item,
                         modifiers: modifiers.as_ref(),
@@ -164,6 +165,12 @@ pub(crate) fn act(
             flush_pending_state(inner, window_id, &mut pending, &mut pending_steps)?;
         }
         match step {
+            Step::StoreInstall { permission, server, id, release } => {
+                if !crate::store::install::install(inner, window_id, &permission, server, id, release)? { break; }
+            }
+            Step::StoreRemove { permission, id } => {
+                crate::store::install::remove(inner, window_id, &permission, id)?;
+            }
             Step::Worker { action, args } => {
                 let worker_action = action.clone();
                 let (app, workspace, link) = {

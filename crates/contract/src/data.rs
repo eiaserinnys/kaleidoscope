@@ -2243,6 +2243,31 @@ pub fn escape_pointer(token: &str) -> String {
     token.replace('~', "~0").replace('/', "~1")
 }
 
+/// 문자열과 주석을 제외한 식에서 앱 목록 변수를 읽는지 판정한다.
+pub fn apps_ref(expr: &str) -> bool {
+    let bytes = expr.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i..].starts_with(b"/*") {
+            i += 2;
+            while i + 1 < bytes.len() && &bytes[i..i + 2] != b"*/" { i += 1; }
+            i = (i + 2).min(bytes.len());
+        } else if bytes[i] == b'\'' || bytes[i] == b'"' {
+            let quote = bytes[i];
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' { i += 2; }
+                else if bytes[i] == quote { i += 1; break; }
+                else { i += 1; }
+            }
+        } else if bytes[i..].starts_with(b"$apps")
+            && bytes.get(i + 5).is_none_or(|b| !b.is_ascii_alphanumeric() && *b != b'_') {
+            return true;
+        } else { i += 1; }
+    }
+    false
+}
+
 /// 상태의 정적 첫 필드들을 돌려준다. 상태 자체를 참조하면 전체 변경에 의존한다.
 pub fn state_refs(expr: &str) -> Option<Vec<String>> {
     let bytes = expr.as_bytes();

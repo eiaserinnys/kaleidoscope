@@ -56,6 +56,7 @@ pub struct BindingDependencies {
     pub data_meta: Vec<String>,
     pub storage: Vec<String>,
     pub storage_meta: Vec<String>,
+    pub apps: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -77,7 +78,10 @@ pub enum SourcePlan {
         recursive: bool,
         extensions: Vec<String>,
     },
+    StoreIndex { permission: String, server: String },
+    StoreApp { permission: String, server: String, id: String },
     Invalid(String),
+    StoreInvalid(kaleidoscope_contract::CoreError),
 }
 
 pub struct Env<'a> {
@@ -86,6 +90,7 @@ pub struct Env<'a> {
     pub data_meta: &'a BTreeMap<String, Value>,
     pub storage: &'a BTreeMap<String, Value>,
     pub storage_meta: &'a BTreeMap<String, Value>,
+    pub apps: Option<&'a [kaleidoscope_contract::store::InstalledAppValue]>,
     pub event: &'a Value,
     pub item: &'a Value,
     pub modifiers: Option<&'a kaleidoscope_contract::client::EventModifiers>,
@@ -93,6 +98,8 @@ pub struct Env<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum Step {
+    StoreInstall { permission: String, server: Value, id: Value, release: Value },
+    StoreRemove { permission: String, id: Value },
     Worker {
         action: String,
         args: Option<Value>,
@@ -136,6 +143,7 @@ impl CompiledApp {
                         data_meta: data::data_meta_refs(&expr.expr),
                         storage: data::storage_refs(&expr.expr),
                         storage_meta: data::storage_meta_refs(&expr.expr),
+                        apps: data::apps_ref(&expr.expr),
                     })
                 } else {
                     None
@@ -191,14 +199,46 @@ impl CompiledApp {
         storage: &BTreeMap<String, Value>,
         storage_meta: &BTreeMap<String, Value>,
     ) -> SourcePlan {
+        self.plan_source_with_apps(name, state, data, storage, storage_meta, None)
+    }
+
+    pub fn plan_source_with_apps(
+        &self,
+        name: &str,
+        state: &BTreeMap<String, Value>,
+        data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+        apps: Option<&[kaleidoscope_contract::store::InstalledAppValue]>,
+    ) -> SourcePlan {
         let Some(source) = self.sources.get(name) else {
             return SourcePlan::Invalid("없는 원천입니다".into());
         };
         let base = format!("/sources/{}", data::escape_pointer(name));
-        let vars = Variables::new(state, data, storage, storage_meta, None, None);
+        let vars = Variables::new(state, data, storage, storage_meta, None, None).with_apps(apps);
         let plan = || -> Result<SourcePlan, String> {
             match source {
-                SourceDecl::Store(_) => Ok(SourcePlan::Invalid("스토어 모듈을 이 쉘에서 지원하지 않습니다".into())),
+                SourceDecl::Store(store) => {
+                    use data::StoreSource;
+                    let (permission, server, id) = match store {
+                        StoreSource::Index { permission, server, .. } => (permission, server, None),
+                        StoreSource::App { permission, server, id, .. } => (permission, server, Some(id)),
+                    };
+                    let server = self.binding(server, &format!("{base}/server"), state, &vars)?;
+                    if server.is_null() { return Ok(SourcePlan::Idle); }
+                    let Some(server) = server.as_str().map(str::to_owned) else {
+                        return Ok(SourcePlan::StoreInvalid(if id.is_some() { kaleidoscope_contract::errors::STORECLIENT_DETAIL_SERVER_INVALID() } else { kaleidoscope_contract::errors::STORECLIENT_INDEX_SERVER_INVALID() }));
+                    };
+                    match id {
+                        None => Ok(SourcePlan::StoreIndex { permission: permission.clone(), server }),
+                        Some(id) => {
+                            let id = self.binding(id, &format!("{base}/id"), state, &vars)?;
+                            if id.is_null() { return Ok(SourcePlan::Idle); }
+                            let Some(id) = id.as_str().map(str::to_owned) else { return Ok(SourcePlan::StoreInvalid(kaleidoscope_contract::errors::STORECLIENT_DETAIL_ID_INVALID())); };
+                            Ok(SourcePlan::StoreApp { permission: permission.clone(), server, id })
+                        }
+                    }
+                },
                 SourceDecl::Request {
                     permission,
                     path,
@@ -289,7 +329,8 @@ impl CompiledApp {
             Some(env.event),
             Some(env.item),
         )
-        .with_data_meta(env.data_meta);
+        .with_data_meta(env.data_meta)
+        .with_apps(env.apps);
         self.binding(binding, pointer, env.state, &vars)
     }
 
@@ -351,6 +392,7 @@ impl CompiledApp {
             storage,
             storage_meta,
             data_meta,
+            None,
             statuses,
             selected,
             &mut |_, _| {},
@@ -364,6 +406,7 @@ impl CompiledApp {
         storage: &BTreeMap<String, Value>,
         storage_meta: &BTreeMap<String, Value>,
         data_meta: &BTreeMap<String, Value>,
+        apps: Option<&[kaleidoscope_contract::store::InstalledAppValue]>,
         statuses: &BTreeMap<String, SourceStatus>,
         selected: Option<&BTreeSet<String>>,
         observe: &mut dyn FnMut(&BindingDependencies, f64),
@@ -378,7 +421,8 @@ impl CompiledApp {
             return BTreeMap::new();
         }
         let vars = Variables::new(state, data, storage, storage_meta, None, None)
-            .with_data_meta(data_meta);
+            .with_data_meta(data_meta)
+            .with_apps(apps);
         self.bindings
             .iter()
             .filter(|binding| selected.is_none_or(|selected| selected.contains(&binding.pointer)))
@@ -457,6 +501,7 @@ impl CompiledApp {
             Some(env.item),
         )
         .with_data_meta(env.data_meta)
+        .with_apps(env.apps)
         .with_modifiers(env.modifiers);
         match actions {
             Actions::One(set) if index == 0 => Ok(Step::SetState {
@@ -467,7 +512,22 @@ impl CompiledApp {
                 let action = actions.get(index).ok_or("없는 동작 단계입니다")?;
                 let base = format!("{pointer}/{index}");
                 match action {
-                    Action::StoreInstall(_) | Action::StoreRemove(_) => Err("스토어 모듈을 이 쉘에서 지원하지 않습니다".into()),
+                    Action::StoreInstall(action) => {
+                        let spec = &action.store_install;
+                        Ok(Step::StoreInstall {
+                            permission: spec.permission.clone(),
+                            server: self.binding(&spec.server, &format!("{base}/store.install/server"), env.state, &vars)?,
+                            id: self.binding(&spec.id, &format!("{base}/store.install/id"), env.state, &vars)?,
+                            release: self.binding(&spec.release, &format!("{base}/store.install/release"), env.state, &vars)?,
+                        })
+                    }
+                    Action::StoreRemove(action) => {
+                        let spec = &action.store_remove;
+                        Ok(Step::StoreRemove {
+                            permission: spec.permission.clone(),
+                            id: self.binding(&spec.id, &format!("{base}/store.remove/id"), env.state, &vars)?,
+                        })
+                    }
                     Action::Client(_)
                     | Action::PickFiles(_)
                     | Action::SaveFile(_)
@@ -624,6 +684,7 @@ impl CompiledApp {
         context.bind("data_meta".into(), vars.data_meta.clone());
         context.bind("storage".into(), vars.storage.clone());
         context.bind("storage_meta".into(), vars.storage_meta.clone());
+        if let Some(apps) = &vars.apps { context.bind("apps".into(), apps.clone()); }
         if let Some(event) = &vars.event {
             context.bind("event".into(), event.clone());
         }
@@ -663,6 +724,7 @@ struct Variables {
     data_meta: JValue,
     storage: JValue,
     storage_meta: JValue,
+    apps: Option<JValue>,
     event: Option<JValue>,
     item: Option<JValue>,
     modifiers: Option<JValue>,
@@ -684,6 +746,7 @@ impl Variables {
             storage_meta: JValue::from(
                 serde_json::to_value(storage_meta).expect("JSON 저장소 메타데이터"),
             ),
+            apps: None,
             event: event.cloned().map(JValue::from),
             item: item.cloned().map(JValue::from),
             modifiers: None,
@@ -705,6 +768,10 @@ impl Variables {
 
     fn with_data_meta(mut self, meta: &BTreeMap<String, Value>) -> Self {
         self.data_meta = JValue::from(serde_json::to_value(meta).expect("JSON 원천 메타데이터"));
+        self
+    }
+    fn with_apps(mut self, apps: Option<&[kaleidoscope_contract::store::InstalledAppValue]>) -> Self {
+        self.apps = apps.map(|apps| JValue::from(serde_json::to_value(apps).expect("JSON 앱 목록")));
         self
     }
 }

@@ -35,3 +35,6 @@ winreg = "0.56"
 
 [dev-dependencies]
 tempfile = "3"
+kaleidoscope-orchestrator = { path = "../orchestrator" }
+rusqlite = { version = "0.41", features = ["bundled"] }
+tower = { version = "0.5", features = ["util"] }

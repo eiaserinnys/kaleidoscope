@@ -29,7 +29,7 @@ pub struct StoreOrigin {
 }
 
 /// 식 변수 $apps의 각 항목. 출처 없는 앱의 관련 값은 null이다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
 pub struct InstalledAppValue {
     pub id: String,

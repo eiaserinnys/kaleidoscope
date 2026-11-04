@@ -163,7 +163,7 @@ impl Runtime {
         }
         let (storage, meta) = self.storage_values();
         self.compiled
-            .plan_source_with_data_and_storage(name, state, &self.data, &storage, &meta)
+            .plan_source_with_apps(name, state, &self.data, &storage, &meta, self.apps.as_deref())
     }
     pub(super) fn source_data_problem(&self, name: &str) -> Option<SourceStatus> {
         let mut result = None;

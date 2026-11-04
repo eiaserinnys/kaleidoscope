@@ -41,6 +41,7 @@ mod server_switch_tests;
 mod share_capture_tests;
 mod shared_state_recovery_tests;
 mod startup_readiness_tests;
+mod store_runtime_tests;
 mod window_control_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
@@ -1834,6 +1835,11 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 
 #[derive(Default)]
 struct FakeRegistryClient {
+    store_apps: Mutex<BTreeMap<String, RegistryApp>>,
+    store_requests: Mutex<Vec<kaleidoscope_contract::store::DeviceInstallRequest>>,
+    store_server: Mutex<Option<kaleidoscope_orchestrator::AppState>>,
+    store_install_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
+    store_remove_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
     asset_bytes: Mutex<Option<Vec<u8>>>,
     storage_reads: AtomicUsize,
     preferences_replies: Mutex<VecDeque<Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError>>>,
@@ -1868,6 +1874,39 @@ struct FakeRegistryClient {
 }
 
 impl RegistryClient for FakeRegistryClient {
+    fn install_store_app(&self, _: &str, _: &str, request: &kaleidoscope_contract::store::DeviceInstallRequest) -> Result<kaleidoscope_contract::store::DeviceInstallReply, RegistryError> {
+        self.store_requests.lock().unwrap().push(request.clone());
+        if let Some(server) = self.store_server.lock().unwrap().clone() {
+            let reply: kaleidoscope_contract::store::DeviceInstallReply = store_runtime_tests::server_request(&server, "POST", "/api/device/app-installs", request)?;
+            self.store_apps.lock().unwrap().insert(reply.app.app.id.clone(), reply.app.clone());
+            return Ok(reply);
+        }
+        let definition: kaleidoscope_contract::AppDefinition = serde_json::from_str(&request.definition_json).unwrap();
+        let mut apps = self.store_apps.lock().unwrap();
+        let old = apps.get(&definition.id);
+        let version = old.map_or(1, |app| app.app.current_version + u32::from(app.version.definition != definition));
+        let mut app = registry_app(version, &request.definition_json);
+        app.app.origin = Some(request.origin.clone());
+        app.app.installed_version = Some(version);
+        apps.insert(definition.id, app.clone());
+        drop(apps);
+        if let Some((ready, resume)) = self.store_install_pause.lock().unwrap().take() {
+            ready.send(()).unwrap();
+            resume.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
+        Ok(kaleidoscope_contract::store::DeviceInstallReply { app, unchanged: false })
+    }
+    fn remove_store_app(&self, _: &str, _: &str, id: &str, request: &kaleidoscope_contract::store::DeviceRemoveRequest) -> Result<(), RegistryError> {
+        if let Some(server) = self.store_server.lock().unwrap().clone() {
+            let _: Value = store_runtime_tests::server_request(&server, "DELETE", &format!("/api/device/apps/{id}"), request)?;
+        }
+        self.store_apps.lock().unwrap().remove(id);
+        if let Some((ready, resume)) = self.store_remove_pause.lock().unwrap().take() {
+            ready.send(()).unwrap();
+            resume.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
+        Ok(())
+    }
     fn asset_get(
         &self,
         _: &str,

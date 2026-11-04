@@ -9,6 +9,7 @@ mod conversation;
 mod conversation_context;
 mod conversation_http;
 mod conversation_reconcile;
+mod installation_consent;
 mod conversation_send;
 mod conversation_stream;
 mod data_runtime;
@@ -220,6 +221,9 @@ pub(crate) struct Inner {
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
     pub(crate) processes: process_host::Processes,
+    pub(crate) installation_consents: installation_consent::Consents,
+    #[cfg(test)]
+    pub(crate) store_transport: Mutex<Option<Arc<dyn store::fetch::Transport>>>,
     pub(crate) realtime: realtime_host::RealtimeConnections,
     pub(crate) client_services: client_services::ClientServices,
     pub(crate) conversation_streams: conversation_stream::Streams,
@@ -284,6 +288,7 @@ impl Drop for Core {
             self.inner.generation.fetch_add(1, Ordering::SeqCst);
             self.inner.layout_signal.notify();
             process_host::shutdown(&self.inner);
+            installation_consent::shutdown(&self.inner);
             realtime_host::shutdown_sessions(&self.inner);
             if let Err(err) = self.flush_storage() {
                 eprintln!("상태를 저장할 수 없습니다: {}", err.message);
@@ -444,6 +449,9 @@ impl Core {
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
             processes: process_host::Processes::with_windows(process_windows),
+            installation_consents: installation_consent::Consents::default(),
+            #[cfg(test)]
+            store_transport: Mutex::new(None),
             realtime: realtime_host::RealtimeConnections::default(),
             client_services: client_services::ClientServices::default(),
             conversation_streams: conversation_stream::Streams::default(),
@@ -625,7 +633,7 @@ impl Core {
             request @ (CoreRequest::WindowControlRespond { .. }
             | CoreRequest::WindowControlCapture { .. }
             | CoreRequest::WebControl { .. }) => window_control::handle(&self.inner, request),
-            CoreRequest::AppRespondInstallPermission { .. } => Err(kaleidoscope_contract::errors::APP_DEFINITION_REQUIRES_NEWER_SHELL()),
+            CoreRequest::AppRespondInstallPermission { window_id, request_id, digest, allow } => installation_consent::respond(&self.inner, &window_id, &request_id, &digest, allow),
             CoreRequest::ProfilerReport { inputs, frames } => {
                 self.inner.profiler.report(inputs, frames);
                 Ok(CoreReply::ProfilerReport {})
@@ -933,6 +941,7 @@ impl Core {
         self.inner.layout_signal.notify();
         client_files::release_all(&self.inner);
         process_host::shutdown(&self.inner);
+        installation_consent::shutdown(&self.inner);
         realtime_host::shutdown_sessions(&self.inner);
         if let Err(err) = self.flush_storage() {
             eprintln!("상태를 저장할 수 없습니다: {}", err.message);
@@ -1215,6 +1224,7 @@ impl Inner {
         data_runtime::state_changed(self);
         conversation_stream::state_changed(self);
         process_host::state_changed(self);
+        installation_consent::state_changed(self);
         realtime_host::state_changed(self);
         client_services::state_changed(self);
     }

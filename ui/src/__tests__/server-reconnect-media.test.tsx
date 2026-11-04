@@ -9,6 +9,7 @@ import { useLayoutEffect } from "react";
 import { useWindowData } from "../data/window-data";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed } from "./fixtures";
+import { BlockRenderContext } from "../render/render-probe";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); document.querySelector(".ks-client-frames")?.remove(); });
 
@@ -112,6 +113,34 @@ it("숨겨진 창의 실패 자산은 연결 후 창을 볼 때 다시 읽는다
   expect(state.calls.mock.calls.filter(([request]) => request.op === "data.media")).toHaveLength(1);
   state.setHidden(false);
   await screen.findByText("data:image/png;base64,aW1hZ2U=");
+  state.store.dispose();
+});
+
+it("숨겨진 창과 휴면 블록은 새 이미지를 요청하지 않고 다시 보이면 요청한다", async () => {
+  const state = setup(base, "image/png", "image");
+  await state.store.ready;
+  state.reconnect();
+  let data!: ReturnType<typeof useWindowData>;
+  function Image({ path }: { path: string }) {
+    data = useWindowData();
+    const result = useMedia({ permission: "catalog", path, query: { server: "https://store.example" } }, 100);
+    return <div>{result.status}</div>;
+  }
+  const draw = (path: string) => <WindowDataProvider store={state.store} windowId={state.windowId} definition={base}>
+    <BlockRenderContext.Provider value={{ windowId: state.windowId, pointer: "/ui/child", type: "image" }}><Image path={path} /></BlockRenderContext.Provider>
+  </WindowDataProvider>;
+  const view = render(draw("one.png"));
+  await screen.findByText("ready");
+  state.setHidden(true);
+  view.rerender(draw("two.png"));
+  await act(async () => { await Promise.resolve(); });
+  expect(state.calls.mock.calls.filter(([request]) => request.op === "data.media")).toHaveLength(1);
+  act(() => data.setDormant("/ui", true));
+  state.setHidden(false);
+  await act(async () => { await Promise.resolve(); });
+  expect(state.calls.mock.calls.filter(([request]) => request.op === "data.media")).toHaveLength(1);
+  act(() => data.setDormant("/ui", false));
+  await waitFor(() => expect(state.calls.mock.calls.filter(([request]) => request.op === "data.media")).toHaveLength(2));
   state.store.dispose();
 });
 

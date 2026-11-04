@@ -238,12 +238,14 @@ impl Context {
         let data = BTreeMap::new();
         let state = BTreeMap::new();
         let null = Value::Null;
+        let apps = crate::data_runtime::apps_for(&inner.state.lock().unwrap(), &self.definition);
         let env = Env {
             state: &state,
             data: &data,
             data_meta: &BTreeMap::new(),
             storage: &storage,
             storage_meta: &meta,
+            apps: apps.as_deref(),
             event: &null,
             item: &null,
             modifiers: None,

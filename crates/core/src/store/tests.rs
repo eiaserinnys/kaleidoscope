@@ -73,10 +73,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-type Reply = (u16, &'static str, Vec<u8>);
+pub(crate) type Reply = (u16, &'static str, Vec<u8>);
 #[derive(Clone)]
-struct Loopback {
-    files: Arc<Mutex<BTreeMap<String, Reply>>>,
+pub(crate) struct Loopback {
+    pub(crate) files: Arc<Mutex<BTreeMap<String, Reply>>>,
     address: IpAddr,
 }
 impl Transport for Loopback {
@@ -150,7 +150,7 @@ fn sha(bytes: &[u8]) -> String {
 fn entry(bytes: &[u8]) -> Value {
     json!({"sha256":sha(bytes),"bytes":bytes.len()})
 }
-fn fixture() -> (Loopback, Vec<u8>, Vec<u8>) {
+pub(crate) fn fixture() -> (Loopback, Vec<u8>, Vec<u8>) {
     let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>"#.to_vec();
     let mut png = std::io::Cursor::new(Vec::new());
     image::DynamicImage::new_rgba8(1, 1)
@@ -256,6 +256,23 @@ fn reads_index_detail_bundle_and_visible_media() {
         ..icon.clone()
     };
     assert_ne!(media_key(icon).unwrap().1, media_key(&other).unwrap().1);
+}
+
+#[test]
+fn listing_and_detail_return_media_references_without_downloading_images() {
+    struct Observed { inner: Loopback, paths: Arc<Mutex<Vec<String>>> }
+    impl Transport for Observed {
+        fn get(&self, origin: &str, allowed: &[String], path: &str, limit: u64) -> Result<PublicResponse, PublicHttpError> {
+            self.paths.lock().unwrap().push(path.into());
+            self.inner.get(origin, allowed, path, limit)
+        }
+    }
+    let (mock, _, _) = fixture();
+    let paths = Arc::new(Mutex::new(Vec::new()));
+    let client = StoreClient::with_transport("https://example.com/appstore", Observed { inner: mock, paths: paths.clone() }).unwrap();
+    assert!(client.index("catalog").unwrap().items[0].icon.is_some());
+    assert!(!client.app("example", "catalog").unwrap().screenshots.is_empty());
+    assert_eq!(*paths.lock().unwrap(), vec!["/appstore/index.json", "/appstore/apps/example/index.json", "/appstore/apps/example/3/manifest.json"]);
 }
 
 #[test]

@@ -189,6 +189,7 @@ pub(crate) fn import_app(
                 app_commands::import(state, definition_json)
             })?;
             let reply = reply?;
+            crate::data_runtime::apps_changed(inner);
             if let Some(event) = event {
                 inner.emit_state(&event);
             }
@@ -246,6 +247,7 @@ pub(crate) fn import_app(
             let (_, event) = registry_events::apply_registry_change(inner, |state| {
                 app_commands::import_registry(state, received)
             })?;
+            crate::data_runtime::apps_changed(inner);
             if let Some(event) = event {
                 inner.emit_state(&event);
             }

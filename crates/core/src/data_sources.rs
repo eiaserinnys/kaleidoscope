@@ -38,6 +38,24 @@ pub(crate) fn fetch_named(
     format: SourceFormat,
 ) -> Result<Value, RequestError> {
     match plan {
+        SourcePlan::StoreIndex { permission, server } | SourcePlan::StoreApp { permission, server, .. } => {
+            let state = inner.state.lock().unwrap();
+            let allowed = state.shared.windows.iter().find(|w| w.id == window)
+                .and_then(|w| crate::app_commands::definition_for(&state.shared, &w.app_id, w.app_version))
+                .is_some_and(|definition| definition.permissions.iter().any(|decl|
+                    matches!(decl, kaleidoscope_contract::PermissionDecl::Store { id, .. } if id == permission)));
+            drop(state);
+            if !allowed { return Err(errors::STORECLIENT_SOURCE_PERMISSION_UNDECLARED(permission).into()); }
+            let client = crate::store::client(inner, server)?;
+            let result = match plan {
+                SourcePlan::StoreIndex { .. } => client.index(permission).map(|value| serde_json::to_value(value).expect("스토어 색인 JSON")),
+                SourcePlan::StoreApp { id, .. } => client.app(id, permission).map(|value| serde_json::to_value(value).expect("스토어 상세 JSON")),
+                _ => unreachable!(),
+            };
+            result.map_err(|failure| if failure.status == Some(429) {
+                RequestError::RateLimited { retry_after: failure.rate_limit.and_then(|hint| hint.retry_after_secs) }
+            } else { RequestError::Core(failure.error) })
+        }
         SourcePlan::File {
             permission,
             path,
@@ -162,6 +180,7 @@ pub(crate) fn fetch_named(
         }
         SourcePlan::Idle => Ok(Value::Null),
         SourcePlan::Invalid(reason) => Err(errors::DATA_SOURCE_PLAN_INVALID(source, reason).into()),
+        SourcePlan::StoreInvalid(error) => Err(error.clone().into()),
     }
 }
 

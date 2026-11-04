@@ -66,6 +66,12 @@ pub(crate) struct AssetDownload {
 }
 
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn install_store_app(&self, _url: &str, _token: &str, _request: &kaleidoscope_contract::store::DeviceInstallRequest) -> Result<kaleidoscope_contract::store::DeviceInstallReply, RegistryError> {
+        Err(RegistryError::failure(FailureStage::Send, "앱 설치를 사용할 수 없습니다"))
+    }
+    fn remove_store_app(&self, _url: &str, _token: &str, _id: &str, _request: &kaleidoscope_contract::store::DeviceRemoveRequest) -> Result<(), RegistryError> {
+        Err(RegistryError::failure(FailureStage::Send, "앱 삭제를 사용할 수 없습니다"))
+    }
     fn post_preferences(
         &self,
         _url: &str,
@@ -919,6 +925,21 @@ impl RegistryClient for HttpRegistryClient {
         }
         success_json(response)
     }
+
+    fn install_store_app(&self, server_url: &str, token: &str, request: &kaleidoscope_contract::store::DeviceInstallRequest) -> Result<kaleidoscope_contract::store::DeviceInstallReply, RegistryError> {
+        let response = self.requests()?.post(format!("{server_url}/api/device/app-installs"))
+            .bearer_auth(token).json(request).send().map_err(request_failure)?;
+        store_success_json(response)
+    }
+
+    fn remove_store_app(&self, server_url: &str, token: &str, id: &str, request: &kaleidoscope_contract::store::DeviceRemoveRequest) -> Result<(), RegistryError> {
+        let mut url = reqwest::Url::parse(&format!("{server_url}{DEVICE_APPS_PATH}/"))
+            .map_err(|e| RegistryError::failure(FailureStage::Send, e.to_string()))?;
+        url.path_segments_mut().map_err(|_| RegistryError::failure(FailureStage::Send, "앱 삭제 주소를 만들 수 없습니다"))?.pop_if_empty().push(id);
+        let response = self.requests()?.delete(url).bearer_auth(token).json(request).send().map_err(request_failure)?;
+        if response.status().is_success() { return Ok(()); }
+        store_failure(response)
+    }
     fn connection_request(
         &self,
         server_url: &str,
@@ -1097,6 +1118,23 @@ fn success_json<T: serde::de::DeserializeOwned>(
     }
 
     let body = response.bytes().unwrap_or_default();
+    check_status(status, &body, &host)?;
+    Err(status_failure(status, &host))
+}
+
+fn store_success_json<T: serde::de::DeserializeOwned>(response: reqwest::blocking::Response) -> Result<T, RegistryError> {
+    if response.status().is_success() { return response.json().map_err(response_read_failure); }
+    store_failure(response)
+}
+
+fn store_failure<T>(response: reqwest::blocking::Response) -> Result<T, RegistryError> {
+    let status = response.status();
+    let host = response_host(&response);
+    let body = response.bytes().unwrap_or_default();
+    if let Ok(mut error) = serde_json::from_slice::<CoreError>(&body) {
+        error.details.push(format!("HTTP {status}; host={host}"));
+        return Err(RegistryError::Validation(error));
+    }
     check_status(status, &body, &host)?;
     Err(status_failure(status, &host))
 }
