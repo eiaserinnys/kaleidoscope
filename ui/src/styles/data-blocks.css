@@ -29,8 +29,8 @@
 .ks-data-stack-item:not(.is-fill) > .ks-data-stack.is-center { height: 100%; }
 .ks-data-stack.gap-small > .ks-data-stack-item > .ks-repeat:not(.is-grid) > .ks-repeat-content { gap: var(--ks-space-2); }
 .ks-data-stack-item.is-fill:has(> .ks-split) { min-height: var(--ks-pane-min-size); }
-.ks-data-stack-item.is-fill > .ks-data-stack.is-column { height: auto; min-height: 100%; }
-.ks-data-stack-item.is-fill > .ks-data-stack.is-column > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
+.ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill) { height: auto; min-height: 100%; }
+.ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill) > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
 .ks-data-stack-item.is-fill > .ks-data-tabs { min-height: calc(var(--ks-pane-min-size) * 2); }
 .ks-data-stack-item:not(.is-fill) > .ks-data-stack { height: auto; }
 .ks-data-stack-item:not(.is-fill) > .ks-data-view { height: auto; overflow: visible; }
