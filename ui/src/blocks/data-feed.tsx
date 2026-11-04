@@ -13,7 +13,7 @@ import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
 import { useWindowStateValue, useWindowVisible } from "../data/window-state";
 import { useLoadMore } from "./load-more";
-import { Badge } from "../components/badge";
+import { MediaAttachment } from "./media-attachment";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
 import { toCoreError } from "../core/core-transport";
 import { checkAppLink } from "../data/app-link";
@@ -97,11 +97,7 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
     </div>
     {!collapsed && <div className={`ks-feed-body tone-${entry.tone ?? "default"}${columns ? " is-columns" : ""}`}>{(typeof entry.body === "string" ? [entry.body] : entry.body).map((line, part) => copy ? <div className="ks-feed-copy-cell" key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}{handlers.current.copy(JSON.stringify([entry.key, "body", part]), line)}</div> : <div key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}</div>)}</div>}
     {!collapsed && entry.media?.length ? <div className="ks-feed-media">{entry.media.map((media, index) => isMedia(media.image) &&
-      <button type="button" key={index} className="ks-feed-media-item" aria-label={media.alt || `그림 ${index + 1}`}
-        onClick={(event) => { event.stopPropagation(); setPreview({ media: media.image, name: media.alt || `그림 ${index + 1}`, trigger: event.currentTarget }); }}>
-        <MediaThumbnail media={media.image} size={96} />
-        {media.kind === "video" || media.kind === "animation" ? <Badge value={media.kind === "video" ? "영상" : "GIF"} /> : null}
-      </button>)}</div> : null}
+      <MediaAttachment key={index} media={media} name={media.alt || `그림 ${index + 1}`} onPreview={setPreview} />)}</div> : null}
     </div>
   </article>{preview && <MediaPreview request={preview} onClose={closePreview} />}</>;
 });

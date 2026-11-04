@@ -108,7 +108,7 @@ export function HistoryAttachmentView({ attachment, cacheKey, load, open, onPrev
   </button>;
 }
 
-export function ImagePreview({ preview, onClose }: { preview: Preview; onClose: () => void }) {
+export function ImagePreview({ preview, onClose, children }: { preview: Preview; onClose: () => void; children?: ReactNode }) {
   const closeRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -137,7 +137,7 @@ export function ImagePreview({ preview, onClose }: { preview: Preview; onClose: 
     };
   }, [onClose, preview.trigger]);
   return createPortal(<div className="ks-agent-image-overlay" data-ks-overlay role="dialog" aria-modal="true" aria-label={preview.name} onClick={onClose} ref={dialogRef}>
-    <img src={preview.src} alt={preview.name} onClick={(event) => event.stopPropagation()} />
+    {children ?? <img src={preview.src} alt={preview.name} onClick={(event) => event.stopPropagation()} />}
     <div className="ks-agent-image-close" ref={closeRef}><IconButton aria-label="닫기" onClick={onClose}><X /></IconButton></div>
   </div>, document.body);
 }

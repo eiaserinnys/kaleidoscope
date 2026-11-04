@@ -1,21 +1,23 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
+import { ContextMenuHost } from "../components/context-menu";
 import { mockVirtualLayout } from "./virtual-layout";
 
 beforeEach(() => { mockVirtualLayout(); vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); vi.spyOn(window, "open").mockImplementation(() => null); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function setup(ui: unknown) {
-  const definition = { ...mdViewerDefinition, requires: { blocks: 32, modules: {} }, state: { ...mdViewerDefinition.state, choice: null }, ui: ui as Block } as AppDefinition;
+  const definition = { ...mdViewerDefinition, requires: { blocks: 32, modules: {} }, state: { ...mdViewerDefinition.state, choice: null, removed: [] }, ui: ui as Block } as AppDefinition;
   const transport = createFakeTransport({ ...makeTestSeed({ definitions: [definition] }), media: { "builtin-icon": "data:image/png;base64,iVBORw0KGgo=" } });
   const calls = vi.spyOn(transport, "call");
   const store = createShellStore(transport);
-  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  render(<><ContextMenuHost /><AppWindowContent store={store} windowId="viewer-window" /></>);
   return { calls, store };
 }
 
@@ -53,4 +55,59 @@ it("고르기 동작이 없는 그림 목록을 누르면 확대하고 초점을
   fireEvent.click(screen.getByRole("button", { name: "닫기" }));
   await waitFor(() => expect(dialog.isConnected).toBe(false));
   expect(document.activeElement).toBe(row);
+});
+
+
+it.each(["rows", "grid"])("빼기가 있는 %s 목록은 항목마다 조작 단추를 묶는다", async (layout) => {
+  setup({ type: "list", layout, items: [{key:"a", title:"첫 사진"}], on_remove:{set_state:"choice"} });
+  const list = await screen.findByRole("list", {name:"목록"});
+  expect(list.querySelector('[role="listitem"]')).toBeTruthy();
+  expect(list.querySelector('[role="option"]')).toBeNull();
+});
+
+it.each(["rows", "grid"])("%s에서 첫째와 마지막을 키보드로 빼면 이웃 빼기에 초점이 남는다", async (layout) => {
+  setup({type:"stack", direction:"column", children:[{ type:"list", layout,
+    items:{expr:'[{"key":"a","title":"첫 사진"},{"key":"b","title":"둘째 사진"},{"key":"c","title":"셋째 사진"}][$not(key in $state.removed)]'},
+    on_remove:[{set_state:"removed", value:{expr:'$append($state.removed, [$event])'}}]},
+    {type:"button",label:"다음 자리",icon:"check",on_click:{set_state:"choice"}},
+    {type:"button",label:"올리기",icon:"send",variant:"primary",on_click:{set_state:"choice"}}]});
+  const first=await screen.findByRole("button",{name:"첫 사진 빼기"});
+  first.focus(); await userEvent.keyboard("{Enter}");
+  await waitFor(()=>expect(document.activeElement?.getAttribute("aria-label")).toBe("둘째 사진 빼기"));
+  const last=screen.getByRole("button",{name:"셋째 사진 빼기"}); last.focus(); await userEvent.keyboard("{Enter}");
+  await waitFor(()=>expect(document.activeElement?.getAttribute("aria-label")).toBe("둘째 사진 빼기"));
+  await userEvent.keyboard("{Enter}");
+  await waitFor(()=>expect(document.activeElement?.textContent).toBe("다음 자리"));
+});
+
+it("불러오는 첨부도 확대창을 바로 열고 그 안에서 기다린다", async () => {
+  let release!: (response: Response) => void;
+  const response = new Promise<Response>((resolve) => { release = resolve; });
+  vi.spyOn(globalThis, "fetch").mockImplementation(() => response.then((value) => value.clone()));
+  setup({type:"feed",entries:[{key:"a",body:"본문",media:[{image:{asset:"builtin-icon"},alt:"늦는 사진"}]}]});
+  const thumb=await screen.findByRole("button",{name:"늦는 사진"});
+  fireEvent.click(thumb);
+  const dialog=await screen.findByRole("dialog",{name:"늦는 사진"});
+  expect(dialog.querySelector('[role="status"]')).toBeTruthy();
+  release(new Response(new Uint8Array([1,2,3]),{headers:{"content-type":"image/png"}}));
+  await waitFor(()=>expect(dialog.querySelector("img")).toBeTruthy());
+});
+
+it("실패 첨부를 누르면 다시 받는다", async () => {
+  const fetch=vi.spyOn(globalThis,"fetch").mockResolvedValue(new Response("그림 실패",{status:500}));
+  setup({type:"feed",entries:[{key:"a",body:"본문",media:[{image:{asset:"builtin-icon"},alt:"실패 사진"}]}]});
+  const thumb=await screen.findByRole("button",{name:"실패 사진"});
+  await screen.findByText("다시 받기");
+  const count=fetch.mock.calls.length;
+  fireEvent.click(thumb);
+  await waitFor(()=>expect(fetch.mock.calls.length).toBeGreaterThan(count));
+});
+
+it("첨부 그림 우클릭은 행 메뉴 대신 그림 메뉴를 연다", async () => {
+  setup({type:"feed",entries:[{key:"a",body:"본문",media:[{image:{asset:"builtin-icon"},alt:"메뉴 사진"}]}]});
+  const thumb=await screen.findByRole("button",{name:"메뉴 사진"});
+  await waitFor(()=>expect(thumb.querySelector("img")).toBeTruthy());
+  fireEvent.contextMenu(thumb);
+  expect(await screen.findByRole("menuitem",{name:"크게 보기"})).toBeTruthy();
+  expect(screen.getByRole("menuitem",{name:"이미지 복사"})).toBeTruthy();
 });
