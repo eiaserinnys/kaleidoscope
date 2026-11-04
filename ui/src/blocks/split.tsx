@@ -22,15 +22,23 @@ function readSplitSizes(element: HTMLElement) {
 }
 
 export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBlockData; context: BlockContext; pointer?: string }) {
-  return <SplitPanes direction={block.direction} sizes={block.sizes}>
+  const [narrow, setNarrow] = useState(false);
+  return <SplitPanes direction={narrow ? "column" : block.direction} sizes={block.sizes} columnBelow={block.column_below} onNarrowChange={setNarrow}>
     {block.children.map((child, index) => renderBlock(child, context, `${pointer}/children/${index}`))}
   </SplitPanes>;
 }
 
-export function SplitPanes({ direction, sizes, children }: { direction: SplitBlockData["direction"]; sizes?: number[]; children: ReactNode[] }) {
+export function SplitPanes({ direction, sizes, children, columnBelow, onNarrowChange }: { direction: SplitBlockData["direction"]; sizes?: number[]; children: ReactNode[]; columnBelow?: number; onNarrowChange?: (narrow: boolean) => void }) {
   const [weights, setWeights] = useState(() => sizes ? [...sizes] : children.map(() => 1));
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = containerRef.current;
+    if (columnBelow === undefined || !element) return;
+    const observer = new ResizeObserver(([entry]) => onNarrowChange?.(entry.contentRect.width < columnBelow));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [columnBelow, onNarrowChange]);
   const dragRef = useRef<{
     index: number;
     coordinate: number;

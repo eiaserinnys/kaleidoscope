@@ -299,7 +299,11 @@ test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
     expect(Math.abs(treeBox!.y - tableBox!.y)).toBeLessThanOrEqual(1);
     coordinates.push({ width, tabBox, listBox, rowBox, propertiesBox, treeBox, tableBox });
     await capture(page, `gallery-table-tree-${width}`);
-    await app.getByRole("tab", { name: "흐름과 글" }).click();
+    const flowTab = app.getByRole("tab", { name: "흐름과 글" });
+    if (!await flowTab.isVisible()) {
+      await app.getByRole("button", { name: "탭 더 보기" }).first().click();
+      await page.getByRole("menuitem", { name: "흐름과 글" }).click();
+    } else await flowTab.click();
     await expect(app.locator(".ks-feed")).toBeVisible();
     await capture(page, `gallery-feed-${width}`);
   }

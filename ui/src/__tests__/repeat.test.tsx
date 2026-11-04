@@ -276,3 +276,13 @@ it("사용자 스크롤 후 2500ms 동안 따라가기를 멈추고 마지막 �
   expect(scrollTop).toHaveBeenCalledTimes(2);
   store.dispose();
 });
+
+it("repeat은 명시한 gap을 항목 간격으로 표시한다", async () => {
+  const definition: AppDefinition = { id: "repeat-gap", name: "간격", requires: { blocks: 26, modules: {} }, permissions: [], state: {},
+    ui: { type: "repeat", items: [{ id: "a" }, { id: "b" }], key: "id", gap: "large", template: { type: "text", value: { item: "id" } } } as AppDefinition["ui"] };
+  const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  await screen.findByText("a");
+  expect(view.container.querySelector(".ks-repeat")?.classList.contains("gap-large")).toBe(true);
+  store.dispose();
+});

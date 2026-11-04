@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
@@ -6,6 +6,7 @@ import { BindingFailureNotice, DataState, isMessageBindingFailure } from "../com
 import { DataIcon } from "../components/data-icons";
 import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { ErrorId, IconButton } from "../components/primitives";
+import { Menu } from "../components/menu";
 import { MarkdownText } from "./markdown-text";
 import { renderBlock } from "../render/render-block";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data/window-state";
@@ -67,6 +68,13 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
   const [focused, setFocused] = useState(0);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const tabsRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const probeRef = useRef<HTMLSpanElement>(null);
+  const pendingFocus = useRef<number | null>(null);
+  const id = useId();
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const closeMenu = useCallback(() => setMenuAnchor(null), []);
+  const [measure, setMeasure] = useState<{ width: number; widths: number[]; labels: string[]; gap: number; more: number } | null>(null);
   const restoreToggleFocus = useRef(false);
   const selected = useWindowStateValue(context, block.selected?.state ?? null);
   const value = block.selected ? selected : local;
@@ -81,13 +89,59 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     if (block.on_change) void patchWindowState(context, { [block.on_change.set_state]: next });
   };
   const keyDown = (event: KeyboardEvent<HTMLButtonElement>, current: number) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const next = (current + (event.key === "ArrowRight" ? 1 : -1) + block.tabs.length) % block.tabs.length;
-    setFocused(next); refs.current[next]?.focus();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? block.tabs.length - 1
+      : (current + (event.key === "ArrowRight" ? 1 : -1) + block.tabs.length) % block.tabs.length;
+    pendingFocus.current = next;
+    setFocused(next); select(next);
   };
   const collapsed = Boolean(block.collapsible && pane?.collapsed);
   const showHeader = block.header !== false && !collapsed;
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list || !showHeader) return;
+    const update = () => {
+      const style = getComputedStyle(list);
+      const width = list.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
+      const widths = refs.current.slice(0, block.tabs.length).map((tab) => tab?.getBoundingClientRect().width ?? 0);
+      const labels = refs.current.slice(0, block.tabs.length).map((tab) => tab?.textContent ?? "");
+      const next = { width, widths, labels, gap: parseFloat(style.columnGap) || 0, more: probeRef.current?.getBoundingClientRect().width ?? 0 };
+      setMeasure((old) => JSON.stringify(old) === JSON.stringify(next) ? old : next);
+    };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(list);
+    refs.current.slice(0, block.tabs.length).forEach((tab) => { if (tab) observer?.observe(tab); });
+    const mutations = new MutationObserver(update);
+    mutations.observe(list, { childList: true, characterData: true, subtree: true });
+    update();
+    return () => { observer?.disconnect(); mutations.disconnect(); };
+  }, [showHeader, block.tabs.length]);
+  const visible = new Set(block.tabs.map((_, n) => n));
+  if (measure && measure.width > 0 && measure.widths.length === block.tabs.length) {
+    const total = measure.widths.reduce((sum, width) => sum + width, 0) + measure.gap * (block.tabs.length - 1);
+    if (total > measure.width) {
+      visible.clear();
+      let used = measure.more;
+      for (let n = 0; n < block.tabs.length; n++) {
+        if (used + measure.gap + measure.widths[n] > measure.width) break;
+        visible.add(n); used += measure.gap + measure.widths[n];
+      }
+      if (!visible.has(index)) {
+        while (visible.size && used + measure.gap + measure.widths[index] > measure.width) {
+          const last = Math.max(...visible); visible.delete(last); used -= measure.widths[last] + measure.gap;
+        }
+        visible.add(index);
+      }
+    }
+  }
+  const overflow = block.tabs.map((_, n) => n).filter((n) => !visible.has(n));
+  useLayoutEffect(() => {
+    const next = pendingFocus.current;
+    if (next === null || next !== index || !visible.has(next)) return;
+    pendingFocus.current = null;
+    refs.current[next]?.focus();
+  });
   useLayoutEffect(() => {
     if (!restoreToggleFocus.current) return;
     restoreToggleFocus.current = false;
@@ -104,9 +158,12 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
   return <div className={`ks-data-tabs${collapsed ? " is-collapsed" : ""}`} ref={tabsRef}>
     {collapsed ? <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span> : null}
     {showHeader ? <div className="ks-data-tab-header">
-      <div className="ks-data-tab-list" role="tablist">
-        {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}`} role="tab" aria-selected={n === index} tabIndex={n === focused ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}><BoundTabLabel pointer={`${pointer}/tabs/${n}/label`} binding={tab.label} /></button>)}
+      <div className="ks-data-tab-list" role="tablist" ref={listRef}>
+        {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}${visible.has(n) ? "" : " is-overflow"}`} role="tab" id={`${id}-tab-${n}`} aria-controls={`${id}-panel-${n}`} aria-hidden={!visible.has(n) || undefined} aria-selected={n === index} tabIndex={n === (visible.has(focused) ? focused : index) ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}><BoundTabLabel pointer={`${pointer}/tabs/${n}/label`} binding={tab.label} /></button>)}
+        <span className="ks-data-tab-more-probe" ref={probeRef} aria-hidden="true" />
+        {overflow.length ? <IconButton aria-label="탭 더 보기" onClick={(event) => setMenuAnchor(event.currentTarget)}><DataIcon name="ellipsis" size="inline" /></IconButton> : null}
       </div>
+      {menuAnchor && overflow.length ? <Menu anchor={menuAnchor} onClose={closeMenu} items={overflow.map((n) => ({ id: String(n), label: measure?.labels[n] ?? "", checked: n === index, onSelect: () => { pendingFocus.current = n; setFocused(n); select(n); } }))} /> : null}
       {block.collapsible && pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
     </div> : null}
     {block.tabs.map((_, tabIndex) => <DormantPointer
@@ -117,8 +174,8 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     {block.keep_mounted ? block.tabs.map((tab, tabIndex) => {
       const selectedTab = tabIndex === index;
       if (!selectedTab && !visited.has(tabIndex)) return null;
-      return <BoundTabPanel key={tabIndex} pointer={`${pointer}/tabs/${tabIndex}/label`} binding={tab.label} showHeader={showHeader} selected={selectedTab} collapsed={collapsed}>{renderChild(tabIndex)}</BoundTabPanel>;
-    }) : <BoundTabPanel pointer={`${pointer}/tabs/${index}/label`} binding={block.tabs[index].label} showHeader={showHeader} selected={true} collapsed={collapsed}>{renderChild(index)}</BoundTabPanel>}
+      return <BoundTabPanel key={tabIndex} id={`${id}-panel-${tabIndex}`} labelledBy={`${id}-tab-${tabIndex}`} pointer={`${pointer}/tabs/${tabIndex}/label`} binding={tab.label} showHeader={showHeader} selected={selectedTab} collapsed={collapsed}>{renderChild(tabIndex)}</BoundTabPanel>;
+    }) : <BoundTabPanel id={`${id}-panel-${index}`} labelledBy={`${id}-tab-${index}`} pointer={`${pointer}/tabs/${index}/label`} binding={block.tabs[index].label} showHeader={showHeader} selected={true} collapsed={collapsed}>{renderChild(index)}</BoundTabPanel>}
   </div>;
 }
 
@@ -171,7 +228,9 @@ const BoundTabLabel = memo(function BoundTabLabel({ pointer, binding }: {
   return <>{tabLabelText(useBinding(pointer, binding))}</>;
 });
 
-const BoundTabPanel = memo(function BoundTabPanel({ pointer, binding, showHeader, selected, collapsed, children }: {
+const BoundTabPanel = memo(function BoundTabPanel({ id, labelledBy, pointer, binding, showHeader, selected, collapsed, children }: {
+  id: string;
+  labelledBy: string;
   pointer: string;
   binding: Extract<Block, { type: "tabs" }>["tabs"][number]["label"];
   showHeader: boolean;
@@ -183,7 +242,7 @@ const BoundTabPanel = memo(function BoundTabPanel({ pointer, binding, showHeader
   const label = value.status === "ready"
     ? value.value !== null && value.value !== undefined ? display(value.value) : ""
     : isMessageBindingFailure(value) ? value.message : "";
-  return <div aria-label={showHeader ? undefined : label} className="ks-data-tab-panel" hidden={!selected || collapsed} inert={!selected || collapsed} role="tabpanel">{children}</div>;
+  return <div id={id} aria-labelledby={showHeader ? labelledBy : undefined} aria-label={showHeader ? undefined : label} className="ks-data-tab-panel" hidden={!selected || collapsed} inert={!selected || collapsed} role="tabpanel">{children}</div>;
 });
 
 export function TextBlock({ block, context, pointer }: Props<"text">) {

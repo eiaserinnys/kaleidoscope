@@ -279,9 +279,12 @@ pub const CONTRACT_VERSION: u32 = 32;
 /// - 22판: request 원천의 `page`(쪽 넘김)와 목록 블록의 다음 쪽 받기, `data.more`.
 /// - 25판: `input.read_only` 읽기 전용 바인딩.
 /// - 26판: 앱 정의의 불변 자산 아이콘.
-pub const BLOCK_SET_VERSION: u32 = APP_ICON_BLOCK_SET_VERSION;
+/// - 27판: `split.column_below`, `repeat.gap`.
+pub const BLOCK_SET_VERSION: u32 = LAYOUT_FIELDS_BLOCK_SET_VERSION;
 /// 앱 아이콘 자산 참조의 첫 블록 세트 판.
 pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
+/// 분할의 반응형 방향과 반복 간격의 첫 블록 세트 판.
+pub const LAYOUT_FIELDS_BLOCK_SET_VERSION: u32 = 27;
 /// 입력 읽기 전용 바인딩의 첫 블록 세트 판.
 pub const INPUT_READ_ONLY_BLOCK_SET_VERSION: u32 = 25;
 /// 동적 표 열과 칸 격자의 첫 블록 세트 판.
@@ -1242,6 +1245,10 @@ pub enum Block {
     Repeat {
         items: Binding,
         key: String,
+        /// 항목 사이 간격. 생략하면 기존 배치의 간격을 쓴다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        gap: Option<Gap>,
         #[serde(default)]
         #[ts(optional, as = "Option<RepeatLayout>")]
         layout: RepeatLayout,
@@ -1438,6 +1445,10 @@ pub enum Block {
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
         direction: SplitDirection,
+        /// row 분할의 자기 폭이 이 값보다 작으면 column으로 놓는다. 0은 쓸 수 없다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        column_below: Option<u32>,
         /// 자식마다의 상대 크기. 없으면 똑같이 나눈다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2078,6 +2089,8 @@ enum RawBlock {
         items: Binding,
         key: String,
         #[serde(default)]
+        gap: Option<Gap>,
+        #[serde(default)]
         layout: RepeatLayout,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         grid: Option<RepeatGrid>,
@@ -2221,6 +2234,8 @@ enum RawBlock {
     /// 자식 블록을 나란히 놓는다. 경계를 끌어 크기를 바꿀 수 있다(바꾼 크기는 저장하지 않는다).
     Split {
         direction: SplitDirection,
+        #[serde(default)]
+        column_below: Option<u32>,
         /// 자식마다의 상대 크기. 없으면 똑같이 나눈다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sizes: Option<Vec<f64>>,
@@ -2775,6 +2790,7 @@ impl From<RawBlock> for Block {
             RawBlock::Repeat {
                 items,
                 key,
+                gap,
                 layout,
                 grid,
                 r#virtual,
@@ -2784,6 +2800,7 @@ impl From<RawBlock> for Block {
             } => Block::Repeat {
                 items,
                 key,
+                gap,
                 layout,
                 grid,
                 r#virtual,
@@ -2937,10 +2954,12 @@ impl From<RawBlock> for Block {
             },
             RawBlock::Split {
                 direction,
+                column_below,
                 sizes,
                 children,
             } => Block::Split {
                 direction,
+                column_below,
                 sizes,
                 children,
             },
@@ -6975,7 +6994,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         }
         rejected(
-            &example("block-gallery.json").replace(r#""blocks": 4"#, r#""blocks": 3"#),
+            &example("card-board.json").replace(r#""blocks": 4"#, r#""blocks": 3"#),
             "블록 세트 4판",
         );
         rejected(

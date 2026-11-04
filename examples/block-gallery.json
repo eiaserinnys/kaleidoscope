@@ -1,8 +1,8 @@
 {
   "id": "block-gallery",
   "name": "블록 견본",
-  "description": "블록 세트 4판의 블록을 탭마다 모아 보인다",
-  "requires": { "blocks": 4, "modules": { "files": 1 } },
+  "description": "블록을 탭마다 모아 보인다",
+  "requires": { "blocks": 26, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
     { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }
@@ -252,6 +252,20 @@
                 { "type": "media", "autoplay": true, "src": { "expr": "$state.sound ? { \"permission\": \"media\", \"path\": $state.sound }" } }
               ]
             }
+          ]
+        }
+      },
+      {
+        "label": "배치",
+        "child": {
+          "type": "split", "direction": "row", "column_below": 700, "sizes": [1, 1, 1],
+          "children": [
+            { "type": "split", "direction": "row", "column_below": 700, "children": [
+              { "type": "section", "title": "메모", "child": { "type": "input", "value": { "state": "query" }, "on_change": { "set_state": "query" }, "placeholder": "내용" } },
+              { "type": "text", "value": "분할 안의 분할" }
+            ] },
+            { "type": "section", "title": "목록 간격", "child": { "type": "repeat", "items": [{ "id": "첫째" }, { "id": "둘째" }, { "id": "셋째" }], "key": "id", "gap": "large", "template": { "type": "text", "value": { "item": "id" } } } },
+            { "type": "section", "title": "격자 간격", "child": { "type": "repeat", "layout": "grid", "grid": { "columns": 2 }, "items": [{ "id": "가" }, { "id": "나" }, { "id": "다" }, { "id": "라" }], "key": "id", "gap": "large", "template": { "type": "text", "value": { "item": "id" } } } }
           ]
         }
       }

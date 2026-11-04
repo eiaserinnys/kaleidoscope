@@ -481,3 +481,31 @@ it("section의 null 제목은 글을 표시하지 않는다", async () => {
   expect(view.container.querySelector(".ks-data-section-title")).toBeNull();
   expect(view.container.querySelector(".ks-data-section-meta")?.textContent).toBe("정보");
 });
+
+it("반응형 분할은 자기 폭으로 방향을 바꾸면서 자식을 유지한다", async () => {
+  let callback!: ResizeObserverCallback;
+  let observed: Element | undefined;
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(cb: ResizeObserverCallback) { callback = cb; }
+    observe(target: Element) { observed = target; }
+    disconnect() {}
+  });
+  const definition: AppDefinition = { id: "responsive-split", name: "분할", requires: { blocks: 26, modules: {} }, permissions: [], state: { value: "처음" },
+    ui: { type: "split", direction: "row", column_below: 700, children: [
+      { type: "input", value: { state: "value" }, on_change: { set_state: "value" } }, { type: "text", value: "둘째" }, { type: "text", value: "셋째" },
+    ] } as Block };
+  const seed = makeTestSeed({ definitions: [definition] });
+  const store = createShellStore(createFakeTransport(seed));
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  const input = await screen.findByRole("textbox") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "유지" } });
+  expect(observed?.classList.contains("ks-split")).toBe(true);
+  act(() => callback([{ target: observed, contentRect: { width: 699 } } as ResizeObserverEntry], {} as ResizeObserver));
+  expect(view.container.querySelector(".ks-split-column")).toBeTruthy();
+  expect(screen.getByRole("textbox")).toBe(input);
+  expect(input.value).toBe("유지");
+  act(() => callback([{ target: observed, contentRect: { width: 700 } } as ResizeObserverEntry], {} as ResizeObserver));
+  expect(view.container.querySelector(".ks-split-row")).toBeTruthy();
+  expect(screen.getByRole("textbox")).toBe(input);
+  store.dispose();
+});
