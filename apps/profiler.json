@@ -39,107 +39,240 @@
     "fill": 2,
     "children": [
       {
-        "type": "toolbar",
-        "start": [
+        "type": "stack",
+        "direction": "column",
+        "gap": "none",
+        "children": [
           {
-            "type": "select",
-            "style": "dropdown",
-            "value": {
-              "state": "category"
-            },
-            "on_change": {
-              "set_state": "category"
-            },
-            "options": [
-              {
-                "value": "all",
-                "label": "전체 구간"
-              },
-              {
-                "value": "command",
-                "label": "명령 처리"
-              },
-              {
-                "value": "data.state_change",
-                "label": "상태 반응"
-              },
-              {
-                "value": "data.view",
-                "label": "화면 계산"
-              },
-              {
-                "value": "data.act",
-                "label": "액션 실행"
-              },
-              {
-                "value": "data.source",
-                "label": "원천 조회"
-              },
-              {
-                "value": "storage.flush",
-                "label": "디스크 플러시"
-              },
-              {
-                "value": "ui.frame",
-                "label": "긴 프레임"
-              }
-            ]
-          }
-        ],
-        "end": [
-          {
-            "type": "button",
-            "label": "벤치마크 실행",
-            "icon": "play",
-            "variant": "primary",
-            "on_click": [
-              {
-                "call": {
-                  "permission": "core_profiler",
-                  "method": "POST",
-                  "path": "/benchmark"
+            "type": "when",
+            "min_width": 411,
+            "child": {
+              "type": "toolbar",
+              "start": [
+                {
+                  "type": "select",
+                  "style": "dropdown",
+                  "value": {
+                    "state": "category"
+                  },
+                  "on_change": {
+                    "set_state": "category"
+                  },
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "전체 구간"
+                    },
+                    {
+                      "value": "command",
+                      "label": "명령 처리"
+                    },
+                    {
+                      "value": "data.state_change",
+                      "label": "상태 반응"
+                    },
+                    {
+                      "value": "data.view",
+                      "label": "화면 계산"
+                    },
+                    {
+                      "value": "data.act",
+                      "label": "액션 실행"
+                    },
+                    {
+                      "value": "data.source",
+                      "label": "원천 조회"
+                    },
+                    {
+                      "value": "storage.flush",
+                      "label": "디스크 플러시"
+                    },
+                    {
+                      "value": "ui.frame",
+                      "label": "긴 프레임"
+                    }
+                  ]
                 }
-              },
-              {
-                "refresh": [
-                  "profile"
-                ]
-              }
-            ]
+              ],
+              "end": [
+                {
+                  "type": "button",
+                  "label": "벤치마크 실행",
+                  "icon": "play",
+                  "variant": "primary",
+                  "on_click": [
+                    {
+                      "call": {
+                        "permission": "core_profiler",
+                        "method": "POST",
+                        "path": "/benchmark"
+                      }
+                    },
+                    {
+                      "refresh": [
+                        "profile"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "label": "새로고침",
+                  "icon": "refresh-cw",
+                  "variant": "default",
+                  "on_click": [
+                    {
+                      "refresh": [
+                        "profile"
+                      ]
+                    }
+                  ],
+                  "icon_only": true
+                },
+                {
+                  "type": "button",
+                  "label": "기록 비우기",
+                  "icon": "rotate-ccw",
+                  "variant": "ghost",
+                  "on_click": [
+                    {
+                      "call": {
+                        "permission": "core_profiler",
+                        "method": "POST",
+                        "path": "/clear"
+                      }
+                    },
+                    {
+                      "refresh": [
+                        "profile"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           },
           {
-            "type": "button",
-            "label": "새로고침",
-            "icon": "refresh-cw",
-            "variant": "default",
-            "on_click": [
-              {
-                "refresh": [
-                  "profile"
-                ]
-              }
-            ],
-            "icon_only": true
-          },
-          {
-            "type": "button",
-            "label": "기록 비우기",
-            "icon": "rotate-ccw",
-            "variant": "ghost",
-            "on_click": [
-              {
-                "call": {
-                  "permission": "core_profiler",
-                  "method": "POST",
-                  "path": "/clear"
+            "type": "when",
+            "max_width": 410,
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toolbar",
+                  "start": [
+                    {
+                      "type": "select",
+                      "style": "dropdown",
+                      "value": {
+                        "state": "category"
+                      },
+                      "on_change": {
+                        "set_state": "category"
+                      },
+                      "options": [
+                        {
+                          "value": "all",
+                          "label": "전체 구간"
+                        },
+                        {
+                          "value": "command",
+                          "label": "명령 처리"
+                        },
+                        {
+                          "value": "data.state_change",
+                          "label": "상태 반응"
+                        },
+                        {
+                          "value": "data.view",
+                          "label": "화면 계산"
+                        },
+                        {
+                          "value": "data.act",
+                          "label": "액션 실행"
+                        },
+                        {
+                          "value": "data.source",
+                          "label": "원천 조회"
+                        },
+                        {
+                          "value": "storage.flush",
+                          "label": "디스크 플러시"
+                        },
+                        {
+                          "value": "ui.frame",
+                          "label": "긴 프레임"
+                        }
+                      ]
+                    }
+                  ],
+                  "end": [
+                    {
+                      "type": "button",
+                      "label": "새로고침",
+                      "icon": "refresh-cw",
+                      "variant": "default",
+                      "on_click": [
+                        {
+                          "refresh": [
+                            "profile"
+                          ]
+                        }
+                      ],
+                      "icon_only": true
+                    }
+                  ]
+                },
+                {
+                  "type": "toolbar",
+                  "start": [],
+                  "end": [
+                    {
+                      "type": "button",
+                      "label": "벤치마크 실행",
+                      "icon": "play",
+                      "variant": "primary",
+                      "on_click": [
+                        {
+                          "call": {
+                            "permission": "core_profiler",
+                            "method": "POST",
+                            "path": "/benchmark"
+                          }
+                        },
+                        {
+                          "refresh": [
+                            "profile"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "button",
+                      "label": "기록 비우기",
+                      "icon": "rotate-ccw",
+                      "variant": "ghost",
+                      "on_click": [
+                        {
+                          "call": {
+                            "permission": "core_profiler",
+                            "method": "POST",
+                            "path": "/clear"
+                          }
+                        },
+                        {
+                          "refresh": [
+                            "profile"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
-              },
-              {
-                "refresh": [
-                  "profile"
-                ]
-              }
-            ]
+              ]
+            }
           }
         ]
       },

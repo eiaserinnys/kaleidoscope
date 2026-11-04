@@ -190,15 +190,33 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
 }
 
 export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaX !== 0 || event.deltaY === 0) return;
+      const maxScroll = track.scrollWidth - track.clientWidth;
+      if (maxScroll <= 0 || (event.deltaY > 0 ? track.scrollLeft >= maxScroll : track.scrollLeft <= 0)) return;
+      event.preventDefault();
+      track.scrollLeft += event.deltaY;
+    };
+    track.addEventListener("wheel", onWheel, { passive: false });
+    return () => track.removeEventListener("wheel", onWheel);
+  }, []);
   const children = (items: Block[], name: string) => items.map((child, index) => <div className={`ks-data-toolbar-item${child.type === "input" ? " is-input" : child.type === "text" ? " is-text" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/${name}/${index}`)}</div>);
   const revealFocus = (event: FocusEvent<HTMLDivElement>) => {
     const track = event.currentTarget;
+    if (!track.contains(event.target)) return;
     const bounds = track.getBoundingClientRect();
     const focused = event.target.getBoundingClientRect();
-    if (focused.left < bounds.left) track.scrollLeft += focused.left - bounds.left;
-    else if (focused.right > bounds.right) track.scrollLeft += focused.right - bounds.right;
+    const style = getComputedStyle(track);
+    const left = bounds.left + parseFloat(style.scrollPaddingInlineStart);
+    const right = bounds.right - parseFloat(style.scrollPaddingInlineEnd);
+    if (focused.left < left) track.scrollLeft += focused.left - left;
+    else if (focused.right > right) track.scrollLeft += focused.right - right;
   };
-  return <div className="ks-data-toolbar" onFocus={revealFocus}><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
+  return <div className="ks-data-toolbar" onFocus={revealFocus} ref={trackRef}><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
 }
 
 export function SectionBlock({ block, context, pointer }: Props<"section">) {

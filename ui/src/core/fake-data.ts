@@ -22,6 +22,7 @@ function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
     case "tabs": return block.tabs.map((tab, index) => [`${pointer}/tabs/${index}/child`, tab.child]);
     case "toolbar": return [...block.start.map((child, index): [string, Block] => [`${pointer}/start/${index}`, child]), ...(block.end ?? []).map((child, index): [string, Block] => [`${pointer}/end/${index}`, child])];
     case "section": return [...(block.actions ?? []).map((child, index): [string, Block] => [`${pointer}/actions/${index}`, child]), [`${pointer}/child`, block.child]];
+    case "when": return [[`${pointer}/child`, block.child]];
     default: return [];
   }
 }

@@ -3,7 +3,7 @@
   "name": "지구 상황판",
   "description": "실시간 지진 진앙지와 현지 기상·대기질, 주변 지형 맥락을 연쇄 조회합니다",
   "requires": {
-    "blocks": 10,
+    "blocks": 19,
     "modules": {
       "http": 1
     }
@@ -131,80 +131,185 @@
     "fill": 1,
     "children": [
       {
-        "type": "toolbar",
-        "start": [
+        "type": "stack",
+        "direction": "column",
+        "gap": "none",
+        "children": [
           {
-            "type": "select",
-            "style": "segmented",
-            "value": {
-              "state": "feed"
-            },
-            "on_change": [
-              {
-                "set_state": "feed"
-              },
-              {
-                "set_state": "selected_quake",
-                "value": "latest"
-              }
-            ],
-            "options": [
-              {
-                "value": "significant_month",
-                "label": "주요 지진 · 30일"
-              },
-              {
-                "value": "4.5_week",
-                "label": "M4.5+ · 7일"
-              },
-              {
-                "value": "2.5_day",
-                "label": "M2.5+ · 24시간"
-              }
-            ]
+            "type": "when",
+            "min_width": 581,
+            "child": {
+              "type": "toolbar",
+              "start": [
+                {
+                  "type": "select",
+                  "style": "segmented",
+                  "value": {
+                    "state": "feed"
+                  },
+                  "on_change": [
+                    {
+                      "set_state": "feed"
+                    },
+                    {
+                      "set_state": "selected_quake",
+                      "value": "latest"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "value": "significant_month",
+                      "label": "주요 지진 · 30일"
+                    },
+                    {
+                      "value": "4.5_week",
+                      "label": "M4.5+ · 7일"
+                    },
+                    {
+                      "value": "2.5_day",
+                      "label": "M2.5+ · 24시간"
+                    }
+                  ]
+                },
+                {
+                  "type": "select",
+                  "style": "segmented",
+                  "value": {
+                    "state": "min_mag"
+                  },
+                  "on_change": [
+                    {
+                      "set_state": "min_mag"
+                    },
+                    {
+                      "set_state": "selected_quake",
+                      "value": "latest"
+                    }
+                  ],
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "전체"
+                    },
+                    {
+                      "value": "5",
+                      "label": "M5.0+"
+                    },
+                    {
+                      "value": "6",
+                      "label": "M6.0+"
+                    }
+                  ]
+                }
+              ],
+              "end": [
+                {
+                  "type": "button",
+                  "label": "새로고침",
+                  "icon": "refresh-cw",
+                  "icon_only": true,
+                  "on_click": [
+                    {
+                      "refresh": []
+                    }
+                  ]
+                }
+              ]
+            }
           },
           {
-            "type": "select",
-            "style": "segmented",
-            "value": {
-              "state": "min_mag"
-            },
-            "on_change": [
-              {
-                "set_state": "min_mag"
-              },
-              {
-                "set_state": "selected_quake",
-                "value": "latest"
-              }
-            ],
-            "options": [
-              {
-                "value": "all",
-                "label": "전체"
-              },
-              {
-                "value": "5",
-                "label": "M5.0+"
-              },
-              {
-                "value": "6",
-                "label": "M6.0+"
-              }
-            ]
-          }
-        ],
-        "end": [
-          {
-            "type": "button",
-            "label": "새로고침",
-            "icon": "refresh-cw",
-            "icon_only": true,
-            "on_click": [
-              {
-                "refresh": []
-              }
-            ]
+            "type": "when",
+            "max_width": 580,
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toolbar",
+                  "start": [
+                    {
+                      "type": "select",
+                      "style": "segmented",
+                      "value": {
+                        "state": "feed"
+                      },
+                      "on_change": [
+                        {
+                          "set_state": "feed"
+                        },
+                        {
+                          "set_state": "selected_quake",
+                          "value": "latest"
+                        }
+                      ],
+                      "options": [
+                        {
+                          "value": "significant_month",
+                          "label": "주요 지진 · 30일"
+                        },
+                        {
+                          "value": "4.5_week",
+                          "label": "M4.5+ · 7일"
+                        },
+                        {
+                          "value": "2.5_day",
+                          "label": "M2.5+ · 24시간"
+                        }
+                      ]
+                    }
+                  ],
+                  "end": [
+                    {
+                      "type": "button",
+                      "label": "새로고침",
+                      "icon": "refresh-cw",
+                      "icon_only": true,
+                      "on_click": [
+                        {
+                          "refresh": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "toolbar",
+                  "start": [
+                    {
+                      "type": "select",
+                      "style": "segmented",
+                      "value": {
+                        "state": "min_mag"
+                      },
+                      "on_change": [
+                        {
+                          "set_state": "min_mag"
+                        },
+                        {
+                          "set_state": "selected_quake",
+                          "value": "latest"
+                        }
+                      ],
+                      "options": [
+                        {
+                          "value": "all",
+                          "label": "전체"
+                        },
+                        {
+                          "value": "5",
+                          "label": "M5.0+"
+                        },
+                        {
+                          "value": "6",
+                          "label": "M6.0+"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           }
         ]
       },

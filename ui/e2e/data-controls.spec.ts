@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
 const output = process.env.KS_DATA_CAPTURE_DIR;
 async function capture(page: import("@playwright/test").Page, name: string) {
   if (output) { mkdirSync(output, { recursive: true }); await page.screenshot({ path: join(output, `${name}.png`), fullPage: true }); }
@@ -252,11 +254,11 @@ async function showToolbarScenario(page: import("@playwright/test").Page, width:
     app.definition.ui = kind === "split" ? { type:"split", direction:"row", sizes:[18,47,35], children:[
       column([toolbar([text("카테고리")]), text("전체 · 설치됨", "body")]),
       column([toolbar([input("앱 찾기")], [icon()]), text("앱 목록", "body")]),
-      column([toolbar([text("문서 보기")], [text("제작자", "meta")]), text("앱 설명", "body"), toolbar([], [button("설치", { variant:"primary" })])]),
+      column([toolbar([text("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본")], [text("제작자", "meta")]), text("앱 설명", "body"), toolbar([], [button("설치", { variant:"primary" })])]),
     ] } : kind === "variants" ? column([
       toolbar([text("카테고리")]), toolbar([input("앱 찾기")]), toolbar([select("dropdown")]),
       toolbar([select("segmented")]), toolbar([button("설치", { variant:"primary" })]), toolbar([icon()]),
-      toolbar([input("앱 찾기")], [icon()]), toolbar([text("아주 긴 앱 제목과 상세한 설명이 있는 제목")], [select("dropdown")]),
+      toolbar([input("앱 찾기")], [icon()]), toolbar([text("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본")], [select("dropdown")]),
       toolbar([input("앱 찾기"), select("dropdown"), select("segmented")], [button("첫 번째"), button("두 번째"), button("세 번째")]),
       { type:"section", title:"입력", child:text("앱 설명", "body") },
     ]) : kind === "jizura" ? jizura() : kind === "ktx" ? ktx() : toolbar([], [input("찾기", "query", "검색")]);
@@ -359,5 +361,148 @@ test("붐비는 도구 막대의 모든 조작을 가로 스크롤과 Tab으로 
         await page.keyboard.press("Escape");
       }
     }
+  }
+});
+
+test("긴 제목은 말줄임되고 끝 조작은 막대에 남는다", async ({ page }) => {
+  for (const [width, scenario] of [[1000, "split"], [360, "variants"]] as const) {
+    const app = await showToolbarScenario(page, width, scenario);
+    const bar = scenario === "split" ? app.locator(".ks-data-toolbar").nth(2) : app.locator(".ks-data-toolbar").nth(7);
+    const text = bar.locator(".ks-data-text.is-title");
+    await expect(text).toHaveText("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본");
+    const geometry = await bar.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      const title = node.querySelector<HTMLElement>(".ks-data-text.is-title")!;
+      const end = node.querySelector<HTMLElement>(".ks-data-toolbar-group.is-end")!.getBoundingClientRect();
+      return { clipped: title.scrollWidth > title.clientWidth, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, endLeft: end.left - r.left, endRight: r.right - end.right };
+    });
+    expect(geometry.clipped).toBe(true);
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+    expect(geometry.endLeft).toBeGreaterThanOrEqual(0);
+    expect(geometry.endRight).toBeGreaterThanOrEqual(0);
+    await capture(page, `revision-title-${width}`);
+  }
+});
+
+test("스크롤바가 있어도 도구 막대의 조작은 같은 세로 중심이다", async ({ page }) => {
+  const app = await showToolbarScenario(page, 360, "jizura");
+  const bar = app.locator(".ks-data-toolbar");
+  const measured = await bar.evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    const items = [...node.querySelectorAll<HTMLElement>(".ks-data-toolbar-item")].map((item) => {
+      const r = item.getBoundingClientRect(); return r.y + r.height / 2;
+    });
+    return { center:rect.y + (rect.height - parseFloat(style.borderBottomWidth)) / 2, items, scrollbar:rect.height - node.clientHeight - parseFloat(style.borderBottomWidth) };
+  });
+  expect(measured.scrollbar).toBeGreaterThan(0);
+  for (const center of measured.items) expect(Math.abs(center - measured.center)).toBeLessThanOrEqual(1);
+  await capture(page, "revision-scrollbar-360");
+});
+
+test("Tab 초점은 막대 가장자리에서 테두리 여백을 지킨다", async ({ page }) => {
+  const app = await showToolbarScenario(page, 360, "jizura");
+  const bar = app.locator(".ks-data-toolbar");
+  const last = bar.getByRole("button", { name:"사용법 안내" });
+  await bar.locator("input").first().focus();
+  for (let i = 0; i < await bar.locator("input, button").count() - 1; i += 1) await page.keyboard.press("Tab");
+  await expect(last).toBeFocused();
+  const gap = await last.evaluate((node) => {
+    const track = node.closest(".ks-data-toolbar")!.getBoundingClientRect();
+    return track.right - node.getBoundingClientRect().right;
+  });
+  expect(gap).toBeGreaterThanOrEqual(4);
+  await capture(page, "revision-focus-360");
+});
+
+test("가로 넘침이 있는 막대만 세로 휠을 가로 스크롤로 바꾸고 끝에서는 전달한다", async ({ page }) => {
+  const app = await showToolbarScenario(page, 360, "jizura");
+  const bar = app.locator(".ks-data-toolbar");
+  await bar.hover();
+  await page.mouse.wheel(0, 160);
+  await expect.poll(() => bar.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  const edgeBubbles = await bar.evaluate((node) => {
+    node.scrollLeft = node.scrollWidth;
+    return node.dispatchEvent(new WheelEvent("wheel", { deltaY:120, bubbles:true, cancelable:true }));
+  });
+  expect(edgeBubbles).toBe(true);
+  await capture(page, "revision-wheel-360");
+  const wide = await showToolbarScenario(page, 1000, "label");
+  const wideBar = wide.locator(".ks-data-toolbar");
+  expect(await wideBar.evaluate((node) => node.dispatchEvent(new WheelEvent("wheel", { deltaY:120, bubbles:true, cancelable:true })))).toBe(true);
+});
+
+test("기본 앱은 최소 창에서는 두 줄이고 넓은 창에서는 기존 한 줄이다", async ({ page }) => {
+  for (const id of ["reader", "market", "earth", "profiler"]) {
+    for (const width of [360, 1000]) {
+      await page.setViewportSize({ width:width + 40, height:400 });
+      await page.goto(`/?preview=${id}`);
+      await page.addStyleTag({ content:`.ks-harness-apps.is-preview .ks-harness-window { width:${width}px; height:240px; }` });
+      const app = page.getByTestId(`app-window-${id}`);
+      const bars = app.locator(".ks-data-toolbar");
+      await expect(bars).toHaveCount((id === "market" ? 2 : 1) * (width === 360 ? 2 : 1));
+      if (id === "market" && width === 360) await expect(app.getByText("KRW", { exact:true })).toBeVisible();
+      const measurements = await bars.evaluateAll((nodes) => nodes.map((node) => ({
+        height:node.getBoundingClientRect().height, client:node.clientWidth, scroll:node.scrollWidth,
+        clippedTexts:[...node.querySelectorAll<HTMLElement>(".ks-data-text")].filter((text) => text.scrollWidth > text.clientWidth + 1).map((text) => text.textContent),
+        items:[...node.querySelectorAll<HTMLElement>(".ks-data-toolbar-item")].map((item) => { const r = item.getBoundingClientRect(), b = node.getBoundingClientRect(); return {left:r.left - b.left, right:b.right - r.right, width:r.width}; }),
+      })));
+      for (const bar of measurements) {
+        expect(bar.height).toBe(49);
+        if (width === 360) {
+          expect(bar.scroll).toBeLessThanOrEqual(bar.client + 1);
+          expect(bar.clippedTexts).toEqual([]);
+          for (const item of bar.items) {
+            expect(item.left).toBeGreaterThanOrEqual(-1);
+            expect(item.right).toBeGreaterThanOrEqual(-1);
+          }
+        }
+      }
+      if (output) await app.screenshot({ path:join(output, `revision-${id}-${width}.png`) });
+      if (id === "market" && width === 360) {
+        await bars.nth(2).scrollIntoViewIfNeeded();
+        if (output) await app.screenshot({ path:join(output, "revision-market-converter-360.png") });
+      }
+    }
+  }
+});
+
+test("기본 앱은 폭 전환 뒤에도 고른 상태와 입력을 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width:400, height:400 });
+  await page.goto("/?preview=reader");
+  const style = await page.addStyleTag({ content:".ks-harness-apps.is-preview .ks-harness-window { width:360px; height:240px; }" });
+  const app = page.getByTestId("app-window-reader");
+  const bars = app.locator(".ks-data-toolbar");
+  await expect(bars).toHaveCount(2);
+  const search = app.getByPlaceholder("검색");
+  await search.fill("kaleidoscope");
+  await search.blur();
+  await expect.poll(async () => page.evaluate(async () => {
+    const { snapshot } = await (window as any).__ksHarness.call({ op:"state.get" });
+    return snapshot.shared.windows.find((item: any) => item.app_id === "reader").state.search_input;
+  })).toBe("kaleidoscope");
+  await style.evaluate((node) => { node.textContent = ".ks-harness-apps.is-preview .ks-harness-window { width:1000px; height:240px; }"; });
+  await expect(bars).toHaveCount(1);
+  await expect(app.getByPlaceholder("검색")).toHaveValue("kaleidoscope");
+});
+
+test("기본 앱의 두 줄 전환은 실측한 막대 경계에서 일어난다", async ({ page }) => {
+  const cases = [
+    { id:"reader", boundary:526, narrow:2, wide:1 },
+    { id:"market", boundary:582, narrow:4, wide:3 },
+    { id:"market", boundary:683, narrow:3, wide:2 },
+    { id:"earth", boundary:580, narrow:2, wide:1 },
+    { id:"profiler", boundary:410, narrow:2, wide:1 },
+  ];
+  for (const { id, boundary, narrow, wide } of cases) {
+    await page.setViewportSize({ width:1040, height:400 });
+    await page.goto(`/?preview=${id}`);
+    const style = await page.addStyleTag({ content:`.ks-harness-apps.is-preview .ks-harness-window { width:${boundary + 2}px; height:240px; }` });
+    const app = page.getByTestId(`app-window-${id}`);
+    await expect(app.locator(".ks-data-window")).toHaveJSProperty("clientWidth", boundary);
+    await expect(app.locator(".ks-data-toolbar")).toHaveCount(narrow);
+    await style.evaluate((node, width) => { node.textContent = `.ks-harness-apps.is-preview .ks-harness-window { width:${width + 3}px; height:240px; }`; }, boundary);
+    await expect(app.locator(".ks-data-window")).toHaveJSProperty("clientWidth", boundary + 1);
+    await expect(app.locator(".ks-data-toolbar")).toHaveCount(wide);
   }
 });

@@ -14,6 +14,27 @@ import blockGallery from "../../../examples/block-gallery.json";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+it("가짜 코어가 when 안의 식과 입력 동작을 처리한다", async () => {
+  const definition: AppDefinition = { ...mdEditorDefinition, state: { query: "처음" }, ui: {
+    type: "when", value: true, child: { type: "stack", direction: "column", children: [
+      { type: "text", value: { expr: "$state.query" } },
+      { type: "input", value: { state: "query" }, on_change: { set_state: "query" } },
+    ] },
+  } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { query: "처음" };
+  const transport = createFakeTransport(seed);
+  const attached = await transport.call({ op: "data.attach", window_id: "editor-window", dormant: [] });
+  expect(attached.op).toBe("data.attach");
+  if (attached.op !== "data.attach") throw new Error("데이터 연결 응답이 아닙니다");
+  expect(attached.view.values["/ui/child/children/0/value"]).toEqual({ status: "ready", value: "처음" });
+  await transport.call({ op: "data.act", window_id: "editor-window", pointer: "/ui/child/children/1/on_change", event: "변경" });
+  const state = await transport.call({ op: "state.get" });
+  expect(state.op).toBe("state.get");
+  if (state.op !== "state.get") throw new Error("상태 조회 응답이 아닙니다");
+  expect(state.snapshot.shared.windows[0].state.query).toBe("변경");
+});
+
 it("도구 막대 텍스트 항목은 줄어들 수 있는 항목으로 표시한다", async () => {
   const definition: AppDefinition = { ...mdEditorDefinition, ui: { type: "toolbar", start: [
     { type: "text", style: "title", value: "긴 제목" },

@@ -63,105 +63,235 @@
     "fill": 1,
     "children": [
       {
-        "type": "toolbar",
-        "start": [
+        "type": "stack",
+        "direction": "column",
+        "gap": "none",
+        "children": [
           {
-            "type": "select",
-            "style": "segmented",
-            "value": {
-              "state": "feed_kind"
-            },
-            "options": [
-              {
-                "value": "front_page",
-                "label": "인기"
-              },
-              {
-                "value": "story",
-                "label": "전체"
-              },
-              {
-                "value": "show_hn",
-                "label": "Show HN"
-              },
-              {
-                "value": "ask_hn",
-                "label": "Ask HN"
-              },
-              {
-                "value": "latest",
-                "label": "최신"
-              }
-            ],
-            "on_change": [
-              {
-                "set_state": "feed_kind"
-              },
-              {
-                "set_state": "selected_story",
-                "value": "top"
-              }
-            ]
+            "type": "when",
+            "min_width": 527,
+            "child": {
+              "type": "toolbar",
+              "start": [
+                {
+                  "type": "select",
+                  "style": "segmented",
+                  "value": {
+                    "state": "feed_kind"
+                  },
+                  "options": [
+                    {
+                      "value": "front_page",
+                      "label": "인기"
+                    },
+                    {
+                      "value": "story",
+                      "label": "전체"
+                    },
+                    {
+                      "value": "show_hn",
+                      "label": "Show HN"
+                    },
+                    {
+                      "value": "ask_hn",
+                      "label": "Ask HN"
+                    },
+                    {
+                      "value": "latest",
+                      "label": "최신"
+                    }
+                  ],
+                  "on_change": [
+                    {
+                      "set_state": "feed_kind"
+                    },
+                    {
+                      "set_state": "selected_story",
+                      "value": "top"
+                    }
+                  ]
+                },
+                {
+                  "type": "input",
+                  "kind": "search",
+                  "value": {
+                    "state": "search_input"
+                  },
+                  "placeholder": "검색",
+                  "on_change": [
+                    {
+                      "set_state": "search_input"
+                    },
+                    {
+                      "set_state": "query",
+                      "value": {
+                        "expr": "$event = '' ? '' : $state.query"
+                      }
+                    },
+                    {
+                      "set_state": "selected_story",
+                      "value": {
+                        "expr": "$event = '' ? 'top' : $state.selected_story"
+                      }
+                    }
+                  ],
+                  "on_submit": [
+                    {
+                      "set_state": "query"
+                    },
+                    {
+                      "set_state": "selected_story",
+                      "value": "top"
+                    }
+                  ]
+                }
+              ],
+              "end": [
+                {
+                  "type": "button",
+                  "label": "초기화",
+                  "icon": "rotate-ccw",
+                  "on_click": [
+                    {
+                      "set_state": "search_input",
+                      "value": ""
+                    },
+                    {
+                      "set_state": "query",
+                      "value": ""
+                    },
+                    {
+                      "set_state": "selected_story",
+                      "value": "top"
+                    },
+                    {
+                      "refresh": [
+                        "stories"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           },
           {
-            "type": "input",
-            "kind": "search",
-            "value": {
-              "state": "search_input"
-            },
-            "placeholder": "검색",
-            "on_change": [
-              {
-                "set_state": "search_input"
-              },
-              {
-                "set_state": "query",
-                "value": {
-                  "expr": "$event = '' ? '' : $state.query"
+            "type": "when",
+            "max_width": 526,
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toolbar",
+                  "start": [
+                    {
+                      "type": "select",
+                      "style": "segmented",
+                      "value": {
+                        "state": "feed_kind"
+                      },
+                      "options": [
+                        {
+                          "value": "front_page",
+                          "label": "인기"
+                        },
+                        {
+                          "value": "story",
+                          "label": "전체"
+                        },
+                        {
+                          "value": "show_hn",
+                          "label": "Show HN"
+                        },
+                        {
+                          "value": "ask_hn",
+                          "label": "Ask HN"
+                        },
+                        {
+                          "value": "latest",
+                          "label": "최신"
+                        }
+                      ],
+                      "on_change": [
+                        {
+                          "set_state": "feed_kind"
+                        },
+                        {
+                          "set_state": "selected_story",
+                          "value": "top"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "toolbar",
+                  "start": [
+                    {
+                      "type": "input",
+                      "kind": "search",
+                      "value": {
+                        "state": "search_input"
+                      },
+                      "placeholder": "검색",
+                      "on_change": [
+                        {
+                          "set_state": "search_input"
+                        },
+                        {
+                          "set_state": "query",
+                          "value": {
+                            "expr": "$event = '' ? '' : $state.query"
+                          }
+                        },
+                        {
+                          "set_state": "selected_story",
+                          "value": {
+                            "expr": "$event = '' ? 'top' : $state.selected_story"
+                          }
+                        }
+                      ],
+                      "on_submit": [
+                        {
+                          "set_state": "query"
+                        },
+                        {
+                          "set_state": "selected_story",
+                          "value": "top"
+                        }
+                      ]
+                    }
+                  ],
+                  "end": [
+                    {
+                      "type": "button",
+                      "label": "초기화",
+                      "icon": "rotate-ccw",
+                      "on_click": [
+                        {
+                          "set_state": "search_input",
+                          "value": ""
+                        },
+                        {
+                          "set_state": "query",
+                          "value": ""
+                        },
+                        {
+                          "set_state": "selected_story",
+                          "value": "top"
+                        },
+                        {
+                          "refresh": [
+                            "stories"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
                 }
-              },
-              {
-                "set_state": "selected_story",
-                "value": {
-                  "expr": "$event = '' ? 'top' : $state.selected_story"
-                }
-              }
-            ],
-            "on_submit": [
-              {
-                "set_state": "query"
-              },
-              {
-                "set_state": "selected_story",
-                "value": "top"
-              }
-            ]
-          }
-        ],
-        "end": [
-          {
-            "type": "button",
-            "label": "초기화",
-            "icon": "rotate-ccw",
-            "on_click": [
-              {
-                "set_state": "search_input",
-                "value": ""
-              },
-              {
-                "set_state": "query",
-                "value": ""
-              },
-              {
-                "set_state": "selected_story",
-                "value": "top"
-              },
-              {
-                "refresh": [
-                  "stories"
-                ]
-              }
-            ]
+              ]
+            }
           }
         ]
       },
