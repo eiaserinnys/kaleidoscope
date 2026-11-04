@@ -186,6 +186,27 @@ fn controls_support_labels_disabled_color_and_grouped_options() {
 }
 
 #[test]
+fn input_read_only_requires_block_25_and_control_bindings() {
+    let mut app = definition(json!({"type":"input", "value":{"state":"value"},
+        "on_change":{"set_state":"value"}, "read_only":{"state":"locked"}}));
+    app["state"]["locked"] = json!(true);
+    app["requires"]["blocks"] = json!(24);
+    let error = parse_app_definition(&app.to_string()).unwrap_err();
+    assert!(error.details.iter().any(|detail| detail.contains("input.read_only") && detail.contains("25")), "{error:?}");
+    app["requires"]["blocks"] = json!(25);
+    for binding in [json!({"state":"locked"}), json!({"client":"value"})] {
+        app["ui"]["read_only"] = binding.clone();
+        let parsed = parse_app_definition(&app.to_string()).unwrap();
+        assert_eq!(serde_json::to_value(&parsed.ui).unwrap()["read_only"], binding);
+        assert!(kaleidoscope_contract::data::all_ui_bindings(&parsed).iter().any(|(path, _)| path == "/ui/read_only"));
+    }
+    for binding in [json!(true), json!({"expr":"true"}), json!({"state":"missing"}), json!({"client":"missing"})] {
+        app["ui"]["read_only"] = binding.clone();
+        assert!(!accepted(&app), "{binding}");
+    }
+}
+
+#[test]
 fn new_control_fields_require_block_set_twelve() {
     for block in [
         json!({"type":"input","label":"BPM","value":{"state":"value"},"on_change":{"set_state":"value"}}),

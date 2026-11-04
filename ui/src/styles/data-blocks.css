@@ -156,6 +156,7 @@
 .ks-data-stack-item > .ks-data-input:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); margin-block: var(--ks-space-1) var(--ks-space-2); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-input:not(.ks-data-tab-panel *) { width: 100%; margin-inline: 0; }
 .ks-data-input .ks-text-input { display: block; font-family: inherit; }
+.ks-data-input .ks-text-input[readonly] { color: var(--ks-color-muted); }
 .ks-data-input textarea { padding-block: calc((var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)) / 2); max-height: calc(var(--ks-type-body) * var(--ks-line-body) * 8 + var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)); resize: none; overflow-y: auto; }
 .ks-data-input.has-rows textarea { max-height: none; }
 .ks-field, .ks-color-control { display: inline-flex; align-items: center; gap: var(--ks-space-2); min-height: var(--ks-control-height); color: var(--ks-color-text); font-size: var(--ks-type-body); }

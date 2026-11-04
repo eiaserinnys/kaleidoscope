@@ -2,6 +2,18 @@ import type { AppDefinition } from "../../src/contract/contract";
 
 const definitions = [
   {
+    id: "input-read-only",
+    name: "입력 읽기 전용",
+    requires: { blocks: 25, modules: {} },
+    permissions: [],
+    state: { locked: true, title: "기획 회의 메모", body: "공유 문서를 읽고 필요한 내용을 복사합니다." },
+    ui: { type: "stack", direction: "column", gap: "medium", children: [
+      { type: "input", label: "제목", value: { state: "title" }, read_only: { state: "locked" }, on_change: { set_state: "title" } },
+      { type: "input", label: "내용", multiline: true, rows: 3, value: { state: "body" }, read_only: { state: "locked" }, on_change: { set_state: "body" } },
+      { type: "toggle", label: "읽기 전용", value: { state: "locked" }, on_change: { set_state: "locked" } },
+    ] },
+  },
+  {
     id: "blocks-18-01",
     name: "가운데 단추 기둥",
     requires: { blocks: 18, modules: {} },

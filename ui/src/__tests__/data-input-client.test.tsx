@@ -13,6 +13,88 @@ vi.mock("../data/window-data", () => ({
 }));
 afterEach(() => { cleanup(); runtime.values = {}; runtime.act.mockClear(); previewRender.mockClear(); });
 
+it.each([false, true])("읽기 전용 %s줄 입력은 동작을 막고 해제하면 다시 편집한다", async (multiline) => {
+  runtime.values = { text: "저장된 내용", locked: false };
+  const input = { type: "input", label: "내용", multiline, value: { client: "text" }, read_only: { client: "locked" },
+    on_change: { client: "change" }, on_submit: { client: "submit" }, on_cancel: { client: "cancel" } };
+  const draw = () => <InputBlock block={input as never} context={{} as never} pointer="/input" />;
+  const view = render(draw());
+  const field = screen.getByRole("textbox", { name: "내용" }) as HTMLInputElement | HTMLTextAreaElement;
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "임시 초안" } });
+  runtime.values.locked = true;
+  view.rerender(draw());
+  expect(field.readOnly).toBe(true);
+  expect(field.getAttribute("aria-readonly")).toBe("true");
+  expect(field.value).toBe("저장된 내용");
+  fireEvent.change(field, { target: { value: "막힌 입력" } });
+  fireEvent.keyDown(field, { key: "Enter", ctrlKey: multiline });
+  fireEvent.keyDown(field, { key: "Escape" });
+  fireEvent.blur(field);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  expect(runtime.act).not.toHaveBeenCalled();
+  runtime.values.locked = false;
+  view.rerender(draw());
+  expect(field.readOnly).toBe(false);
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "다시 수정" } });
+  fireEvent.blur(field);
+  await vi.waitFor(() => expect(runtime.act).toHaveBeenCalledWith("/input/on_change", "다시 수정"));
+});
+
+it("읽기 전용 검색 입력의 지우기 조작은 값을 보내지 않는다", () => {
+  runtime.values = { text: "검색어", locked: true };
+  const input = { type: "input", kind: "search", value: { client: "text" }, read_only: { client: "locked" }, on_change: { client: "change" } };
+  render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+  const clear = screen.queryByRole("button", { name: "지우기" }) as HTMLButtonElement | null;
+  if (clear) fireEvent.click(clear);
+  expect(runtime.act).not.toHaveBeenCalled();
+  expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("검색어");
+});
+
+it("초점을 유지한 채 읽기 전용을 해제한 뒤에도 편집 중 초안을 보존한다", () => {
+  runtime.values = { text: "원본", locked: false };
+  const input = { type: "input", label: "내용", value: { client: "text" }, read_only: { client: "locked" }, on_change: { client: "change" } };
+  const draw = () => <InputBlock block={input as never} context={{} as never} pointer="/input" />;
+  const view = render(draw());
+  const field = screen.getByRole("textbox", { name: "내용" }) as HTMLInputElement;
+  fireEvent.focus(field);
+  runtime.values.locked = true;
+  view.rerender(draw());
+  runtime.values.locked = false;
+  view.rerender(draw());
+  fireEvent.change(field, { target: { value: "새 초안" } });
+  runtime.values.text = "외부 변경";
+  view.rerender(draw());
+  expect(field.value).toBe("새 초안");
+});
+
+it("전환 전에 확정한 편집은 순서대로 전송하고 전환 뒤 새 입력과 제출은 막는다", async () => {
+  let complete!: (value: boolean) => void;
+  runtime.act.mockImplementationOnce(() => new Promise<boolean>((resolve) => { complete = resolve; }));
+  runtime.values = { text: "원본", locked: false };
+  const input = { type: "input", label: "내용", value: { client: "text" }, read_only: { client: "locked" }, on_change: { client: "change" }, on_submit: { client: "submit" } };
+  const draw = () => <InputBlock block={input as never} context={{} as never} pointer="/input" />;
+  const view = render(draw());
+  const field = screen.getByRole("textbox", { name: "내용" });
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "첫 편집" } });
+  fireEvent.blur(field);
+  fireEvent.focus(field);
+  fireEvent.change(field, { target: { value: "다음 편집" } });
+  fireEvent.blur(field);
+  expect(runtime.act).toHaveBeenCalledTimes(1);
+  runtime.values.locked = true;
+  view.rerender(draw());
+  fireEvent.change(field, { target: { value: "잠긴 뒤 입력" } });
+  fireEvent.keyDown(field, { key: "Enter" });
+  await act(async () => complete(true));
+  expect(runtime.act).toHaveBeenCalledTimes(2);
+  expect(runtime.act).toHaveBeenNthCalledWith(1, "/input/on_change", "첫 편집");
+  expect(runtime.act).toHaveBeenNthCalledWith(2, "/input/on_change", "다음 편집");
+  expect(runtime.act).not.toHaveBeenCalledWith("/input/on_submit", expect.anything());
+});
+
 it("클라이언트 버튼 이름·아이콘과 색상 비활성 상태가 바뀐다", () => {
   runtime.values = { label: "재생", icon: "play", disabled: true, color: "#123456" };
   const button = { type: "button", label: { client: "label" }, icon: { client: "icon" }, on_click: { client: "go" } };
