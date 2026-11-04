@@ -21,12 +21,6 @@ fn encode_url(args: &[JValue], name: &str, uri: bool) -> Result<JValue, Evaluato
             FunctionError::ArgumentError(format!("${name}에 인코딩할 글을 인자로 주세요")).into(),
         );
     }
-    if args.len() != 1 {
-        return Err(EvaluatorError::TypeError(format!(
-            "T0410: Argument count mismatch: expected 0, got {}",
-            args.len()
-        )));
-    }
     let value = match &args[0] {
         JValue::String(value) => value,
         JValue::Undefined => return Ok(JValue::Undefined),
@@ -48,4 +42,48 @@ fn encode_url(args: &[JValue], name: &str, uri: bool) -> Result<JValue, Evaluato
         }
     }
     Ok(JValue::string(encoded))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jsonata_core::parser;
+    use serde_json::{json, Value};
+
+    fn evaluate(expression: &str) -> Result<Value, String> {
+        let ast = parser::parse(expression).unwrap();
+        let mut evaluator = Evaluator::new();
+        install_standard_functions(&mut evaluator);
+        evaluator
+            .evaluate(&ast, &JValue::Null)
+            .map(|value| Value::from(&value))
+            .map_err(|error| error.to_string())
+    }
+
+    #[test]
+    fn component_as_map_callback() {
+        assert_eq!(
+            evaluate("$map(['a-b','a b'], $encodeUrlComponent)").unwrap(),
+            json!(["a-b", "a%20b"])
+        );
+    }
+
+    #[test]
+    fn uri_as_map_callback() {
+        assert_eq!(
+            evaluate("$map(['https://x.test/a b?q=1','https://x.test/c d'], $encodeUrl)").unwrap(),
+            json!(["https://x.test/a%20b?q=1", "https://x.test/c%20d"])
+        );
+    }
+
+    #[test]
+    fn no_argument_reports_what_to_supply() {
+        for name in ["encodeUrlComponent", "encodeUrl"] {
+            let error = evaluate(&format!("${name}()")).unwrap_err();
+            assert!(
+                error.contains(&format!("${name}에 인코딩할 글을 인자로 주세요")),
+                "{error}"
+            );
+        }
+    }
 }

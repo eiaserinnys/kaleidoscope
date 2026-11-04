@@ -135,6 +135,16 @@ fn url_encoding_without_an_argument_reports_what_to_supply() {
 }
 
 #[test]
+fn url_encoding_functions_work_as_map_callbacks() {
+    for (expression, expected) in [
+        ("$map(['a-b','a b'], $encodeUrlComponent)", json!(["a-b", "a%20b"])),
+        ("$map(['https://x.test/a b?q=1','https://x.test/c d'], $encodeUrl)", json!(["https://x.test/a%20b?q=1", "https://x.test/c%20d"])),
+    ] {
+        assert_eq!(evaluate_page_next(expression, &Value::Null, 0, 0).unwrap(), expected);
+    }
+}
+
+#[test]
 fn source_pipeline_plans_in_dependency_order() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["sources"] = json!({
