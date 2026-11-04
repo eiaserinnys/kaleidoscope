@@ -12,6 +12,17 @@ export const shellDefectFixtures = [
     ] },
     { type: "text", value: { state: "clicked" } },
   ] } },
+  ...[false, true].map((inTabs) => {
+    const fields = { type: "stack", direction: "column", gap: "small", children: [
+      { type: "input", label: "짧은 입력", label_position: "top", columns: 5, kind: "number", value: { state: "value" }, on_change: { set_state: "value" } },
+      { type: "stack", direction: "row", align: "end", fill: 1, gap: "small", children: [
+        { type: "input", label: "긴 입력", label_position: "top", columns: 12, value: { state: "value" }, on_change: { set_state: "value" } },
+        { type: "button", label: "새 값", on_click: [] },
+      ] },
+      { type: "input", label: "기본", columns: 5, value: { state: "value" }, on_change: { set_state: "value" } },
+    ] };
+    return { ...base, requires: { blocks: 21, modules: {} }, id: inTabs ? "columns-tabs" : "columns-plain", name: "입력 폭 시험", state: { value: "12" }, ui: inTabs ? { type: "tabs", tabs: [{ label: "입력", child: fields }] } : fields };
+  }),
   { ...base, id: "follow-fixture", name: "따라가기 시험", state: { active: null, rows }, ui: { type: "stack", direction: "column", fill: 1, children: [
     { type: "button", label: "마지막 항목", on_click: [{ set_state: "active", value: "29" }] },
     { type: "repeat", key: "id", items: { state: "rows" }, follow_key: { state: "active" }, template: { type: "text", value: { item: "name" } } },
