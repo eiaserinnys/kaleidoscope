@@ -5,6 +5,38 @@ use axum::{
 };
 use tower::ServiceExt;
 
+fn insert_receiver_fixture(state: &AppState, id: &str, receiver: &str) {
+    let mut definition = json!({
+        "id": id, "name": id,
+        "requires": {"blocks": 1, "modules": {}},
+        "permissions": [], "state": {},
+        "ui": {"type": "text", "value": "시험"}
+    });
+    match receiver {
+        "agent" => {
+            definition["agent"] = json!({
+                "protocol": "conversation-v1", "permission": "service", "base_path": "/api",
+                "namespace": "test", "profile": "test", "collection": "test", "model_order": [],
+                "selected_model": "test", "title_template": "test",
+                "initial_instruction_template": "test", "instructions_template": "test",
+                "thread_entry": "thread"
+            })
+        }
+        "client" => {
+            definition["client"] = json!({
+                "runtime": "javascript", "entry": {"id": "script", "version": 1},
+                "capabilities": ["receive_message"]
+            })
+        }
+        "none" => {}
+        _ => unreachable!(),
+    }
+    let definition: AppDefinition = serde_json::from_value(definition).unwrap();
+    let db = state.lock_db().unwrap();
+    db.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?1,1,'now','now')", [id]).unwrap();
+    db.execute("INSERT INTO app_versions(app_id,version,definition,created_at,created_by) VALUES(?1,1,?2,'now','test')", params![id, serde_json::to_string(&definition).unwrap()]).unwrap();
+}
+
 fn device(state: &AppState, id: &str, account: &str) -> String {
     let token = format!("token-{id}");
     state.lock_db().unwrap().execute(
@@ -133,7 +165,14 @@ async fn preferences_broadcast_to_two_devices_and_reconnect_snapshot() {
     let account = state.mcp_account_id().unwrap();
     let first = device(&state, "first", &account);
     let second = device(&state, "second", &account);
-    state.lock_db().unwrap().execute("INSERT INTO accounts(id,display_name,created_at) VALUES('other','other','now')", []).unwrap();
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES('other','other','now')",
+            [],
+        )
+        .unwrap();
     let other = device(&state, "other", "other");
     let old = device(&state, "old", &account);
     let mut a = events(&state, &first, registry::PREFERENCES_REGISTRY_VERSION).await;
@@ -146,7 +185,10 @@ async fn preferences_broadcast_to_two_devices_and_reconnect_snapshot() {
         assert_eq!(next_event(stream).await["event"], "layout.snapshot");
     }
     assert_eq!(next_event(&mut outsider).await["event"], "apps.snapshot");
-    assert_eq!(next_event(&mut outsider).await["event"], "preferences.snapshot");
+    assert_eq!(
+        next_event(&mut outsider).await["event"],
+        "preferences.snapshot"
+    );
     assert_eq!(next_event(&mut outsider).await["event"], "layout.snapshot");
     assert_eq!(next_event(&mut legacy).await["event"], "apps.snapshot");
     assert_eq!(next_event(&mut legacy).await["event"], "layout.snapshot");
@@ -163,8 +205,16 @@ async fn preferences_broadcast_to_two_devices_and_reconnect_snapshot() {
         assert_eq!(changed["event"], "preferences.changed");
         assert_eq!(changed["preferences"], value);
     }
-    assert!(tokio::time::timeout(Duration::from_millis(200), next_event(&mut outsider)).await.is_err());
-    assert!(tokio::time::timeout(Duration::from_millis(200), next_event(&mut legacy)).await.is_err());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(200), next_event(&mut outsider))
+            .await
+            .is_err()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(200), next_event(&mut legacy))
+            .await
+            .is_err()
+    );
     drop(b);
     let mut b = events(&state, &second, registry::PREFERENCES_REGISTRY_VERSION).await;
     assert_eq!(next_event(&mut b).await["event"], "apps.snapshot");
@@ -178,12 +228,8 @@ async fn preference_rejects_unreceivable_deleted_and_invalid_requests() {
     let state = AppState::in_memory("secret");
     let account = state.mcp_account_id().unwrap();
     let token = device(&state, "first", &account);
-    let definition = test_definition(include_str!("fixtures/simple-app.json"));
-    let app = state
-        .publish_app(&definition, "test", false, None)
-        .unwrap()
-        .0;
-    let id = app.app.id;
+    let id = "receiver-none";
+    insert_receiver_fixture(&state, id, "none");
     let (status, error) = request(
         &state,
         &token,
@@ -197,7 +243,7 @@ async fn preference_rejects_unreceivable_deleted_and_invalid_requests() {
     state
         .lock_db()
         .unwrap()
-        .execute("UPDATE apps SET deleted_at='now' WHERE id=?1", [&id])
+        .execute("UPDATE apps SET deleted_at='now' WHERE id=?1", [id])
         .unwrap();
     let (status, error) = request(
         &state,
@@ -226,26 +272,19 @@ async fn current_registered_receiver_is_selectable() {
     let state = AppState::in_memory("secret");
     let account = state.mcp_account_id().unwrap();
     let token = device(&state, "first", &account);
-    let mut definition: AppDefinition =
-        serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
-    definition.id = "receiver".into();
-    definition.client.as_mut().unwrap().capabilities = Some(vec![
-        kaleidoscope_contract::client::ClientCapability::ReceiveMessage,
-    ]);
-    let db = state.lock_db().unwrap();
-    db.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES('receiver','Receiver',1,'now','now')", []).unwrap();
-    db.execute("INSERT INTO app_versions(app_id,version,definition,created_at,created_by) VALUES('receiver',1,?1,'now','test')", [serde_json::to_string(&definition).unwrap()]).unwrap();
-    drop(db);
-    let (status, value) = request(
-        &state,
-        &token,
-        "POST",
-        "/api/device/preferences/default",
-        json!({"app_id":"receiver"}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(value["default_message_app_id"], "receiver");
+    for (id, receiver) in [("receiver-client", "client"), ("receiver-agent", "agent")] {
+        insert_receiver_fixture(&state, id, receiver);
+        let (status, value) = request(
+            &state,
+            &token,
+            "POST",
+            "/api/device/preferences/default",
+            json!({"app_id":id}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(value["default_message_app_id"], id);
+    }
 }
 
 #[tokio::test]
@@ -253,9 +292,23 @@ async fn null_default_restores_builtin_fallback() {
     let state = AppState::in_memory("secret");
     let account = state.mcp_account_id().unwrap();
     let token = device(&state, "first", &account);
-    let (_, initial) = request(&state, &token, "POST", "/api/device/preferences/default", json!({"app_id":"agent"})).await;
+    let (_, initial) = request(
+        &state,
+        &token,
+        "POST",
+        "/api/device/preferences/default",
+        json!({"app_id":"agent"}),
+    )
+    .await;
     assert_eq!(initial["default_message_app_id"], "agent");
-    let (status, cleared) = request(&state, &token, "POST", "/api/device/preferences/default", json!({"app_id":null})).await;
+    let (status, cleared) = request(
+        &state,
+        &token,
+        "POST",
+        "/api/device/preferences/default",
+        json!({"app_id":null}),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(cleared["default_message_app_id"], Value::Null);
     assert_eq!(cleared["revision"], 2);
