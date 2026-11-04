@@ -2,6 +2,8 @@ import { test, expect } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+test.use({ deviceScaleFactor: 2 });
+
 test("런처와 창의 앱 아이콘이 테마와 앱 판을 따른다", async ({ page }) => {
   const output = process.env.KS_ICON_CAPTURE_DIR ?? "/tmp/ks-icon-979/captures";
   mkdirSync(output, { recursive: true });
@@ -13,9 +15,10 @@ test("런처와 창의 앱 아이콘이 테마와 앱 판을 따른다", async (
       await page.goto("/harness.html?app-icons");
       const bar = page.getByTestId("app-window-web-browser").locator(".ks-window-titlebar");
       const icon = bar.locator(".ks-app-icon");
-      await expect(icon).toHaveCSS("background-color", /.+/);
       await expect(icon).toHaveCSS("mask-image", /data:image\/svg/);
-      await page.getByRole("button", { name: "앱 열기" }).click();
+      const color = await bar.evaluate((element) => getComputedStyle(element).color);
+      await expect(icon).toHaveCSS("background-color", color);
+      await page.locator(".ks-shell-actions").getByRole("button", { name: "앱 열기" }).click();
       const menu = page.getByRole("menu");
       await expect(menu.getByRole("menuitem", { name: "탐색기" }).locator("img.ks-app-icon")).toBeVisible();
       await expect(menu.getByRole("menuitem", { name: "계산기" }).locator("svg.ks-app-icon")).toBeVisible();

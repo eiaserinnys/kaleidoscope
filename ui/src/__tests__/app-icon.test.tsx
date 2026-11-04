@@ -15,7 +15,7 @@ describe("앱 아이콘 SVG 표시 방식", () => {
   });
 });
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
 import { createFakeTransport } from "../core/fake-transport";
@@ -47,21 +47,26 @@ describe("쉘 앱 아이콘", () => {
     snapshot.link = { state: "connected", mode: "remote", server_url: "https://first.test", device_name: "PC" };
     const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
     const original = transport.call.bind(transport);
+    let complete!: (reply: { op: "app.icon"; media: { mime: string; data_base64: string; width: null; height: null } }) => void;
+    const pending = new Promise<{ op: "app.icon"; media: { mime: string; data_base64: string; width: null; height: null } }>((resolve) => { complete = resolve; });
     const calls = vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) => {
-      if (request.op === "app.icon") return Promise.resolve({ op: "app.icon", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } });
+      if (request.op === "app.icon") return pending;
       return original(request);
     }) as typeof transport.call);
     const store = createShellStore(transport);
     render(<Shell store={store} />);
     await store.ready;
-    await screen.findByRole("button", { name: "앱 열기" });
+    await waitFor(() => expect(document.querySelector(".ks-shell-actions")).not.toBeNull());
+    const launcher = within(document.querySelector(".ks-shell-actions") as HTMLElement).getByRole("button", { name: "앱 열기" });
     const iconCalls = () => calls.mock.calls.filter(([request]) => request.op === "app.icon");
     expect(iconCalls()).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
+    fireEvent.click(launcher);
     await waitFor(() => expect(iconCalls()).toHaveLength(1));
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] } } });
     await screen.findByTestId("app-window-md-viewer");
     expect(iconCalls()).toHaveLength(1);
+    complete({ op: "app.icon", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } });
+    await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(2));
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] }, link: { state: "connected", mode: "remote", server_url: "https://second.test", device_name: "PC" } } });
     await waitFor(() => expect(iconCalls()).toHaveLength(2));
     store.dispose();
