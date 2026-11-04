@@ -15,6 +15,7 @@ use measure::{measure_ax, measure_click, measure_key, measure_type};
 
 const APP_ID: &str = "e2e-web-control-probe";
 const TIMEOUT: Duration = Duration::from_secs(30);
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(120);
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 struct Process(Child);
@@ -34,6 +35,19 @@ fn wait_file(path: &Path) -> Result<(), String> {
         thread::sleep(Duration::from_millis(20));
     }
     Ok(())
+}
+
+fn focus_start_diagnostics(out: &Path) -> String {
+    let log = fs::read_to_string(out.join("focus-start.log"))
+        .unwrap_or_else(|e| format!("읽을 수 없음: {e}"));
+    let stderr = fs::read(out.join("focus-window.stderr.txt"));
+    let stderr = match stderr {
+        Ok(bytes) => {
+            String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(2048)..]).into_owned()
+        }
+        Err(e) => format!("읽을 수 없음: {e}"),
+    };
+    format!("focus-start.log:\n{log}\nstderr 끝부분:\n{stderr}")
 }
 
 fn serve_fixture() -> Result<String, String> {
@@ -69,6 +83,10 @@ impl<'a> FocusProbe<'a> {
         // 웹뷰의 일부만 가려 남은 영역의 깜빡임을 기록할 수 있다.
         let x = pos.x + (size.width as i32 / 2);
         let y = pos.y + 80;
+        let stdout = File::create(out.join("focus-window.stdout.txt"))
+            .map_err(|e| format!("다른 프로그램 stdout 파일 생성: {e}"))?;
+        let stderr = File::create(out.join("focus-window.stderr.txt"))
+            .map_err(|e| format!("다른 프로그램 stderr 파일 생성: {e}"))?;
         let child = Command::new("powershell.exe")
             .creation_flags(CREATE_NO_WINDOW)
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
@@ -79,8 +97,8 @@ impl<'a> FocusProbe<'a> {
             .arg((size.width / 3).max(300).to_string())
             .arg((size.height / 2).max(240).to_string())
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
             .spawn()
             .map_err(|e| format!("다른 프로그램 실행: {e}"))?;
         let mut probe = Self {
@@ -88,7 +106,23 @@ impl<'a> FocusProbe<'a> {
             sequence: 0,
             _process: Process(child),
         };
-        wait_file(&out.join("focus.ready"))?;
+        let deadline = Instant::now() + STARTUP_TIMEOUT;
+        while !out.join("focus.ready").is_file() {
+            if let Some(status) = probe._process.0.try_wait().map_err(|e| e.to_string())? {
+                return Err(format!(
+                    "다른 프로그램 시작 중 종료: {status}\n{}",
+                    focus_start_diagnostics(out)
+                ));
+            }
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "다른 프로그램 시작 대기 시간 초과: {}\n{}",
+                    out.join("focus.ready").display(),
+                    focus_start_diagnostics(out)
+                ));
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
         probe.snapshot()?;
         Ok(probe)
     }

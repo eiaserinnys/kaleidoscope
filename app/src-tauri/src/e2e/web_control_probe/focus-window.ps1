@@ -1,6 +1,10 @@
 param([string]$Out, [int]$X, [int]$Y, [int]$Width, [int]$Height)
+[IO.File]::AppendAllText((Join-Path $Out 'focus-start.log'), "started $((Get-Date).ToString('o'))`r`n")
+try {
+$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+[IO.File]::AppendAllText((Join-Path $Out 'focus-start.log'), "assemblies $((Get-Date).ToString('o'))`r`n")
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -14,6 +18,7 @@ public class ProbeFocus {
   [DllImport("user32.dll")] public static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO info);
 }
 '@
+[IO.File]::AppendAllText((Join-Path $Out 'focus-start.log'), "compiled $((Get-Date).ToString('o'))`r`n")
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Kaleidoscope focus probe'
 $form.StartPosition = 'Manual'
@@ -52,5 +57,13 @@ $timer.Add_Tick({
   [IO.File]::WriteAllText($pending, $json)
   [IO.File]::Move($pending, (Join-Path $Out "focus-$id.json"))
 })
-$form.Add_Shown({ $textBox.Focus(); $textBox.SelectionStart = 5; $timer.Start(); [IO.File]::WriteAllText((Join-Path $Out 'focus.ready'), '') })
+$form.Add_Shown({
+  $textBox.Focus(); $textBox.SelectionStart = 5; $timer.Start()
+  [IO.File]::AppendAllText((Join-Path $Out 'focus-start.log'), "shown $((Get-Date).ToString('o'))`r`n")
+  [IO.File]::WriteAllText((Join-Path $Out 'focus.ready'), '')
+})
 [System.Windows.Forms.Application]::Run($form)
+} catch {
+  [IO.File]::AppendAllText((Join-Path $Out 'focus-start.log'), "error $($_.Exception.Message)`r`n")
+  exit 1
+}
