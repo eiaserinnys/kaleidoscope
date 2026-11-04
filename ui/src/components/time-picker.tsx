@@ -10,5 +10,5 @@ export function TimePicker({ value, min, max, step, locale, ...props }: Props) {
     const normalized = normalizeInputOptions(timeOptions(step, min, max).map((value) => ({ value, label: formatter.formatTime(value) })));
     return normalized.ok ? normalized.options : [];
   }, [locale, min, max, step]);
-  return <Combobox {...props} options={options} ready selectedValue={value} />;
+  return <Combobox {...props} options={options} ready selectedValue={value} hideValue />;
 }

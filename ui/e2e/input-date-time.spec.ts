@@ -24,6 +24,9 @@ test("날짜 키보드와 같이 보기 입력, 좁은 창의 팝업 위치", as
     await input.focus(); await input.press("Alt+ArrowDown");
     const dialog = page.getByRole("dialog", { name: "날짜" });
     await expect(dialog).toBeVisible();
+    const [fieldBox, dialogBox] = await Promise.all([input.boundingBox(), dialog.boundingBox()]);
+    const gap = await input.evaluate((element) => parseFloat(getComputedStyle(element).getPropertyValue("--ks-space-2")));
+    expect(dialogBox!.y - (fieldBox!.y + fieldBox!.height)).toBe(gap);
     if (output) await page.screenshot({ path: join(output, `달력-${width}-${theme}.png`) });
     await page.keyboard.press("ArrowRight"); await page.keyboard.press("Enter");
     await expect(input).toBeFocused();

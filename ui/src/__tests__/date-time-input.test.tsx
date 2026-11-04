@@ -56,6 +56,14 @@ it("시간 직접 입력과 목록 선택은 ISO 시각을 보낸다", async () 
   expect(screen.getByRole("listbox")).toBeTruthy();
   await act(async () => {});
 });
+it("시간 목록은 표시 시각만 한 줄로 보여 준다", async () => {
+  setup("time", "15:30");
+  const input = await screen.findByRole("combobox", { name: "입력" });
+  fireEvent.focus(input);
+  const selected = screen.getByRole("option", { selected: true });
+  expect(selected.textContent).toContain("3:30");
+  expect(selected.querySelector(".ks-menu-item-description")).toBeNull();
+});
 it("지연된 날짜 입력을 받은 뒤 외부 단추가 새 값을 읽는다", async () => {
   const { store, spy, originalCall } = setup("date", "2026-11-20");
   let release!: () => void;

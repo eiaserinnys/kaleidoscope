@@ -12,7 +12,7 @@ export function DatePicker({ inputProps, inputRef, value, min, max, locale, labe
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLInputElement | null>(null);
   const surface = useRef<HTMLDivElement>(null);
-  const position = useAnchoredOverlay(anchor, surface, { observe: true });
+  const position = useAnchoredOverlay(anchor, surface, { observe: true, offsetToken: "--ks-space-2" });
   const close = (restore: boolean) => {
     setAnchor(null);
     const owner = inputRef.current && ownerOf(inputRef.current);

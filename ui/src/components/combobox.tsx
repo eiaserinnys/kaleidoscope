@@ -19,9 +19,10 @@ type Props = {
   onCommit: () => boolean;
   onEditingEnd: () => void;
   selectedValue?: string | null;
+  hideValue?: boolean;
 };
 
-export function Combobox({ inputProps, inputRef, options, ready, loading = false, visible, optionsOnly = false, onChoose, onCommit, onEditingEnd, selectedValue }: Props) {
+export function Combobox({ inputProps, inputRef, options, ready, loading = false, visible, optionsOnly = false, onChoose, onCommit, onEditingEnd, selectedValue, hideValue = false }: Props) {
   const id = useId();
   const listId = `${id}-list`;
   const descriptionId = `${id}-description`;
@@ -111,7 +112,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
       <div className="ks-combobox-list" role="listbox" id={listId} ref={scroll}>
         {loading ? <div className="ks-data-skeleton ks-combobox-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div> : filtered.length ? <VirtualSurface virtual={virtual}>{rows.map((row) => {
           const option = filtered[row.index];
-          return <OptionRow key={option.index} option={option} id={`${id}-option-${option.index}`} top={row.start} selected={selected === option.value} active={option.index === active} size={filtered.length} position={row.index + 1} descriptionId={descriptionId} measure={virtual.measureElement} onActive={setActive} onChoose={choose} />;
+          return <OptionRow key={option.index} option={option} id={`${id}-option-${option.index}`} top={row.start} selected={selected === option.value} active={option.index === active} size={filtered.length} position={row.index + 1} descriptionId={descriptionId} measure={virtual.measureElement} onActive={setActive} onChoose={choose} hideValue={hideValue} />;
         })}</VirtualSurface> : <div className="ks-combobox-empty">일치 없음</div>}
       </div>
       {activeOption?.description && <><div className="ks-combobox-separator" /><div className="ks-combobox-description" id={descriptionId} tabIndex={-1}>{activeOption.description}</div></>}
@@ -172,8 +173,8 @@ function useComboboxLayout(anchor: HTMLElement | null, options: InputOption[], l
   return layout;
 }
 
-const OptionRow = memo(function OptionRow({ option, id, top, selected, active, size, position, descriptionId, measure, onActive, onChoose }: { option: InputOption; id: string; top: number; selected: boolean; active: boolean; size: number; position: number; descriptionId: string; measure: (node: Element | null) => void; onActive: (index: number) => void; onChoose: (option: InputOption) => void }) {
+const OptionRow = memo(function OptionRow({ option, id, top, selected, active, size, position, descriptionId, measure, onActive, onChoose, hideValue }: { option: InputOption; id: string; top: number; selected: boolean; active: boolean; size: number; position: number; descriptionId: string; measure: (node: Element | null) => void; onActive: (index: number) => void; onChoose: (option: InputOption) => void; hideValue: boolean }) {
   return <div ref={measure} data-index={position - 1} id={id} role="option" aria-selected={selected} aria-posinset={position} aria-setsize={size} aria-describedby={active && option.description ? descriptionId : undefined} className={`ks-menu-item ks-combobox-option${active ? " is-active" : ""}`} style={{ position: "absolute", top: 0, transform: `translateY(${top}px)` }} onPointerDown={(event) => event.preventDefault()} onPointerMove={() => onActive(option.index)} onClick={() => onChoose(option)}>
-    <span className="ks-menu-item-copy"><span className="ks-menu-item-label">{option.label}</span>{option.label !== option.value && <span className="ks-menu-item-description">{option.value}</span>}</span>
+    <span className="ks-menu-item-copy"><span className="ks-menu-item-label">{option.label}</span>{!hideValue && option.label !== option.value && <span className="ks-menu-item-description">{option.value}</span>}</span>
   </div>;
 });
