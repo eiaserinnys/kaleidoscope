@@ -120,6 +120,8 @@ error_catalog! { ENTRIES;
         message: "{path}: viewport 시작일 {start}이 끝날 {end}보다 늦습니다. 날짜 순서를 고치세요.",
         fix: "뷰포트 시작일을 끝날 이전으로 고치세요"
     }
+    APP_LIST_ON_REMOVE_VERSION_REQUIRED(pointer, version) { class: InvalidAppDefinition, place: "목록 빼기 판 검사", cause: "목록 빼기 동작에 필요한 블록 판보다 낮다", message: "목록 {pointer}의 on_remove는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
+    APP_OPEN_URL_VERSION_REQUIRED(pointer, version) { class: InvalidAppDefinition, place: "주소 열기 동작 판 검사", cause: "주소 열기 동작에 필요한 블록 판보다 낮다", message: "동작 {pointer}의 open_url은 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
     APP_ICON_VERSION_INVALID(app_id, asset, version) {
         class: InvalidAppDefinition,
         place: "앱 아이콘 자산 판 검사",

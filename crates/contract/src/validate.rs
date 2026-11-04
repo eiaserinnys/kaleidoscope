@@ -92,6 +92,24 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
         ));
     }
 
+    if definition.requires.blocks < crate::LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION {
+        let mut remove_pointer = None;
+        data::walk_definition_blocks(&definition, &mut |pointer, block| {
+            if matches!(block, Block::List { on_remove: Some(_), .. }) {
+                remove_pointer = Some(pointer.to_owned());
+            }
+        });
+        if let Some(pointer) = remove_pointer {
+            return Err(crate::errors::APP_LIST_ON_REMOVE_VERSION_REQUIRED(&pointer, crate::LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION));
+        }
+        if let Some((pointer, _)) = data::all_ui_actions(&definition).into_iter().find(|(_, action)| matches!(action, Actions::OpenUrl(_))) {
+            return Err(crate::errors::APP_OPEN_URL_VERSION_REQUIRED(&pointer, crate::LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION));
+        }
+        if let Some((index, _)) = definition.shortcuts.iter().flatten().enumerate().find(|(_, shortcut)| matches!(shortcut.action, Actions::OpenUrl(_))) {
+            return Err(crate::errors::APP_OPEN_URL_VERSION_REQUIRED(&format!("/shortcuts/{index}/action"), crate::LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION));
+        }
+    }
+
     if let Some(icon) = &definition.icon {
         if icon.version == 0 {
             return Err(crate::errors::APP_ICON_VERSION_INVALID(
@@ -1287,7 +1305,8 @@ fn validate_ui_binding(
             && (menu_confirm_body
                 || at
                     .strip_suffix("/copy_text")
-                    .is_some_and(is_item_menu_action))
+                    .is_some_and(is_item_menu_action)
+                || at.strip_suffix("/open_url").is_some_and(is_item_menu_action))
         {
             return;
         }
@@ -2029,6 +2048,12 @@ fn validate_actions(
                 details,
                 &format!("{at}/copy_text"),
             );
+        }
+        Actions::OpenUrl(action) => {
+            if is_item_menu_action(at) && matches!(action.open_url, Binding::Expr(_)) {
+                details.push(format!("{at}: item_menu의 open_url은 {{\"item\":\"필드\"}}로 항목 값을 가리키세요. 식은 행마다 계산하지 않습니다"));
+            }
+            validate_ui_binding(&action.open_url, definition, details, &format!("{at}/open_url"));
         }
         Actions::Many(list) => {
             if list.is_empty() {

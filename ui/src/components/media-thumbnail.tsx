@@ -30,5 +30,5 @@ export function MediaThumbnail({ media, size, className = "", icon = false }: { 
     return iconImageFromData(header.slice(5, -7), base64);
   }, [icon, url]);
   const style = cropStyle(media?.crop);
-  return <span ref={ref} style={icon ? { color: "inherit" } : undefined} className={`ks-media-thumbnail${media && "asset" in media ? " is-asset" : ""} ${className}`}>{result.status === "ready" ? image ? <IconImage image={image} size="tile" /> : <img alt="" src={result.url} style={style} /> : <DataIcon name="image" size="empty" />}</span>;
+  return <span ref={ref} style={icon && result.status === "ready" ? { color: "inherit" } : undefined} className={`ks-media-thumbnail${media && "asset" in media ? " is-asset" : ""}${media ? ` is-${result.status}` : ""} ${className}`} title={result.status === "failed" ? `${result.error.message} ${result.error.id ?? ""}` : undefined}>{result.status === "ready" ? image ? <IconImage image={image} size="tile" /> : <img alt="" src={result.url} style={style} /> : <DataIcon name="image" size="empty" />}</span>;
 }

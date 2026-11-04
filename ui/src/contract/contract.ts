@@ -18,7 +18,7 @@ export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAct
  * 블록 이벤트에 거는 동작. 상태 키 하나에 이벤트 값을 쓰는 짧은 꼴(`{ "set_state": "키" }`)이나 동작 목록이다.
  * 목록은 코어가 순서대로 실행하고, 하나가 실패하면 거기서 멈춘다(앞에서 쓴 상태는 그대로 둔다).
  */
-export type Actions = SetState | ClientAction | PickFilesAction | SaveFileAction | Array<Action> | CopyTextAction;
+export type Actions = SetState | ClientAction | PickFilesAction | SaveFileAction | Array<Action> | OpenUrlAction | CopyTextAction;
 
 /**
  * 추가 객체 필드를 금지하거나 각 값에 적용할 스키마를 지정한다.
@@ -357,7 +357,11 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, 
+/**
+ * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
+ */
+on_remove?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -717,7 +721,7 @@ color?: string,
 /**
  * 이름 옆의 작은 원형 초상.
  */
-image?: MediaRef, meta?: string, badges?: Array<Badge>, 
+image?: MediaRef, media?: Array<FeedMedia>, link?: string, meta?: string, badges?: Array<Badge>, 
 /**
  * 스레드 깊이(0부터). `children`으로 중첩해 넘기면 쉘이 깊이를 계산한다.
  */
@@ -730,6 +734,10 @@ body: FeedBody, tone?: Tone,
  * 대댓글·하위 스레드 항목.
  */
 children?: Array<FeedEntry>, };
+
+export type FeedMedia = { image: MediaRef, kind?: FeedMediaKind, alt?: string, };
+
+export type FeedMediaKind = "image" | "video" | "animation";
 
 /**
  * 속성 값을 보이는 방법.
@@ -984,6 +992,11 @@ export type MoreState = "ready" | "loading" | "failed";
 export type NoticeAction = { label: Binding, on_click: Actions, };
 
 export type NoticeKind = "info" | "error" | "loading";
+
+/**
+ * (블록 세트 36판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
+ */
+export type OpenUrlAction = { open_url: Binding, };
 
 /**
  * 앱이 여는 파일의 선언. 예: `{ "extensions": ["md"], "permission": "docs", "state": "current_file" }`.

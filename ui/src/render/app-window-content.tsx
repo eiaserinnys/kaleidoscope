@@ -92,6 +92,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     const scope = content.closest<HTMLElement>(".ks-window-frame") ?? content;
     let focused: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
+    let focusedRemove = false;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
     let inContent = false;
     let restore = false;
@@ -105,6 +106,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       const target = event.target;
       if (!(target instanceof HTMLElement) || target.classList.contains("ks-window-content")) return;
       focused = target;
+      focusedRemove = target.classList.contains("ks-list-remove");
       inContent = content.contains(target);
       focusedItem = null;
       for (let item: HTMLElement | null = target; item && content.contains(item); item = item.parentElement) {
@@ -138,9 +140,17 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"], [role="table"]')) : undefined;
       if (!collection || !focusedItem || focusedItem.isConnected) return;
       const group = collection.ancestor;
+      const removableList = group.matches('.ks-list[role="list"]');
       const visible = visibleControls(content);
       let anchor: Node = group;
       if (content.contains(group)) {
+        if (removableList) {
+          const items = Array.from(group.querySelectorAll<HTMLElement>('[role="listitem"][data-list-index]'));
+          const index = Number(focusedItem.dataset.listIndex);
+          const item = items.find((item) => Number(item.dataset.listIndex) >= index) ?? items.at(-1);
+          const target = item?.querySelector<HTMLElement>(focusedRemove ? ".ks-list-remove" : "button");
+          if (target) return target;
+        }
         const controls = visibleControls(group);
         if (controls.length) return controls[Math.max(0, collection.controlIndex)] ?? controls[controls.length - 1];
       } else {
@@ -148,6 +158,10 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
         if (!parent) return;
         const added = changes.filter((change) => change.target === parent).flatMap((change) => Array.from(change.addedNodes));
         anchor = added.find((node) => parent.contains(node)) ?? parent;
+      }
+      if (removableList) {
+        const before = visible.filter((element) => Boolean(element.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+        return before ?? visible.find((element) => Boolean(anchor.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) && !anchor.contains(element)) ?? windowContentTarget();
       }
       const addedControl = changes.some((change) => content.contains(change.target)
         && Array.from(change.addedNodes).some((node) => visible.some((control) => node.contains(control))));

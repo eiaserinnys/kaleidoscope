@@ -501,7 +501,8 @@ pub enum Actions {
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
     Many(Vec<Action>),
-    // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
+    OpenUrl(OpenUrlAction),
+    // 기존 동작 배열을 먼저 읽고 단독 지역 동작을 읽는다.
     CopyText(CopyTextAction),
 }
 
@@ -520,7 +521,7 @@ pub enum Action {
     Client(ClientAction),
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
-    // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
+    // 기존 동작 배열을 먼저 읽고 단독 지역 동작을 읽는다.
     CopyText(CopyTextAction),
 }
 
@@ -560,7 +561,7 @@ pub struct FileAccept {
     pub extensions: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct PickFilesAction {
@@ -577,7 +578,7 @@ pub struct PickFilesSpec {
     pub client: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct SaveFileAction {
@@ -585,12 +586,41 @@ pub struct SaveFileAction {
 }
 
 /// 바인딩이 낸 글을 이 기기의 클립보드에 쓴다. 단독으로 쓴다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct CopyTextAction {
     pub copy_text: Binding,
 }
+
+/// (블록 세트 36판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct OpenUrlAction {
+    pub open_url: Binding,
+}
+
+// serde 구조체의 시퀀스 해석이 untagged 동작의 다른 variant로 새지 않게 한다.
+macro_rules! object_action {
+    ($name:ident, $field:ident: $ty:ty) => {
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Fields { $field: $ty }
+                let map = serde_json::Map::<String, JsonValue>::deserialize(deserializer)?;
+                let fields: Fields = serde_json::from_value(JsonValue::Object(map))
+                    .map_err(serde::de::Error::custom)?;
+                Ok(Self { $field: fields.$field })
+            }
+        }
+    };
+}
+object_action!(PickFilesAction, pick_files: PickFilesSpec);
+object_action!(SaveFileAction, save_file: SaveFileSpec);
+object_action!(CopyTextAction, copy_text: Binding);
+object_action!(OpenUrlAction, open_url: Binding);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1092,6 +1122,12 @@ pub struct FeedEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub image: Option<MediaRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<FeedMedia>>")]
+    pub media: Vec<FeedMedia>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub link: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub meta: Option<String>,
@@ -1112,6 +1148,23 @@ pub struct FeedEntry {
     #[ts(optional, as = "Option<Vec<FeedEntry>>")]
     pub children: Vec<FeedEntry>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct FeedMedia {
+    pub image: MediaRef,
+    #[serde(default)]
+    #[ts(optional, as = "Option<FeedMediaKind>")]
+    pub kind: FeedMediaKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub alt: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum FeedMediaKind { #[default] Image, Video, Animation }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(untagged)]
@@ -1332,6 +1385,7 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
                 format!("{pointer}/save_file/suggested_name"),
             )),
             Actions::CopyText(copy) => Some((&copy.copy_text, format!("{pointer}/copy_text"))),
+            Actions::OpenUrl(open) => Some((&open.open_url, format!("{pointer}/open_url"))),
             Actions::Many(list) if list.len() == 1 => match &list[0] {
                 Action::SaveFile(save) => Some((
                     &save.save_file.suggested_name,
@@ -1351,6 +1405,13 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
                     | Binding::Message(_)
             ) {
                 out.push((pointer, binding));
+            }
+        }
+    }
+    for (index, shortcut) in definition.shortcuts.iter().flatten().enumerate() {
+        if let Actions::OpenUrl(open) = &shortcut.action {
+            if !matches!(open.open_url, Binding::Client(_) | Binding::Item(_) | Binding::ParentItem(_) | Binding::Message(_)) {
+                out.push((format!("/shortcuts/{index}/action/open_url"), &open.open_url));
             }
         }
     }
@@ -1423,6 +1484,7 @@ pub fn local_actions(actions: &Actions) -> bool {
         Actions::Client(_)
         | Actions::PickFiles(_)
         | Actions::SaveFile(_)
+        | Actions::OpenUrl(_)
         | Actions::CopyText(_) => true,
         Actions::Many(list) => list.iter().any(|action| {
             matches!(
@@ -1777,6 +1839,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             items,
             selected,
             on_select,
+            on_remove,
             ..
         } => {
             bind!("items", items);
@@ -1785,6 +1848,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
+            }
+            if let Some(on_remove) = on_remove {
+                act!("on_remove", on_remove);
             }
         }
         Block::Tree {

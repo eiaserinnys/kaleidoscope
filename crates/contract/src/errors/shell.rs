@@ -15,6 +15,11 @@ error_catalog! { ENTRIES;
     SHELL_INPUT_DATE_BOUND_INVALID(field) { class: InvalidRequest, place: "날짜 입력 범위 바인딩 읽기", cause: "날짜 범위가 실재 날짜 형식이 아님", message: "날짜 입력의 {field} 값을 읽을 수 없습니다. 앱 정의의 바인딩을 실재 날짜 YYYY-MM-DD로 고치세요.", fix: "날짜 범위 바인딩을 실재 날짜 YYYY-MM-DD로 고치세요" }
     SHELL_INPUT_TIME_BOUND_INVALID(field) { class: InvalidRequest, place: "시간 입력 범위 바인딩 읽기", cause: "시각 범위가 HH:mm 형식이 아님", message: "시간 입력의 {field} 값을 읽을 수 없습니다. 앱 정의의 바인딩을 00:00부터 23:59 사이 HH:mm으로 고치세요.", fix: "시각 범위 바인딩을 HH:mm으로 고치세요" }
     SHELL_INPUT_TIME_STEP_INVALID() { class: InvalidRequest, place: "시간 입력 간격 바인딩 읽기", cause: "분 간격이 양의 정수가 아님", message: "시간 입력의 step이 분 단위 양의 정수가 아닙니다. 앱 정의의 step 바인딩을 고치세요.", fix: "step 바인딩을 양의 정수로 고치세요" }
+    SHELL_OPEN_URL_NOT_TEXT() { class: InvalidRequest, place: "앱 주소 동작 값", cause: "주소가 문자열이 아니다", message: "앱 주소가 글자가 아니라 열 수 없습니다. 앱 정의의 open_url 값을 고치세요.", fix: "앱 정의의 open_url 값을 고치세요" }
+    SHELL_OPEN_URL_EMPTY() { class: InvalidRequest, place: "앱 주소 동작 빈 값", cause: "주소가 비어 있다", message: "앱 주소가 비어 있어 열 수 없습니다. 앱 정의의 open_url 값을 고치세요.", fix: "앱 정의의 open_url 값을 고치세요" }
+    SHELL_APP_LINK_INVALID() { class: InvalidRequest, place: "앱 링크 주소 해석", cause: "주소를 읽을 수 없다", message: "앱 주소를 읽을 수 없어 열지 못했습니다. 앱 정의의 주소를 고치세요.", fix: "앱 정의의 주소를 고치세요" }
+    SHELL_APP_LINK_NOT_HTTPS() { class: InvalidRequest, place: "앱 링크 주소 방식", cause: "HTTPS 주소가 아니다", message: "앱 주소가 HTTPS가 아니라 열 수 없습니다. 앱 정의의 주소를 HTTPS로 고치세요.", fix: "앱 정의의 주소를 HTTPS로 고치세요" }
+    SHELL_APP_LINK_PRIVATE_HOST() { class: InvalidRequest, place: "앱 링크 호스트 검사", cause: "로컬 또는 비공개 주소다", message: "앱 주소가 로컬 또는 비공개 주소라 열 수 없습니다. 앱 정의에 공개 주소를 쓰세요.", fix: "앱 정의에 공개 주소를 쓰세요" }
     SHELL_REALTIME_URL_INVALID(path) { class: InvalidRequest, place: "실시간 연결 경로 확인", cause: "가상 주소 또는 연결 경로가 올바르지 않다", message: "실시간 연결 경로 {path}를 쓸 수 없습니다. /로 시작하는 연결 아래 경로를 써 주세요.", fix: "/로 시작하는 연결 아래 경로를 써 주세요" }
     SHELL_REALTIME_SEND_TYPE_INVALID() { class: InvalidRequest, place: "실시간 메시지 형식 확인", cause: "문자열이나 바이트가 아닌 값을 보내려 했다", message: "이 실시간 연결은 문자열과 바이트만 보낼 수 있습니다. 앱의 send 값을 고쳐 주세요.", fix: "앱의 send 값을 고쳐 주세요" }
     SHELL_REALTIME_SEND_CONNECTING() { class: InvalidRequest, place: "실시간 연결 열기 전 전송", cause: "아직 열리지 않은 연결에 메시지를 보내려 했다", message: "연결이 아직 열리지 않았습니다. 앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요.", fix: "앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요" }
