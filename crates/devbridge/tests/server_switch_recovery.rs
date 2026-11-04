@@ -366,40 +366,50 @@ async fn real_remote_reconnect_recovers_storage_source_and_asset() {
         wait_for(|| connected(&core, ServerMode::Embedded));
         let armed = Arc::new(AtomicBool::new(true));
         let updates = Arc::new(Mutex::new(Vec::<Value>::new()));
-        let offline_result = Arc::new(Mutex::new(None::<Value>));
+        let (media_tx, media_rx) = std::sync::mpsc::channel();
         let weak = Arc::downgrade(&core);
         let updates_listener = updates.clone();
-        let offline_listener = offline_result.clone();
         let armed_listener = armed.clone();
         let window_listener = window.clone();
         core.subscribe(Box::new(move |event| {
             match event {
                 kaleidoscope_contract::CoreEvent::DataUpdate { window_id, view } if window_id == &window_listener => updates_listener.lock().unwrap().push(serde_json::to_value(view).unwrap()),
-                kaleidoscope_contract::CoreEvent::StateChanged { snapshot, .. } if matches!(snapshot.link, LinkStatus::Offline { mode: ServerMode::Remote, .. }) && armed_listener.swap(false, Ordering::SeqCst) => {
+                kaleidoscope_contract::CoreEvent::StateChanged { snapshot, .. } if matches!(snapshot.link, LinkStatus::Offline { mode: ServerMode::Remote, reason: None, .. }) && armed_listener.swap(false, Ordering::SeqCst) => {
                     let core = weak.upgrade().unwrap();
-                    call(&core, json!({"op":"data.attach","window_id":window_listener}));
+                    let attached = call(&core, json!({"op":"data.attach","window_id":window_listener}));
+                    for pointer in ["/ui/children/0/value", "/ui/children/1/value"] {
+                        assert_eq!(attached["view"]["values"][pointer]["status"], "loading");
+                    }
                     let request: CoreRequest = serde_json::from_value(json!({"op":"data.media","window_id":window_listener,"media":{"asset":"test-script","version":1}})).unwrap();
-                    let error = core.handle(request).unwrap_err();
-                    wait_for(|| {
-                        let values = updates_listener.lock().unwrap();
-                        ["/ui/children/0/value", "/ui/children/1/value"].iter().all(|pointer| values.iter().any(|view| view["values"][pointer]["status"] == "failed"))
+                    // 콜백 반환 뒤 스트림이 시작되므로 준비를 기다리는 명령은 별도 스레드로 보낸다.
+                    let tx = media_tx.clone();
+                    let (started_tx, started_rx) = std::sync::mpsc::channel();
+                    let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+                    thread::spawn(move || {
+                        started_tx.send(()).unwrap();
+                        tx.send(core.handle(request)).unwrap();
+                        let _ = finished_tx.send(());
                     });
-                    *offline_listener.lock().unwrap() = Some(json!({"message":error.message,"id":error.id}));
+                    started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                    assert_eq!(finished_rx.recv_timeout(Duration::from_millis(100)), Err(std::sync::mpsc::RecvTimeoutError::Timeout), "연결 전 자산 요청은 준비를 기다려야 한다");
                 }
                 _ => {}
             }
         }));
         call(&core, json!({"op":"link.start","server_url":remote.server_url}));
-        let offline = offline_result.lock().unwrap().clone().unwrap();
-        assert_eq!(offline["message"], "kaleidoscope 서버에 연결되어 있지 않아 미디어를 불러올 수 없습니다. 서버를 연결한 뒤 다시 시도하세요.");
-        assert_eq!(offline["id"], "MEDIA_LOAD_SERVER_NOT_CONNECTED");
+        assert!(!armed.load(Ordering::SeqCst), "원격 전환 중 상태를 관찰해야 한다");
         wait_for(|| connected(&core, ServerMode::Remote));
         wait_for(|| {
             let values = updates.lock().unwrap();
             values.iter().any(|view| view["values"]["/ui/children/0/value"]["value"] == "기본값") && values.iter().any(|view| view["values"]["/ui/children/1/value"]["value"] == true)
         });
-        let media = call(&core, json!({"op":"data.media","window_id":window,"media":{"asset":"test-script","version":1}}));
-        assert_eq!(media["media"]["data_base64"], "eA==");
+        let media = media_rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+        assert!(matches!(media, CoreReply::DataMedia { media } if media.data_base64 == "eA=="));
+        let values = updates.lock().unwrap();
+        for pointer in ["/ui/children/0/value", "/ui/children/1/value"] {
+            assert!(values.iter().all(|view| view["values"][pointer]["status"] != "failed"), "{pointer}: {values:?}");
+        }
+        drop(values);
         core.shutdown();
     }).await.unwrap();
 }

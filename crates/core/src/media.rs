@@ -179,6 +179,7 @@ pub(crate) fn get(
             let original = if let Some(entry) = inner.media_cache.get(&original_key) {
                 entry
             } else {
+                crate::startup_readiness::wait(inner, crate::startup_readiness::WaitFor::Server);
                 if !matches!(
                     inner.state.lock().unwrap().link,
                     kaleidoscope_contract::LinkStatus::Connected { .. }
