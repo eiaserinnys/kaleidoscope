@@ -286,7 +286,8 @@ export class ClientRuntime {
   }
 
   sync() {
-    if (!this.frame) return;
+    // 프레임 준비 전에 보낸 입력은 닿지 않으므로 준비된 뒤 한꺼번에 보낸다.
+    if (!this.frame || !this.ready) return;
     this.syncGrants();
     const inputs = this.inputs();
     const signatures = Object.fromEntries(Object.entries(inputs).map(([name, value]) => [name, JSON.stringify(value)]));
