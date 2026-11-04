@@ -31,3 +31,21 @@ fn list_remove_and_open_url_require_new_version_and_menu_item_binding() {
     let result = parse_app_definition(&app(array, 30).to_string());
     assert!(result.is_err(), "open_url은 배열에 넣을 수 없다: {result:?}");
 }
+
+#[test]
+fn 지역_동작은_객체로만_읽고_기존_복사를_유지한다() {
+    use data::{Actions, Action, CopyTextAction, OpenUrlAction, PickFilesAction, SaveFileAction};
+    for binding in [json!("본문"), json!({"item":"title"}), json!(["a", "b"])] {
+        let value = json!({"copy_text":binding});
+        let single: Actions = serde_json::from_value(value.clone()).unwrap();
+        assert!(matches!(single, Actions::CopyText(_)));
+        assert_eq!(serde_json::to_value(single).unwrap(), value);
+        let many: Actions = serde_json::from_value(json!([value.clone()])).unwrap();
+        assert!(matches!(many, Actions::Many(ref actions) if matches!(&actions[0], Action::CopyText(_))));
+        assert_eq!(serde_json::to_value(many).unwrap(), json!([value]));
+    }
+    assert!(serde_json::from_value::<CopyTextAction>(json!(["본문"])).is_err());
+    assert!(serde_json::from_value::<OpenUrlAction>(json!(["https://example.com"])).is_err());
+    assert!(serde_json::from_value::<PickFilesAction>(json!([{"accept":[],"client":"pick"}])).is_err());
+    assert!(serde_json::from_value::<SaveFileAction>(json!([{"suggested_name":"a","mime":"text/plain","client":"save"}])).is_err());
+}

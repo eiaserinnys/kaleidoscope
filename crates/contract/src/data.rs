@@ -501,9 +501,8 @@ pub enum Actions {
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
     Many(Vec<Action>),
-    #[serde(deserialize_with = "deserialize_open_url")]
     OpenUrl(OpenUrlAction),
-    // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
+    // 기존 동작 배열을 먼저 읽고 단독 지역 동작을 읽는다.
     CopyText(CopyTextAction),
 }
 
@@ -522,7 +521,7 @@ pub enum Action {
     Client(ClientAction),
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
-    // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
+    // 기존 동작 배열을 먼저 읽고 단독 지역 동작을 읽는다.
     CopyText(CopyTextAction),
 }
 
@@ -562,7 +561,7 @@ pub struct FileAccept {
     pub extensions: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct PickFilesAction {
@@ -579,7 +578,7 @@ pub struct PickFilesSpec {
     pub client: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct SaveFileAction {
@@ -587,7 +586,7 @@ pub struct SaveFileAction {
 }
 
 /// 바인딩이 낸 글을 이 기기의 클립보드에 쓴다. 단독으로 쓴다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct CopyTextAction {
@@ -595,20 +594,33 @@ pub struct CopyTextAction {
 }
 
 /// 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct OpenUrlAction {
     pub open_url: Binding,
 }
 
-fn deserialize_open_url<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<OpenUrlAction, D::Error> {
-    let value = JsonValue::deserialize(deserializer)?;
-    if !value.is_object() {
-        return Err(serde::de::Error::custom("open_url은 단독 객체여야 합니다"));
-    }
-    serde_json::from_value(value).map_err(serde::de::Error::custom)
+// serde 구조체의 시퀀스 해석이 untagged 동작의 다른 variant로 새지 않게 한다.
+macro_rules! object_action {
+    ($name:ident, $field:ident: $ty:ty) => {
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Fields { $field: $ty }
+                let map = serde_json::Map::<String, JsonValue>::deserialize(deserializer)?;
+                let fields: Fields = serde_json::from_value(JsonValue::Object(map))
+                    .map_err(serde::de::Error::custom)?;
+                Ok(Self { $field: fields.$field })
+            }
+        }
+    };
 }
+object_action!(PickFilesAction, pick_files: PickFilesSpec);
+object_action!(SaveFileAction, save_file: SaveFileSpec);
+object_action!(CopyTextAction, copy_text: Binding);
+object_action!(OpenUrlAction, open_url: Binding);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
