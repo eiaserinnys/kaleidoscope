@@ -148,3 +148,62 @@ test("도구막대는 세 폭에서 겹치거나 넘치거나 글자를 줄바�
   }
   if (output) writeFileSync(join(output, "toolbar-widths.json"), JSON.stringify(metrics, null, 2));
 });
+
+test("넘친 목록에서 삭제 확인을 열고 닫아도 창 스크롤이 유지된다", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.goto("/?preview=data-controls");
+  await page.addStyleTag({ content: `.ks-harness-apps.is-preview .ks-harness-window { width: 520px; height: 560px; }` });
+  await page.evaluate(async () => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const app = snapshot.shared.app_versions.find((version: any) => version.app_id === "data-controls");
+    const rows = Array.from({ length: 40 }, (_, index) => String(index + 1).padStart(2, "0"));
+    app.definition.state = { rows, count: 0 };
+    app.definition.ui = { type: "stack", direction: "column", gap: "large", children: [
+      { type: "text", value: { expr: "'올린 횟수 ' & $string($state.count)" } },
+      { type: "list", items: { expr: "$append([], $map($state.rows, function($r){ {'key': $r, 'title': $r & ' 항목'} }))" }, item_menu: [{
+        label: "지우기", danger: true, confirm: { title: "항목 지우기", body: { item: "title" }, ok: "지우기" },
+        on_select: [{ set_state: "rows", value: { expr: "$append([], $filter($state.rows, function($r){ $r != $item.key }))" } }],
+      }] },
+      { type: "button", label: "올리기", variant: "primary", on_click: [{ set_state: "count", value: { expr: "$state.count + 1" } }] },
+      { type: "button", label: "되돌리기", on_click: [{ set_state: "rows", value: rows }] },
+    ] };
+    app.version += 1;
+    const appWindow = snapshot.shared.windows.find((item: any) => item.app_id === "data-controls");
+    appWindow.app_version = app.version;
+    appWindow.state = { rows, count: 0 };
+    harness.emit({ event: "state.changed", snapshot });
+  });
+  const app = page.getByTestId("app-window-data-controls");
+  await app.getByRole("option", { name: "01 항목", exact: true }).focus();
+  for (let index = 0; index < 19; index += 1) await page.keyboard.press("ArrowDown");
+  await expect(app.getByRole("option", { name: "20 항목", exact: true })).toBeFocused();
+  await app.evaluate((node) => {
+    (window as any).__scrollPositions = [node, ...node.querySelectorAll("*")].map((element) => [element, element.scrollTop]);
+  });
+  const scrollsUnchanged = async () => {
+    const changed = await app.evaluate((node) => {
+      const previous = new Map<Element, number>((window as any).__scrollPositions);
+      return [node, ...node.querySelectorAll("*")].filter((element) => element.scrollTop !== (previous.get(element) ?? 0))
+        .map((element) => ({ className: element.className, before: previous.get(element) ?? 0, after: element.scrollTop }));
+    });
+    expect(changed).toEqual([]);
+  };
+  const openConfirm = async () => {
+    await page.keyboard.press("Shift+F10");
+    await page.getByRole("menuitem", { name: "지우기" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(app.getByRole("dialog").getByRole("button", { name: "취소" })).toBeFocused();
+    await scrollsUnchanged();
+  };
+  await openConfirm();
+  await page.keyboard.press("Enter");
+  await expect(app.getByRole("dialog")).toBeHidden();
+  await scrollsUnchanged();
+  await openConfirm();
+  await page.keyboard.press("Tab");
+  await expect(app.getByRole("dialog").getByRole("button", { name: "지우기" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(app.getByRole("option", { name: "21 항목", exact: true })).toBeFocused();
+  await scrollsUnchanged();
+});
