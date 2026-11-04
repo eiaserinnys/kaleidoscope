@@ -220,6 +220,7 @@ pub mod realtime;
 pub mod registry;
 pub mod size;
 pub mod validate;
+mod validate_input;
 pub mod window_control;
 pub mod worker;
 pub use window_control::*;
@@ -280,11 +281,14 @@ pub const CONTRACT_VERSION: u32 = 32;
 /// - 25판: `input.read_only` 읽기 전용 바인딩.
 /// - 26판: 앱 정의의 불변 자산 아이콘.
 /// - 27판: `split.column_below`, `repeat.gap`.
-pub const BLOCK_SET_VERSION: u32 = LAYOUT_FIELDS_BLOCK_SET_VERSION;
+/// - 28판: `button.description` 도움말 바인딩.
+pub const BLOCK_SET_VERSION: u32 = BUTTON_DESCRIPTION_BLOCK_SET_VERSION;
 /// 앱 아이콘 자산 참조의 첫 블록 세트 판.
 pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 /// 분할의 반응형 방향과 반복 간격의 첫 블록 세트 판.
 pub const LAYOUT_FIELDS_BLOCK_SET_VERSION: u32 = 27;
+/// button.description을 처음 지원한 블록 세트 판.
+pub const BUTTON_DESCRIPTION_BLOCK_SET_VERSION: u32 = 28;
 /// 입력 읽기 전용 바인딩의 첫 블록 세트 판.
 pub const INPUT_READ_ONLY_BLOCK_SET_VERSION: u32 = 25;
 /// 동적 표 열과 칸 격자의 첫 블록 세트 판.
@@ -1956,6 +1960,9 @@ pub enum Block {
         label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        description: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         icon: Option<Binding>,
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
@@ -2643,6 +2650,8 @@ enum RawBlock {
         pressed: Option<Binding>,
         label: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         icon: Option<Binding>,
         #[serde(default)]
         icon_only: bool,
@@ -3279,6 +3288,7 @@ impl From<RawBlock> for Block {
             RawBlock::Button {
                 pressed,
                 label,
+                description,
                 icon,
                 icon_only,
                 variant,
@@ -3290,6 +3300,7 @@ impl From<RawBlock> for Block {
             } => Block::Button {
                 pressed,
                 label,
+                description,
                 icon,
                 icon_only,
                 variant,

@@ -1867,6 +1867,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         }
         Block::Button {
             label,
+            description,
             icon,
             on_click,
             confirm,
@@ -1879,6 +1880,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 bind!("pressed", value);
             }
             bind!("label", label);
+            if let Some(description) = description { bind!("description", description); }
             if let Some(icon) = icon {
                 bind!("icon", icon);
             }

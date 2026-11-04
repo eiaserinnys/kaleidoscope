@@ -60,6 +60,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
             .is_some_and(uses_block_set_21_fields);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
+    crate::validate_input::validate_input_extensions(&definition)?;
 
     if let Some(icon) = &definition.icon {
         if icon.version == 0 {

@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { ownerOf, registerOverlay } from "../share/overlay-owner";
+import { ownerOf } from "../share/overlay-owner";
+import { useAnchoredOverlay } from "./anchored-overlay";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
 
 export interface MenuItem {
@@ -39,31 +40,11 @@ export interface MenuProps {
 export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: MenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const [position, setPosition] = useState({ left: 0, top: 0 });
+  const position = useAnchoredOverlay(anchor, menuRef, { anchorPoint, keyboardRect });
 
   useLayoutEffect(() => {
-    const rect = anchor.getBoundingClientRect();
     const menu = menuRef.current;
     const owner = ownerOf(anchor);
-    const unregister = menu && owner ? registerOverlay(menu, owner, anchor) : undefined;
-    const menuWidth = menu?.getBoundingClientRect().width ?? 0;
-    const viewportInset = menu
-      ? Number.parseFloat(getComputedStyle(menu).getPropertyValue("--ks-space-3")) || 0
-      : 0;
-    const maxLeft = Math.max(window.innerWidth - menuWidth - viewportInset, viewportInset);
-    const menuHeight = menu?.getBoundingClientRect().height ?? 0;
-    const belowTop = keyboardRect?.bottom ?? anchorPoint?.y ?? rect.bottom;
-    const aboveTop = keyboardRect ? keyboardRect.top - menuHeight : anchorPoint ? anchorPoint.y - menuHeight : rect.top - menuHeight;
-    const anchorLeft = keyboardRect?.left ?? anchorPoint?.x ?? rect.left;
-    const fitsBelow = belowTop >= viewportInset
-      && belowTop + menuHeight <= window.innerHeight - viewportInset;
-    const fitsAbove = aboveTop >= viewportInset && (keyboardRect !== undefined || anchorPoint !== undefined || rect.top <= window.innerHeight - viewportInset);
-    const preferredTop = fitsBelow ? belowTop : fitsAbove ? aboveTop : window.innerHeight - viewportInset - menuHeight;
-    const maxTop = Math.max(window.innerHeight - menuHeight - viewportInset, viewportInset);
-    setPosition({
-      left: Math.min(Math.max(anchorLeft, viewportInset), maxLeft),
-      top: Math.min(Math.max(preferredTop, viewportInset), maxTop),
-    });
     const checked = menu?.querySelector<HTMLButtonElement>('[aria-current="true"]');
     if (menu && checked) menu.scrollTop = checked.offsetTop - (menu.clientHeight - checked.offsetHeight) / 2;
     const focusTarget = checked && !checked.disabled
@@ -109,7 +90,6 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      unregister?.();
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
@@ -118,7 +98,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
   return createPortal(
     <div
       aria-orientation="vertical"
-      className="ks-menu"
+      className="ks-anchored-overlay ks-menu"
       data-ks-overlay
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;

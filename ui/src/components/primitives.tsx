@@ -1,4 +1,5 @@
 import { Fragment, type MouseEvent, type ReactNode, type Ref } from "react";
+import { Tooltip } from "./tooltip";
 import type { CoreError } from "../contract/contract";
 
 export interface ButtonProps {
@@ -17,6 +18,11 @@ export interface ButtonProps {
   "aria-describedby"?: string;
   "aria-disabled"?: boolean;
   "data-ks-user-consent"?: boolean;
+  onPointerEnter?: React.PointerEventHandler<HTMLButtonElement>;
+  onPointerLeave?: React.PointerEventHandler<HTMLButtonElement>;
+  onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
+  onFocus?: React.FocusEventHandler<HTMLButtonElement>;
+  onBlur?: React.FocusEventHandler<HTMLButtonElement>;
 }
 
 export function Button({
@@ -35,6 +41,7 @@ export function Button({
   "aria-describedby": describedBy,
   "aria-disabled": ariaDisabled,
   "data-ks-user-consent": userConsent,
+  onPointerEnter, onPointerLeave, onPointerDown, onFocus, onBlur,
 }: ButtonProps) {
   return (
     <button
@@ -49,6 +56,7 @@ export function Button({
       aria-disabled={ariaDisabled}
       data-ks-user-consent={userConsent || undefined}
       onClick={onClick}
+      onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onPointerDown={onPointerDown} onFocus={onFocus} onBlur={onBlur}
       type={type}
       title={title}
     >
@@ -59,6 +67,8 @@ export function Button({
 
 export interface IconButtonProps {
   "aria-label": string;
+  tooltip?: ReactNode;
+  tooltipEnabled?: boolean;
   children: ReactNode;
   disabled?: boolean;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -70,8 +80,8 @@ export interface IconButtonProps {
   "data-ks-user-consent"?: boolean;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, "aria-disabled": ariaDisabled, "data-ks-user-consent": userConsent }: IconButtonProps) {
-  return (
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, "aria-disabled": ariaDisabled, "data-ks-user-consent": userConsent }: IconButtonProps) {
+  const button = (
     <button
       aria-label={label}
       aria-pressed={pressed}
@@ -81,11 +91,12 @@ export function IconButton({ "aria-label": label, children, disabled, onClick, t
       disabled={disabled}
       onClick={onClick}
       type="button"
-      title={title ?? label}
+      title={tooltip != null ? undefined : title ?? label}
     >
       {children}
     </button>
   );
+  return tooltip != null ? <Tooltip content={tooltip} enabled={tooltipEnabled}>{button}</Tooltip> : button;
 }
 
 export function EmptyState({

@@ -196,13 +196,7 @@
   max-height: calc(100vh - 2 * var(--ks-space-3));
   flex-direction: column;
   overflow: hidden auto;
-  border: var(--ks-line-width) solid var(--ks-color-glass-edge);
-  border-radius: var(--ks-radius-large);
-  background: var(--ks-material-popover);
-  box-shadow: var(--ks-shadow-popover);
-  color: var(--ks-color-text);
   padding: var(--ks-space-1);
-  backdrop-filter: blur(var(--ks-blur-popover));
 }
 
 .ks-menu > * {

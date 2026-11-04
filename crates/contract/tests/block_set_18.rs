@@ -63,6 +63,7 @@ fn current_contract_versions_include_realtime() {
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION);
     assert!(supported.blocks >= LAYOUT_FIELDS_BLOCK_SET_VERSION);
+    assert_eq!(supported.blocks, kaleidoscope_contract::BUTTON_DESCRIPTION_BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
     assert_eq!(supported.modules.get("client"), Some(&kaleidoscope_contract::realtime::REALTIME_CLIENT_VERSION));
 }

@@ -429,6 +429,28 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose(); vi.restoreAllMocks();
   });
 
+  it("단추 설명이 바뀌면 그 단추만 다시 그린다", async () => {
+    const definition: AppDefinition = {
+      id: "tooltip-isolation", name: "설명", requires: { blocks: 27, modules: {} }, permissions: [], state: { hint: "이전 설명", count: 0 },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "button", label: "실행", description: { state: "hint" }, on_click: [{ set_state: "count", value: 1 }] },
+        { type: "text", value: "바뀌지 않는 내용" },
+      ] },
+    };
+    const { store } = await setup([definition], { hint: "이전 설명", count: 0 });
+    await settleRenders();
+    calls.length = 0;
+    await setState(store, "window-a", "hint", "새 설명");
+    await settleRenders();
+    expect(countFor("window-a", "/ui/children/0")).toBeGreaterThan(0);
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    const first = document.querySelector<HTMLButtonElement>('.ks-data-window[data-window-id="window-a"] button[aria-label="실행"]')!;
+    act(() => first.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("새 설명");
+    store.dispose();
+  });
+
   it("창 제목 바인딩 변경은 해당 창 머리만 다시 그린다", async () => {
     const titleDefinition: AppDefinition = {
       id: "window-title-render-isolation", name: "기본 제목",
