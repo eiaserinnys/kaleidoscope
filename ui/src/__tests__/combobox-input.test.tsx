@@ -11,7 +11,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function setup(optionsOnly = false) {
   const choices = Array.from({ length: 504 }, (_, index) => ({ value: `value-${index}`, label: index === 503 ? "Zombie 마지막" : `항목 ${index}`, ...(index === 0 ? {} : { description: `설명 ${index}` }) }));
-  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 32, modules: {} }, state: { draft: "value-1", saved: "" }, ui: { type: "stack", direction: "column", children: [
+  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 33, modules: {} }, state: { draft: "value-1", saved: "" }, ui: { type: "stack", direction: "column", children: [
     { type: "input", placeholder: "선택", value: { state: "draft" }, options: choices, options_only: optionsOnly, on_change: { set_state: "draft" } },
     { type: "button", label: "확인", on_click: [{ set_state: "saved", value: { expr: "$state.draft" } }] },
   ] } };

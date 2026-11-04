@@ -373,11 +373,11 @@ copy?: boolean,
  */
 collapsible?: boolean, selected?: StateRef, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", 
 /**
- * (32판) 입력하면서 거를 문자열 선택지 바인딩.
+ * (33판) 입력하면서 거를 문자열 선택지 바인딩.
  */
 options?: Binding, 
 /**
- * (32판) 참이면 선택지 값만 확정한다.
+ * (33판) 참이면 선택지 값만 확정한다.
  */
 options_only?: boolean, 
 /**

@@ -1034,7 +1034,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
   });
 
   it("다른 창의 선택지 갱신은 입력과 이웃 블록을 다시 그리지 않는다", async () => {
-    const optionsInput: AppDefinition = { ...definition, requires: { blocks: 32, modules: {} }, state: { first: "a", second: "옆 글", choices: ["a", "b"] }, ui: { type: "stack", direction: "column", children: [
+    const optionsInput: AppDefinition = { ...definition, requires: { blocks: 33, modules: {} }, state: { first: "a", second: "옆 글", choices: ["a", "b"] }, ui: { type: "stack", direction: "column", children: [
       { type: "input", value: { state: "first" }, on_change: { set_state: "first" }, options: { state: "choices" } },
       { type: "text", value: { state: "second" } },
     ] } };
@@ -1560,7 +1560,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
   });
 
   it("선택지 입력을 연 창을 최소화하면 팝업을 닫는다", async () => {
-    const optionsInput: AppDefinition = { ...definition, requires: { blocks: 32, modules: {} }, state: { first: "a" }, ui: { type: "input", value: { state: "first" }, on_change: { set_state: "first" }, options: ["a", "b"] } };
+    const optionsInput: AppDefinition = { ...definition, requires: { blocks: 33, modules: {} }, state: { first: "a" }, ui: { type: "input", value: { state: "first" }, on_change: { set_state: "first" }, options: ["a", "b"] } };
     const { store } = await setup([optionsInput], { first: "a" });
     const root = document.querySelector<HTMLElement>('[data-window-id="window-a"]')!;
     fireEvent.focus(within(root).getByRole("combobox"));

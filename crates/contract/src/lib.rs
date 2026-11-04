@@ -1890,11 +1890,11 @@ pub enum Block {
     /// (19판) `columns`는 보일 문자 수로 폭을 정하며, 양수여야 하고 지정한 폭보다 줄어들지 않는다.
     /// (31판) `spin`은 숫자 입력에 위아래 단추를 보인다.
     Input {
-        /// (32판) 입력하면서 거를 문자열 선택지 바인딩.
+        /// (33판) 입력하면서 거를 문자열 선택지 바인딩.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         options: Option<Binding>,
-        /// (32판) 참이면 선택지 값만 확정한다.
+        /// (33판) 참이면 선택지 값만 확정한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         options_only: Option<bool>,

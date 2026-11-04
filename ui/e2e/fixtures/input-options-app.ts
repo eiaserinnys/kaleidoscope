@@ -7,7 +7,7 @@ const options = Array.from({ length: 504 }, (_, index) => ({
 }));
 
 export const inputOptionsApp = {
-  id: "input-options-fixture", name: "선택지 입력", requires: { blocks: 32, modules: { connection: 1 } },
+  id: "input-options-fixture", name: "선택지 입력", requires: { blocks: 33, modules: { connection: 1 } },
   permissions: [{ id: "api", module: "connection", access: "read", connection: "sample", label: "예제" }],
   sources: { slow_options: { kind: "request", permission: "api", path: "/choices" } },
   state: { value: "entry-1", free: "", saved: "", selected: "a", slow: "", invalid: "", invalid_options: ["정상", { value: 12, label: "잘못된 자료" }] },

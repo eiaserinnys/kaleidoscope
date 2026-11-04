@@ -23,7 +23,7 @@ fn error_id(block: Value, version: u32) -> String {
 fn options_require_their_version_and_join_the_binding_walk() {
     let block = input(json!(["a", "b"]));
     assert_eq!(error_id(block.clone(), 31), "APP_INPUT_OPTIONS_VERSION_LOW");
-    let parsed = parse_app_definition(&definition(block, 32).to_string()).unwrap();
+    let parsed = parse_app_definition(&definition(block, 33).to_string()).unwrap();
     assert!(all_ui_bindings(&parsed)
         .iter()
         .any(|(path, _)| path == "/ui/options"));
@@ -32,7 +32,7 @@ fn options_require_their_version_and_join_the_binding_walk() {
 #[test]
 fn one_string_option_is_a_literal_and_passes_validation() {
     let parsed =
-        parse_app_definition(&definition(input(json!(["alpha"])), 32).to_string()).unwrap();
+        parse_app_definition(&definition(input(json!(["alpha"])), 33).to_string()).unwrap();
     let bindings = all_ui_bindings(&parsed);
     let binding = bindings
         .iter()
@@ -46,19 +46,19 @@ fn one_string_option_is_a_literal_and_passes_validation() {
 fn invalid_combinations_and_literal_values_have_specific_errors() {
     let mut block = input(json!(["a", "b"]));
     block["kind"] = json!("number");
-    assert_eq!(error_id(block, 32), "APP_INPUT_OPTIONS_KIND_INVALID");
+    assert_eq!(error_id(block, 33), "APP_INPUT_OPTIONS_KIND_INVALID");
     let mut block = input(json!(["a", "b"]));
     block["multiline"] = json!(true);
-    assert_eq!(error_id(block, 32), "APP_INPUT_OPTIONS_MULTILINE_INVALID");
+    assert_eq!(error_id(block, 33), "APP_INPUT_OPTIONS_MULTILINE_INVALID");
     let mut block = input(json!(["a", "b"]));
     block.as_object_mut().unwrap().remove("options");
     block["options_only"] = json!(true);
     assert_eq!(
-        error_id(block, 32),
+        error_id(block, 33),
         "APP_INPUT_OPTIONS_ONLY_WITHOUT_OPTIONS"
     );
     assert_eq!(
-        error_id(input(json!(["a", {"value": 2, "label":"둘"}])), 32),
+        error_id(input(json!(["a", {"value": 2, "label":"둘"}])), 33),
         "APP_INPUT_OPTIONS_KEY_NOT_STRING"
     );
 }
@@ -70,7 +70,7 @@ fn select_literal_description_requires_the_options_version() {
         error_id(block.clone(), 31),
         "APP_SELECT_DESCRIPTION_VERSION_LOW"
     );
-    assert!(parse_app_definition(&definition(block, 32).to_string()).is_ok());
+    assert!(parse_app_definition(&definition(block, 33).to_string()).is_ok());
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn option_errors_distinguish_causes_and_values() {
             "description",
         ),
     ] {
-        let error = parse_app_definition(&definition(input(value), 32).to_string()).unwrap_err();
+        let error = parse_app_definition(&definition(input(value), 33).to_string()).unwrap_err();
         assert_eq!(error.id.unwrap(), format!("APP_INPUT_OPTIONS_{suffix}"));
         assert!(error.message.contains(text));
     }
