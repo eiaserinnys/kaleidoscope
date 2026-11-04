@@ -39,6 +39,8 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const data = useWindowData();
   const multiline = isMultilineInput(block);
   const bound = useBinding(`${pointer}/value`, block.value);
+  const readOnlyBinding = useBinding(`${pointer}/read_only`, block.read_only ?? null);
+  const readOnly = readOnlyBinding.status === "ready" && readOnlyBinding.value === true;
   const label = useBinding(`${pointer}/label`, block.label ?? null);
   const placeholder = useBinding(`${pointer}/placeholder`, block.placeholder ?? null);
   const hasLabel = block.label != null;
@@ -69,6 +71,18 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   const previousFocus = useRef<JsonValue | typeof uninitializedFocus>(uninitializedFocus);
   const customSpinbutton = block.kind === "number" && (block.format?.kind === "decimal" || block.focus !== undefined);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); unregisterFlush.current?.(); }, []);
+  useLayoutEffect(() => {
+    if (!readOnly) {
+      if (focused) holding.current = true;
+      return;
+    }
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    unregisterFlush.current?.(); unregisterFlush.current = null;
+    edited.current = false;
+    change(initialDraft);
+    finish();
+  }, [readOnly]);
   useEffect(() => {
     if (focus.status !== "ready") return;
     if (previousFocus.current === uninitializedFocus) { previousFocus.current = focus.value; return; }
@@ -95,6 +109,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     return send(value, false);
   }, [block.kind, block.format, change, send, toEventValue]);
   const markChanged = (value: string) => {
+    if (readOnly) return;
     edited.current = true;
     change(value);
     if (timer.current) clearTimeout(timer.current);
@@ -105,7 +120,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
       if (element) unregisterFlush.current = registerPendingFlush(element, () => sendDraft(value));
     }
   };
-  const commit = (value: string) => { if (edited.current) sendDraft(value); };
+  const commit = (value: string) => { if (!readOnly && edited.current) sendDraft(value); };
   const cancel = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
@@ -116,6 +131,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     if (block.on_cancel) void data.act(`${pointer}/on_cancel`, null);
   };
   const keyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (readOnly) return;
     if (event.key === "Escape" && !event.nativeEvent.isComposing && !composing.current && block.on_cancel && (focused || edited.current)) {
       event.preventDefault();
       cancel();
@@ -136,8 +152,8 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     else if (block.on_submit) event.preventDefault();
     if (block.on_submit) void data.act(`${pointer}/on_submit`, toEventValue(draft));
   };
-  const props = { className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: draft,
-    onFocus: () => { setFocused(true); holding.current = true; }, onBlur: () => {
+  const props = { className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: readOnly ? initialDraft : draft, readOnly, "aria-readonly": readOnly,
+    onFocus: () => { setFocused(true); holding.current = !readOnly; }, onBlur: () => {
       setFocused(false);
       if ((block.commit ?? "debounce") !== "submit") commit(draft);
       finish(!edited.current);
@@ -161,7 +177,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
       aria-valuemax={customSpinbutton ? maximum ?? undefined : undefined}
       aria-valuenow={customSpinbutton ? numericValue : undefined}
     />}
-    {block.kind === "search" && draft ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" onClick={() => { markChanged(""); sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
+    {block.kind === "search" && (readOnly ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={readOnly} onClick={() => { markChanged(""); sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
   return hasLabel ? <><label className={`ks-field ks-input-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}{input}</label><BindingFailureNotice value={label} /></> : input;
 }

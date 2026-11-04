@@ -3003,12 +3003,19 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         }
         Block::Input {
             value,
+            read_only,
             rows,
             columns,
             label,
             ..
         } => {
             validate_control_binding(value, definition, details, at);
+            if let Some(read_only) = read_only {
+                validate_control_binding(read_only, definition, details, at);
+                if definition.requires.blocks < crate::INPUT_READ_ONLY_BLOCK_SET_VERSION {
+                    details.push(format!("{at}: input.read_only는 blocks {} 이상이 필요합니다", crate::INPUT_READ_ONLY_BLOCK_SET_VERSION));
+                }
+            }
             if label.is_some() && definition.requires.blocks < 12 {
                 details.push(format!("{at}: input.label은 blocks 12 이상이 필요합니다"));
             }

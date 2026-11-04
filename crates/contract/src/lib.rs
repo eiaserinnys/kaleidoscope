@@ -275,7 +275,10 @@ pub const CONTRACT_VERSION: u32 = 31;
 ///   `list`, `table`, `tree`, `feed`의 `item_menu`.
 /// - 21판: input, select, slider, color의 `label_position`과 slider의 `show_value`.
 /// - 22판: request 원천의 `page`(쪽 넘김)와 목록 블록의 다음 쪽 받기, `data.more`.
-pub const BLOCK_SET_VERSION: u32 = TABLE_GRID_BLOCK_SET_VERSION;
+/// - 25판: `input.read_only` 읽기 전용 바인딩.
+pub const BLOCK_SET_VERSION: u32 = INPUT_READ_ONLY_BLOCK_SET_VERSION;
+/// 입력 읽기 전용 바인딩의 첫 블록 세트 판.
+pub const INPUT_READ_ONLY_BLOCK_SET_VERSION: u32 = 25;
 /// 동적 표 열과 칸 격자의 첫 블록 세트 판.
 pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// 이 쉘이 제공하는 모듈과 버전.
@@ -1825,6 +1828,10 @@ pub enum Block {
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
     /// (19판) `columns`는 보일 문자 수로 폭을 정하며, 양수여야 하고 지정한 폭보다 줄어들지 않는다.
     Input {
+        /// (25판) 참이면 편집을 막고 글 선택과 복사는 허용한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        read_only: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         min: Option<Binding>,
@@ -2522,6 +2529,8 @@ enum RawBlock {
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
     Input {
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        read_only: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         min: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         max: Option<Binding>,
@@ -3132,6 +3141,7 @@ impl From<RawBlock> for Block {
                 style,
             },
             RawBlock::Input {
+                read_only,
                 min,
                 max,
                 step,
@@ -3150,6 +3160,7 @@ impl From<RawBlock> for Block {
                 placeholder,
                 on_submit,
             } => Block::Input {
+                read_only,
                 min,
                 max,
                 step,
@@ -3177,6 +3188,7 @@ impl From<RawBlock> for Block {
                 placeholder,
                 on_submit,
             } => Block::Input {
+                read_only: None,
                 min: None,
                 max: None,
                 step: None,
