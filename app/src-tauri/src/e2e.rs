@@ -22,12 +22,16 @@ mod folder_drag;
 mod share_isolate;
 mod ui;
 mod update;
+#[cfg(windows)]
+mod web_control_probe;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScenarioKind {
     WebView,
     #[cfg(windows)]
     ShareIsolate,
+    #[cfg(windows)]
+    WebControlProbe,
     Update,
     FilesWrite,
     Realtime,
@@ -37,6 +41,8 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
     match name {
         #[cfg(windows)]
         Some("share-isolate") => ScenarioKind::ShareIsolate,
+        #[cfg(windows)]
+        Some("web-control-probe") => ScenarioKind::WebControlProbe,
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("files-write") => ScenarioKind::FilesWrite,
         Some("realtime") => ScenarioKind::Realtime,
@@ -518,6 +524,10 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
             Ok(mut log) => match match selected {
                 #[cfg(windows)]
                 ScenarioKind::ShareIsolate => share_isolate::scenario(&app, &core, &out, &mut log),
+                #[cfg(windows)]
+                ScenarioKind::WebControlProbe => {
+                    web_control_probe::scenario(&app, &core, &out, &mut log)
+                }
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Realtime => realtime::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
@@ -557,6 +567,11 @@ mod tests {
         assert_eq!(
             scenario_kind(Some("share-isolate")),
             ScenarioKind::ShareIsolate
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            scenario_kind(Some("web-control-probe")),
+            ScenarioKind::WebControlProbe
         );
         assert_eq!(scenario_kind(None), ScenarioKind::WebView);
     }

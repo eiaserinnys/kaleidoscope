@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Web control probe</title></head>
+<body>
+<button id="button">Probe button</button>
+<label for="input">Probe input</label><input id="input">
+<a href="#link">Probe link</a>
+<p id="clicks">click-count 0</p>
+<p id="inputs">input-count 0</p>
+<p id="keys">enter-count 0</p>
+<script>
+let clicks = 0, inputs = 0, keys = 0;
+document.querySelector('#button').addEventListener('click', () => { document.querySelector('#clicks').textContent = `click-count ${++clicks}`; });
+document.querySelector('#input').addEventListener('input', () => { document.querySelector('#inputs').textContent = `input-count ${++inputs}`; });
+document.addEventListener('keydown', event => { if (event.key === 'Enter') document.querySelector('#keys').textContent = `enter-count ${++keys}`; });
+</script>
+</body>
+</html>

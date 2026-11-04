@@ -53,6 +53,43 @@ jobs:
         with:
           path: target/release/kaleidoscope-app.exe
           key: ${{ steps.executable-cache.outputs.cache-primary-key }}
+      - name: 웹 화면 DevTools 실측 데이터 초기화
+        shell: pwsh
+        run: ./app/e2e-windows/reset-app-data.ps1
+      - name: 웹 화면 DevTools 실측
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-web-control-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-web-control-localappdata'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-web-control-webview'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/web-control'
+          $env:KALEIDOSCOPE_E2E_CAPTURE_SCRIPT = Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'
+          $env:KALEIDOSCOPE_E2E_RECORDER_SCRIPT = Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/freeze-record.ps1'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT | Out-Null
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=web-control-probe', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -PassThru
+          try {
+            if (-not $app.WaitForExit(300000)) { throw '웹 화면 실측 시간 초과' }
+            if ($app.ExitCode -ne 0) { throw "웹 화면 실측 실행 실패: $($app.ExitCode)" }
+            $resultPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'web-control-results.json'
+            if (-not (Test-Path $resultPath)) { throw '웹 화면 실측 결과가 없음' }
+            $result = Get-Content -Raw -Encoding utf8 $resultPath | ConvertFrom-Json
+            foreach ($phase in @('a_visible', 'b_covered', 'c_hidden')) {
+              foreach ($field in @('ax', 'click', 'type', 'key', 'focus')) {
+                if ($result.states.$phase.$field.status -notin @('된다', '안 된다', '측정 실패')) { throw "실측 결과 누락: $phase.$field" }
+                Write-Host "$phase.$field : $($result.states.$phase.$field.status)"
+              }
+            }
+            if ($null -ne $result.states.c_prime_cover) {
+              foreach ($field in @('ax', 'click', 'type', 'key', 'focus', 'flicker')) {
+                if ($result.states.c_prime_cover.$field.status -notin @('된다', '안 된다', '측정 실패')) { throw "덮개 실측 결과 누락: $field" }
+                Write-Host "c_prime_cover.$field : $($result.states.c_prime_cover.$field.status)"
+              }
+            }
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+            $app.Dispose()
+          }
       - name: 끌기 진단 자체 시험
         run: node --test --test-timeout=60000 app/e2e-windows/drag-events.test.cjs
       - name: 입력 미도달 재시도 정책 시험

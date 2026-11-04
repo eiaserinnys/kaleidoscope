@@ -7,6 +7,8 @@ mod freeze_cover;
 #[cfg(windows)]
 mod native_webview;
 mod updater;
+#[cfg(all(windows, feature = "e2e"))]
+mod web_control;
 #[cfg(windows)]
 mod web_host;
 
