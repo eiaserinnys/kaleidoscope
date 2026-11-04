@@ -42,6 +42,7 @@
 .ks-data-tab-panel { padding-inline: var(--ks-space-3); }
 .ks-data-tab-list .ks-button { flex: 0 0 auto; font-size: var(--ks-type-meta); white-space: nowrap; }
 .ks-data-tab-list .ks-button.is-constrained { flex: 0 1 auto; min-width: 0; }
+.ks-data-tab-list > .ks-icon-button { align-self: center; }
 .ks-data-tab-list .ks-button.is-overflow { position: absolute; inset-inline-start: 0; visibility: hidden; }
 .ks-data-tab-more-probe { position: absolute; inset-inline-start: 0; visibility: hidden; width: var(--ks-icon-button-size); }
 .ks-data-tab-panel { flex: 1 1 auto; min-height: 0; overflow: auto; padding-block-end: var(--ks-space-3); }
@@ -96,6 +97,17 @@
 .ks-data-section-child > .ks-chart, .ks-data-section-child > .ks-map { padding-block-start: var(--ks-space-2); }
 .ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:last-child) { padding-inline-end: var(--ks-space-3); }
 .ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:first-child) { padding-inline-start: var(--ks-space-3); }
+.ks-split.is-stacked { display: flex; flex-direction: column; overflow-y: auto; }
+.ks-split.is-stacked > .ks-split-pane { flex: 0 0 auto; overflow: visible; }
+.ks-split.is-stacked > .ks-split-pane:not(:has(> .ks-split.is-stacked)):has(:is(
+  .ks-list, .ks-table-scroll, .ks-data-tree, .ks-feed, .ks-explorer-icons, .ks-repeat.is-virtual,
+  .ks-explorer, .ks-file-tree, .ks-code-view, .ks-markdown-editor, .ks-markdown-view,
+  .ks-agent-chat, .ks-html-view, .ks-web-view, .ks-canvas, .ks-map, .ks-chart, .ks-timeline,
+  .ks-split:not(.is-stacked)
+)) { height: calc(var(--ks-pane-min-size) * 2); }
+.ks-split.is-stacked > .ks-split-pane > .ks-split.is-stacked { height: auto; }
+.ks-split.is-stacked > .ks-split-handle { display: none; }
+.ks-split.is-stacked > .ks-split-pane:not(:first-child) { border-top: var(--ks-line-width) solid var(--ks-color-border); padding-top: var(--ks-space-2); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-chart { padding-inline: 0; padding-block-end: var(--ks-space-3); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-map { padding-inline: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-properties { padding-inline: 0; padding-block: var(--ks-space-2) var(--ks-space-3); }
@@ -112,25 +124,29 @@
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-data-section > .ks-data-section-header,
 :is(
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-properties-container > .ks-properties,
 :is(
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > :is(.ks-feed, .ks-markdown-view, .ks-metrics, .ks-chart, .ks-map, .ks-data-tree, .ks-keypad),
 :is(
   .ks-data-tab-panel,
   .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child,
   .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
-  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane
+  .ks-data-tab-panel > .ks-data-stack > .ks-data-stack-item:first-child > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
 ) > .ks-code-view .cm-content { padding-block-start: 0; }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ks-data-section-heading { display: flex; flex: 1 1 0; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }

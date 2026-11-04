@@ -12,6 +12,7 @@
     "item": "b",
     "node": null,
     "query": "",
+    "memo": "",
     "lang": "both",
     "compact": false,
     "count": 0,
@@ -261,7 +262,7 @@
           "type": "split", "direction": "row", "column_below": 700, "sizes": [1, 1, 1],
           "children": [
             { "type": "split", "direction": "row", "column_below": 700, "children": [
-              { "type": "section", "title": "메모", "child": { "type": "input", "value": { "state": "query" }, "on_change": { "set_state": "query" }, "placeholder": "내용" } },
+              { "type": "section", "title": "메모", "child": { "type": "input", "value": { "state": "memo" }, "on_change": { "set_state": "memo" }, "placeholder": "내용" } },
               { "type": "text", "value": "분할 안의 분할" }
             ] },
             { "type": "section", "title": "목록 간격", "child": { "type": "repeat", "items": [{ "id": "첫째" }, { "id": "둘째" }, { "id": "셋째" }], "key": "id", "gap": "large", "template": { "type": "text", "value": { "item": "id" } } } },

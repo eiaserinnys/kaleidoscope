@@ -149,7 +149,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
   };
   const row = (entry: Entry) => <Row key={entry.key} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} template={block.template} context={context} pointer={pointer} />;
   const gridStyle = layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
-  return <div ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.gap ? ` gap-${block.gap}` : ""}`} onWheel={pause} onTouchMove={pause}
+  return <div ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""}`} onWheel={pause} onTouchMove={pause}
     onPointerDown={(event) => { if (event.target === event.currentTarget) { draggingScrollbar.current = true; pause(); } }}
     onPointerUp={() => { draggingScrollbar.current = false; }} onPointerCancel={() => { draggingScrollbar.current = false; }}
     onScroll={() => { if (draggingScrollbar.current) pause(); }}

@@ -3,6 +3,15 @@ import type { AppDefinition } from "../../src/contract/contract";
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
 export const shellDefectFixtures = [
+  { ...base, id: "stacked-list-fixture", name: "쌓인 목록", state: { first: "", second: "" }, ui: { type: "split", direction: "row", column_below: 700, children: [
+    { type: "list", items: Array.from({ length: 100 }, (_, i) => ({ key: String(i), title: `첫 목록 ${i + 1}` })) },
+    { type: "list", items: Array.from({ length: 100 }, (_, i) => ({ key: String(i), title: `둘째 목록 ${i + 1}` })) },
+    { type: "stack", direction: "column", children: [
+      { type: "input", placeholder: "첫 입력", value: { state: "first" }, on_change: { set_state: "first" } },
+      { type: "input", placeholder: "둘째 입력", value: { state: "second" }, on_change: { set_state: "second" } },
+      { type: "code", value: "작업 내용을 확인합니다.\n다음 줄입니다.", read_only: true },
+    ] },
+  ] } },
   { ...base, id: "long-tabs-fixture", name: "긴 탭 이름", state: {}, ui: { type: "tabs", tabs: [
     { label: "프로젝트의 아주 긴 이름과 여러 항목을 함께 살펴보는 상세 작업 화면과 변경 기록", child: { type: "text", value: "선택한 보기" } },
     { label: "상세 보기", child: { type: "text", value: "상세 내용" } },

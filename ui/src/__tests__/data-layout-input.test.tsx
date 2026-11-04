@@ -502,10 +502,12 @@ it("반응형 분할은 자기 폭으로 방향을 바꾸면서 자식을 유지
   expect(observed?.classList.contains("ks-split")).toBe(true);
   act(() => callback([{ target: observed, contentRect: { width: 699 } } as ResizeObserverEntry], {} as ResizeObserver));
   expect(view.container.querySelector(".ks-split-column")).toBeTruthy();
+  expect(view.container.querySelector(".ks-split.is-stacked")).toBeTruthy();
   expect(screen.getByRole("textbox")).toBe(input);
   expect(input.value).toBe("유지");
   act(() => callback([{ target: observed, contentRect: { width: 700 } } as ResizeObserverEntry], {} as ResizeObserver));
   expect(view.container.querySelector(".ks-split-row")).toBeTruthy();
+  expect(view.container.querySelector(".ks-split.is-stacked")).toBeNull();
   expect(screen.getByRole("textbox")).toBe(input);
   store.dispose();
 });
