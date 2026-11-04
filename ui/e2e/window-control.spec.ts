@@ -93,6 +93,7 @@ test("실제 격리 프레임에서 좌표 클릭과 더블클릭이 동작한�
   result = await point("#label", "click");
   await expect(sandbox.locator("#check")).toBeChecked(); expect(result.after.text).toContain("켜짐");
   await point("summary", "click"); await expect(sandbox.locator("details")).toHaveAttribute("open", "");
+  await page.screenshot({ path: "test-results/frame-point-sandbox.png" });
   await page.evaluate(() => (window as any).controlHarness.chooseFrame("html"));
   const html = page.frameLocator('iframe[title="실제 HTML"]');
   await expect(html.locator("#target")).toHaveText("편집할 글");
@@ -100,4 +101,5 @@ test("실제 격리 프레임에서 좌표 클릭과 더블클릭이 동작한�
   result = await point("#target", "double_click");
   expect(result.applied).toBe(true); expect(result.after.settled).toBe(true);
   await expect(html.locator("#target")).toHaveAttribute("contenteditable", "plaintext-only");
+  await page.screenshot({ path: "test-results/frame-point-html.png" });
 });
