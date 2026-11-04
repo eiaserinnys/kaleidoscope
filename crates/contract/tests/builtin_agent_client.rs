@@ -1,13 +1,13 @@
-use kaleidoscope_contract::validate::parse_app_definition;
+use kaleidoscope_contract::{validate::parse_app_definition, RECEIVE_MESSAGE_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
 use serde_json::Value;
 
 #[test]
 fn builtin_agent_declares_client_process_and_settings() {
     let json = include_str!("../../../apps/agent.json");
     let value: Value = serde_json::from_str(json).unwrap();
-    assert_eq!(value["requires"]["blocks"], 19);
+    assert_eq!(value["requires"]["blocks"], RECEIVE_MESSAGE_BLOCK_SET_VERSION);
     assert_eq!(value["requires"]["modules"]["process"], 1);
-    assert_eq!(value["requires"]["modules"]["client"], 4);
+    assert_eq!(value["requires"]["modules"]["client"], RECEIVE_MESSAGE_CLIENT_VERSION);
     assert_eq!(value["client"]["device_storage"]["scope"], "window");
     assert_eq!(value["client"]["channels"][0], "conversation");
     assert!(value["settings"]["ui"].is_object());

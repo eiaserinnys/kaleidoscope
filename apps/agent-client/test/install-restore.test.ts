@@ -39,17 +39,18 @@ async function scenario(finishBeforeReload: boolean) {
   };
   const make = (restore: boolean) => {
     const handlers = new Map<string, Function>(), stores = new Map<string, Function>(), views: any[] = [];
+    let receive: Function = () => {};
     const client = {
       process, files: { grant: () => restore ? "작업" : null, on_grant() {}, pick_folder: async () => "작업" },
       blobs: { open: async () => null, put: async () => {}, remove: async () => {} }, host: {}, context: {}, chat: { publish() {} },
       getStorage: async (id: string) => id === "programs" ? programs : [agent],
       getState: () => restore ? "a" : null, setState() {}, onStorageChange: (id: string, fn: Function) => stores.set(id, fn),
-      onLifecycle() {}, handle: (name: string, fn: Function) => handlers.set(name, fn), publish: (view: any) => views.push(view),
+      onLifecycle() {}, onMessage: (fn: Function) => { receive = fn; }, handle: (name: string, fn: Function) => handlers.set(name, fn), publish: (view: any) => views.push(view),
     };
     new AppClient(client as any, []);
     stores.get("programs")!(programs);
     stores.get("agents")!([agent]);
-    return { handlers, views };
+    return { handlers, views, receive: (message: any) => receive(message) };
   };
   const first = make(false);
   await first.handlers.get("pick_folder")!({});
@@ -59,6 +60,9 @@ async function scenario(finishBeforeReload: boolean) {
   listeners = [];
   const second = make(true);
   await until(() => second.views.some((view) => view.show_installing));
+  if (!finishBeforeReload) assert.deepEqual(await second.receive({ request_id: "one", text: "안녕" }), {
+    status: "not_ready", reason: "에이전트 창에서 프로그램 설치를 마친 뒤 다시 보내세요",
+  });
   if (!finishBeforeReload) { exit = { code: 0 }; listeners.forEach((listener) => listener("install-handle")); }
   await until(() => agentStarts === 2);
   assert.equal(after, 1);

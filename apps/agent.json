@@ -2,13 +2,13 @@
   "id": "agent",
   "name": "에이전트",
   "requires": {
-    "blocks": 19,
+    "blocks": 29,
     "modules": {
       "files": 1,
       "storage": 1,
       "worker": 1,
       "assets": 1,
-      "client": 4,
+      "client": 6,
       "process": 1
     }
   },
@@ -558,14 +558,14 @@
   "assets": [
     {
       "id": "builtin-agent-client",
-      "version": 3
+      "version": 4
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 3
+      "version": 4
     },
     "inputs": {},
     "outputs": {
@@ -718,7 +718,8 @@
     },
     "capabilities": [
       "instructions",
-      "context_capture"
+      "context_capture",
+      "receive_message"
     ]
   },
   "settings": {

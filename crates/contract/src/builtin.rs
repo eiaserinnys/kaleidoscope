@@ -26,6 +26,7 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-agent-client", 1),
     ("builtin-agent-client", 2),
     ("builtin-agent-client", 3),
+    ("builtin-agent-client", 4),
 ];
 
 // BUNDLED_ASSET_KEYS와 같은 순서. 코어의 번들 매니페스트 대조 시험이 형식을 확인한다.
@@ -41,6 +42,7 @@ const BUNDLED_ASSET_FORMATS: &[AssetFormat] = &[
     AssetFormat::Javascript,
     AssetFormat::Javascript,
     AssetFormat::Javascript,
+    AssetFormat::Javascript,
 ];
 
 pub fn bundled_asset_format(id: &str, version: u32) -> Option<AssetFormat> {
@@ -52,7 +54,7 @@ pub fn bundled_asset_format(id: &str, version: u32) -> Option<AssetFormat> {
 
 // 날씨 자산 뒤에 에이전트 client의 보존 판과 현재 판이 온다.
 pub const WEATHER_ASSET_KEYS: &[(&str, u32)] =
-    BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 3).0;
+    BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 4).0;
 pub const AGENT_ASSET_KEYS: &[(&str, u32)] =
     BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 1).1;
 
@@ -70,15 +72,15 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
-        default_message_receiver: false,
+        default_message_receiver: true,
         id: "agent",
         name: "에이전트",
-        version: 6,
-        updated_at: "2026-11-04T00:00:00Z",
-        blocks: 19,
+        version: 7,
+        updated_at: "2026-11-05T00:00:00Z",
+        blocks: crate::RECEIVE_MESSAGE_BLOCK_SET_VERSION,
         modules: &[
             ("assets", 1),
-            ("client", 4),
+            ("client", crate::RECEIVE_MESSAGE_CLIENT_VERSION),
             ("files", 1),
             ("process", 1),
             ("storage", 1),

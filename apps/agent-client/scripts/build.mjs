@@ -4,11 +4,11 @@ import { execFileSync } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkBundle } from "./bundle-check.mjs";
+import { checkBundle, checkPreserved } from "./bundle-check.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const assets = resolve(root, "../assets");
-const target = resolve(assets, "agent/client.js");
+const target = resolve(assets, "agent/client-v4.js");
 const manifestPath = resolve(assets, "manifest.json");
 const check = process.argv.includes("--check");
 if (!check) execFileSync("npm", ["test"], { cwd: root, stdio: "inherit" });
@@ -18,7 +18,10 @@ const bundle = await build({ entryPoints: [resolve(root, "src/index.ts")], bundl
 const bytes = bundle.outputFiles[0].contents;
 const hash = createHash("sha256").update(bytes).digest("hex");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-const entry = { id: "builtin-agent-client", version: 3, format: "javascript", sha256: hash, source: "apps/agent-client", license: "MIT", byte_size: bytes.length, created_at: "2026-11-04T00:00:00Z", path: "agent/client.js" };
+const entry = { id: "builtin-agent-client", version: 4, format: "javascript", sha256: hash, source: "apps/agent-client", license: "MIT", byte_size: bytes.length, created_at: "2026-11-05T00:00:00Z", path: "agent/client-v4.js" };
+const preserved = { id: "builtin-agent-client", version: 3, format: "javascript", sha256: "8eee03485f21ac079cddd660f02b878f53e960eda31006674b3c54c62bfb7b1e", source: "apps/agent-client", license: "MIT", byte_size: 37051, created_at: "2026-11-04T00:00:00Z", path: "agent/client-v3.js" };
+const oldBytes = await readFile(resolve(assets, preserved.path));
+checkPreserved(oldBytes, manifest.find((item) => item.id === preserved.id && item.version === preserved.version), preserved);
 const index = manifest.findIndex((item) => item.id === entry.id && item.version === entry.version);
 if (check) {
   const saved = await readFile(target);

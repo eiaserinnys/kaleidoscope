@@ -1,9 +1,11 @@
-import { AgentSession, type Host, type SessionView, type Spec } from "./session.ts";
+import { AgentSession, type Host, type SendInput, type SessionView, type Spec } from "./session.ts";
 import { agentError } from "./errors.ts";
 
 type Agent = Spec & { id: string };
 type Program = { name: string; winget: string; url: string };
 type Action = { event?: any; item?: any; parent_item?: any };
+type MessageInput = { request_id: string; text: string };
+type MessageResult = { status: "accepted" } | { status: "not_ready"; reason: string };
 type Bridge = {
   process: Host["process"];
   files: { grant(id: string): string | null; on_grant(id: string, listener: (name: string | null) => void): void; pick_folder(id: string): Promise<string | null>; read(id: string): Promise<ArrayBuffer> };
@@ -17,6 +19,7 @@ type Bridge = {
   setState(key: string, value: unknown): void;
   onStorageChange(entry: string, listener: (value: unknown) => void, onError?: (error: unknown) => void): void;
   onLifecycle(listener: (event: { phase: string }) => unknown): void;
+  onMessage(listener: (message: MessageInput) => Promise<MessageResult>): void;
   handle(name: string, listener: (context: Action) => unknown): void;
   publish(value: Record<string, unknown>): void;
 };
@@ -38,6 +41,10 @@ export class AppClient {
   private restoring = false;
   private storageReady = false;
   private storageFailure = false;
+  private finishInitial: () => void = () => {};
+  private readonly initialReady = new Promise<void>((resolve) => { this.finishInitial = resolve; });
+  private storageTask: Promise<void> | null = null;
+  private restoreTask: Promise<void> | null = null;
   private error: { id: string | null; message: string; details: string[] } | null = null;
   private lastItems: SessionView["items"] | null = null;
   private lastQueue = "";
@@ -62,9 +69,10 @@ export class AppClient {
     };
     this.session = new AgentSession(host);
     client.onStorageChange("programs", (value) => { this.programs = value as Record<string, Program>; this.update(); });
-    client.onStorageChange("agents", (value) => { void this.acceptAgents(value); }, (error) => { this.storageFailure = true; this.showError(error); });
+    client.onStorageChange("agents", (value) => { void this.acceptAgents(value).finally(() => this.finishInitial()); }, (error) => { this.storageFailure = true; this.showError(error); this.finishInitial(); });
     client.onLifecycle((event) => { if (event.phase === "ready") this.update(); });
-    client.files.on_grant("work", (folder) => { this.folder = folder; this.update(); if (folder && this.restoring && !this.choosingFolder) void this.restore(); });
+    client.files.on_grant("work", (folder) => { this.folder = folder; this.update(); if (folder && this.restoring && !this.choosingFolder) void this.startRestore(); });
+    client.onMessage((message) => this.receiveMessage(message));
     client.handle("choose_agent", ({ item }) => this.chooseAgent(String(item?.id ?? "")));
     client.handle("back_agent", () => this.backAgent());
     client.handle("pick_folder", () => this.pickFolder());
@@ -76,7 +84,7 @@ export class AppClient {
     client.handle("settings_agent", ({ event }) => this.settingsAgent(String(event ?? "")));
     client.handle("answer", ({ item, parent_item }) => this.session.answer(parent_item?.rpcId, item?.id ?? null));
     client.handle("cancel", () => this.session.cancel());
-    client.handle("send", ({ event }) => this.session.send({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
+    client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
     client.handle("attachment", ({ event }) => this.attachment(event));
   }
 
@@ -100,7 +108,35 @@ export class AppClient {
     this.stage = this.selected ? "folder" : "agents";
     this.restoring = !!this.selected;
     this.update();
-    if (this.selected && this.folder) await this.restore();
+    if (this.selected && this.folder) await this.startRestore();
+  }
+
+  private startRestore(): Promise<void> {
+    this.restoreTask = this.restore();
+    return this.restoreTask;
+  }
+
+  private submit(input: SendInput): Promise<void> { return this.session.send(input); }
+
+  private async receiveMessage(message: MessageInput): Promise<MessageResult> {
+    await this.initialReady;
+    await this.storageTask;
+    await this.restoreTask;
+    const phase = this.view?.phase;
+    if (this.stage === "session" && (phase === "ready" || phase === "responding")) {
+      await this.submit({ id: message.request_id, text: message.text, attachments: [] });
+      return { status: "accepted" };
+    }
+    const reason = this.installing || this.canInstall()
+      ? "에이전트 창에서 프로그램 설치를 마친 뒤 다시 보내세요"
+      : this.stage === "error" || (this.stage === "session" && phase === "failed")
+        ? "에이전트 창의 오류를 확인한 뒤 다시 보내세요"
+        : this.stage === "session" && phase === "login"
+          ? "에이전트 창에서 로그인한 뒤 다시 보내세요"
+          : this.stage === "session" && (!phase || phase === "starting")
+            ? "에이전트가 시작되는 중입니다. 시작된 뒤 다시 보내세요"
+            : "에이전트 창에서 에이전트와 작업 폴더를 고른 뒤 다시 보내세요";
+    return { status: "not_ready", reason };
   }
 
   private async retryStorage(): Promise<void> {
@@ -125,7 +161,8 @@ export class AppClient {
           this.programs = programs;
           this.installing = true;
           this.update();
-          await this.finishInstall(programs[this.selected.command], installer.handle, installer.after, installer.checkpoint as { stdout: string } | null);
+          void this.finishInstall(programs[this.selected.command], installer.handle, installer.after, installer.checkpoint as { stdout: string } | null)
+            .catch((error) => this.showError(error));
         } else {
           const started = await this.session.start(this.selected);
           if (!started) { this.stage = "folder"; this.retry = true; this.update(); }
@@ -175,7 +212,7 @@ export class AppClient {
   }
 
   private async retryStart(installed?: Program): Promise<void> {
-    if (this.storageFailure || !this.selected) { await this.retryStorage(); return; }
+    if (this.storageFailure || !this.selected) { this.storageTask = this.retryStorage(); await this.storageTask; return; }
     this.stage = "session";
     this.error = null;
     this.retry = false;
