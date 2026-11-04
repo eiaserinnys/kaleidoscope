@@ -1,4 +1,9 @@
 error_catalog! { ENTRIES;
+    SHELL_MESSAGE_SEND_SOURCE_MISSING() { class: NotFound, place: "메시지 보낸 창 찾기", cause: "보낸 창이 사라졌다", message: "보내던 창이 닫혀 메시지를 보낼 수 없습니다. 문서를 다시 열어 보내세요.", fix: "송신 창을 다시 여세요" }
+    SHELL_MESSAGE_SEND_NO_RECEIVER() { class: NotFound, place: "메시지 받을 앱 찾기", cause: "메시지를 받을 수 있는 앱이 없다", message: "메시지를 받을 수 있는 앱이 없습니다. 수신 가능한 앱을 설치한 뒤 다시 보내세요.", fix: "수신 가능한 앱을 설치하세요" }
+    SHELL_MESSAGE_SEND_NOT_CONFIGURED(app) { class: InvalidRequest, place: "대화에 메시지 보내기", cause: "받는 대화가 없다", message: "{app}에 보낼 대화가 없습니다. 열린 앱에서 대화를 시작한 뒤 다시 보내세요.", fix: "받는 앱에서 대화를 시작하세요" }
+    SHELL_MESSAGE_SEND_NOT_READY(app, reason) { class: InvalidRequest, place: "앱에 메시지 보내기", cause: "받는 앱이 준비되지 않았다", message: "{app}에서 메시지를 받지 못했습니다. {reason}", fix: "받는 앱의 안내를 따르세요" }
+    SHELL_MESSAGE_SEND_WINDOW_NOT_SHOWN(app) { class: Unavailable, place: "메시지 받을 창 열기", cause: "연 창이 제시간에 화면에 나타나지 않았다", message: "{app} 창을 열었지만 화면에 나타나지 않아 보내지 못했습니다. 창이 보이면 다시 보내세요.", fix: "창이 보이면 다시 보내세요" }
     SHELL_MESSAGE_RECEIVER_START_TIMEOUT(app) { class: Unavailable, place: "메시지 수신 준비", cause: "받는 창이 제시간에 준비되지 않았다", message: "{app}의 메시지 수신이 준비되지 않았습니다. 열린 앱의 상태를 확인한 뒤 다시 보내세요.", fix: "열린 앱의 상태를 확인한 뒤 다시 보내세요" }
     SHELL_MESSAGE_RECEIVER_CLOSED(app) { class: NotFound, place: "메시지 수신 창 종료", cause: "받는 창이 종료되었다", message: "{app}의 받는 창이 종료되어 보내기를 끝내지 못했습니다. 창을 다시 열고 받은 내용을 확인하세요.", fix: "창을 다시 열고 받은 내용을 확인하세요" }
     SHELL_MESSAGE_RECEIVE_REPLY_TIMEOUT(app) { class: Unavailable, place: "메시지 접수 응답", cause: "받는 창이 제시간에 접수 응답을 보내지 않았다", message: "{app}의 접수 응답을 받지 못했습니다. 중복해서 보내기 전에 받는 창을 확인하세요.", fix: "중복해서 보내기 전에 받는 창을 확인하세요" }
