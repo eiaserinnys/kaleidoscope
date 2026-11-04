@@ -21,3 +21,100 @@ async fn embedded_restarts_with_persistent_identity_and_loopback_port() {
         .unwrap();
     assert!(response.status().is_success());
 }
+
+#[tokio::test]
+async fn embedded_migrates_v14_through_preferences_and_installation_then_restarts() {
+    use kaleidoscope_contract::{registry, Supported};
+    use kaleidoscope_orchestrator::AppState;
+    use rusqlite::Connection;
+    use serde_json::{json, Value};
+    use std::time::Duration;
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = || EmbeddedConfig {
+        db_path: dir.path().join("test.sqlite"),
+        token_path: dir.path().join("test.token"),
+        device_name: "시험 기기".into(),
+    };
+    let state = AppState::open(config().db_path, "test-seed".into()).unwrap();
+    let definition = json!({"id":"personal-app","name":"개인 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"안녕"}}).to_string();
+    state.publish_app(&definition, "test", false, None).unwrap();
+    drop(state);
+    let db = Connection::open(config().db_path).unwrap();
+    db.execute_batch("DROP TABLE account_preferences; ALTER TABLE apps DROP COLUMN installation_json; PRAGMA user_version=14;").unwrap();
+    assert_eq!(
+        db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        14
+    );
+    drop(db);
+
+    let first = EmbeddedServer::start(config()).await.unwrap();
+    let db = Connection::open(config().db_path).unwrap();
+    assert_eq!(
+        db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        16
+    );
+    let preferences_table: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='account_preferences')", [], |row| row.get(0)).unwrap();
+    assert!(preferences_table);
+    let origin: Option<String> = db
+        .query_row(
+            "SELECT installation_json FROM apps WHERE id='personal-app'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(origin.is_none());
+    drop(db);
+    drop(first);
+
+    let second = EmbeddedServer::start(config()).await.unwrap();
+    let mut response = reqwest::Client::new()
+        .get(format!("{}/api/device/events", second.server_url))
+        .bearer_auth(&second.token)
+        .header(
+            registry::REGISTRY_HEADER,
+            registry::PREFERENCES_REGISTRY_VERSION.to_string(),
+        )
+        .header(
+            registry::SUPPORTED_HEADER,
+            serde_json::to_string(&Supported::current()).unwrap(),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let events = tokio::time::timeout(Duration::from_secs(10), async {
+        let mut buffer = Vec::new();
+        loop {
+            let chunk = response
+                .chunk()
+                .await
+                .unwrap()
+                .expect("이벤트 스트림이 끝났습니다");
+            buffer.extend_from_slice(&chunk);
+            let text = String::from_utf8_lossy(&buffer);
+            let events: Vec<Value> = text
+                .lines()
+                .filter_map(|line| line.strip_prefix("data: "))
+                .filter_map(|data| serde_json::from_str(data).ok())
+                .collect();
+            if events.len() >= 2 {
+                break events;
+            }
+        }
+    })
+    .await
+    .expect("스냅샷을 받지 못했습니다");
+    assert_eq!(events[0]["event"], "apps.snapshot");
+    assert_eq!(events[1]["event"], "preferences.snapshot");
+    let app = events[0]["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["app"]["id"] == "personal-app")
+        .unwrap();
+    assert!(app["app"]["origin"].is_null());
+    assert!(app["app"]["installed_version"].is_null());
+}

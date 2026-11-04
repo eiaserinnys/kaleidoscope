@@ -393,7 +393,7 @@ fn migration_removes_builtin_definitions_but_preserves_saved_values() {
         .unwrap();
     {
         let db = state.lock_db().unwrap();
-        db.execute_batch("DROP TABLE asset_versions; ALTER TABLE app_storage_items DROP COLUMN workspace_id; PRAGMA user_version=10;").unwrap();
+        db.execute_batch("DROP TABLE asset_versions; ALTER TABLE app_storage_items DROP COLUMN workspace_id; ALTER TABLE apps DROP COLUMN installation_json; PRAGMA user_version=10;").unwrap();
         migrate(&db).unwrap();
         let apps: i64 = db
             .query_row("SELECT count(*) FROM apps WHERE id='agent'", [], |row| {

@@ -377,7 +377,7 @@ impl AppState {
             .map(|app| app.id)
             .collect();
         let placeholders = vec!["?"; builtin_ids.len()].join(",");
-        let query = format!("SELECT a.id,a.name,a.current_version,a.created_at,a.updated_at,v.definition,v.created_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.deleted_at IS NULL AND a.id NOT IN ({placeholders}) ORDER BY a.id");
+        let query = format!("SELECT a.id,a.name,a.current_version,a.created_at,a.updated_at,v.definition,v.created_at,a.installation_json FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.deleted_at IS NULL AND a.id NOT IN ({placeholders}) ORDER BY a.id");
         let mut stmt = db.prepare(&query).map_err(|error| {
             db_error_with(
                 error,
@@ -394,6 +394,7 @@ impl AppState {
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
                     row.get::<_, String>(6)?,
+                    row.get::<_, Option<String>>(7)?,
                 ))
             })
             .map_err(|error| {
@@ -412,6 +413,7 @@ impl AppState {
                 updated_at,
                 raw_definition,
                 version_created_at,
+                installation_json,
             ) = row.map_err(|error| {
                 db_error_with(
                     error,
@@ -422,10 +424,11 @@ impl AppState {
                 kaleidoscope_contract::errors::SERVER_APP_LIST_DEFINITION_JSON_INVALID(&id)
                     .and_details(vec![error.to_string()])
             })?;
+            let installation = registry_install::read_installation(installation_json, &id)?;
             apps.push(RegistryApp {
                 app: App {
-                    origin: None,
-                    installed_version: None,
+                    origin: installation.as_ref().map(|item| item.origin.clone()),
+                    installed_version: installation.and_then(|item| item.installed_version),
                     id: id.clone(),
                     name,
                     current_version,
@@ -448,15 +451,16 @@ impl AppState {
             return Ok(None);
         }
         let db = self.lock_db()?;
-        let current: Option<(String, String, u32, String, String)> = db
+        let current: Option<(String, String, u32, String, String, Option<String>)> = db
             .query_row(
-                "SELECT id,name,current_version,created_at,updated_at FROM apps WHERE id=?1 AND deleted_at IS NULL",
+                "SELECT id,name,current_version,created_at,updated_at,installation_json FROM apps WHERE id=?1 AND deleted_at IS NULL",
                 [app_id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
             )
             .optional()
             .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_LOOKUP_DATABASE_FAILED(app_id)))?;
-        let Some((id, name, current_version, created_at, updated_at)) = current else {
+        let Some((id, name, current_version, created_at, updated_at, installation_json)) = current
+        else {
             return Ok(None);
         };
         let version = version.unwrap_or(current_version);
@@ -480,10 +484,11 @@ impl AppState {
             kaleidoscope_contract::errors::SERVER_APP_DEFINITION_JSON_INVALID(&id)
                 .and_details(vec![error.to_string()])
         })?;
+        let installation = registry_install::read_installation(installation_json, &id)?;
         Ok(Some(RegistryApp {
             app: App {
-                origin: None,
-                installed_version: None,
+                origin: installation.as_ref().map(|item| item.origin.clone()),
+                installed_version: installation.and_then(|item| item.installed_version),
                 id: id.clone(),
                 name,
                 current_version,
@@ -699,6 +704,7 @@ mod embedded;
 mod transfer;
 pub use embedded::{load_or_create_token, EmbeddedConfig, EmbeddedServer};
 
+mod app_delete;
 mod app_storage;
 mod app_storage_context;
 mod app_storage_http;
@@ -718,6 +724,10 @@ mod pairing;
 mod preferences;
 mod preview;
 mod publish;
+mod publish_transaction;
+mod registry_install;
+#[cfg(test)]
+mod registry_install_tests;
 mod share;
 mod storage;
 mod window_control;

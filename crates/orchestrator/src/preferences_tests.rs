@@ -319,13 +319,13 @@ fn preferences_migration_from_v14_keeps_account_data() {
     let state = AppState::in_memory("secret");
     let account = state.mcp_account_id().unwrap();
     let db = state.lock_db().unwrap();
-    db.execute_batch("DROP TABLE account_preferences; PRAGMA user_version=14;")
+    db.execute_batch("DROP TABLE account_preferences; ALTER TABLE apps DROP COLUMN installation_json; PRAGMA user_version=14;")
         .unwrap();
     migrate(&db).unwrap();
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, storage::PREFERENCES_SCHEMA_VERSION);
+    assert_eq!(version, storage::INSTALLATION_SCHEMA_VERSION);
     let exists: bool = db
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",

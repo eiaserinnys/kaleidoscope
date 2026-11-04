@@ -5,6 +5,7 @@ use rand::RngExt;
 use sha2::{Digest, Sha256};
 
 pub(super) const PREFERENCES_SCHEMA_VERSION: i64 = 15;
+pub(super) const INSTALLATION_SCHEMA_VERSION: i64 = 16;
 
 pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
@@ -15,7 +16,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > PREFERENCES_SCHEMA_VERSION {
+    } else if version > INSTALLATION_SCHEMA_VERSION {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -293,6 +294,9 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
         tx.execute_batch("CREATE TABLE IF NOT EXISTS account_preferences (account_id TEXT PRIMARY KEY REFERENCES accounts(id), data TEXT NOT NULL);")?;
         tx.pragma_update(None, "user_version", PREFERENCES_SCHEMA_VERSION)?;
         tx.commit()?;
+    }
+    if version < INSTALLATION_SCHEMA_VERSION {
+        db.execute_batch("BEGIN IMMEDIATE; ALTER TABLE apps ADD COLUMN installation_json TEXT; PRAGMA user_version=16; COMMIT;")?;
     }
     Ok(())
 }

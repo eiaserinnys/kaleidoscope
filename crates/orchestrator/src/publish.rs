@@ -1,5 +1,6 @@
+use super::publish_transaction::{publish_database_error, publish_transaction, published_app};
 use super::*;
-use kaleidoscope_contract::{migrate_window_state, AppWindow};
+use kaleidoscope_contract::AppWindow;
 
 #[derive(Clone, Debug)]
 pub(crate) struct OpenTarget {
@@ -56,23 +57,66 @@ impl AppState {
         preferred_device: Option<&str>,
         asset_uploads: &[kaleidoscope_contract::assets::AssetUpload],
     ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
+        self.publish_with_guard(
+            definition_json,
+            created_by,
+            open,
+            workspace_id,
+            preferred_device,
+            asset_uploads,
+            None,
+        )
+    }
+
+    pub(super) fn publish_install(
+        &self,
+        definition_json: &str,
+        created_by: &str,
+        asset_uploads: &[kaleidoscope_contract::assets::AssetUpload],
+        guard: super::registry_install::InstallGuard,
+    ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
+        self.publish_with_guard(
+            definition_json,
+            created_by,
+            false,
+            None,
+            None,
+            asset_uploads,
+            Some(guard),
+        )
+    }
+
+    fn publish_with_guard(
+        &self,
+        definition_json: &str,
+        created_by: &str,
+        open: bool,
+        workspace_id: Option<String>,
+        preferred_device: Option<&str>,
+        asset_uploads: &[kaleidoscope_contract::assets::AssetUpload],
+        guard: Option<super::registry_install::InstallGuard>,
+    ) -> Result<(RegistryApp, bool, Option<OpenTarget>), CoreError> {
         let definition = parse_app_definition(definition_json)?;
+        if kaleidoscope_contract::builtin::is_builtin(&definition.id) && guard.is_some() {
+            return Err(
+                kaleidoscope_contract::errors::REGISTRYINSTALL_ORIGIN_CONFLICT(&definition.id),
+            );
+        }
         if kaleidoscope_contract::builtin::is_builtin(&definition.id) {
             return Err(
                 kaleidoscope_contract::errors::APP_PUBLISH_BUILTIN_APP_FORBIDDEN(&definition.id),
             );
         }
         let now = timestamp();
-        let prepared = asset_uploads
-            .iter()
-            .map(super::assets::prepare)
-            .collect::<Result<Vec<_>, _>>()?;
         let workspace_accessible = match workspace_id.as_deref() {
             Some(id) => self.mcp_owns_workspace(id)?,
             None => true,
         };
         let event_workspace_id = workspace_accessible.then(|| workspace_id.clone()).flatten();
-        let account_id = self.mcp_account_id()?;
+        let account_id = match &guard {
+            Some(guard) => guard.account.clone(),
+            None => self.mcp_account_id()?,
+        };
         let open_target = if open && workspace_accessible {
             self.choose_open_target(
                 workspace_id.as_deref(),
@@ -87,140 +131,24 @@ impl AppState {
             open && workspace_accessible && (preferred_device.is_none() || open_target.is_some());
         let result = {
             let mut db = self.lock_db()?;
-            let tx = db.transaction().map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                        &definition.id,
-                    ),
-                )
-            })?;
-            for asset in &prepared {
-                super::assets::insert(&tx, &account_id, asset)?;
-            }
-            super::assets::verify_dependencies(&tx, &account_id, &definition.assets)?;
-            super::assets::verify_client_entry(&tx, &account_id, &definition)?;
-            super::assets::verify_icon(&tx, &account_id, &definition)?;
-            let current: Option<(u32, String, String, Option<String>)> = tx.query_row(
-                "SELECT a.current_version, v.definition, a.created_at, a.deleted_at FROM apps a JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE a.id=?1",
-                [&definition.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-            ).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(&definition.id)))?;
-            let revived = current
-                .as_ref()
-                .is_some_and(|(_, _, _, deleted)| deleted.is_some());
-            let mut migrated_windows = Vec::new();
-            let (version_num, created_at, unchanged) = if let Some((
-                current_version,
-                stored,
-                created_at,
-                _,
-            )) = current
-            {
-                let previous: AppDefinition = serde_json::from_str(&stored).map_err(|error| {
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_STORED_DEFINITION_JSON_INVALID(
-                        &definition.id,
-                    )
-                    .and_details(vec![error.to_string()])
-                })?;
-                if previous == definition {
-                    (current_version, created_at, true)
-                } else {
-                    super::app_storage::validate_storage_publish(
-                        &tx,
-                        &definition.id,
-                        &previous,
-                        &definition,
-                    )?;
-                    let version = current_version + 1;
-                    save_version(&tx, &definition, version, &now, created_by).map_err(|error| {
-                        db_error_with(
-                            error,
-                            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                                &definition.id,
-                            ),
-                        )
-                    })?;
-                    tx.execute(
-                        "UPDATE apps SET name=?2,current_version=?3,updated_at=?4 WHERE id=?1",
-                        params![definition.id, definition.name, version, now],
-                    )
-                    .map_err(|error| {
-                        db_error_with(
-                            error,
-                            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                                &definition.id,
-                            ),
-                        )
-                    })?;
-                    migrated_windows = move_app_windows(&tx, &definition, version, &now)?;
-                    (version, created_at, false)
-                }
-            } else {
-                tx.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?2,1,?3,?3)", params![definition.id, definition.name, now]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(&definition.id)))?;
-                save_version(&tx, &definition, 1, &now, created_by).map_err(|error| {
-                    db_error_with(
-                        error,
-                        kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                            &definition.id,
-                        ),
-                    )
-                })?;
-                (1, now.clone(), false)
-            };
-            if revived {
-                tx.execute(
-                    "UPDATE apps SET deleted_at=NULL WHERE id=?1",
-                    [&definition.id],
-                )
-                .map_err(|error| {
-                    db_error_with(
-                        error,
-                        kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                            &definition.id,
-                        ),
-                    )
-                })?;
-            }
-            tx.commit().map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                        &definition.id,
-                    ),
-                )
-            })?;
-            drop(db);
-            let app = App {
-                origin: None,
-                installed_version: None,
-                id: definition.id.clone(),
-                name: definition.name.clone(),
-                current_version: version_num,
-                created_at,
-                updated_at: if unchanged {
-                    self.app_updated_at(&definition.id)?
-                } else {
-                    now.clone()
-                },
-            };
-            let version = AppVersion {
-                app_id: definition.id.clone(),
-                version: version_num,
-                definition,
-                created_at: if unchanged {
-                    self.version_created_at(&app.id, version_num)?
-                } else {
-                    now
-                },
-            };
-            (
-                RegistryApp { app, version },
-                unchanged,
-                migrated_windows,
-                revived,
-            )
+            let tx = db
+                .transaction()
+                .map_err(|error| publish_database_error(error, &definition.id, guard.is_some()))?;
+            let (unchanged, migrated_windows, revived, origin_changed) = publish_transaction(
+                &tx,
+                &definition,
+                asset_uploads,
+                &account_id,
+                &now,
+                created_by,
+                guard.as_ref(),
+            )?;
+            let app = published_app(&tx, &definition, guard.is_some())?;
+            tx.commit()
+                .map_err(|error| publish_database_error(error, &definition.id, guard.is_some()))?;
+            (app, unchanged, migrated_windows, revived, origin_changed)
         };
-        if !result.1 || result.3 {
+        if !result.1 || result.3 || result.4 {
             let defer_open = open_requested && !result.2.is_empty();
             let event = DeviceEvent::AppPublished {
                 app: result.0.clone(),
@@ -442,33 +370,6 @@ impl AppState {
             .map(|(id, name, _)| OpenTarget { id, name }))
     }
 
-    fn app_updated_at(&self, id: &str) -> Result<String, CoreError> {
-        self.lock_db()?
-            .query_row("SELECT updated_at FROM apps WHERE id=?1", [id], |r| {
-                r.get(0)
-            })
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(id),
-                )
-            })
-    }
-    fn version_created_at(&self, id: &str, version: u32) -> Result<String, CoreError> {
-        self.lock_db()?
-            .query_row(
-                "SELECT created_at FROM app_versions WHERE app_id=?1 AND version=?2",
-                params![id, version],
-                |r| r.get(0),
-            )
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(id),
-                )
-            })
-    }
-
     pub(crate) fn open_sent_to(
         &self,
         target: Option<&OpenTarget>,
@@ -562,73 +463,4 @@ impl AppState {
             })
             .sum()
     }
-}
-
-fn move_app_windows(
-    tx: &Transaction<'_>,
-    definition: &AppDefinition,
-    version: u32,
-    now: &str,
-) -> Result<Vec<AppWindow>, CoreError> {
-    let rows = {
-        let mut statement = tx
-            .prepare("SELECT id,data FROM windows WHERE app_id=?1 ORDER BY created_at,id")
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                        &definition.id,
-                    ),
-                )
-            })?;
-        let rows = statement
-            .query_map([&definition.id], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                        &definition.id,
-                    ),
-                )
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                        &definition.id,
-                    ),
-                )
-            })?;
-        rows
-    };
-    let mut moved = Vec::with_capacity(rows.len());
-    for (id, raw) in rows {
-        let mut window: AppWindow = serde_json::from_str(&raw).map_err(|error| {
-            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_WINDOW_STATE_INVALID(&id)
-                .and_details(vec![error.to_string()])
-        })?;
-        window.state = migrate_window_state(definition, &window.state);
-        window.app_version = version;
-        window.updated_at = now.to_string();
-        let data = serde_json::to_string(&window).map_err(|error| {
-            kaleidoscope_contract::errors::SERVER_APP_PUBLISH_WINDOW_STATE_SERIALIZE_FAILED(
-                &window.id,
-            )
-            .and_details(vec![error.to_string()])
-        })?;
-        tx.execute("UPDATE windows SET data=?2 WHERE id=?1", params![id, data])
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::SERVER_APP_PUBLISH_DATABASE_FAILED(
-                        &definition.id,
-                    ),
-                )
-            })?;
-        moved.push(window);
-    }
-    Ok(moved)
 }

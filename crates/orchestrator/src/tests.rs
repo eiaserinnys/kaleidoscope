@@ -68,7 +68,7 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
         .publish_app(&test_definition(EDITOR), "agent", false, None)
         .unwrap();
     let db = state.lock_db().unwrap();
-    db.execute_batch("ALTER TABLE apps DROP COLUMN deleted_at; PRAGMA user_version=8;")
+    db.execute_batch("ALTER TABLE apps DROP COLUMN deleted_at; ALTER TABLE apps DROP COLUMN installation_json; PRAGMA user_version=8;")
         .unwrap();
     migrate(&db).unwrap();
     let row: (String, u32, Option<String>) = db
@@ -82,7 +82,7 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::PREFERENCES_SCHEMA_VERSION
+        storage::INSTALLATION_SCHEMA_VERSION
     );
 }
 
@@ -106,12 +106,13 @@ fn worker_migration_v14_removes_retired_builtin_rows() {
         db.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at) VALUES(?1,'key','json','{}','1','now')", [id]).unwrap();
         db.execute("INSERT INTO windows(id,desktop_id,app_id,data,created_at) VALUES(?1,'desktop',?1,'{}','now')", [id]).unwrap();
     }
+    db.execute_batch("ALTER TABLE apps DROP COLUMN installation_json;").unwrap();
     db.pragma_update(None, "user_version", 13).unwrap();
     migrate(&db).unwrap();
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::PREFERENCES_SCHEMA_VERSION
+        storage::INSTALLATION_SCHEMA_VERSION
     );
     for table in [
         "builtin_app_specs",
@@ -1106,7 +1107,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, storage::PREFERENCES_SCHEMA_VERSION);
+    assert_eq!(version, storage::INSTALLATION_SCHEMA_VERSION);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -1143,14 +1144,14 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
         "ALTER TABLE apps DROP COLUMN deleted_at; CREATE TABLE agents(workspace_id TEXT PRIMARY KEY);
         CREATE TABLE agent_items(id INTEGER PRIMARY KEY, text TEXT);
         INSERT INTO agents VALUES('w'); INSERT INTO agent_items VALUES(1,'기록');
-        PRAGMA user_version=7;",
+        ALTER TABLE apps DROP COLUMN installation_json; PRAGMA user_version=7;",
     )
     .unwrap();
     migrate(&db).unwrap();
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, storage::PREFERENCES_SCHEMA_VERSION);
+    assert_eq!(version, storage::INSTALLATION_SCHEMA_VERSION);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db
