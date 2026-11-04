@@ -256,6 +256,43 @@ fn transfer_assets_precede_apps_and_conflicts_preserve_remote_asset() {
 }
 
 #[test]
+fn transfer_rejects_non_image_icon_and_rolls_back_assets() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    use kaleidoscope_contract::assets::{AppIconRef, AssetDep, AssetFormat, AssetUpload};
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    let mut definition = app();
+    definition.requires.blocks = kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION;
+    definition.requires.modules.insert("assets".into(), 1);
+    definition.assets = vec![AssetDep {
+        id: "page".into(),
+        version: 1,
+    }];
+    definition.icon = Some(AppIconRef {
+        asset: "page".into(),
+        version: 1,
+    });
+    let html = "<p>시험</p>".as_bytes();
+    let bundle = TransferBundle {
+        assets: vec![AssetUpload {
+            id: "page".into(),
+            version: 1,
+            format: AssetFormat::Html,
+            sha256: sha256_hex(html),
+            source: "시험".into(),
+            license: "MIT".into(),
+            data_base64: STANDARD.encode(html),
+        }],
+        apps: vec![definition],
+        ..Default::default()
+    };
+    let error = state.import_data(&account, bundle).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("ASSET_APP_ICON_FORMAT_INVALID"));
+    assert!(state.list_assets().unwrap().is_empty());
+    assert!(state.app("personal-test", None).unwrap().is_none());
+}
+
+#[test]
 fn deleted_apps_retained_values_do_not_block_transfer() {
     let local = AppState::in_memory("local");
     let remote = AppState::in_memory("remote");

@@ -20,6 +20,37 @@ pub enum AssetFormat {
     Otf,
 }
 
+/// 앱 아이콘이 가리키는 불변 자산.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AppIconRef {
+    pub asset: String,
+    #[schemars(range(min = 1))]
+    pub version: u32,
+}
+
+impl AppIconRef {
+    pub fn validate_format(
+        &self,
+        app_id: &str,
+        format: AssetFormat,
+    ) -> Result<(), crate::CoreError> {
+        if matches!(
+            format,
+            AssetFormat::Svg | AssetFormat::Png | AssetFormat::Webp
+        ) {
+            Ok(())
+        } else {
+            Err(crate::errors::ASSET_APP_ICON_FORMAT_INVALID(
+                app_id,
+                &self.asset,
+                self.version,
+            ))
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]

@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 29판, 261103)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 32판, 261105)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -239,7 +239,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 31;
+pub const CONTRACT_VERSION: u32 = 32;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -278,7 +278,10 @@ pub const CONTRACT_VERSION: u32 = 31;
 /// - 21판: input, select, slider, color의 `label_position`과 slider의 `show_value`.
 /// - 22판: request 원천의 `page`(쪽 넘김)와 목록 블록의 다음 쪽 받기, `data.more`.
 /// - 25판: `input.read_only` 읽기 전용 바인딩.
-pub const BLOCK_SET_VERSION: u32 = INPUT_READ_ONLY_BLOCK_SET_VERSION;
+/// - 26판: 앱 정의의 불변 자산 아이콘.
+pub const BLOCK_SET_VERSION: u32 = APP_ICON_BLOCK_SET_VERSION;
+/// 앱 아이콘 자산 참조의 첫 블록 세트 판.
+pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 /// 입력 읽기 전용 바인딩의 첫 블록 세트 판.
 pub const INPUT_READ_ONLY_BLOCK_SET_VERSION: u32 = 25;
 /// 동적 표 열과 칸 격자의 첫 블록 세트 판.
@@ -760,6 +763,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub description: Option<String>,
+    /// 앱 아이콘. assets에 같은 id와 판을 선언한 SVG, PNG 또는 WebP 자산이다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub icon: Option<assets::AppIconRef>,
     pub requires: Requires,
     /// 앱이 참조할 수 있는 자산과 고정된 판.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -6069,7 +6076,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 31);
+        assert_eq!(CONTRACT_VERSION, 32);
         let Block::Tabs {
             header,
             keep_mounted,

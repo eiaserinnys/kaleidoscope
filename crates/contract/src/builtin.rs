@@ -1,5 +1,7 @@
 //! 쉘에 포함되는 기본 앱과 자산의 식별 및 호환 정보.
 
+use crate::assets::AssetFormat;
+
 pub struct BuiltinIdentity {
     pub id: &'static str,
     pub name: &'static str,
@@ -23,6 +25,28 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-agent-client", 2),
     ("builtin-agent-client", 3),
 ];
+
+// BUNDLED_ASSET_KEYS와 같은 순서. 코어의 번들 매니페스트 대조 시험이 형식을 확인한다.
+const BUNDLED_ASSET_FORMATS: &[AssetFormat] = &[
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Javascript,
+    AssetFormat::Javascript,
+    AssetFormat::Javascript,
+];
+
+pub fn bundled_asset_format(id: &str, version: u32) -> Option<AssetFormat> {
+    BUNDLED_ASSET_KEYS
+        .iter()
+        .position(|key| *key == (id, version))
+        .and_then(|index| BUNDLED_ASSET_FORMATS.get(index).copied())
+}
 
 // 날씨 자산 뒤에 에이전트 client의 보존 판과 현재 판이 온다.
 pub const WEATHER_ASSET_KEYS: &[(&str, u32)] =

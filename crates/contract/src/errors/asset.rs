@@ -1,4 +1,25 @@
 error_catalog! { ENTRIES;
+    ASSET_APP_ICON_LOOKUP_FAILED(app_id, asset, version) {
+        class: Server,
+        place: "앱 아이콘 자산 조회",
+        cause: "아이콘 자산 판을 데이터베이스에서 확인하지 못했다",
+        message: "앱 ID {app_id}, 아이콘 자산 {asset} {version}판: SVG, PNG 또는 WebP 형식인지 확인하지 못했습니다. 잠시 뒤 앱을 다시 올리세요.",
+        fix: "잠시 뒤 앱을 다시 올리세요"
+    }
+    ASSET_APP_ICON_NOT_FOUND(app_id, asset, version) {
+        class: InvalidAppDefinition,
+        place: "앱 아이콘 자산 확인",
+        cause: "아이콘 자산 판을 찾지 못했다",
+        message: "앱 ID {app_id}, 아이콘 자산 {asset} {version}판: 자산을 찾지 못했습니다. SVG, PNG 또는 WebP 자산을 등록하고 지정하세요.",
+        fix: "아이콘 자산 판을 등록하세요"
+    }
+    ASSET_APP_ICON_FORMAT_INVALID(app_id, asset, version) {
+        class: InvalidAppDefinition,
+        place: "앱 아이콘 자산 형식 검사",
+        cause: "아이콘 자산이 허용한 이미지 형식이 아니다",
+        message: "앱 ID {app_id}, 아이콘 자산 {asset} {version}판: 아이콘 형식으로 사용할 수 없습니다. SVG, PNG 또는 WebP 자산을 지정하세요.",
+        fix: "SVG, PNG 또는 WebP 자산을 지정하세요"
+    }
     ASSET_UPLOAD_ID_EMPTY() {
         class: InvalidRequest,
         place: "자산 업로드 검사",

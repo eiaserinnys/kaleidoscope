@@ -218,6 +218,7 @@ impl AppState {
             }
             assets::verify_dependencies(&tx, account, &definition.assets)?;
             assets::verify_client_entry(&tx, account, &definition)?;
+            assets::verify_icon(&tx, account, &definition)?;
             let now = timestamp();
             tx.execute("INSERT INTO apps(id,name,current_version,created_at,updated_at) VALUES(?1,?2,1,?3,?3)",params![definition.id,definition.name,now]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
             save_version(&tx, &definition, 1, &now, "transfer").map_err(|error| {
