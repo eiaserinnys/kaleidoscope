@@ -6,6 +6,7 @@ type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storag
 
 export function sandboxErrors() {
   return {
+    clientActionFailed: shellErrors.SHELL_CLIENT_ACTION_FAILED({ reason: "__REASON__" }),
     storageEntryUndeclared: shellErrors.SHELL_CLIENT_STORAGE_ENTRY_UNDECLARED({ entry: "__ENTRY__" }),
     savePromptActionRequired: shellErrors.SHELL_CLIENT_SAVE_PROMPT_ACTION_REQUIRED(),
     pickFolderActionRequired: shellErrors.SHELL_CLIENT_PICK_FOLDER_ACTION_REQUIRED(),
@@ -58,6 +59,7 @@ function bridgeSource(init: SandboxInit): string {
     const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set(), processServicesListeners = new Set();
     let lifecycle = null;
     const inputListeners = new Set(), handlers = new Map(), surfaceListeners = new Map(), surfaces = new Map();
+    let messageHandler = null;
     let activeActions = 0;
     let inputs = config.inputs || {};
     let grants = {};
@@ -206,6 +208,9 @@ function bridgeSource(init: SandboxInit): string {
         report();
       },
     };
+    if (config.capabilities?.includes('receive_message')) {
+      window.kaleidoscope.onMessage = handler => { messageHandler = handler; send('ks-client-message-ready'); };
+    }
     if (realtime) window.kaleidoscope.connection = { webSocketConstructor: realtime.webSocketConstructor, login: realtime.login };
     if (config.capabilities?.includes('instructions')) {
       window.kaleidoscope.host.instructions = kind => clientRequest('ks-client-instructions', { kind });
@@ -280,6 +285,18 @@ function bridgeSource(init: SandboxInit): string {
           const previous = previousGrants[permission] ?? null, current = grants[permission] ?? null;
           if (previous !== current) for (const listener of grantListeners.get(permission) || []) listener(current);
         }
+      }
+      if (data.type === 'ks-client-message' && data.token === token && config.capabilities?.includes('receive_message') && messageHandler) {
+        Promise.resolve().then(() => messageHandler(data.message)).then(result => {
+          send('ks-client-message-result', { requestId: data.requestId, result });
+        }).catch(error => {
+          const detail = error && typeof error === 'object' ? error : {};
+          const reason = typeof detail.message === 'string' ? detail.message : String(error);
+          const problem = typeof detail.code === 'string' && typeof detail.message === 'string'
+            ? { id: detail.id, code: detail.code, message: detail.message, details: Array.isArray(detail.details) ? detail.details : [] }
+            : { ...config.errors.clientActionFailed, message: config.errors.clientActionFailed.message.replace('__REASON__', reason) };
+          send('ks-client-message-result', { requestId: data.requestId, error: problem });
+        });
       }
       if (data.type === 'ks-client-action' && config.actions?.includes(data.name)) {
         const handler = handlers.get(data.name), requestId = typeof data.requestId === 'string' ? data.requestId : null;

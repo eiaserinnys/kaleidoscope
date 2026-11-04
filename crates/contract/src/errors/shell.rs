@@ -1,4 +1,8 @@
 error_catalog! { ENTRIES;
+    SHELL_MESSAGE_RECEIVER_START_TIMEOUT(app) { class: Unavailable, place: "메시지 수신 준비", cause: "받는 창이 제시간에 준비되지 않았다", message: "{app}의 메시지 수신이 준비되지 않았습니다. 열린 앱의 상태를 확인한 뒤 다시 보내세요.", fix: "열린 앱의 상태를 확인한 뒤 다시 보내세요" }
+    SHELL_MESSAGE_RECEIVER_CLOSED(app) { class: NotFound, place: "메시지 수신 창 종료", cause: "받는 창이 종료되었다", message: "{app}의 받는 창이 종료되어 보내기를 끝내지 못했습니다. 창을 다시 열고 받은 내용을 확인하세요.", fix: "창을 다시 열고 받은 내용을 확인하세요" }
+    SHELL_MESSAGE_RECEIVE_REPLY_TIMEOUT(app) { class: Unavailable, place: "메시지 접수 응답", cause: "받는 창이 제시간에 접수 응답을 보내지 않았다", message: "{app}의 접수 응답을 받지 못했습니다. 중복해서 보내기 전에 받는 창을 확인하세요.", fix: "중복해서 보내기 전에 받는 창을 확인하세요" }
+    SHELL_MESSAGE_RECEIVE_RESULT_INVALID(app) { class: InvalidRequest, place: "메시지 접수 결과", cause: "받는 창의 접수 결과 형식이 잘못되었다", message: "{app}이 잘못된 접수 결과를 보냈습니다. 앱의 메시지 수신 코드를 고쳐 주세요.", fix: "앱의 메시지 수신 코드를 고쳐 주세요" }
     SHELL_REALTIME_URL_INVALID(path) { class: InvalidRequest, place: "실시간 연결 경로 확인", cause: "가상 주소 또는 연결 경로가 올바르지 않다", message: "실시간 연결 경로 {path}를 쓸 수 없습니다. /로 시작하는 연결 아래 경로를 써 주세요.", fix: "/로 시작하는 연결 아래 경로를 써 주세요" }
     SHELL_REALTIME_SEND_TYPE_INVALID() { class: InvalidRequest, place: "실시간 메시지 형식 확인", cause: "문자열이나 바이트가 아닌 값을 보내려 했다", message: "이 실시간 연결은 문자열과 바이트만 보낼 수 있습니다. 앱의 send 값을 고쳐 주세요.", fix: "앱의 send 값을 고쳐 주세요" }
     SHELL_REALTIME_SEND_CONNECTING() { class: InvalidRequest, place: "실시간 연결 열기 전 전송", cause: "아직 열리지 않은 연결에 메시지를 보내려 했다", message: "연결이 아직 열리지 않았습니다. 앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요.", fix: "앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요" }

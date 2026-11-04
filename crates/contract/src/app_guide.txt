@@ -92,4 +92,4 @@ worker.webhook은 외부 POST 트리거를 선언합니다. enabled_entry는 기
 
 button.description은 올림 또는 키보드 초점에 보이는 설명 바인딩입니다. icon_only의 label도 쉘 도움말로 보입니다. description을 쓰면 requires.blocks를 28 이상으로 선언합니다.
 
-메시지 수신 계약: client.capabilities에 receive_message를 선언하는 앱은 requires.blocks 29와 requires.modules.client 6 이상을 지정합니다. 클라이언트의 onMessage(handler)로 {request_id, text}를 받으며 {status:"accepted"}는 접수 완료이지 답변 완료가 아닙니다. 준비되지 않았으면 {status:"not_ready", reason}을 돌려주고 reason에는 사용자가 할 일을 적습니다. agent 제공자와 receive_message가 둘 다 있으면 대화 제공자 경로를 우선합니다. 수신 다리와 onMessage 실행은 후속 구현에서 제공됩니다.
+메시지 수신 계약: client.capabilities에 receive_message를 선언하는 앱은 requires.blocks 29와 requires.modules.client 6 이상을 지정합니다. 클라이언트의 onMessage(handler)로 {request_id, text}를 받으며 {status:"accepted"}는 접수 완료이지 답변 완료가 아닙니다. 준비되지 않았으면 {status:"not_ready", reason}을 돌려주고 reason에는 사용자가 할 일을 적습니다. agent 제공자와 receive_message가 둘 다 있으면 대화 제공자 경로를 우선합니다. 초기 코드에서 window.kaleidoscope.onMessage(async (message) => ({ status: "accepted" }))를 한 번 등록합니다. handler는 오래 걸리는 답변 생성을 기다리지 말고 5초 안에 접수 결과를 반환하세요.
