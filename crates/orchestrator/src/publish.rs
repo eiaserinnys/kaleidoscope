@@ -191,6 +191,8 @@ impl AppState {
             })?;
             drop(db);
             let app = App {
+                origin: None,
+                installed_version: None,
                 id: definition.id.clone(),
                 name: definition.name.clone(),
                 current_version: version_num,

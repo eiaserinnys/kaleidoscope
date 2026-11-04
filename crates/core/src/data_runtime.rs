@@ -500,7 +500,7 @@ impl Runtime {
 fn source_format(source: &SourceDecl) -> SourceFormat {
     match source {
         SourceDecl::Request { format, .. } | SourceDecl::File { format, .. } => *format,
-        SourceDecl::Folder { .. } => SourceFormat::Json,
+        SourceDecl::Folder { .. } | SourceDecl::Store(_) => SourceFormat::Json,
     }
 }
 

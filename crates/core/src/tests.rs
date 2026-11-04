@@ -2318,6 +2318,8 @@ fn registry_app(version: u32, definition_json: &str) -> RegistryApp {
     let parsed: kaleidoscope_contract::AppDefinition = definition;
     RegistryApp {
         app: App {
+            origin: None,
+            installed_version: None,
             id: parsed.id.clone(),
             name: parsed.name.clone(),
             current_version: version,

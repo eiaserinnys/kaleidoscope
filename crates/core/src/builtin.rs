@@ -40,6 +40,8 @@ pub fn builtin_apps() -> Vec<RegistryApp> {
             let date = identity.updated_at.to_string();
             RegistryApp {
                 app: App {
+                    origin: None,
+                    installed_version: None,
                     id: identity.id.into(),
                     name: definition.name.clone(),
                     current_version: identity.version,

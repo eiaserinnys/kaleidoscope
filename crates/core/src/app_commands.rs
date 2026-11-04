@@ -49,6 +49,8 @@ fn import_definition(state: &mut CoreState, definition: AppDefinition) -> CoreRe
         .unwrap_or(0);
     let version_number = previous_version + 1;
     let app = App {
+        origin: None,
+        installed_version: None,
         id: definition.id.clone(),
         name: definition.name.clone(),
         current_version: version_number,

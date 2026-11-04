@@ -71,7 +71,7 @@ fn wire_variants_and_versions() {
         json!({"op":"window.control.capture","image_base64":"AA==","geometry":{"css_width":1.0,"css_height":2.0,"pixel_width":1,"pixel_height":2}}),
     );
     roundtrip::<CoreReply>(json!({"op":"web.control","result":response["result"]}));
-    assert_eq!(CONTRACT_VERSION, 32);
+    assert_eq!(CONTRACT_VERSION, 33);
     assert_eq!(REGISTRY_VERSION, 12);
 }
 

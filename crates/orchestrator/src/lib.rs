@@ -424,6 +424,8 @@ impl AppState {
             })?;
             apps.push(RegistryApp {
                 app: App {
+                    origin: None,
+                    installed_version: None,
                     id: id.clone(),
                     name,
                     current_version,
@@ -480,6 +482,8 @@ impl AppState {
         })?;
         Ok(Some(RegistryApp {
             app: App {
+                origin: None,
+                installed_version: None,
                 id: id.clone(),
                 name,
                 current_version,

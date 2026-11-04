@@ -93,7 +93,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
   const publish = (context: Context, view: DataView) => { if (context.attached) emit(context.window.id, view); };
   const sourceInputs = async (context: Context, name: string) => {
     const source = context.definition.sources![name];
-    const path = source.kind === "folder" ? source.dir : source.path;
+    const path = source.kind === "store" ? undefined : source.kind === "folder" ? source.dir : source.path;
     const query = source.kind === "request" ? source.query ?? {} : {};
     return JSON.stringify([path === undefined ? "" : await evaluate(path, context), await Promise.all(Object.entries(query).map(async ([key, value]) => [key, await evaluate(value, context)]))]);
   };
@@ -127,7 +127,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       const source = context.definition.sources?.[name];
       if (!source) return;
       const sourceSeed = seed.sources?.[name] ?? {};
-      const path = source.kind === "folder" ? source.dir : source.path;
+      const path = source.kind === "store" ? undefined : source.kind === "folder" ? source.dir : source.path;
       if (path !== undefined && await evaluate(path, context) === null) {
         context.view.sources[name] = { state: "idle" }; delete context.values[name];
       } else {

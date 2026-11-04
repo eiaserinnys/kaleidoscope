@@ -9,21 +9,26 @@ use crate::app_storage::{self, StorageKind};
 use crate::data::{self, Action, Actions, Binding, MessageKey, SourceDecl};
 use crate::{
     AgentProvider, AppDefinition, Block, CoreError, FileAccess, FileRef, FilesScope, FolderRoot,
-    PathValue, PermissionDecl, UrlValue, BLOCK_SET_VERSION, MODULE_VERSIONS,
+    PathValue, PermissionDecl, UrlValue,
 };
 
 /// 앱 정의 JSON 원문을 읽고 검사한다. 통과하면 정의를, 걸리면 `unsupported_app`이나
 /// `invalid_app_definition`(걸린 것은 `details`)을 돌려준다.
 pub fn parse_app_definition(definition_json: &str) -> Result<AppDefinition, CoreError> {
-    parse_definition(definition_json, false)
+    parse_definition(definition_json, false, &crate::Supported::current())
 }
 
 /// 이미 등록된 옛 앱은 제공자가 없어도 표시할 수 있다.
 pub fn parse_cached_app_definition(definition_json: &str) -> Result<AppDefinition, CoreError> {
-    parse_definition(definition_json, true)
+    parse_definition(definition_json, true, &crate::Supported::current())
 }
 
-fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition, CoreError> {
+/// 지정한 쉘 지원 범위에서 앱 정의를 검사한다.
+pub fn parse_app_definition_with_supported(definition_json: &str, supported: &crate::Supported) -> Result<AppDefinition, CoreError> {
+    parse_definition(definition_json, false, supported)
+}
+
+fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supported) -> Result<AppDefinition, CoreError> {
     let value: Value = serde_json::from_str(definition_json)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_JSON_INVALID(&parse_error))?;
 
@@ -31,8 +36,19 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         return Err(error);
     }
 
-    if requires_unsupported(&value) {
+    if requires_unsupported(&value, supported) {
         return Err(crate::errors::APP_DEFINITION_REQUIRES_NEWER_SHELL());
+    }
+
+    if let Some(sources) = value.get("sources").and_then(Value::as_object) {
+        for (name, source) in sources {
+            if source.get("kind").and_then(Value::as_str) == Some("store")
+                && source.get("store").and_then(Value::as_str) == Some("app")
+                && source.get("id").is_none()
+            {
+                return Err(crate::errors::APP_STORE_SOURCE_ID_MISSING(name));
+            }
+        }
     }
 
     let uses_new_definition_fields = uses_versioned_block_fields(&value)
@@ -61,6 +77,8 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
     crate::validate_input::validate_input_extensions(&definition)?;
+
+    validate_store_contract(&definition)?;
 
     if let Some(icon) = &definition.icon {
         if icon.version == 0 {
@@ -232,6 +250,59 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
 }
 
+/// 스토어를 쓰는 자리의 선언을 원인별 오류로 돌려준다.
+fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> {
+    let sources: Vec<_> = definition.sources.iter()
+        .filter(|(_, source)| matches!(source, SourceDecl::Store(_)))
+        .collect();
+    let mut actions = Vec::new();
+    for (pointer, group) in data::ui_actions(definition) {
+        if let Actions::Many(list) = group {
+            for (index, action) in list.iter().enumerate() {
+                if matches!(action, Action::StoreInstall(_) | Action::StoreRemove(_)) {
+                    actions.push((format!("{pointer}/{index}"), action));
+                }
+            }
+        }
+    }
+    if (!sources.is_empty() || !actions.is_empty()
+        || definition.permissions.iter().any(|p| matches!(p, PermissionDecl::Store { .. })))
+        && definition.requires.modules.get("store").copied().unwrap_or(0) < 1
+    {
+        return Err(crate::errors::APP_STORE_MODULE_REQUIRED(&definition.id));
+    }
+    let check_permission = |location: &str, id: &str| -> Result<(), CoreError> {
+        match find_permission(definition, id) {
+            None => Err(crate::errors::APP_STORE_PERMISSION_UNDECLARED(location, id)),
+            Some(permission) if !matches!(permission, PermissionDecl::Store { .. }) => Err(
+                crate::errors::APP_STORE_PERMISSION_MISMATCH(location, id, permission.module()),
+            ),
+            Some(_) => Ok(()),
+        }
+    };
+    for (name, source) in sources {
+        check_permission(&format!("/sources/{}", data::escape_pointer(name)), source.permission())?;
+    }
+    for (location, action) in actions {
+        match action {
+            Action::StoreInstall(action) => {
+                let spec = &action.store_install;
+                check_permission(&location, &spec.permission)?;
+                if let Binding::Literal(value) = &spec.release {
+                    if !value.as_u64().is_some_and(|number| number > 0) {
+                        return Err(crate::errors::APP_STORE_RELEASE_INVALID(
+                            format!("{location}/store.install/release"), value,
+                        ));
+                    }
+                }
+            }
+            Action::StoreRemove(action) => check_permission(&location, &action.store_remove.permission)?,
+            _ => unreachable!(),
+        }
+    }
+    Ok(())
+}
+
 fn removed_local_agent_error(value: &Value) -> Option<CoreError> {
     if value.pointer("/requires/modules/local_agent").is_some() {
         return Some(crate::errors::APP_DEFINITION_REMOVED_LOCAL_AGENT_MODULE());
@@ -292,14 +363,14 @@ pub fn parse_expr(expr: &str) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn requires_unsupported(value: &Value) -> bool {
+fn requires_unsupported(value: &Value, supported: &crate::Supported) -> bool {
     let Some(requires) = value.get("requires").and_then(Value::as_object) else {
         return false;
     };
     if requires
         .get("blocks")
         .and_then(Value::as_u64)
-        .is_some_and(|blocks| blocks > BLOCK_SET_VERSION as u64)
+        .is_some_and(|blocks| blocks > supported.blocks as u64)
     {
         return true;
     }
@@ -307,7 +378,7 @@ fn requires_unsupported(value: &Value) -> bool {
         return false;
     };
     modules.iter().any(|(name, version)| {
-        let Some((_, supported_version)) = MODULE_VERSIONS.iter().find(|(known, _)| known == name)
+        let Some(supported_version) = supported.modules.get(name)
         else {
             return true;
         };
@@ -1304,6 +1375,7 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
                 "http"
             }
             SourceDecl::Request { .. } => "connection",
+            SourceDecl::Store(_) => "store",
             SourceDecl::File { .. } | SourceDecl::Folder { .. } => "files",
         };
         validate_permission_module(source.permission(), module, definition, details, &at);
@@ -1317,6 +1389,9 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
             ));
         }
         match source {
+            SourceDecl::Store(_) => {
+                for (field, binding) in data::source_bindings(source) { validate_binding_shape(binding, definition, details, &format!("{at}/{field}")); }
+            }
             SourceDecl::Request {
                 path, query, page, ..
             } => {
@@ -1805,6 +1880,16 @@ fn validate_actions(
             for (index, action) in list.iter().enumerate() {
                 let at = format!("{at}/{index}");
                 match action {
+                    Action::StoreInstall(action) => {
+                        let spec = &action.store_install;
+                        for (field, binding) in [("server", &spec.server), ("id", &spec.id), ("release", &spec.release)] {
+                            validate_binding_shape(binding, definition, details, &format!("{at}/store.install/{field}"));
+                        }
+                    }
+                    Action::StoreRemove(action) => {
+                        let spec = &action.store_remove;
+                        validate_binding_shape(&spec.id, definition, details, &format!("{at}/store.remove/id"));
+                    }
                     Action::Client(action) => {
                         if list.len() != 1 {
                             details.push(format!("{at}: 클라이언트 동작은 단독으로 써야 합니다"));

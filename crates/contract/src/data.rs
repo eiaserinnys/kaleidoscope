@@ -256,6 +256,8 @@ pub enum SourceDecl {
         #[ts(optional)]
         page: Option<PageDecl>,
     },
+    /// 정적 스토어의 색인 또는 앱 상세를 읽는다.
+    Store(StoreSource),
     /// 기기마다 고른 폴더(모듈 `files`)의 파일 하나를 읽는다. `path`는 [`FileRef`]의 경로 규칙을 따른다.
     /// 없는 파일이면 실패다. `json`이면 JSON으로 읽고, 읽지 못하면 실패다.
     File {
@@ -288,6 +290,15 @@ pub enum SourceDecl {
     },
 }
 
+/// 스토어 원천은 종류별로 필요한 값을 선언한다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(tag = "store", rename_all = "snake_case", deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub enum StoreSource {
+    Index { permission: String, server: Binding, #[serde(default, skip_serializing_if = "Option::is_none")] #[ts(optional)] refresh_secs: Option<u32> },
+    App { permission: String, server: Binding, id: Binding, #[serde(default, skip_serializing_if = "Option::is_none")] #[ts(optional)] refresh_secs: Option<u32> },
+}
+
 /// 한 앱이 한 호스트에 보내는 원천의 분당 호출 계산값.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HostCallBudget {
@@ -305,21 +316,22 @@ pub fn call_budget(definition: &AppDefinition) -> Vec<HostCallBudget> {
     let mut budgets: BTreeMap<String, (f64, f64)> = BTreeMap::new();
 
     for (name, source) in &definition.sources {
-        let SourceDecl::Request { permission, .. } = source else {
-            continue;
+        let host = match source {
+            SourceDecl::Store(store) => Some(format!("store:{}", match store {
+                StoreSource::Index { permission, .. } | StoreSource::App { permission, .. } => permission,
+            })),
+            SourceDecl::Request { permission, .. } => definition
+                .permissions
+                .iter()
+                .find(|decl| decl.id() == permission)
+                .and_then(|decl| match decl {
+                    crate::PermissionDecl::Http { base_url, .. } => url::Url::parse(base_url)
+                        .ok()?.host_str().map(str::to_owned),
+                    crate::PermissionDecl::Connection { connection, .. } => Some(connection.clone()),
+                    _ => None,
+                }),
+            SourceDecl::File { .. } | SourceDecl::Folder { .. } => None,
         };
-        let host = definition
-            .permissions
-            .iter()
-            .find(|decl| decl.id() == permission)
-            .and_then(|decl| match decl {
-                crate::PermissionDecl::Http { base_url, .. } => url::Url::parse(base_url)
-                    .ok()?
-                    .host_str()
-                    .map(str::to_owned),
-                crate::PermissionDecl::Connection { connection, .. } => Some(connection.clone()),
-                _ => None,
-            });
         let Some(host) = host else {
             continue;
         };
@@ -424,6 +436,7 @@ fn reads_all_data(expr: &str, variable: &str) -> bool {
 impl SourceDecl {
     pub fn permission(&self) -> &str {
         match self {
+            SourceDecl::Store(StoreSource::Index { permission, .. } | StoreSource::App { permission, .. }) => permission,
             SourceDecl::Request { permission, .. }
             | SourceDecl::File { permission, .. }
             | SourceDecl::Folder { permission, .. } => permission,
@@ -432,6 +445,7 @@ impl SourceDecl {
 
     pub fn refresh_secs(&self) -> Option<u32> {
         match self {
+            SourceDecl::Store(StoreSource::Index { refresh_secs, .. } | StoreSource::App { refresh_secs, .. }) => *refresh_secs,
             SourceDecl::Request { refresh_secs, .. }
             | SourceDecl::File { refresh_secs, .. }
             | SourceDecl::Folder { refresh_secs, .. } => *refresh_secs,
@@ -476,12 +490,31 @@ pub enum Action {
     Call(CallAction),
     SetStorage(SetStorageAction),
     Worker(WorkerAction),
+    StoreInstall(StoreInstallAction),
+    StoreRemove(StoreRemoveAction),
     Client(ClientAction),
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
     // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
     CopyText(CopyTextAction),
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreInstallAction { #[serde(rename = "store.install")] pub store_install: StoreInstallSpec }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreInstallSpec { pub permission: String, pub server: Binding, pub id: Binding, pub release: Binding }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreRemoveAction { #[serde(rename = "store.remove")] pub store_remove: StoreRemoveSpec }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreRemoveSpec { pub permission: String, pub id: Binding }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1992,6 +2025,8 @@ pub fn source_bindings(source: &SourceDecl) -> Vec<(String, &Binding)> {
             }
             out
         }
+        SourceDecl::Store(StoreSource::Index { server, .. }) => vec![("server".into(), server)],
+        SourceDecl::Store(StoreSource::App { server, id, .. }) => vec![("server".into(), server), ("id".into(), id)],
         SourceDecl::File { path, .. } => vec![("path".to_string(), path)],
         SourceDecl::Folder { dir, .. } => dir.iter().map(|dir| ("dir".to_string(), dir)).collect(),
     }
@@ -2060,6 +2095,8 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
             .map(|value| ("value".to_string(), value))
             .collect(),
         Action::Refresh(_) => Vec::new(),
+        Action::StoreInstall(action) => vec![("store.install/server".into(), &action.store_install.server), ("store.install/id".into(), &action.store_install.id), ("store.install/release".into(), &action.store_install.release)],
+        Action::StoreRemove(action) => vec![("store.remove/id".into(), &action.store_remove.id)],
         Action::Call(call) => {
             let mut out = vec![("call/path".to_string(), &call.call.path)];
             for (key, value) in &call.call.query {
