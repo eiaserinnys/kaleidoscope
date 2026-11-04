@@ -1,0 +1,17 @@
+{
+  "id": "window-control-check",
+  "name": "창 조작 시험",
+  "requires": { "blocks": 12, "modules": {} },
+  "permissions": [],
+  "state": { "text": "처음", "choice": "a", "clicked": false },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      { "type": "input", "label": "시험 입력", "value": { "state": "text" }, "on_change": { "set_state": "text" } },
+      { "type": "select", "label": "시험 선택", "value": { "state": "choice" }, "options": [{ "value": "a", "label": "첫째" }, { "value": "b", "label": "둘째" }], "on_change": { "set_state": "choice" } },
+      { "type": "button", "label": "시험 실행", "on_click": [{ "set_state": "clicked", "value": true }] },
+      { "type": "text", "value": { "state": "text" } }
+    ]
+  }
+}

@@ -35,8 +35,8 @@ kaleidoscope는 에이전트가 앱을 만들어 올리면 사용자가 창으�
 2. preview_app으로 식이 내는 값과 warnings를 봅니다. 화면을 그리지는 않습니다. 기기 원천은 data로 표본을 줍니다.
 3. upload_app으로 올립니다. 기본으로 창도 띄우며, 이미 올린 앱을 다시 띄울 때는 open_app을 씁니다. 응답의 open_sent_to는 띄우기를 요청한 기기 수입니다. 0이면 창이 뜨지 않으니 note가 있으면 읽고 사용자에게 알립니다.
 4. get_workspace로 창이 떴는지 봅니다. 창마다 상태, 고른 폴더, data_errors가 나옵니다.
-5. 실제 화면은 사용자에게 확인받습니다. 위 도구로는 그려진 화면을 볼 수 없고, client 코드가 도는지와 키가 먹는지도 알 수 없습니다. 보지 못한 것은 못 봤다고 말하고, 무엇을 해 보면 되는지 짧게 알립니다.
-6. 화면을 봐야 판단할 수 있으면 사용자에게 그 창 제목 줄의 같이 보기를 켜 달라고 합니다. 켜면 사용자가 다음 말을 보낼 때 그 창에 보이는 글이 함께 오고, canvas, 이미지, 영상, 웹 화면이 보이는 창은 지금 보는 데스크톱에 있을 때 창 그림이 첨부됩니다. 보이는 글 전체는 get_shared_view로 읽습니다.
+5. 사용자에게 창의 같이 보기를 켜 달라고 합니다. get_shared_view로 window_id를 찾고 read_window(window_id)로 view_id와 [번호]를 읽습니다. act_window(window_id, view_id, action)의 click, type, select, key, scroll로 조작하고 새 view_id와 mode(diff, full, unchanged)로 결과를 확인합니다. 다음 동작에는 새 view_id를 씁니다.
+6. 시각 확인이나 canvas·격리 프레임(sandbox, html_view)의 point에만 image: true로 그림과 geometry(css_width, css_height, pixel_width, pixel_height)를 받습니다. point는 그림의 픽셀 좌표입니다. settled: false나 applied: true 오류 뒤에는 다시 읽습니다. 같이 보기가 꺼진 창과 파일·실행 허용 화면은 사용자에게 조작을 요청합니다.
 7. 시험용 앱은 확인 뒤 지웁니다.
 
 앱을 올릴 수 없는 세션

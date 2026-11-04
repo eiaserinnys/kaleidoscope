@@ -5,6 +5,7 @@ use kaleidoscope_contract::{
     ActWindowArgs, Direction, ReadWindowArgs, TextMode, WindowAction, WindowControlRequest,
     WindowControlResponse, WindowControlResult, WindowControlSuccess, WindowObservation,
 };
+use rmcp::handler::server::wrapper::Parameters;
 use tower::ServiceExt;
 
 #[path = "window_control_stream_tests.rs"]
@@ -56,7 +57,10 @@ fn act(view: &str, action: WindowAction) -> ActWindowArgs {
     }
 }
 fn click() -> WindowAction {
-    WindowAction::Click { target: 1, gesture: None }
+    WindowAction::Click {
+        target: 1,
+        gesture: None,
+    }
 }
 fn observation(view: &str, text: &str) -> WindowObservation {
     WindowObservation {
@@ -68,6 +72,151 @@ fn observation(view: &str, text: &str) -> WindowObservation {
         geometry: None,
         image_base64: None,
     }
+}
+
+#[tokio::test]
+async fn mcp_window_control_returns_text_image_and_applied_error() {
+    let (state, token, _) = setup();
+    let _stream = state.stream_with_registry("pc".into(), None, 12).unwrap();
+    let mut events = state.0.events.subscribe();
+    let server = crate::mcp::McpServer::new(state.clone());
+
+    let task = tokio::spawn({
+        let server = server.clone();
+        async move { server.read_window(Parameters(read())).await.unwrap() }
+    });
+    let request = next_request(&mut events, &state, "pc").await;
+    let reply = response(&request, "v1", None, "[1] 입력");
+    assert_eq!(
+        post(
+            &state,
+            &token,
+            &request.request_id,
+            serde_json::to_string(&reply).unwrap()
+        )
+        .await,
+        StatusCode::OK
+    );
+    let result = serde_json::to_value(task.await.unwrap()).unwrap();
+    let output: Value =
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(output["view_id"], "v1");
+    assert_eq!(output["text"], "[1] 입력");
+    assert_eq!(result["content"].as_array().unwrap().len(), 1);
+
+    let task = tokio::spawn({
+        let server = server.clone();
+        async move {
+            server
+                .read_window(Parameters(ReadWindowArgs {
+                    image: Some(true),
+                    ..read()
+                }))
+                .await
+                .unwrap()
+        }
+    });
+    let request = next_request(&mut events, &state, "pc").await;
+    let mut reply = response(&request, "v2", None, "[1] 입력");
+    if let WindowControlResult::Ok { value } = &mut reply.result {
+        value.after.geometry = Some(kaleidoscope_contract::WindowGeometry {
+            css_width: 100.0,
+            css_height: 50.0,
+            pixel_width: 200,
+            pixel_height: 100,
+        });
+        value.after.image_base64 = Some("aW1hZ2U=".into());
+    }
+    assert_eq!(
+        post(
+            &state,
+            &token,
+            &request.request_id,
+            serde_json::to_string(&reply).unwrap()
+        )
+        .await,
+        StatusCode::OK
+    );
+    let result = serde_json::to_value(task.await.unwrap()).unwrap();
+    let output: Value =
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(output["view_id"], "v2");
+    assert_eq!(output["geometry"]["pixel_width"], 200);
+    assert_eq!(result["content"][1]["type"], "image");
+    assert_eq!(result["content"][1]["mimeType"], "image/png");
+    assert_eq!(result["content"][1]["data"], "aW1hZ2U=");
+
+    let task = tokio::spawn({
+        let server = server.clone();
+        async move {
+            server
+                .act_window(Parameters(act("v2", click())))
+                .await
+                .unwrap()
+        }
+    });
+    let request = next_request(&mut events, &state, "pc").await;
+    let reply = response(&request, "v3", Some("[1] 입력"), "[1] 완료");
+    assert_eq!(
+        post(
+            &state,
+            &token,
+            &request.request_id,
+            serde_json::to_string(&reply).unwrap()
+        )
+        .await,
+        StatusCode::OK
+    );
+    let result = serde_json::to_value(task.await.unwrap()).unwrap();
+    let output: Value =
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(output["view_id"], "v3");
+    assert!(output["text"].as_str().unwrap().contains("완료"));
+    assert!(output["mode"] == "full" || output["mode"] == "diff");
+
+    let task = tokio::spawn(async move {
+        server
+            .act_window(Parameters(act("v3", click())))
+            .await
+            .unwrap()
+    });
+    let request = next_request(&mut events, &state, "pc").await;
+    let mut error = kaleidoscope_contract::errors::MCP_WINDOW_CONTROL_REPLY_BODY_INVALID();
+    error.details.push("applied: true".into());
+    let reply = WindowControlResponse {
+        request_id: request.request_id.clone(),
+        window_id: request.window_id.clone(),
+        result: WindowControlResult::Error {
+            error,
+            applied: true,
+        },
+    };
+    assert_eq!(
+        post(
+            &state,
+            &token,
+            &request.request_id,
+            serde_json::to_string(&reply).unwrap()
+        )
+        .await,
+        StatusCode::OK
+    );
+    let result = serde_json::to_value(task.await.unwrap()).unwrap();
+    assert_eq!(result["isError"], true);
+    let error: CoreError =
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        error.id.as_deref(),
+        Some("MCP_WINDOW_CONTROL_REPLY_BODY_INVALID")
+    );
+    assert_eq!(
+        error
+            .details
+            .iter()
+            .filter(|detail| *detail == "applied: true")
+            .count(),
+        1
+    );
 }
 fn response(
     request: &WindowControlRequest,

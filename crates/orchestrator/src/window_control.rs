@@ -1,5 +1,4 @@
-//! 같이 보기 창의 기기 왕복과 읽기 판을 관리한다. MCP 도구 등록은 별도 단계에서 한다.
-#![allow(dead_code)]
+//! 같이 보기 창의 기기 왕복과 읽기 판을 관리한다.
 
 use super::*;
 use axum::extract::{Extension, Path};
