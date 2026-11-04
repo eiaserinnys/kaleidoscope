@@ -18,7 +18,7 @@ const definition = {
     { module: "files", id: "pc", label: "내 PC", access: "read", scope: "pc" },
     { module: "connection", id: "team", label: "팀 계정", connection: "team-api", access: "read" },
     { module: "http", id: "web", label: "웹", base_url: "https://example.org", paths: ["/one", "/two"] },
-    { module: "process", id: "run", label: "프로그램 실행" },
+    { module: "process", id: "run", label: "자료 변환" },
     { module: "profiler", id: "perf", label: "성능" },
     { module: "store", id: "market", label: "스토어" },
   ],

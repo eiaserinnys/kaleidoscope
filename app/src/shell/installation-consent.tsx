@@ -37,7 +37,7 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
     overlayClassName="ks-window-consent-overlay ks-install-consent" inertSelector=":scope > .ks-window-content"
     title="이 앱을 설치할까요?" ok="허용하고 설치" onCancel={cancel} onConfirm={confirm}
     body={<>
-      <div><strong className="ks-consent-value">{request.app_name}</strong> · <span className="ks-consent-value">{request.release}판</span><br /><span className="ks-consent-value">{request.store_url}</span></div>
+      <div className="ks-consent-value"><span><strong className="ks-consent-value">{request.app_name}</strong> · {request.release}판</span><br />{request.store_url}</div>
       {definition.permissions.some((permission) => permission.module === "process") ? <strong className="ks-install-warning">이 PC에서 프로그램을 실행할 수 있습니다.</strong> : null}
       {worker ? <strong className="ks-install-warning">{workerLocation}</strong> : null}
       {empty ? <span>선언된 권한이 없습니다.</span> : null}
@@ -45,24 +45,24 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
       {definition.storage?.entries.map((entry) => <StorageEntryView key={entry.id} entry={entry} />)}
       {client ? <section>
         <strong>격리 클라이언트 코드 실행</strong>
-        <Field name="시작 자산" meta><span className="ks-consent-value">{client.entry.id} {client.entry.version}판</span></Field>
+        <Field name="시작 자산" meta>{client.entry.id} {client.entry.version}판</Field>
         <Fields values={{ ...client, entry: undefined, device_storage: undefined, capabilities: client.capabilities?.map((item) => capabilityLabels[item]) }} />
-        {client.device_storage ? <Field name="기기 저장"><span className="ks-consent-value">
+        {client.device_storage ? <Field name="기기 저장">
           {client.device_storage.prefixes.map((prefix) => `${prefix} 아래`).join(", ")}{client.device_storage.prefixes.length ? ", " : ""}{client.device_storage.scope === "window" ? "창별" : "앱별"}, 파일당 512 MiB
-        </span></Field> : null}
+        </Field> : null}
       </section> : null}
       {worker ? <section>
         <strong>서버 실행 코드</strong>
         <Fields values={{ ...worker, code: undefined, schedule: undefined, webhook: undefined, secrets: undefined }} />
-        {worker.schedule ? <Field name="일정"><span className="ks-consent-value">
+        {worker.schedule ? <Field name="일정">
           {duration(worker.schedule.interval_secs)}마다, {worker.schedule.enabled_entry}로 켜고 끔{worker.schedule.jitter_secs !== undefined ? `, 지연 최대 ${duration(worker.schedule.jitter_secs)}` : ""}
-        </span></Field> : null}
-        {worker.webhook ? <Field name="웹훅"><span className="ks-consent-value">
+        </Field> : null}
+        {worker.webhook ? <Field name="웹훅">
           {worker.webhook.enabled_entry ? `${worker.webhook.enabled_entry}로 켜고 끔` : "켜짐"}, 토큰 비밀값 {worker.webhook.token_secret}
-        </span></Field> : null}
-        {worker.secrets?.map((secret) => <Field key={secret.id} name="비밀값"><span className="ks-consent-value">
+        </Field> : null}
+        {worker.secrets?.map((secret) => <Field key={secret.id} name="비밀값">
           {secret.id}{secret.description ? ` (${secret.description})` : ""}
-        </span></Field>)}
+        </Field>)}
         <Details label="코드 보기"><span className="ks-consent-value">{worker.code}</span></Details>
       </section> : null}
       {definition.agent ? <section><strong>대화 제공자</strong><Fields values={definition.agent} /></section> : null}
@@ -86,12 +86,12 @@ function PermissionEntry({ permission }: { permission: Permission }) {
       content = <span className="ks-consent-value">{permission.access === "read" ? "읽기" : "읽기와 쓰기"} · {permission.scope === "pc" ? "PC 전체" : "선택한 폴더"}</span>;
       break;
     case "connection":
-      content = <><Field name="연결"><span className="ks-consent-value">{permission.connection} · {permission.access === "read" ? "읽기" : "읽기와 쓰기"}</span></Field><div className="ks-install-meta">로그인은 사용할 때 별도로 합니다.</div></>;
+      content = <><Field name="연결">{permission.connection} · {permission.access === "read" ? "읽기" : "읽기와 쓰기"}</Field><div className="ks-install-meta">로그인은 사용할 때 별도로 합니다.</div></>;
       break;
     case "http":
       content = <><Field name="기준 주소"><Values value={permission.base_url} /></Field><Field name="허용 경로"><Values value={permission.paths} /></Field></>;
       break;
-    case "process": break;
+    case "process": content = <span className="ks-consent-value">프로그램 실행</span>; break;
     case "profiler": content = <span className="ks-consent-value">이 기기의 성능 기록 조회와 측정</span>; break;
     case "store": content = <span className="ks-consent-value">스토어 읽기, 설치와 삭제</span>; break;
     default: {
@@ -114,7 +114,7 @@ const capabilityLabels = {
 };
 
 function Field({ name, meta = false, children }: { name: string; meta?: boolean; children: ReactNode }) {
-  return <div className={meta ? "ks-install-meta" : undefined}><span className="ks-consent-label">{name}: </span>{children}</div>;
+  return <div className={meta ? "ks-install-meta" : undefined}><span className="ks-consent-label">{name}: </span><span className="ks-consent-value">{children}</span></div>;
 }
 
 function Details({ label, children }: { label: string; children: ReactNode }) {
@@ -135,12 +135,12 @@ function hasValue(value: unknown): boolean {
 }
 
 function Values({ value }: { value: unknown }): ReactNode {
-  if (value === null) return <span className="ks-consent-value">없음</span>;
+  if (value === null) return "없음";
   if (Array.isArray(value)) return <>{value.filter(hasValue).map((item, index) => <span key={index}>{index ? ", " : ""}<Values value={item} /></span>)}</>;
   if (typeof value === "object") return <>{Object.entries(value).filter(([, item]) => hasValue(item)).map(([key, item], index) => <span key={key}>
     {index ? ", " : ""}<span className="ks-consent-label">{labels[key] ?? key}: </span><Values value={item} />
   </span>)}</>;
-  return <span className="ks-consent-value">{typeof value === "boolean" ? (value ? "예" : "아니요") : value === "" ? "(빈 문자열)" : String(value)}</span>;
+  return typeof value === "boolean" ? (value ? "예" : "아니요") : value === "" ? "(빈 문자열)" : String(value);
 }
 
 function duration(seconds: number): string {

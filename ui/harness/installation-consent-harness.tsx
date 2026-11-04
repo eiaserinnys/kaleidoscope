@@ -38,7 +38,7 @@ const sample = {
 const light = { ...sample, id: "clock", name: "간단한 시계", permissions: [], storage: undefined, client: undefined, worker: undefined, agent: undefined };
 Object.assign(window, { installationHarness: {
   ready: store.ready,
-  show: (kind: string) => fake.emit({ event: "app.install_permission", window_id: appWindow.id, request_id: kind, app_name: kind === "heavy" ? sample.name : light.name, release: 3, store_url: "https://apps.example.org/store", digest: "sha256-test-digest", definition: kind === "heavy" ? sample : light }),
+  show: (kind: string, overrides: Partial<AppDefinition> = {}) => fake.emit({ event: "app.install_permission", window_id: appWindow.id, request_id: kind, app_name: kind === "heavy" ? sample.name : light.name, release: 3, store_url: "https://apps.example.org/store", digest: "sha256-test-digest", definition: { ...(kind === "heavy" ? sample : light), ...overrides } }),
   answers,
 } });
 createRoot(document.getElementById("root")!).render(<main className="ks-desktop-area" style={{ width: "100vw", height: "100vh" }}>
