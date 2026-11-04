@@ -29,5 +29,9 @@ which = "8"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Environment"] }
+winreg = "0.56"
+
 [dev-dependencies]
 tempfile = "3"
