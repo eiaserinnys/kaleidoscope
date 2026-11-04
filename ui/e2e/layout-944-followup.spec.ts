@@ -24,6 +24,33 @@ async function chooseLayout(page: Page, app: Locator) {
   return layout;
 }
 
+test("쌓인 분할 구분선 위아래 첫 내용은 같은 간격을 쓴다", async ({ page }) => {
+  for (const width of [360, 1100]) {
+    const app = await open(page, "block-gallery", width, 640);
+    await chooseLayout(page, app);
+    const split = app.locator(".ks-data-tab-panel:visible > .ks-split");
+    await expect(split.locator(".ks-split.is-stacked").first()).toBeVisible();
+    const gaps = await app.locator(".ks-data-tab-panel:visible .ks-split.is-stacked > .ks-split-pane:not(:first-child)").evaluateAll((panes) => panes.map((pane) => {
+      const previous = pane.previousElementSibling!.previousElementSibling!;
+      const style = getComputedStyle(pane);
+      const title = pane.querySelector(".ks-data-section-title") ?? pane.firstElementChild!;
+      return {
+        title: title.textContent,
+        above: parseFloat(getComputedStyle(previous).paddingBottom),
+        below: title.getBoundingClientRect().top - pane.getBoundingClientRect().top - parseFloat(style.borderTopWidth),
+      };
+    }));
+    console.log(`${width} 구분선 간격: ${JSON.stringify(gaps)}`);
+    expect(gaps.length).toBeGreaterThan(0);
+    for (const gap of gaps) {
+      expect(gap.above).toBe(8);
+      expect(gap.below).toBe(8);
+    }
+    await capture(app, `separator-${width}x640`);
+    if (output) await split.locator(".ks-split.is-stacked").first().screenshot({ path: join(output, `separator-detail-${width}.png`) });
+  }
+});
+
 test("쌓인 분할의 가상 목록은 높이와 가상화를 유지한다", async ({ page }) => {
   const app = await open(page, "stacked-list-fixture", 360, 640);
   const split = app.locator(".ks-split").first();

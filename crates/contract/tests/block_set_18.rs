@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{app_definition_schema, validate::parse_app_definition, Supported, BLOCK_SET_VERSION, CONTRACT_VERSION};
+use kaleidoscope_contract::{app_definition_schema, validate::parse_app_definition, Supported, BLOCK_SET_VERSION, CONTRACT_VERSION, LAYOUT_FIELDS_BLOCK_SET_VERSION};
 use serde_json::{json, Value};
 
 fn definition(ui: Value, blocks: u64) -> Value {
@@ -62,7 +62,7 @@ fn current_contract_versions_include_realtime() {
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION);
-    assert_eq!(supported.blocks, kaleidoscope_contract::LAYOUT_FIELDS_BLOCK_SET_VERSION);
+    assert!(supported.blocks >= LAYOUT_FIELDS_BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
     assert_eq!(supported.modules.get("client"), Some(&kaleidoscope_contract::realtime::REALTIME_CLIENT_VERSION));
 }
@@ -85,11 +85,11 @@ fn responsive_split_and_repeat_gap_require_their_block_set() {
         (repeat.clone(), "APP_REPEAT_GAP_VERSION_REQUIRED"),
     ] {
         let error =
-            parse_app_definition(&definition(ui.clone(), BLOCK_SET_VERSION as u64 - 1).to_string())
+            parse_app_definition(&definition(ui.clone(), LAYOUT_FIELDS_BLOCK_SET_VERSION as u64 - 1).to_string())
                 .unwrap_err();
         assert_eq!(error.id.as_deref(), Some(code));
         let parsed =
-            parse_app_definition(&definition(ui.clone(), BLOCK_SET_VERSION as u64).to_string())
+            parse_app_definition(&definition(ui.clone(), LAYOUT_FIELDS_BLOCK_SET_VERSION as u64).to_string())
                 .unwrap();
         let serialized = serde_json::to_value(parsed).unwrap();
         for field in ["column_below", "gap"] {
@@ -101,7 +101,7 @@ fn responsive_split_and_repeat_gap_require_their_block_set() {
     let mut column = split.clone();
     column["direction"] = json!("column");
     assert_eq!(
-        parse_app_definition(&definition(column, BLOCK_SET_VERSION as u64).to_string())
+        parse_app_definition(&definition(column, LAYOUT_FIELDS_BLOCK_SET_VERSION as u64).to_string())
             .unwrap_err()
             .id
             .as_deref(),
@@ -110,7 +110,7 @@ fn responsive_split_and_repeat_gap_require_their_block_set() {
     let mut zero = split;
     zero["column_below"] = json!(0);
     assert_eq!(
-        parse_app_definition(&definition(zero, BLOCK_SET_VERSION as u64).to_string())
+        parse_app_definition(&definition(zero, LAYOUT_FIELDS_BLOCK_SET_VERSION as u64).to_string())
             .unwrap_err()
             .id
             .as_deref(),
