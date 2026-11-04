@@ -44,6 +44,8 @@ impl Echo {
                     Ok((socket, _)) => {
                         let stats = stats.clone();
                         clients.push(thread::spawn(move || {
+                            // Windows에서는 accept가 리스너의 비차단 속성을 물려받는다.
+                            socket.set_nonblocking(false).expect("시험 소켓의 차단 모드 설정 실패");
                             let _ = socket.set_read_timeout(Some(Duration::from_secs(10)));
                             let _ = socket.set_write_timeout(Some(Duration::from_secs(5)));
                             let mut ws = match accept_hdr(socket, |request: &Request, response: Response| {
@@ -136,6 +138,8 @@ mod tests {
             .headers_mut()
             .insert("Authorization", "Bearer fixture-secret".parse().unwrap());
         let (mut ws, _) = client(request, stream).unwrap();
+        // 비차단 read를 종료로 잘못 처리하면 이 대기 중 서버가 연결을 끊는다.
+        thread::sleep(Duration::from_millis(30));
         for message in [
             Message::Text("문자 왕복".into()),
             Message::Binary(vec![0, 1, 255].into()),
