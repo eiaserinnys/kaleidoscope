@@ -27,6 +27,7 @@ mod media;
 mod oauth;
 mod os_process;
 mod process_host;
+mod realtime_host;
 mod profiler;
 mod registry_client;
 mod registry_events;
@@ -205,6 +206,7 @@ pub(crate) struct Inner {
     pub(crate) layout_signal: LayoutSignal,
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
     pub(crate) processes: process_host::Processes,
+    pub(crate) realtime: realtime_host::RealtimeConnections,
     pub(crate) client_services: client_services::ClientServices,
     pub(crate) conversation_streams: conversation_stream::Streams,
     pub(crate) conversation_sends: Mutex<HashSet<String>>,
@@ -256,6 +258,7 @@ impl Drop for Core {
     fn drop(&mut self) {
         if self.owner {
             process_host::shutdown(&self.inner);
+            realtime_host::shutdown_sessions(&self.inner);
             if let Err(err) = self.flush_storage() {
                 eprintln!("상태를 저장할 수 없습니다: {}", err.message);
             }
@@ -268,6 +271,7 @@ impl Core {
     /// 쉘의 최소화 상태를 데이터 원천 실행에 반영한다.
     pub fn set_shell_visible(&self, visible: bool) {
         data_runtime::set_shell_visible(&self.inner, visible);
+        realtime_host::state_changed(&self.inner);
     }
 
     pub fn shell_visible(&self) -> bool {
@@ -414,6 +418,7 @@ impl Core {
             },
             data_runtimes: data_runtime::DataRuntimes::default(),
             processes: process_host::Processes::with_windows(process_windows),
+            realtime: realtime_host::RealtimeConnections::default(),
             client_services: client_services::ClientServices::default(),
             conversation_streams: conversation_stream::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
@@ -874,6 +879,7 @@ impl Core {
     pub fn shutdown(&self) {
         client_files::release_all(&self.inner);
         process_host::shutdown(&self.inner);
+        realtime_host::shutdown_sessions(&self.inner);
         if let Err(err) = self.flush_storage() {
             eprintln!("상태를 저장할 수 없습니다: {}", err.message);
         }
@@ -1165,6 +1171,7 @@ impl Inner {
         data_runtime::state_changed(self);
         conversation_stream::state_changed(self);
         process_host::state_changed(self);
+        realtime_host::state_changed(self);
         client_services::state_changed(self);
     }
 }

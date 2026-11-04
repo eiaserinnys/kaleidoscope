@@ -97,15 +97,6 @@ pub(super) fn plan_with_cursor(plan: &SourcePlan, page: &PageDecl, cursor: &str)
     plan
 }
 
-fn record_limit(inner: &Inner, key: &str, retry_after: Option<u64>) -> chrono::DateTime<chrono::Utc> {
-    let mut gates = inner.data_runtimes.gates.lock().unwrap();
-    let failures = gates.get(key).map_or(1, |gate| gate.failures.saturating_add(1));
-    let seconds = retry_after.unwrap_or_else(|| backoff_seconds(failures));
-    let until = chrono::Utc::now() + chrono::Duration::seconds(seconds.min(i64::MAX as u64) as i64);
-    gates.insert(key.into(), Gate { until, failures });
-    until
-}
-
 pub(super) fn rebuild(inner: &Arc<Inner>, job: &Job, page: &PageDecl, first_value: &Value) -> (Value, Paging) {
     let mut combined = first_value.clone();
     let mut paging = first(&job.name, page, first_value);
@@ -115,7 +106,7 @@ pub(super) fn rebuild(inner: &Arc<Inner>, job: &Job, page: &PageDecl, first_valu
         let response = match data_sources::fetch_named(inner, &job.window, &job.name, &plan, job.format) {
             Ok(response) => response,
             Err(RequestError::RateLimited { retry_after }) => {
-                if let Some(key) = &job.gate { record_limit(inner, key, retry_after); }
+                if let Some(key) = &job.gate { gates::record_limit(&inner.data_runtimes, key, retry_after); }
                 break;
             }
             Err(_) => break,
@@ -155,8 +146,7 @@ pub(crate) fn more(inner: &Arc<Inner>, window: &str, name: &str) -> Result<bool,
             return Ok(false);
         }
         let gate = gate_key(runtime, name);
-        let until = gate.as_ref().and_then(|key| inner.data_runtimes.gates.lock().unwrap().get(key).map(|gate| gate.until))
-            .filter(|until| *until > chrono::Utc::now());
+        let until = gate.as_ref().and_then(|key| gates::blocked(&inner.data_runtimes, key));
         if let Some(until) = until {
             let time = until.with_timezone(&chrono::Local).format("%H:%M").to_string();
             runtime.sources.get_mut(name).unwrap().paging.fail(errors::DATA_SOURCE_MORE_RATE_LIMITED(name, time), true);
@@ -183,10 +173,9 @@ pub(crate) fn more(inner: &Arc<Inner>, window: &str, name: &str) -> Result<bool,
         let started = Instant::now();
         let result = data_sources::fetch_named(&inner, &window, &name, &request, format);
         let until = match (&gate, &result) {
-            (Some(key), Err(RequestError::RateLimited { retry_after })) => Some(record_limit(&inner, key, *retry_after)),
+            (Some(key), Err(RequestError::RateLimited { retry_after })) => Some(gates::record_limit(&inner.data_runtimes, key, *retry_after)),
             (Some(key), Ok(_)) => {
-                let mut gates = inner.data_runtimes.gates.lock().unwrap();
-                if gates.get(key).is_some_and(|gate| gate.until <= chrono::Utc::now()) { gates.remove(key); }
+                gates::release_expired(&inner.data_runtimes, key);
                 None
             }
             _ => None,

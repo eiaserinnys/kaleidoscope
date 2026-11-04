@@ -337,6 +337,21 @@ pub(crate) fn authorize(
     method: HttpMethod,
     path: &str,
 ) -> Result<(String, ConnectionInfo), CoreError> {
+    let access = if method == HttpMethod::Get {
+        FileAccess::Read
+    } else {
+        FileAccess::Readwrite
+    };
+    authorize_access(inner, window_id, permission, access, path)
+}
+
+pub(crate) fn authorize_access(
+    inner: &Arc<Inner>,
+    window_id: &str,
+    permission: &str,
+    requested: FileAccess,
+    path: &str,
+) -> Result<(String, ConnectionInfo), CoreError> {
     let (app_id, connection) = {
         let state = inner.state.lock().unwrap();
         let window = state
@@ -358,7 +373,7 @@ pub(crate) fn authorize(
         else {
             return Err(errors::CONN_AUTHORIZE_PERMISSION_MISSING(permission));
         };
-        if method != HttpMethod::Get && *access != FileAccess::Readwrite {
+        if requested == FileAccess::Readwrite && *access != FileAccess::Readwrite {
             return Err(errors::CONN_AUTHORIZE_READ_ONLY(permission));
         }
         (window.app_id.clone(), connection.clone())
@@ -370,7 +385,7 @@ pub(crate) fn authorize(
     {
         return Err(errors::CONN_AUTHORIZE_PATH_DENIED(&connection));
     }
-    if method != HttpMethod::Get && !info.writable {
+    if requested == FileAccess::Readwrite && !info.writable {
         return Err(errors::CONN_AUTHORIZE_WRITE_DENIED(&connection));
     }
     Ok((app_id, info))

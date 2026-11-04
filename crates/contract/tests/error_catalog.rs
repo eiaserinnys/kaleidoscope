@@ -77,6 +77,14 @@ fn codes_start_with_their_area_prefix() {
 }
 
 #[test]
+fn each_area_is_listed_once() {
+    let mut seen = HashSet::new();
+    for (prefix, _) in errors::AREAS {
+        assert!(seen.insert(prefix), "duplicate area {prefix}");
+    }
+}
+
+#[test]
 fn active_and_retired_codes_are_unique() {
     let mut seen = HashSet::new();
     for entry in errors::all() {

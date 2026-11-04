@@ -1,6 +1,7 @@
 //! 창별 원천과 식 결과. 입출력은 잠금 밖에서 수행하고 세대가 같은 결과만 반영한다.
 // 기존 창별 원천 수명 경로가 이미 500줄을 넘는다. 별도 수명 리팩터링은 이 변경에 섞지 않는다.
 mod actions;
+pub(crate) mod gates;
 mod liveness;
 mod paging;
 mod storage;
@@ -102,14 +103,16 @@ struct Source {
     waiting: Option<chrono::DateTime<chrono::Utc>>,
     paging: paging::Paging,
 }
-struct Gate {
-    until: chrono::DateTime<chrono::Utc>,
-    failures: u32,
-}
-fn backoff_seconds(failures: u32) -> u64 {
-    30u64
-        .saturating_mul(1u64 << failures.saturating_sub(1).min(5))
-        .min(600)
+use gates::Gate;
+#[cfg(test)]
+use gates::backoff_seconds;
+
+pub(crate) fn window_visible(inner: &Inner, window: &str) -> bool {
+    liveness::visible(
+        &inner.state.lock().unwrap(),
+        window,
+        inner.data_runtimes.shell_visible.load(Ordering::SeqCst),
+    )
 }
 struct Job {
     window: String,
@@ -658,17 +661,7 @@ fn prepare(
     force: bool,
 ) -> Option<Job> {
     let gate = gate_key(runtime, name);
-    let until = gate
-        .as_ref()
-        .and_then(|key| {
-            manager
-                .gates
-                .lock()
-                .unwrap()
-                .get(key)
-                .map(|gate| gate.until)
-        })
-        .filter(|until| *until > chrono::Utc::now());
+    let until = gate.as_ref().and_then(|key| gates::blocked(manager, key));
     let source = runtime.sources.get_mut(name)?;
     if source.in_flight || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_)) {
         return None;
@@ -737,19 +730,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     flight
                 });
                 let _flight_guard = flight.as_ref().map(|flight| flight.lock().unwrap());
-                let blocked = job
-                    .gate
-                    .as_ref()
-                    .and_then(|key| {
-                        inner
-                            .data_runtimes
-                            .gates
-                            .lock()
-                            .unwrap()
-                            .get(key)
-                            .map(|gate| gate.until)
-                    })
-                    .filter(|until| *until > chrono::Utc::now());
+                let blocked = job.gate.as_ref().and_then(|key| gates::blocked(&inner.data_runtimes, key));
                 let source_times = inner
                     .data_runtimes
                     .windows
@@ -791,24 +772,10 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                 let wait_until = match (&job.gate, &result, blocked) {
                     (_, _, Some(until)) => Some(until),
                     (Some(key), Err(RequestError::RateLimited { retry_after }), None) => {
-                        let mut gates = inner.data_runtimes.gates.lock().unwrap();
-                        let failures = gates
-                            .get(key)
-                            .map_or(1, |gate| gate.failures.saturating_add(1));
-                        let seconds = retry_after.unwrap_or_else(|| backoff_seconds(failures));
-                        let until = chrono::Utc::now()
-                            + chrono::Duration::seconds(seconds.min(i64::MAX as u64) as i64);
-                        gates.insert(key.clone(), Gate { until, failures });
-                        Some(until)
+                        Some(gates::record_limit(&inner.data_runtimes, key, *retry_after))
                     }
                     (Some(key), Ok(_), None) if fetched => {
-                        let mut gates = inner.data_runtimes.gates.lock().unwrap();
-                        if gates
-                            .get(key)
-                            .is_some_and(|gate| gate.until <= chrono::Utc::now())
-                        {
-                            gates.remove(key);
-                        }
+                        gates::release_expired(&inner.data_runtimes, key);
                         None
                     }
                     _ => None,
@@ -1165,7 +1132,7 @@ pub(crate) fn refresh(
 pub(crate) fn server_changed(inner: &Inner) {
     inner.data_runtimes.windows.lock().unwrap().clear();
     inner.data_runtimes.request_cache.lock().unwrap().clear();
-    inner.data_runtimes.gates.lock().unwrap().clear();
+    gates::clear(&inner.data_runtimes);
 }
 
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
