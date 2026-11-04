@@ -451,8 +451,8 @@ fn codes_are_used_outside_catalog_and_shell_types_are_generated() {
     let Ok(output_dir) = std::env::var("TS_RS_EXPORT_DIR") else {
         return;
     };
-    let mut generated = String::from("// 생성물이다. `cargo test -p kaleidoscope-contract`가 crates/contract/src/errors/shell.rs에서 만든다. 손으로 고치지 않는다.\nimport type { CoreError } from \"./contract\";\n\n");
-    for entry in errors::shell::ENTRIES {
+    let mut generated = String::from("// 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.\nimport type { CoreError } from \"./contract\";\n\n");
+    for entry in errors::shell::ENTRIES.iter().chain(errors::realtime::ENTRIES.iter().filter(|entry| matches!(entry.id, "CONN_REALTIME_MESSAGE_TOO_LARGE" | "CONN_REALTIME_SEND_QUEUE_FULL" | "CONN_REALTIME_CLOSE_INVALID" | "CONN_REALTIME_CLIENT_PERMISSION_MISSING" | "CONN_REALTIME_LOGIN_REQUIRED"))) {
         let args = entry
             .args
             .iter()

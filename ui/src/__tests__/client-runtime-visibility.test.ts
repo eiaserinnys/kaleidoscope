@@ -184,6 +184,11 @@ it("클라이언트에 내용 크기와 가시성, 종료를 전달한다", asyn
   runtime.surface({ phase: "attach", id: "tile", generation: 1, canvas: {} as OffscreenCanvas, css_width: 100, css_height: 100, dpr: 1, visible: true });
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-surface", phase: "attach", id: "tile", visible: true }), "*", expect.any(Array));
   post.mockClear();
+  // 같은 프레임 안에서 숨겼다가 복원해도 두 수명 전환은 빠짐없이 전달한다.
+  current = snapshot(false); listeners.forEach((listener) => listener());
+  current = snapshot(true); listeners.forEach((listener) => listener());
+  expect(post.mock.calls.filter(([message]) => message.type === "ks-client-lifecycle").map(([message]) => message.lifecycle.visible)).toEqual([false, true]);
+  post.mockClear();
   bounds.mockReturnValue({ width: 500, height: 350 } as DOMRect);
   resized(); resized(); resized();
   await new Promise((resolve) => requestAnimationFrame(resolve));

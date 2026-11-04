@@ -1,6 +1,12 @@
-// 생성물이다. `cargo test -p kaleidoscope-contract`가 crates/contract/src/errors/shell.rs에서 만든다. 손으로 고치지 않는다.
+// 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
+export const SHELL_REALTIME_URL_INVALID = (args: { path: string }): CoreError => ({ id: "SHELL_REALTIME_URL_INVALID", code: "invalid_request", message: `실시간 연결 경로 ${args.path}를 쓸 수 없습니다. /로 시작하는 연결 아래 경로를 써 주세요.`, details: [] });
+export const SHELL_REALTIME_SEND_TYPE_INVALID = (): CoreError => ({ id: "SHELL_REALTIME_SEND_TYPE_INVALID", code: "invalid_request", message: `이 실시간 연결은 문자열과 바이트만 보낼 수 있습니다. 앱의 send 값을 고쳐 주세요.`, details: [] });
+export const SHELL_REALTIME_SEND_CONNECTING = (): CoreError => ({ id: "SHELL_REALTIME_SEND_CONNECTING", code: "invalid_request", message: `연결이 아직 열리지 않았습니다. 앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요.`, details: [] });
+export const SHELL_REALTIME_BINARY_TYPE_UNSUPPORTED = (): CoreError => ({ id: "SHELL_REALTIME_BINARY_TYPE_UNSUPPORTED", code: "invalid_request", message: `이 실시간 연결은 arraybuffer만 지원합니다. 앱의 binaryType을 arraybuffer로 두세요.`, details: [] });
+export const SHELL_REALTIME_PROTOCOL_INVALID = (): CoreError => ({ id: "SHELL_REALTIME_PROTOCOL_INVALID", code: "invalid_request", message: `WebSocket 하위 프로토콜 이름이 올바르지 않습니다. 앱의 protocols 값을 고쳐 주세요.`, details: [] });
+export const SHELL_REALTIME_NATIVE_CORE_REQUIRED = (): CoreError => ({ id: "SHELL_REALTIME_NATIVE_CORE_REQUIRED", code: "unavailable", message: `이 시험 화면에는 실제 실시간 연결 코어가 없습니다. 로컬 코어 시험 쉘에서 실행해 주세요.`, details: [] });
 export const SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED = (): CoreError => ({ id: "SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED", code: "permission_denied", message: `앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.`, details: [] });
 export const SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED = (): CoreError => ({ id: "SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED", code: "permission_denied", message: `앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.`, details: [] });
 export const SHELL_APP_IMPORT_REPLY_INVALID = (): CoreError => ({ id: "SHELL_APP_IMPORT_REPLY_INVALID", code: "io", message: `앱 정의를 가져온 결과를 확인하지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });
@@ -102,3 +108,8 @@ export const SHELL_MENU_CLIPBOARD_READ_FAILED = (args: { reason: string }): Core
 export const SHELL_MESSAGE_ITEM_KEY_MISSING = (args: { path: string }): CoreError => ({ id: "SHELL_MESSAGE_ITEM_KEY_MISSING", code: "invalid_request", message: `자료 항목의 ${args.path} 경로에 문자열 키가 없습니다. 목록 자료에서 메시지 키를 확인하세요.`, details: [] });
 export const SHELL_MESSAGE_ITEM_KEY_NOT_STRING = (args: { path: string }): CoreError => ({ id: "SHELL_MESSAGE_ITEM_KEY_NOT_STRING", code: "invalid_request", message: `자료 항목의 ${args.path} 경로 값이 문자열이 아닙니다. 목록 자료에서 문자열 키를 확인하세요.`, details: [] });
 export const SHELL_MESSAGE_KEY_NOT_FOUND = (args: { locale: string; key: string }): CoreError => ({ id: "SHELL_MESSAGE_KEY_NOT_FOUND", code: "not_found", message: `언어 ${args.locale}의 messages에 ${args.key} 키가 없습니다. messages에 번역을 추가하거나 목록 자료의 키를 고치세요.`, details: [] });
+export const CONN_REALTIME_CLIENT_PERMISSION_MISSING = (args: { permission: string }): CoreError => ({ id: "CONN_REALTIME_CLIENT_PERMISSION_MISSING", code: "permission_denied", message: `이 앱 client에는 연결 권한 ${args.permission}이 없습니다. 앱 정의의 realtime_permissions를 고쳐 주세요.`, details: [] });
+export const CONN_REALTIME_LOGIN_REQUIRED = (args: { name: string }): CoreError => ({ id: "CONN_REALTIME_LOGIN_REQUIRED", code: "login_required", message: `연결 ${args.name}에 로그인해야 합니다. 앱의 로그인 단추를 눌러 주세요.`, details: [] });
+export const CONN_REALTIME_MESSAGE_TOO_LARGE = (args: { name: string }): CoreError => ({ id: "CONN_REALTIME_MESSAGE_TOO_LARGE", code: "invalid_request", message: `연결 ${args.name}의 메시지가 8MiB를 넘습니다. 앱에서 메시지 크기를 줄여 주세요.`, details: [] });
+export const CONN_REALTIME_SEND_QUEUE_FULL = (args: { name: string }): CoreError => ({ id: "CONN_REALTIME_SEND_QUEUE_FULL", code: "server", message: `연결 ${args.name}으로 보낼 메시지가 쌓여 연결을 닫았습니다. 앱의 전송량을 줄이고 다시 연결해 주세요.`, details: [] });
+export const CONN_REALTIME_CLOSE_INVALID = (): CoreError => ({ id: "CONN_REALTIME_CLOSE_INVALID", code: "invalid_request", message: `연결 종료 코드나 사유가 WebSocket 규칙에 맞지 않습니다. 앱의 close 호출을 고쳐 주세요.`, details: [] });

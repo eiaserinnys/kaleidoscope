@@ -788,6 +788,24 @@ fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
         return;
     };
     validate_module_version("client", 1, definition, details, "/client");
+    if let Some(permissions) = &client.realtime_permissions {
+        use crate::realtime::{REALTIME_BLOCK_SET_VERSION, REALTIME_CLIENT_VERSION, REALTIME_CONNECTION_VERSION};
+        validate_module_version("client", REALTIME_CLIENT_VERSION, definition, details, "/client/realtime_permissions");
+        validate_module_version("connection", REALTIME_CONNECTION_VERSION, definition, details, "/client/realtime_permissions");
+        if definition.requires.blocks < REALTIME_BLOCK_SET_VERSION {
+            details.push(format!("/client/realtime_permissions: 블록 세트 {REALTIME_BLOCK_SET_VERSION}판이 필요합니다"));
+        }
+        let mut seen = HashSet::new();
+        for permission in permissions {
+            if !seen.insert(permission) {
+                details.push(format!("/client/realtime_permissions: 중복 권한 {permission}"));
+            }
+            match definition.permissions.iter().find(|item| item.id() == permission) {
+                Some(crate::PermissionDecl::Connection { access: crate::FileAccess::Readwrite, .. }) => {},
+                _ => details.push(format!("/client/realtime_permissions: 읽기와 쓰기가 가능한 연결 권한이 필요합니다: {permission}")),
+            }
+        }
+    }
     if client.capabilities.as_ref().is_some_and(|capabilities| {
         capabilities.iter().any(|capability| {
             matches!(

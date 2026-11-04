@@ -57,19 +57,18 @@ fn block_set_18_schema_exposes_new_fields_and_types() {
 }
 
 #[test]
-fn current_contract_versions_include_block_set_22() {
-    assert_eq!(CONTRACT_VERSION, 29);
+fn current_contract_versions_include_realtime() {
+    assert_eq!(CONTRACT_VERSION, 30);
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
-    assert_eq!(supported.blocks, 22);
-    assert_eq!(supported.modules.get("client"), Some(&4));
+    assert_eq!(supported.blocks, kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
+    assert_eq!(supported.modules.get("client"), Some(&kaleidoscope_contract::realtime::REALTIME_CLIENT_VERSION));
 }
 
 #[test]
 fn block_set_18_remains_supported_by_current_contract() {
-    assert_eq!(CONTRACT_VERSION, 29);
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
     assert!(supported.blocks >= 18);
-    assert_eq!(supported.modules.get("client"), Some(&4));
+    assert!(supported.modules.get("client").is_some_and(|version| *version >= 4));
 }

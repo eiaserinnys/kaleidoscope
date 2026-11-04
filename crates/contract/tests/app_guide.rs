@@ -31,3 +31,10 @@ fn app_authoring_guide_explains_boundaries_before_reference_section() {
     // MCP instructions were observed truncating near 6,850 bytes, so keep the boundary guidance intact.
     assert!(positions[6] < 6_800, "참조 시작 바이트: {}", positions[6]);
 }
+
+#[test]
+fn realtime_guide_explains_permission_and_network_boundary() {
+    for phrase in ["client.realtime_permissions", "webSocketConstructor", "connection.login", "직접 WebSocket은 막혀", "arraybuffer", "onLifecycle"] {
+        assert!(APP_AUTHORING_GUIDE.contains(phrase), "{phrase}");
+    }
+}

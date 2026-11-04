@@ -5,7 +5,7 @@ use futures_util::{SinkExt, StreamExt};
 use kaleidoscope_contract::{errors, registry::ConnectionInfo, CoreError};
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, Weak},
     time::Duration,
 };
 use tokio::sync::{mpsc, Notify};
@@ -45,6 +45,9 @@ pub(super) struct Running {
     pub handle: String,
     pub permission: String,
     pub info: ConnectionInfo,
+    inner: Weak<Inner>,
+    window: String,
+    session: String,
     pub state: Mutex<State>,
     pub space: Notify,
     command: mpsc::UnboundedSender<Command>,
@@ -54,6 +57,9 @@ pub(super) struct Running {
 
 impl Running {
     pub fn new(
+        inner: &Arc<Inner>,
+        window: &str,
+        session: &str,
         permission: &str,
         info: ConnectionInfo,
     ) -> (
@@ -68,6 +74,9 @@ impl Running {
                 handle: uuid::Uuid::new_v4().to_string(),
                 permission: permission.into(),
                 info,
+                inner: Arc::downgrade(inner),
+                window: window.into(),
+                session: session.into(),
                 state: Mutex::new(State {
                     queue: VecDeque::new(),
                     bytes: 0,
@@ -126,6 +135,29 @@ impl Running {
     pub fn cancel(&self) {
         let _ = self.stop.send(Stop::Abort);
         self.space.notify_waiters();
+    }
+
+    pub fn ready(&self) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner.emit(&kaleidoscope_contract::CoreEvent::RealtimeReady {
+                window_id: self.window.clone(),
+                session: self.session.clone(),
+                handle: self.handle.clone(),
+            });
+        }
+    }
+
+    pub fn closed(&self, code: u16) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner.emit(&kaleidoscope_contract::CoreEvent::RealtimeClosed {
+                window_id: self.window.clone(),
+                session: self.session.clone(),
+                handle: self.handle.clone(),
+                code,
+                reason: String::new(),
+                error: None,
+            });
+        }
     }
 
     pub fn join(&self) {
@@ -333,6 +365,8 @@ async fn drive(
                 let sequence = state.next;
                 state.next += 1;
                 state.queue.push_back(Packet { sequence, message });
+                drop(state);
+                run.ready();
             } else {
                 pending = Some(message);
             }
@@ -356,9 +390,10 @@ async fn drive(
                     if result.is_err() { terminal(&run, 1006, "", false, Some(errors::CONN_REALTIME_STREAM_FAILED(&run.info.name, "전송 연결이 끊김"))); break; }
                 }
                 Some(Command::Close(code, reason)) => {
-                    let frame = code.map(|code| CloseFrame { code: CloseCode::from(code), reason: reason.into() });
-                    let clean = close_socket(&mut socket, frame).await;
-                    terminal(&run, code.unwrap_or(1000), "", clean, None); break;
+                    let frame = code.map(|code| CloseFrame { code: CloseCode::from(code), reason: reason.clone().into() });
+                    let (clean, response) = close_socket(&mut socket, frame).await;
+                    let (code, reason) = response.unwrap_or((code.unwrap_or(1000), reason));
+                    terminal(&run, code, &reason, clean, None); break;
                 }
                 None => break,
             },
@@ -407,23 +442,27 @@ async fn close_socket(
         tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
     frame: Option<CloseFrame>,
-) -> bool {
+) -> (bool, Option<(u16, String)>) {
     tokio::time::timeout(Duration::from_secs(1), async {
         if socket.close(frame).await.is_err() {
-            return false;
+            return (false, None);
         }
         loop {
             match socket.next().await {
-                Some(Ok(WsMessage::Close(_)))
-                | Some(Err(tungstenite::Error::ConnectionClosed))
-                | None => return true,
-                Some(Err(_)) => return false,
+                Some(Ok(WsMessage::Close(frame))) => {
+                    return (
+                        true,
+                        frame.map(|frame| (u16::from(frame.code), frame.reason.to_string())),
+                    )
+                }
+                Some(Err(tungstenite::Error::ConnectionClosed)) | None => return (true, None),
+                Some(Err(_)) => return (false, None),
                 _ => {}
             }
         }
     })
     .await
-    .unwrap_or(false)
+    .unwrap_or((false, None))
 }
 
 fn terminal(run: &Running, code: u16, reason: &str, clean: bool, error: Option<CoreError>) {
@@ -445,4 +484,6 @@ fn terminal(run: &Running, code: u16, reason: &str, clean: bool, error: Option<C
     } else {
         state.pending_terminal = Some(packet);
     }
+    drop(state);
+    run.ready();
 }

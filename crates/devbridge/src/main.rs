@@ -285,7 +285,7 @@ async fn post_core_bytes(
                 .client_write_export(&window, &handle, *offset, &body)
                 .map(|()| Vec::new()),
         },
-        "client.http_read" | "client.blob_put" | "process.write" => {
+        "client.http_read" | "client.blob_put" | "process.write" | "connection.realtime.read" | "connection.realtime.send" => {
             core.client_binary(&operation, &window, &handle, &body)
         }
         operation => {

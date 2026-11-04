@@ -1,7 +1,8 @@
 import type { ClientCapability } from "../contract/contract";
 import * as shellErrors from "../contract/shell-errors";
+import realtimeSource from "../runtime/realtime-socket.ts?iife";
 
-type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; channels?: string[]; filePermissions?: string[]; processEnabled?: boolean; errors?: ReturnType<typeof sandboxErrors> };
+type SandboxInit = { state: Record<string, unknown>; stateKeys: string[]; storageEntries: string[]; token: string; inputs?: Record<string, unknown>; capabilities?: ClientCapability[]; actions?: string[]; channels?: string[]; filePermissions?: string[]; processEnabled?: boolean; realtimePermissions?: string[]; realtimeNames?: Record<string, string>; realtimeSession?: string; errors?: ReturnType<typeof sandboxErrors> };
 
 export function sandboxErrors() {
   return {
@@ -14,6 +15,15 @@ export function sandboxErrors() {
     shareActionRequired: shellErrors.SHELL_CLIENT_SHARE_ACTION_REQUIRED(),
     keepAwakeCapabilityUndeclared: shellErrors.SHELL_CLIENT_FRAME_KEEP_AWAKE_CAPABILITY_UNDECLARED(),
     keepAwakeActionRequired: shellErrors.SHELL_CLIENT_KEEP_AWAKE_ACTION_REQUIRED(),
+    urlInvalid: shellErrors.SHELL_REALTIME_URL_INVALID({ path: "__PATH__" }),
+    sendTypeInvalid: shellErrors.SHELL_REALTIME_SEND_TYPE_INVALID(),
+    sendConnecting: shellErrors.SHELL_REALTIME_SEND_CONNECTING(),
+    binaryTypeUnsupported: shellErrors.SHELL_REALTIME_BINARY_TYPE_UNSUPPORTED(),
+    protocolInvalid: shellErrors.SHELL_REALTIME_PROTOCOL_INVALID(),
+    queueFull: shellErrors.CONN_REALTIME_SEND_QUEUE_FULL({ name: "__NAME__" }),
+    messageTooLarge: shellErrors.CONN_REALTIME_MESSAGE_TOO_LARGE({ name: "__NAME__" }),
+    closeInvalid: shellErrors.CONN_REALTIME_CLOSE_INVALID(),
+    loginRequired: shellErrors.CONN_REALTIME_LOGIN_REQUIRED({ name: "__NAME__" }),
   };
 }
 
@@ -55,6 +65,23 @@ function bridgeSource(init: SandboxInit): string {
       const requestId = String(++nextRequest); pending.set(requestId, { resolve, reject });
       send(type, { requestId, ...body }, transfer);
     });
+    ${realtimeSource}
+    const makeRealtime = globalThis.__ksCreateRealtime;
+    delete globalThis.__ksCreateRealtime;
+    const realtime = config.realtimePermissions ? makeRealtime({
+      open(permission, path, protocols) {
+        const requestId = String(++nextRequest);
+        const result = new Promise((resolve, reject) => pending.set(requestId, { resolve, reject }));
+        send('ks-client-realtime', { requestId, method: 'open', params: { permission, path, protocols } });
+        return { result, cancel() { pending.delete(requestId); send('ks-client-realtime', { requestId, method: 'close', params: {} }); } };
+      },
+      send(handle, data) { return clientRequest('ks-client-realtime', { method: 'send', params: { handle, data } }, data instanceof ArrayBuffer ? [data] : undefined); },
+      close(handle, code, reason) { return clientRequest('ks-client-realtime', { method: 'close', params: { handle, code, reason } }); },
+      login(permission) {
+        if (!activeActions) return Promise.reject(fail({ ...config.errors.loginRequired, message: config.errors.loginRequired.message.replace('__NAME__', config.realtimeNames?.[permission] || permission) }));
+        return clientRequest('ks-client-realtime', { method: 'login', params: { permission } });
+      },
+    }, config.errors, config.realtimeNames) : null;
     const request = (type, entry, content) => new Promise((resolve, reject) => {
       if (!config.storageEntries.includes(entry)) { reject(fail({ ...config.errors.storageEntryUndeclared, message: config.errors.storageEntryUndeclared.message.replace('__ENTRY__', entry) })); return; }
       const requestId = String(++nextRequest);
@@ -179,6 +206,7 @@ function bridgeSource(init: SandboxInit): string {
         report();
       },
     };
+    if (realtime) window.kaleidoscope.connection = { webSocketConstructor: realtime.webSocketConstructor, login: realtime.login };
     if (config.capabilities?.includes('instructions')) {
       window.kaleidoscope.host.instructions = kind => clientRequest('ks-client-instructions', { kind });
     }
@@ -206,6 +234,10 @@ function bridgeSource(init: SandboxInit): string {
     window.addEventListener('message', event => {
       if (event.source !== parent || !event.data) return;
       const data = event.data;
+      if (data.type === 'ks-realtime-event' && data.token === token && data.session === config.realtimeSession && realtime) {
+        try { realtime.event(data); }
+        finally { if (Number.isSafeInteger(data.sequence)) send('ks-realtime-delivered', { handle: data.handle, sequence: data.sequence }); }
+      }
       if (data.type === 'ks-sandbox-context-command' && data.token === token && data.requestId === menuRequestId && menuTarget && document.hasFocus()) {
         menuTarget.focus();
         if ((menuTarget instanceof HTMLInputElement || menuTarget instanceof HTMLTextAreaElement) && menuField && menuTarget.value === menuField.value) menuTarget.setSelectionRange(menuField.start, menuField.end);
@@ -249,7 +281,7 @@ function bridgeSource(init: SandboxInit): string {
         }
       }
       if (data.type === 'ks-client-ping') send('ks-client-pong');
-      if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(fail({ id: data.errorId, code: data.errorCode, message: data.error })) : job.resolve(data.result); } }
+      if (data.type === 'ks-client-reply') { const job = pending.get(data.requestId); if (job) { pending.delete(data.requestId); data.error ? job.reject(Object.assign(fail({ id: data.errorId, code: data.errorCode, message: data.error }), { details: data.errorDetails || [] })) : job.resolve(data.result); } }
       if (data.type === 'ks-process-ready') processListeners.forEach(fn => fn(data.handle));
       if (data.type === 'ks-process-services-changed') processServicesListeners.forEach(fn => fn(data.handle));
       if (data.type === 'ks-client-surface') {

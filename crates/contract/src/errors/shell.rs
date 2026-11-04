@@ -1,4 +1,10 @@
 error_catalog! { ENTRIES;
+    SHELL_REALTIME_URL_INVALID(path) { class: InvalidRequest, place: "실시간 연결 경로 확인", cause: "가상 주소 또는 연결 경로가 올바르지 않다", message: "실시간 연결 경로 {path}를 쓸 수 없습니다. /로 시작하는 연결 아래 경로를 써 주세요.", fix: "/로 시작하는 연결 아래 경로를 써 주세요" }
+    SHELL_REALTIME_SEND_TYPE_INVALID() { class: InvalidRequest, place: "실시간 메시지 형식 확인", cause: "문자열이나 바이트가 아닌 값을 보내려 했다", message: "이 실시간 연결은 문자열과 바이트만 보낼 수 있습니다. 앱의 send 값을 고쳐 주세요.", fix: "앱의 send 값을 고쳐 주세요" }
+    SHELL_REALTIME_SEND_CONNECTING() { class: InvalidRequest, place: "실시간 연결 열기 전 전송", cause: "아직 열리지 않은 연결에 메시지를 보내려 했다", message: "연결이 아직 열리지 않았습니다. 앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요.", fix: "앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요" }
+    SHELL_REALTIME_BINARY_TYPE_UNSUPPORTED() { class: InvalidRequest, place: "실시간 바이너리 형식 확인", cause: "arraybuffer 외의 바이너리 형식을 지정했다", message: "이 실시간 연결은 arraybuffer만 지원합니다. 앱의 binaryType을 arraybuffer로 두세요.", fix: "앱의 binaryType을 arraybuffer로 두세요" }
+    SHELL_REALTIME_PROTOCOL_INVALID() { class: InvalidRequest, place: "실시간 하위 프로토콜 확인", cause: "하위 프로토콜 이름이 유효하지 않거나 중복됐다", message: "WebSocket 하위 프로토콜 이름이 올바르지 않습니다. 앱의 protocols 값을 고쳐 주세요.", fix: "앱의 protocols 값을 고쳐 주세요" }
+    SHELL_REALTIME_NATIVE_CORE_REQUIRED() { class: Unavailable, place: "가짜 코어 실시간 연결", cause: "시험 화면에 실시간 연결 코어가 없다", message: "이 시험 화면에는 실제 실시간 연결 코어가 없습니다. 로컬 코어 시험 쉘에서 실행해 주세요.", fix: "로컬 코어 시험 쉘에서 실행해 주세요" }
     SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 지침 요청", cause: "앱이 지침 기능을 선언하지 않았다", message: "앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 instructions를 선언하세요" }
     SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 같이 보기 요청", cause: "앱이 같이 보기 기능을 선언하지 않았다", message: "앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 context_capture를 선언하세요" }
     SHELL_APP_IMPORT_REPLY_INVALID() {

@@ -17,6 +17,8 @@ import { TimelineBlock } from "../blocks/timeline";
 import { WindowNotice } from "../data/window-notice";
 import * as renderBlockModule from "../render/render-block";
 import { ClientRuntime } from "../runtime/client-runtime";
+import { createRealtime } from "../runtime/realtime-socket";
+import * as shellErrors from "../contract/shell-errors";
 import { grantFor, makeTestSeed, makeTestSnapshot } from "./fixtures";
 import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
@@ -389,6 +391,44 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("소켓 수신을 한 출력에 발행하면 그 출력의 블록만 다시 그린다", async () => {
+    vi.spyOn(ClientRuntime.prototype, "start").mockResolvedValue();
+    const live: AppDefinition = {
+      id: "realtime-render", name: "실시간 렌더", requires: { blocks: 12, modules: { assets: 1, client: 1 } }, permissions: [], state: {},
+      assets: [{ id: "script", version: 1 }],
+      client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: { first: { default: "이전" }, second: { default: "고정" } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
+      ui: { type: "stack", direction: "column", children: [{ type: "text", value: { client: "first" } }, { type: "text", value: { client: "second" } }] },
+    };
+    const snapshot = testSnapshot([live], {});
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    await store.ready;
+    let dataA: WindowData | null = null;
+    function Capture() { const data = useWindowData(); useEffect(() => { dataA = data; }, [data]); return null; }
+    const context = (window: ShellSnapshot["shared"]["windows"][number]): BlockContext => ({ store, window: { id: window.id, app_id: window.app_id, app_version: window.app_version, desktop_id: window.desktop_id }, definition: live });
+    render(<>
+      {snapshot.shared.windows.map((window) => <WindowDataProvider key={window.id} store={store} windowId={window.id} definition={live}>
+        {window.id === "window-a" && <Capture />}{renderBlockModule.renderBlock(live.ui, context(window))}
+      </WindowDataProvider>)}
+    </>);
+    await waitFor(() => expect(dataA).toBeTruthy());
+    await settleRenders();
+    const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
+    if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    else fallbackProbe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    calls.length = 0;
+    const failure = shellErrors.SHELL_REALTIME_PROTOCOL_INVALID();
+    const realtime = createRealtime({ open: () => ({ result: Promise.resolve({ handle: "socket", protocol: "" }), cancel() {} }), send: async () => {}, close: async () => {}, login: async () => {} }, { urlInvalid: failure, sendTypeInvalid: failure, sendConnecting: failure, binaryTypeUnsupported: failure, protocolInvalid: failure, queueFull: failure, messageTooLarge: failure });
+    const Socket = realtime.webSocketConstructor("live"); const socket = new Socket("/socket");
+    socket.onmessage = (event) => dataA!.publishClient({ first: event.data as string });
+    await act(async () => { await Promise.resolve(); realtime.event({ handle: "socket", event: "message", data: "갱신" }); });
+    await settleRenders();
+    expect(screen.getByText("갱신")).toBeTruthy();
+    expect(countFor("window-a", "/ui/children/0")).toBeGreaterThan(0);
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    store.dispose(); vi.restoreAllMocks();
+  });
+
   it("창 제목 바인딩 변경은 해당 창 머리만 다시 그린다", async () => {
     const titleDefinition: AppDefinition = {
       id: "window-title-render-isolation", name: "기본 제목",

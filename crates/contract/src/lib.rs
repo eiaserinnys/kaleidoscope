@@ -214,6 +214,7 @@ pub mod data;
 pub mod errors;
 pub mod file_name;
 pub mod process;
+pub mod realtime;
 pub mod registry;
 pub mod size;
 pub mod validate;
@@ -234,7 +235,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 29;
+pub const CONTRACT_VERSION: u32 = 30;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -272,7 +273,7 @@ pub const CONTRACT_VERSION: u32 = 29;
 ///   `list`, `table`, `tree`, `feed`의 `item_menu`.
 /// - 21판: input, select, slider, color의 `label_position`과 slider의 `show_value`.
 /// - 22판: request 원천의 `page`(쪽 넘김)와 목록 블록의 다음 쪽 받기, `data.more`.
-pub const BLOCK_SET_VERSION: u32 = 22;
+pub const BLOCK_SET_VERSION: u32 = realtime::REALTIME_BLOCK_SET_VERSION;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -296,13 +297,13 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 3),
     ("agent", 3),
     ("web", 1),
-    ("connection", 2),
+    ("connection", realtime::REALTIME_CONNECTION_VERSION),
     ("storage", 3),
     ("assets", 1),
     ("http", 2),
     ("worker", 1),
     ("profiler", 1),
-    ("client", 4),
+    ("client", realtime::REALTIME_CLIENT_VERSION),
     ("process", 1),
 ];
 
@@ -4512,6 +4513,40 @@ pub enum CoreRequest {
     #[serde(rename = "context.commit")]
     ContextCommit { window_id: String, ticket: String },
 
+    #[serde(rename = "connection.realtime.session")]
+    RealtimeSession { window_id: String },
+    #[serde(rename = "connection.realtime.open")]
+    RealtimeOpen {
+        window_id: String,
+        session: String,
+        permission: String,
+        kind: realtime::RealtimeKind,
+        path: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<String>>")]
+        protocols: Vec<String>,
+    },
+    #[serde(rename = "connection.realtime.read")]
+    RealtimeRead { window_id: String, session: String, handle: String, #[ts(type = "number")] after: u64 },
+    #[serde(rename = "connection.realtime.ack")]
+    RealtimeAck { window_id: String, session: String, handle: String, #[ts(type = "number")] through: u64 },
+    #[serde(rename = "connection.realtime.send")]
+    RealtimeSend { window_id: String, session: String, handle: String, message: realtime::RealtimePayload },
+    #[serde(rename = "connection.realtime.close")]
+    RealtimeClose {
+        window_id: String,
+        session: String,
+        handle: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        code: Option<u16>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        reason: Option<String>,
+    },
+    #[serde(rename = "connection.realtime.release")]
+    RealtimeRelease { window_id: String, session: String },
+
     /// 프로세스 명령. 허용 응답은 쉘에서만 보낸다.
     #[serde(rename = "process.start")]
     ProcessStart {
@@ -5173,6 +5208,20 @@ pub enum CoreReply {
     #[serde(rename = "conversation.attachment_open")]
     ConversationAttachmentOpen {},
 
+    #[serde(rename = "connection.realtime.session")]
+    RealtimeSession { session: String },
+    #[serde(rename = "connection.realtime.open")]
+    RealtimeOpen { handle: String, protocol: Option<String> },
+    #[serde(rename = "connection.realtime.read")]
+    RealtimeRead { item: Option<realtime::RealtimeItem> },
+    #[serde(rename = "connection.realtime.ack")]
+    RealtimeAck {},
+    #[serde(rename = "connection.realtime.send")]
+    RealtimeSend {},
+    #[serde(rename = "connection.realtime.close")]
+    RealtimeClose {},
+    #[serde(rename = "connection.realtime.release")]
+    RealtimeRelease {},
     #[serde(rename = "process.start")]
     ProcessStart { result: process::ProcessStartResult },
     #[serde(rename = "host.instructions")]
@@ -5390,6 +5439,10 @@ pub enum CoreEvent {
         request_id: String,
         spec: process::ProcessSpec,
     },
+    #[serde(rename = "connection.realtime.ready")]
+    RealtimeReady { window_id: String, session: String, handle: String },
+    #[serde(rename = "connection.realtime.closed")]
+    RealtimeClosed { window_id: String, session: String, handle: String, code: u16, reason: String, error: Option<CoreError> },
     /// 프로세스 출력을 읽거나 종료를 확인할 수 있다.
     #[serde(rename = "process.ready")]
     ProcessReady { window_id: String, handle: String },
@@ -5913,7 +5966,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 29);
+        assert_eq!(CONTRACT_VERSION, 30);
         let Block::Tabs {
             header,
             keep_mounted,
