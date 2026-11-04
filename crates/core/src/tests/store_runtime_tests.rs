@@ -27,7 +27,7 @@ fn test_server(directory: &Path) -> (kaleidoscope_orchestrator::AppState, PathBu
     let server = kaleidoscope_orchestrator::AppState::open(&path, "test-mcp-token".into()).unwrap();
     let db = rusqlite::Connection::open(&path).unwrap();
     for table in ["devices", "apps", "asset_versions"] {
-        let count: u64 = db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
+        let count: i64 = db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
         assert_eq!(count, 0, "시험 DB {table}에 기존 자료가 있습니다");
     }
     let token_hash = format!("{:x}", Sha256::digest(b"test-token"));
@@ -142,10 +142,29 @@ fn store_source_and_consent_install_update_modified_and_remove() {
     assert!(registry.store_requests.lock().unwrap().is_empty());
     let db = rusqlite::Connection::open(&database).unwrap();
     for table in ["apps", "asset_versions"] {
-        let count: u64 = db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
+        let count: i64 = db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
         assert_eq!(count, 0);
     }
     assert_eq!(core.inner.state.lock().unwrap().shared.windows.iter().find(|w| w.id == window).unwrap().state["success"], json!(false));
+
+    let raced = act(core.clone(), window.clone());
+    let (request, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let prepared = crate::store::client(&core.inner, "https://example.com/appstore").unwrap()
+        .prepare("example", 3, "apps/example/3/manifest.json").unwrap();
+    let concurrent = kaleidoscope_contract::store::DeviceInstallRequest {
+        definition_json: prepared.definition_json,
+        asset_uploads: prepared.assets,
+        manifest_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, prepared.manifest),
+        approved_digest: prepared.digest.clone(),
+        origin: kaleidoscope_contract::store::StoreOrigin { store_url: "https://example.com/appstore".into(), store_app_id: "example".into(), release: 3, digest: prepared.digest },
+        expected_current_version: None,
+    };
+    let _: kaleidoscope_contract::store::DeviceInstallReply = server_request(&server, "POST", "/api/device/app-installs", &concurrent).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    let error = raced.join().unwrap().unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("REGISTRYINSTALL_EXPECTED_VERSION_CONFLICT"));
+    let _: Value = server_request(&server, "DELETE", "/api/device/apps/example", &kaleidoscope_contract::store::DeviceRemoveRequest { expected_current_version: std::num::NonZeroU32::new(1).unwrap() }).unwrap();
+    registry.store_requests.lock().unwrap().clear();
 
     let second = act(core.clone(), window.clone());
     let (request, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
@@ -174,6 +193,6 @@ fn store_source_and_consent_install_update_modified_and_remove() {
     assert_eq!(error.id.as_deref(), Some("STORECLIENT_INSTALL_LOCAL_MODIFIED"));
     core.handle(CoreRequest::DataAct { window_id: window.clone(), pointer: "/ui/children/3/on_click".into(), event: Value::Null, item: Value::Null, modifiers: None }).unwrap();
     assert!(!core.inner.state.lock().unwrap().shared.apps.iter().any(|app| app.id == "example"));
-    let active: u64 = db.query_row("SELECT COUNT(*) FROM apps WHERE id='example' AND deleted_at IS NULL", [], |row| row.get(0)).unwrap();
+    let active: i64 = db.query_row("SELECT COUNT(*) FROM apps WHERE id='example' AND deleted_at IS NULL", [], |row| row.get(0)).unwrap();
     assert_eq!(active, 0);
 }
