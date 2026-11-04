@@ -5,6 +5,8 @@ import type { CoreError } from "../contract/contract";
 import * as shellErrors from "../contract/shell-errors";
 import { Menu, type MenuEntry } from "./menu";
 import { Button, Notice } from "./primitives";
+import { ownerOf } from "../share/overlay-owner";
+import { windowActionActive } from "../share/action-context";
 
 type MenuEvent = MouseEvent | ReactMouseEvent<HTMLElement>;
 type MenuState = { anchor: HTMLElement; point?: { x: number; y: number }; keyboardRect?: { left: number; top: number; bottom: number }; entries: MenuEntry[] };
@@ -161,7 +163,9 @@ export function ContextMenuHost({ onError }: { onError?: (error: CoreError) => v
     const onContextMenu = (event: MouseEvent) => { if (!event.defaultPrevented) openContextMenu(event, []); };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !(event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))) return;
-      const target = document.activeElement;
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      const owner = eventTarget && ownerOf(eventTarget);
+      const target = !event.isTrusted && owner && windowActionActive(owner) ? eventTarget : document.activeElement;
       if (!(target instanceof HTMLElement)) return;
       event.preventDefault();
       const rect = target.getBoundingClientRect();

@@ -5,6 +5,7 @@ import type { ShellStore } from "../core/shell-store";
 import { clientShare } from "../runtime/client-runtime";
 import { isFullyVisible, revealWebSurface } from "../blocks/web-surface-layer";
 import { describeVisible, limitShareText } from "./visible";
+import { registerControlWindow } from "./window-control";
 
 const SHARE_ISOLATE_BUDGET_MS = 2_500;
 const RAF_TIMEOUT_MS = 100;
@@ -114,6 +115,7 @@ export function useShareView({ windowId, root, enabled, store }: { windowId: str
   useEffect(() => {
     const element = root.current;
     if (!element || !enabled) return;
+    const unregisterControl = registerControlWindow(windowId, element, store);
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastKey = "";
     let pending: Promise<void> = Promise.resolve();
@@ -179,6 +181,7 @@ export function useShareView({ windowId, root, enabled, store }: { windowId: str
     void send();
     return () => {
       alive = false; clearTimeout(timer);
+      unregisterControl();
       if (active.get(windowId) === entry) active.delete(windowId);
       observer.disconnect(); frameObserver.disconnect(); canvasObserver.disconnect(); resize.disconnect();
       element.removeEventListener("scroll", onScroll, true); element.removeEventListener("input", schedule, true); window.removeEventListener("resize", schedule);

@@ -1,10 +1,11 @@
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
-import { SHELL_STATE_REPLY_INVALID } from "../contract/shell-errors";
+import { SHELL_STATE_REPLY_INVALID, SHELL_WINDOW_CONTROL_CONSENT_BLOCKED } from "../contract/shell-errors";
 import type { CoreError, CoreEvent, ShellSnapshot } from "../contract/contract";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { useBlockRenderProbe } from "../render/render-probe";
 import { startUiTiming } from "../profiler/ui-timing";
 import { isResponding } from "../profiler/chat-responding";
+import { trackWindowAction, windowActionActive } from "../share/action-context";
 
 export interface ShellStore {
   call: CoreTransport["call"];
@@ -52,7 +53,15 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   return {
     nativeFiles: transport.nativeFiles,
     bytes: transport.bytes?.bind(transport),
-    call: transport.call.bind(transport) as CoreTransport["call"],
+    call: ((request: Parameters<CoreTransport["call"]>[0]) => {
+      const windowId = "window_id" in request ? request.window_id : undefined;
+      if (windowId && windowActionActive(windowId) && (
+        request.op === "files.allow_pc" || request.op === "files.pick_folder" || request.op === "connection.login"
+        || (request.op === "process.respond_permission" && request.allow)
+      )) return Promise.reject(SHELL_WINDOW_CONTROL_CONSENT_BLOCKED());
+      const result = transport.call(request);
+      return windowId ? trackWindowAction(windowId, result) : result;
+    }) as CoreTransport["call"],
     getSnapshot: () => snapshot,
     getError: () => error,
     subscribe(listener) {

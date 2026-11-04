@@ -1,7 +1,8 @@
-import { Fragment, type MouseEvent, type ReactNode } from "react";
+import { Fragment, type MouseEvent, type ReactNode, type Ref } from "react";
 import type { CoreError } from "../contract/contract";
 
 export interface ButtonProps {
+  ref?: Ref<HTMLButtonElement>;
   className?: string,
   children: ReactNode;
   variant?: "default" | "emphasis";
@@ -19,6 +20,7 @@ export interface ButtonProps {
 }
 
 export function Button({
+  ref,
   children,
   className,
   variant = "default",
@@ -36,6 +38,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
+      ref={ref}
       className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
       aria-pressed={pressed}

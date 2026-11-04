@@ -34,6 +34,9 @@ pub struct ActWindowArgs {
 pub enum WindowAction {
     Click {
         target: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        gesture: Option<PointGesture>,
     },
     Type {
         target: u32,

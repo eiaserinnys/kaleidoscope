@@ -70,3 +70,13 @@ it("트리의 위치가 바뀌어도 같은 행 키의 번호는 유지한다", 
   expect(second.text).toContain(`[${number}] 트리 항목 문서`);
   expect(resolveNumbered("one", number)).toEqual({ element: row });
 });
+
+it("최소화 창의 inert만 우회하고 실제 모달이 막은 내용은 숨긴다", () => {
+  document.body.innerHTML = '<section data-minimized="true" inert><main id="root"><button>보이는 조작</button><div inert><button>모달 뒤</button></div></main></section>';
+  const root = document.querySelector<HTMLElement>("#root")!;
+  const view = describeNumbered("one", root);
+  expect(view.text).toContain("보이는 조작");
+  expect(view.text).not.toContain("모달 뒤");
+  const number = Number(view.text.match(/\[(\d+)\] 단추 보이는 조작/)?.[1]);
+  expect(resolveNumbered("one", number)).toEqual({ element: root.querySelector("button") });
+});

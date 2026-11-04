@@ -56,7 +56,7 @@ fn act(view: &str, action: WindowAction) -> ActWindowArgs {
     }
 }
 fn click() -> WindowAction {
-    WindowAction::Click { target: 1 }
+    WindowAction::Click { target: 1, gesture: None }
 }
 fn observation(view: &str, text: &str) -> WindowObservation {
     WindowObservation {

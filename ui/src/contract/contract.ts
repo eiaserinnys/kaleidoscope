@@ -1445,7 +1445,7 @@ title: string,
  */
 loading: boolean, can_go_back: boolean, can_go_forward: boolean, };
 
-export type WindowAction = { "kind": "click", target: number, } | { "kind": "type", target: number, text: string, mode: TextMode, } | { "kind": "select", target: number, choice: WindowChoice, } | { "kind": "scroll", target?: number, direction: Direction, amount: number, } | { "kind": "key", target?: number, key: string, } | { "kind": "point", x: number, y: number, gesture: PointGesture, };
+export type WindowAction = { "kind": "click", target: number, gesture?: PointGesture, } | { "kind": "type", target: number, text: string, mode: TextMode, } | { "kind": "select", target: number, choice: WindowChoice, } | { "kind": "scroll", target?: number, direction: Direction, amount: number, } | { "kind": "key", target?: number, key: string, } | { "kind": "point", x: number, y: number, gesture: PointGesture, };
 
 export type WindowChoice = { "by": "value", "value": JsonValue } | { "by": "label", "value": string };
 

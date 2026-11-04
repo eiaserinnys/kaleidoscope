@@ -6,6 +6,7 @@ import { DataState } from "../components/data-state";
 import { Select } from "../components/select-toggle";
 import { useBinding, useWindowData } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
+import { capturePointer } from "../share/pointer-capture";
 import type { BlockContext } from "./block-context";
 import { asArray, isObject, NoItems } from "./data-view-common";
 import { WORLD_LAND } from "./world-land";
@@ -146,7 +147,7 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
     if (!current || current.id !== event.pointerId) return;
     const dx = event.clientX - current.x, dy = event.clientY - current.y;
     if (!current.moved && Math.hypot(dx, dy) <= 4) return;
-    if (!current.moved) event.currentTarget.setPointerCapture?.(event.pointerId);
+    if (!current.moved) capturePointer(event);
     current.moved = true;
     suppressClick.current = true;
     const width = event.currentTarget.getBoundingClientRect().width || 720;
