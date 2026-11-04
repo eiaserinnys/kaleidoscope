@@ -46,7 +46,7 @@ test("목록 아이콘의 단색 SVG도 테마색을 따른다", async ({ page }
     for (const theme of ["light", "dark"] as const) {
       await page.setViewportSize({ width, height: 720 });
       await page.emulateMedia({ colorScheme: theme });
-      await page.goto("/harness.html?app-icons&app=explorer");
+      await page.goto("/harness.html?app-icons&window=explorer");
       const row = page.getByRole("option", { name: "긴 제목을 가진 웹 브라우저와 자료 탐색 작업" });
       const icon = row.locator("span.ks-app-icon");
       await expect(icon).toHaveCSS("mask-image", /data:image\/svg/);

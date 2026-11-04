@@ -48,7 +48,7 @@ const longFolderScenario = harnessParams.has("long-folder");
 const pcAllowErrorScenario = harnessParams.has("pc-allow-error");
 const settingsPreview = harnessParams.get("preview") === "app-settings";
 const settingsSample = harnessParams.get("app") === "sample" || harnessParams.get("app") === "empty-group";
-const requestedAppWindow = ["agent", "calculator", "html-report"].includes(harnessParams.get("window") ?? "") ? harnessParams.get("window")! : null;
+const requestedAppWindow = ["agent", "calculator", "html-report", "explorer"].includes(harnessParams.get("window") ?? "") ? harnessParams.get("window")! : null;
 const shareScenario = new URLSearchParams(window.location.search).get("share");
 const entries = Array.from({ length: 80 }, (_, i) => ({ key: String(i + 1), title: `항목 ${i + 1}`, value: `값 ${i + 1}` }));
 const shareDefinition: AppDefinition = {
