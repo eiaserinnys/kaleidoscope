@@ -20,6 +20,10 @@
   background: var(--ks-material-popover);
   backdrop-filter: blur(var(--ks-blur-popover));
 }
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-view-sticky .ks-view-group {
+  padding-inline: var(--ks-space-2);
+  border-radius: var(--ks-radius-small);
+}
 .ks-list-row .ks-list-content { flex: 1 1 auto; }
 .ks-list-row > .ks-view-meta, .ks-list-row > .ks-view-badges { flex: 0 0 auto; }
 .ks-data-tree .ks-row > .ks-view-meta, .ks-data-tree .ks-row > .ks-view-badges { flex: 0 0 auto; }

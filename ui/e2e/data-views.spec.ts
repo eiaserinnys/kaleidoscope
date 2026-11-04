@@ -54,6 +54,25 @@ test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({
   await capture(page, "grid-wide");
 });
 
+test("고정 묶음 머리의 행 여백은 8px다", async ({ page }) => {
+  await page.goto("/?preview=data-views-test");
+  const paddingLeft = await page.evaluate(() => {
+    const section = document.createElement("div");
+    section.className = "ks-data-section";
+    const sticky = document.createElement("div");
+    sticky.className = "ks-view-sticky";
+    const group = document.createElement("div");
+    group.className = "ks-view-group";
+    sticky.append(group);
+    section.append(sticky);
+    document.body.append(section);
+    const value = getComputedStyle(group).paddingLeft;
+    section.remove();
+    return value;
+  });
+  expect(paddingLeft).toBe("8px");
+});
+
 test("표 머리 고정과 가로 스크롤, 흐름 따라가기", async ({ page }) => {
   await page.setViewportSize({ width: 400, height: 700 });
   await page.goto("/?preview=data-views-test");
