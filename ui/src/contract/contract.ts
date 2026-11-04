@@ -357,7 +357,11 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, on_remove?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, 
+/**
+ * (블록 세트 32판) 항목 끝의 빼기 단추가 실행하는 동작.
+ */
+on_remove?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -990,7 +994,7 @@ export type NoticeAction = { label: Binding, on_click: Actions, };
 export type NoticeKind = "info" | "error" | "loading";
 
 /**
- * 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
+ * (블록 세트 32판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
  */
 export type OpenUrlAction = { open_url: Binding, };
 
