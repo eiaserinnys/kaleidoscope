@@ -20,6 +20,7 @@ import type {
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { SHARE_TEXT_MAX_BYTES } from "../contract/limits";
 import { toCoreError, type CoreTransport } from "./core-transport";
+import { SHELL_REALTIME_NATIVE_CORE_REQUIRED } from "../contract/shell-errors";
 import { createFakeData, type FakeDataSeed } from "./fake-data";
 
 export interface FakeTransportSeed {
@@ -293,6 +294,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   };
 
   async function callRequest(request: CoreRequest): Promise<CoreReply> {
+    if (request.op.startsWith("connection.realtime.")) throw SHELL_REALTIME_NATIVE_CORE_REQUIRED();
     calls.push(clone(request));
     switch (request.op) {
       case "profiler.report":

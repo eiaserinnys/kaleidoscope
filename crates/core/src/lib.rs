@@ -515,6 +515,9 @@ impl Core {
         body: &[u8],
     ) -> Result<Vec<u8>, CoreError> {
         match operation {
+            "connection.realtime.read" | "connection.realtime.send" => {
+                realtime_host::dispatch::binary(&self.inner, operation, window, handle, body)
+            }
             "client.blob_put" => {
                 client_blobs::put(&self.inner, window, handle, None, Some(body))?;
                 Ok(Vec::new())
@@ -582,6 +585,15 @@ impl Core {
 
     fn handle_inner(&self, request: CoreRequest) -> Result<CoreReply, CoreError> {
         match request {
+            request @ (CoreRequest::RealtimeSession { .. }
+            | CoreRequest::RealtimeOpen { .. }
+            | CoreRequest::RealtimeRead { .. }
+            | CoreRequest::RealtimeAck { .. }
+            | CoreRequest::RealtimeSend { .. }
+            | CoreRequest::RealtimeClose { .. }
+            | CoreRequest::RealtimeRelease { .. }) => {
+                realtime_host::dispatch::handle(&self.inner, request)
+            }
             CoreRequest::ProfilerReport { inputs, frames } => {
                 self.inner.profiler.report(inputs, frames);
                 Ok(CoreReply::ProfilerReport {})

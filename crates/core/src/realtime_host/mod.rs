@@ -1,9 +1,6 @@
 //! 앱 프로토콜을 해석하지 않는 창별 실시간 연결 운반.
-// 공개 명령은 다음 단계에서 연결하므로 내부 API는 이번 단계에서 미사용일 수 있다.
-#![allow(dead_code)]
-// 공개 브리지의 선언 검사와 바이트 봉투는 다음 통합에서 맡는다.
-// CONN_REALTIME_CLIENT_PERMISSION_MISSING, CONN_REALTIME_KIND_UNSUPPORTED,
-// CONN_REALTIME_PACKET_INVALID는 그 경계에서 쓰는 등록 코드다.
+// CONN_REALTIME_KIND_UNSUPPORTED는 현재 역직렬화에서 거부하는 종류를 위한 등록 코드다.
+pub(crate) mod dispatch;
 mod stream;
 use crate::{
     app_commands, connections,
@@ -121,7 +118,11 @@ pub(crate) fn session(inner: &Arc<Inner>, window: &str) -> Result<String, CoreEr
         },
     );
     if let Some(old) = old {
-        stop_all(old.handles.into_values());
+        let runs: Vec<_> = old.handles.into_values().collect();
+        for run in &runs {
+            run.closed(1008);
+        }
+        stop_all(runs);
     }
     Ok(id)
 }
@@ -146,8 +147,10 @@ pub(crate) fn open(
     id: &str,
     permission: &str,
     path: &str,
+    kind: kaleidoscope_contract::realtime::RealtimeKind,
     protocols: &[String],
 ) -> Result<Opened, CoreError> {
+    let kaleidoscope_contract::realtime::RealtimeKind::Websocket = kind;
     if !same_session(inner, window, id) {
         return Err(errors::CONN_REALTIME_SESSION_STALE());
     }
@@ -165,7 +168,7 @@ pub(crate) fn open(
         error.details.push(format!("retry_after_secs={seconds}"));
         return Err(error);
     }
-    let (run, commands, stops) = Running::new(permission, info.clone());
+    let (run, commands, stops) = Running::new(inner, window, id, permission, info.clone());
     {
         let mut sessions = inner.realtime.sessions.lock().unwrap();
         let s = sessions
@@ -291,13 +294,18 @@ pub(crate) fn ack(
         state.bytes -= packet.message.size();
         ended |= matches!(packet.message, Message::Terminal { .. });
     }
+    let mut ready = false;
     if state.queue.len() < LIMIT_COUNT {
         if let Some(packet) = state.pending_terminal.take() {
             state.queue.push_back(packet);
+            ready = true;
         }
     }
     drop(state);
     run.space.notify_one();
+    if ready {
+        run.ready();
+    }
     if ended {
         if let Some(s) = inner
             .realtime
@@ -366,11 +374,22 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             continue;
         }
         if current.as_ref() != Some(&(app, version)) {
-            stopped.extend(sessions.remove(&window).unwrap().handles.into_values());
+            stopped.extend(
+                sessions
+                    .remove(&window)
+                    .unwrap()
+                    .handles
+                    .into_values()
+                    .map(|run| (run, 1008)),
+            );
         } else {
             let s = sessions.get_mut(&window).unwrap();
             if !visible {
-                stopped.extend(std::mem::take(&mut s.handles).into_values());
+                stopped.extend(
+                    std::mem::take(&mut s.handles)
+                        .into_values()
+                        .map(|run| (run, 1001)),
+                );
                 s.cooldown = None;
             } else {
                 let changed: Vec<_> = s
@@ -385,15 +404,25 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                     .map(|(key, _)| key.clone())
                     .collect();
                 for key in changed {
-                    stopped.push(s.handles.remove(&key).unwrap());
+                    stopped.push((s.handles.remove(&key).unwrap(), 1008));
                 }
             }
         }
     }
-    stop_all(stopped);
+    for (run, code) in &stopped {
+        run.closed(*code);
+    }
+    stop_all(stopped.into_iter().map(|(run, _)| run));
 }
 
 pub(crate) fn shutdown_sessions(inner: &Arc<Inner>) {
     let sessions = std::mem::take(&mut *inner.realtime.sessions.lock().unwrap());
-    stop_all(sessions.into_values().flat_map(|s| s.handles.into_values()));
+    let runs: Vec<_> = sessions
+        .into_values()
+        .flat_map(|s| s.handles.into_values())
+        .collect();
+    for run in &runs {
+        run.closed(1008);
+    }
+    stop_all(runs);
 }

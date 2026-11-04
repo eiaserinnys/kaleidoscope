@@ -12,6 +12,7 @@ import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
 import { ClientHostServices } from "./client-host-services";
 import { processRequest } from "./client-process";
+import { ClientRealtime } from "./client-realtime";
 import { prepareShareForSend } from "../share/share-view";
 import * as shellErrors from "../contract/shell-errors";
 
@@ -58,6 +59,7 @@ export class ClientRuntime {
   private closingNotified = false;
   private host: HTMLElement | null = null;
   private snapshots = new Map<string, (image: string) => void>();
+  private realtime?: ClientRealtime;
 
   constructor(private store: ShellStore, private data: WindowData, private definition: AppDefinition, private client: Client) {
     this.hostServices = new ClientHostServices(client, store, data.windowId, this.files, () => this.isHostVisible());
@@ -70,6 +72,13 @@ export class ClientRuntime {
       if (reply.op !== "data.media") throw shellErrors.SHELL_CLIENT_SCRIPT_ASSET_REPLY_INVALID();
       if (reply.media.mime.split(";")[0] !== "text/javascript") throw shellErrors.SHELL_CLIENT_SCRIPT_ASSET_INVALID();
       const script = new TextDecoder().decode(Uint8Array.from(atob(reply.media.data_base64), (char) => char.charCodeAt(0)));
+      if (this.client.realtime_permissions !== undefined) {
+        this.realtime = new ClientRealtime(this.store, this.data.windowId, this.client.realtime_permissions,
+          (message, transfer) => this.send({ ...message, token: this.token }, transfer),
+          (id, result, error) => this.reply(id, result, error));
+        await this.realtime.start();
+        if (this.stopped) return;
+      }
       this.token = crypto.randomUUID();
       const state = this.state();
       const frame = document.createElement("iframe");
@@ -77,7 +86,8 @@ export class ClientRuntime {
       frame.setAttribute("sandbox", "allow-scripts");
       frame.setAttribute("allow", "autoplay");
       frame.setAttribute("title", "클라이언트 런타임");
-      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, channels: this.client.channels ?? [], filePermissions: this.filePermissions(), processEnabled: this.client.process_permissions !== undefined, errors: sandboxErrors() });
+      const realtimeNames = Object.fromEntries((this.definition.permissions ?? []).filter((item) => item.module === "connection").map((item) => [item.id, item.connection]));
+      frame.srcdoc = clientSource(script, { token: this.token, state, stateKeys: this.client.state_keys, storageEntries: this.client.storage_entries, inputs: this.inputs(), capabilities: this.client.capabilities ?? [], actions: this.client.actions, channels: this.client.channels ?? [], filePermissions: this.filePermissions(), processEnabled: this.client.process_permissions !== undefined, realtimePermissions: this.client.realtime_permissions, realtimeNames, realtimeSession: this.realtime?.sessionId, errors: sandboxErrors() });
       frame.addEventListener("load", () => {
         if (this.loaded) { this.ready = false; this.token = ""; this.data.failClient(shellErrors.SHELL_CLIENT_FRAME_NAVIGATED()); void this.stop(); }
         else this.loaded = true;
@@ -90,6 +100,7 @@ export class ClientRuntime {
       windows.set(this.data.windowId, this);
       window.addEventListener("message", this.receive);
       this.unsubscribeStorage = this.store.subscribeEvents((event) => {
+        this.realtime?.event(event);
         if (event.event === "process.ready" && event.window_id === this.data.windowId && this.client.process_permissions !== undefined) this.send({ type: "ks-process-ready", handle: event.handle });
         if (event.event === "process.services_changed" && event.window_id === this.data.windowId && this.client.process_permissions !== undefined) this.send({ type: "ks-process-services-changed", handle: event.handle });
         if (event.event !== "storage.update" || event.window_id !== this.data.windowId) return;
@@ -120,6 +131,8 @@ export class ClientRuntime {
     const visible = isWindowVisible(this.store.getSnapshot(), this.data.windowId);
     if (visible === this.pingVisible) return;
     this.pingVisible = visible;
+    // 숨김과 복원이 한 프레임 안에 와도 연결 수명 전환을 합치지 않는다.
+    this.sendLifecycle("change");
     if (!visible) {
       this.hostServices.releaseWakeLock();
       if (this.ping) clearInterval(this.ping);
@@ -311,7 +324,7 @@ export class ClientRuntime {
   }
 
   private reply(requestId: string, result?: unknown, error?: ReturnType<typeof toCoreError>, transfer?: Transferable[]) {
-    this.send({ type: "ks-client-reply", requestId, result, error: error?.message, errorId: error?.id, errorCode: error?.code }, transfer);
+    this.send({ type: "ks-client-reply", requestId, result, error: error?.message, errorId: error?.id, errorCode: error?.code, errorDetails: error?.details }, transfer);
   }
 
   private async syncStorage(entry: string) {
@@ -380,6 +393,12 @@ export class ClientRuntime {
       }
     }
     else if (message.type === "ks-sandbox-flushed") { this.pending.get(message.requestId)?.(message.ok === true); this.pending.delete(message.requestId); }
+    else if (message.type === "ks-client-realtime" && this.realtime && typeof message.requestId === "string") {
+      void this.realtime.request(message.requestId, message.method, message.params ?? {});
+    }
+    else if (message.type === "ks-realtime-delivered" && this.realtime && typeof message.handle === "string" && Number.isSafeInteger(message.sequence)) {
+      void this.realtime.delivered(message.handle, message.sequence).catch((error) => this.data.setNotice(toCoreError(error)));
+    }
     else if (message.type === "ks-client-process" && this.client.process_permissions !== undefined) {
       void processRequest(this.store, this.data.windowId, message.method, message.params).then((result) => this.reply(message.requestId, result)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     }
@@ -558,6 +577,7 @@ export class ClientRuntime {
     this.beginClosing();
     await this.flush();
     this.hostServices.dispose();
+    await this.realtime?.stop().catch((error) => this.data.setNotice(toCoreError(error)));
     await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error)));
     if (this.store.nativeFiles || this.blobFiles.size) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error)));
     this.unregister?.();

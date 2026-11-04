@@ -46,6 +46,9 @@ pub struct ClientDecl {
     pub process_permissions: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    pub realtime_permissions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub device_storage: Option<DeviceStorage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]

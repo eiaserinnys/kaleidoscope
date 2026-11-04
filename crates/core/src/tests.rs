@@ -32,6 +32,7 @@ mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
 mod process_tests;
+mod realtime_public_tests;
 mod profiler_concurrency_tests;
 mod profiler_tests;
 mod realtime_tests;

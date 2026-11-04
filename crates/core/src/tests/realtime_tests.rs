@@ -79,7 +79,7 @@ fn 문자열과_바이트를_경계와_순서대로_주고받고_ack한다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     assert!(!format!("{opened:?}").contains("fixture-secret"));
     realtime_host::send(
         &core.inner,
@@ -166,7 +166,7 @@ fn 앱과_연결_권한_경로_종류_및_숨김을_접속_전에_검사한다()
             fixture(access, kind, writable, paths, "http://127.0.0.1:1".into());
         let session = realtime_host::session(&core.inner, &window).unwrap();
         let error =
-            realtime_host::open(&core.inner, &window, &session, "live", path, &[]).unwrap_err();
+            realtime_host::open(&core.inner, &window, &session, "live", path, kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
         assert_eq!(error.id.as_deref(), Some(expected));
         assert!(!format!("{error:?}").contains("fixture-secret"));
     }
@@ -180,7 +180,7 @@ fn 앱과_연결_권한_경로_종류_및_숨김을_접속_전에_검사한다()
     let session = realtime_host::session(&core.inner, &window).unwrap();
     core.set_shell_visible(false);
     let error =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONN_REALTIME_WINDOW_HIDDEN"));
 }
 
@@ -192,7 +192,7 @@ fn 네트워크_실패는_로그인_필요가_아니다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let error =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONN_REALTIME_OPEN_UNREACHABLE"));
     assert_ne!(error.code, ErrorCode::LoginRequired);
     assert!(!format!("{error:?}").contains("fixture-secret"));
@@ -228,7 +228,7 @@ fn 관문에_걸린_연결은_다음_소켓을_열지_않는다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let error =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONN_REALTIME_OPEN_RATE_LIMITED"));
     assert!(crate::data_runtime::gates::blocked(&core.inner.data_runtimes, "example").is_some());
     let CoreReply::DataAttach { view } = core
@@ -245,7 +245,7 @@ fn 관문에_걸린_연결은_다음_소켓을_열지_않는다() {
         Some(kaleidoscope_contract::data::SourceStatus::Loading { .. })
     ));
     let error =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONN_REALTIME_OPEN_RATE_LIMITED"));
     assert!(
         !worker.join().unwrap(),
@@ -272,7 +272,7 @@ fn 숨기면_연결이_닫히고_다시_보이면_같은_세션을_쓸_수_있�
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     core.set_shell_visible(false);
     rx.recv_timeout(Duration::from_secs(3)).unwrap();
     assert_eq!(
@@ -283,7 +283,7 @@ fn 숨기면_연결이_닫히고_다시_보이면_같은_세션을_쓸_수_있�
         Some("CONN_REALTIME_HANDLE_MISSING")
     );
     core.set_shell_visible(true);
-    realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+    realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     realtime_host::release(&core.inner, &window, &session);
     rx.recv_timeout(Duration::from_secs(3)).unwrap();
     worker.join().unwrap();
@@ -345,7 +345,7 @@ fn 첫_401은_갱신한_bearer로_한번만_다시_연다() {
         .unwrap();
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     assert!(!format!("{opened:?}").contains("fixture-secret"));
     realtime_host::release(&core.inner, &window, &session);
     worker.join().unwrap();
@@ -379,7 +379,7 @@ fn 두번째_401은_갱신한_토큰을_무효화하고_로그인을_요구한�
         .unwrap();
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let error =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONN_REALTIME_LOGIN_REQUIRED"));
     assert_eq!(
         core.inner
@@ -408,7 +408,7 @@ fn 메시지_한도를_넘는_전송은_거부한다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     let error = realtime_host::send(
         &core.inner,
         &window,
@@ -450,7 +450,7 @@ fn 수신_큐가_차면_ack_뒤_다음_메시지를_읽는다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     let mut after = 0;
     wait_until(|| {
         while let Some(packet) =
@@ -502,7 +502,7 @@ fn 닫힌_세션의_늦은_핸드셰이크는_핸들을_공개하지_않는다()
             &other_session,
             "live",
             "/socket",
-            &[],
+            kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[],
         )
     });
     started_rx.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -526,7 +526,7 @@ fn 사백삼_거부는_로그인_필요로_바꾸지_않는다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let error =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONN_REALTIME_OPEN_REJECTED"));
     assert_ne!(error.code, ErrorCode::LoginRequired);
     worker.join().unwrap();
@@ -550,7 +550,7 @@ fn 정확히_팔미비_바이트_메시지가_실제_소켓에서_왕복한다()
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     let payload = vec![0x5a; 8 * 1024 * 1024];
     realtime_host::send(
         &core.inner,
@@ -600,10 +600,10 @@ fn 한_창에서_네_연결까지만_열린다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     for _ in 0..4 {
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     }
     let error =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONN_REALTIME_OPEN_LIMIT"));
     realtime_host::release(&core.inner, &window, &session);
     worker.join().unwrap();
@@ -617,10 +617,10 @@ fn 연결_실패_직후_같은_세션은_일초를_기다린다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let first =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(first.id.as_deref(), Some("CONN_REALTIME_OPEN_UNREACHABLE"));
     let second =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap_err();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap_err();
     assert_eq!(second.id.as_deref(), Some("CONN_REALTIME_OPEN_COOLDOWN"));
 }
 
@@ -671,7 +671,7 @@ fn 만료_토큰은_런타임_밖에서_갱신하고_새_bearer로_연결한다(
         )
         .unwrap();
     let session = realtime_host::session(&core.inner, &window).unwrap();
-    realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+    realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     realtime_host::release(&core.inner, &window, &session);
     worker.join().unwrap();
 }
@@ -692,7 +692,7 @@ fn 팔미비를_넘는_수신_메시지를_거부한다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     let mut packet = None;
     wait_until(|| {
         packet = realtime_host::read(&core.inner, &window, &session, &opened.handle, 0).unwrap();
@@ -728,7 +728,7 @@ fn 여러_연결을_숨길_때_종료_신호를_함께_보낸다() {
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     for _ in 0..4 {
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     }
     ready_rx.recv_timeout(Duration::from_secs(3)).unwrap();
     let started = Instant::now();
@@ -770,7 +770,7 @@ fn 원격_정상_종료에_응답하고_받은_메시지_뒤에_종료를_전달
     let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
     let session = realtime_host::session(&core.inner, &window).unwrap();
     let opened =
-        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", kaleidoscope_contract::realtime::RealtimeKind::Websocket, &[]).unwrap();
     let mut packets = Vec::new();
     wait_until(|| {
         if let Some(packet) = realtime_host::read(

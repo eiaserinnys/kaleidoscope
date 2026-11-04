@@ -1,0 +1,19 @@
+{
+  "id": "realtime-fixture", "name": "실시간 연결 시험",
+  "requires": { "blocks": 23, "modules": { "assets": 1, "client": 5, "connection": 3 } },
+  "permissions": [{ "module": "connection", "id": "live", "label": "실시간 연결", "connection": "fixture-echo", "access": "readwrite" }],
+  "assets": [{ "id": "realtime-fixture-client", "version": 1 }],
+  "client": {
+    "runtime": "javascript", "entry": { "id": "realtime-fixture-client", "version": 1 },
+    "realtime_permissions": ["live"], "actions": ["close_socket"],
+    "outputs": { "status": { "default": "대기" }, "text": { "default": "" }, "binary": { "default": "" }, "closed": { "default": "" }, "error": { "default": "" } }
+  },
+  "ui": { "type": "stack", "direction": "column", "children": [
+    { "type": "text", "value": { "client": "status" } },
+    { "type": "text", "value": { "client": "text" } },
+    { "type": "text", "value": { "client": "binary" } },
+    { "type": "text", "value": { "client": "closed" } },
+    { "type": "button", "label": "종료 확인", "on_click": { "client": "close_socket" } },
+    { "type": "text", "value": { "client": "error" } }
+  ] }
+}
