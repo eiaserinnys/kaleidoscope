@@ -64,6 +64,37 @@
 .ks-table-row { padding: var(--ks-space-1) 0; }
 .ks-table-cell { min-width: 0; overflow: hidden; padding-inline: var(--ks-space-2); text-overflow: ellipsis; white-space: nowrap; }
 .ks-table-cell.is-numeric { text-align: end; font-variant-numeric: tabular-nums; }
+.ks-table-grid .ks-table-header > div { padding: var(--ks-space-1) var(--ks-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-table-grid .ks-grid-corner { position: sticky; left: 0; z-index: 3; background: var(--ks-color-surface-solid); }
+.ks-table-grid .ks-table-header, .ks-grid-row { column-gap: var(--ks-space-1); }
+.ks-table-grid .ks-table-header { margin-bottom: var(--ks-space-1); }
+.ks-table-grid > .ks-table-inner { padding-inline-end: var(--ks-focus-width); }
+.ks-grid-row { align-items: stretch; padding: 0 0 var(--ks-space-1); border: 0; border-radius: 0; }
+.ks-grid-row:hover:not([data-menu-target]) { background-image: none; }
+.ks-table-rows.has-content .ks-table-row { min-height: calc((var(--ks-grid-lines) + 2) * var(--ks-type-body) * var(--ks-line-body) + 4 * var(--ks-space-1)); }
+/* 제목과 본문, 배지, 묶음 간격 둘, 칸 위아래 여백, 행 사이 간격. */
+.ks-table-grid.has-content .ks-grid-row { min-height: calc((var(--ks-grid-lines) + 1) * var(--ks-type-body) * var(--ks-line-body) + var(--ks-type-meta) * var(--ks-line-body) + 5 * var(--ks-space-1)); }
+.ks-grid-row-header { position: sticky; left: 0; z-index: 1; display: flex; align-items: center; align-self: stretch; background: var(--ks-color-surface-solid); padding-block: var(--ks-space-1); }
+.ks-grid-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-grid-cell { position: relative; z-index: 0; overflow: visible; padding-block: var(--ks-space-1); }
+.ks-grid-cell-value { display: block; height: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ks-grid-cell:has(.ks-table-content) { padding: 0; }
+.ks-grid-cell::after, .ks-grid-cell:is(:focus-visible, [data-keyboard-focus]):focus::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.ks-grid-cell:hover::after { background: var(--ks-color-hover); }
+.ks-grid-cell.is-selected::after { box-shadow: inset 0 0 0 var(--ks-focus-width) var(--ks-color-accent), inset 0 0 0 calc(2 * var(--ks-focus-width)) var(--ks-color-surface-solid); }
+.ks-grid-cell:focus-visible { outline: none; }
+.ks-grid-cell:is(:focus-visible, [data-keyboard-focus]):focus::before { z-index: 2; outline: var(--ks-focus-width) dashed var(--ks-color-focus); outline-offset: 0; box-shadow: 0 0 0 var(--ks-focus-width) var(--ks-color-surface-solid); }
+.ks-table-content { display: flex; flex-direction: column; height: 100%; min-width: 0; gap: var(--ks-space-1); padding: var(--ks-space-1) var(--ks-space-2); white-space: normal; }
+.ks-table-content-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-table-content-subtitle { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var(--ks-table-lines); }
+.ks-table-content .ks-view-badges { overflow: hidden; flex-wrap: nowrap; }
+.ks-table-content .ks-badge { background: var(--ks-color-surface-solid); color: var(--ks-color-text); }
+.ks-table-content.is-error { padding: 0; }
+.ks-table-content.is-error > .ks-notice { height: 100%; padding: var(--ks-space-1) var(--ks-space-2); white-space: normal; }
+.ks-table-content.is-error .ks-notice-message { display: flex; flex-direction: column; gap: var(--ks-space-1); }
+.ks-table-error-message { display: -webkit-box; height: calc((1 + var(--ks-table-lines)) * var(--ks-type-body) * var(--ks-line-body)); overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: calc(1 + var(--ks-table-lines)); }
+.ks-table-content.is-error .ks-error-id { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-table-content.is-error .ks-error-id wbr { display: none; }
 .ks-properties-container { container-type: inline-size; width: 100%; height: 100%; overflow: auto; }
 .ks-properties { display: grid; grid-template-columns: calc(var(--ks-space-6) * 4) minmax(0, 1fr); align-content: start; gap: var(--ks-space-2); margin: 0; padding: var(--ks-space-3); }
 .ks-properties.is-rows { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }

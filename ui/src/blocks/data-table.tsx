@@ -1,5 +1,5 @@
 import { memo, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import type { BindingMore, Block, Column, SortSpec } from "../contract/contract";
+import type { BindingMore, Block, Column, SortSpec, TableCellAddress } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
@@ -10,11 +10,14 @@ import { useLoadMore } from "./load-more";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
 import { NoItems, VirtualSurface, asArray, dateText, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
+import * as shellErrors from "../contract/shell-errors";
+import { TableGrid } from "./data-table-grid";
+import { ContentCell } from "./data-table-cell";
 
 export type Row = Record<string, JsonValue> & { key: string };
 const validRow = (item: unknown): item is Row => isObject(item) && typeof item.key === "string";
 const numberFormatter = new Intl.NumberFormat();
-function width(column: Column, rows: Row[]) {
+export function width(column: Column, rows: Row[]) {
   if (column.width === "narrow" && column.format === "number") {
     const valueLength = rows.reduce((longest, row) => Math.max(longest, Array.from(cellValue(row[column.field], column)).length), 0);
     const labelLength = Array.from(column.label).length;
@@ -29,7 +32,7 @@ function width(column: Column, rows: Row[]) {
   const minimum = length ? `max(${base}, calc(${length} * var(--ks-type-body) + 4 * var(--ks-space-2)))` : base;
   return column.width === undefined || column.width === "fill" ? `minmax(${minimum}, 1fr)` : minimum;
 }
-function cellValue(value: JsonValue | undefined, column: Column): string {
+export function cellValue(value: JsonValue | undefined, column: Column): string {
   if (value == null) return "";
   if (column.format === "date") return dateText(value);
   if (column.format === "number" && typeof value === "number") return numberFormatter.format(value);
@@ -41,7 +44,8 @@ const numeric = (value: JsonValue | undefined): number | null => {
   return Number.isFinite(result) ? result : null;
 };
 const trend = (value: JsonValue | undefined): number[] => Array.isArray(value) ? value.filter((v): v is number => typeof v === "number" && Number.isFinite(v)) : [];
-function formattedCell(value: JsonValue | undefined, column: Column): ReactNode | undefined {
+export function formattedCell(value: JsonValue | undefined, column: Column): ReactNode | undefined {
+  if (column.format === "content") return <ContentCell value={value} column={column} />;
   if (column.format === "delta") {
     const n = numeric(value);
     return n === null ? "—" : <span className={`ks-table-delta ${n > 0 ? "up" : n < 0 ? "down" : "flat"}`}>{n > 0 ? "+" : ""}{n.toFixed(2)}%</span>;
@@ -57,22 +61,47 @@ function formattedCell(value: JsonValue | undefined, column: Column): ReactNode 
   }
   return undefined;
 }
-const numericColumn = (column: Column) => column.format === "number" || column.format === "date" || column.format === "delta";
+export const numericColumn = (column: Column) => column.format === "number" || column.format === "date" || column.format === "delta";
 const readOnlyRowProps = () => ({ "data-ks-share-readonly": "true" });
+function normalizeColumns(value: unknown, rowHeader?: string, cell = false): { columns: Column[]; error?: ReturnType<typeof shellErrors.SHELL_TABLE_COLUMNS_VALUE_INVALID> } {
+  const values = asArray(value);
+  const fields = new Set<string>();
+  for (const [index, column] of values.entries()) {
+    if (!isObject(column) || Object.keys(column).some((key) => !["field", "label", "width", "format", "max_lines"].includes(key)) || typeof column.field !== "string" || typeof column.label !== "string" ||
+        (column.width !== undefined && (typeof column.width !== "string" || !["narrow", "medium", "wide", "fill"].includes(column.width))) ||
+        (column.format !== undefined && (typeof column.format !== "string" || !["text", "number", "date", "badge", "delta", "sparkline", "content"].includes(column.format))) ||
+        (column.max_lines !== undefined && (!Number.isInteger(column.max_lines) || Number(column.max_lines) < 1 || Number(column.max_lines) > 3 || column.format !== "content"))) {
+      const field = isObject(column) && typeof column.field === "string" ? column.field : `${index + 1}번째`;
+      return { columns: [], error: shellErrors.SHELL_TABLE_COLUMNS_VALUE_INVALID({ field }) };
+    }
+    if (fields.has(column.field)) return { columns: [], error: shellErrors.SHELL_TABLE_COLUMNS_FIELD_DUPLICATE({ field: column.field }) };
+    fields.add(column.field);
+  }
+  const columns = values as Column[];
+  if (columns.length && rowHeader && (columns[0].field !== rowHeader || (columns[0].format !== undefined && columns[0].format !== "text"))) return { columns: [], error: shellErrors.SHELL_TABLE_ROW_HEADER_INVALID({ field: rowHeader }) };
+  if (cell && rowHeader && columns.length === 1) return { columns: [], error: shellErrors.SHELL_TABLE_DATA_COLUMNS_EMPTY() };
+  return { columns };
+}
 export function TableBlock({ block, context, pointer }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/rows`, block.rows);
+  const columnsValue = useBinding(`${pointer}/columns`, block.columns);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <TableReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
+  if (columnsValue.status !== "ready") return <DataState value={columnsValue} />;
+  return <TableReady block={block} context={context} pointer={pointer} value={value.value} columnsValue={columnsValue.value} more={value.more} />;
 }
-function TableReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
+function TableReady({ block, context, pointer, value, columnsValue, more }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string; value: unknown; columnsValue: unknown; more?: BindingMore }) {
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const rows = useMemo(() => asArray(value).filter(validRow), [value]);
+  const result = useMemo(() => normalizeColumns(columnsValue, block.row_header, block.selection === "cell"), [columnsValue, block.row_header, block.selection]);
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
   const visible = useWindowVisible(context);
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
-  return <><TableView columns={block.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from(anchor.querySelectorAll('[role="cell"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
+  const selectedCell = isObject(selected) && typeof selected.row === "string" && typeof selected.column === "string" ? { row: selected.row, column: selected.column } : null;
+  if (result.error) return <DataState value={{ status: "failed", message: result.error.message, id: result.error.id, retry: [] }} />;
+  if (!result.columns.length) return <NoItems />;
+  return <><TableView columns={result.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} selection={block.selection} selectedCell={selectedCell} rowHeader={block.row_header} onChooseCell={(row, column) => { if (block.on_select) void data.act(`${pointer}/on_select`, { row: row.key, column }, row); }} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from((anchor.closest('[role="row"]') ?? anchor).querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
 }
 
 export interface TableViewProps {
@@ -80,6 +109,10 @@ export interface TableViewProps {
   rows: Row[];
   initialSort?: SortSpec | null;
   selected: string | null;
+  selection?: "row" | "cell";
+  selectedCell?: TableCellAddress | null;
+  rowHeader?: string;
+  onChooseCell?: (row: Row, column: string) => void;
   ariaLabel?: string;
   onChoose: (row: Row) => void;
   onActivate?: (row: Row, anchor: HTMLElement) => void;
@@ -105,7 +138,11 @@ const TableRow = memo(function TableRow({ row, index, start, active, focused, co
   </div>;
 });
 
-export function TableView({ columns: sourceColumns, rows: sourceRows, initialSort, selected, ariaLabel = "표", onChoose, onActivate, onContextMenu, renderCell, compareRows, rowProps, more, data, visible = true }: TableViewProps) {
+export function TableView(props: TableViewProps) {
+  return props.selection === "cell" ? <TableGrid {...props} /> : <RowTableView {...props} />;
+}
+
+function RowTableView({ columns: sourceColumns, rows: sourceRows, initialSort, selected, ariaLabel = "표", onChoose, onActivate, onContextMenu, renderCell, compareRows, rowProps, more, data, visible = true }: TableViewProps) {
   const [sort, setSort] = useState<SortSpec | null>(initialSort ?? null);
   const rows = useMemo(() => {
     if (!sort) return sourceRows;
@@ -139,8 +176,9 @@ export function TableView({ columns: sourceColumns, rows: sourceRows, initialSor
     context: (event, row) => { if (onContextMenu && !event.defaultPrevented) { event.preventDefault(); onContextMenu(row, event.currentTarget, event); } },
   };
   const gridColumns = useMemo(() => sourceColumns.map((column) => width(column, sourceRows)).join(" "), [sourceRows, sourceColumns]);
+  const lines = Math.max(0, ...sourceColumns.filter((column) => column.format === "content").map((column) => column.max_lines ?? 3));
   const toggleSort = (field: string) => setSort((old) => old?.field !== field ? { field, desc: false } : !old.desc ? { field, desc: true } : null);
-  return <div className="ks-data-view ks-table-scroll" ref={scroll} role="table" aria-rowcount={rows.length} aria-label={ariaLabel} style={{ "--ks-table-columns": gridColumns } as CSSProperties}>
+  return <div className={`ks-data-view ks-table-scroll ks-table-rows${lines ? " has-content" : ""}`} ref={scroll} role="table" aria-rowcount={rows.length} aria-label={ariaLabel} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">
       <div className="ks-table-header" role="row">
         {sourceColumns.map((column) => <div role="columnheader" aria-sort={sort?.field === column.field ? sort.desc ? "descending" : "ascending" : "none"} key={column.field}><button className={numericColumn(column) ? "is-numeric" : undefined} type="button" onClick={() => toggleSort(column.field)}>{column.label}{sort?.field === column.field && <DataIcon name={sort.desc ? "chevron-down" : "chevron-up"} size="inline" />}</button></div>)}

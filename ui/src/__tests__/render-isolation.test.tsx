@@ -1538,3 +1538,77 @@ describe("shareStructure 참조 보존", () => {
     expect(removed.other).toBe(previous.other);
   });
 });
+
+describe("표 칸 렌더 격리", () => {
+  it("선택 이동은 이전 칸과 새 칸 및 두 행만 그리고 다른 창은 그리지 않는다", async () => {
+    mockVirtualLayout();
+    const { GridCell, GridRow } = await import("../blocks/data-table-grid");
+    const cellSpy = vi.spyOn(GridCell as unknown as { type: (...args: never[]) => unknown }, "type");
+    const rowSpy = vi.spyOn(GridRow as unknown as { type: (...args: never[]) => unknown }, "type");
+    const app: AppDefinition = {
+      id: "grid-selection-isolation", name: "선택 격리", requires: { blocks: 24, modules: {} }, permissions: [],
+      state: { chosen: { row: "a", column: "mon" } },
+      ui: { type: "table", rows: [
+        { key: "a", label: "기획", mon: "회의", tue: "초안" },
+        { key: "b", label: "제작", mon: "검토", tue: "완료" },
+        { key: "c", label: "배포", mon: "준비", tue: "공개" },
+      ], columns: [{ field: "label", label: "항목" }, { field: "mon", label: "월요일" }, { field: "tue", label: "화요일" }],
+      selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" } },
+    };
+    const snapshot = testSnapshot([app], app.state);
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    await store.ready;
+    render(<>{snapshot.shared.windows.map((window) => <div key={window.id} data-testid={window.id}>
+      <AppWindowContent store={store} windowId={window.id} />
+    </div>)}</>);
+    await waitFor(() => expect(screen.getAllByRole("gridcell")).toHaveLength(12));
+    await settleRenders();
+    rowSpy.mockClear(); cellSpy.mockClear();
+    await act(async () => { await setState(store, "window-a", "chosen", { row: "b", column: "tue" }); });
+    await settleRenders();
+    expect(rowSpy).toHaveBeenCalledTimes(2);
+    expect(cellSpy).toHaveBeenCalledTimes(2);
+    expect(rowSpy.mock.calls.map(([props]) => (props as { row: { key: string } }).row.key)).toEqual(["a", "b"]);
+    expect(cellSpy.mock.calls.map(([props]) => { const cell = props as { rowKey: string; column: { field: string } }; return `${cell.rowKey}/${cell.column.field}`; })).toEqual(["a/mon", "b/tue"]);
+    expect(within(screen.getByTestId("window-b")).getByRole("gridcell", { name: "기획, 월요일, 회의" }).getAttribute("aria-selected")).toBe("true");
+    cellSpy.mockRestore(); rowSpy.mockRestore(); store.dispose();
+  });
+
+  it("client가 새 행렬 전체를 발행해도 바뀐 행과 칸만 그린다", async () => {
+    mockVirtualLayout();
+    const { GridCell, GridRow } = await import("../blocks/data-table-grid");
+    const cellSpy = vi.spyOn(GridCell as unknown as { type: (...args: never[]) => unknown }, "type");
+    const rowSpy = vi.spyOn(GridRow as unknown as { type: (...args: never[]) => unknown }, "type");
+    const rows = [
+      { key: "a", label: "기획", mon: { title: "첫 회의" }, tue: { title: "초안" } },
+      { key: "b", label: "제작", mon: { title: "검토" }, tue: { title: "완료" } },
+    ];
+    const columns: JsonValue[] = [{ field: "label", label: "항목" }, { field: "mon", label: "월요일", format: "content" }, { field: "tue", label: "화요일", format: "content" }];
+    const app: AppDefinition = {
+      id: "grid-isolation", name: "일정", requires: { blocks: 24, modules: { assets: 1, client: 1 } }, permissions: [], state: { chosen: null },
+      assets: [{ id: "grid-runtime", version: 1 }],
+      client: { runtime: "javascript", entry: { id: "grid-runtime", version: 1 }, inputs: {}, outputs: { rows: { default: rows }, columns: { default: columns } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
+      ui: { type: "table", rows: { client: "rows" }, columns: { client: "columns" }, selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" } },
+    };
+    const snapshot = testSnapshot([app], { chosen: null });
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    await store.ready;
+    const first = snapshot.shared.windows[0];
+    const context: BlockContext = { store, window: { id: first.id, app_id: first.app_id, app_version: first.app_version, desktop_id: first.desktop_id }, definition: app };
+    let data: WindowData | null = null;
+    function Capture() { const value = useWindowData(); useEffect(() => { data = value; }, [value]); return null; }
+    render(<WindowDataProvider store={store} windowId={first.id} definition={app}><Capture />{renderBlockModule.renderBlock(app.ui, context)}</WindowDataProvider>);
+    await screen.findByText("첫 회의");
+    await settleRenders();
+    rowSpy.mockClear(); cellSpy.mockClear();
+    const next = structuredClone(rows);
+    next[0].mon.title = "길게 바뀐 회의 내용";
+    await act(async () => { data!.publishClient({ rows: next, columns: structuredClone(columns) }); });
+    await screen.findByText("길게 바뀐 회의 내용");
+    await settleRenders();
+    expect(rowSpy).toHaveBeenCalledTimes(1);
+    expect(cellSpy).toHaveBeenCalledTimes(1);
+    cellSpy.mockRestore(); rowSpy.mockRestore(); store.dispose();
+  });
+});

@@ -18,6 +18,11 @@ error_catalog! { ENTRIES;
     SHELL_WINDOW_CONTROL_POINT_OUTSIDE(x, y) { class: InvalidRequest, place: "창 제어 그림 좌표 확인", cause: "좌표가 창 내용 영역 밖이다", message: "좌표 ({x}, {y})가 창 내용 밖입니다. 반환된 그림 크기 안의 좌표를 쓰세요.", fix: "반환된 그림 크기 안의 좌표를 쓰세요" }
     SHELL_WINDOW_CONTROL_GEOMETRY_CHANGED() { class: Conflict, place: "창 제어 그림 크기 확인", cause: "그림을 읽은 뒤 창 내용 크기가 바뀌었다", message: "그림을 읽은 뒤 창 내용 크기가 바뀌었습니다. 그림을 다시 읽으세요.", fix: "그림을 다시 읽으세요" }
     SHELL_WINDOW_CONTROL_FRAME_TIMEOUT() { class: Unavailable, place: "창 제어 격리 프레임 응답", cause: "프레임이 입력 결과를 시간 안에 돌려주지 않았다", message: "격리 프레임이 입력 결과를 돌려주지 않았습니다. 현재 화면을 다시 읽어 결과를 확인하세요.", fix: "현재 화면을 다시 읽어 결과를 확인하세요" }
+    SHELL_TABLE_COLUMNS_VALUE_INVALID(field) { class: InvalidRequest, place: "표 열 출력", cause: "열 출력의 형태가 올바르지 않다", message: "표 열 {field}의 형식이 올바르지 않습니다. 앱의 columns 출력을 고치세요.", fix: "앱의 columns 출력을 고치세요" }
+    SHELL_TABLE_COLUMNS_FIELD_DUPLICATE(field) { class: InvalidRequest, place: "표 열 식별자", cause: "열 field가 중복됐다", message: "표의 열 {field}가 중복됩니다. 앱의 columns 출력을 고치세요.", fix: "앱의 columns 출력을 고치세요" }
+    SHELL_TABLE_ROW_HEADER_INVALID(field) { class: InvalidRequest, place: "표 행 머리", cause: "행 머리가 첫 text 열이 아니다", message: "표의 행 머리 {field}를 찾지 못했습니다. 앱의 columns 출력을 고치세요.", fix: "앱의 columns 출력을 고치세요" }
+    SHELL_TABLE_DATA_COLUMNS_EMPTY() { class: InvalidRequest, place: "표 데이터 열", cause: "행 머리 외 데이터 열이 없다", message: "표에 고를 데이터 열이 없습니다. 앱의 columns 출력을 고치세요.", fix: "앱의 columns 출력을 고치세요" }
+    SHELL_TABLE_CELL_CONTENT_INVALID(field) { class: InvalidRequest, place: "표 칸 내용", cause: "칸 내용의 형태가 올바르지 않다", message: "표의 {field} 칸 내용을 읽지 못했습니다. 앱의 칸 출력을 고치세요.", fix: "앱의 칸 출력을 고치세요" }
     SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 지침 요청", cause: "앱이 지침 기능을 선언하지 않았다", message: "앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 instructions를 선언하세요" }
     SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 같이 보기 요청", cause: "앱이 같이 보기 기능을 선언하지 않았다", message: "앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 context_capture를 선언하세요" }
     SHELL_APP_IMPORT_REPLY_INVALID() {

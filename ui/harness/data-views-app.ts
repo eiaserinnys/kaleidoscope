@@ -5,13 +5,18 @@ const items = Array.from({ length: 1000 }, (_, index) => ({ key: String(index), 
 const grid = Array.from({ length: 24 }, (_, index) => ({ key: String(index), title: `그림 ${index + 1}`, image: { permission: "media", path: index % 2 ? "shapes.png" : "landscape.png" } }));
 const rows = Array.from({ length: 70 }, (_, index) => ({ key: String(index), name: `행 ${index + 1}`, status: "길게 표시되는 진행 상태 배지", a: index, b: index + 1, c: index + 2, d: index + 3, e: index + 4 }));
 const surfaceCards = Array.from({ length: 240 }, (_, index) => ({ key: String(index), surface: `sample-${index}`, title: `견본 ${index + 1}`, aspect: index === 0 ? 9 / 16 : 1.6 }));
+const scheduleColumns = [{ field: "label", label: "담당" }, ...Array.from({ length: 12 }, (_, index) => ({ field: `period_${index}`, label: `${index + 1}일`, width: "wide" as const, format: "content" as const }))];
+const scheduleRows = Array.from({ length: 60 }, (_, index) => ({ key: `team-${index}`, label: index === 1 ? "작업 묶음 2 이름이 아주 긴 담당 부서" : `작업 묶음 ${index + 1}`, ...Object.fromEntries(Array.from({ length: 12 }, (_, column) => [`period_${column}`, (index + column) % 4 ? { title: `긴 한글 제목과 검토 일정 ${index + 1}-${column + 1}`, ...(index === 0 && column === 3 ? {} : { subtitle: "긴 본문과 자료를 살펴보고 다음 작업을 준비합니다. 화면 폭이 좁아도 내용이 칸 밖으로 나가지 않아야 합니다." }), color: (index + Math.floor(column / 3)) % 2 ? "#394667" : "#d6eaff", badges: ["확인", ...(index % 2 ? ["진행 중"] : [])] } : null])) }));
+const largeColumns = [{ field: "label", label: "담당" }, ...Array.from({ length: 200 }, (_, index) => ({ field: `period_${index}`, label: `${index + 1}일`, width: "narrow" as const }))];
+const largeRows = Array.from({ length: 200 }, (_, index) => ({ key: `group-${index}`, label: `그룹 ${index + 1}` }));
 
 export const dataViewsApp: AppDefinition = {
   id: "data-views-test",
   name: "보기 시험",
-  requires: { blocks: 20, modules: { files: 1 } },
-  permissions: [{ id: "media", module: "files", access: "read", label: "그림" }],
-  state: { tab: 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8) },
+  requires: { blocks: 24, modules: { files: 1, connection: 1 } },
+  permissions: [{ id: "media", module: "files", access: "read", label: "그림" }, { id: "sample", module: "connection", access: "read", connection: "sample", label: "예제" }],
+  sources: { sample: { kind: "request", permission: "sample", path: "/sample" } },
+  state: { tab: new URLSearchParams(window.location.search).has("grid-error") ? 13 : new URLSearchParams(window.location.search).has("grid-loading") ? 12 : 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8), schedule_columns: scheduleColumns, schedule_rows: scheduleRows, schedule_choice: null, large_columns: largeColumns, large_rows: largeRows },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
     { label: "긴 목록", child: { type: "list", items, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }, { label: "지우기", danger: true, confirm: { title: "지울까요?", body: { item: "title" }, ok: "지우기" }, on_select: { copy_text: { item: "url" } } }] } },
     { label: "격자 시험", child: { type: "list", layout: "grid", items: grid, selected: { state: "choice" }, on_select: { set_state: "choice" } } },
@@ -20,6 +25,11 @@ export const dataViewsApp: AppDefinition = {
       { field: "status", label: "상태", width: "narrow", format: "badge" },
       ...["a", "b", "c", "d", "e"].map((field) => ({ field, label: field.toUpperCase(), width: "medium" as const, format: "number" as const })),
     ] } },
+    { label: "일정표", child: { type: "stack", direction: "column", fill: 0, children: [
+      { type: "table", rows: { state: "schedule_rows" }, columns: { state: "schedule_columns" }, selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } },
+      { type: "text", value: { state: "schedule_choice" } },
+    ] } },
+    { label: "큰 일정표", child: { type: "table", rows: { state: "large_rows" }, columns: { state: "large_columns" }, selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
     { label: "흐름 시험", child: { type: "stack", direction: "column", children: [
       { type: "toolbar", start: [{ type: "button", label: "추가", on_click: [{ set_state: "feed", value: { expr: "$append($state.feed, [{\"key\": $string($count($state.feed)), \"name\": \"기록\", \"body\": \"새 내용\"}])" } }] }] },
       { type: "feed", follow: true, entries: { state: "feed" } },
@@ -57,5 +67,8 @@ export const dataViewsApp: AppDefinition = {
       { type: "anchor", id: "stage", child: { type: "canvas", surface: "stage", aspect_ratio: 9 / 16 } }, { type: "text", value: "도구" },
     ] } },
     { label: "지우기 시험", child: { type: "list", items: { state: "delete_rows" }, item_menu: [{ label: "지우기", danger: true, confirm: { title: "지울까요?", ok: "지우기" }, on_select: [{ set_state: "delete_rows", value: { expr: "[$state.delete_rows[key != $event]]" } }] }] } },
+    { label: "탐색기 확인", child: { type: "explorer", root: { permission: "media" } } },
+    { label: "열 불러오기", child: { type: "table", rows: [{ key: "a", label: "첫 항목" }], columns: { expr: '$data.sample.message ? [{"field":"label","label":"이름"}] : []' } } },
+    { label: "칸 오류", child: { type: "table", rows: [{ key: "a", label: "제작", day: ["잘못된 내용"], next: { title: "정상 일정" } }], columns: [{ field: "label", label: "항목" }, { field: "day", label: "첫째 날", format: "content" }, { field: "next", label: "둘째 날", format: "content" }], selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
   ] },
 };

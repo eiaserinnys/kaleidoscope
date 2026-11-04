@@ -292,10 +292,10 @@ it("잘못된 클라이언트 출력은 원인별 코드와 읽기 쉬운 크기
 
 it("클라이언트가 발행한 행과 선택은 코어 동작 없이 표에 반영된다", async () => {
   const definition: AppDefinition = {
-    id: "client-table", name: "표 시험", requires: { blocks: 12, modules: { assets: 1, client: 1 } }, permissions: [], state: {},
+    id: "client-table", name: "표 시험", requires: { blocks: 24, modules: { assets: 1, client: 1 } }, permissions: [], state: {},
     assets: [{ id: "script", version: 1 }],
-    client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: { rows: { default: [] }, selected: { default: null } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
-    ui: { type: "table", rows: { client: "rows" }, columns: [{ field: "title", label: "이름" }], selected: { client: "selected" } },
+    client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: { rows: { default: [] }, columns: { default: [] }, selected: { default: null } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
+    ui: { type: "table", rows: { client: "rows" }, columns: { client: "columns" }, selected: { client: "selected" } },
   };
   const seed = makeTestSeed({ definitions: [definition] });
   const appWindow = seed.snapshot.shared.windows[0];
@@ -304,12 +304,13 @@ it("클라이언트가 발행한 행과 선택은 코어 동작 없이 표에 �
   const context = { store, snapshot: seed.snapshot, window: appWindow, definition };
   function Harness() {
     const data = windowData.useWindowData();
-    return <><button onClick={() => data.publishClient({ rows: [{ key: "a", title: "계산된 행" }], selected: "a" })}>계산</button>
+    return <><button onClick={() => data.publishClient({ rows: [{ key: "a", title: "계산된 행" }], columns: [{ field: "title", label: "동적 이름" }], selected: "a" })}>계산</button>
       <TableBlock block={definition.ui as Extract<AppDefinition["ui"], { type: "table" }>} context={context} pointer="/ui" /></>;
   }
   render(<windowData.WindowDataProvider store={store} windowId={appWindow.id} definition={definition}><Harness /></windowData.WindowDataProvider>);
   await userEvent.click(screen.getByRole("button", { name: "계산" }));
   expect(await screen.findByText("계산된 행")).toBeTruthy();
+  expect(screen.getByRole("columnheader", { name: "동적 이름" })).toBeTruthy();
   expect(transport.getCalls().filter((call) => call.op === "data.act" || call.op === "window.set_state")).toHaveLength(0);
 });
 

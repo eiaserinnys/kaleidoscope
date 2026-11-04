@@ -238,3 +238,30 @@ it("표의 다른 행 메뉴를 열 때 무관한 행은 다시 그리지 않는
   fireEvent.contextMenu(second);
   expect(renderCell.mock.calls.some(([row]) => row.key === "c")).toBe(false);
 });
+
+it("칸 우클릭 메뉴는 칸을 고르지 않고 행과 행 키를 전달한다", async () => {
+  const row = { key: "a", label: "제작", period: { title: "검토" } };
+  const calls = setup({ type: "table", rows: [row], columns: [{ field: "label", label: "항목" }, { field: "period", label: "월요일", format: "content" }], selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" }, item_menu: menu }, { chosen: null });
+  const cell = await screen.findByRole("gridcell", { name: /제작.*월요일.*검토/ });
+  fireEvent.contextMenu(cell);
+  expect(calls.mock.calls.some(([request]) => request.op === "data.act" && request.pointer === "/ui/on_select")).toBe(false);
+  fireEvent.click(await screen.findByRole("menuitem", { name: "고르기" }));
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/item_menu/0/on_select", event: "a", item: row })));
+});
+
+it("칸 행 메뉴 취소와 확인 삭제 뒤 초점을 인접 칸에 둔다", async () => {
+  const rows = [{ key: "a", label: "기획", day: "첫째" }, { key: "b", label: "제작", day: "둘째" }];
+  setup({ type: "table", rows: { state: "rows" }, columns: [{ field: "label", label: "항목" }, { field: "day", label: "요일" }], selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" }, item_menu: [{ label: "지우기", confirm: { title: "지울까요?" }, on_select: [{ set_state: "rows", value: { expr: "[$state.rows[key != $event]]" } }] }] }, { rows, chosen: null });
+  const first = await screen.findByRole("gridcell", { name: /기획.*요일.*첫째/ });
+  first.focus();
+  fireEvent.keyDown(first, { key: "F10", shiftKey: true });
+  await screen.findByRole("menuitem", { name: "지우기" });
+  fireEvent.keyDown(document, { key: "Escape" });
+  await waitFor(() => expect(document.activeElement).toBe(first));
+  fireEvent.keyDown(first, { key: "F10", shiftKey: true });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "지우기" }));
+  fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "지우기" }));
+  const next = await screen.findByRole("gridcell", { name: /제작.*요일.*둘째/ });
+  await waitFor(() => expect(screen.queryByRole("gridcell", { name: /기획.*요일.*첫째/ })).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(next));
+});

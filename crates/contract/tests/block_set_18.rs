@@ -61,7 +61,8 @@ fn current_contract_versions_include_realtime() {
     assert_eq!(CONTRACT_VERSION, 31);
     let supported = Supported::current();
     assert_eq!(supported.blocks, BLOCK_SET_VERSION);
-    assert_eq!(supported.blocks, kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
+    assert_eq!(supported.blocks, kaleidoscope_contract::TABLE_GRID_BLOCK_SET_VERSION);
+    assert!(supported.blocks >= kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
     assert_eq!(supported.modules.get("client"), Some(&kaleidoscope_contract::realtime::REALTIME_CLIENT_VERSION));
 }
 
