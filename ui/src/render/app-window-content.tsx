@@ -108,7 +108,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       inContent = content.contains(target);
       focusedItem = null;
       for (let item: HTMLElement | null = target; item && content.contains(item); item = item.parentElement) {
-        if (item.matches('[role="option"], [role="listitem"]') || item.parentElement?.matches('.ks-repeat-content')) {
+        if (item.matches('[role="option"], [role="listitem"], [role="row"][data-focus-index]') || item.parentElement?.matches('.ks-repeat-content')) {
           focusedItem = item;
           break;
         }
@@ -120,7 +120,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       restore = false;
     };
     const collectionTarget = (changes: MutationRecord[]): HTMLElement | undefined => {
-      const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"]')) : undefined;
+      const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"], [role="table"]')) : undefined;
       if (!collection || !focusedItem || focusedItem.isConnected) return;
       const group = collection.ancestor;
       const visible = visibleControls(content);
