@@ -10,7 +10,7 @@ name = "kaleidoscope_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-e2e = ["dep:base64", "dep:image", "dep:reqwest", "dep:sha2", "dep:tokio-tungstenite"]
+e2e = ["dep:reqwest", "dep:sha2", "dep:tokio-tungstenite"]
 
 [build-dependencies]
 tauri-build = "2"
@@ -22,8 +22,8 @@ kaleidoscope-core = { path = "../../crates/core" }
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["time"] }
-base64 = { version = "0.22", optional = true }
-image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { workspace = true }
 reqwest = { version = "0.12.4", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
 sha2 = { version = "0.10", optional = true }

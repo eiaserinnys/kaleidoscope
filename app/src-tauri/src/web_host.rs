@@ -1,9 +1,10 @@
+// Windows 웹뷰 수명과 캡처 및 제어 연결이 한 호스트에 모여 있어 500줄을 넘는다.
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use kaleidoscope_core::kaleidoscope_contract::{
-    errors, CoreError, Rect, WebHistoryAction, WebPage,
+    errors, CoreError, Rect, WebHistoryAction, WebPage, WindowControlOperation, WindowControlResult,
 };
 use kaleidoscope_core::{Core, WebHost};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
@@ -28,6 +29,7 @@ pub struct TauriWebHost {
     app: AppHandle,
     attaching: Mutex<()>,
     pages: Mutex<HashMap<String, Page>>,
+    controls: Mutex<HashMap<String, Arc<Mutex<crate::web_control::WindowControlState>>>>,
 }
 
 fn with_detail(detail: impl std::fmt::Display, error: CoreError) -> CoreError {
@@ -56,6 +58,7 @@ impl TauriWebHost {
             app,
             attaching: Mutex::new(()),
             pages: Mutex::new(HashMap::new()),
+            controls: Mutex::new(HashMap::new()),
         }
     }
     fn view(&self, id: &str) -> Result<Webview, CoreError> {
@@ -193,6 +196,36 @@ fn register(view: &Webview, app: AppHandle, id: String, page: Page) -> Result<()
 }
 
 impl WebHost for TauriWebHost {
+    fn control(
+        &self,
+        id: &str,
+        operation: &WindowControlOperation,
+    ) -> Result<WindowControlResult, CoreError> {
+        let view = self.view(id)?;
+        let page = self
+            .pages
+            .lock()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| errors::WEB_HOST_VIEW_NOT_FOUND())?;
+        let state = self
+            .controls
+            .lock()
+            .unwrap()
+            .entry(id.to_string())
+            .or_default()
+            .clone();
+        let mut state = state.lock().unwrap();
+        Ok(crate::web_control::control(
+            &view,
+            id,
+            &page,
+            &mut state,
+            operation,
+            || self.capture_control(&view, id),
+        ))
+    }
     fn attach(&self, id: &str, url: &str) -> Result<WebPage, CoreError> {
         let url = parse_url(url, id)?;
         let _attaching = self.attaching.lock().unwrap();
@@ -426,6 +459,7 @@ impl WebHost for TauriWebHost {
     }
     fn detach(&self, id: &str) -> Result<(), CoreError> {
         self.pages.lock().unwrap().remove(id);
+        self.controls.lock().unwrap().remove(id);
         if let Some(view) = self.app.get_webview(&format!("web-{id}")) {
             view.close().map_err(|error| {
                 with_detail(
@@ -435,6 +469,49 @@ impl WebHost for TauriWebHost {
             })?;
         }
         Ok(())
+    }
+}
+
+impl TauriWebHost {
+    fn capture_control(&self, view: &Webview, id: &str) -> Result<Vec<u8>, CoreError> {
+        let unavailable = || errors::SHARE_CONTROL_IMAGE_UNAVAILABLE(id);
+        if let Some(bytes) = capture_view(view.clone(), id)
+            .map_err(|_| unavailable())?
+            .filter(|bytes| !bytes.is_empty())
+        {
+            return Ok(bytes);
+        }
+        let (tx, rx) = mpsc::channel();
+        view.with_webview(move |native| {
+            let mut visible = BOOL(0);
+            let result = unsafe { native.controller().IsVisible(&mut visible) }
+                .map(|_| visible.as_bool())
+                .map_err(|_| ());
+            let _ = tx.send(result);
+        })
+        .map_err(|_| unavailable())?;
+        if rx
+            .recv_timeout(Duration::from_secs(2))
+            .map_err(|_| unavailable())?
+            .map_err(|_| unavailable())?
+        {
+            return Err(unavailable());
+        }
+        self.freeze().map_err(|_| unavailable())?;
+        let shown = view.show().map_err(|_| unavailable());
+        let captured = if shown.is_ok() {
+            capture_view(view.clone(), id)
+                .map_err(|_| unavailable())
+                .and_then(|v| v.filter(|b| !b.is_empty()).ok_or_else(unavailable))
+        } else {
+            Err(unavailable())
+        };
+        let hidden = view.hide().map_err(|_| unavailable());
+        let unfrozen = self.unfreeze().map_err(|_| unavailable());
+        shown?;
+        hidden?;
+        unfrozen?;
+        captured
     }
 }
 
