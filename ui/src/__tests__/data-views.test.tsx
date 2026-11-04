@@ -44,6 +44,17 @@ it("아이콘 목록은 이름만 보이고 선택할 때 원래 항목을 보�
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a", item })));
   vi.unstubAllGlobals();
 });
+it.each([[360, 6], [1000, 18]])("%i 폭의 초기 아이콘 뼈대는 두 줄과 한 줄 이름을 쓴다", async (width, count) => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
+  const { transport } = setup({ type: "list", layout: "icons", items: { expr: "[]" } });
+  await screen.findByText("없음", { exact: true });
+  await act(async () => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/items": { status: "loading" } } } }));
+  const loading = await screen.findByRole("status", { name: "불러오는 중" });
+  expect(loading.querySelectorAll(".ks-icon-tile-skeleton")).toHaveLength(count);
+  for (const name of loading.querySelectorAll(".ks-icon-skeleton-name")) expect(name.children).toHaveLength(1);
+  vi.unstubAllGlobals();
+});
 it("moves through grouped list entries and selects the focused item", async () => {
   const { calls } = setup({ type: "list", grouped: true, items: [{ title: "묶음", items: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }] }], on_select: { set_state: "choice" } }, { choice: null });
   const first = await screen.findByRole("option", { name: "하나" });

@@ -60,6 +60,10 @@ test("아이콘 목록과 탐색기가 같은 칸을 쓰고 방향키와 메뉴�
     await first.focus();
     await page.keyboard.press("ArrowDown");
     await expect(list.getByRole("option").nth(expected)).toBeFocused();
+    expect(await list.getByRole("option").nth(expected).evaluate((element) => {
+      const style = getComputedStyle(element);
+      return parseFloat(style.outlineOffset) === -parseFloat(style.outlineWidth);
+    })).toBe(true);
     await page.keyboard.press("Enter");
     await expect(list.getByRole("option").nth(expected)).toHaveAttribute("aria-selected", "true");
     await capture(page, `icons-${width}`);
@@ -92,6 +96,12 @@ test("아이콘 목록과 탐색기가 같은 칸을 쓰고 방향키와 메뉴�
     const old = await page.addStyleTag({ content: `${oldTiles}\n.ks-icon-tile-name { word-break: normal; }` });
     await capture(page, `explorer-before-${width}`);
     await old.evaluate((element) => element.remove());
+    await explorer.getByRole("option").first().focus();
+    await page.keyboard.press("ArrowRight");
+    expect(await explorer.getByRole("option").nth(1).evaluate((element) => {
+      const style = getComputedStyle(element);
+      return parseFloat(style.outlineOffset) === -parseFloat(style.outlineWidth);
+    })).toBe(true);
     await capture(page, `explorer-icons-${width}`);
   }
   await app.getByRole("button", { name: "자세히 보기" }).click();

@@ -34,8 +34,13 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
 });
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/items`, block.items);
-  if (value.status !== "ready") return block.layout === "icons" && value.status === "loading" ? <div className="ks-data-view ks-list is-icons"><IconTileSkeleton count={9} /></div> : <DataState value={value} />;
+  if (value.status !== "ready") return block.layout === "icons" && value.status === "loading" ? <IconListLoading /> : <DataState value={value} />;
   return <ListReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
+}
+function IconListLoading() {
+  const scroll = useRef<HTMLDivElement>(null);
+  const columns = useIconGridColumns(scroll, true);
+  return <div className="ks-data-view ks-list is-icons" ref={scroll}><IconTileSkeleton count={columns * 2} /></div>;
 }
 function ListReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const data = useWindowData();

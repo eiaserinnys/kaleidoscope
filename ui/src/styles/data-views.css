@@ -1,4 +1,4 @@
-.ks-list-row:focus-visible, .ks-table-row:focus-visible, .ks-data-tree .ks-row:focus-visible, .ks-file-tree-list:focus-visible, .ks-file-tree-list .ks-row:focus-visible, .ks-feed-entry:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-list-row:focus-visible, .ks-icon-tile:focus-visible, .ks-table-row:focus-visible, .ks-data-tree .ks-row:focus-visible, .ks-file-tree-list:focus-visible, .ks-file-tree-list .ks-row:focus-visible, .ks-feed-entry:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-row[data-menu-target] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-file-tree-row.is-open-file { box-shadow: inset var(--ks-focus-width) 0 var(--ks-color-accent); }
 .ks-file-tree-list [data-drop-state="valid"], .ks-file-tree-list[data-drop-state="valid"] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
@@ -67,8 +67,7 @@
 .ks-icon-tile-skeleton i { display: block; background: var(--ks-color-hover); border-radius: var(--ks-radius-small); }
 .ks-icon-skeleton-icon { width: var(--ks-space-6); height: var(--ks-space-6); }
 .ks-icon-skeleton-name { display: flex; width: 100%; flex-direction: column; gap: var(--ks-space-1); }
-.ks-icon-skeleton-name i { width: 100%; height: calc(var(--ks-type-body) * var(--ks-line-body) - var(--ks-space-1)); }
-.ks-icon-skeleton-name i:last-child { width: 70%; align-self: center; }
+.ks-icon-skeleton-name i { width: 100%; height: calc(var(--ks-type-body) * var(--ks-line-body)); }
 .ks-list-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); min-width: 0; border: var(--ks-focus-width) solid transparent; border-radius: var(--ks-radius-small); padding: 0; background: transparent; cursor: pointer; color: inherit; font: inherit; text-align: start; }
 .ks-list-card.is-selected { border-color: var(--ks-color-accent); }
 .ks-list-card:hover { background: var(--ks-color-hover); }
