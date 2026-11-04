@@ -27,7 +27,10 @@ struct AppState {
     events: broadcast::Sender<CoreEvent>,
 }
 
-struct DevHost;
+#[derive(Default)]
+struct DevHost {
+    oauth_open_url_file: Option<PathBuf>,
+}
 
 impl Host for DevHost {
     fn pick_folder(&self) -> Option<PathBuf> {
@@ -67,7 +70,10 @@ impl Host for DevHost {
             .collect()
     }
 
-    fn open_url(&self, _: &str) -> std::io::Result<()> {
+    fn open_url(&self, url: &str) -> std::io::Result<()> {
+        if let Some(path) = &self.oauth_open_url_file {
+            return std::fs::write(path, url);
+        }
         Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "개발용 다리에서는 브라우저를 열 수 없습니다",
@@ -77,21 +83,33 @@ impl Host for DevHost {
 
 #[cfg(test)]
 mod host_tests {
-    use super::{DevHost, Host};
+    use super::{parse_args, DevHost, Host};
 
     #[test]
     fn devbridge_picks_the_configured_files() {
         std::env::set_var("KALEIDOSCOPE_DEV_PICK_FILES", r#"["/tmp/sample-a.txt","/tmp/sample-b.txt"]"#);
-        let paths = DevHost.pick_files(&[], true).unwrap();
+        let paths = DevHost::default().pick_files(&[], true).unwrap();
         assert_eq!(paths, ["/tmp/sample-a.txt", "/tmp/sample-b.txt"].map(std::path::PathBuf::from));
-        assert_eq!(DevHost.pick_files(&[], false).unwrap().len(), 1);
+        assert_eq!(DevHost::default().pick_files(&[], false).unwrap().len(), 1);
         std::env::remove_var("KALEIDOSCOPE_DEV_PICK_FILES");
     }
 
     #[test]
     fn devbridge_does_not_open_oauth_urls() {
-        let error = DevHost.open_url("https://auth.example").unwrap_err();
+        let error = DevHost::default().open_url("https://auth.example").unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn configured_oauth_url_is_overwritten_in_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("open-url");
+        let args = ["--data-dir", "data", "--port", "1234", "--oauth-open-url-file", path.to_str().unwrap()];
+        let parsed = parse_args(args.into_iter().map(Into::into)).unwrap();
+        let host = DevHost { oauth_open_url_file: parsed.oauth_open_url_file };
+        host.open_url("http://localhost/first").unwrap();
+        host.open_url("http://localhost/second").unwrap();
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "http://localhost/second");
     }
 }
 
@@ -101,6 +119,7 @@ struct Args {
     server: String,
     device_name: String,
     seeds: Vec<PathBuf>,
+    oauth_open_url_file: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -141,8 +160,9 @@ async fn run() -> Result<(), String> {
         server_url: args.server,
         device_name: args.device_name,
     };
+    let host = DevHost { oauth_open_url_file: args.oauth_open_url_file };
     let core = Arc::new(
-        tokio::task::spawn_blocking(move || Core::open(config, Arc::new(DevHost)))
+        tokio::task::spawn_blocking(move || Core::open(config, Arc::new(host)))
             .await
             .map_err(|error| format!("코어 시작 태스크가 실패했습니다: {error}"))?
             .map_err(|error| format!("코어를 열 수 없습니다: {}", error.message))?,
@@ -319,6 +339,7 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
     let mut server = "http://127.0.0.1:4219".to_string();
     let mut device_name = "devbridge".to_string();
     let mut seeds = Vec::new();
+    let mut oauth_open_url_file = None;
 
     while let Some(argument) = args.next() {
         match argument.to_string_lossy().as_ref() {
@@ -359,6 +380,9 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
                 args.next()
                     .ok_or_else(|| "--seed 값이 필요합니다".to_string())?,
             )),
+            "--oauth-open-url-file" => {
+                oauth_open_url_file = Some(PathBuf::from(args.next().ok_or_else(|| "--oauth-open-url-file 값이 필요합니다".to_string())?));
+            }
             other => return Err(format!("알 수 없는 인자입니다: {other}")),
         }
     }
@@ -369,5 +393,6 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
         server,
         device_name,
         seeds,
+        oauth_open_url_file,
     })
 }
