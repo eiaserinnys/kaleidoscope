@@ -19,7 +19,8 @@ export function revealIn(element: HTMLElement, scroller: HTMLElement, horizontal
   const end = horizontal ? target.right : target.bottom;
   const visibleStart = (horizontal ? frame.left + scroller.clientLeft : frame.top + scroller.clientTop);
   const visibleEnd = visibleStart + (horizontal ? scroller.clientWidth : scroller.clientHeight);
-  const delta = start < visibleStart ? start - visibleStart : end > visibleEnd ? end - visibleEnd : 0;
+  const delta = end - start >= visibleEnd - visibleStart ? start - visibleStart
+    : start < visibleStart ? start - visibleStart : end > visibleEnd ? end - visibleEnd : 0;
   if (horizontal) scroller.scrollLeft += delta;
   else scroller.scrollTop += delta;
 }

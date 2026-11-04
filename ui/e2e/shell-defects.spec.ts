@@ -153,3 +153,49 @@ test("탭에서 이름표를 숨긴 분할 고르기는 이름표 열을 비우�
   const widths = await field.evaluate((el) => ({ field: el.getBoundingClientRect().width, group: el.querySelector(".ks-data-segmented")!.getBoundingClientRect().width }));
   expect(Math.abs(widths.field - widths.group)).toBeLessThanOrEqual(1);
 });
+
+test("숫자 폭이 다른 글꼴의 좁은 시간축에서 눈금이 겹치지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 600 });
+  await page.goto("/?preview=timeline-fixture");
+  await page.evaluate(() => document.fonts.ready);
+  const app = page.getByTestId("app-window-timeline-fixture");
+  const scroll = app.locator(".ks-timeline-scroll");
+  await scroll.evaluate((el) => { (el as HTMLElement).style.flex = "0 0 218px"; });
+  const labels = app.locator(".ks-timeline-ruler > span");
+  await expect(labels.first()).toBeVisible();
+  await expect.poll(() => labels.count()).toBeGreaterThan(1);
+  const geometry = await labels.evaluateAll((elements) => elements.map((el) => ({ text: el.textContent, ...el.getBoundingClientRect().toJSON() })));
+  expect(Math.max(...geometry.slice(1).map((el, index) => geometry[index].right - el.left))).toBeLessThanOrEqual(0);
+  await capture(page, "ruler-narrow");
+});
+
+test("화면보다 키 큰 안내 대상은 시작을 보여 준다", async ({ page }) => {
+  await page.setViewportSize({ width: 880, height: 600 });
+  await page.goto("/?preview=tour-fixture");
+  const app = page.getByTestId("app-window-tour-fixture");
+  const target = app.locator(".ks-anchor > *");
+  await target.evaluate((el) => { (el as HTMLElement).style.height = "1200px"; (el as HTMLElement).style.marginTop = "100px"; });
+  await app.getByRole("button", { name: "안내 시작" }).click();
+  await expect(app.locator(".ks-tour-card")).toBeVisible();
+  const geometry = await target.evaluate((el) => ({ target: el.getBoundingClientRect().toJSON(), body: el.closest(".ks-data-window-body")!.getBoundingClientRect().toJSON() }));
+  expect(Math.abs(geometry.target.top - geometry.body.top)).toBeLessThanOrEqual(1);
+  await capture(page, "tour-tall");
+});
+
+for (const width of [360, 1000]) test(`${width} 폭에서 가로 채움 칸의 입력이 칸을 채운다`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 600 });
+  await page.goto("/?preview=row-fields-fixture");
+  const app = page.getByTestId("app-window-row-fields-fixture");
+  for (const selector of [".ks-slider-field", ".ks-select-field", ".ks-input-field"]) {
+    const field = app.locator(`${selector}.is-label-hidden`);
+    await expect(field).toBeVisible();
+    const widths = await field.evaluate((el) => ({ field: el.getBoundingClientRect().width, control: el.querySelector<HTMLElement>(".ks-slider, .ks-button, .ks-data-input")!.getBoundingClientRect().width, item: el.parentElement!.getBoundingClientRect().width }));
+    expect(Math.abs(widths.item - widths.field)).toBeLessThanOrEqual(1);
+    expect(Math.abs(widths.field - widths.control)).toBeLessThanOrEqual(4);
+  }
+  const inline = app.locator(".ks-slider-field:not(.is-label-hidden)");
+  const layout = await inline.evaluate((el) => ({ field: el.getBoundingClientRect().toJSON(), label: el.querySelector(".ks-field-label")!.getBoundingClientRect().toJSON(), slider: el.querySelector(".ks-slider")!.getBoundingClientRect().toJSON() }));
+  expect(layout.label.right).toBeLessThan(layout.slider.left);
+  expect(layout.field.width).toBeLessThan(300);
+  await capture(page, `row-fill-fields-${width}`);
+});

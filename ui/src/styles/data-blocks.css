@@ -417,4 +417,7 @@
 .ks-select-field > .ks-button { justify-content: space-between; text-align: start; }
 
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-input-field { display: flex; width: 100%; min-width: 0; }
+.ks-data-stack.is-row > .ks-data-stack-item.is-fill > :is(.ks-slider-field, .ks-select-field) { width: 100%; min-width: 0; }
+.ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-slider-field > .ks-slider { flex: 1 1 auto; min-width: 0; }
+.ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-select-field > .ks-select-button { flex: 1 1 auto; }
 .ks-input-field > .ks-field-label { flex-shrink: 0; }
