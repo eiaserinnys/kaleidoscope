@@ -1398,7 +1398,8 @@ pub fn child_blocks<'a>(block: &'a Block, pointer: &str) -> Vec<(String, &'a Blo
             )))
             .collect(),
         Block::Chat {
-            footer: Some(footer), ..
+            footer: Some(footer),
+            ..
         } => vec![(format!("{pointer}/footer"), footer.as_ref())],
         _ => Vec::new(),
     }
@@ -1581,7 +1582,10 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         } => bind!("value", value),
         Block::Sandbox { value: None, .. } => {}
         Block::Slider {
-            value, on_change, label, ..
+            value,
+            on_change,
+            label,
+            ..
         } => {
             bind!("value", value);
             act!("on_change", on_change);
@@ -1761,7 +1765,10 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::Toggle {
-            value, on_change, label, disabled
+            value,
+            on_change,
+            label,
+            disabled,
         } => {
             bind!("value", value);
             act!("on_change", on_change);
@@ -1770,7 +1777,12 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 bind!("disabled", disabled);
             }
         }
-        Block::Notice { message, error_id, actions, .. } => {
+        Block::Notice {
+            message,
+            error_id,
+            actions,
+            ..
+        } => {
             bind!("message", message);
             if let Some(error_id) = error_id {
                 bind!("error_id", error_id);
@@ -1814,11 +1826,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::Image { src, .. } | Block::Media { src, .. } => bind!("src", src),
-        Block::Chat { agents, .. } => {
-            if let Some(agents) = agents {
-                bind!("agents", agents);
-            }
-        }
+        Block::Chat { .. } => {}
         Block::HtmlView {
             value: Some(value), ..
         } => bind!("value", value),

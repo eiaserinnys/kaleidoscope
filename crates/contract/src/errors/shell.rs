@@ -134,27 +134,6 @@ error_catalog! { ENTRIES;
         message: "대화 첨부를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
         fix: "쉘을 업데이트하고 첨부를 다시 여세요"
     }
-    SHELL_AGENT_SESSION_ATTACH_REPLY_INVALID() {
-        class: Io,
-        place: "로컬 에이전트 연결",
-        cause: "에이전트 상태 명령이 다른 종류의 응답을 받았다",
-        message: "로컬 에이전트 상태를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
-        fix: "쉘을 업데이트하고 다시 시도하세요"
-    }
-    SHELL_AGENT_SESSION_ATTACHMENT_REPLY_INVALID() {
-        class: Io,
-        place: "로컬 에이전트 첨부 읽기",
-        cause: "첨부 명령이 다른 종류의 응답을 받았다",
-        message: "로컬 에이전트 첨부를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
-        fix: "쉘을 업데이트하고 첨부를 다시 여세요"
-    }
-    SHELL_AGENT_SESSION_FAILURE_DETAILS_MISSING() {
-        class: LocalAgentFailed,
-        place: "로컬 에이전트 실패 표시",
-        cause: "실패 상태에 원인 설명이 없다",
-        message: "로컬 에이전트가 실패했지만 원인을 받지 못했습니다. 에이전트를 다시 시도하세요.",
-        fix: "로컬 에이전트를 다시 시도하세요"
-    }
     SHELL_CANVAS_TRANSFER_UNSUPPORTED() {
         class: Unavailable,
         place: "캔버스 화면 연결",

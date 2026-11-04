@@ -50,7 +50,6 @@ macro_rules! error_catalog {
     };
 }
 
-pub mod agent;
 pub mod app;
 pub mod asset;
 pub mod conn;
@@ -69,7 +68,6 @@ pub mod storage;
 pub mod web;
 pub mod worker;
 
-pub use agent::*;
 pub use app::*;
 pub use asset::*;
 pub use conn::*;
@@ -95,7 +93,6 @@ pub const AREAS: &[(&str, &[ErrorEntry])] = &[
     ("DATA", data::ENTRIES),
     ("CONN", conn::ENTRIES),
     ("CONV", conv::ENTRIES),
-    ("AGENT", agent::ENTRIES),
     ("MEDIA", media::ENTRIES),
     ("PROCESS", process::ENTRIES),
     ("WEB", web::ENTRIES),

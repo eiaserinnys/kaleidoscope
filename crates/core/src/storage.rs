@@ -5,7 +5,9 @@ use chrono::Utc;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
-use kaleidoscope_contract::{errors, CoreError, DeviceState, SharedState};
+use kaleidoscope_contract::{
+    errors, migrate_window_state, AppVersion, CoreError, DeviceState, SharedState,
+};
 
 const FORMAT: u32 = 1;
 
@@ -38,12 +40,118 @@ struct DeviceFile {
 
 pub(crate) fn load_shared(data_dir: &Path) -> Result<SharedState, CoreError> {
     let path = data_dir.join("state.json");
-    let file: SharedFile = load_file(&path, "state.json")?;
-    if file.format == FORMAT {
-        Ok(file.shared)
-    } else {
-        move_broken_if_present(&path, "state.json")?;
-        Ok(SharedState::default())
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(SharedState::default())
+        }
+        Err(error) => {
+            return Err(errors::DESK_LOCAL_STATE_READ_FAILED(path.display())
+                .and_details(vec![error.to_string()]));
+        }
+    };
+    let raw: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(raw) => raw,
+        Err(_) => return recover_shared_state(&path),
+    };
+    let Some(raw_versions) = raw
+        .get("app_versions")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return recover_shared_state(&path);
+    };
+    let raw_versions = raw_versions.clone();
+    let mut without_versions = raw;
+    let Some(root) = without_versions.as_object_mut() else {
+        return recover_shared_state(&path);
+    };
+    root.insert("app_versions".into(), serde_json::Value::Array(Vec::new()));
+    let mut file: SharedFile = match serde_json::from_value(without_versions) {
+        Ok(file) => file,
+        Err(_) => return recover_shared_state(&path),
+    };
+    if file.format != FORMAT {
+        return recover_shared_state(&path);
+    }
+
+    let mut skipped_versions = Vec::new();
+    for raw_version in raw_versions {
+        match serde_json::from_value::<AppVersion>(raw_version.clone()) {
+            Ok(version) => file.shared.app_versions.push(version),
+            Err(reason) => {
+                let app_id = raw_version
+                    .get("app_id")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("알 수 없음");
+                let version_number = raw_version
+                    .get("version")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|version| u32::try_from(version).ok())
+                    .unwrap_or_default();
+                let error = errors::DESK_LOCAL_STATE_APP_VERSION_SKIPPED(
+                    path.display(),
+                    app_id,
+                    version_number,
+                    reason,
+                );
+                eprintln!(
+                    "{}: {}",
+                    error
+                        .id
+                        .as_deref()
+                        .unwrap_or("DESK_LOCAL_STATE_APP_VERSION_SKIPPED"),
+                    error.message
+                );
+                if app_id != "알 수 없음" && version_number != 0 {
+                    skipped_versions.push((app_id.to_owned(), version_number));
+                }
+            }
+        }
+    }
+    repair_windows_for_skipped_versions(&mut file.shared, &skipped_versions);
+    Ok(file.shared)
+}
+
+fn recover_shared_state(path: &Path) -> Result<SharedState, CoreError> {
+    move_broken_if_present(path, "state.json")?;
+    Ok(SharedState::default())
+}
+
+fn repair_windows_for_skipped_versions(
+    shared: &mut SharedState,
+    skipped_versions: &[(String, u32)],
+) {
+    for (app_id, skipped_version) in skipped_versions {
+        let builtin = crate::builtin::builtin_app(app_id);
+        let replacement = builtin.as_ref().map(|row| row.version.clone()).or_else(|| {
+            shared
+                .app_versions
+                .iter()
+                .filter(|version| version.app_id == *app_id)
+                .max_by_key(|version| version.version)
+                .cloned()
+        });
+        let Some(replacement) = replacement else {
+            continue;
+        };
+        for window in shared
+            .windows
+            .iter_mut()
+            .filter(|window| window.app_id == *app_id && window.app_version == *skipped_version)
+        {
+            window.state = migrate_window_state(&replacement.definition, &window.state);
+            window.app_version = replacement.version;
+            window.updated_at = replacement.created_at.clone();
+        }
+        if builtin.is_none() {
+            if let Some(app) = shared.apps.iter_mut().find(|app| app.id == *app_id) {
+                if app.current_version == *skipped_version {
+                    app.name = replacement.definition.name.clone();
+                    app.current_version = replacement.version;
+                    app.updated_at = replacement.created_at;
+                }
+            }
+        }
     }
 }
 

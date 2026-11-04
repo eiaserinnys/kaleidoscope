@@ -131,26 +131,6 @@ fn literal_timeline_rejects_invalid_waveforms_and_duplicate_ids() {
 }
 
 #[test]
-fn local_agent_configuration_cannot_depend_on_client_only_output() {
-    let mut app: Value =
-        serde_json::from_str(include_str!("../../core/src/tests/fixtures/local-agent.json")).unwrap();
-    app["requires"]["blocks"] = json!(12);
-    app["requires"]["modules"]["assets"] = json!(1);
-    app["requires"]["modules"]["client"] = json!(1);
-    app["assets"] = json!([{"id":"script","version":1}]);
-    app["client"] = json!({"runtime":"javascript","entry":{"id":"script","version":1},"outputs":{"agents":{"default":[]}}});
-    parse_app_definition(&app.to_string()).expect("클라이언트 출력을 쓰기 전 정의는 유효해야 합니다");
-    app["ui"]["agents"] = json!({"client":"agents"});
-    let error = parse_app_definition(&app.to_string()).unwrap_err();
-    assert!(
-        error.details.iter().any(|detail| detail.contains(
-            "/ui/agents: 코어에서 실행하는 에이전트 설정에는 클라이언트 출력을 쓸 수 없습니다"
-        )),
-        "예상한 설정 제약이 아닌 다른 오류: {error:?}"
-    );
-}
-
-#[test]
 fn save_file_expression_is_calculated_for_object_and_array_actions() {
     let action = json!({"save_file":{"suggested_name":{"expr":"'보고서' & '.txt'"},"mime":"text/plain","client":"change"}});
     for (value, pointer) in [

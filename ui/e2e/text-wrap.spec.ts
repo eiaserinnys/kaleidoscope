@@ -215,24 +215,6 @@ test("긴 사용자 말, 알림, 오류와 도구 이름이 360 폭 기록 안�
   for (const [scrollWidth, clientWidth] of widths.text) expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
 
-test("이전 에이전트의 실행 명령과 오류 명령이 360 폭 안에 든다", async ({ page }) => {
-  await page.setViewportSize({ width: 392, height: 732 });
-  await page.goto("/?preview=agent&agent-phase=awaiting_permission");
-  await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
-  const app = page.getByTestId("app-window-agent");
-  const command = app.locator(".ks-agent-session-command");
-  await expect(command).toBeVisible();
-  expect(await command.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  expect(await command.evaluate((element) => element.parentElement!.scrollWidth <= element.parentElement!.clientWidth)).toBe(true);
-
-  await page.goto("/?preview=agent&agent-phase=failed");
-  await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
-  const failedCommand = page.getByTestId("app-window-agent").locator(".ks-agent-session-command");
-  await expect(failedCommand).toBeVisible();
-  expect(await failedCommand.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-  expect(await failedCommand.evaluate((element) => element.parentElement!.scrollWidth <= element.parentElement!.clientWidth)).toBe(true);
-});
-
 test("마크다운 편집기의 표와 긴 코드 줄이 창 폭에 맞는다", async ({ page }) => {
   await page.setViewportSize({ width: 392, height: 732 });
   await page.goto("/?preview=md-editor");

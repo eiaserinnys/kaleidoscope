@@ -49,7 +49,6 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "feed": add("entries", block.entries); break;
     case "text": case "code": add("value", block.value); break;
     case "markdown": case "html_view": case "sandbox": add("value", block.value); break;
-    case "chat": add("agents", block.agents); break;
     case "select": add("options", block.options); break;
     case "input": add("min", block.min); add("max", block.max); add("step", block.step); add("focus", block.focus); break;
     case "progress": add("value", block.value); add("label", block.label); break;

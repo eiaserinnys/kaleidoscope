@@ -43,10 +43,11 @@ def capture(sb, app, name):
              'rect':{'x':20, 'y':20, 'width':620, 'height':680}})
 
 def main():
-    with tempfile.TemporaryDirectory(prefix='ks-agent-f-') as directory:
+    address, ui_lock = sandbox.acquire_ui_address()
+    with tempfile.TemporaryDirectory(prefix='ks-agent-f-') as directory, ui_lock:
         folder = Path(directory) / '작업폴더'
         folder.mkdir()
-        sb = sandbox.Sandbox(ROOT, OUT, folder)
+        sb = sandbox.Sandbox(ROOT, OUT, folder, address)
         spawn = sb._spawn
         def local_spawn(name, command, **env):
             if name in ('server', 'bridge'):
@@ -88,6 +89,20 @@ def main():
                 assert command.evaluate('element => element.scrollWidth <= element.clientWidth')
                 assert command.evaluate('element => element.parentElement.scrollWidth <= element.parentElement.clientWidth')
                 sb.core({'op':'window.set_rect','window_id':window_id,'rect':{'x':20,'y':20,'width':620,'height':680}})
+                dialog.get_by_role('button', name='취소', exact=True).press('Enter')
+                app.get_by_role('button', name='다시 시도', exact=True).wait_for()
+                app.get_by_role('button', name='에이전트 하나', exact=True).press('Enter')
+                first = app.get_by_role('button', name='에이전트 하나', exact=True)
+                app.get_by_role('button', name='에이전트 둘', exact=True).wait_for()
+                assert app.get_by_role('button', name='다시 시도', exact=True).count() == 0
+                capture(sb, app, '07-back-after-cancel')
+                first.press('Enter')
+                pick = app.get_by_role('button', name='폴더 선택', exact=True)
+                pick.wait_for()
+                capture(sb, app, '08-keyboard-folder')
+                assert pick.evaluate('element => document.activeElement === element'), page.evaluate('({tag: document.activeElement.tagName, classes: document.activeElement.className})')
+                pick.press('Enter')
+                dialog.wait_for(timeout=30000)
                 dialog.get_by_role('button', name='허용', exact=True).click()
                 app.get_by_role('textbox', name='메시지').wait_for(timeout=30000)
                 assert app.locator('.ks-window-title').inner_text() == '에이전트 하나'

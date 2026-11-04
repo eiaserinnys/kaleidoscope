@@ -65,9 +65,12 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
 }
 export function useRoving<T extends { key: string }>(items: T[], selected: unknown, scroll: RefObject<HTMLDivElement | null>, virtual?: Virtualizer<HTMLDivElement, Element>, rowOf?: (index: number) => number) {
   const [focusKey, setFocusKey] = useState<string | null>(() => items.find((item) => item.key === selected)?.key ?? items[0]?.key ?? null);
-  const entryKey = items.some((item) => item.key === focusKey) ? focusKey : items.find((item) => item.key === selected)?.key ?? items[0]?.key ?? null;
+  const previousIndex = useRef(0);
+  const entryKey = items.some((item) => item.key === focusKey) ? focusKey : focusKey === null
+    ? items.find((item) => item.key === selected)?.key ?? items[0]?.key ?? null
+    : items[Math.min(previousIndex.current, items.length - 1)]?.key ?? null;
   const entryIndex = Math.max(0, items.findIndex((item) => item.key === entryKey));
-  const setFocus = (index: number) => setFocusKey(items[index]?.key ?? null);
+  const setFocus = (index: number) => { previousIndex.current = index; setFocusKey(items[index]?.key ?? null); };
   const pending = useRef<string | null>(null);
   const initial = useRef(false);
   useEffect(() => {
@@ -77,7 +80,10 @@ export function useRoving<T extends { key: string }>(items: T[], selected: unkno
       if (index >= 0) { setFocus(index); virtual?.scrollToIndex(rowOf ? rowOf(index) : index, { align: "auto" }); }
     }
   }, [items, selected, virtual, rowOf]);
-  useEffect(() => { if (focusKey !== entryKey) setFocusKey(entryKey); }, [focusKey, entryKey]);
+  useEffect(() => {
+    previousIndex.current = entryIndex;
+    if (focusKey !== entryKey) setFocusKey(entryKey);
+  }, [focusKey, entryKey, entryIndex]);
   useEffect(() => {
     if (pending.current === null) return;
     const index = items.findIndex((item) => item.key === pending.current);

@@ -31,11 +31,12 @@ mod connection_snapshot_race_tests;
 mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
+mod process_tests;
 mod profiler_concurrency_tests;
 mod profiler_tests;
-mod process_tests;
 mod server_switch_tests;
 mod share_capture_tests;
+mod shared_state_recovery_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
 const MD_EDITOR_V3: &str = include_str!("tests/fixtures/md-editor-v3.json");
@@ -183,6 +184,18 @@ fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) ->
 }
 
 #[test]
+fn startup_removes_the_legacy_local_agent_directory() {
+    let temp = TempDir::new().unwrap();
+    let legacy = temp.path().join("local-agent");
+    fs::create_dir_all(&legacy).unwrap();
+    fs::write(legacy.join("old-record.json"), "old conversation").unwrap();
+
+    let _core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+
+    assert!(!legacy.exists());
+}
+
+#[test]
 fn link_start_reads_http_200_body_as_response_read_failure() {
     use std::io::Write;
     use std::net::TcpListener;
@@ -257,7 +270,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
         ("profiler", 3),
-        ("agent", 4),
+        ("agent", 5),
         ("slackbot", 2),
         ("explorer", 3),
         ("md-editor", 4),
@@ -405,23 +418,6 @@ fn retired_windows_from_another_device_are_deleted_during_sync() {
 }
 
 #[test]
-fn local_agent_is_available_and_reads_defaults_before_linking() {
-    let temp = TempDir::new().unwrap();
-    let definition = include_str!("tests/fixtures/local-agent.json");
-    let core = open_core(temp.path(), vec![definition.into()], &Arc::new(FakeHost::default()));
-    let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "test-agent");
-    let value = crate::app_storage::read(&core.inner, &window, "agents").unwrap();
-    assert!(!value.exists);
-    assert_eq!(value.revision, None);
-    assert!(!value.content.as_array().unwrap().is_empty());
-    assert!(matches!(
-        core.handle(CoreRequest::LocalAgentAttach { window_id: window }),
-        Ok(CoreReply::LocalAgentAttach { snapshot }) if snapshot.phase == kaleidoscope_contract::local_agent::LocalAgentPhase::ChoosingAgent
-    ));
-}
-
-#[test]
 fn builtin_agent_reads_defaults_before_linking() {
     let temp = TempDir::new().unwrap();
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
@@ -436,7 +432,7 @@ fn builtin_agent_reads_defaults_before_linking() {
         .shared
         .app_versions
         .iter()
-        .find(|version| version.app_id == "agent" && version.version == 4)
+        .find(|version| version.app_id == "agent" && version.version == 5)
         .unwrap()
         .definition;
     assert_eq!(definition.requires.blocks, 19);
@@ -3452,9 +3448,6 @@ mod conversation_http_tests;
 mod data_tests;
 mod oauth_tests;
 mod web_tests;
-
-mod local_agent_tests;
-mod local_agent_wiring_tests;
 
 #[test]
 fn storage_request_errors_report_the_failure_stage() {

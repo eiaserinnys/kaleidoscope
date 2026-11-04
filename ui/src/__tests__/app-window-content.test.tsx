@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +31,6 @@ it("기존 블록 이름을 정본 이름과 모드로 정규화한다", () => {
     [{ type: "code_editor", file: { permission: "docs", path: "main.rs" } }, { type: "code", file: { permission: "docs", path: "main.rs" } }],
     [{ type: "code_view", value: "fn main() {}" }, { type: "code", value: "fn main() {}", read_only: true }],
     [{ type: "agent_chat" }, { type: "chat" }],
-    [{ type: "agent_session", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent" }, on_select: { set_state: "agent" } }, { type: "chat", permission: "run", root: { permission: "work" }, agents: [], selected: { state: "agent" }, on_select: { set_state: "agent" } }],
     [{ type: "keypad", columns: 4, buttons: [], on_press: { set_state: "value" } }, { type: "button_grid", columns: 4, buttons: [], on_press: { set_state: "value" } }],
   ] as const;
   for (const [legacy, canonical] of aliases) expect(normalizeBlock(legacy as unknown as Block)).toEqual(canonical);
@@ -62,6 +61,178 @@ describe("app definition renderer", () => {
     first.focus();
     await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { visible: false } }); });
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음" })));
+  });
+
+  it("목록 항목을 키보드로 지우면 강조 단추 대신 다음 항목으로 초점을 옮긴다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-list-test", name: "목록 초점", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { items: [{ key: "a", title: "Alpha" }, { key: "b", title: "Beta" }, { key: "c", title: "Gamma" }] },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "list", items: { state: "items" } },
+        { type: "button", label: "올리기", variant: "primary", on_click: [{ set_state: "unused" }] },
+      ] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const alpha = await screen.findByRole("option", { name: "Alpha" });
+    alpha.focus();
+    fireEvent.keyDown(alpha, { key: "Delete" });
+    await act(async () => {
+      await store.call({ op: "window.set_state", window_id: "viewer-window", state: {
+        items: [{ key: "b", title: "Beta" }, { key: "c", title: "Gamma" }],
+      } });
+    });
+
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: "Beta" })));
+  });
+
+  it("목록이 창 내용의 뿌리여도 삭제 뒤 이웃으로 초점을 옮긴다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-root-list", name: "목록 초점", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { items: [{ key: "a", title: "Alpha" }, { key: "b", title: "Beta" }] },
+      ui: { type: "list", items: { state: "items" } },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const first = await screen.findByRole("option", { name: "Alpha" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "Delete" });
+    await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { items: [{ key: "b", title: "Beta" }] } }); });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: "Beta" })));
+  });
+
+  async function focusFixture(markup: string) {
+    const definition: AppDefinition = {
+      id: "focus-fixture", name: "초점 시험", requires: { blocks: 14, modules: {} },
+      permissions: [], state: {}, ui: { type: "text", value: "시험" },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    const { container } = render(<AppWindowContent store={store} windowId="viewer-window" />);
+    await screen.findByText("시험");
+    const body = container.querySelector(".ks-data-window-body")!;
+    const fixture = document.createElement("div");
+    fixture.innerHTML = markup;
+    body.append(fixture);
+    return fixture;
+  }
+
+  it("실제 목록의 끝 항목과 마지막 항목 삭제를 구분한다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-empty-list", name: "목록 초점", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { items: [{ key: "a", title: "Alpha" }, { key: "b", title: "Beta" }] },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "button", label: "앞 조작", on_click: [{ set_state: "unused" }] },
+        { type: "list", items: { state: "items" } },
+        { type: "button", label: "올리기", variant: "primary", on_click: [{ set_state: "unused" }] },
+      ] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const beta = await screen.findByRole("option", { name: "Beta" });
+    beta.focus();
+    fireEvent.keyDown(beta, { key: "Delete" });
+    await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { items: [{ key: "a", title: "Alpha" }] } }); });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("option", { name: "Alpha" })));
+    fireEvent.keyDown(document.activeElement!, { key: "Delete" });
+    await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { items: [] } }); });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "앞 조작" })));
+  });
+
+  it("repeat 항목이 남은 채 when 안의 단추만 바뀌면 화면 전환 규칙을 쓴다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-repeat-when", name: "반복 초점", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { items: [{ id: "a" }, { id: "b" }], visible: true },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "repeat", items: { state: "items" }, key: "id", template: {
+          type: "when", value: { state: "visible" }, child: { type: "button", label: "선택", on_click: [{ set_state: "visible", value: false }] },
+        } },
+        { type: "button", label: "다음 화면", variant: "primary", on_click: [{ set_state: "unused" }] },
+      ] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const first = (await screen.findAllByRole("button", { name: "선택" }))[0];
+    first.focus();
+    fireEvent.keyDown(first, { key: "Enter" });
+    const replacement = definition.state!.items;
+    await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { items: replacement, visible: false } }); });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음 화면" })));
+  });
+
+  it("모음이 when으로 사라지고 다른 형제에 단추가 생기면 화면 전환 규칙을 쓴다", async () => {
+    const definition: AppDefinition = {
+      id: "focus-sibling-when", name: "전환 초점", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { items: [{ id: "a" }], choosing: true, next: false },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "when", value: { state: "choosing" }, child: {
+          type: "repeat", items: { state: "items" }, key: "id", template: {
+            type: "button", label: "선택", on_click: [{ set_state: "unused" }],
+          },
+        } },
+        { type: "when", value: { state: "next" }, child: {
+          type: "button", label: "폴더 선택", variant: "primary", on_click: [{ set_state: "unused" }],
+        } },
+      ] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const first = await screen.findByRole("button", { name: "선택" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "Enter" });
+    await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { choosing: false, next: true } }); });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "폴더 선택" })));
+  });
+
+  it("같은 부모에서 가지가 바뀌면 새 화면의 강조 단추로 초점을 옮긴다", async () => {
+    const fixture = await focusFixture('<div><div role="list"><button>에이전트 하나</button></div><button>뒤로</button></div>');
+    const parent = fixture.firstElementChild!;
+    const first = screen.getByRole("button", { name: "에이전트 하나" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "Enter" });
+    const next = document.createElement("button");
+    next.className = "ks-button-emphasis";
+    next.textContent = "폴더 선택";
+    parent.replaceChild(next, first.parentElement!);
+    await waitFor(() => expect(document.activeElement).toBe(next));
+  });
+
+  it("모음에 새 조작이 함께 들어오면 이웃 대신 새 화면의 강조 단추로 옮긴다", async () => {
+    const fixture = await focusFixture('<div role="list"><button>이전 항목</button><button>남은 항목</button></div><button class="ks-button-emphasis">다음 화면</button>');
+    const group = fixture.firstElementChild!;
+    const first = screen.getByRole("button", { name: "이전 항목" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "Enter" });
+    const replacement = document.createElement("button");
+    replacement.textContent = "새 항목";
+    group.replaceChild(replacement, first);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음 화면" })));
+  });
+
+  it("승인 목록이 비면 말풍선 대신 대화 입력칸으로 초점을 옮긴다", async () => {
+    await focusFixture('<div><button>내 말풍선</button><div role="list"><button role="listitem">허용</button></div></div><textarea class="ks-agent-chat-input" aria-label="메시지"></textarea>');
+    const allow = screen.getByRole("listitem");
+    allow.focus();
+    fireEvent.keyDown(allow, { key: "Enter" });
+    allow.parentElement!.removeChild(allow);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "메시지" })));
+  });
+
+  it("마지막 목록 항목을 지우면 뒤의 강조 단추가 아닌 앞 조작에 초점을 둔다", async () => {
+    const fixture = await focusFixture('<button>앞 조작</button><div role="list"><button role="listitem">마지막 지우기</button></div><button class="ks-button-emphasis">올리기</button>');
+    const remove = screen.getByRole("listitem");
+    remove.focus();
+    fireEvent.keyDown(remove, { key: "Enter" });
+    fixture.children[1].removeChild(remove);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "앞 조작" })));
+  });
+
+  it("빈 목록 앞에 조작이 없으면 창 내용에 테두리 없이 초점을 둔다", async () => {
+    const fixture = await focusFixture('<div role="list"><button role="listitem">마지막 지우기</button></div><button class="ks-button-emphasis">올리기</button>');
+    const remove = screen.getByRole("listitem");
+    remove.focus();
+    fireEvent.keyDown(remove, { key: "Enter" });
+    fixture.firstElementChild!.removeChild(remove);
+    await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
   });
 
   it("shows an unknown block error while rendering its sibling block", async () => {

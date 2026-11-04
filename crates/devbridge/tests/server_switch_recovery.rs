@@ -33,40 +33,6 @@ fn wait_for(mut predicate: impl FnMut() -> bool) {
 fn connected(core: &Core, mode: ServerMode) -> bool {
     matches!(core.handle(CoreRequest::StateGet {}).unwrap(), CoreReply::StateGet { snapshot } if matches!(snapshot.link, LinkStatus::Connected { mode: actual, .. } if actual == mode))
 }
-fn open_agent(core: &Core) -> (String, String, String) {
-    let definition_json = include_str!("../../core/src/tests/fixtures/local-agent.json");
-    call(core, json!({"op":"app.import","definition_json":definition_json}));
-    let state = call(core, json!({"op":"state.get"}));
-    let workspace = state["snapshot"]["shared"]["workspaces"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let desktop = state["snapshot"]["shared"]["desktops"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let window = call(
-        core,
-        json!({"op":"window.open","desktop_id":desktop,"app_id":"test-agent"}),
-    )["window"]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    call(core, json!({"op":"data.attach","window_id":window}));
-    let definition: Value = serde_json::from_str(definition_json).unwrap();
-    let defaults = definition["storage"]["entries"][0]["default"]
-        .as_array()
-        .unwrap();
-    wait_for(|| {
-        let reply = call(core, json!({"op":"local_agent.attach","window_id":window}));
-        let agents = reply["snapshot"]["agents"].as_array().unwrap();
-        defaults
-            .iter()
-            .take(2)
-            .all(|expected| agents.iter().any(|agent| agent["id"] == expected["id"]))
-    });
-    (workspace, desktop, window)
-}
 fn config(dir: &Path, info: &EmbeddedServer, remote: &str) -> CoreConfig {
     CoreConfig {
         data_dir: dir.into(),
@@ -266,84 +232,6 @@ async fn pas_connection_is_available_during_both_server_switch_directions() {
     })
     .await
     .unwrap();
-}
-
-fn agent_binary() -> PathBuf {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let target = std::env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| "target".into());
-    let executable = root.join(target).join("debug").join(format!(
-        "kaleidoscope-acp-test-agent{}",
-        std::env::consts::EXE_SUFFIX
-    ));
-    if !executable.exists() {
-        let result = std::process::Command::new(env!("CARGO"))
-            .current_dir(root)
-            .args(["build", "-p", "kaleidoscope-acp-test-agent"])
-            .output()
-            .unwrap();
-        assert!(
-            result.status.success(),
-            "{}",
-            String::from_utf8_lossy(&result.stderr)
-        );
-    }
-    executable
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn real_embedded_agent_and_remote_switch() {
-    let temp = tempfile::tempdir().unwrap();
-    let fresh = EmbeddedServer::start(server_config(temp.path(), "fresh"))
-        .await
-        .unwrap();
-    let local = EmbeddedServer::start(server_config(temp.path(), "local"))
-        .await
-        .unwrap();
-    let remote = EmbeddedServer::start(server_config(temp.path(), "remote"))
-        .await
-        .unwrap();
-    let root = temp.path().to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        let host = Arc::new(TestHost(root.clone()));
-        let new_dir = root.join("new-device");
-        let new_core = Core::open(config(&new_dir, &fresh, &remote.server_url), host.clone()).unwrap();
-        wait_for(|| connected(&new_core, ServerMode::Embedded));
-        open_agent(&new_core);
-        new_core.shutdown();
-
-        let device = root.join("old-device");
-        std::fs::create_dir_all(&device).unwrap();
-        std::fs::write(device.join("link.json"), serde_json::to_vec(&json!({"format":1,"mode":"remote","server_url":remote.server_url,"device_id":remote.device_id,"device_name":"시험","token":remote.token})).unwrap()).unwrap();
-        let core = Core::open(config(&device, &local, &remote.server_url), host).unwrap();
-        wait_for(|| connected(&core, ServerMode::Remote));
-        call(&core, json!({"op":"link.use_local"}));
-        wait_for(|| connected(&core, ServerMode::Embedded));
-        let (workspace, desktop, window) = open_agent(&core);
-        let db_path = root.join("local.db");
-        wait_for(|| {
-            let db = rusqlite::Connection::open(&db_path).unwrap();
-            let workspaces: i64 = db.query_row("SELECT count(*) FROM workspaces WHERE id=?1 AND account_id=(SELECT account_id FROM mcp_principal WHERE id=1)", [&workspace], |r| r.get(0)).unwrap();
-            let desktops: i64 = db.query_row("SELECT count(*) FROM desktops WHERE id=?1 AND workspace_id=?2", [&desktop, &workspace], |r| r.get(0)).unwrap();
-            workspaces == 1 && desktops == 1
-        });
-        let executable = agent_binary();
-        call(&core, json!({"op":"storage.write","window_id":window,"entry":"agents","content":[{"id":"test","name":"시험 에이전트","command":executable,"args":[],"env":{}}],"expected_revision":null}));
-        wait_for(|| call(&core, json!({"op":"local_agent.attach","window_id":window}))["snapshot"]["agents"].as_array().unwrap().iter().any(|agent| agent["id"] == "test"));
-        call(&core, json!({"op":"window.set_state","window_id":window,"state":{"agent_id":"test"}}));
-        call(&core, json!({"op":"files.pick_folder","window_id":window,"permission":"work"}));
-        let mut hash = String::new();
-        wait_for(|| {
-            let snapshot = call(&core, json!({"op":"local_agent.attach","window_id":window}));
-            if let Some(value) = snapshot["snapshot"]["execution"]["spec_hash"].as_str() { hash = value.into(); true } else { false }
-        });
-        call(&core, json!({"op":"local_agent.allow","window_id":window,"spec_hash":hash}));
-        wait_for(|| call(&core, json!({"op":"local_agent.attach","window_id":window}))["snapshot"]["phase"] == "ready");
-        call(&core, json!({"op":"link.start","server_url":remote.server_url}));
-        wait_for(|| connected(&core, ServerMode::Remote));
-        core.shutdown();
-    }).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

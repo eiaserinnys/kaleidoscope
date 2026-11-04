@@ -14,7 +14,7 @@ describe("core error conversion", () => {
     expect(toCoreError(unavailable)).toEqual(unavailable);
   });
 
-  it.each(["unauthorized", "local_agent_failed"] as const)("preserves the %s error instead of stringifying it", (code) => {
+  it.each(["unauthorized"] as const)("preserves the %s error instead of stringifying it", (code) => {
     const error = { code, message: "접근이 거부되었습니다", details: [] };
     expect(isCoreError(error)).toBe(true);
     expect(toCoreError(error)).toEqual(error);

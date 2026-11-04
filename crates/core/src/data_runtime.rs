@@ -917,7 +917,6 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                 }
                 let handles = jobs(&inner, follow_up);
                 let due = run_due(&inner, Some(&job.window));
-                crate::local_agent::data_changed(&inner, &job.window);
                 inner.layout_signal.notify();
                 for handle in handles.into_iter().chain(due) {
                     let _ = handle.join();

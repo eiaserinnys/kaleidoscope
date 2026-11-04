@@ -191,7 +191,7 @@ pub(super) fn start_recorder(
 
 pub(super) fn send_prompt(
     app: &AppHandle,
-    core: &Core,
+    _core: &Core,
     out: &Path,
     image_dir: &Path,
     agent_window_id: &str,
@@ -239,7 +239,9 @@ pub(super) fn send_prompt(
         "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');input.dispatchEvent(new KeyboardEvent('keydown',{{key:'Enter',code:'Enter',bubbles:true,cancelable:true}}));return true;"
     ))?;
     let images = wait_prompt_images(image_dir, text)?;
-    wait_agent_phase(core, agent_window_id, LocalAgentPhase::Ready)?;
+    ui::wait_dom(app, &format!(
+        "const e=document.querySelector('[data-testid=\\\"app-window-{AGENT_APP_ID}\\\"]');const input=e?.querySelector('textarea[aria-label=\\\"메시지\\\"]');return !!input && !e.querySelector('.ks-agent-chat-working') && !e.querySelector('button[aria-label=\\\"멈춤\\\"]');"
+    ), "agent response completed")?;
     let focus = ui::evaluate(app, &format!(
         "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');return {{has_focus:document.hasFocus(),active:document.activeElement===input,selection:[input?.selectionStart,input?.selectionEnd],value:input?.value}};"
     ))?;

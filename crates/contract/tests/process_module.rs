@@ -25,12 +25,6 @@ fn process_permission_requires_declared_permission_and_versions() {
         },
         {
             let mut value = app.clone();
-            value["permissions"][0]["module"] = json!("local_agent");
-            value["requires"]["modules"]["local_agent"] = json!(1);
-            value
-        },
-        {
-            let mut value = app.clone();
             value["requires"]["modules"]["process"] = json!(0);
             value
         },
@@ -53,11 +47,8 @@ fn process_permission_requires_declared_permission_and_versions() {
 }
 
 #[test]
-fn process_hash_preserves_existing_agent_hash() {
-    use kaleidoscope_contract::{
-        local_agent::{agent_spec_hash, AgentSpec},
-        process::{spec_hash, ProcessSpec},
-    };
+fn process_hash_is_stable() {
+    use kaleidoscope_contract::process::{spec_hash, ProcessSpec};
     let execution = ProcessSpec {
         name: "이름".into(),
         command: "tool".into(),
@@ -66,17 +57,8 @@ fn process_hash_preserves_existing_agent_hash() {
             .into_iter()
             .collect(),
     };
-    let agent = AgentSpec {
-        id: "old".into(),
-        name: execution.name.clone(),
-        command: execution.command.clone(),
-        args: execution.args.clone(),
-        env: execution.env.clone(),
-        auth_methods: Some(vec!["ignored".into()]),
-    };
     assert_eq!(
-        agent_spec_hash(&agent),
+        spec_hash(&execution),
         "3a28a5f291ad35656879ede03b191574fef6d577e32c1e43921ea6885275559a"
     );
-    assert_eq!(spec_hash(&execution), agent_spec_hash(&agent));
 }

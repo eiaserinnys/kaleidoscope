@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { App, AppDefinition, AppVersion, AppWindow, LocalAgentSnapshot, ShellSnapshot } from "../src/contract/contract";
+import type { App, AppDefinition, AppVersion, AppWindow, ShellSnapshot } from "../src/contract/contract";
 import type { WindowData } from "../src/data/window-data";
 import {
   AppWindowContent,
@@ -15,7 +15,6 @@ import {
 import "@kaleidoscope/ui/styles.css";
 import "./harness.css";
 import galleryJson from "../../examples/block-gallery.json";
-import agentJson from "../../apps/agent.json";
 import sampleOne from "./assets/landscape.png";
 import sampleTwo from "./assets/shapes.png";
 import sampleTone from "./assets/tone.wav";
@@ -40,14 +39,6 @@ const mdEditor = mdEditorJson as AppDefinition;
 installShellDragGuard();
 const htmlReport = htmlReportJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
-const agentApp = agentJson as unknown as AppDefinition;
-// 이전 local_agent 정의도 아직 지원하므로 상태별 테스트는 해당 계약을 고정한다.
-const legacyAgentApp: AppDefinition = {
-  id: "agent", name: "에이전트", requires: { blocks: 8, modules: { local_agent: 1, files: 1, storage: 1 } },
-  permissions: [{ module: "local_agent", id: "run", label: "에이전트 실행" }, { module: "files", id: "work", access: "readwrite", label: "작업 폴더" }],
-  state: { agent_id: null }, storage: agentApp.storage,
-  ui: { type: "chat", permission: "run", root: { permission: "work" }, agents: { expr: "$storage.agents" }, selected: { state: "agent_id" }, on_select: { set_state: "agent_id" } },
-};
 const clientChatScriptUrl = URL.createObjectURL(new Blob([clientChatSource], { type: "text/javascript" }));
 const clientChatApp = {
   id: "client-chat-test", name: "클라이언트 채팅 시험",
@@ -106,44 +97,8 @@ const historyCount = historyParam !== null && Number.isInteger(Number(historyPar
 if (conversationMode) workspacePas.agent = {
   protocol: "conversation-v1", permission: "conversation", base_path: "api", namespace: "test", profile: "test", collection: "test", model_order: [], selected_model: "", title_template: "", initial_instruction_template: "", instructions_template: "", thread_entry: "thread",
 };
-const phaseAgent = new URLSearchParams(window.location.search).has("agent-phase") ? legacyAgentApp : agentApp;
-const definitions = [mdEditor, htmlReport, workspacePas, phaseAgent, clientChatApp, dataLayoutApp, gallery, dataViewsApp, storageDocument, ...previewDefinitions];
+const definitions = [mdEditor, htmlReport, workspacePas, clientChatApp, dataLayoutApp, gallery, dataViewsApp, storageDocument, ...previewDefinitions];
 const timestamp = "2026-10-28T00:00:00Z";
-const agentHarnessParams = new URLSearchParams(window.location.search);
-const agentPhases = ["choosing_agent", "choosing_folder", "awaiting_permission", "starting", "login_required", "ready", "responding", "failed", "ended"] as const;
-const agentPhase = agentPhases.find((phase) => phase === agentHarnessParams.get("agent-phase")) ?? "choosing_agent";
-const agentSelected = agentPhase === "choosing_agent" ? null : "agent-b";
-const agentFolderName = agentHarnessParams.has("short-folder") ? "프로젝트" : "프로젝트-앱-데이터-동기화-실험-long-folder-name";
-const longCommandArgument = "workspace-component-wrap-check-".repeat(10);
-const fakeLocalAgent: LocalAgentSnapshot = {
-  generation: `harness-${agentPhase}`,
-  phase: agentPhase,
-  agents: [{ id: "agent-a", name: "Agent A" }, { id: "agent-b", name: "Agent B" }, { id: "agent-c", name: "Agent C" }],
-  selected: agentSelected,
-  folder_name: agentSelected ? agentFolderName : null,
-  execution: agentPhase === "awaiting_permission" ? {
-    spec_hash: "harness-spec-hash", name: "Agent B", command: "npx", args: ["-y", "@agentclientprotocol/agent-b-acp", "--workspace", longCommandArgument], env: { OPENAI_API_KEY: "example-value-for-ellipsis" },
-  } : null,
-  auth_methods: agentPhase === "login_required" ? [{ id: "chat-gpt", name: "ChatGPT 로그인", description: "" }] : [],
-  controls: [
-    { id: "model", label: "모델", category: null, value: "balanced", kind: { kind: "select", options: [{ name: "모델", options: [{ id: "balanced", name: "균형" }, { id: "fast", name: "빠름" }] }] } },
-    { id: "approval", label: "자동 승인", category: null, value: false, kind: { kind: "boolean" } },
-    { id: "reasoning", label: "추론", category: null, value: "medium", kind: { kind: "select", options: [{ name: "추론", options: [{ id: "low", name: "낮음" }, { id: "medium", name: "중간" }, { id: "high", name: "높음" }] }] } },
-  ],
-  history: [
-    { id: "agent-user", kind: "user", text: "변경된 파일을 정리해 줘", at: timestamp, attachments: [] },
-    { id: "agent-assistant", kind: "assistant", text: "변경된 파일 세 개를 확인했습니다.", at: timestamp, attachments: [] },
-    ...(agentPhase === "responding" ? [{ id: "agent-progress", kind: "assistant" as const, text: "파일 목록을 살펴보고 있습니다.", at: timestamp, attachments: [] }] : []),
-  ],
-  stream_id: null,
-  text: "",
-  activity: { busy: agentPhase === "responding", tool: agentPhase === "responding" ? "파일 찾기" : null },
-  permissions: agentPhase === "ready" || agentPhase === "responding" ? [{
-    id: "permission-read-file", title: "파일 읽기", options: [{ id: "allow-once", label: "한 번 허용", kind: "allow_once" }, { id: "deny", label: "거부", kind: "deny" }],
-  }] : [],
-  queued: agentPhase === "responding" ? [{ id: "queued-harness", text: "그리고 최근 변경도 확인해 줘", attachments: [] }] : [],
-  failure: agentPhase === "failed" ? { code: "local_agent_failed", message: "에이전트를 시작하지 못했습니다", command: `npx ${longCommandArgument}` } : null,
-};
 
 function makeWindow(definition: AppDefinition, id: string, z: number): AppWindow {
   return {
@@ -172,9 +127,6 @@ const appVersions: AppVersion[] = definitions.map((definition) => ({
   definition,
   created_at: timestamp,
 }));
-const agentWindow = makeWindow(agentApp, "agent-window", 8);
-agentWindow.state.agent_id = fakeLocalAgent.selected;
-
 const initialSnapshot: ShellSnapshot = {
   embedded_available: false,
   shared: {
@@ -182,9 +134,9 @@ const initialSnapshot: ShellSnapshot = {
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
     desktops: [{ id: "desktop-1", workspace_id: "workspace-1", name: "작업", position: 0, created_at: timestamp, updated_at: timestamp }],
-  windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), agentWindow, makeWindow(clientChatApp, "client-chat-window", 8), ...previewDefinitions.map((definition, index) => makeWindow(definition, `${definition.id}-window`, 9 + index))],
+    windows: [makeWindow(mdEditor, "editor-window", 1), makeWindow(htmlReport, "html-report-window", 2), makeWindow(workspacePas, "pas-window", 3), makeWindow(dataLayoutApp, "data-window", 4), makeWindow(gallery, "gallery-window", 5), makeWindow(dataViewsApp, "views-window", 6), makeWindow(storageDocument, "storage-window", 7), makeWindow(clientChatApp, "client-chat-window", 8), ...previewDefinitions.map((definition, index) => makeWindow(definition, `${definition.id}-window`, 9 + index))],
   },
-  device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [], pc_access: [], local_agent_access: [], process_access: [] },
+  device: { active_workspace_id: "workspace-1", active_desktop_ids: { "workspace-1": "desktop-1" }, grants: [], pc_access: [], process_access: [] },
   supported: { blocks: 18, modules: { assets: 1, client: 4, files: 1, storage: 1 } },
   link: { state: "unlinked" },
   sharing: [],
@@ -282,7 +234,6 @@ const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["rea
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
-  localAgent: fakeLocalAgent,
   data: { sources: { pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne },
   folder: { root_path: "/fake/docs", root_name: "문서" },
@@ -379,7 +330,6 @@ function Harness() {
   const editorWindow = snapshot?.shared.windows.find((item) => item.app_id === "md-editor");
   const htmlReportWindow = snapshot?.shared.windows.find((item) => item.app_id === "html-report");
   const dataWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-controls");
-  const agentAppWindow = snapshot?.shared.windows.find((item) => item.app_id === "agent");
   const viewsWindow = snapshot?.shared.windows.find((item) => item.app_id === "data-views-test");
   const galleryWindow = snapshot?.shared.windows.find((item) => item.app_id === "block-gallery");
   const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas" || (coreUrl && snapshot.shared.app_versions.some((version) => version.app_id === item.app_id && version.version === item.app_version && version.definition.agent)));
@@ -417,10 +367,6 @@ function Harness() {
               ? <AppWindowContent store={store} windowId={pasWindow.id} />
               : <div className="ks-harness-loading">불러오는 중</div>}
           </div>
-        </section>
-        <section aria-label="agent" className={`ks-harness-window${previewOnly && previewAppId !== "agent" ? " is-hidden" : ""}`} data-app-id="agent" data-testid="app-window-agent">
-          <header className="ks-harness-window-header">agent_session</header>
-          <div className="ks-harness-window-content">{agentAppWindow ? <AppWindowContent store={store} windowId={agentAppWindow.id} /> : null}</div>
         </section>
         <section aria-label="client-chat-test" className={`ks-harness-window${previewOnly && previewAppId !== "client-chat-test" ? " is-hidden" : ""}`} data-app-id="client-chat-test" data-testid="app-window-client-chat">
           <header className="ks-harness-window-header">client-chat-test</header>

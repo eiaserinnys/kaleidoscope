@@ -1,4 +1,11 @@
 error_catalog! { ENTRIES;
+    DESK_LEGACY_AGENT_DATA_DIRECTORY_REMOVE_FAILED(reason) {
+        class: Io,
+        place: "이전 에이전트 기록 삭제",
+        cause: "이전 실행 기록 폴더를 삭제하지 못했다",
+        message: "이전 에이전트 기록 폴더를 지우지 못했습니다. 쉘 데이터 폴더의 삭제 권한을 확인하세요. 원인: {reason}",
+        fix: "쉘 데이터 폴더의 권한을 확인한 뒤 쉘을 다시 시작하세요"
+    }
     DESK_WORKSPACE_RENAME_NOT_FOUND() {
         class: NotFound,
         place: "작업 이름 바꾸기",
@@ -215,6 +222,13 @@ error_catalog! { ENTRIES;
         cause: "상태 파일을 읽지 못했다",
         message: "쉘 데이터 파일을 읽지 못했습니다. 파일 관리자에서 열리는지 확인한 뒤 쉘을 다시 시작하세요. 파일: {path}",
         fix: "파일 관리자에서 파일이 열리는지 확인하세요"
+    }
+    DESK_LOCAL_STATE_APP_VERSION_SKIPPED(path, app_id, version, reason) {
+        class: Io,
+        place: "공유 상태 복구",
+        cause: "저장된 앱 판 정의가 현재 계약과 맞지 않는다",
+        message: "상태 파일 {path}에서 앱 {app_id} 판 {version} 정의를 읽지 못했습니다. 이 판만 건너뛰고 나머지 공유 상태를 읽었습니다. 원인: {reason}",
+        fix: "앱에 남은 판이 있는지 확인하세요. 기본 앱은 쉘에 포함된 판을 사용합니다."
     }
     DESK_LOCAL_STATE_RECOVERY_RENAME_NOT_FOUND(path) {
         class: NotFound,

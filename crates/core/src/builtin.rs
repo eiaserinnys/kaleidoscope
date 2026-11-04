@@ -83,6 +83,10 @@ pub fn builtin_app(id: &str) -> Option<RegistryApp> {
 const MANIFEST: &str = include_str!("../../../apps/assets/manifest.json");
 const FILES: &[(&str, &[u8])] = &[
     (
+        "agent/client-v1.js",
+        include_bytes!("../../../apps/assets/agent/client-v1.js"),
+    ),
+    (
         "agent/client.js",
         include_bytes!("../../../apps/assets/agent/client.js"),
     ),

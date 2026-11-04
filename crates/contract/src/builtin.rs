@@ -20,10 +20,11 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-weather-snow", 1),
     ("builtin-weather-thunderstorm", 1),
     ("builtin-agent-client", 1),
+    ("builtin-agent-client", 2),
 ];
 
-// 날씨 자산은 목록의 앞부분이며 마지막 항목은 에이전트 client 자산이다.
-pub const WEATHER_ASSET_KEYS: &[(&str, u32)] = BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 1).0;
+// 날씨 자산 뒤에 에이전트 client의 보존 판과 현재 판이 온다.
+pub const WEATHER_ASSET_KEYS: &[(&str, u32)] = BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 2).0;
 pub const AGENT_ASSET_KEYS: &[(&str, u32)] = BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 1).1;
 
 pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
@@ -39,8 +40,8 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "agent",
         name: "에이전트",
-        version: 4,
-        updated_at: "2026-11-03T00:00:00Z",
+        version: 5,
+        updated_at: "2026-11-04T00:00:00Z",
         blocks: 19,
         modules: &[
             ("assets", 1),

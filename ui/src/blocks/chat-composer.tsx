@@ -56,8 +56,8 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
 
   return <div className="ks-agent-chat-input-area">
     {error ? <Notice role="alert" errorId={error.id}>{error.message}</Notice> : null}
-    {sharedWindows.length ? <div className="ks-agent-attachment-list">{sharedWindows.map(({ id, name }) => <AttachmentChip key={id} name={name} preview={<span className="ks-agent-attachment-chip-preview ks-share-chip-icon"><ScreenShare /></span>} removeLabel={`${name} 같이 보기 끄기`} onRemove={() => onRemoveShared(id)} />)}</div> : null}
-    {attachments.length ? <div className="ks-agent-attachment-list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={onPreview} onRemove={() => onAttachmentsChange(attachments.filter((item) => item.id !== attachment.id))} />)}</div> : null}
+    {sharedWindows.length ? <div className="ks-agent-attachment-list" role="list">{sharedWindows.map(({ id, name }) => <AttachmentChip key={id} name={name} preview={<span className="ks-agent-attachment-chip-preview ks-share-chip-icon"><ScreenShare /></span>} removeLabel={`${name} 같이 보기 끄기`} onRemove={() => onRemoveShared(id)} />)}</div> : null}
+    {attachments.length ? <div className="ks-agent-attachment-list" role="list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={onPreview} onRemove={() => onAttachmentsChange(attachments.filter((item) => item.id !== attachment.id))} />)}</div> : null}
     <div className="ks-agent-chat-input-row">
       <input type="file" multiple hidden ref={fileRef} disabled={disabled} onChange={(event) => {
         addAttachments(Array.from(event.currentTarget.files ?? []).map((file) => makeDraftAttachment(file, file.name)));
