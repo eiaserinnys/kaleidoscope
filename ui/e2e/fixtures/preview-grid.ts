@@ -24,4 +24,10 @@ export const previewGridFixtures = [
   { ...common, id: "preview-grid-outside", name: "탭 밖 격자 시험", ui: {
     type: "section", title: "표식", child: { type: "stack", direction: "column", fill: 0, children: [grid] },
   } },
+  { ...common, id: "preview-markdown-surface", name: "본문 글 시험", ui: {
+    type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
+      { label: "구역", child: { type: "section", title: "구역 제목", child: { type: "markdown", read_only: true, value: "구역 본문 글입니다." } } },
+      { label: "문서", child: { type: "markdown", read_only: true, value: "칸을 채우는 문서입니다." } },
+    ],
+  } },
 ] as unknown as AppDefinition[];

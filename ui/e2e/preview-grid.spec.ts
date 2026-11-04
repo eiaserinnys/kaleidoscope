@@ -81,3 +81,23 @@ test("탭 안팎 격자를 키보드로 왕복할 때 포커스 링을 보인다
     }
   }
 });
+
+test("구역 안 markdown은 바탕 면 없이 제목 선에서 시작하고, 칸을 채우는 문서는 면을 유지한다", async ({ page }) => {
+  const app = await open(page, "preview-markdown-surface");
+  const section = await app.locator(".ks-data-tab-panel:not([hidden])").evaluate((panel) => {
+    const view = panel.querySelector(".ks-markdown-view")!;
+    const text = view.querySelector(".ks-markdown-text")!.getBoundingClientRect();
+    const title = panel.querySelector(".ks-data-section-title")!.getBoundingClientRect();
+    return { background: getComputedStyle(view).backgroundColor, textLeft: text.left, titleLeft: title.left };
+  });
+  expect(section.background).toBe("rgba(0, 0, 0, 0)");
+  expect(Math.abs(section.textLeft - section.titleLeft)).toBeLessThanOrEqual(0.5);
+
+  await app.getByRole("tab", { name: "문서" }).click();
+  const filled = await app.locator(".ks-data-tab-panel:not([hidden]) > .ks-markdown-view").evaluate((view) => {
+    const style = getComputedStyle(view);
+    return { background: style.backgroundColor, padding: parseFloat(style.paddingLeft) };
+  });
+  expect(filled.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(filled.padding).toBeGreaterThan(0);
+});

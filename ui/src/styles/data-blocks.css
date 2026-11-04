@@ -72,7 +72,7 @@
   .ks-timeline-labels > div
 ) { padding-inline: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-feed-entry-nested { padding-inline-end: 0; }
-:is(.ks-data-section, .ks-dialog) .ks-markdown-view:not(.ks-data-tab-panel > .ks-markdown-view) { padding-inline: 0; }
+:is(.ks-data-section, .ks-dialog) .ks-markdown-view:not(.ks-data-tab-panel > .ks-markdown-view) { padding-inline: 0; background: transparent; }
 .ks-split-pane > .ks-data-section, .ks-data-tab-panel > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child, .ks-data-tab-panel > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child { overflow-y: auto; }
