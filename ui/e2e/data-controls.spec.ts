@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+test.use({ deviceScaleFactor: 2, launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
 const output = process.env.KS_DATA_CAPTURE_DIR;
 async function capture(page: import("@playwright/test").Page, name: string) {
   if (output) { mkdirSync(output, { recursive: true }); await page.screenshot({ path: join(output, `${name}.png`), fullPage: true }); }
@@ -220,4 +222,346 @@ test("넘친 목록에서 삭제 확인을 열고 닫아도 창 스크롤이 유
   await page.keyboard.press("Tab");
   await expect(lastButton).toBeFocused();
   expect(await frame.evaluate((node) => node.scrollTop)).toBe(0);
+});
+
+type ToolbarScenario = "split" | "tabsplit" | "variants" | "jizura" | "ktx" | "label";
+async function showToolbarScenario(page: import("@playwright/test").Page, width: number, scenario: ToolbarScenario) {
+  await page.setViewportSize({ width: width + 40, height: 1000 });
+  await page.goto("/?preview=data-controls");
+  await page.addStyleTag({ content: `.ks-harness-apps.is-preview .ks-harness-window { width: ${width}px; height: 900px; }` });
+  await page.evaluate(async (kind) => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const app = snapshot.shared.app_versions.find((item: any) => item.app_id === "data-controls");
+    const state = { title:"", artist:"", route:"", date:"", time:"", query:"", choice:"전체", mode:"전체", range:"전체", format:"전체" };
+    const input = (placeholder: string, key = "query", label?: string) => ({ type:"input", ...(placeholder === "앱 찾기" ? { kind:"search" } : {}), placeholder, ...(label ? { label } : {}), value:{ state:key }, on_change:{ set_state:key } });
+    const select = (style: string, options = ["전체", "설치됨"], key = "choice") => ({ type:"select", style, options, value:{ state:key }, on_change:{ set_state:key } });
+    const button = (label: string, extra = {}) => ({ type:"button", label, on_click:[{ set_state:"choice", value:"전체" }], ...extra });
+    const toolbar = (start: any[], end: any[] = []) => ({ type:"toolbar", start, end });
+    const text = (value: string, style = "title") => ({ type:"text", value, style });
+    const column = (children: any[]) => ({ type:"stack", direction:"column", children });
+    const icon = () => button("올리기", { icon:"upload", icon_only:true, variant:"ghost" });
+    const jizura = () => toolbar([
+      text("곡 정보", "body"), input("곡 제목", "title"), input("아티스트", "artist"),
+      select("segmented", ["전체", "가사", "영상"], "mode"), select("dropdown", ["전체", "하나", "둘", "셋", "넷", "다섯", "여섯"], "format"),
+      ...["열기", "저장", "AE용 내보내기", "초기화", "이용 안내", "사용법 안내"].map((label) => button(label)),
+    ]);
+    const ktx = () => toolbar([
+      select("segmented", ["전체", "고속"], "mode"), select("segmented", ["전체", "상행", "하행"], "range"),
+      input("출발 → 도착", "route"), input("YYYY-MM-DD", "date"), input("HH:MM~HH:MM", "time"),
+    ], [button("저장", { variant:"primary" }), button("신규"), button("삭제", { variant:"danger" })]);
+    app.definition.state = state;
+    app.definition.ui = kind === "split" ? { type:"split", direction:"row", sizes:[18,47,35], children:[
+      column([toolbar([text("카테고리")]), text("전체 · 설치됨", "body")]),
+      column([toolbar([input("앱 찾기")], [icon()]), text("앱 목록", "body")]),
+      column([toolbar([text("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본")], [text("제작자", "meta")]), text("앱 설명", "body"), toolbar([], [button("설치", { variant:"primary" })])]),
+    ] } : kind === "tabsplit" ? { type:"tabs", tabs:[{ label:"목록", child:{ type:"split", direction:"row", sizes:[50,50], column_below:500, children:[
+      column([toolbar([text("카테고리")]), text("전체", "body")]),
+      column([toolbar([input("앱 찾기")], [icon()]), text("앱 목록", "body")]),
+    ] } }] } : kind === "variants" ? column([
+      toolbar([text("카테고리")]), toolbar([input("앱 찾기")]), toolbar([select("dropdown")]),
+      toolbar([select("segmented")]), toolbar([button("설치", { variant:"primary" })]), toolbar([icon()]),
+      toolbar([input("앱 찾기")], [icon()]), toolbar([text("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본")], [select("dropdown")]),
+      toolbar([input("앱 찾기"), select("dropdown"), select("segmented")], [button("첫 번째"), button("두 번째"), button("세 번째")]),
+      { type:"section", title:"입력", child:text("앱 설명", "body") },
+    ]) : kind === "jizura" ? jizura() : kind === "ktx" ? ktx() : toolbar([], [input("찾기", "query", "검색")]);
+    app.version += 1;
+    const appWindow = snapshot.shared.windows.find((item: any) => item.app_id === "data-controls");
+    appWindow.app_version = app.version;
+    appWindow.state = { ...state };
+    harness.emit({ event:"state.changed", snapshot });
+  }, scenario);
+  const app = page.getByTestId("app-window-data-controls");
+  if (scenario === "split") await expect(app.getByText("카테고리", { exact: true })).toBeVisible();
+  if (scenario === "tabsplit") await expect(app.locator(".ks-data-toolbar")).toHaveCount(2);
+  if (scenario === "variants") await expect(app.locator(".ks-data-toolbar")).toHaveCount(9);
+  if (scenario === "jizura") await expect(app.getByRole("button", { name: "사용법 안내" })).toBeAttached();
+  if (scenario === "ktx") await expect(app.getByPlaceholder("HH:MM~HH:MM")).toBeAttached();
+  if (scenario === "label") await expect(app.getByLabel("검색")).toBeAttached();
+  return app;
+}
+
+async function checkToolbarGeometry(app: import("@playwright/test").Locator) {
+  const metrics = await app.locator(".ks-data-toolbar").evaluateAll((bars) => bars.map((bar) => {
+    const rect = bar.getBoundingClientRect();
+    const style = getComputedStyle(bar);
+    const probe = document.createElement("div");
+    probe.style.height = "var(--ks-bar-height)";
+    bar.append(probe);
+    const expected = probe.getBoundingClientRect().height;
+    probe.remove();
+    const controlHeight = parseFloat(style.getPropertyValue("--ks-control-height"));
+    return { x:rect.x, y:rect.y, width:rect.width, height:rect.height, expected, controlHeight, children:Array.from(bar.querySelectorAll(":scope > .ks-data-toolbar-group > .ks-data-toolbar-item")).map((item) => {
+      const child = item.getBoundingClientRect(); return { x:child.x, y:child.y, width:child.width, height:child.height };
+    }) };
+  }));
+  for (const bar of metrics) {
+    expect(bar.height).toBe(bar.expected);
+    for (const child of bar.children) {
+      expect(child.height).toBeLessThanOrEqual(bar.controlHeight + 0.5);
+      expect(Math.abs(child.y + child.height / 2 - (bar.y + bar.height / 2))).toBeLessThanOrEqual(1);
+    }
+  }
+  return metrics;
+}
+
+async function checkTabAndScroll(page: import("@playwright/test").Page, bar: import("@playwright/test").Locator) {
+  const controls = bar.locator("input:not([disabled]), button:not([disabled])");
+  const count = await controls.count();
+  expect(count).toBeGreaterThan(0);
+  await controls.first().focus();
+  for (let i = 0; i < count; i += 1) {
+    const control = controls.nth(i);
+    await expect(control).toBeFocused();
+    const visibility = await control.evaluate((node) => {
+      const bar = node.closest(".ks-data-toolbar")!;
+      const item = node.getBoundingClientRect(), track = bar.getBoundingClientRect();
+      return { left:item.left - track.left, right:track.right - item.right };
+    });
+    expect(visibility.left).toBeGreaterThanOrEqual(-1);
+    expect(visibility.right).toBeGreaterThanOrEqual(-1);
+    if (i + 1 < count) await page.keyboard.press("Tab");
+  }
+}
+
+test("도구 막대의 모든 조합은 같은 높이와 세로 가운데를 유지한다", async ({ page }) => {
+  for (const width of [1000, 360]) {
+    for (const scenario of ["split", "variants", "label"] as const) {
+      const app = await showToolbarScenario(page, width, scenario);
+      await capture(page, `${scenario}-${width}`);
+      const metrics = await checkToolbarGeometry(app);
+      if (output) writeFileSync(join(output, `${scenario}-${width}.json`), JSON.stringify(metrics, null, 2));
+      if (scenario === "variants" && width === 360) {
+        await checkTabAndScroll(page, app.locator(".ks-data-toolbar").nth(7));
+        await checkTabAndScroll(page, app.locator(".ks-data-toolbar").last());
+        expect(await app.locator(".ks-data-window-body").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+      }
+    }
+  }
+});
+
+test("붐비는 도구 막대의 모든 조작을 가로 스크롤과 Tab으로 사용할 수 있다", async ({ page }) => {
+  for (const width of [1000, 800, 360]) {
+    for (const scenario of ["jizura", "ktx"] as const) {
+      const app = await showToolbarScenario(page, width, scenario);
+      const bar = app.locator(".ks-data-toolbar");
+      await capture(page, `${scenario}-${width}`);
+      const metrics = await checkToolbarGeometry(app);
+      if (output) writeFileSync(join(output, `${scenario}-${width}.json`), JSON.stringify(metrics, null, 2));
+      if (width === 360) {
+        expect(await bar.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+        await bar.evaluate((node) => { node.scrollLeft = node.scrollWidth; });
+        await expect(bar.locator("button").last()).toBeInViewport();
+        await capture(page, `${scenario}-360-scrolled`);
+        await bar.locator("button").last().click();
+        await bar.evaluate((node) => { node.scrollLeft = 0; });
+      }
+      await checkTabAndScroll(page, bar);
+      expect(await app.locator(".ks-data-window-body").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+      if (width === 360 && scenario === "jizura") {
+        await bar.locator(".ks-select-button").click();
+        await expect(page.getByRole("menuitem", { name: "여섯" })).toBeVisible();
+        await capture(page, "jizura-360-menu");
+        await page.keyboard.press("Escape");
+      }
+    }
+  }
+});
+
+test("긴 제목은 말줄임되고 끝 조작은 막대에 남는다", async ({ page }) => {
+  for (const [width, scenario] of [[1000, "split"], [360, "variants"]] as const) {
+    const app = await showToolbarScenario(page, width, scenario);
+    const bar = scenario === "split" ? app.locator(".ks-data-toolbar").nth(2) : app.locator(".ks-data-toolbar").nth(7);
+    const text = bar.locator(".ks-data-text.is-title");
+    await expect(text).toHaveText("kaleidoscope 랜딩 페이지 시안 3판 디렉터 검토본");
+    const geometry = await bar.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      const title = node.querySelector<HTMLElement>(".ks-data-text.is-title")!;
+      const end = node.querySelector<HTMLElement>(".ks-data-toolbar-group.is-end")!.getBoundingClientRect();
+      return { clipped: title.scrollWidth > title.clientWidth, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, endLeft: end.left - r.left, endRight: r.right - end.right };
+    });
+    expect(geometry.clipped).toBe(true);
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+    expect(geometry.endLeft).toBeGreaterThanOrEqual(0);
+    expect(geometry.endRight).toBeGreaterThanOrEqual(0);
+    await capture(page, `revision-title-${width}`);
+  }
+});
+
+test("스크롤바가 있어도 도구 막대의 조작은 같은 세로 중심이다", async ({ page }) => {
+  const app = await showToolbarScenario(page, 360, "jizura");
+  const bar = app.locator(".ks-data-toolbar");
+  const measured = await bar.evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    const items = [...node.querySelectorAll<HTMLElement>(".ks-data-toolbar-item")].map((item) => {
+      const r = item.getBoundingClientRect(); return r.y + r.height / 2;
+    });
+    return { center:rect.y + (rect.height - parseFloat(style.borderBottomWidth)) / 2, items, scrollbar:rect.height - node.clientHeight - parseFloat(style.borderBottomWidth) };
+  });
+  expect(measured.scrollbar).toBeGreaterThan(0);
+  for (const center of measured.items) expect(Math.abs(center - measured.center)).toBeLessThanOrEqual(1);
+  await capture(page, "revision-scrollbar-360");
+});
+
+test("Tab 초점은 막대 가장자리에서 테두리 여백을 지킨다", async ({ page }) => {
+  const app = await showToolbarScenario(page, 360, "jizura");
+  const bar = app.locator(".ks-data-toolbar");
+  const last = bar.getByRole("button", { name:"사용법 안내" });
+  await bar.locator("input").first().focus();
+  for (let i = 0; i < await bar.locator("input, button").count() - 1; i += 1) await page.keyboard.press("Tab");
+  await expect(last).toBeFocused();
+  const gap = await last.evaluate((node) => {
+    const track = node.closest(".ks-data-toolbar")!.getBoundingClientRect();
+    return track.right - node.getBoundingClientRect().right;
+  });
+  expect(gap).toBeGreaterThanOrEqual(4);
+  await capture(page, "revision-focus-360");
+});
+
+test("가로 넘침이 있는 막대만 세로 휠을 가로 스크롤로 바꾸고 끝에서는 전달한다", async ({ page }) => {
+  const app = await showToolbarScenario(page, 360, "jizura");
+  const bar = app.locator(".ks-data-toolbar");
+  await bar.hover();
+  await page.mouse.wheel(0, 160);
+  await expect.poll(() => bar.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  const edgeBubbles = await bar.evaluate((node) => {
+    node.scrollLeft = node.scrollWidth;
+    return node.dispatchEvent(new WheelEvent("wheel", { deltaY:120, bubbles:true, cancelable:true }));
+  });
+  expect(edgeBubbles).toBe(true);
+  await capture(page, "revision-wheel-360");
+  const wide = await showToolbarScenario(page, 1000, "label");
+  const wideBar = wide.locator(".ks-data-toolbar");
+  expect(await wideBar.evaluate((node) => node.dispatchEvent(new WheelEvent("wheel", { deltaY:120, bubbles:true, cancelable:true })))).toBe(true);
+});
+
+for (const [scenario, width, label] of [["ktx", 360, "저장"], ["jizura", 360, "사용법 안내"], ["ktx", 1000, "저장"]] as const) {
+  test(`${scenario} ${width} 막대는 초점 테두리 아래 여백을 보존한다`, async ({ page }) => {
+    const app = await showToolbarScenario(page, width, scenario);
+    const bar = app.locator(".ks-data-toolbar");
+    const control = bar.getByRole("button", { name:label, exact:true });
+    await page.keyboard.press("Tab");
+    await control.focus();
+    const geometry = await control.evaluate((node) => {
+      const track = node.closest<HTMLElement>(".ks-data-toolbar")!;
+      const r = track.getBoundingClientRect(), c = node.getBoundingClientRect();
+      const style = getComputedStyle(node), trackStyle = getComputedStyle(track);
+      return { top:c.top-r.top, bottom:c.bottom-r.top,
+        outlineBottom:c.bottom-r.top+parseFloat(style.outlineOffset)+parseFloat(style.outlineWidth),
+        clipBottom:track.clientTop+track.clientHeight,
+        scrollbar:r.height-track.clientHeight-parseFloat(trackStyle.borderBottomWidth) };
+    });
+    await capture(page, `focus-${scenario}-${width}-full`);
+    if (output) await bar.screenshot({ path:join(output, `focus-${scenario}-${width}-detail.png`) });
+    expect(geometry.top).toBe(8);
+    expect(geometry.bottom).toBe(40);
+    expect(geometry.clipBottom).toBeGreaterThanOrEqual(geometry.outlineBottom);
+    expect(geometry.scrollbar).toBe(width === 360 ? 4 : 0);
+  });
+}
+
+test("빈 묶음은 간격을 차지하지 않고 끝 묶음만 있어도 오른쪽을 지킨다", async ({ page }) => {
+  await page.setViewportSize({ width:400, height:800 });
+  await page.goto("/?preview=market");
+  await page.addStyleTag({ content:".ks-harness-apps.is-preview .ks-harness-window { width:360px; height:600px; }" });
+  const app = page.getByTestId("app-window-market");
+  const bars = app.locator(".ks-data-toolbar");
+  await expect(bars).toHaveCount(4);
+  await bars.nth(2).scrollIntoViewIfNeeded();
+  const rightInset = (bar: import("@playwright/test").Locator) => bar.evaluate((node) => {
+    const items = [...node.querySelectorAll(".ks-data-toolbar-item")];
+    return node.getBoundingClientRect().right-items.at(-1)!.getBoundingClientRect().right;
+  });
+  await capture(page, "market-converter-insets-360");
+  expect(await rightInset(bars.nth(2))).toBe(12);
+  expect(await rightInset(bars.nth(3))).toBe(12);
+  const endOnly = await showToolbarScenario(page, 360, "label");
+  expect(await rightInset(endOnly.locator(".ks-data-toolbar"))).toBe(12);
+});
+
+test("기본 앱은 최소 창에서는 두 줄이고 넓은 창에서는 기존 한 줄이다", async ({ page }) => {
+  for (const id of ["reader", "market", "earth", "profiler"]) {
+    for (const width of [360, 1000]) {
+      await page.setViewportSize({ width:width + 40, height:400 });
+      await page.goto(`/?preview=${id}`);
+      await page.addStyleTag({ content:`.ks-harness-apps.is-preview .ks-harness-window { width:${width}px; height:240px; }` });
+      const app = page.getByTestId(`app-window-${id}`);
+      const bars = app.locator(".ks-data-toolbar");
+      await expect(bars).toHaveCount((id === "market" ? 2 : 1) * (width === 360 ? 2 : 1));
+      if (id === "market" && width === 360) await expect(app.getByText("KRW", { exact:true })).toBeVisible();
+      const measurements = await bars.evaluateAll((nodes) => nodes.map((node) => ({
+        height:node.getBoundingClientRect().height, client:node.clientWidth, scroll:node.scrollWidth,
+        clippedTexts:[...node.querySelectorAll<HTMLElement>(".ks-data-text")].filter((text) => text.scrollWidth > text.clientWidth + 1).map((text) => text.textContent),
+        items:[...node.querySelectorAll<HTMLElement>(".ks-data-toolbar-item")].map((item) => { const r = item.getBoundingClientRect(), b = node.getBoundingClientRect(); return {left:r.left - b.left, right:b.right - r.right, width:r.width}; }),
+      })));
+      for (const bar of measurements) {
+        expect(bar.height).toBe(49);
+        if (width === 360) {
+          expect(bar.scroll).toBeLessThanOrEqual(bar.client + 1);
+          expect(bar.clippedTexts).toEqual([]);
+          for (const item of bar.items) {
+            expect(item.left).toBeGreaterThanOrEqual(-1);
+            expect(item.right).toBeGreaterThanOrEqual(-1);
+          }
+        }
+      }
+      if (output) await app.screenshot({ path:join(output, `revision-${id}-${width}.png`) });
+      if (id === "market" && width === 360) {
+        await bars.nth(2).scrollIntoViewIfNeeded();
+        if (output) await app.screenshot({ path:join(output, "revision-market-converter-360.png") });
+      }
+    }
+  }
+});
+
+test("기본 앱은 폭 전환 뒤에도 고른 상태와 입력을 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width:400, height:400 });
+  await page.goto("/?preview=reader");
+  const style = await page.addStyleTag({ content:".ks-harness-apps.is-preview .ks-harness-window { width:360px; height:240px; }" });
+  const app = page.getByTestId("app-window-reader");
+  const bars = app.locator(".ks-data-toolbar");
+  await expect(bars).toHaveCount(2);
+  const search = app.getByPlaceholder("검색");
+  await search.fill("kaleidoscope");
+  await search.blur();
+  await expect.poll(async () => page.evaluate(async () => {
+    const { snapshot } = await (window as any).__ksHarness.call({ op:"state.get" });
+    return snapshot.shared.windows.find((item: any) => item.app_id === "reader").state.search_input;
+  })).toBe("kaleidoscope");
+  await style.evaluate((node) => { node.textContent = ".ks-harness-apps.is-preview .ks-harness-window { width:1000px; height:240px; }"; });
+  await expect(bars).toHaveCount(1);
+  await expect(app.getByPlaceholder("검색")).toHaveValue("kaleidoscope");
+});
+
+test("기본 앱의 두 줄 전환은 글꼴 폭 여유를 더한 막대 경계에서 일어난다", async ({ page }) => {
+  const cases = [
+    { id:"reader", boundary:558, narrow:2, wide:1 },
+    { id:"market", boundary:614, narrow:4, wide:3 },
+    { id:"market", boundary:715, narrow:3, wide:2 },
+    { id:"earth", boundary:612, narrow:2, wide:1 },
+    { id:"profiler", boundary:442, narrow:2, wide:1 },
+  ];
+  for (const { id, boundary, narrow, wide } of cases) {
+    await page.setViewportSize({ width:1040, height:400 });
+    await page.goto(`/?preview=${id}`);
+    const style = await page.addStyleTag({ content:`.ks-harness-apps.is-preview .ks-harness-window { width:${boundary + 2}px; height:240px; }` });
+    const app = page.getByTestId(`app-window-${id}`);
+    await expect(app.locator(".ks-data-window")).toHaveJSProperty("clientWidth", boundary);
+    await expect(app.locator(".ks-data-toolbar")).toHaveCount(narrow);
+    await style.evaluate((node, width) => { node.textContent = `.ks-harness-apps.is-preview .ks-harness-window { width:${width + 3}px; height:240px; }`; }, boundary);
+    await expect(app.locator(".ks-data-window")).toHaveJSProperty("clientWidth", boundary + 1);
+    await expect(app.locator(".ks-data-toolbar")).toHaveCount(wide);
+  }
+});
+
+test("탭 안 분할의 도구 막대는 쌓인 칸과 나란한 칸에서 높이를 유지한다", async ({ page }) => {
+  for (const width of [360, 1000]) {
+    const app = await showToolbarScenario(page, width, "tabsplit");
+    const split = app.locator(".ks-split");
+    if (width === 360) await expect(split).toHaveClass(/is-stacked/);
+    else await expect(split).not.toHaveClass(/is-stacked/);
+    await checkToolbarGeometry(app);
+    await capture(page, `revision-tabsplit-${width}`);
+  }
 });
