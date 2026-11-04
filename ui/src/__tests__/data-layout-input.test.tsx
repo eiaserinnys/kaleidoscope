@@ -10,6 +10,7 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
+import blockGallery from "../../../examples/block-gallery.json";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -490,7 +491,7 @@ it("반응형 분할은 자기 폭으로 방향을 바꾸면서 자식을 유지
     observe(target: Element) { observed = target; }
     disconnect() {}
   });
-  const definition: AppDefinition = { id: "responsive-split", name: "분할", requires: { blocks: 26, modules: {} }, permissions: [], state: { value: "처음" },
+  const definition: AppDefinition = { id: "responsive-split", name: "분할", requires: { blocks: blockGallery.requires.blocks, modules: {} }, permissions: [], state: { value: "처음" },
     ui: { type: "split", direction: "row", column_below: 700, children: [
       { type: "input", value: { state: "value" }, on_change: { set_state: "value" } }, { type: "text", value: "둘째" }, { type: "text", value: "셋째" },
     ] } as Block };
