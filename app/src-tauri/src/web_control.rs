@@ -22,8 +22,8 @@ struct TargetEntry {
     role: String,
     _name: String,
     _value: String,
-    _center_x: f64,
-    _center_y: f64,
+    center_x: f64,
+    center_y: f64,
     disabled: bool,
     readonly: bool,
 }
@@ -393,8 +393,8 @@ fn read_view(
                     role: role.into(),
                     _name: name.into(),
                     _value: value.into(),
-                    _center_x: center_x,
-                    _center_y: center_y,
+                    center_x,
+                    center_y,
                     disabled,
                     readonly,
                 },
@@ -538,12 +538,6 @@ fn perform(
         )),
         WindowAction::Click { gesture, .. } => {
             let (x, y) = center.unwrap();
-            dispatch(
-                view,
-                id,
-                "Input.dispatchMouseEvent",
-                json!({"type":"mouseMoved","x":x,"y":y}),
-            )?;
             for count in 1..=if *gesture == Some(PointGesture::DoubleClick) {
                 2
             } else {
@@ -779,44 +773,10 @@ pub(crate) fn control(
             };
             let center = if let Some(entry) = &entry {
                 let n = number.unwrap().to_string();
-                let model = match call(
-                    view,
-                    "DOM.getBoxModel",
-                    json!({"backendNodeId":entry.backend_node_id}),
-                ) {
-                    Ok(m) => m,
-                    Err(_) => {
-                        return error(errors::SHELL_WINDOW_CONTROL_REFERENCE_STALE(&n), false)
-                    }
-                };
-                let viewport = match call(
-                    view,
-                    "Runtime.evaluate",
-                    json!({"expression":"({width:window.innerWidth,height:window.innerHeight})","returnByValue":true}),
-                ) {
-                    Ok(v) => v,
-                    Err(e) => return error(ax_error(id, e), false),
-                };
-                let dimensions = &viewport["result"]["value"];
-                if visible_bounds(
-                    &model,
-                    dimensions["width"].as_f64().unwrap_or(0.0),
-                    dimensions["height"].as_f64().unwrap_or(0.0),
-                )
-                .is_none()
-                {
-                    return error(errors::SHELL_WINDOW_CONTROL_TARGET_HIDDEN(&n), false);
-                }
                 if entry.disabled {
                     return error(errors::SHELL_WINDOW_CONTROL_TARGET_DISABLED(&n), false);
                 }
-                match visible_point(view, id, entry.backend_node_id) {
-                    Ok(Some(point)) => Some(point),
-                    Ok(None) => {
-                        return error(errors::SHELL_WINDOW_CONTROL_TARGET_HIDDEN(&n), false)
-                    }
-                    Err(e) => return error(e, false),
-                }
+                Some((entry.center_x, entry.center_y))
             } else {
                 None
             };
@@ -902,11 +862,14 @@ mod product_tests {
             TargetEntry {
                 readonly: true,
                 disabled: true,
+                center_x: 25.0,
+                center_y: 40.0,
                 ..old.clone()
             },
         );
         let current = current_target(&state, 1, &old).unwrap();
         assert!(current.readonly && current.disabled);
+        assert_eq!((current.center_x, current.center_y), (25.0, 40.0));
         state.targets.get_mut(&1).unwrap().backend_node_id = 43;
         assert!(current_target(&state, 1, &old).is_none());
     }
