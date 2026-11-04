@@ -16,6 +16,7 @@ import {
   Menu,
   Notice,
   Plus,
+  Settings,
   TextInput,
   UpdateReady,
   flushEditors,
@@ -33,21 +34,21 @@ import {
   type ShellStore,
   type Workspace,
 } from "@kaleidoscope/ui";
-import { ServerPanel, serverLabel } from "./server-panel";
+import { serverLabel } from "./server-label";
+import { ShellSettings } from "./shell-settings";
 import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
 
-type OpenMenu =
-  | { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] }
-  | { kind: "link"; anchor: HTMLElement };
+type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
 
 export function Shell({ store }: { store: ShellStore }) {
   useWindowControlHost(store);
   const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
+  const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; kind: "gear" | "server"; sequence: number } | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingDesktopId, setRenamingDesktopId] = useState<string | null>(null);
@@ -127,32 +128,43 @@ export function Shell({ store }: { store: ShellStore }) {
     }
   }), [newWindowRect, runCommand, store]);
 
-  const openLinkMenu = (anchor: HTMLElement) => {
-    setMenu({ kind: "link", anchor });
+  const openSettings = (anchor: HTMLElement, kind: "gear" | "server") => {
+    closeMenu();
+    setSettings((current) => current
+      ? { ...current, kind, sequence: current.sequence + 1 }
+      : { anchor, origin: kind, kind, sequence: 0 });
   };
-
-  const linkAnchor = menu?.kind === "link" ? menu.anchor : null;
+  const closeSettings = (restoreFocus = true) => {
+    if (restoreFocus && settings) {
+      const target = settings.anchor.isConnected ? settings.anchor : document.querySelector<HTMLElement>(settings.origin === "server" ? ".ks-shell-bar .shell-link-button" : '.ks-shell-bar button[aria-label="설정"]');
+      target?.focus();
+    }
+    setSettings(null);
+  };
   const serverButton = snapshot ? (
-    <Button className="ks-button-quiet shell-link-button" onClick={(event) => openLinkMenu(event.currentTarget)} aria-label={serverLabel(snapshot)} aria-expanded={linkAnchor !== null}>
+    <Button className="ks-button-quiet shell-link-button" onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabel(snapshot)}>
       <span aria-hidden="true" className={`shell-server-dot is-${snapshot.link.state}`} />
       <span className="ks-truncate">{serverLabel(snapshot)}</span>
     </Button>
   ) : null;
-  const serverPanel = snapshot && linkAnchor ? <ServerPanel snapshot={snapshot} anchor={linkAnchor} onClose={closeMenu} call={runCommand} /> : null;
+  const settingsButton = <IconButton aria-label="설정" title="설정" pressed={settings !== null} onClick={(event) => {
+    if (settings) closeSettings(); else openSettings(event.currentTarget, "gear");
+  }}><Settings /></IconButton>;
+  const settingsScreen = snapshot && settings ? <ShellSettings snapshot={snapshot} entry={settings} onClose={() => closeSettings()} call={runCommand} /> : null;
 
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
   if (!activeWorkspace || !activeDesktop) {
-    return <main className="app-root">
-      <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}</div></header>
+    return <main className="app-root" data-settings-open={settings ? "" : undefined}>
+      <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}{settingsButton}</div></header>
       <EmptyState
         icon={<LayoutGrid size="empty" />}
         text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
         action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined}
       />
-      {serverPanel}
+      {settingsScreen}
     </main>;
   }
 
@@ -162,6 +174,7 @@ export function Shell({ store }: { store: ShellStore }) {
     .sort((a, b) => a.position - b.position);
 
   const openAppMenu = (anchor: HTMLElement) => {
+    closeSettings(false);
     const builtins = new Set<string>(BUILTIN_APP_IDS);
     const sortApps = (apps: ShellSnapshot["shared"]["apps"]) => apps.slice().sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
     const builtinApps = sortApps(snapshot.shared.apps.filter((app) => builtins.has(app.id)));
@@ -223,7 +236,7 @@ export function Shell({ store }: { store: ShellStore }) {
         onSelect: () => void runCommand({ op: "workspace.delete", workspace_id: activeWorkspace.id }),
       },
     ];
-    setMenu({ kind: "items", anchor, entries });
+    setMenu({ kind: "items", anchor, entries: entries.map((entry) => "onSelect" in entry && entry.onSelect ? { ...entry, onSelect: () => { closeSettings(false); return entry.onSelect?.(); } } : entry) });
   };
 
   const openDesktopMenu = (anchor: HTMLElement, desktop: Desktop) => {
@@ -277,6 +290,7 @@ export function Shell({ store }: { store: ShellStore }) {
   };
 
   const createDesktop = () => {
+    closeSettings(false);
     const name = nextName("데스크톱", desktops.map((item) => item.name));
     void runCommand({ op: "desktop.create", workspace_id: activeWorkspace.id, name });
   };
@@ -300,7 +314,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
 
   return (
-    <main className="app-root">
+    <main className="app-root" data-settings-open={settings ? "" : undefined}>
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar">
         <BrandMark />
@@ -343,9 +357,9 @@ export function Shell({ store }: { store: ShellStore }) {
                   />
                 ) : (
                   <button
-                    aria-pressed={desktop.id === activeDesktop.id}
-                    className={`ks-desktop-tab${desktop.id === activeDesktop.id ? " ks-desktop-tab-active" : ""}`}
-                    onClick={() => void runCommand({ op: "desktop.activate", desktop_id: desktop.id })}
+                    aria-pressed={!settings && desktop.id === activeDesktop.id}
+                    className={`ks-desktop-tab${!settings && desktop.id === activeDesktop.id ? " ks-desktop-tab-active" : ""}`}
+                    onClick={() => { closeSettings(false); void runCommand({ op: "desktop.activate", desktop_id: desktop.id }); }}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       openDesktopMenu(event.currentTarget, desktop);
@@ -369,7 +383,7 @@ export function Shell({ store }: { store: ShellStore }) {
           <IconButton aria-label="앱 열기" onClick={(event) => openAppMenu(event.currentTarget)} title="앱 열기">
             <LayoutGrid />
           </IconButton>
-          <IconButton aria-label="앱 정의 가져오기" onClick={() => fileInput.current?.click()} title="앱 정의 가져오기">
+          <IconButton aria-label="앱 정의 가져오기" onClick={() => { closeSettings(false); fileInput.current?.click(); }} title="앱 정의 가져오기">
             <Import />
           </IconButton>
           {snapshot.update.state === "ready" ? (
@@ -383,6 +397,7 @@ export function Shell({ store }: { store: ShellStore }) {
             </IconButton>
           ) : null}
           {serverButton}
+          {settingsButton}
           <input
             accept=".json,application/json"
             aria-label="앱 정의 파일"
@@ -405,7 +420,8 @@ export function Shell({ store }: { store: ShellStore }) {
         store={store}
       />
 
-      {menu?.kind === "link" ? serverPanel : menu ? (
+      {settingsScreen}
+      {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}
       {notice ? (

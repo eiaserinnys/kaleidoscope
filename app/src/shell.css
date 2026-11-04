@@ -518,11 +518,18 @@
 .shell-server-dot { width: var(--ks-space-2); height: var(--ks-space-2); flex-shrink: 0; border-radius: var(--ks-radius-large); background: var(--ks-color-muted); }
 .shell-server-dot.is-connected { background: var(--ks-color-positive); }
 .shell-server-dot.is-pairing, .shell-server-dot.is-offline { background: var(--ks-color-warning); }
-.shell-link-panel.ks-menu { position: absolute; top: calc(var(--ks-control-height) + 2 * var(--ks-space-2)); right: var(--ks-space-3); left: auto; display: flex; flex-direction: column; gap: var(--ks-space-3); padding: var(--ks-space-3); width: calc(var(--ks-pane-min-size) * 2); max-width: calc(100% - 2 * var(--ks-space-3)); max-height: calc(100% - var(--ks-control-height) - 4 * var(--ks-space-3)); overflow-y: auto; }
-.shell-server-heading { font-size: var(--ks-type-title); }
+.app-root[data-settings-open] > .ks-desktop-area, .app-root[data-settings-open] > .ks-empty-state { visibility: hidden; }
+.ks-app-settings.ks-shell-settings { position: absolute; z-index: 1; inset: calc(var(--ks-control-height) + 2 * var(--ks-space-2)) 0 0; }
+.ks-shell-settings-body { width: 100%; max-width: calc(var(--ks-window-min-width) * 2); }
+.ks-shell-settings .ks-settings-label-row > span:first-child { flex: 1 1 auto; min-width: 0; }
+.ks-settings-stack { display: flex; flex-direction: column; gap: var(--ks-space-2); }
+.ks-settings-value { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); }
+.ks-settings-inline { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); }
+.ks-settings-inline > .ks-text-input { flex: 1 1 auto; min-width: 0; }
+.ks-settings-inline > .ks-button { flex: 0 0 auto; }
+.ks-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ks-space-2); }
 .shell-server-meta-group { display: flex; flex-direction: column; gap: var(--ks-space-1); }
 .shell-server-meta, .shell-server-skipped { font-size: var(--ks-type-meta); line-height: var(--ks-line-body); color: var(--ks-color-muted); }
-.shell-server-guide { font-size: var(--ks-type-body); line-height: var(--ks-line-body); color: var(--ks-color-muted); text-wrap: pretty; }
 .shell-server-skipped, .shell-server-skipped-list { margin-block-start: var(--ks-space-1); }
 .shell-server-skipped-list { display: flex; flex-direction: column; gap: var(--ks-space-1); }
 .ks-window-consent-overlay { inset: 0; z-index: 3; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); padding: calc(var(--ks-window-titlebar-height) + var(--ks-space-2)) var(--ks-space-2) var(--ks-space-2); pointer-events: none; }
