@@ -593,7 +593,7 @@ pub struct CopyTextAction {
     pub copy_text: Binding,
 }
 
-/// (블록 세트 33판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
+/// (블록 세트 34판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]

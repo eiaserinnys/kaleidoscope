@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Crop, MediaRef } from "../contract/contract";
-import { useWindowData } from "../data/window-data";
 import { useMedia } from "../data/use-media";
 import { DataIcon } from "./data-icons";
 import { IconImage, iconImageFromData } from "./app-icon";
@@ -12,7 +11,6 @@ export function cropStyle(crop: Crop | undefined) {
   return crop && crop.w > 0 && crop.h > 0 ? { width: `${100 / crop.w}%`, height: `${100 / crop.h}%`, left: `${-100 * crop.x / crop.w}%`, top: `${-100 * crop.y / crop.h}%` } : undefined;
 }
 export function MediaThumbnail({ media, size, className = "", icon = false }: { media: MediaRef | null; size: number; className?: string; icon?: boolean }) {
-  const data = useWindowData();
   const ref = useRef<HTMLSpanElement>(null);
   const [measured, setMeasured] = useState(0);
   useEffect(() => {
@@ -32,5 +30,5 @@ export function MediaThumbnail({ media, size, className = "", icon = false }: { 
     return iconImageFromData(header.slice(5, -7), base64);
   }, [icon, url]);
   const style = cropStyle(media?.crop);
-  return <span ref={ref} style={icon ? { color: "inherit" } : undefined} className={`ks-media-thumbnail${media && "asset" in media ? " is-asset" : ""}${media ? ` is-${result.status}` : ""} ${className}`} title={result.status === "failed" ? `${result.error.message} ${result.error.id ?? ""}` : undefined} onClick={result.status === "failed" ? (event) => { event.stopPropagation(); data.setNotice(result.error); } : undefined}>{result.status === "ready" ? image ? <IconImage image={image} size="tile" /> : <img alt="" src={result.url} style={style} /> : <DataIcon name={result.status === "failed" ? "triangle-alert" : "image"} size="empty" />}</span>;
+  return <span ref={ref} style={icon && result.status === "ready" ? { color: "inherit" } : undefined} className={`ks-media-thumbnail${media && "asset" in media ? " is-asset" : ""}${media ? ` is-${result.status}` : ""} ${className}`} title={result.status === "failed" ? `${result.error.message} ${result.error.id ?? ""}` : undefined}>{result.status === "ready" ? image ? <IconImage image={image} size="tile" /> : <img alt="" src={result.url} style={style} /> : <DataIcon name="image" size="empty" />}</span>;
 }

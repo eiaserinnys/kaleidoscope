@@ -197,7 +197,8 @@
 }
 
 .ks-media-thumbnail.is-loading, .ks-media-skeleton { background: var(--ks-color-hover); }
-.ks-media-thumbnail.is-failed, .ks-media-failed { background: var(--ks-color-surface-solid); color: var(--ks-color-danger); }
+.ks-media-thumbnail.is-failed { background: var(--ks-color-surface-raised); color: var(--ks-color-muted); }
+.ks-media-failed { background: var(--ks-color-surface-solid); color: var(--ks-color-danger); }
 .ks-media-skeleton, .ks-media-failed { display: grid; width: 100%; height: 100%; place-content: center; gap: var(--ks-space-2); border-radius: inherit; }
 .ks-media-failed > svg { justify-self: center; }
 .ks-media-preview-state { display: grid; gap: var(--ks-space-3); width: calc(var(--ks-control-height) * 8); max-width: 100%; padding: var(--ks-space-4); }

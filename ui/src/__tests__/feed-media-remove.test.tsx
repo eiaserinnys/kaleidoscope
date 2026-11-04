@@ -9,11 +9,16 @@ import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import { ContextMenuHost } from "../components/context-menu";
 import { mockVirtualLayout } from "./virtual-layout";
 
-beforeEach(() => { mockVirtualLayout(); vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); vi.spyOn(window, "open").mockImplementation(() => null); });
+beforeEach(() => { mockVirtualLayout();
+  const measure = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const rect = measure.call(this);
+    return this.matches(".ks-media-thumbnail") ? new DOMRect(rect.x, rect.y, 32, 32) : rect;
+  }); vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} }); vi.spyOn(window, "open").mockImplementation(() => null); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function setup(ui: unknown) {
-  const definition = { ...mdViewerDefinition, requires: { blocks: 33, modules: {} }, state: { ...mdViewerDefinition.state, choice: null, removed: [] }, ui: ui as Block } as AppDefinition;
+  const definition = { ...mdViewerDefinition, requires: { blocks: 34, modules: {} }, state: { ...mdViewerDefinition.state, choice: null, removed: [] }, ui: ui as Block } as AppDefinition;
   const transport = createFakeTransport({ ...makeTestSeed({ definitions: [definition] }), media: { "builtin-icon": "data:image/png;base64,iVBORw0KGgo=" } });
   const calls = vi.spyOn(transport, "call");
   const store = createShellStore(transport);
@@ -110,4 +115,23 @@ it("첨부 그림 우클릭은 행 메뉴 대신 그림 메뉴를 연다", async
   fireEvent.contextMenu(thumb);
   expect(await screen.findByRole("menuitem",{name:"크게 보기"})).toBeTruthy();
   expect(screen.getByRole("menuitem",{name:"이미지 복사"})).toBeTruthy();
+});
+
+it.each(["rows", "grid", "icons"].flatMap(layout => [false, true].map(removable => ({layout, removable}))))("실패 그림도 행 선택을 막지 않는다: $layout / 빼기 $removable", async ({layout, removable}) => {
+  vi.spyOn(globalThis,"fetch").mockResolvedValue(new Response("그림 실패",{status:500}));
+  const {store}=setup({type:"list",layout,items:[{key:"a",title:"실패 행",image:{asset:"builtin-icon"}}],on_select:{set_state:"choice"},...(removable ? {on_remove:{set_state:"removed"}} : {})});
+  const row=await screen.findByRole(removable ? "button" : "option",{name:"실패 행"});
+  await waitFor(()=>expect(row.querySelector('.ks-media-thumbnail.is-failed')).toBeTruthy());
+  fireEvent.click(row.querySelector('.ks-media-thumbnail')!);
+  await waitFor(()=>expect(store.getSnapshot()?.shared.windows[0].state.choice).toBe("a"));
+  expect(document.querySelector('.ks-data-window-notice')?.textContent ?? "").toBe("");
+});
+
+it.each(["rows","grid"])("%s 목록이 비면 뒤의 좋아요보다 앞 조작을 먼저 고른다", async layout => {
+  setup({type:"stack",direction:"column",children:[
+    {type:"button",label:"앞 조작",icon:"image",on_click:{set_state:"choice"}},
+    {type:"list",layout,items:{expr:'[{"key":"a","title":"첨부"}][$not(key in $state.removed)]'},on_remove:[{set_state:"removed",value:{expr:'$append($state.removed, [$event])'}}]},
+    {type:"button",label:"좋아요",icon:"heart",variant:"primary",on_click:{set_state:"choice"}}]});
+  const remove=await screen.findByRole("button",{name:"첨부 빼기"});remove.focus();await userEvent.keyboard("{Enter}");
+  await waitFor(()=>expect(document.activeElement?.textContent).toBe("앞 조작"));
 });

@@ -11,7 +11,7 @@ import { makeTestSeed } from "./fixtures";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function setup(binding: unknown) {
-  const definition = { id: "open-test", name: "열기", requires: { blocks: 33, modules: {} }, permissions: [], state: {}, ui: { type: "button", label: "열기", icon: "external-link", on_click: { open_url: binding } } } as unknown as AppDefinition;
+  const definition = { id: "open-test", name: "열기", requires: { blocks: 34, modules: {} }, permissions: [], state: {}, ui: { type: "button", label: "열기", icon: "external-link", on_click: { open_url: binding } } } as unknown as AppDefinition;
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   vi.spyOn(window, "open").mockImplementation(() => null);
   const store = createShellStore(transport);

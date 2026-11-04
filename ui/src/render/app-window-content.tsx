@@ -160,7 +160,8 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
         anchor = added.find((node) => parent.contains(node)) ?? parent;
       }
       if (removableList) {
-        return visible.find((element) => Boolean(anchor.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) && !anchor.contains(element)) ?? windowContentTarget();
+        const before = visible.filter((element) => Boolean(element.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+        return before ?? visible.find((element) => Boolean(anchor.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING) && !anchor.contains(element)) ?? windowContentTarget();
       }
       const addedControl = changes.some((change) => content.contains(change.target)
         && Array.from(change.addedNodes).some((node) => visible.some((control) => node.contains(control))));
