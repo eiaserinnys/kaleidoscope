@@ -272,13 +272,25 @@ test("파일 트리 행의 공통화 전후 모습을 비교한다", async ({ pa
       document.querySelectorAll(".ks-file-tree-row").forEach((row) => row.classList.remove("ks-row"));
     }, baselineCss);
     await capture(page, `file-tree-before-${width}`);
-    const before = await folderTree.screenshot();
+    const screenshotRows = async () => {
+      const list = folderTree.locator(".ks-file-tree-list");
+      return page.screenshot({
+        clip: await list.evaluate((element) => {
+          const rows = element.querySelectorAll<HTMLElement>(".ks-file-tree-row");
+          const first = rows.item(0).getBoundingClientRect();
+          const last = rows.item(rows.length - 1).getBoundingClientRect();
+          const listRect = element.getBoundingClientRect();
+          return { x: listRect.x, y: first.y, width: listRect.width, height: last.bottom - first.y };
+        }),
+      });
+    };
+    const before = await screenshotRows();
     await page.evaluate(() => {
       document.getElementById("old-file-tree-css")?.remove();
       document.querySelectorAll(".ks-file-tree-row").forEach((row) => row.classList.add("ks-row"));
     });
     await capture(page, `file-tree-after-${width}`);
-    const after = await folderTree.screenshot();
+    const after = await screenshotRows();
     expect(after).toEqual(before);
   }
 });

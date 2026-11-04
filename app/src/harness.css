@@ -12,13 +12,8 @@
   overflow: hidden;
   border: var(--ks-line-width) solid var(--ks-color-glass-edge);
   border-radius: var(--ks-radius-window);
-  background-image:
-    linear-gradient(var(--ks-material-window), var(--ks-material-window)),
-    var(--ks-wallpaper-blur);
-  background-attachment: scroll, fixed;
-  background-position: center, center;
-  background-repeat: repeat, no-repeat;
-  background-size: auto, cover;
+  background: var(--ks-material-window);
+  backdrop-filter: blur(var(--ks-blur-window)) saturate(1.05);
   color: var(--ks-color-text);
   box-shadow: var(--ks-shadow-window);
   font-size: var(--ks-type-body);

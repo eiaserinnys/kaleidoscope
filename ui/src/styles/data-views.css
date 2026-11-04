@@ -17,14 +17,8 @@
 .ks-view-group strong { font-family: var(--ks-font-label); font-weight: 600; letter-spacing: var(--ks-letter-label); text-transform: uppercase; }
 .ks-view-sticky { position: sticky; top: 0; z-index: 2; height: 0; }
 .ks-view-sticky .ks-view-group {
-  background:
-    linear-gradient(var(--ks-material-window-body), var(--ks-material-window-body)),
-    linear-gradient(var(--ks-material-window), var(--ks-material-window)),
-    var(--ks-wallpaper-blur, linear-gradient(var(--ks-color-surface-solid), var(--ks-color-surface-solid)));
-  background-attachment: scroll, scroll, fixed;
-  background-size: auto, auto, cover;
-  background-position: center;
-  background-repeat: repeat, repeat, no-repeat;
+  background: transparent;
+  backdrop-filter: blur(var(--ks-blur-popover));
 }
 .ks-list-row .ks-list-content { flex: 1 1 auto; }
 .ks-list-row > .ks-view-meta, .ks-list-row > .ks-view-badges { flex: 0 0 auto; }
