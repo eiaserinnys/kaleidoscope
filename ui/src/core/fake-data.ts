@@ -54,7 +54,7 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "section": add("title", block.title); add("meta", block.meta); break;
     case "list": add("items", block.items); break;
     case "tree": if (block.items !== undefined) add("items", block.items); break;
-    case "table": add("rows", block.rows); break;
+    case "table": add("rows", block.rows); if (!Array.isArray(block.columns)) add("columns", block.columns); break;
     case "properties": block.fields.forEach((field, index) => add(`fields/${index}/value`, field.value)); break;
     case "feed": add("entries", block.entries); break;
     case "repeat": add("items", block.items); break;

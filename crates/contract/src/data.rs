@@ -736,6 +736,30 @@ pub enum Badge {
     },
 }
 
+/// 표 내용 칸의 표시 값.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct TableCellContent {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub subtitle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub color: Option<String>,
+    #[serde(default)]
+    #[ts(optional, as = "Option<Vec<Badge>>")]
+    pub badges: Vec<Badge>,
+}
+
+/// 표에서 고른 행과 열의 안정 식별자.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct TableCellAddress {
+    pub row: String,
+    pub column: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
@@ -1710,11 +1734,15 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         } => act!("on_select", on_select),
         Block::Table {
             rows,
+            columns,
             selected,
             on_select,
             ..
         } => {
             bind!("rows", rows);
+            if let crate::TableColumns::Bound(binding) = columns {
+                bind!("columns", binding);
+            }
             if let Some(selected) = selected {
                 bind!("selected", selected);
             }

@@ -2891,32 +2891,101 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             columns,
             sort,
             selected,
+            selection,
+            row_header,
+            on_select,
             ..
         } => {
+            let static_columns = match columns {
+                crate::TableColumns::Static(columns) => Some(columns),
+                crate::TableColumns::Bound(_) => None,
+            };
+            let cell = *selection == crate::TableSelection::Cell;
+            let uses_grid = static_columns.is_none() || cell || row_header.is_some()
+                || static_columns.is_some_and(|columns| columns.iter().any(|column| column.format == crate::CellFormat::Content || column.max_lines.is_some()));
+            if uses_grid && definition.requires.blocks < crate::TABLE_GRID_BLOCK_SET_VERSION {
+                let version = crate::TABLE_GRID_BLOCK_SET_VERSION;
+                details.push(format!("{at}: table의 동적 열과 칸 격자는 블록 세트 {version}판 이상이 필요합니다"));
+            }
+            if cell && (selected.is_none() || on_select.is_none()) {
+                details.push(format!("{at}: table 칸 선택에는 selected와 on_select가 필요합니다"));
+            }
+            if !cell && row_header.is_some() {
+                details.push(format!("{at}: table의 row_header는 칸 선택에서만 쓸 수 있습니다"));
+            }
+            if cell && sort.is_some() {
+                details.push(format!("{at}: table 칸 선택에는 sort를 쓸 수 없습니다"));
+            }
             if definition.requires.blocks < 9
-                && columns.iter().any(|c| {
+                && static_columns.is_some_and(|columns| columns.iter().any(|c| {
                     matches!(
                         c.format,
                         crate::CellFormat::Delta | crate::CellFormat::Sparkline
                     )
-                })
+                }))
             {
                 details.push(format!("{at}: table의 delta, sparkline 열 형식은 블록 세트 9판이라 requires.blocks가 9 이상이어야 합니다"));
             }
-            if columns.is_empty() {
+            if static_columns.is_some_and(|columns| columns.is_empty()) {
                 details.push(format!("{at}: table에는 열이 하나 이상 필요합니다"));
             }
             let mut fields = HashSet::new();
-            for column in columns {
+            for column in static_columns.into_iter().flatten() {
                 if !fields.insert(column.field.as_str()) {
                     details.push(format!(
                         "{at}: table 열의 field가 겹칩니다: {}",
                         column.field
                     ));
                 }
+                if column.max_lines.is_some_and(|lines| !(1..=3).contains(&lines) || column.format != crate::CellFormat::Content) {
+                    details.push(format!("{at}: table 열 {}의 max_lines는 content에서 1부터 3까지입니다", column.field));
+                }
+            }
+            if let (Some(columns), Some(header)) = (static_columns, row_header) {
+                if !columns.first().is_some_and(|column| column.field == *header && column.format == crate::CellFormat::Text) {
+                    details.push(format!("{at}: table의 row_header는 첫 text 열이어야 합니다: {header}"));
+                }
+                if cell && columns.len() < 2 {
+                    details.push(format!("{at}: table 칸 선택에는 데이터 열이 하나 이상 필요합니다"));
+                }
+            }
+            let initial = match columns {
+                crate::TableColumns::Bound(Binding::State(reference)) => definition.state.get(&reference.state),
+                crate::TableColumns::Bound(Binding::Client(reference)) => definition.client.as_ref().and_then(|client| client.outputs.get(&reference.client)).map(|output| &output.default),
+                _ => None,
+            };
+            if let Some(initial) = initial.filter(|value| !value.is_null()) {
+                let entries = match initial {
+                    Value::Array(values) => values.clone(),
+                    value => vec![value.clone()],
+                };
+                if !entries.is_empty() {
+                    match serde_json::from_value::<Vec<crate::Column>>(Value::Array(entries)) {
+                        Ok(columns) => {
+                            let mut initial_fields = HashSet::new();
+                            for column in &columns {
+                                if !initial_fields.insert(&column.field) {
+                                    details.push(format!("{at}/columns: table 열의 field가 겹칩니다: {}", column.field));
+                                }
+                                if column.max_lines.is_some_and(|lines| !(1..=3).contains(&lines) || column.format != crate::CellFormat::Content) {
+                                    details.push(format!("{at}/columns: table 열 {}의 max_lines는 content에서 1부터 3까지입니다", column.field));
+                                }
+                            }
+                            if let Some(header) = row_header {
+                                if !columns.first().is_some_and(|column| column.field == *header && column.format == crate::CellFormat::Text) {
+                                    details.push(format!("{at}/columns: table의 row_header는 첫 text 열이어야 합니다: {header}"));
+                                }
+                                if cell && columns.len() < 2 {
+                                    details.push(format!("{at}/columns: table 칸 선택에는 데이터 열이 하나 이상 필요합니다"));
+                                }
+                            }
+                        }
+                        Err(_) => details.push(format!("{at}/columns: table 열의 초기값이 열 형식과 다릅니다")),
+                    }
+                }
             }
             if let Some(sort) = sort {
-                if !fields.contains(sort.field.as_str()) {
+                if static_columns.is_some() && !fields.contains(sort.field.as_str()) {
                     details.push(format!(
                         "{at}: sort의 field가 열에 없습니다: {}",
                         sort.field

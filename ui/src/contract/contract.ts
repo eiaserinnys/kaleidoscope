@@ -335,7 +335,7 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: Array<Column>, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -377,7 +377,7 @@ export type CanvasFit = "contain" | "cover";
 /**
  * 칸 값을 보이는 방법. `number`와 `date`는 끝에 맞추고, 나머지는 앞에 맞춘다.
  */
-export type CellFormat = "text" | "number" | "date" | "badge" | "delta" | "sparkline";
+export type CellFormat = "text" | "number" | "date" | "badge" | "delta" | "sparkline" | "content";
 
 export type ChartHeight = "compact" | "medium" | "tall";
 
@@ -455,7 +455,7 @@ export type Column = {
 /**
  * 행 객체의 키.
  */
-field: string, label: string, width?: ColumnWidth, format?: CellFormat, };
+field: string, label: string, width?: ColumnWidth, format?: CellFormat, max_lines?: number, };
 
 /**
  * 열 너비. 남은 폭은 `fill` 열들이 나눈다.
@@ -1284,6 +1284,26 @@ export type Supported = { blocks: number, modules: { [key in string]: number }, 
  * 탭 하나.
  */
 export type Tab = { label: Binding, child: Block, };
+
+/**
+ * 표에서 고른 행과 열의 안정 식별자.
+ */
+export type TableCellAddress = { row: string, column: string, };
+
+/**
+ * 표 내용 칸의 표시 값.
+ */
+export type TableCellContent = { title: string, subtitle?: string, color?: string, badges?: Array<Badge>, };
+
+/**
+ * 표의 열 배열 또는 열 값을 내는 바인딩.
+ */
+export type TableColumns = Array<Column> | Binding;
+
+/**
+ * 표에서 고르는 단위.
+ */
+export type TableSelection = "row" | "cell";
 
 export type TextFormat = "plain" | "markdown";
 

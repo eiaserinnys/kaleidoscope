@@ -275,7 +275,9 @@ pub const CONTRACT_VERSION: u32 = 31;
 ///   `list`, `table`, `tree`, `feed`의 `item_menu`.
 /// - 21판: input, select, slider, color의 `label_position`과 slider의 `show_value`.
 /// - 22판: request 원천의 `page`(쪽 넘김)와 목록 블록의 다음 쪽 받기, `data.more`.
-pub const BLOCK_SET_VERSION: u32 = realtime::REALTIME_BLOCK_SET_VERSION;
+pub const BLOCK_SET_VERSION: u32 = TABLE_GRID_BLOCK_SET_VERSION;
+/// 동적 표 열과 칸 격자의 첫 블록 세트 판.
+pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -1727,7 +1729,13 @@ pub enum Block {
     /// 붙어 있고 긴 표는 보이는 줄만 그린다. 고르기는 `list`와 같다.
     Table {
         rows: Binding,
-        columns: Vec<Column>,
+        columns: TableColumns,
+        #[serde(default, skip_serializing_if = "TableSelection::is_row")]
+        #[ts(optional, as = "Option<TableSelection>")]
+        selection: TableSelection,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        row_header: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         sort: Option<SortSpec>,
@@ -2436,7 +2444,11 @@ enum RawBlock {
     /// 붙어 있고 긴 표는 보이는 줄만 그린다. 고르기는 `list`와 같다.
     Table {
         rows: Binding,
-        columns: Vec<Column>,
+        columns: TableColumns,
+        #[serde(default, skip_serializing_if = "TableSelection::is_row")]
+        selection: TableSelection,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        row_header: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sort: Option<SortSpec>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3062,6 +3074,8 @@ impl From<RawBlock> for Block {
             RawBlock::Table {
                 rows,
                 columns,
+                selection,
+                row_header,
                 sort,
                 selected,
                 on_select,
@@ -3069,6 +3083,8 @@ impl From<RawBlock> for Block {
             } => Block::Table {
                 rows,
                 columns,
+                selection,
+                row_header,
                 sort,
                 selected,
                 on_select,
@@ -3580,6 +3596,42 @@ pub enum ListLayout {
     Grid,
 }
 
+/// 표의 열 배열 또는 열 값을 내는 바인딩.
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum TableColumns {
+    Static(Vec<Column>),
+    Bound(Binding),
+}
+
+impl<'de> Deserialize<'de> for TableColumns {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.is_array() {
+            return serde_json::from_value(value).map(Self::Static).map_err(serde::de::Error::custom);
+        }
+        let binding: Binding = serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+        if matches!(binding, Binding::Literal(_)) {
+            return Err(serde::de::Error::custom("table.columns는 열 배열이거나 state, expr, client, item 바인딩이어야 합니다"));
+        }
+        Ok(Self::Bound(binding))
+    }
+}
+
+/// 표에서 고르는 단위.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum TableSelection {
+    #[default]
+    Row,
+    Cell,
+}
+impl TableSelection {
+    fn is_row(&self) -> bool { *self == Self::Row }
+}
+
 /// 표의 열.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -3594,6 +3646,9 @@ pub struct Column {
     #[serde(default)]
     #[ts(optional, as = "Option<CellFormat>")]
     pub format: CellFormat,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub max_lines: Option<u8>,
 }
 
 /// 열 너비. 남은 폭은 `fill` 열들이 나눈다.
@@ -3626,6 +3681,8 @@ pub enum CellFormat {
     Delta,
     /// 숫자 배열을 표 안의 추이 곡선으로 표시한다.
     Sparkline,
+    /// 제목, 본문, 색과 배지로 된 내용.
+    Content,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]

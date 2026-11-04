@@ -53,3 +53,7 @@ summary,
 .ks-data-toolbar .ks-data-text * {
   user-select: none;
 }
+
+.ks-table-grid .ks-table-cell { user-select: none; }
+.ks-table-grid .ks-table-content-title,
+.ks-table-grid .ks-table-content-subtitle { user-select: text; }
