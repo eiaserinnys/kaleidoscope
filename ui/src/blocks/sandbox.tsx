@@ -6,6 +6,7 @@ import { DataState } from "../components/data-state";
 import { toCoreError } from "../core/core-transport";
 import { useBinding, useWindowData } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
+import { registerFramePointHandler } from "../share/frame-point";
 import type { BlockContext } from "./block-context";
 import { FileGrant } from "./file-grant";
 import { resolveFilePath } from "./file-path";
@@ -105,6 +106,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   const active = useRef(true);
   const currentToken = useRef("");
   const flushes = useRef(new Map<string, (ok: boolean) => void>());
+  const points = useRef(new Map<string, () => void>());
   const [sequence, setSequence] = useState(0);
   const [share, setShare] = useState({ text: "", image: "", sequence: 0 });
   const stateKeys = block.state_keys ?? [];
@@ -138,6 +140,19 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
     ownWrites.current = {};
     setShare({ text: "", image: "", sequence: 0 });
   }, [source.token]);
+  useLayoutEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const unregister = registerFramePointHandler(element, (x, y, gesture, requestId) => new Promise<void>((resolve) => {
+      points.current.set(requestId, resolve);
+      send({ type: "ks-sandbox-point", token: source.token, x, y, gesture, requestId });
+    }));
+    return () => {
+      unregister();
+      points.current.forEach((resolve) => resolve());
+      points.current.clear();
+    };
+  }, [send, source.token, sequence]);
   const readStorage = useCallback(async (entry: string) => {
     const reply = await context.store.call({ op: "storage.get", window_id: context.window.id, entry });
     if (reply.op !== "storage.get") throw shellErrors.SHELL_SANDBOX_STORAGE_READ_REPLY_INVALID();
@@ -180,7 +195,10 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
     const receive = (event: MessageEvent) => {
       if (!active.current || event.source !== frame.current?.contentWindow || !["null", ""].includes(event.origin) || !event.data || event.data.token !== source.token) return;
       const data = event.data;
-      if (data.type === "ks-sandbox-context-menu" && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string" && (data.text || data.editable) && frame.current) {
+      if (data.type === "ks-sandbox-point-done" && typeof data.requestId === "string") {
+        points.current.get(data.requestId)?.();
+        points.current.delete(data.requestId);
+      } else if (data.type === "ks-sandbox-context-menu" && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string" && (data.text || data.editable) && frame.current) {
         openFrameContextMenu(frame.current, data, (command) => send({ type: "ks-sandbox-context-command", token: source.token, ...command }));
       } else if (data.type === "ks-sandbox-ready") {
         send({ type: "ks-sandbox-state-sync", state: JSON.parse(stateJson) });

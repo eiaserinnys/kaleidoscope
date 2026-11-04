@@ -234,6 +234,22 @@ function bridgeSource(init: SandboxInit): string {
     window.addEventListener('message', event => {
       if (event.source !== parent || !event.data) return;
       const data = event.data;
+      if (data.type === 'ks-sandbox-point' && data.token === token && typeof data.requestId === 'string') {
+        const x = Number(data.x), y = Number(data.y);
+        const target = Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0 && x < innerWidth && y < innerHeight ? document.elementFromPoint(x, y) : null;
+        if (!(target instanceof Element)) { send('ks-sandbox-point-done', { requestId: data.requestId }); return; }
+        const base = { clientX: x, clientY: y, bubbles: true, cancelable: true, composed: true };
+        const pointer = (type, detail, buttons, bubbles = true) => target.dispatchEvent(new PointerEvent(type, { ...base, bubbles, button: 0, buttons, pointerId: 1, detail }));
+        const mouse = (type, detail, buttons, bubbles = true) => target.dispatchEvent(new MouseEvent(type, { ...base, bubbles, button: 0, buttons, detail }));
+        pointer('pointerover', 0, 0); pointer('pointerenter', 0, 0, false);
+        mouse('mouseover', 0, 0); mouse('mouseenter', 0, 0, false);
+        const click = detail => { pointer('pointerdown', detail, 1); mouse('mousedown', detail, 1); pointer('pointerup', detail, 0); mouse('mouseup', detail, 0); mouse('click', detail, 0); };
+        click(1);
+        if (data.gesture === 'double_click') { click(2); mouse('dblclick', 2, 0); }
+        schedule();
+        Promise.resolve().then(() => report()).finally(() => send('ks-sandbox-point-done', { requestId: data.requestId }));
+        return;
+      }
       if (data.type === 'ks-realtime-event' && data.token === token && data.session === config.realtimeSession && realtime) {
         try { realtime.event(data); }
         finally { if (Number.isSafeInteger(data.sequence)) send('ks-realtime-delivered', { handle: data.handle, sequence: data.sequence }); }

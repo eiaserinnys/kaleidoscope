@@ -230,7 +230,22 @@ window.addEventListener("scroll", schedule, true); window.addEventListener("resi
 window.addEventListener("message", (event: MessageEvent<ParentToFrame>) => {
   if (event.source !== parent || !event.data || typeof event.data !== "object") return;
   const data = event.data;
-  if (data.type === "ks-html-context-command") {
+  if (data.type === "ks-html-point") {
+    const { x, y, requestId } = data;
+    const target = !locked && Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0 && x < innerWidth && y < innerHeight ? document.elementFromPoint(x, y) : null;
+    if (!(target instanceof Element)) { send({ type: "ks-html-point-done", requestId }); return; }
+    const base = { clientX: x, clientY: y, bubbles: true, cancelable: true, composed: true };
+    const pointer = (type: string, detail: number, buttons: number, bubbles = true) => target.dispatchEvent(new PointerEvent(type, { ...base, bubbles, button: 0, buttons, pointerId: 1, detail }));
+    const mouse = (type: string, detail: number, buttons: number, bubbles = true) => target.dispatchEvent(new MouseEvent(type, { ...base, bubbles, button: 0, buttons, detail }));
+    pointer("pointerover", 0, 0); pointer("pointerenter", 0, 0, false);
+    mouse("mouseover", 0, 0); mouse("mouseenter", 0, 0, false);
+    const click = (detail: number) => { pointer("pointerdown", detail, 1); mouse("mousedown", detail, 1); pointer("pointerup", detail, 0); mouse("mouseup", detail, 0); mouse("click", detail, 0); };
+    click(1);
+    if (data.gesture === "double_click") { click(2); mouse("dblclick", 2, 0); }
+    visible(); schedule();
+    Promise.resolve().then(() => send({ type: "ks-html-point-done", requestId }));
+  }
+  else if (data.type === "ks-html-context-command") {
     if (locked || data.requestId !== menuRequestId || !menuTarget || !document.hasFocus()) return;
     menuTarget.focus();
     if ((menuTarget instanceof HTMLInputElement || menuTarget instanceof HTMLTextAreaElement) && menuField && menuTarget.value === menuField.value) menuTarget.setSelectionRange(menuField.start, menuField.end);

@@ -1,6 +1,32 @@
 /// <reference path="../iife.d.ts" />
 import bridgeSource from "./html-bridge/main.ts?iife";
 import { sourceHash } from "./html-bridge/identity";
+import { useLayoutEffect, useRef, type RefObject } from "react";
+import { registerFramePointHandler } from "../share/frame-point";
+
+export function useHtmlFramePoint(frame: RefObject<HTMLIFrameElement | null>, source: string | null): void {
+  const points = useRef(new Map<string, () => void>());
+  useLayoutEffect(() => {
+    const element = frame.current;
+    if (!element || source === null) return;
+    const unregister = registerFramePointHandler(element, (x, y, gesture, requestId) => new Promise<void>((resolve) => {
+      points.current.set(requestId, resolve);
+      element.contentWindow?.postMessage({ type: "ks-html-point", requestId, x, y, gesture }, "*");
+    }));
+    const receive = (event: MessageEvent) => {
+      if (event.source !== element.contentWindow || event.data?.type !== "ks-html-point-done" || typeof event.data.requestId !== "string") return;
+      points.current.get(event.data.requestId)?.();
+      points.current.delete(event.data.requestId);
+    };
+    window.addEventListener("message", receive);
+    return () => {
+      unregister();
+      window.removeEventListener("message", receive);
+      points.current.forEach((resolve) => resolve());
+      points.current.clear();
+    };
+  }, [frame, source]);
+}
 
 const tokenNames = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-color-warning", "--ks-type-meta", "--ks-line-body", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
 
