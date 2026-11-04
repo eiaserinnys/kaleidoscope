@@ -1503,6 +1503,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     </>);
     const scroll = view.container.querySelector(".ks-dates-scroll") as HTMLElement;
     expect(scroll).not.toBeNull();
+    await settleRenders();
     const beforeOther = otherWindowRender.mock.calls.length, beforeTimeline = timelineRender.mock.calls.length;
     const beforeCalls = transport.getCalls().length;
     scroll.scrollTop = 50; fireEvent.scroll(scroll);
