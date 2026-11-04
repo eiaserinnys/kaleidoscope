@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { BUILTIN_APP_IDS, Dialog, ErrorNotice, defaultMessageApp, messageApps, toCoreError, type CoreError, type ShellStore } from "@kaleidoscope/ui";
-import { LoaderCircle } from "../../../ui/src/components/icons";
 import { useMessageSnapshot } from "./use-message-snapshot";
 
 export function directionParticle(name: string): string {
@@ -35,7 +34,7 @@ export function MessageAppPrompt({ store, host }: { store: ShellStore; host: HTM
   const cancel = useCallback(() => { void answer(false); }, [answer]);
   if (!candidate) return null;
   const error = problem?.key === key ? problem.error : null;
-  const body = busy || error ? <>{error ? <ErrorNotice error={error} /> : null}{busy ? <span className="ks-settings-apply-progress" role="status" aria-label="저장 중"><LoaderCircle size="inline" className="ks-settings-apply-spinner" /></span> : null}</> : undefined;
+  const body = error ? <ErrorNotice error={error} /> : undefined;
   return <Dialog key={key} host={host} title={`기본 에이전트를 ${candidate.name}${directionParticle(candidate.name)} 바꿀까요?`}
     body={body} ok="바꾸기" cancelLabel="그대로 두기" userConsent busy={busy}
     overlayClassName="ks-shell-dialog-layer" inertSelector=":scope > .ks-shell-bar, :scope > .ks-desktop-area, :scope > .ks-shell-settings, :scope > .ks-empty-state"

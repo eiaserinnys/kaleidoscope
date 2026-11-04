@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
 import type { CoreEvent } from "../contract/contract";
@@ -401,6 +401,26 @@ describe("shell server link control", () => {
     expect(await screen.findByText("가져오기 완료 3개")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 전환" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.use_local" })); store.dispose();
+  });
+  it("가져오는 동안 누른 서버 단추 자리에 진행 표시를 둔다", async () => {
+    const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
+    const transport = createFakeTransport(seed);
+    transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
+    const original = transport.call.bind(transport);
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(transport, "call").mockImplementation((async (request) => {
+      if (request.op === "link.sync_local_to_remote") await waiting;
+      return original(request);
+    }) as typeof transport.call);
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "원격 서버 (remote.example)" }));
+    const button = screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" });
+    fireEvent.click(button);
+    expect(button.classList.contains("is-progress")).toBe(true);
+    expect(button.querySelector(".ks-button-progress")).toBeTruthy();
+    await act(async () => release());
+    store.dispose();
   });
   it("shows offline state and disables importing until reconnected", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;

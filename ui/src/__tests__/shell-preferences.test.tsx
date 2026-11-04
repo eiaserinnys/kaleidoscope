@@ -45,24 +45,31 @@ describe("쉘 기본 에이전트 설정", () => {
     expect(select.disabled).toBe(true);
     expect(select.textContent).toContain("에이전트");
     expect(screen.getByText("저장 중")).toBeTruthy();
+    select.blur();
     await act(async () => release());
     await waitFor(() => expect(select.textContent).toContain("작업 PAS"));
     expect(select.disabled).toBe(false);
+    expect(document.activeElement).toBe(select);
     store.dispose();
   });
 
   it("저장 오류는 선택을 유지하고 해당 행에 표시한다", async () => {
     const { transport, store } = setup(); await store.ready;
     const original = transport.call.bind(transport);
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise<never>((_resolve, rejectPromise) => { reject = rejectPromise; });
     vi.spyOn(transport, "call").mockImplementation(((request: CoreRequest) => request.op === "shell.preferences.set_default"
-      ? Promise.reject({ id: "SERVER_PREFERENCES_NOT_CONNECTED", code: "server", message: "서버에 연결되어 있지 않습니다", details: [] })
+      ? pending
       : original(request as never)) as typeof transport.call);
     fireEvent.click(screen.getByRole("button", { name: "설정" }));
     const select = screen.getByRole("button", { name: "기본 에이전트" }) as HTMLButtonElement;
     fireEvent.click(select); fireEvent.click(screen.getByRole("menuitem", { name: "작업 PAS" }));
+    select.blur();
+    await act(async () => reject({ id: "SERVER_PREFERENCES_NOT_CONNECTED", code: "server", message: "서버에 연결되어 있지 않습니다", details: [] }));
     expect(await screen.findByText("서버에 연결되어 있지 않습니다")).toBeTruthy();
     expect(select.textContent).toContain("에이전트");
     expect(select.disabled).toBe(false);
+    expect(document.activeElement).toBe(select);
     store.dispose();
   });
 
@@ -80,7 +87,7 @@ describe("쉘 기본 에이전트 설정", () => {
 
   it.each([
     [{ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" }, "서버 연결 승인을 기다리는 중입니다"],
-    [{ state: "revoked", server_url: "https://remote.example" }, "서버가 이 PC의 연결을 거부했습니다. 서버 연결을 다시 설정하세요"],
+    [{ state: "revoked", server_url: "https://remote.example" }, "서버 연결을 다시 설정하면 바꿀 수 있습니다"],
     [{ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "내 PC", reason: null }, "서버에 다시 연결하면 바꿀 수 있습니다"],
   ] as Array<[LinkStatus, string]>)("서버 상태에 맞는 잠금 까닭을 고르기에 연결한다", async (link, reason) => {
     const { transport, store } = setup(); await store.ready;
@@ -167,7 +174,11 @@ describe("새 메시지 앱 질문", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.mouseDown(dialog.parentElement!);
     expect(spy).toHaveBeenCalledWith({ op: "shell.preferences.answer", app_id: "pas", use_as_default: false });
-    expect((within(dialog).getByRole("button", { name: "바꾸기" }) as HTMLButtonElement).disabled).toBe(true);
+    const confirm = within(dialog).getByRole("button", { name: "바꾸기" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.classList.contains("is-progress")).toBe(true);
+    expect(confirm.querySelector(".ks-button-progress")).toBeTruthy();
+    expect(dialog.querySelector(".ks-dialog-body")).toBeNull();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(spy.mock.calls.filter(([request]) => request.op === "shell.preferences.answer")).toHaveLength(1);
     await act(async () => release());

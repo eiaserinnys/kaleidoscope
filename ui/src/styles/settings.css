@@ -2,6 +2,7 @@
 .ks-app-settings[hidden], .ks-settings-document[hidden], .ks-data-window-body[hidden] { display: none; }
 .ks-app-settings h2, .ks-app-settings h3 { margin: 0; }
 .ks-app-settings h2 { font-size: var(--ks-type-title); font-weight: 600; }
+.ks-app-settings > .ks-data-toolbar > h2 { line-height: var(--ks-control-height); }
 .ks-app-settings-scroll { min-height: 0; overflow: auto; padding: var(--ks-space-3); }
 .ks-settings-custom { width: 100%; max-width: calc(var(--ks-window-min-width) * 2); }
 .ks-settings-custom .ks-data-stack { height: auto; }

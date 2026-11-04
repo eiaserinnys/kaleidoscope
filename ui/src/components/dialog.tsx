@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./primitives";
+import { LoaderCircle } from "./icons";
 import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
 import { writableControlSelector } from "./focus-rescue";
@@ -72,7 +73,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay} onMouseDown={(event) => { if (!busy && !windowModal && event.target === event.currentTarget) onCancel(); }}>
     <div className="ks-dialog" role="dialog" aria-modal={windowModal ? active : true} aria-labelledby={titleId} aria-describedby={windowModal && body != null ? bodyId : undefined} tabIndex={windowModal ? -1 : undefined} onKeyDown={windowModal ? onKey : undefined} ref={root}>
       {heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={windowModal ? 0 : undefined}>{content}</div> : null}
-      <div className="ks-dialog-actions">{showCancel ? <Button disabled={busy} onClick={onCancel}>{cancelLabel}</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button disabled={busy} onClick={(event) => { if (!windowModal) restore.current = false; onConfirm(event); }} variant={danger ? "default" : "emphasis"}>{ok}</Button></span></div>
+      <div className="ks-dialog-actions">{showCancel ? <Button disabled={busy} onClick={onCancel}>{cancelLabel}</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button disabled={busy} aria-label={ok} aria-busy={busy || undefined} className={busy ? "is-progress" : undefined} onClick={(event) => { if (!windowModal) restore.current = false; onConfirm(event); }} variant={danger ? "default" : "emphasis"}><span>{ok}</span>{busy ? <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span> : null}</Button></span></div>
     </div>
   </div>, host);
 }

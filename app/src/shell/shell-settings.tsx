@@ -7,7 +7,7 @@ import { AccountSettings } from "./account-settings";
 type Entry = { kind: "gear" | "server"; sequence: number };
 
 function Progress() {
-  return <span className="ks-settings-apply-progress" role="status" aria-label="처리 중"><LoaderCircle size="inline" className="ks-settings-apply-spinner" /></span>;
+  return <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>;
 }
 
 export function ShellSettings({ snapshot, entry, onClose, call, store }: {
@@ -81,8 +81,8 @@ export function ShellSettings({ snapshot, entry, onClose, call, store }: {
               {link.state === "offline" && link.reason ? <span className="shell-server-meta">{link.reason.message} {link.reason.id ? <ErrorId id={link.reason.id} /> : null}</span> : null}
             </div>
             {(remote && snapshot.embedded_available) || showSwitch ? <div className="ks-settings-actions">
-              {remote && snapshot.embedded_available ? <Button disabled={busy !== null || link.state !== "connected"} onClick={() => void run({ op: "link.sync_local_to_remote" })}>{busy === "link.sync_local_to_remote" ? <Progress /> : null}내 PC 앱과 데이터 가져오기</Button> : null}
-              {showSwitch ? <Button disabled={busy !== null} onClick={() => void run({ op: switchOp })}>{busy === switchOp ? <Progress /> : null}{switchLabel}</Button> : null}
+              {remote && snapshot.embedded_available ? <Button aria-label="내 PC 앱과 데이터 가져오기" aria-busy={busy === "link.sync_local_to_remote" || undefined} className={busy === "link.sync_local_to_remote" ? "is-progress" : undefined} disabled={busy !== null || link.state !== "connected"} onClick={() => void run({ op: "link.sync_local_to_remote" })}><span>내 PC 앱과 데이터 가져오기</span>{busy === "link.sync_local_to_remote" ? <Progress /> : null}</Button> : null}
+              {showSwitch ? <Button aria-label={switchLabel} aria-busy={busy === switchOp || undefined} className={busy === switchOp ? "is-progress" : undefined} disabled={busy !== null} onClick={() => void run({ op: switchOp })}><span>{switchLabel}</span>{busy === switchOp ? <Progress /> : null}</Button> : null}
             </div> : null}
           </div>
           {copyResult === "failed" ? <ErrorNotice error={SHELL_SERVER_PAIRING_CODE_COPY_FAILED()} /> : null}
@@ -93,7 +93,7 @@ export function ShellSettings({ snapshot, entry, onClose, call, store }: {
           <div className="ks-settings-label-row"><label htmlFor={`${id}-url`}>원격 서버 주소</label></div>
           <div className="ks-settings-control"><div className="ks-settings-inline">
             <TextInput id={`${id}-url`} type="url" placeholder="https://server.example" persistent commitOnBlur={false} value={url} onEdit={setUrl} onCommit={startRemote} onCancel={() => setUrl("")} disabled={busy !== null} />
-            <Button disabled={busy !== null || !url.trim()} onClick={() => startRemote(url)}>{busy === "link.start" ? <Progress /> : null}연결</Button>
+            <Button aria-label="연결" aria-busy={busy === "link.start" || undefined} className={busy === "link.start" ? "is-progress" : undefined} disabled={busy !== null || !url.trim()} onClick={() => startRemote(url)}><span>연결</span>{busy === "link.start" ? <Progress /> : null}</Button>
           </div></div>
         </div> : null}
       </section>

@@ -25,8 +25,11 @@ test("서버 설정 진입과 전환, 닫기와 초점", async ({ page }) => {
       group: rect(".ks-shell-settings .ks-settings-group h3"), entry: rect(".ks-shell-settings .ks-settings-entry"),
       address: rect(".ks-settings-inline input"), connect: rect(".ks-settings-inline button"),
       select: rect(".ks-shell-settings .ks-select-button"),
+      titleCenter: (() => { const range = document.createRange(); range.selectNodeContents(document.querySelector(".ks-shell-settings h2")!); const r = range.getBoundingClientRect(); return (r.top + r.bottom) / 2; })(),
+      backCenter: (() => { const r = document.querySelector(".ks-shell-settings .ks-data-toolbar button svg")!.getBoundingClientRect(); return (r.top + r.bottom) / 2; })(),
     };
   });
+  expect(Math.abs(metrics.titleCenter - metrics.backCenter)).toBeLessThanOrEqual(2);
   await writeFile(`${captures}/metrics.json`, JSON.stringify(metrics, null, 2));
   await page.getByRole("button", { name: "내 PC 서버", exact: true }).click();
   const input = page.getByLabel("원격 서버 주소");
@@ -83,10 +86,14 @@ test("서버 상태를 넓은 화면과 최소 화면에서 확인한다", async
     await expect(page.getByText("가져오기 완료 3개")).toBeVisible();
     await expect(page.locator(".shell-server-skipped")).not.toHaveAttribute("open");
     await page.screenshot({ path: `${captures}/transfer-${viewport.width}.png` });
-    await page.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" }).click();
-    await expect(page.getByRole("status", { name: "처리 중" })).toBeVisible();
+    const transfer = page.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" });
+    const beforeTransfer = await transfer.boundingBox();
+    await transfer.click();
+    await expect(transfer).toHaveAttribute("aria-busy", "true");
+    const duringTransfer = await transfer.boundingBox();
+    expect(duringTransfer).toEqual(beforeTransfer);
     await page.screenshot({ path: `${captures}/busy-${viewport.width}.png` });
-    await expect(page.getByRole("status", { name: "처리 중" })).toHaveCount(0);
+    await expect(transfer).not.toHaveAttribute("aria-busy", "true");
   }
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto(`${base}&link=connected`);
@@ -116,6 +123,7 @@ test("기본 에이전트를 고르고 대기와 비연결 상태를 확인한�
     await expect(page.getByText("저장 중")).toBeVisible();
     await page.screenshot({ path: `${captures}/account-saving-${viewport.width}.png` });
     await expect(select).toContainText("작업 PAS");
+    await expect(select).toBeFocused();
     await page.goto(`${base}&link=unlinked`);
     await expect(page.locator(".ks-harness-webview")).toBeVisible();
     await page.getByRole("button", { name: "설정", exact: true }).click();
@@ -162,8 +170,13 @@ test("새 앱 질문 저장 중과 실패 후 재시도", async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto(`${base}&link=connected&prompt&slow-preferences`);
     let dialog = page.getByRole("dialog", { name: "기본 에이전트를 작업 PAS로 바꿀까요?" });
-    await dialog.getByRole("button", { name: "바꾸기" }).click();
-    await expect(dialog.getByRole("status", { name: "저장 중" })).toBeVisible();
+    const confirm = dialog.getByRole("button", { name: "바꾸기" });
+    const dialogBefore = await dialog.boundingBox();
+    const buttonBefore = await confirm.boundingBox();
+    await confirm.click();
+    await expect(confirm).toHaveAttribute("aria-busy", "true");
+    expect(await dialog.boundingBox()).toEqual(dialogBefore);
+    expect(await confirm.boundingBox()).toEqual(buttonBefore);
     await page.screenshot({ path: `${captures}/question-saving-${viewport.width}.png` });
     await expect(dialog).toHaveCount(0);
     await page.goto(`${base}&link=connected&prompt&fail-answer`);
