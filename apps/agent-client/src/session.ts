@@ -4,12 +4,13 @@ import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
 
 export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[] };
-type ProcessSnapshot = { handle: string; after: number; checkpoint: State | null; cwd: string; services: Record<string, string | null>; exit: unknown | null };
+type InstallerCheckpoint = { stdout: string };
+type ProcessSnapshot = { handle: string; after: number; checkpoint: State | InstallerCheckpoint | null; cwd: string; services: Record<string, string | null>; exit: unknown | null };
 type ProcessPort = {
   attach(params: { key: string }): Promise<ProcessSnapshot | null>;
   start(params: { key: string; permission: string; cwd_permission: string; spec: Omit<Spec, "auth_methods">; services?: string[] }): Promise<{ status?: string; handle?: string; cwd?: string; services?: Record<string, string | null> }>;
   read(params: { handle: string; after: number; max_bytes: number }): Promise<{ bytes: number[]; next: number; stderr_tail: number[]; exit: { code: number | null } | null }>;
-  ack(params: { handle: string; after: number; checkpoint: State | null }): Promise<unknown>;
+  ack(params: { handle: string; after: number; checkpoint: State | InstallerCheckpoint | null }): Promise<unknown>;
   write(params: { handle: string; bytes: Uint8Array; checkpoint: State }): Promise<unknown>;
   stop(params: { handle: string }): Promise<unknown>;
   file_uri(key: string): Promise<string>;
@@ -90,7 +91,7 @@ export class AgentSession {
       this.after = process.after;
       this.cwd = process.cwd;
       this.tools = process.services.tools ?? null;
-      this.state = process.checkpoint ?? { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
+      this.state = (process.checkpoint as State | null) ?? { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
       this.checkpointKeys = [this.state.streamKey, this.state.partialKey].filter((key): key is string => !!key);
       if (this.state.streamKey) {
         const bytes = await this.host.blobs.read(this.state.streamKey);

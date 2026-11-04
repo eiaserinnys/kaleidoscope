@@ -1,17 +1,20 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { AppClient } from "../src/app.ts";
+import { agentError } from "../src/errors.ts";
 
 const programs = { missing: { name: "시험 프로그램", winget: "Test.Program", url: "https://example.test/" } };
 const agent = { id: "a", name: "시험 에이전트", command: "missing", args: [], env: {} };
 const missing = { id: "PROCESS_START_COMMAND_NOT_FOUND", code: "not_found", message: "명령 없음" };
 
-async function fixture({ platform = "Windows", known = true, result = 0, cancel = false, noWinget = false, missingAgain = false }: any = {}) {
+async function fixture({ platform = "Windows", known = true, result = 0, cancel = false, noWinget = false, missingAgain = false, deferred = false }: any = {}) {
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: platform } });
   const handlers = new Map<string, Function>();
   const stores = new Map<string, Function>();
   const views: any[] = [], starts: any[] = [], ready: Function[] = [];
   let agentStarts = 0, installerRead = false;
+  let releasePermission: (result: any) => void = () => {};
+  const permission = new Promise((resolve) => { releasePermission = resolve; });
   const process = {
     onReady(fn: Function) { ready.push(fn); return () => {}; }, onServicesChanged() {}, attach: async () => null,
     start: async (params: any) => {
@@ -21,6 +24,7 @@ async function fixture({ platform = "Windows", known = true, result = 0, cancel 
         if (agentStarts === 1 || missingAgain) throw missing;
         return { status: "cancelled" };
       }
+      if (deferred) return permission;
       if (cancel) return { status: "cancelled" };
       if (noWinget) throw missing;
       return { handle: "installer", cwd: "/work" };
@@ -39,7 +43,7 @@ async function fixture({ platform = "Windows", known = true, result = 0, cancel 
   stores.get("programs")?.(known ? programs : {});
   stores.get("agents")!([agent]);
   await handlers.get("pick_folder")!({});
-  return { handlers, views, starts, get view() { return views.at(-1); }, get agentStarts() { return agentStarts; } };
+  return { handlers, views, starts, releasePermission, get view() { return views.at(-1); }, get agentStarts() { return agentStarts; } };
 }
 
 test("등록된 명령은 Windows에서 설치 단추를 보이고 다른 플랫폼은 주소를 안내한다", async () => {
@@ -49,7 +53,7 @@ test("등록된 명령은 Windows에서 설치 단추를 보이고 다른 플랫
   f = await fixture({ platform: "Linux" });
   assert.equal(f.view.show_install, false);
   assert.equal(f.view.error_id, "AGENT_INSTALL_UNSUPPORTED_PLATFORM");
-  assert.equal(f.view.error_message, "시험 에이전트에 필요한 시험 프로그램이(가) 이 기기에 없습니다. 이 기기에서는 창에서 설치할 수 없으니 https://example.test/에서 받아 설치한 뒤 다시 시도하세요.");
+  assert.equal(f.view.error_message, "시험 에이전트에 필요한 시험 프로그램이(가) 이 기기에 없습니다. 창에서 설치는 Windows에서만 되니 https://example.test/에서 받아 설치한 뒤 다시 시도하세요.");
   f = await fixture({ known: false });
   assert.equal(f.view.show_install, false);
   assert.equal(f.view.error_id, missing.id);
@@ -66,7 +70,7 @@ test("설치 성공은 같은 에이전트를 다시 시작한다", async () => 
   const f = await fixture();
   await f.handlers.get("install")!({});
   assert.equal(f.agentStarts, 2);
-  assert.deepEqual(f.starts[1], { key: "install", permission: "install", cwd_permission: "work", spec: { name: "시험 프로그램 설치", command: "winget", args: ["install", "--id", "Test.Program", "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"], env: {} } });
+  assert.deepEqual(f.starts[1], { key: "install", permission: "install", cwd_permission: "work", spec: { name: "시험 프로그램 설치 프로그램", command: "winget", args: ["install", "--id", "Test.Program", "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"], env: {} } });
   assert.ok(f.views.some((view: any) => view.show_installing && view.install_message === "시험 프로그램 설치 중"));
 });
 
@@ -92,5 +96,21 @@ for (const [name, result, id] of [
   await f.handlers.get("install")!({});
   assert.equal(f.view.error_id, id);
   assert.match(f.view.error_message, /https:\/\/example.test\//);
-  if (result === 1) assert.equal(f.view.error_message, "시험 프로그램을(를) 설치하지 못했습니다(winget 종료 코드 0x00000001). 다시 시도하거나 https://example.test/에서 받아 설치하세요. 원인: 원인 메시지");
+  if (result === 1) assert.equal(f.view.error_message, "시험 프로그램을(를) 설치하지 못했습니다. 다시 시도하거나 https://example.test/에서 받아 설치하세요. 원인: 원인 메시지");
+});
+
+test("허용을 기다리는 동안 제안 화면을 유지하고 취소해도 같은 화면을 보인다", async () => {
+  const f = await fixture({ deferred: true });
+  const pending = f.handlers.get("install")!({});
+  assert.equal(f.view.show_install, true);
+  assert.equal(f.view.show_installing, false);
+  f.releasePermission({ status: "cancelled" });
+  await pending;
+  assert.equal(f.view.show_install, true);
+});
+
+test("일반 설치 실패의 종료 코드는 상세에만 남는다", () => {
+  const error = agentError("AGENT_INSTALL_FAILED", "시험", "https://example.test/", "0x00000001", "문제");
+  assert.deepEqual(error.details, ["winget 종료 코드: 0x00000001"]);
+  assert.doesNotMatch(error.message, /0x00000001/);
 });

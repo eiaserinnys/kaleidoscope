@@ -28,6 +28,7 @@ export class AppClient {
   private agents: Agent[] = [];
   private programs: Record<string, Program> = {};
   private installing = false;
+  private startingAfterInstall = false;
   private selected: Agent | null = null;
   private folder: string | null = null;
   private stage: "loading" | "agents" | "folder" | "session" | "error" = "loading";
@@ -37,7 +38,7 @@ export class AppClient {
   private restoring = false;
   private storageReady = false;
   private storageFailure = false;
-  private error: { id: string | null; message: string } | null = null;
+  private error: { id: string | null; message: string; details: string[] } | null = null;
   private lastItems: SessionView["items"] | null = null;
   private lastQueue = "";
   private lastStream = "";
@@ -115,10 +116,20 @@ export class AppClient {
     this.stage = "session";
     this.update();
     try {
-      const attached = await this.session.attach(this.selected);
+      const [attached, installer] = await Promise.all([
+        this.session.attach(this.selected), this.client.process.attach({ key: "install" }),
+      ]);
       if (!attached) {
-        const started = await this.session.start(this.selected);
-        if (!started) { this.stage = "folder"; this.retry = true; this.update(); }
+        if (installer) {
+          const programs = this.programs[this.selected.command] ? this.programs : await this.client.getStorage("programs") as Record<string, Program>;
+          this.programs = programs;
+          this.installing = true;
+          this.update();
+          await this.finishInstall(programs[this.selected.command], installer.handle, installer.after, installer.checkpoint as { stdout: string } | null);
+        } else {
+          const started = await this.session.start(this.selected);
+          if (!started) { this.stage = "folder"; this.retry = true; this.update(); }
+        }
       }
     } catch (error) { this.showError(error); }
   }
@@ -169,8 +180,9 @@ export class AppClient {
     this.error = null;
     this.retry = false;
     this.update();
-    try { if (!await this.session.retry()) { this.stage = "folder"; this.retry = true; this.update(); } }
+    try { if (!await this.session.retry()) { this.startingAfterInstall = false; this.stage = "folder"; this.retry = true; this.update(); } }
     catch (error) {
+      this.startingAfterInstall = false;
       if (installed && (error as { id?: string })?.id === "PROCESS_START_COMMAND_NOT_FOUND") {
         this.showError(agentError("AGENT_INSTALL_COMMAND_STILL_MISSING", installed.name, this.selected.command));
       } else this.showError(error);
@@ -180,25 +192,15 @@ export class AppClient {
   private async install(): Promise<void> {
     const program = this.selected && this.programs[this.selected.command];
     if (!program || !this.canInstall()) return;
-    this.installing = true;
-    this.update();
     try {
       const result = await this.client.process.start({ key: "install", permission: "install", cwd_permission: "work", spec: {
-        name: `${program.name} 설치`, command: "winget", args: ["install", "--id", program.winget, "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"], env: {},
+        name: `${program.name} 설치 프로그램`, command: "winget", args: ["install", "--id", program.winget, "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"], env: {},
       } });
       if (result.status === "cancelled") return;
       if (!result.handle) throw agentError("AGENT_START_HANDLE_MISSING");
-      const { code, output } = await this.readInstaller(result.handle);
-      if (code === 0) {
-        this.installing = false;
-        await this.retryStart(program);
-        return;
-      }
-      const unsigned = code === null ? null : code >>> 0;
-      const id = unsigned === 0x8A15003A || unsigned === 0x8A15010F ? "AGENT_INSTALL_BLOCKED_BY_POLICY"
-        : unsigned === 0x8A15010C ? "AGENT_INSTALL_CANCELLED_BY_USER" : "AGENT_INSTALL_FAILED";
-      const hex = unsigned === null ? "알 수 없음" : `0x${unsigned.toString(16).toUpperCase().padStart(8, "0")}`;
-      this.showError(agentError(id, program.name, program.url, hex, output));
+      this.installing = true;
+      this.update();
+      await this.finishInstall(program, result.handle, 0, null);
     } catch (error) {
       if ((error as { id?: string })?.id === "PROCESS_START_COMMAND_NOT_FOUND") this.showError(agentError("AGENT_INSTALL_WINGET_NOT_FOUND", program.name, program.url));
       else this.showError(error);
@@ -208,8 +210,28 @@ export class AppClient {
     }
   }
 
-  private async readInstaller(handle: string): Promise<{ code: number | null; output: string }> {
-    let after = 0, stdout = "", queue = Promise.resolve(), done = false;
+  private async finishInstall(program: Program, handle: string, after: number, checkpoint: { stdout: string } | null): Promise<void> {
+    try {
+      const { code, output } = await this.readInstaller(handle, after, checkpoint);
+      if (code === 0) {
+        this.installing = false;
+        this.startingAfterInstall = true;
+        await this.retryStart(program);
+        return;
+      }
+      const unsigned = code === null ? null : code >>> 0;
+      const id = unsigned === 0x8A15003A || unsigned === 0x8A15010F ? "AGENT_INSTALL_BLOCKED_BY_POLICY"
+        : unsigned === 0x8A15010C ? "AGENT_INSTALL_CANCELLED_BY_USER" : "AGENT_INSTALL_FAILED";
+      const hex = unsigned === null ? "알 수 없음" : `0x${unsigned.toString(16).toUpperCase().padStart(8, "0")}`;
+      this.showError(agentError(id, program.name, program.url, hex, output));
+    } finally {
+      this.installing = false;
+      this.update();
+    }
+  }
+
+  private async readInstaller(handle: string, after: number, checkpoint: { stdout: string } | null): Promise<{ code: number | null; output: string }> {
+    let stdout = checkpoint?.stdout ?? "", queue = Promise.resolve(), done = false;
     const decoder = new TextDecoder();
     return new Promise((resolve, reject) => {
       const read = async () => {
@@ -218,7 +240,7 @@ export class AppClient {
           for (;;) {
             const result = await this.client.process.read({ handle, after, max_bytes: 65536 });
             stdout = (stdout + decoder.decode(Uint8Array.from(result.bytes), { stream: true })).slice(-65536);
-            if (result.next !== after) { after = result.next; await this.client.process.ack({ handle, after, checkpoint: null }); }
+            if (result.next !== after) { after = result.next; await this.client.process.ack({ handle, after, checkpoint: { stdout } }); }
             if (result.bytes.length) continue;
             if (result.exit) {
               done = true;
@@ -269,6 +291,7 @@ export class AppClient {
   private receive(view: SessionView): void {
     const previous = this.view;
     this.view = view;
+    if (view.phase !== "starting") this.startingAfterInstall = false;
     const queue = JSON.stringify(view.queued);
     if (this.lastItems !== view.items || this.lastQueue !== queue) {
       this.client.chat.publish("conversation", { kind: "snapshot", items: view.items, stream_id: view.stream_id, text: view.text, busy: view.busy, tool: view.tool, queued: view.queued });
@@ -304,8 +327,8 @@ export class AppClient {
   }
 
   private showError(reason: unknown): void {
-    const error = reason as { id?: string; message?: string };
-    this.error = { id: error?.id ?? null, message: error?.message ?? String(reason) };
+    const error = reason as { id?: string; message?: string; details?: string[] };
+    this.error = { id: error?.id ?? null, message: error?.message ?? String(reason), details: error?.details ?? [] };
     this.stage = "error";
     this.update();
   }
@@ -327,13 +350,14 @@ export class AppClient {
       show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
       show_empty: this.stage === "agents" && this.agents.length === 0, show_folder: this.stage === "folder",
-      show_starting: !this.installing && this.stage === "session" && (!phase || phase === "starting"), show_login: this.stage === "session" && phase === "login",
+      show_starting: this.installing || (this.stage === "session" && (!phase || phase === "starting")), show_login: this.stage === "session" && phase === "login",
       show_failed: !this.installing && !this.canInstall() && (this.stage === "error" || (this.stage === "session" && phase === "failed")), show_install: this.canInstall(),
-      show_installing: this.installing, install_label: program ? `${program.name} 설치` : "", install_message: program ? `${program.name} 설치 중` : "", show_chat: chat,
-      show_retry: this.retry && (this.stage === "folder" || this.stage === "error" || (this.stage === "session" && phase === "failed")), show_back: !this.installing && this.agents.length > 1,
-      show_selected: !this.installing && !!this.selected && this.stage !== "agents" && this.stage !== "loading",
-      show_single: !this.installing && !!this.selected && this.agents.length <= 1,
-      show_picked_folder: !this.installing && !!this.folder && (this.stage !== "folder" || this.retry) && this.stage !== "agents" && this.stage !== "loading",
+      show_installing: this.installing, show_install_label: this.installing || this.startingAfterInstall,
+      install_label: program ? `${program.name} 설치` : "", install_message: this.installing && program ? `${program.name} 설치 중` : " ", show_chat: chat,
+      show_retry: this.retry && (this.stage === "folder" || this.stage === "error" || (this.stage === "session" && phase === "failed")), show_back: this.agents.length > 1,
+      show_selected: !!this.selected && this.stage !== "agents" && this.stage !== "loading",
+      show_single: !!this.selected && this.agents.length <= 1,
+      show_picked_folder: !!this.folder && (this.stage !== "folder" || this.retry) && this.stage !== "agents" && this.stage !== "loading",
       show_login_error: phase === "login" && !!failure,
       show_pick_folder: this.stage === "folder" && !this.retry,
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),

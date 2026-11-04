@@ -289,6 +289,9 @@
                       },
                       "on_click": {
                         "client": "back_agent"
+                      },
+                      "disabled": {
+                        "client": "show_installing"
                       }
                     }
                   },
@@ -317,7 +320,10 @@
                       "on_click": {
                         "client": "pick_folder"
                       },
-                      "icon": "folder"
+                      "icon": "folder",
+                      "disabled": {
+                        "client": "show_installing"
+                      }
                     }
                   }
                 ]
@@ -442,25 +448,13 @@
             {
               "type": "when",
               "value": {
-                "client": "show_installing"
+                "client": "show_install_label"
               },
               "child": {
-                "type": "stack",
-                "direction": "column",
-                "gap": "small",
-                "children": [
-                  {
-                    "type": "progress",
-                    "value": null,
-                    "max": 1
-                  },
-                  {
-                    "type": "text",
-                    "value": {
-                      "client": "install_message"
-                    }
-                  }
-                ]
+                "type": "text",
+                "value": {
+                  "client": "install_message"
+                }
               }
             },
             {
@@ -672,6 +666,9 @@
       },
       "install_message": {
         "default": ""
+      },
+      "show_install_label": {
+        "default": false
       }
     },
     "channels": [
