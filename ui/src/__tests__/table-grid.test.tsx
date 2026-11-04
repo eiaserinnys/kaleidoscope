@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
+import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
@@ -53,6 +54,19 @@ it("잘못된 동적 열은 오류 코드로 표시하고 null 열은 빈 상태
   cleanup();
   setup(ui, { columns: null });
   expect(await screen.findByText("없음")).toBeTruthy();
+});
+
+it("동적 열의 너비와 형식은 문자열이어야 한다", async () => {
+  const ui = { type: "table", rows: [], columns: { state: "columns" } } as unknown as Block;
+  const invalid: JsonValue[] = [
+    { field: "a", label: "하나", width: ["wide"] },
+    { field: "a", label: "하나", format: ["content"] },
+  ];
+  for (const column of invalid) {
+    setup(ui, { columns: [column] });
+    expect(await screen.findByText("SHELL_TABLE_COLUMNS_VALUE_INVALID")).toBeTruthy();
+    cleanup();
+  }
 });
 
 it("칸의 색, 제목, 본문과 단일 배지를 표시하고 잘못된 칸만 오류로 둔다", async () => {

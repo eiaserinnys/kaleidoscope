@@ -24,8 +24,8 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
     tabIndex={focused ? 0 : -1} className={`ks-table-cell ks-grid-cell${numericColumn(column) ? " is-numeric" : ""}${selected ? " is-selected" : ""}`}
     onFocus={() => handlers.current.focus(rowKey, column.field)}
     onKeyDown={(event) => handlers.current.key(event, rowKey, column.field)}
+    onMouseDown={(event) => { if (event.detail >= 2) event.preventDefault(); }}
     onClick={(event) => { if (!window.getSelection()?.toString()) { event.currentTarget.focus({ preventScroll: true }); handlers.current.choose(rowKey, column.field); } }}
-    onDoubleClick={(event) => event.preventDefault()}
     onContextMenu={(event) => handlers.current.menu(event, rowKey, event.currentTarget)}>
     {column.format === "badge" && isBadge(raw) ? <Badge value={raw} /> : formattedCell(raw, column) ?? text}
   </span>;

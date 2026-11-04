@@ -16,7 +16,7 @@ export const dataViewsApp: AppDefinition = {
   requires: { blocks: 23, modules: { files: 1, connection: 1 } },
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }, { id: "sample", module: "connection", access: "read", connection: "sample", label: "예제" }],
   sources: { sample: { kind: "request", permission: "sample", path: "/sample" } },
-  state: { tab: new URLSearchParams(window.location.search).has("grid-loading") ? 12 : 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8), schedule_columns: scheduleColumns, schedule_rows: scheduleRows, schedule_choice: null, large_columns: largeColumns, large_rows: largeRows },
+  state: { tab: new URLSearchParams(window.location.search).has("grid-error") ? 13 : new URLSearchParams(window.location.search).has("grid-loading") ? 12 : 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8), schedule_columns: scheduleColumns, schedule_rows: scheduleRows, schedule_choice: null, large_columns: largeColumns, large_rows: largeRows },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
     { label: "긴 목록", child: { type: "list", items, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }, { label: "지우기", danger: true, confirm: { title: "지울까요?", body: { item: "title" }, ok: "지우기" }, on_select: { copy_text: { item: "url" } } }] } },
     { label: "격자 시험", child: { type: "list", layout: "grid", items: grid, selected: { state: "choice" }, on_select: { set_state: "choice" } } },
@@ -69,5 +69,6 @@ export const dataViewsApp: AppDefinition = {
     { label: "지우기 시험", child: { type: "list", items: { state: "delete_rows" }, item_menu: [{ label: "지우기", danger: true, confirm: { title: "지울까요?", ok: "지우기" }, on_select: [{ set_state: "delete_rows", value: { expr: "[$state.delete_rows[key != $event]]" } }] }] } },
     { label: "탐색기 확인", child: { type: "explorer", root: { permission: "media" } } },
     { label: "열 불러오기", child: { type: "table", rows: [{ key: "a", label: "첫 항목" }], columns: { expr: '$data.sample.message ? [{"field":"label","label":"이름"}] : []' } } },
+    { label: "칸 오류", child: { type: "table", rows: [{ key: "a", label: "제작", day: ["잘못된 내용"], next: { title: "정상 일정" } }], columns: [{ field: "label", label: "항목" }, { field: "day", label: "첫째 날", format: "content" }, { field: "next", label: "둘째 날", format: "content" }], selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
   ] },
 };

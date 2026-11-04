@@ -68,8 +68,8 @@ function normalizeColumns(value: unknown, rowHeader?: string, cell = false): { c
   const fields = new Set<string>();
   for (const [index, column] of values.entries()) {
     if (!isObject(column) || Object.keys(column).some((key) => !["field", "label", "width", "format", "max_lines"].includes(key)) || typeof column.field !== "string" || typeof column.label !== "string" ||
-        (column.width !== undefined && !["narrow", "medium", "wide", "fill"].includes(String(column.width))) ||
-        (column.format !== undefined && !["text", "number", "date", "badge", "delta", "sparkline", "content"].includes(String(column.format))) ||
+        (column.width !== undefined && (typeof column.width !== "string" || !["narrow", "medium", "wide", "fill"].includes(column.width))) ||
+        (column.format !== undefined && (typeof column.format !== "string" || !["text", "number", "date", "badge", "delta", "sparkline", "content"].includes(column.format))) ||
         (column.max_lines !== undefined && (!Number.isInteger(column.max_lines) || Number(column.max_lines) < 1 || Number(column.max_lines) > 3 || column.format !== "content"))) {
       const field = isObject(column) && typeof column.field === "string" ? column.field : `${index + 1}번째`;
       return { columns: [], error: shellErrors.SHELL_TABLE_COLUMNS_VALUE_INVALID({ field }) };

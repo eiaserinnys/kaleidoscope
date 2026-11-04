@@ -122,3 +122,37 @@ test("동적 열이 도착하기 전 표 자리에 로딩을 보인다", async (
   await capture(page, "20261104-1700-table-loading");
   await expect(app.getByRole("table")).toBeVisible();
 });
+
+test("내용 글의 더블클릭과 드래그 선택을 구분한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "일정표", exact: true }).click();
+  const text = app.getByText("긴 한글 제목과 검토 일정 1-2", { exact: true });
+  await text.dblclick();
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toBe("");
+  const cell = text.getByRole("gridcell").or(text.locator('xpath=ancestor::*[@role="gridcell"]'));
+  await expect(cell).toHaveAttribute("aria-selected", "true");
+  const selections = () => page.evaluate(() => (window as unknown as { conversationHarness: { calls: () => Array<{ op: string; pointer?: string }> } }).conversationHarness.calls().filter((call) => call.op === "data.act" && call.pointer?.endsWith("/on_select")).length);
+  const before = await selections();
+  const rect = (await text.boundingBox())!;
+  await page.mouse.move(rect.x + 4, rect.y + rect.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
+  expect(selected).not.toBe("");
+  await page.keyboard.press("Control+C");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(selected);
+  expect(await selections()).toBe(before);
+});
+
+test("잘못된 내용 칸과 정상 칸을 함께 표시한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 750 });
+  await page.goto("/?preview=data-views-test&grid-error=1");
+  const app = page.getByTestId("app-window-data-views-test");
+  await expect(app.getByText("SHELL_TABLE_CELL_CONTENT_INVALID")).toBeVisible();
+  await expect(app.getByText("정상 일정")).toBeVisible();
+  await capture(page, "20261104-1700-table-error");
+});
