@@ -1,0 +1,3 @@
+.ks-data-input.has-spin .ks-text-input { padding-inline-end: var(--ks-icon-button-size); }
+.ks-number-spin { position: absolute; inset-block-start: 0; inset-inline-end: 0; display: flex; flex-direction: column; width: var(--ks-icon-button-size); height: var(--ks-control-height); }
+.ks-number-spin .ks-icon-button.is-embedded { width: var(--ks-icon-button-size); height: calc(var(--ks-control-height) / 2); min-height: 0; flex: 0 0 calc(var(--ks-control-height) / 2); padding: 0; }

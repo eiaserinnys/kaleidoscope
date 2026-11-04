@@ -39,6 +39,7 @@ import { blockSet18Fixtures } from "../e2e/fixtures/blocks-18";
 import { previewGridFixtures } from "../e2e/fixtures/preview-grid";
 import { shellDefectFixtures } from "../e2e/fixtures/shell-defects";
 import { stackWhenFillApp } from "../e2e/fixtures/stack-when-fill";
+import { inputSpinApp } from "../e2e/fixtures/input-spin";
 import { describeVisible } from "../src/share/visible";
 
 const mdEditor = mdEditorJson as AppDefinition;
@@ -85,7 +86,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp];
+const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},

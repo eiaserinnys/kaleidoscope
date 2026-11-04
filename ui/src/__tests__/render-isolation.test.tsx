@@ -1394,6 +1394,25 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("숫자 스핀 값 변화는 다른 창과 형제를 다시 그리지 않는다", async () => {
+    const app: AppDefinition = {
+      id: "spin-isolation", name: "숫자 입력 격리", requires: { blocks: 29, modules: {} }, permissions: [],
+      state: { value: 2, other: "고정" },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "input", kind: "number", spin: true, label: "수량", value: { state: "value" }, on_change: { set_state: "value" } },
+        { type: "text", value: { state: "other" } },
+      ] },
+    };
+    const { store } = await setup([app], { value: 2, other: "고정" });
+    await waitFor(() => expect(screen.getAllByRole("spinbutton", { name: "수량" })).toHaveLength(2));
+    calls.length = 0;
+    await setState(store, "window-a", "value", 3);
+    await settleRenders();
+    expect(countFor("window-b")).toBe(0);
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    store.dispose();
+  });
+
   it("창 정보 알림 표시와 소멸은 형제 내용과 다른 창을 다시 그리지 않는다", async () => {
     const snapshot = testSnapshot([definition]);
     const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));

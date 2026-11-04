@@ -14,3 +14,15 @@ fn button_description_requires_its_version_and_joins_binding_walk() {
     assert!(all_ui_bindings(&parsed).iter().any(|(path, _)| path == "/ui/children/0/description"));
     assert_eq!(serde_json::to_value(parsed).unwrap()["ui"]["children"][0]["description"]["state"], "hint");
 }
+
+#[test]
+fn spin_requires_version_and_number_kind() {
+    let mut app = definition(28);
+    app["ui"]["children"][0] = json!({"type":"input", "kind":"number", "spin":false, "value":{"state":"hint"}, "on_change":{"set_state":"hint"}});
+    assert_eq!(parse_app_definition(&app.to_string()).unwrap_err().id.as_deref(), Some("APP_INPUT_SPIN_VERSION_LOW"));
+    app["requires"]["blocks"] = json!(29);
+    let parsed = parse_app_definition(&app.to_string()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap()["ui"]["children"][0]["spin"], false);
+    app["ui"]["children"][0]["kind"] = json!("text");
+    assert_eq!(parse_app_definition(&app.to_string()).unwrap_err().id.as_deref(), Some("APP_INPUT_SPIN_KIND_INVALID"));
+}

@@ -68,14 +68,15 @@ describe("입력 블록 확장", () => {
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_change", event: 4.5 }));
   });
 
-  it("서식과 focus 신호가 없는 숫자 입력은 기존 숫자 컨트롤을 유지한다", async () => {
+  it("서식과 focus 신호가 없는 숫자 입력도 텍스트 스핀 컨트롤을 쓴다", async () => {
     setup(
       { type: "input", kind: "number", value: { state: "amount" }, on_change: { set_state: "amount" }, min: 0, max: 10, step: 0.5 },
       { amount: 1 },
     );
     const input = await screen.findByRole("spinbutton") as HTMLInputElement;
-    expect(input.type).toBe("number");
-    expect(fireEvent.keyDown(input, { key: "ArrowUp" })).toBe(true);
+    expect(input.type).toBe("text");
+    expect(fireEvent.keyDown(input, { key: "ArrowUp" })).toBe(false);
+    expect(input.value).toBe("1.5");
   });
 
   it("blur 모드는 입력을 떠날 때 한 번 확정한다", async () => {

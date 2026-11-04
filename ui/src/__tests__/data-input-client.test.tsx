@@ -4,6 +4,135 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ButtonBlock, ColorBlock, InputBlock, SelectBlock, ToggleBlock } from "../blocks/data-input";
 import "../styles/data-input-preview.css";
 
+it("숫자 입력은 기본 단추 없이 키로 범위를 지켜 증감한다", () => {
+  vi.useFakeTimers();
+  try {
+  const input = { type: "input", kind: "number", value: 1, min: 0, max: 10, step: 0.5, on_change: { client: "change" } };
+  render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+  const field = screen.getByRole("spinbutton") as HTMLInputElement;
+  expect(field.type).toBe("text");
+  expect(field.inputMode).toBe("decimal");
+  fireEvent.keyDown(field, { key: "ArrowUp" });
+  expect(field.value).toBe("1.5");
+  fireEvent.keyDown(field, { key: "PageUp" });
+  expect(field.value).toBe("6.5");
+  fireEvent.keyDown(field, { key: "End" });
+  expect(field.value).toBe("10");
+  fireEvent.keyDown(field, { key: "Home" });
+  expect(field.value).toBe("0");
+  } finally { cleanup(); vi.useRealTimers(); }
+});
+
+it("스핀을 누르는 동안 반복하고 놓은 뒤 마지막 값만 보낸다", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("PointerEvent", MouseEvent);
+  try {
+    const input = { type: "input", kind: "number", spin: true, value: 1, min: 0, max: 20, on_change: { client: "change" } };
+    render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+    const field = screen.getByRole("spinbutton") as HTMLInputElement;
+    const up = screen.getByRole("button", { name: "늘리기" });
+    fireEvent.pointerDown(up, { button: 0, pointerId: 1 });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(Number(field.value)).toBeGreaterThan(2);
+    expect(runtime.act).not.toHaveBeenCalled();
+    fireEvent.pointerUp(up, { pointerId: 1 });
+    fireEvent.click(up, { detail: 1 });
+    const finalValue = Number(field.value);
+    await act(async () => { vi.advanceTimersByTime(300); await Promise.resolve(); });
+    expect(runtime.act).toHaveBeenCalledTimes(1);
+    expect(runtime.act).toHaveBeenCalledWith("/input/on_change", finalValue, undefined, undefined, undefined, { input: true });
+  } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
+it("스핀 경계와 읽기 전용 상태는 해당 단추를 잠근다", () => {
+  runtime.values = { value: 2, locked: false };
+  const input = { type: "input", kind: "number", spin: true, value: { client: "value" }, read_only: { client: "locked" }, min: 0, max: 2, on_change: { client: "change" } };
+  const draw = () => <InputBlock block={input as never} context={{} as never} pointer="/input" />;
+  const view = render(draw());
+  expect((screen.getByRole("button", { name: "늘리기" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "줄이기" }) as HTMLButtonElement).disabled).toBe(false);
+  runtime.values.locked = true;
+  view.rerender(draw());
+  expect((screen.getByRole("button", { name: "늘리기" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "줄이기" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("짧게 누르면 놓고 300ms 뒤 한 번만 보낸다", async () => {
+  vi.useFakeTimers(); vi.stubGlobal("PointerEvent", MouseEvent);
+  try {
+    const input = { type: "input", kind: "number", spin: true, value: 1, on_change: { client: "change" } };
+    render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+    const up = screen.getByRole("button", { name: "늘리기" });
+    fireEvent.pointerDown(up, { button: 0 });
+    fireEvent.pointerUp(up);
+    fireEvent.click(up, { detail: 1 });
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("2");
+    act(() => { vi.advanceTimersByTime(299); });
+    expect(runtime.act).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1); await Promise.resolve(); });
+    expect(runtime.act).toHaveBeenCalledTimes(1);
+    expect(runtime.act).toHaveBeenCalledWith("/input/on_change", 2, undefined, undefined, undefined, { input: true });
+  } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
+it("입력에 초점이 없어도 스핀 조작 중 바깥 값이 초안을 덮지 않는다", () => {
+  vi.useFakeTimers(); vi.stubGlobal("PointerEvent", MouseEvent);
+  try {
+    runtime.values = { value: 1 };
+    const input = { type: "input", kind: "number", spin: true, value: { client: "value" }, on_change: { client: "change" } };
+    const draw = () => <InputBlock block={input as never} context={{} as never} pointer="/input" />;
+    const view = render(draw());
+    const up = screen.getByRole("button", { name: "늘리기" });
+    fireEvent.pointerDown(up, { button: 0 });
+    runtime.values.value = 9;
+    view.rerender(draw());
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("2");
+    fireEvent.pointerUp(up);
+  } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
+it.each(["cancel", "lost", "unmount"])("스핀 %s 종료는 반복을 멈추고 마지막 값을 보낸다", async (ending) => {
+  vi.useFakeTimers(); vi.stubGlobal("PointerEvent", MouseEvent);
+  try {
+    const input = { type: "input", kind: "number", spin: true, value: 1, on_change: { client: "change" } };
+    const view = render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+    const up = screen.getByRole("button", { name: "늘리기" });
+    fireEvent.pointerDown(up, { button: 0 });
+    if (ending === "cancel") fireEvent.pointerCancel(up);
+    else if (ending === "lost") fireEvent.lostPointerCapture(up);
+    else view.unmount();
+    await act(async () => { vi.advanceTimersByTime(1000); await Promise.resolve(); });
+    expect(runtime.act).toHaveBeenCalledTimes(1);
+    expect(runtime.act).toHaveBeenCalledWith("/input/on_change", 2, undefined, undefined, undefined, { input: true });
+  } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
+it("빈 숫자는 0에서 시작하고 경계 없는 Home은 텍스트 조작에 남긴다", () => {
+  vi.useFakeTimers();
+  try {
+  const input = { type: "input", kind: "number", value: null, step: 0.25, format: { kind: "decimal", digits: 2 }, on_change: { client: "change" } };
+  render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+  const field = screen.getByRole("spinbutton") as HTMLInputElement;
+  expect(field.hasAttribute("aria-valuenow")).toBe(false);
+  expect(fireEvent.keyDown(field, { key: "Home" })).toBe(true);
+  fireEvent.keyDown(field, { key: "ArrowDown" });
+  expect(field.value).toBe("-0.25");
+  } finally { cleanup(); vi.useRealTimers(); }
+});
+
+it("서식 없는 소수 step도 부동소수 오차 없이 증감한다", () => {
+  vi.useFakeTimers();
+  try {
+    const input = { type: "input", kind: "number", value: 0.2, step: 0.1, on_change: { client: "change" } };
+    render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+    const field = screen.getByRole("spinbutton") as HTMLInputElement;
+    fireEvent.keyDown(field, { key: "ArrowUp" });
+    expect(field.value).toBe("0.3");
+    fireEvent.keyDown(field, { key: "ArrowDown" });
+    expect(field.value).toBe("0.2");
+  } finally { cleanup(); vi.useRealTimers(); }
+});
+
 const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, loading: false, act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined }));
 const previewRender = vi.hoisted(() => vi.fn());
 vi.mock("../data/window-state", async (importOriginal) => ({ ...(await importOriginal<typeof import("../data/window-state")>()), useWindowVisible: () => true }));
@@ -221,7 +350,7 @@ it("columns 입력은 보일 문자 수와 숫자 조작부 폭을 전달한다"
   const field = screen.getByRole("spinbutton") as HTMLInputElement;
   const wrapper = field.closest(".ks-data-input") as HTMLDivElement;
   expect(wrapper.classList.contains("has-columns")).toBe(true);
-  expect(wrapper.classList.contains("is-native-number")).toBe(true);
+  expect(wrapper.classList.contains("is-number")).toBe(true);
   expect(wrapper.style.getPropertyValue("--ks-input-columns")).toBe("4ch");
   field.focus();
   fireEvent.change(field, { target: { value: "1234" } });
