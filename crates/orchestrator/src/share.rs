@@ -20,12 +20,16 @@ pub(super) struct ShareStore {
 
 impl ShareStore {
     pub(super) fn control_candidates(&self, window: &str) -> Vec<(String, SharedView)> {
-        self.views.iter().filter(|((_, id), _)| id == window)
-            .map(|((device, _), view)| (device.clone(), view.clone())).collect()
+        self.views
+            .iter()
+            .filter(|((_, id), _)| id == window)
+            .map(|((device, _), view)| (device.clone(), view.clone()))
+            .collect()
     }
 
     pub(super) fn contains(&self, device: &str, window: &str) -> bool {
-        self.views.contains_key(&(device.to_string(), window.to_string()))
+        self.views
+            .contains_key(&(device.to_string(), window.to_string()))
     }
     pub(super) fn put(
         &mut self,

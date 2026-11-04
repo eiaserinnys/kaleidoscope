@@ -706,9 +706,6 @@ mod collection_storage;
 mod connection_relay;
 mod connections;
 mod device_stream;
-mod window_control;
-#[cfg(test)]
-mod window_control_tests;
 mod http;
 mod layout_changes;
 mod layouts;
@@ -718,6 +715,9 @@ mod preview;
 mod publish;
 mod share;
 mod storage;
+mod window_control;
+#[cfg(test)]
+mod window_control_tests;
 pub mod worker;
 mod worker_bridge;
 mod worker_http;

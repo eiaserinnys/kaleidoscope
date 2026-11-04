@@ -330,10 +330,21 @@ impl AppState {
     ) -> Option<DeviceEvent> {
         let mut event = broadcast.event;
         if matches!(event, DeviceEvent::WindowControl { .. }) {
-            let supported = self.0.window_control_versions.lock().ok()
-                .and_then(|versions| versions.get(device_id).map(|versions| versions.iter().any(|v| *v >= 12)))
+            let supported = self
+                .0
+                .window_control_versions
+                .lock()
+                .ok()
+                .and_then(|versions| {
+                    versions
+                        .get(device_id)
+                        .map(|versions| versions.iter().any(|v| *v >= 12))
+                })
                 .unwrap_or(false);
-            if !broadcast.strict_open_target || broadcast.open_target.as_deref() != Some(device_id) || !supported {
+            if !broadcast.strict_open_target
+                || broadcast.open_target.as_deref() != Some(device_id)
+                || !supported
+            {
                 return None;
             }
         }

@@ -88,7 +88,10 @@ pub fn router(state: AppState) -> Router {
             post(super::app_storage_http::device_collection_move),
         )
         .route("/events", get(device_events))
-        .route("/window-control/{request_id}", post(super::window_control::device_reply).layer(DefaultBodyLimit::disable()))
+        .route(
+            "/window-control/{request_id}",
+            post(super::window_control::device_reply).layer(DefaultBodyLimit::disable()),
+        )
         .route("/layout", axum::routing::put(super::layouts::put_layout))
         .route(
             "/layout/changes",

@@ -155,8 +155,13 @@ impl AppState {
         }
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
-        self.0.window_control_versions.lock().unwrap_or_else(|e| e.into_inner())
-            .entry(device_id.clone()).or_default().push(registry_version);
+        self.0
+            .window_control_versions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(device_id.clone())
+            .or_default()
+            .push(registry_version);
         let guard = ConnectionGuard {
             state: state.clone(),
             device_id: device_id.clone(),
@@ -196,10 +201,19 @@ struct ConnectionGuard {
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         if let Ok(mut map) = self.state.0.connections.lock() {
-            let mut versions = self.state.0.window_control_versions.lock().unwrap_or_else(|e| e.into_inner());
+            let mut versions = self
+                .state
+                .0
+                .window_control_versions
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(entries) = versions.get_mut(&self.device_id) {
-                if let Some(index) = entries.iter().position(|v| *v == self.registry_version) { entries.remove(index); }
-                if entries.is_empty() { versions.remove(&self.device_id); }
+                if let Some(index) = entries.iter().position(|v| *v == self.registry_version) {
+                    entries.remove(index);
+                }
+                if entries.is_empty() {
+                    versions.remove(&self.device_id);
+                }
             }
             drop(versions);
             if let Some(count) = map.get_mut(&self.device_id) {
@@ -207,7 +221,8 @@ impl Drop for ConnectionGuard {
                 if *count == 0 {
                     map.remove(&self.device_id);
                     self.state.delete_device_shared_views(&self.device_id);
-                    self.state.window_control_device_disconnected(&self.device_id);
+                    self.state
+                        .window_control_device_disconnected(&self.device_id);
                     if let Ok(mut support) = self.state.0.device_support.lock() {
                         support.remove(&self.device_id);
                     }
