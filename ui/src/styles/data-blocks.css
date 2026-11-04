@@ -41,6 +41,7 @@
 .ks-data-tab-list { position: relative; display: flex; min-width: 0; flex: 1 1 auto; gap: var(--ks-space-1); overflow: hidden; padding-block: var(--ks-space-2); padding-inline: var(--ks-space-1); margin-inline: calc(-1 * var(--ks-space-1)); }
 .ks-data-tab-panel { padding-inline: var(--ks-space-3); }
 .ks-data-tab-list .ks-button { flex: 0 0 auto; font-size: var(--ks-type-meta); white-space: nowrap; }
+.ks-data-tab-list .ks-button.is-constrained { flex: 0 1 auto; min-width: 0; }
 .ks-data-tab-list .ks-button.is-overflow { position: absolute; inset-inline-start: 0; visibility: hidden; }
 .ks-data-tab-more-probe { position: absolute; inset-inline-start: 0; visibility: hidden; width: var(--ks-icon-button-size); }
 .ks-data-tab-panel { flex: 1 1 auto; min-height: 0; overflow: auto; padding-block-end: var(--ks-space-3); }

@@ -104,7 +104,14 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     const update = () => {
       const style = getComputedStyle(list);
       const width = list.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0");
-      const widths = refs.current.slice(0, block.tabs.length).map((tab) => tab?.getBoundingClientRect().width ?? 0);
+      const widths = refs.current.slice(0, block.tabs.length).map((tab) => {
+        if (!tab) return 0;
+        const label = tab.querySelector<HTMLElement>(".ks-truncate-label");
+        const tabStyle = getComputedStyle(tab);
+        const inset = parseFloat(tabStyle.paddingLeft) + parseFloat(tabStyle.paddingRight)
+          + parseFloat(tabStyle.borderLeftWidth) + parseFloat(tabStyle.borderRightWidth);
+        return Math.max(tab.getBoundingClientRect().width, (label?.scrollWidth ?? 0) + (inset || 0));
+      });
       const labels = refs.current.slice(0, block.tabs.length).map((tab) => tab?.textContent ?? "");
       const next = { width, widths, labels, gap: parseFloat(style.columnGap) || 0, more: probeRef.current?.getBoundingClientRect().width ?? 0 };
       setMeasure((old) => JSON.stringify(old) === JSON.stringify(next) ? old : next);
@@ -136,6 +143,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     }
   }
   const overflow = block.tabs.map((_, n) => n).filter((n) => !visible.has(n));
+  const constrained = Boolean(measure && overflow.length && measure.widths[index] + measure.gap + measure.more > measure.width);
   useLayoutEffect(() => {
     const next = pendingFocus.current;
     if (next === null || next !== index || !visible.has(next)) return;
@@ -159,7 +167,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
     {collapsed ? <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span> : null}
     {showHeader ? <div className="ks-data-tab-header">
       <div className="ks-data-tab-list" role="tablist" ref={listRef}>
-        {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}${visible.has(n) ? "" : " is-overflow"}`} role="tab" id={`${id}-tab-${n}`} aria-controls={`${id}-panel-${n}`} aria-hidden={!visible.has(n) || undefined} aria-selected={n === index} tabIndex={n === (visible.has(focused) ? focused : index) ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}><BoundTabLabel pointer={`${pointer}/tabs/${n}/label`} binding={tab.label} /></button>)}
+        {block.tabs.map((tab, n) => <button className={`ks-button ks-button-default${n === index ? " is-selected" : ""}${n === index && constrained ? " is-constrained" : ""}${visible.has(n) ? "" : " is-overflow"}`} role="tab" id={`${id}-tab-${n}`} aria-controls={`${id}-panel-${n}`} aria-hidden={!visible.has(n) || undefined} aria-selected={n === index} tabIndex={n === (visible.has(focused) ? focused : index) ? 0 : -1} key={n} ref={(element) => { refs.current[n] = element; }} onFocus={() => setFocused(n)} onKeyDown={(event) => keyDown(event, n)} onClick={() => select(n)}><span className="ks-truncate-label"><BoundTabLabel pointer={`${pointer}/tabs/${n}/label`} binding={tab.label} /></span></button>)}
         <span className="ks-data-tab-more-probe" ref={probeRef} aria-hidden="true" />
         {overflow.length ? <IconButton aria-label="탭 더 보기" onClick={(event) => setMenuAnchor(event.currentTarget)}><DataIcon name="ellipsis" size="inline" /></IconButton> : null}
       </div>

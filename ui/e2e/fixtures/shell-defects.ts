@@ -3,6 +3,11 @@ import type { AppDefinition } from "../../src/contract/contract";
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
 export const shellDefectFixtures = [
+  { ...base, id: "long-tabs-fixture", name: "긴 탭 이름", state: {}, ui: { type: "tabs", tabs: [
+    { label: "프로젝트의 아주 긴 이름과 여러 항목을 함께 살펴보는 상세 작업 화면과 변경 기록", child: { type: "text", value: "선택한 보기" } },
+    { label: "상세 보기", child: { type: "text", value: "상세 내용" } },
+    { label: "기록 보기", child: { type: "text", value: "기록 내용" } },
+  ] } },
   { ...base, id: "notice-fixture", name: "알림 시험", state: { clicked: "대기" }, ui: { type: "stack", direction: "column", children: [
     { type: "toolbar", start: [
       { type: "button", label: "시작 단추", on_click: [{ set_state: "clicked", value: "시작 누름" }] },

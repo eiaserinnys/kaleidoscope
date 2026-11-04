@@ -77,3 +77,33 @@ test("repeat 기본 간격의 넓은 폭과 최소 폭", async ({ page }) => {
     await capture(app, `repeat-default-${width}`);
   }
 });
+
+test("긴 선택 탭을 말줄여 더 보기 단추를 온전히 표시한다", async ({ page }) => {
+  const app = await prepare(page, 360, "long-tabs-fixture");
+  const name = "프로젝트의 아주 긴 이름과 여러 항목을 함께 살펴보는 상세 작업 화면과 변경 기록";
+  const selected = app.getByRole("tab", { name, exact: true });
+  const list = app.getByRole("tablist");
+  const more = app.getByRole("button", { name: "탭 더 보기" });
+  await expect(selected).toBeVisible();
+  await expect(more).toBeVisible();
+  const bounds = await list.evaluate((element) => {
+    const tab = element.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')!;
+    const moreButton = element.querySelector<HTMLElement>('[aria-label="탭 더 보기"]')!;
+    const label = tab.querySelector<HTMLElement>(".ks-truncate-label");
+    const container = element.getBoundingClientRect();
+    const button = moreButton.getBoundingClientRect();
+    return { container: container.toJSON(), button: button.toJSON(), clipped: Boolean(label && label.scrollWidth > label.clientWidth), ellipsis: label && getComputedStyle(label).textOverflow };
+  });
+  expect(bounds.button.left).toBeGreaterThanOrEqual(bounds.container.left);
+  expect(bounds.button.right).toBeLessThanOrEqual(bounds.container.right);
+  expect(bounds.clipped).toBe(true);
+  expect(bounds.ellipsis).toBe("ellipsis");
+  await capture(app, "long-selected-tab-360");
+  await more.click();
+  await page.getByRole("menuitem", { name: "상세 보기" }).click();
+  await expect(app.getByRole("tab", { name: "상세 보기" })).toHaveAttribute("aria-selected", "true");
+  await page.setViewportSize({ width: 1102, height: 920 });
+  await expect(app.getByRole("button", { name: "탭 더 보기" })).toHaveCount(0);
+  await selected.click();
+  await expect(selected).toHaveAttribute("aria-selected", "true");
+});
