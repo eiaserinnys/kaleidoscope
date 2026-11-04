@@ -77,7 +77,12 @@ const settingsDefinition: AppDefinition = {
   ui: harnessParams.has("settings-web") ? { type: "web_view", url: "https://example.com", address_bar: false } : harnessParams.has("settings-document") ? { type: "markdown", document: { entry: "initial" } } : { type: "text", value: "앱 본문" },
 };
 if (harnessParams.get("app") === "empty-group") settingsDefinition.storage!.entries = settingsDefinition.storage!.entries.filter((entry) => !entry.key.includes("{workspace_id}"));
-const definitions = [mdEditorJson, htmlReportJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, marketJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[];
+const iconScenario = harnessParams.has("app-icons");
+const definitions = ([mdEditorJson, htmlReportJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, marketJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[]).map((definition) => {
+  if (!iconScenario || !["web-browser", "explorer"].includes(definition.id)) return definition;
+  const asset = definition.id === "web-browser" ? "sample-mono" : "sample-color";
+  return { ...definition, name: definition.id === "web-browser" ? "긴 제목을 가진 웹 브라우저와 자료 탐색 작업" : definition.name, icon: { asset, version: 1 }, assets: [...(definition.assets ?? []), { id: asset, version: 1 }] };
+});
 const apps: App[] = definitions.map((definition) => ({
   id: definition.id,
   name: definition.name,
@@ -205,6 +210,10 @@ const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 1
 
 const transport: FakeTransport = createFakeTransport({
   snapshot,
+  media: iconScenario ? {
+    "sample-mono": `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="2"/><path d="M3 12h18M12 3v18" stroke-width="2"/></svg>')}`,
+    "sample-color": `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="15" rx="3" fill="#e38932"/><path d="M3 8h18" stroke="#6b360f" stroke-width="2"/></svg>')}`,
+  } : undefined,
   conversation: shareScenario ? { thread: { id: "test-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "test", label: "Test" }, created_at: timestamp, archived: false }, items: [], models: [{ id: "test", label: "Test", available: true }] } : undefined,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   webUnavailable: new URLSearchParams(window.location.search).get("web") === "unavailable",

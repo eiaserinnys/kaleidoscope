@@ -95,6 +95,116 @@ impl MediaCache {
     }
 }
 
+
+pub(crate) fn app_icon(inner: &Arc<Inner>, app_id: &str, app_version: u32) -> Result<Option<MediaData>, CoreError> {
+    let icon = {
+        let state = inner.state.lock().unwrap();
+        if !state.shared.apps.iter().any(|app| app.id == app_id) {
+            return Err(errors::APP_ICON_APP_NOT_INSTALLED(app_id));
+        }
+        let definition = app_commands::definition_for(&state.shared, app_id, app_version)
+            .ok_or_else(|| errors::APP_ICON_APP_VERSION_NOT_FOUND(app_id, app_version))?;
+        let Some(icon) = definition.icon else { return Ok(None) };
+        let declared = definition.assets.iter().find(|asset| asset.id == icon.asset)
+            .ok_or_else(|| errors::APP_ICON_ASSET_UNDECLARED(app_id, &icon.asset, icon.version))?;
+        if declared.version != icon.version {
+            return Err(errors::APP_ICON_VERSION_MISMATCH(app_id, &icon.asset, icon.version, declared.version));
+        }
+        icon
+    };
+    get_asset(inner, &icon.asset, icon.version, None).map(Some)
+}
+
+fn get_asset(inner: &Arc<Inner>, asset: &str, version: u32, max_px: Option<u32>) -> Result<MediaData, CoreError> {
+    if let Some((meta, bytes)) = crate::builtin::bundled_asset(asset, version) {
+        return Ok(MediaData {
+            mime: match meta.format {
+                kaleidoscope_contract::assets::AssetFormat::Html => "text/html",
+                kaleidoscope_contract::assets::AssetFormat::Svg => "image/svg+xml",
+                kaleidoscope_contract::assets::AssetFormat::Png => "image/png",
+                kaleidoscope_contract::assets::AssetFormat::Webp => "image/webp",
+                kaleidoscope_contract::assets::AssetFormat::Jpeg => "image/jpeg",
+                kaleidoscope_contract::assets::AssetFormat::Gif => "image/gif",
+                kaleidoscope_contract::assets::AssetFormat::Javascript => "text/javascript",
+                kaleidoscope_contract::assets::AssetFormat::Woff2 => "font/woff2",
+                kaleidoscope_contract::assets::AssetFormat::Ttf => "font/ttf",
+                kaleidoscope_contract::assets::AssetFormat::Otf => "font/otf",
+            }
+            .into(),
+            data_base64: STANDARD.encode(bytes),
+            width: None,
+            height: None,
+        });
+    }
+    if kaleidoscope_contract::builtin::is_bundled_asset(asset, version) {
+        return Err(errors::MEDIA_LOAD_BUNDLED_ASSET_MISSING(asset));
+    }
+    let link =
+        inner.link_file.lock().unwrap().clone().ok_or_else(|| {
+            kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED()
+        })?;
+    use sha2::{Digest, Sha256};
+    let namespace = format!(
+        "{:x}",
+        Sha256::digest(format!("{}\0{}", link.server_url, link.token).as_bytes())
+    );
+    let key = format!("asset:{namespace}:{}:{version}", asset);
+    let original_key = format!("{key}|original");
+    let original = if let Some(entry) = inner.media_cache.get(&original_key) {
+        entry
+    } else {
+        crate::startup_readiness::wait(inner, crate::startup_readiness::WaitFor::Server);
+        if !matches!(
+            inner.state.lock().unwrap().link,
+            kaleidoscope_contract::LinkStatus::Connected { .. }
+        ) {
+            return Err(kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED());
+        }
+        let download = inner
+            .registry
+            .asset_get(&link.server_url, &link.token, asset, version)
+            .map_err(|failure| match failure {
+                crate::registry_client::RegistryError::Failure { stage, detail } => {
+                    let error = match stage {
+                        crate::registry_client::FailureStage::Send => {
+                            errors::MEDIA_LOAD_ASSET_DOWNLOAD_SEND_FAILED(asset)
+                        }
+                        crate::registry_client::FailureStage::Status => {
+                            errors::MEDIA_LOAD_ASSET_DOWNLOAD_STATUS_REJECTED(asset)
+                        }
+                        crate::registry_client::FailureStage::Read => {
+                            errors::MEDIA_LOAD_ASSET_DOWNLOAD_RESPONSE_READ_FAILED(
+                                asset,
+                            )
+                        }
+                    };
+                    error.and_details(vec![detail])
+                }
+                failure => errors::MEDIA_LOAD_ASSET_DOWNLOAD_FAILED(asset)
+                    .and_details(vec![format!("{failure:?}")]),
+            })?;
+        if format!("{:x}", Sha256::digest(&download.bytes)) != download.sha256 {
+            return Err(errors::MEDIA_LOAD_ASSET_HASH_MISMATCH(asset));
+        }
+        let (width, height) = dimensions(&download.bytes, &download.mime);
+        let entry = Entry {
+            bytes: Arc::new(download.bytes),
+            mime: download.mime,
+            width,
+            height,
+            used: Instant::now(),
+        };
+        inner.media_cache.put(original_key, entry.clone());
+        entry
+    };
+    let result = if let Some(max) = max_px {
+        shrink(&original, max, asset)?
+    } else {
+        original
+    };
+    Ok(as_data(&result))
+}
+
 pub(crate) fn get(
     inner: &Arc<Inner>,
     window: &str,
@@ -142,93 +252,7 @@ pub(crate) fn get(
                 }
                 dependency.version
             };
-            if let Some((meta, bytes)) = crate::builtin::bundled_asset(&media.asset, version) {
-                return Ok(MediaData {
-                    mime: match meta.format {
-                        kaleidoscope_contract::assets::AssetFormat::Html => "text/html",
-                        kaleidoscope_contract::assets::AssetFormat::Svg => "image/svg+xml",
-                        kaleidoscope_contract::assets::AssetFormat::Png => "image/png",
-                        kaleidoscope_contract::assets::AssetFormat::Webp => "image/webp",
-                        kaleidoscope_contract::assets::AssetFormat::Jpeg => "image/jpeg",
-                        kaleidoscope_contract::assets::AssetFormat::Gif => "image/gif",
-                        kaleidoscope_contract::assets::AssetFormat::Javascript => "text/javascript",
-                        kaleidoscope_contract::assets::AssetFormat::Woff2 => "font/woff2",
-                        kaleidoscope_contract::assets::AssetFormat::Ttf => "font/ttf",
-                        kaleidoscope_contract::assets::AssetFormat::Otf => "font/otf",
-                    }
-                    .into(),
-                    data_base64: STANDARD.encode(bytes),
-                    width: None,
-                    height: None,
-                });
-            }
-            if kaleidoscope_contract::builtin::is_bundled_asset(&media.asset, version) {
-                return Err(errors::MEDIA_LOAD_BUNDLED_ASSET_MISSING(&media.asset));
-            }
-            let link =
-                inner.link_file.lock().unwrap().clone().ok_or_else(|| {
-                    kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED()
-                })?;
-            use sha2::{Digest, Sha256};
-            let namespace = format!(
-                "{:x}",
-                Sha256::digest(format!("{}\0{}", link.server_url, link.token).as_bytes())
-            );
-            let key = format!("asset:{namespace}:{}:{version}", media.asset);
-            let original_key = format!("{key}|original");
-            let original = if let Some(entry) = inner.media_cache.get(&original_key) {
-                entry
-            } else {
-                crate::startup_readiness::wait(inner, crate::startup_readiness::WaitFor::Server);
-                if !matches!(
-                    inner.state.lock().unwrap().link,
-                    kaleidoscope_contract::LinkStatus::Connected { .. }
-                ) {
-                    return Err(kaleidoscope_contract::errors::MEDIA_LOAD_SERVER_NOT_CONNECTED());
-                }
-                let download = inner
-                    .registry
-                    .asset_get(&link.server_url, &link.token, &media.asset, version)
-                    .map_err(|failure| match failure {
-                        crate::registry_client::RegistryError::Failure { stage, detail } => {
-                            let error = match stage {
-                                crate::registry_client::FailureStage::Send => {
-                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_SEND_FAILED(&media.asset)
-                                }
-                                crate::registry_client::FailureStage::Status => {
-                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_STATUS_REJECTED(&media.asset)
-                                }
-                                crate::registry_client::FailureStage::Read => {
-                                    errors::MEDIA_LOAD_ASSET_DOWNLOAD_RESPONSE_READ_FAILED(
-                                        &media.asset,
-                                    )
-                                }
-                            };
-                            error.and_details(vec![detail])
-                        }
-                        failure => errors::MEDIA_LOAD_ASSET_DOWNLOAD_FAILED(&media.asset)
-                            .and_details(vec![format!("{failure:?}")]),
-                    })?;
-                if format!("{:x}", Sha256::digest(&download.bytes)) != download.sha256 {
-                    return Err(errors::MEDIA_LOAD_ASSET_HASH_MISMATCH(&media.asset));
-                }
-                let (width, height) = dimensions(&download.bytes, &download.mime);
-                let entry = Entry {
-                    bytes: Arc::new(download.bytes),
-                    mime: download.mime,
-                    width,
-                    height,
-                    used: Instant::now(),
-                };
-                inner.media_cache.put(original_key, entry.clone());
-                entry
-            };
-            let result = if let Some(max) = max_px {
-                shrink(&original, max, &target)?
-            } else {
-                original
-            };
-            return Ok(as_data(&result));
+            return get_asset(inner, &media.asset, version, max_px);
         }
     };
     let module = {

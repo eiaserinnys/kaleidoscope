@@ -2,6 +2,50 @@ use super::*;
 use kaleidoscope_contract::data::{BindingValue, SourceStatus};
 
 #[test]
+fn app_icon_uses_the_installed_exact_version_without_a_window() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let definition = json!({"id":"icon-test", "name":"아이콘 시험",
+        "requires":{"blocks":kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION,"modules":{"assets":1}}, "permissions":[], "state":{},
+        "assets":[{"id":"builtin-weather-clear","version":1}],
+        "icon":{"asset":"builtin-weather-clear","version":1},
+        "ui":{"type":"text","value":"시험"}}).to_string();
+    let core = open_core(temp.path(), vec![definition], &host);
+    let request = |version| serde_json::from_value::<CoreRequest>(json!({
+        "op":"app.icon", "app_id":"icon-test", "app_version":version
+    })).unwrap();
+    let reply = serde_json::to_value(core.handle(request(1)).unwrap()).unwrap();
+    assert_eq!(reply["media"]["mime"], "image/svg+xml");
+    assert!(core.handle(request(2)).is_err());
+    assert!(serde_json::from_value::<CoreRequest>(json!({
+        "op":"app.icon", "app_id":"icon-test", "app_version":1, "asset":"other"
+    })).is_err());
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        let mut next = state.shared.app_versions.iter().find(|v| v.app_id == "icon-test").unwrap().clone();
+        next.version = 2;
+        next.definition.icon.as_mut().unwrap().asset = "builtin-weather-rain".into();
+        next.definition.assets[0].id = "builtin-weather-rain".into();
+        state.shared.app_versions.push(next);
+    }
+    let second = serde_json::to_value(core.handle(request(2)).unwrap()).unwrap();
+    assert_ne!(reply["media"]["data_base64"], second["media"]["data_base64"]);
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        let version = state.shared.app_versions.iter_mut().find(|v| v.app_id == "icon-test" && v.version == 1).unwrap();
+        version.definition.assets.clear();
+    }
+    assert_eq!(core.handle(request(1)).unwrap_err().id.as_deref(), Some("APP_ICON_ASSET_UNDECLARED"));
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        let version = state.shared.app_versions.iter_mut().find(|v| v.app_id == "icon-test" && v.version == 1).unwrap();
+        version.definition.icon = None;
+    }
+    let reply = serde_json::to_value(core.handle(request(1)).unwrap()).unwrap();
+    assert!(reply["media"].is_null());
+}
+
+#[test]
 fn data_action_reply_covers_state_event_sequence() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

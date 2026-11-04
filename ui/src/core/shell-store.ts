@@ -9,6 +9,7 @@ import { trackWindowAction, windowActionActive } from "../share/action-context";
 
 export interface ShellStore {
   call: CoreTransport["call"];
+  iconCache: Map<string, Promise<{ url: string; mask: boolean } | null>>;
   getSnapshot(): ShellSnapshot | null;
   getError(): CoreError | null;
   reached(sequence: number): Promise<void> | null;
@@ -60,6 +61,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   });
 
   return {
+    iconCache: new Map(),
     nativeFiles: transport.nativeFiles,
     bytes: transport.bytes?.bind(transport),
     call: ((request: Parameters<CoreTransport["call"]>[0]) => {

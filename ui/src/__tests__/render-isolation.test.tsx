@@ -399,6 +399,32 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("앱 아이콘 수신은 다른 창과 블록을 다시 그리지 않는다", async () => {
+    const withIcon = { ...definition, icon: { asset: "logo", version: 1 } };
+    const snapshot = testSnapshot([withIcon]);
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const original = transport.call.bind(transport);
+    let complete!: (reply: CoreReply) => void;
+    const pending = new Promise<CoreReply>((resolve) => { complete = resolve; });
+    vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) =>
+      request.op === "app.icon" ? pending : original(request)) as typeof transport.call);
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    await waitFor(() => expect(document.querySelector('[data-window-id="window-b"]')).not.toBeNull());
+    await settleRenders();
+    const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
+    if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    else fallbackProbe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    calls.length = 0;
+    await act(async () => complete({ op: "app.icon", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } }));
+    await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(2));
+    await settleRenders();
+    expect(countFor("window-b")).toBe(0);
+    expect(calls).toHaveLength(0);
+    store.dispose();
+  });
+
   it("소켓 수신을 한 출력에 발행하면 그 출력의 블록만 다시 그린다", async () => {
     vi.spyOn(ClientRuntime.prototype, "start").mockResolvedValue();
     const live: AppDefinition = {
