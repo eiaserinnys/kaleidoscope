@@ -15,6 +15,7 @@ export function WindowNotice() {
   const message = useSyncExternalStore(data.subscribeNotice, data.getNotice, data.getNotice);
   const noticeId = useSyncExternalStore(data.subscribeNotice, data.getNoticeId, data.getNoticeId);
   const role = useSyncExternalStore(data.subscribeNotice, data.getNoticeRole, data.getNoticeRole);
+  const statusSequence = useSyncExternalStore(data.subscribeNotice, data.getStatusSequence, data.getStatusSequence);
   const clientFailed = useSyncExternalStore(data.subscribeNotice, data.getClientFailed, data.getClientFailed);
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => { setDismissed(false); }, [sources]);
@@ -31,5 +32,22 @@ export function WindowNotice() {
   const actions: [ReactNode] | [ReactNode, ReactNode] = message
     ? clientFailed ? [<Button key="restart" onClick={() => { void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
     : [<Button key="retry" onClick={() => { void data.refresh(failed); }}>다시 받기</Button>, closeButton];
-  return <Notice role={message ? role : "alert"} errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? `다시 받지 못했습니다: ${failed.join(", ")}`}</Notice>;
+  if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} />;
+  return <Notice role="alert" errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? `다시 받지 못했습니다: ${failed.join(", ")}`}</Notice>;
+}
+
+const STATUS_NOTICE_DURATION_MS = 5000;
+
+function TransientStatus({ data, message, sequence }: {
+  data: ReturnType<typeof useWindowData>; message: string; sequence: number;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (data.getNoticeRole() === "status" && data.getStatusSequence() === sequence) data.setNotice(null);
+    }, STATUS_NOTICE_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [data, sequence]);
+  return <div className="ks-window-status" data-ks-overlay>
+    <Notice role="status">{message}</Notice>
+  </div>;
 }

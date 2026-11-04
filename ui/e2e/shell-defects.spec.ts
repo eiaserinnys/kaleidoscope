@@ -199,3 +199,31 @@ for (const width of [360, 1000]) test(`${width} 폭에서 가로 채움 칸의 �
   expect(layout.field.width).toBeLessThan(300);
   await capture(page, `row-fill-fields-${width}`);
 });
+
+for (const id of ["columns-plain", "columns-tabs"]) test(`${id}에서 위 이름표 입력의 columns는 높이를 늘리지 않는다`, async ({ page }) => {
+  for (const width of [1000, 360]) {
+    await page.setViewportSize({ width, height: 600 });
+    await page.goto(`/?preview=${id}`);
+    const app = page.getByTestId(`app-window-${id}`);
+    const short = app.locator(".ks-input-field.is-label-top").filter({ hasText: "짧은 입력" });
+    const long = app.locator(".ks-input-field.is-label-top").filter({ hasText: "긴 입력" });
+    await expect(short).toBeVisible(); await expect(long).toBeVisible();
+    const measure = (field: import("@playwright/test").Locator) => field.evaluate((el) => {
+      const label = el.querySelector(".ks-field-label")!.getBoundingClientRect();
+      const wrapper = el.querySelector(".ks-data-input")!.getBoundingClientRect();
+      const input = el.querySelector("input")!.getBoundingClientRect();
+      return { label: label.toJSON(), wrapper: wrapper.toJSON(), input: input.toJSON() };
+    });
+    const [a, b] = await Promise.all([measure(short), measure(long)]);
+    expect(Math.abs(a.wrapper.height - a.input.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(b.wrapper.height - b.input.height)).toBeLessThanOrEqual(1);
+    expect(a.wrapper.width).toBeLessThan(b.wrapper.width);
+    expect(a.input.top - a.label.bottom).toBeLessThanOrEqual(4);
+    const button = await app.getByRole("button", { name: "새 값" }).boundingBox();
+    expect(Math.abs(button!.y + button!.height / 2 - (b.input.top + b.input.height / 2))).toBeLessThanOrEqual(1);
+    const inline = app.locator(".ks-input-field:not(.is-label-top)").filter({ hasText: "기본" });
+    const inlineGeometry = await inline.evaluate((el) => ({ label: el.querySelector(".ks-field-label")!.getBoundingClientRect().toJSON(), input: el.querySelector("input")!.getBoundingClientRect().toJSON() }));
+    expect(inlineGeometry.label.right).toBeLessThan(inlineGeometry.input.left);
+    await capture(page, `${id}-${width}`);
+  }
+});

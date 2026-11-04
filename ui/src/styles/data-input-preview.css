@@ -10,6 +10,7 @@
 .ks-data-input.has-columns:not(.ks-data-tab-panel *) { width: var(--ks-input-columns-size); min-width: var(--ks-input-columns-size); flex: 0 0 var(--ks-input-columns-size); }
 .ks-data-input.has-columns .ks-text-input { width: var(--ks-input-columns-size); min-width: var(--ks-input-columns-size); flex: 0 0 var(--ks-input-columns-size); }
 .ks-data-tab-panel .ks-input-field > .ks-data-input.has-columns { width: var(--ks-input-columns-size); min-width: var(--ks-input-columns-size); flex: 0 0 var(--ks-input-columns-size); }
+.ks-input-field.is-label-top > .ks-data-input.has-columns { flex: 0 0 auto; }
 .ks-input-field:has(> .ks-data-input.has-columns) { flex: 0 0 auto; }
 
 .ks-data-button-prefix { color: var(--ks-color-muted); font-size: var(--ks-type-body); font-weight: 400; }

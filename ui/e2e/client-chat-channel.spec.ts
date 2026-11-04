@@ -10,6 +10,7 @@ declare global {
   interface Window {
     clientChatHarness: {
       calls: () => ClientChatHarnessCall[];
+      visibleText: () => string;
       control: (type: string) => void;
       coreCalls: () => number;
       pauseNextSnapshot: () => void;

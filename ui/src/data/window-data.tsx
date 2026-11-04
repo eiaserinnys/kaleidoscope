@@ -137,6 +137,7 @@ export class WindowData {
   private noticeOwner: object | null = null;
   private noticeId: string | null = null;
   private noticeRole: "alert" | "status" = "alert";
+  private statusSequence = 0;
   private unsubscribe?: () => void;
   private unsubscribeLink?: () => void;
   private active = false;
@@ -249,6 +250,7 @@ export class WindowData {
   getNotice = () => this.notice;
   getNoticeId = () => this.noticeId;
   getNoticeRole = () => this.noticeRole;
+  getStatusSequence = () => this.statusSequence;
   setNotice = (problem: CoreError | string | null, owner: object | null = null) => {
     this.noticeProblem = problem;
     this.noticeOwner = owner;
@@ -261,7 +263,7 @@ export class WindowData {
     if (this.notice === null || this.noticeOwner === owner) this.setNotice(problem, owner);
   };
   clearNoticeIf = (problem: CoreError | string, owner?: object) => { if (this.noticeProblem === problem && (!owner || this.noticeOwner === owner)) this.setNotice(null); };
-  setStatus = (message: string) => { this.noticeProblem = null; this.noticeOwner = null; this.notice = message; this.noticeId = null; this.noticeRole = "status"; this.noticeListeners.forEach((listener) => listener()); };
+  setStatus = (message: string) => { this.noticeProblem = null; this.noticeOwner = null; this.notice = message; this.noticeId = null; this.noticeRole = "status"; this.statusSequence += 1; this.noticeListeners.forEach((listener) => listener()); };
   getClientFailed = () => this.clientFailed;
   failClient = (problem: CoreError) => { this.clientFailed = true; this.setNotice(problem); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };

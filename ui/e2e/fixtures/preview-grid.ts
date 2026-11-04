@@ -10,7 +10,41 @@ const common = {
   state: { selection: "", tab: 0, query: "", marks: Array.from({ length: 16 }, (_, id) => ({ id: String(id), label: `견본 ${id + 1}`, image: { asset: "builtin-weather-clear" } })) },
 };
 
+const longText = Array.from({ length: 80 }, (_, index) => `내용 ${index + 1}`).join("\n");
+const nestedColumn = (explicit: boolean, split: boolean) => ({
+  type: "stack", direction: "column", fill: 1, children: [
+    { type: "text", value: "바깥 머리" },
+    { type: "stack", direction: "column", ...(explicit ? { fill: 1 } : {}), children: [
+      { type: "text", value: "안쪽 머리" },
+      split ? { type: "split", direction: "row", sizes: [50, 50], children: [
+        { type: "section", title: "첫 칸", child: { type: "text", value: longText } },
+        { type: "section", title: "둘째 칸", child: { type: "text", value: longText } },
+      ] } : { type: "text", value: longText },
+    ] },
+  ],
+});
+
 export const previewGridFixtures = [
+  { ...common, id: "slider-fill", name: "채움 슬라이더", requires: { blocks: 21, modules: {} }, ui: {
+    type: "stack", direction: "row", fill: 1, children: [
+      { type: "button", label: "고정 도구 단추", on_click: [] },
+      { type: "slider", label_position: "hidden", show_value: false, value: { state: "selection" }, min: 0, max: 100, on_change: { set_state: "selection" } },
+      { type: "button", label: "오른쪽에 놓인 긴 고정 도구 단추", on_click: [] },
+    ],
+  } },
+  { ...common, id: "nested-controls", name: "중첩 조작 끝", ui: {
+    type: "stack", direction: "column", fill: 1, children: [
+      { type: "text", value: "고정 머리" },
+      { type: "stack", direction: "column", children: [
+        { type: "text", value: longText }, { type: "button", label: "끝 조작", on_click: [] },
+      ] },
+    ],
+  } },
+  ...[
+    ["nested-fill", true, false],
+    ["nested-fill-split", true, true],
+    ["nested-natural", false, false],
+  ].map(([id, explicit, split]) => ({ ...common, id, name: "중첩 채움 시험", ui: nestedColumn(Boolean(explicit), Boolean(split)) })),
   { ...common, id: "preview-grid-tabs", name: "격자 탭 시험", ui: {
     type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
       { label: "격자", child: grid },
