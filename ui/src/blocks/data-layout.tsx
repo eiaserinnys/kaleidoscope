@@ -39,10 +39,25 @@ export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const fill = block.place === "center" ? -1 : block.fill ??
     ((block.direction === "column" ? isFixedHeightControl(block.children[last]) : isFixedWidthControl(block.children[last])) ? -1 : last);
   const explicitFill = block.place !== "center" && block.fill !== undefined;
+  let firstFill = fill;
+  let lastFill = fill;
+  const selected = block.children[fill];
+  if (explicitFill && selected?.type === "when" && (selected.min_width !== undefined || selected.max_width !== undefined)) {
+    while (firstFill > 0) {
+      const previous = block.children[firstFill - 1];
+      if (previous.type !== "when" || (previous.min_width === undefined && previous.max_width === undefined)) break;
+      firstFill -= 1;
+    }
+    while (lastFill < last) {
+      const next = block.children[lastFill + 1];
+      if (next.type !== "when" || (next.min_width === undefined && next.max_width === undefined)) break;
+      lastFill += 1;
+    }
+  }
   const direction = block.place === "center" ? "column" : block.direction;
   const align = block.place === "center" || block.align === undefined ? "" : ` align-${block.align}`;
   return <div className={`ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${align}`}>
-    {block.children.map((child, index) => <div className={`ks-data-stack-item${index === fill ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>)}
+    {block.children.map((child, index) => <div className={`ks-data-stack-item${index >= firstFill && index <= lastFill ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>)}
   </div>;
 }
 
