@@ -37,28 +37,33 @@ function isFixedWidthControl(block: Block | undefined): boolean {
 
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const last = block.children.length - 1;
-  const fill = block.place === "center" ? -1 : block.fill ??
-    ((block.direction === "column" ? isFixedHeightControl(block.children[last]) : isFixedWidthControl(block.children[last])) ? -1 : last);
+  const fill = block.place === "center" ? [] : block.fill === undefined
+    ? ((block.direction === "column" ? isFixedHeightControl(block.children[last]) : isFixedWidthControl(block.children[last])) ? [] : [last])
+    : Array.isArray(block.fill) ? block.fill : [block.fill];
   const explicitFill = block.place !== "center" && block.fill !== undefined;
-  let firstFill = fill;
-  let lastFill = fill;
-  const selected = block.children[fill];
-  if (explicitFill && selected?.type === "when" && (selected.min_width !== undefined || selected.max_width !== undefined)) {
+  const filled = new Set(fill);
+  for (const index of fill) {
+    let firstFill = index;
+    let lastFill = index;
+    const selected = block.children[index];
+    if (!(explicitFill && selected?.type === "when" && (selected.min_width !== undefined || selected.max_width !== undefined))) continue;
     while (firstFill > 0) {
       const previous = block.children[firstFill - 1];
       if (previous.type !== "when" || (previous.min_width === undefined && previous.max_width === undefined)) break;
       firstFill -= 1;
+      filled.add(firstFill);
     }
     while (lastFill < last) {
       const next = block.children[lastFill + 1];
       if (next.type !== "when" || (next.min_width === undefined && next.max_width === undefined)) break;
       lastFill += 1;
+      filled.add(lastFill);
     }
   }
   const direction = block.place === "center" ? "column" : block.direction;
   const align = block.place === "center" || block.align === undefined ? "" : ` align-${block.align}`;
-  return <div className={`ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${align}`}>
-    {block.children.map((child, index) => <div className={`ks-data-stack-item${index >= firstFill && index <= lastFill ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>)}
+  return <div className={`ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${Array.isArray(block.fill) && block.place !== "center" ? " has-fill-list" : ""}${align}`}>
+    {block.children.map((child, index) => <div className={`ks-data-stack-item${filled.has(index) ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>)}
   </div>;
 }
 

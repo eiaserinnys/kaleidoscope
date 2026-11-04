@@ -301,6 +301,14 @@
         }
       },
       {
+        "label": "채움",
+        "child": { "type": "stack", "direction": "column", "gap": "small", "fill": [0, 1], "children": [
+          { "type": "input", "label": "첫째", "multiline": true, "value": { "state": "memo" }, "on_change": { "set_state": "memo" } },
+          { "type": "input", "label": "둘째", "multiline": true, "value": { "state": "query" }, "on_change": { "set_state": "query" } },
+          { "type": "button", "label": "지우기", "on_click": [{ "set_state": "memo", "value": "" }, { "set_state": "query", "value": "" }] }
+        ] }
+      },
+      {
         "label": "배치",
         "child": {
           "type": "split", "direction": "row", "column_below": 700, "sizes": [1, 1, 1],

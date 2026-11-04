@@ -296,10 +296,13 @@ pub const CONTRACT_VERSION: u32 = 36;
 /// - 34판: timeline 날짜 눈금과 줄 배치.
 /// - 35판: 날짜와 시간 입력.
 /// - 36판: 목록 빼기와 주소 열기 동작.
-pub const BLOCK_SET_VERSION: u32 = LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION;
+/// - 37판: 쌓기 목록 채움.
+pub const BLOCK_SET_VERSION: u32 = STACK_FILL_LIST_BLOCK_SET_VERSION;
 pub const LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION: u32 = 36;
 /// 날짜와 시간 입력의 첫 블록 세트 판.
 pub const INPUT_DATE_TIME_BLOCK_SET_VERSION: u32 = 35;
+/// stack.fill 목록을 처음 지원하는 블록 세트 판.
+pub const STACK_FILL_LIST_BLOCK_SET_VERSION: u32 = 37;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
 pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
 pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
@@ -1736,6 +1739,7 @@ pub enum Block {
     /// `when`과 `anchor`는 감싼 자식으로 본다. 세로 스택이 넘치면 창 몸통이 스크롤한다.
     /// `fill`이 `min_width`나 `max_width`를 가진 `when`을 가리키면, 바로 이웃한 폭 조건 `when`들도
     /// 채움 자리가 되어 창 폭으로 배치를 바꿔 끼울 때 보이는 쪽이 남은 공간을 채운다.
+    /// 목록 형태의 `fill`은 지정한 칸들이 남은 공간을 똑같이 나눈다. 목록은 중복 없이 자식 범위 안의 번호를 하나 이상 담는다.
     /// `place:"center"`는 `fill`을 무시하고 가운데 배치한다.
     Stack {
         direction: SplitDirection,
@@ -1744,7 +1748,7 @@ pub enum Block {
         gap: Gap,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        fill: Option<u32>,
+        fill: Option<StackFill>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         wrap: Option<bool>,
@@ -2513,13 +2517,14 @@ enum RawBlock {
     /// `when`과 `anchor`는 감싼 자식으로 본다. 세로 스택이 넘치면 창 몸통이 스크롤한다.
     /// `fill`이 `min_width`나 `max_width`를 가진 `when`을 가리키면, 바로 이웃한 폭 조건 `when`들도
     /// 채움 자리가 되어 창 폭으로 배치를 바꿔 끼울 때 보이는 쪽이 남은 공간을 채운다.
+    /// 목록 형태의 `fill`은 지정한 칸들이 남은 공간을 똑같이 나눈다. 목록은 중복 없이 자식 범위 안의 번호를 하나 이상 담는다.
     /// `place:"center"`는 `fill`을 무시하고 가운데 배치한다.
     Stack {
         direction: SplitDirection,
         #[serde(default)]
         gap: Gap,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        fill: Option<u32>,
+        fill: Option<StackFill>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3838,6 +3843,15 @@ pub struct Column {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub max_lines: Option<u8>,
+}
+
+/// 쌓기에서 남은 공간을 차지할 자식 번호 또는 번호 목록.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum StackFill {
+    Index(u32),
+    Indices(Vec<u32>),
 }
 
 /// 열 너비. 남은 폭은 `fill` 열들이 나눈다.

@@ -13,6 +13,7 @@ test("여러 줄 입력은 여덟 줄까지 스크롤 없이 자라고 폭에 �
   const app = page.getByTestId("app-window-input-autogrow-fixture");
   const field = app.getByRole("textbox", { name: "한국어" });
   const fixed = app.getByRole("textbox", { name: "고정" });
+  expect((await field.boundingBox())!.height).toBe(32);
   const heights = () => field.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
   for (const lines of [1, 3, 8]) {
     await field.fill(Array(lines).fill("한 줄").join("\n"));
