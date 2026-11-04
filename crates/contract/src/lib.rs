@@ -297,6 +297,9 @@ pub const CONTRACT_VERSION: u32 = 36;
 /// - 35판: 날짜와 시간 입력.
 /// 날짜와 시간 입력의 첫 블록 세트 판.
 pub const INPUT_DATE_TIME_BLOCK_SET_VERSION: u32 = 35;
+/// - 30판: 목록 빼기와 주소 열기 동작.
+pub const BLOCK_SET_VERSION: u32 = LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION;
+pub const LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION: u32 = 30;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
 pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
 pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
@@ -306,9 +309,6 @@ pub const INPUT_SPIN_BLOCK_SET_VERSION: u32 = 31;
 pub const INPUT_OPTIONS_BLOCK_SET_VERSION: u32 = 33;
 /// timeline 날짜 눈금의 첫 블록 세트 판.
 pub const TIMELINE_DATES_BLOCK_SET_VERSION: u32 = 34;
-/// - 30판: 목록 빼기와 주소 열기 동작.
-pub const BLOCK_SET_VERSION: u32 = LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION;
-pub const LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION: u32 = 30;
 /// 앱 아이콘 자산 참조의 첫 블록 세트 판.
 pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 /// 분할의 반응형 방향과 반복 간격의 첫 블록 세트 판.
