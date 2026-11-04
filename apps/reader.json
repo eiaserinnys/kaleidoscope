@@ -69,7 +69,7 @@
         "children": [
           {
             "type": "when",
-            "min_width": 527,
+            "min_width": 559,
             "child": {
               "type": "toolbar",
               "start": [
@@ -176,7 +176,7 @@
           },
           {
             "type": "when",
-            "max_width": 526,
+            "max_width": 558,
             "child": {
               "type": "stack",
               "direction": "column",

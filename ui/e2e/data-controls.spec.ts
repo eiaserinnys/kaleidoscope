@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+test.use({ deviceScaleFactor: 2, launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
 
 const output = process.env.KS_DATA_CAPTURE_DIR;
 async function capture(page: import("@playwright/test").Page, name: string) {
@@ -436,6 +436,50 @@ test("가로 넘침이 있는 막대만 세로 휠을 가로 스크롤로 바꾸
   expect(await wideBar.evaluate((node) => node.dispatchEvent(new WheelEvent("wheel", { deltaY:120, bubbles:true, cancelable:true })))).toBe(true);
 });
 
+for (const [scenario, width, label] of [["ktx", 360, "저장"], ["jizura", 360, "사용법 안내"], ["ktx", 1000, "저장"]] as const) {
+  test(`${scenario} ${width} 막대는 초점 테두리 아래 여백을 보존한다`, async ({ page }) => {
+    const app = await showToolbarScenario(page, width, scenario);
+    const bar = app.locator(".ks-data-toolbar");
+    const control = bar.getByRole("button", { name:label, exact:true });
+    await page.keyboard.press("Tab");
+    await control.focus();
+    const geometry = await control.evaluate((node) => {
+      const track = node.closest<HTMLElement>(".ks-data-toolbar")!;
+      const r = track.getBoundingClientRect(), c = node.getBoundingClientRect();
+      const style = getComputedStyle(node), trackStyle = getComputedStyle(track);
+      return { top:c.top-r.top, bottom:c.bottom-r.top,
+        outlineBottom:c.bottom-r.top+parseFloat(style.outlineOffset)+parseFloat(style.outlineWidth),
+        clipBottom:track.clientTop+track.clientHeight,
+        scrollbar:r.height-track.clientHeight-parseFloat(trackStyle.borderBottomWidth) };
+    });
+    await capture(page, `focus-${scenario}-${width}-full`);
+    if (output) await bar.screenshot({ path:join(output, `focus-${scenario}-${width}-detail.png`) });
+    expect(geometry.top).toBe(8);
+    expect(geometry.bottom).toBe(40);
+    expect(geometry.clipBottom).toBeGreaterThanOrEqual(geometry.outlineBottom);
+    expect(geometry.scrollbar).toBe(width === 360 ? 4 : 0);
+  });
+}
+
+test("빈 묶음은 간격을 차지하지 않고 끝 묶음만 있어도 오른쪽을 지킨다", async ({ page }) => {
+  await page.setViewportSize({ width:400, height:800 });
+  await page.goto("/?preview=market");
+  await page.addStyleTag({ content:".ks-harness-apps.is-preview .ks-harness-window { width:360px; height:600px; }" });
+  const app = page.getByTestId("app-window-market");
+  const bars = app.locator(".ks-data-toolbar");
+  await expect(bars).toHaveCount(4);
+  await bars.nth(2).scrollIntoViewIfNeeded();
+  const rightInset = (bar: import("@playwright/test").Locator) => bar.evaluate((node) => {
+    const items = [...node.querySelectorAll(".ks-data-toolbar-item")];
+    return node.getBoundingClientRect().right-items.at(-1)!.getBoundingClientRect().right;
+  });
+  await capture(page, "market-converter-insets-360");
+  expect(await rightInset(bars.nth(2))).toBe(12);
+  expect(await rightInset(bars.nth(3))).toBe(12);
+  const endOnly = await showToolbarScenario(page, 360, "label");
+  expect(await rightInset(endOnly.locator(".ks-data-toolbar"))).toBe(12);
+});
+
 test("기본 앱은 최소 창에서는 두 줄이고 넓은 창에서는 기존 한 줄이다", async ({ page }) => {
   for (const id of ["reader", "market", "earth", "profiler"]) {
     for (const width of [360, 1000]) {
@@ -490,13 +534,13 @@ test("기본 앱은 폭 전환 뒤에도 고른 상태와 입력을 유지한다
   await expect(app.getByPlaceholder("검색")).toHaveValue("kaleidoscope");
 });
 
-test("기본 앱의 두 줄 전환은 실측한 막대 경계에서 일어난다", async ({ page }) => {
+test("기본 앱의 두 줄 전환은 글꼴 폭 여유를 더한 막대 경계에서 일어난다", async ({ page }) => {
   const cases = [
-    { id:"reader", boundary:526, narrow:2, wide:1 },
-    { id:"market", boundary:582, narrow:4, wide:3 },
-    { id:"market", boundary:683, narrow:3, wide:2 },
-    { id:"earth", boundary:580, narrow:2, wide:1 },
-    { id:"profiler", boundary:410, narrow:2, wide:1 },
+    { id:"reader", boundary:558, narrow:2, wide:1 },
+    { id:"market", boundary:614, narrow:4, wide:3 },
+    { id:"market", boundary:715, narrow:3, wide:2 },
+    { id:"earth", boundary:612, narrow:2, wide:1 },
+    { id:"profiler", boundary:442, narrow:2, wide:1 },
   ];
   for (const { id, boundary, narrow, wide } of cases) {
     await page.setViewportSize({ width:1040, height:400 });

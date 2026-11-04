@@ -223,7 +223,7 @@
         "children": [
           {
             "type": "when",
-            "min_width": 583,
+            "min_width": 615,
             "child": {
               "type": "toolbar",
               "start": [
@@ -413,7 +413,7 @@
           },
           {
             "type": "when",
-            "max_width": 582,
+            "max_width": 614,
             "child": {
               "type": "stack",
               "direction": "column",
@@ -641,7 +641,7 @@
                 "children": [
                   {
                     "type": "when",
-                    "min_width": 684,
+                    "min_width": 716,
                     "child": {
                       "type": "toolbar",
                       "start": [
@@ -738,7 +738,7 @@
                   },
                   {
                     "type": "when",
-                    "max_width": 683,
+                    "max_width": 715,
                     "child": {
                       "type": "stack",
                       "direction": "column",
