@@ -6,6 +6,15 @@ type Program = { name: string; winget: string; url: string };
 type Action = { event?: any; item?: any; parent_item?: any };
 type MessageInput = { request_id: string; text: string };
 type MessageResult = { status: "accepted" } | { status: "not_ready"; reason: string };
+function sessionTime(value: string | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const today = new Date().toDateString() === date.toDateString();
+  return new Intl.DateTimeFormat("ko-KR", today
+    ? { hour: "2-digit", minute: "2-digit", hour12: false }
+    : { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+}
 type Bridge = {
   process: Host["process"];
   files: { grant(id: string): string | null; on_grant(id: string, listener: (name: string | null) => void): void; pick_folder(id: string): Promise<string | null>; read(id: string): Promise<ArrayBuffer> };
@@ -51,6 +60,7 @@ export class AppClient {
   private lastStream = "";
   private lastActivity = "";
   private lastOutputs = "";
+  private historyOpen = false;
 
   constructor(client: Bridge, defaults: Agent[]) {
     this.client = client;
@@ -86,6 +96,13 @@ export class AppClient {
     client.handle("cancel", () => this.session.cancel());
     client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
     client.handle("attachment", ({ event }) => this.attachment(event));
+    client.handle("new_session", () => this.session.newSession());
+    client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
+    client.handle("close_history", () => { this.historyOpen = false; this.update(); });
+    client.handle("select_session", ({ event }) => {
+      if (event === this.view?.sessionId) { this.historyOpen = false; this.update(); return; }
+      return this.session.loadSession(String(event));
+    });
   }
 
   private async acceptAgents(value: unknown): Promise<void> {
@@ -328,6 +345,10 @@ export class AppClient {
   private receive(view: SessionView): void {
     const previous = this.view;
     this.view = view;
+    if (previous?.switching && !view.switching && !view.sessionError && previous.sessionId !== view.sessionId) this.historyOpen = false;
+    if (!this.historyOpen && view.sessionError && view.sessionError !== previous?.sessionError && view.sessionError.id === "AGENT_SESSION_NEW_FAILED") {
+      this.client.chat.publish("conversation", { kind: "error", error: { ...view.sessionError, code: "local_agent_failed", details: [] } });
+    }
     if (view.phase !== "starting") this.startingAfterInstall = false;
     const queue = JSON.stringify(view.queued);
     if (this.lastItems !== view.items || this.lastQueue !== queue) {
@@ -401,6 +422,14 @@ export class AppClient {
       selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
+      history_open: this.historyOpen, session_buttons_busy: !!(this.view?.busy || this.view?.switching || this.view?.configuring),
+      history_disabled: !!(this.view?.busy || this.view?.switching || this.view?.configuring || !this.view?.canListSessions),
+      history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
+      history_items: (this.view?.sessions ?? []).map((session) => ({ key: session.sessionId, title: session.title || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt) })),
+      history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading,
+      history_empty: !!this.view && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,
+      history_has_items: !!this.view?.sessions.length, history_has_error: !!this.view?.sessionError,
+      history_error_message: this.view?.sessionError?.message ?? "", history_error_id: this.view?.sessionError?.id ?? null,
       permissions: this.view?.permissions ?? [], auth_methods: this.view?.authMethods ?? [],
       has_error: !!(this.error || failure), error_message: message, error_id: unsupported ? "AGENT_INSTALL_UNSUPPORTED_PLATFORM" : this.error?.id ?? failure?.id ?? null,
     };

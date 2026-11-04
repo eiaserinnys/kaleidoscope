@@ -56,6 +56,14 @@ export class History {
     await this.writeManifest();
   }
 
+  async replace(sessionId: string, items: Item[]): Promise<void> {
+    this.manifest = { ...this.manifest, pages: 0, sessionId, controls: {} };
+    this.pages = [];
+    this.cachedItems = null;
+    await this.writeManifest();
+    await this.append(items);
+  }
+
   async setControl(id: string, value: string | boolean): Promise<void> {
     this.manifest.controls[id] = value;
     await this.writeManifest();

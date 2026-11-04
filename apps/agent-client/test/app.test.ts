@@ -82,3 +82,26 @@ test("초기 저장소 오류는 가운데에 보이고 다시 읽기에 실패�
   assert.equal(views.at(-1).show_folder, true);
   assert.equal(views.at(-1).error_id, null);
 });
+
+test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 이유를 표시한다", () => {
+  const handlers = new Map<string, (context: any) => unknown>();
+  const views: any[] = [];
+  const client = {
+    process: { onReady() {}, onServicesChanged() {} },
+    files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
+    onStorageChange() {}, onLifecycle() {}, onMessage() {},
+    handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
+  };
+  const app = new AppClient(client as any, []);
+  (app as any).receive({ phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null,
+    queued: [], permissions: [], controls: [], authMethods: [], failure: null,
+    sessionId: "current", canListSessions: false, sessions: [], sessionsLoading: false, sessionError: null, switching: false });
+  assert.equal(views.at(-1).history_disabled, true);
+  assert.equal(views.at(-1).history_description, "이 에이전트는 지난 세션 목록을 주지 않습니다");
+  (app as any).receive({ ...(app as any).view, canListSessions: true });
+  assert.equal(views.at(-1).history_disabled, false);
+  assert.equal(views.at(-1).history_description, null);
+  (app as any).receive({ ...(app as any).view, configuring: true });
+  assert.equal(views.at(-1).history_disabled, true);
+  assert.equal(views.at(-1).session_buttons_busy, true);
+});

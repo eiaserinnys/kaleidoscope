@@ -18,7 +18,8 @@ type ProcessPort = {
   onServicesChanged(listener: (handle: string) => void): unknown;
 };
 type Prepared = { text: string | null; images: { name: string; mime: string; bytes: Uint8Array }[]; ticket: string };
-export type SessionView = { phase: State["phase"]; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: State["permissions"]; controls: State["controls"]; authMethods: State["authMethods"]; failure: State["failure"] };
+type SessionInfo = { sessionId: string; cwd: string; title?: string; updatedAt?: string };
+export type SessionView = { phase: State["phase"]; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: State["permissions"]; controls: State["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; configuring: boolean };
 export type Host = {
   process: ProcessPort;
   blobs: BlobStore;
@@ -50,6 +51,9 @@ export class AgentSession {
   private spec: Spec | null = null;
   private tasks: Promise<unknown> = Promise.resolve();
   private checkpointKeys: string[] = [];
+  private sessions: SessionInfo[] = [];
+  private sessionsLoading = false;
+  private listError: State["sessionError"] = null;
 
   constructor(host: Host) {
     this.host = host;
@@ -179,7 +183,7 @@ export class AgentSession {
         total += upload.bytes.length;
       }
       if (total > 30 * 1024 * 1024) throw agentError("AGENT_PROMPT_ATTACHMENTS_TOTAL_TOO_LARGE");
-      if (!this.handle || (this.state.phase !== "ready" && this.state.phase !== "responding")) throw agentError("AGENT_PROMPT_SEND_NOT_READY");
+      if (!this.handle || (this.state.phase !== "ready" && this.state.phase !== "responding") || Object.values(this.state.pending).some((request) => request.kind === "switch" || request.kind === "new_user")) throw agentError("AGENT_PROMPT_SEND_NOT_READY");
       const attachments: Attachment[] = [];
       for (let index = 0; index < input.attachments.length; index++) {
         const upload = input.attachments[index];
@@ -227,11 +231,39 @@ export class AgentSession {
     });
   }
 
+  listSessions(): Promise<void> {
+    return this.serial(async () => {
+      if (!this.handle || !this.state.capabilities.list || this.state.phase !== "ready" || Object.values(this.state.pending).some((request) => request.kind === "list" || request.kind === "switch" || request.kind === "new_user")) return;
+      this.sessions = [];
+      this.sessionsLoading = true;
+      this.listError = null;
+      this.state = { ...this.state, sessionError: null };
+      await this.request("list", "session/list", { cwd: this.cwd });
+      this.publish();
+    });
+  }
+
+  newSession(): Promise<void> { return this.switchSession(null); }
+  loadSession(sessionId: string): Promise<void> { return this.switchSession(sessionId); }
+
+  private switchSession(sessionId: string | null): Promise<void> {
+    return this.serial(async () => {
+      if (!this.handle || this.state.phase !== "ready" || this.state.queue.length || Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
+      const mcpServers = this.state.capabilities.http && this.tools ? [{ type: "http", name: "kaleidoscope", url: this.tools, headers: [] }] : [];
+      this.listError = null;
+      await this.request(sessionId ? "switch" : "new_user", sessionId ? "session/load" : "session/new", {
+        cwd: this.cwd, mcpServers, ...(sessionId ? { sessionId, _control: sessionId } : {}),
+      });
+      this.publish();
+    });
+  }
+
   private async configureNow(id: string, value: string | boolean): Promise<void> {
     const params = id === "__legacy_model" ? { sessionId: this.state.sessionId, modelId: value }
       : id === "__legacy_mode" ? { sessionId: this.state.sessionId, modeId: value }
       : { sessionId: this.state.sessionId, configId: id, value };
     await this.request("configure", id === "__legacy_model" ? "session/set_model" : id === "__legacy_mode" ? "session/set_mode" : "session/set_config_option", { ...params, _control: { id, value } });
+    this.publish();
   }
 
   async attachment(key: string): Promise<Uint8Array | null> { return this.host.blobs.read(key); }
@@ -313,9 +345,28 @@ export class AgentSession {
       const decoded = decodeLines(this.state.partial, Uint8Array.from(result.bytes));
       this.state = { ...this.state, partial: decoded.partial };
       for (let index = 0; index < decoded.messages.length; index++) {
-        const message = decoded.messages[index] as { id?: string | number; error?: unknown };
+        const message = decoded.messages[index] as { id?: string | number; error?: { message?: string }; result?: { sessions?: SessionInfo[]; nextCursor?: string } };
         const request = message.id === undefined ? undefined : this.state.pending[String(message.id)];
+        if (request?.kind === "list") {
+          const pending = { ...this.state.pending };
+          delete pending[String(message.id)];
+          this.state = { ...this.state, pending };
+          if (message.error) {
+            const error = agentError("AGENT_SESSION_LIST_FAILED", this.redact(message.error.message ?? "ACP 오류"));
+            this.listError = { id: error.id, message: error.message };
+            this.sessionsLoading = false;
+          } else {
+            this.sessions = [...this.sessions, ...(message.result?.sessions ?? []).filter((entry) => entry.cwd === this.cwd)]
+              .sort((a, b) => (Date.parse(b.updatedAt ?? "") || 0) - (Date.parse(a.updatedAt ?? "") || 0));
+            this.sessionsLoading = !!message.result?.nextCursor;
+            if (message.result?.nextCursor) await this.request("list", "session/list", { cwd: this.cwd, cursor: message.result.nextCursor });
+          }
+          this.publish();
+          continue;
+        }
+        const replayItems = this.state.replayItems ?? [];
         this.state = reduceMessage(this.state, message, `stream-${this.state.generation}-${this.after}-${index}`);
+        if (this.state.sessionError) this.state = { ...this.state, sessionError: { ...this.state.sessionError, message: this.redact(this.state.sessionError.message) } };
         if (this.state.failure) this.state = { ...this.state, failure: { ...this.state.failure, reason: this.redact(this.state.failure.reason) } };
         if (request && !message.error && request.kind === "initialize" && this.spec?.auth_methods) {
           this.state = { ...this.state, authMethods: this.state.authMethods.filter((method) => this.spec!.auth_methods!.includes(method.id)) };
@@ -324,6 +375,9 @@ export class AgentSession {
           await this.history.setSession(this.state.sessionId);
           const restoreControls = Object.entries(this.history.controls).filter(([id, value]) => this.state.controls.some((control) => control.id === id && (control.kind === "boolean" ? typeof value === "boolean" : control.options.some((option) => option.value === value)))).map(([id, value]) => ({ id, value }));
           this.state = { ...this.state, restoreControls };
+        }
+        if (request && !message.error && (request.kind === "switch" || request.kind === "new_user") && this.state.sessionId) {
+          await this.history.replace(this.state.sessionId, request.kind === "switch" ? replayItems : []);
         }
         if (request && !message.error && request.kind === "configure") {
           const control = request.params as { id: string; value: string | boolean };
@@ -423,6 +477,10 @@ export class AgentSession {
     this.host.publish({ phase: this.state.phase, items: this.history.items, stream_id: this.state.stream.id, text: this.state.stream.text,
       busy: this.state.phase === "responding" || (this.state.phase === "ready" && this.state.queue.length > 0), tool: this.state.tools.at(-1)?.title ?? null,
       queued: this.state.queue.map((item) => ({ ...item, attachments: item.attachments.map(({ id, name, mime }) => ({ id, name, mime })) })),
-      permissions: this.state.permissions, controls: this.state.controls, authMethods: this.state.authMethods, failure: this.state.failure });
+      permissions: this.state.permissions, controls: this.state.controls, authMethods: this.state.authMethods, failure: this.state.failure,
+      sessionId: this.state.sessionId, canListSessions: !!this.state.capabilities.list, sessions: this.sessions,
+      sessionsLoading: this.sessionsLoading, sessionError: this.listError ?? this.state.sessionError ?? null,
+      switching: Object.values(this.state.pending).some((request) => request.kind === "switch" || request.kind === "new_user"),
+      configuring: Object.values(this.state.pending).some((request) => request.kind === "configure") });
   }
 }
