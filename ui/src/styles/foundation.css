@@ -47,7 +47,7 @@
   --ks-shadow-window: 0 24px 55px -24px rgb(75 55 91 / 25%), 0 3px 8px rgb(82 64 95 / 4%), inset 0 0 0 1px rgb(255 255 255 / 20%);
   --ks-shadow-bar: 0 7px 21px rgb(73 50 77 / 9%), inset 0 0 0 1px rgb(255 255 255 / 20%);
   --ks-shadow-selected: inset 0 0 0 1px rgb(255 255 255 / 53%), 0 2px 7px rgb(98 78 116 / 6%);
-  --ks-blur-window: 14px;
+  --ks-blur-window: 24px;
   --ks-blur-bar: 18px;
   --ks-blur-popover: 30px;
   --ks-blur-overlay: 9px;
@@ -82,8 +82,8 @@
   --ks-color-code: rgb(210 191 226 / 24%);
   --ks-color-scroll-thumb: rgb(120 100 140 / 32%);
   --ks-color-window-active-edge: rgb(145 170 130 / 47%);
-  --ks-material-window: rgb(251 250 251 / 16%);
-  --ks-material-window-body: rgb(251 250 251 / 48%);
+  --ks-material-window: rgb(251 250 251 / 28%);
+  --ks-material-window-body: rgb(251 250 251 / 58%);
   --ks-material-shellbar: linear-gradient(180deg, rgb(248 245 243 / 19%), transparent);
   --ks-material-bar: rgb(249 245 244 / 18%);
   --ks-material-popover: rgb(249 244 249 / 80%);
@@ -120,7 +120,7 @@
     --ks-color-code: rgb(255 255 255 / 7%);
     --ks-color-scroll-thumb: rgb(220 200 235 / 26%);
     --ks-color-window-active-edge: rgb(140 165 133 / 50%);
-    --ks-material-window: rgb(251 250 251 / 8%);
+    --ks-material-window: rgb(39 32 45 / 45%);
     --ks-material-window-body: rgb(39 32 45 / 76%);
     --ks-material-shellbar: linear-gradient(180deg, rgb(29 24 34 / 30%), transparent);
     --ks-material-bar: rgb(77 55 95 / 27%);

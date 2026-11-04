@@ -13,11 +13,20 @@
   border: var(--ks-line-width) solid var(--ks-color-glass-edge);
   border-radius: var(--ks-radius-window);
   background: var(--ks-material-window);
-  backdrop-filter: blur(var(--ks-blur-window)) saturate(1.05);
   color: var(--ks-color-text);
   box-shadow: var(--ks-shadow-window);
   font-size: var(--ks-type-body);
   pointer-events: auto;
+}
+
+.ks-harness-webview::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  backdrop-filter: blur(var(--ks-blur-window)) saturate(1.05);
+  content: "";
+  pointer-events: none;
 }
 
 .ks-harness-webview-toolbar {

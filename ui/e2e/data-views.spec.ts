@@ -14,6 +14,19 @@ test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=data-views-test");
   const app = page.getByTestId("app-window-data-views-test");
+  await page.addStyleTag({ path: new URL("../../app/src/shell.css", import.meta.url).pathname });
+  const backdropFilters = await page.evaluate(() => {
+    const frame = document.createElement("div");
+    frame.className = "ks-window-frame";
+    frame.style.cssText = "left: -10000px; width: 1px; height: 1px;";
+    document.body.append(frame);
+    return {
+      frame: getComputedStyle(frame).backdropFilter,
+      before: getComputedStyle(frame, "::before").backdropFilter,
+    };
+  });
+  expect(backdropFilters.frame).toBe("none");
+  expect(backdropFilters.before).toBe("blur(24px) saturate(1.05)");
   const list = app.getByRole("listbox");
   await expect(list.getByRole("option", { name: "항목 1", exact: true })).toBeVisible();
   expect(await list.getByRole("option").count()).toBeLessThan(100);
