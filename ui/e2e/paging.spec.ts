@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
+import { selectTab } from "./tab-helper";
 
 const captures = process.env.KS_PAGING_CAPTURE_DIR;
 async function capture(page: import("@playwright/test").Page, name: string) {
@@ -352,7 +353,7 @@ for (const view of [
   await page.setViewportSize({ width: 392, height: 700 });
   await page.goto("/?preview=paging-test");
   const app = page.getByTestId("app-window-paging-test");
-  await app.getByRole("tab", { name: view.tab }).click();
+  await selectTab(app, view.tab);
   const scroll = app.locator(view.selector);
   await expect(scroll.locator(view.row).first()).toBeAttached();
   const rowStart = await scroll.locator(view.row).first().evaluate(element => element.getBoundingClientRect().left);
