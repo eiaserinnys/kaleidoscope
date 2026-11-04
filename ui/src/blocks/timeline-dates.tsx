@@ -163,8 +163,9 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
     if (initialized.current || !scroll.current || !metrics.width || metrics.day <= 1) return;
     const initialPx = bound ? lineWidth / (bound.end - bound.start + 1) : metrics.day;
     const nextPx = Math.max(minPx, Math.min(maxPx, initialPx));
-    let first = bound?.start ?? (today >= range.start && today <= range.end ? monday(today - 7) : range.start);
-    if (!bound && (today + 0.5 - first) * nextPx > lineWidth * 2 / 3) first = today + 0.5 - lineWidth / (3 * nextPx);
+    const todayInRange = today >= range.start && today <= range.end;
+    let first = bound?.start ?? (todayInRange ? monday(today - 7) : range.start);
+    if (!bound && todayInRange && (today + 0.5 - first) * nextPx > lineWidth * 2 / 3) first = today + 0.5 - lineWidth / (3 * nextPx);
     applyScale(nextPx, Math.max(0, (first - range.start) * nextPx));
     if (bound) sentViewport.current = `${bound.start}:${bound.end}`;
 

@@ -173,3 +173,35 @@ test("범위 시작 자료 변경 전후와 빈 상태 전환·첫 진입", asyn
   await expect(app.getByText("없음", { exact: true })).toBeVisible();
   await shot(page, "r2-empty-fresh");
 });
+
+for (const width of [1200, 360]) {
+  test(`${width} 날짜 없는 칩은 줄 안에서 막대와 같은 위아래 여백을 둔다`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 700 });
+    const app = await schedule(page);
+    const chip = app.locator(".ks-dates-undated").first();
+    const spacing = await chip.evaluate((el) => {
+      const c = el.getBoundingClientRect(), row = el.closest(".ks-dates-row")!.getBoundingClientRect();
+      const gap = parseFloat(getComputedStyle(el).getPropertyValue("--ks-space-1"));
+      return { top: c.top - row.top, bottom: row.bottom - c.bottom, gap };
+    });
+    expect(Math.abs(spacing.top - spacing.gap)).toBeLessThanOrEqual(1);
+    expect(Math.abs(spacing.bottom - spacing.gap)).toBeLessThanOrEqual(1);
+    expect(Math.abs(spacing.top - spacing.bottom)).toBeLessThanOrEqual(1);
+    if (out) writeFileSync(join(out, `r3-${width}-chip-metrics.json`), JSON.stringify(spacing, null, 2));
+    if (width === 360) await shot(page, "r3-360-chip");
+    else {
+      if (out) {
+        const root = (await app.locator(".ks-timeline-dates").boundingBox())!;
+        const row = (await chip.locator("..").boundingBox())!;
+        const session = await page.context().newCDPSession(page);
+        const capture = await session.send("Page.captureScreenshot", { format: "png", clip: { x: root.x, y: row.y, width: root.width, height: row.height, scale: 2 } });
+        writeFileSync(join(out, "r3-chip-row.png"), Buffer.from(capture.data, "base64"));
+        await session.detach();
+      }
+      await chip.click(); await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab");
+      await expect(chip).toBeFocused();
+      expect(await chip.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+      await shot(page, "r3-chip-focus");
+    }
+  });
+}

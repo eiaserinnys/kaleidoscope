@@ -125,3 +125,13 @@ it.each([["each", "긴 이름 전체", true], ["each", "짧음", false], ["pack"
   expect(name.textContent).toBe(label);
   expect(name.classList.contains("is-outside")).toBe(outside);
 });
+
+it("오늘이 범위 밖이면 과거 항목의 범위 시작에서 연다", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-05T12:00:00Z"));
+  try {
+    const view = render(<TimelineBlock block={{ ...block, today: false, tracks: [{ id: "past", items: [{ id: "january", label: "1월 일정", start: "2026-01-05", end: "2026-01-16" }] }] }} pointer="/ui" context={context} />);
+    expect(view.container.querySelector<HTMLElement>(".ks-dates-scroll")!.scrollLeft).toBe(0);
+    expect(view.container.querySelector(".ks-timeline-item")?.getAttribute("aria-label")).toContain("1월 일정");
+  } finally { vi.useRealTimers(); }
+});
