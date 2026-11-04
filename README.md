@@ -5,21 +5,19 @@
 
 **A desktop workspace for tools built by your AI agent.**
 
-Ask an agent for a tool. It uploads a JSON app definition through MCP, and kaleidoscope opens it as a window on your desktop. Apps combine built-in UI blocks with local files, connected services, and saved state. Creating or updating an app does not require rebuilding the shell.
+Ask an agent for a tool. It uploads a JSON app definition through MCP, and kaleidoscope opens it as a window on your desktop. Apps combine built-in UI blocks with local files, web data, connected services, and saved state. Creating or updating an app does not require rebuilding the shell.
 
-블록 세트 12판은 창마다 격리된 `client` 로직, 픽셀을 그리는 `canvas`, 구간과 파형을 편집하는 `timeline`을 지원합니다. 앱은 로컬 출력과 선언형 화면을 연결하고 사용자가 고른 파일을 가져오거나 저장할 수 있습니다.
+![A project desktop with the file explorer and the Markdown editor; the editor window is shared with an agent](docs/screenshots/overview.png)
 
-![A project desktop with a file explorer and live-preview Markdown editor](docs/screenshots/overview.png)
-
-*Actual browser development shell with synthetic project files. The shell currently uses Korean interface labels.*
+*Browser development shell with synthetic project files. The shell's interface labels are currently in Korean.*
 
 ## What you can do
 
-- **Keep a working context.** Arrange app windows across workspaces and desktops. A connected shell syncs workspaces, window layouts, and app state across devices; local folder mappings stay on each device.
-- **Work with files.** Browse folders in icon or details view, open files in apps that declare their extensions, and edit Markdown in a live preview with automatic saving and conflict detection.
-- **Connect your data.** Read files, folders, or service APIs and shape the results with JSONata expressions. Apps can display tables, trees, lists, feeds, code, images, and media, with inputs and actions alongside them.
-- **Talk to an agent in context.** An app can connect to a `conversation-v1` provider for streaming chat and attachments. Turn on sharing for selected windows to include their visible content with your next message.
-- **Reuse app settings and documents.** App storage holds account-scoped settings and Markdown documents, independently of individual windows.
+- **Keep a working context.** Arrange app windows across workspaces and desktops. When the shell is connected to a server, workspaces, window layouts, and app state follow you across devices; folder choices stay on each device.
+- **Work with files.** Browse your known folders and drives in icon or details view, open files in apps that declare their extensions, and edit Markdown in a live preview with automatic saving and conflict detection.
+- **Connect your data.** Read files, folders, public HTTPS APIs, or signed-in services and shape the results with JSONata expressions. Apps show them as tables, trees, lists, feeds, timelines, code, images, and media, with inputs and actions alongside. Long lists keep loading as you scroll.
+- **Work with an agent in the shell.** The built-in Agent app runs an agent CLI in a folder you choose, and that agent can build and open apps for you. Turn on sharing for a window, and agents can read what it shows and operate it.
+- **Go past the blocks when needed.** Per-window JavaScript draws on a canvas, existing HTML runs in an isolated frame, Python workers run on the server on a schedule or webhook, and apps can start programs you have approved on this PC.
 - **Open web pages.** The desktop shell embeds pages in native child webviews. Installed builds check for signed updates and let you choose when to restart.
 
 ![Folder tree and details view in the file explorer](docs/screenshots/explorer-details.png)
@@ -27,17 +25,17 @@ Ask an agent for a tool. It uploads a JSON app definition through MCP, and kalei
 ## How it fits together
 
 ```mermaid
-flowchart LR
-    Agent[AI agent / MCP client] -->|App definitions| Server[Orchestrator\nRust + axum + SQLite]
-    Server <-->|Registry and layout sync| Core[Rust core\nPermissions and data]
-    Core <-->|Commands and snapshots| UI[Desktop shell\nTauri 2 + React]
-    Core --> Files[Local files]
-    Core --> Services[Connected services]
+flowchart TB
+    Agent[AI agent / MCP client] -->|MCP: apps, windows, storage| Server[Orchestrator<br/>Rust + axum + SQLite]
+    Server <-->|Registry and layout sync| Core[Rust core<br/>permissions and data]
+    Core <-->|Commands and snapshots| UI[Desktop shell<br/>Tauri 2 + React]
+    Core --> Files[Local files and programs]
+    Core --> Services[Web and connected services]
 ```
 
-The Tauri app contains a React shell and a Rust core. The core handles file access, authentication, data evaluation, and app permissions; UI blocks render the resulting values. The core is independent of Tauri and can also run behind the development HTTP bridge.
+The Tauri app contains a React shell and a Rust core. The core handles file access, authentication, data evaluation, app permissions, and real-time connections; UI blocks render the resulting values. The core is independent of Tauri and can also run behind the development HTTP bridge.
 
-The self-hosted orchestrator stores versioned app definitions and shared workspace state, pairs devices, and exposes MCP tools to agents. The shell and server provide general capabilities; service-specific paths and data transformations belong in app definitions and named connections.
+The orchestrator stores versioned app definitions and shared workspace state, pairs devices, runs app workers, and exposes MCP tools to agents. Every desktop shell starts one of its own on the loopback address, so a single PC needs no setup. Run a separate orchestrator to share a workspace between devices or to reach it from an agent outside the shell. The shell and server provide only general capabilities; service-specific paths and data transformations belong in app definitions and named connections.
 
 | Concept | Meaning |
 | --- | --- |
@@ -47,31 +45,43 @@ The self-hosted orchestrator stores versioned app definitions and shared workspa
 | App version | An immutable definition of blocks, bindings, permissions, and defaults |
 | Block set and modules | Versioned shell capabilities an app declares it needs |
 
-Connections support device-local OAuth login and server-side relay requests. OAuth tokens stay on the device. Relay credentials stay on the server; app definitions reference a connection by name. Files are accessed through declared permissions, including user-selected folders or explicit PC access.
+Connections support device-local OAuth login and server-side relay requests. OAuth tokens stay on the device. Relay credentials stay on the server; app definitions reference a connection by name. Files are accessed through declared permissions: a folder the user picks for a window, or PC-wide read access the user allows once per app.
 
 ## Get started
 
-kaleidoscope is under active development. Windows is the first supported desktop target; macOS support is planned. The browser development shell is useful for local testing, but does not provide native embedded webviews or desktop updating.
+kaleidoscope is under active development. Windows is the first supported desktop target; macOS support is planned.
 
-### 1. Run an orchestrator
+### 1. Install the shell
 
-Install stable Rust, clone this repository, and start the server from its root:
+Download the [Windows installer](https://kaleidoscope.eiaserinnys.me/releases/kaleidoscope_x64-setup.exe). It is not Authenticode-signed, so Windows may show a SmartScreen warning. Installed shells update themselves from the same place.
+
+The shell starts its built-in server on launch. Its database and token are kept in the app data folder as `local-orchestrator.db` and `local-orchestrator.token`.
+
+### 2. Start the Agent app
+
+Open **에이전트** (Agent) from the app menu (`앱 열기` at the top right), pick an agent and a working folder, and approve its command the first time on that PC. The defaults are Claude Code, Codex, Gemini CLI, and Antigravity, launched through the Agent Client Protocol. If the command's program is missing, the window offers to install it and then starts the agent. Sign in once with each agent CLI you plan to use.
+
+The approval lets that command run with your account's permissions; the working folder is not a sandbox. Agents that accept HTTP MCP servers receive the shell's MCP tools, so you can ask one to build an app and it opens as a new window. The list of agents is stored in the Agent app's `agents` storage entry; change it with the MCP tool `write_app_storage`. The defaults are in [`apps/agent.json`](apps/agent.json).
+
+### 3. Run your own server (optional)
+
+Run a separate orchestrator to use an agent outside the shell, such as a terminal CLI, or to share one workspace across devices. Build it from source with stable Rust:
 
 ```bash
 git clone https://github.com/eiaserinnys/kaleidoscope.git
 cd kaleidoscope
-export KALEIDOSCOPE_MCP_TOKEN="$(openssl rand -hex 32)"
-export KALEIDOSCOPE_DB_PATH=./kaleidoscope.db
-cargo run -p kaleidoscope-orchestrator
+cargo run -p kaleidoscope-orchestrator -- --db ./data/kaleidoscope.db --print-mcp-config
 ```
 
-The server defaults to `127.0.0.1:4219`. Keep the generated MCP token for your agent's configuration. Use `KALEIDOSCOPE_BIND` to change the listen address. For devices on another machine, expose the server through an HTTPS reverse proxy and use that address in the shell.
+The server listens on `127.0.0.1:4219`. On first start it creates a token next to the database (`./data/kaleidoscope.db.token`) and reuses it afterwards. `--print-mcp-config` writes an MCP configuration containing that token to standard output; keep it only in your own agent settings. Other options are `--bind`, `--token`, and `--token-file`; the environment variables `KALEIDOSCOPE_BIND`, `KALEIDOSCOPE_DB_PATH`, and `KALEIDOSCOPE_MCP_TOKEN` also work, and command-line options take precedence.
 
-Windows 독립 서버에서 기기 연결 전에 기본 앱 워커를 쓰려면 릴리스의 서버 ZIP을 풀고, `apps` 폴더가 있는 디렉터리에서 서버를 실행합니다. 서버 워커에는 Python 3이 필요하며, `npx`를 쓰는 기본 에이전트에는 Node.js 22 이상과 해당 에이전트의 로그인이 필요합니다. Docker 이미지는 Python과 Node.js를 포함합니다.
+On Windows, you can instead download `kaleidoscope-orchestrator-x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/eiaserinnys/kaleidoscope/releases). It contains the server and the built-in app definitions in `apps/`; run the server from that folder so built-in app workers work before any shell connects. With Docker, `docker compose up -d --build` builds an image that keeps the database, token, and backups in a volume and publishes port 4219 on the host's loopback address.
 
-### 2. Connect an MCP client
+App workers run Python 3 (`python3` on Linux, `python` on Windows), which must be on the server's PATH. The Docker image includes Python and Node.js. For devices on another machine, put the server behind an HTTPS reverse proxy and use that address in the shell.
 
-Add the orchestrator as a Streamable HTTP MCP server in your agent's MCP configuration:
+### 4. Connect an MCP client
+
+Add the printed configuration to your agent's MCP settings. It describes a Streamable HTTP server:
 
 ```json
 {
@@ -87,27 +97,29 @@ Add the orchestrator as a Streamable HTTP MCP server in your agent's MCP configu
 }
 ```
 
-The exact configuration wrapper depends on your MCP client. Use the token generated in step 1, and replace the URL if the server is on another machine.
+The wrapper around the server entry depends on your MCP client. Replace the URL if the server is on another machine.
 
-### 3. Pair the desktop shell
+### 5. Pair the shell
 
-Download the Windows installer from [Releases](https://github.com/eiaserinnys/kaleidoscope/releases). The installer is not Authenticode-signed, so Windows may show a SmartScreen warning.
+Click the server label at the top right of the shell (it reads `내 PC 서버` while the shell uses its built-in server) to open the server section of the settings. Enter the address under `원격 서버 주소` (remote server address) and choose `연결` (connect). Give the displayed pairing code to your agent and ask it to call `approve_device`. Once approved, the shell copies this PC's assets, personal apps, layouts, and stored values to the server, keeping anything the server already has; `내 PC 앱과 데이터 가져오기` runs the copy again and lists what was skipped. Service connections, sign-ins, and worker secrets are not copied, so set them up again for the new server.
 
-Release installers are preconfigured for the project's hosted registry. To use your own orchestrator, build a shell with `KALEIDOSCOPE_SERVER_URL` set at compile time (see Development), or use the browser development shell below. There is currently no server URL field in the desktop interface.
+`내 PC 서버로 전환` switches back to the built-in server. Layouts and unsent changes are kept separately for each server.
 
-In a shell configured for your server, open the server connection menu and start pairing. Give the displayed code to your agent and ask it to call `approve_device`. Once approved, the shell receives the registry and shared layout.
+### 6. Ask for an app
 
-### 4. Ask for an app
+The shell ships with built-in apps such as the file explorer, Markdown editor, web browser, and Agent; their definitions live in [apps/](apps/) and change with shell releases. Ask the agent to create a personal app with `upload_app`, which also opens it; [examples](examples/) include a block gallery. You can also load a definition file yourself with `앱 정의 가져오기` (import app definition) next to the app menu. Apps that use files ask for a folder when needed. Apps that use service connections need the connection set up first; the orchestrator does not run an AI model itself.
 
-The shell includes a file explorer, Markdown editor and viewer, and web browser. Their definitions live in [apps/](apps/) and change with shell releases. Ask the agent to create a personal app with `upload_app`, using `open: true`; [examples](examples/) include a block gallery. File-based apps ask for a folder when needed. Apps using service connections or agent chat also need the corresponding connection or conversation provider; the orchestrator does not run an AI model itself.
+Agents work with the shell through these MCP tools:
 
-Useful MCP tools include `list_apps`, `get_app`, `upload_app`, `delete_app`, `open_app`, `preview_app`, `list_workspaces`, `get_workspace`, `get_shared_view`, `list_devices`, and `approve_device`. The server's tool schemas describe their inputs.
+| Area | Tools |
+| --- | --- |
+| Apps | `list_apps`, `get_app`, `preview_app`, `upload_app`, `open_app`, `delete_app` |
+| Workspaces and devices | `list_workspaces`, `get_workspace`, `delete_workspace`, `list_devices`, `approve_device`, `revoke_device` |
+| Shared windows | `get_shared_view`, `read_window`, `act_window` |
+| App storage and assets | `list_app_storage`, `read_app_storage`, `write_app_storage`, `move_app_storage`, `reset_app_storage`, `list_assets`, `get_asset`, `upload_asset` |
+| Connections and workers | `list_connections`, `set_connection`, `delete_connection`, `list_app_secrets`, `set_app_secret`, `delete_app_secret`, `invoke_app_worker`, `get_app_worker_status`, `list_worker_runs` |
 
-## Use the built-in Agent app
-
-Install Node.js for adapters launched with `npx`, and sign in once with each agent CLI you plan to use. Open **Agent** from the app menu, choose an agent and a working folder, then approve its displayed command the first time on that PC. This approval allows that command to run; the selected folder is not a sandbox. Chat with the agent and review its tool requests as they appear.
-
-When the shell is connected to an orchestrator, you can also ask an agent to create or open an app in the same workspace. The Agent app's list is stored in its `agents` app-storage entry; use MCP `write_app_storage` to add or change entries. The four defaults and their commands are in [`apps/agent.json`](apps/agent.json).
+The server's tool descriptions and input schemas are the reference for their arguments.
 
 ## An app is a JSON definition
 
@@ -124,19 +136,25 @@ This minimal editor opens Markdown files from a folder the user selects:
   "state": { "file": null },
   "opens": { "extensions": ["md"], "permission": "docs", "state": "file" },
   "ui": {
-    "type": "markdown_editor",
+    "type": "markdown",
     "file": { "permission": "docs", "path": { "state": "file" } }
   }
 }
 ```
 
-An explorer can open `.md` files in this app through its `opens` declaration. For an editor with its own file tree, see [md-editor.json](apps/md-editor.json).
+The explorer can open `.md` files in this app through its `opens` declaration. For an editor with its own file tree, see [md-editor.json](apps/md-editor.json).
 
-More elaborate apps add `sources` for data, JSONata bindings to transform it, and actions to update state or call a connection. Shared validation checks definitions and capability versions before accepting them. The authoritative types and documentation live in [the contract crate](crates/contract/src/lib.rs), with [data bindings and actions](crates/contract/src/data.rs), [app storage](crates/contract/src/app_storage.rs), and [the conversation protocol](crates/contract/src/conversation.rs).
+Larger apps add `sources` for data, JSONata bindings to transform it, and actions that update state or call a connection. `client` scripts, `worker` code, `storage` entries, and `assets` cover what blocks alone cannot. The server checks every definition and the capability versions it requires before accepting it, and errors name what failed and where. The authoritative types and documentation live in [the contract crate](crates/contract/src/lib.rs), with [data bindings and actions](crates/contract/src/data.rs), [app storage](crates/contract/src/app_storage.rs), [client scripts](crates/contract/src/client.rs), [workers](crates/contract/src/worker.rs), and [the conversation protocol](crates/contract/src/conversation.rs).
 
-![Live-preview Markdown editing with the window-sharing indicator enabled](docs/screenshots/markdown-sharing.png)
+![Live-preview Markdown editing in a window shared with an agent](docs/screenshots/markdown-sharing.png)
 
-*The green border marks a window selected for sharing with an agent. This capture shows local editing; no model conversation is running.*
+*The colored ring marks a window shared with an agent. This capture shows local editing; no agent is running.*
+
+## Share apps through the store
+
+The app store is the public repository [eiaserinnys/kaleidoscope-appstore](https://github.com/eiaserinnys/kaleidoscope-appstore). Each app is one folder, `apps/{id}/`, holding its store metadata, the app definition, assets, and screenshots. To publish, open a pull request there; merging it is the approval. Checks on the pull request report problems to the author before review. Merged apps are copied to a static site at [kaleidoscope.eiaserinnys.me/appstore](https://kaleidoscope.eiaserinnys.me/appstore/).
+
+Any HTTPS address that serves the same static format works as a store. An app reads a store with a `store` source and installs a release with the `store.install` action; the shell shows the permissions an app asks for before installing it.
 
 ## Development
 
@@ -150,69 +168,49 @@ pnpm -r --if-present typecheck
 pnpm -r --if-present test
 ```
 
-Contract tests generate the TypeScript types in `ui/src/contract/`; commit regenerated files when the Rust contract changes.
+Contract tests generate the TypeScript types in `ui/src/contract/`; commit regenerated files when the Rust contract changes. Errors are registered in `crates/contract/src/errors/`, one code per place and cause; `cargo run -p kaleidoscope-contract --example error_catalog <area>` prints an area's table.
 
-To run the browser development shell against the real core, start the orchestrator above, then run these in separate terminals from the repository root:
+To run the browser development shell against the real core, start these in separate terminals from the repository root:
 
 ```bash
-cargo run -p kaleidoscope-devbridge -- --data-dir ./dev-data --port 1421 --server http://127.0.0.1:4219
+cargo run -p kaleidoscope-devbridge -- --data-dir ./dev-data --port 1421
 ```
 
 ```bash
 pnpm --dir app dev
 ```
 
-Open `http://localhost:1420/?core=http://127.0.0.1:1421`, then pair this shell through your local MCP client. The development bridge accepts the UI origin `http://localhost:1420`. 시험용 파일 선택은 `KALEIDOSCOPE_DEV_PICK_FILES`에 절대 경로의 JSON 배열을 지정한다. 예: `["/tmp/sample.txt"]`. 설정하지 않거나 빈 배열이면 파일 선택이 취소된다.
+Open `http://localhost:1420/?core=http://127.0.0.1:1421`. The bridge starts its own built-in server, as the desktop shell does, and accepts only the UI origin `http://localhost:1420`. To try a separate orchestrator, start one as in Get started and connect to it from the server section of the settings. The browser shell has no native webviews or updater. Native dialogs are replaced by environment variables on the bridge:
 
-For desktop development on a supported host, install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and set the server URL when building:
+| Variable | Effect |
+| --- | --- |
+| `KALEIDOSCOPE_DEV_PICK` | Folder returned when a window asks for a folder |
+| `KALEIDOSCOPE_DEV_PICK_FILES` | JSON array of absolute file paths returned by the file picker, such as `["/tmp/sample.txt"]`. Unset or empty cancels the pick |
+| `KALEIDOSCOPE_DEV_PICK_SAVE_FILE` | Path returned by the save dialog |
+| `KALEIDOSCOPE_DEV_PC_ROOTS` | JSON array of `{"id", "kind", "name", "path"}` roots the explorer shows as this PC; `kind` is `known` or `volume` |
+
+For desktop development on a supported host, install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and run:
 
 ```bash
-KALEIDOSCOPE_SERVER_URL=http://127.0.0.1:4219 pnpm --dir app tauri dev
+pnpm --dir app tauri dev
 ```
 
-Use `tauri build` instead of `tauri dev` for an installer. A redistributed build also needs its own updater endpoint and signing key configuration in `app/src-tauri/tauri.conf.json`. Windows release builds and native end-to-end checks run in GitHub Actions.
+Use `tauri build` instead of `tauri dev` for an installer. A redistributed build also needs its own updater endpoints and signing key in `app/src-tauri/tauri.conf.json`. Windows release builds and native end-to-end checks run in GitHub Actions.
 
 | Path | Contents |
 | --- | --- |
-| `crates/contract` | Rust contracts, validation, JSON Schema, generated TypeScript |
-| `crates/core` | File access, permissions, persistence, connections, synchronization |
+| `crates/contract` | Rust contracts, validation, error registry, JSON Schema, generated TypeScript |
+| `crates/core` | File access, permissions, persistence, connections, store installs, synchronization |
 | `crates/data` | Shared JSONata evaluation |
-| `crates/orchestrator` | Registry, device pairing, MCP, shared state |
+| `crates/orchestrator` | Registry, device pairing, MCP, workers, shared state; also embedded in the shell |
 | `crates/devbridge` | Local HTTP bridge for testing the core in a browser |
+| `crates/acp-test-agent` | Offline agent with fixed responses for Agent app tests |
 | `ui/` | Reusable blocks and rendering |
 | `app/` | React desktop shell and thin Tauri host |
-| `apps/` | Built-in app definitions shipped with the shell |
+| `apps/` | Built-in app definitions shipped with the shell, with the Agent app's client source and assets |
 | `examples/` | App definitions used by examples and contract tests |
+| `e2e/` | Window-control scenarios run against a local test shell |
 
 ## License
 
 [MIT](LICENSE). Copyright (c) 2026 Jubok Kim.
-
-## 데스크톱과 내 PC 서버
-
-설치본을 실행하면 내장 서버가 자동으로 시작됩니다. 기기 연결 코드를 입력하지 않고 기본 에이전트에서 앱을 만들고, 앱 저장소와 서버 워커를 사용할 수 있습니다. 내장 서버는 루프백 주소만 열며 데이터와 토큰은 앱 데이터 폴더의 `local-orchestrator.db`, `local-orchestrator.token`에 보존됩니다. 기존 원격 연결을 쓰던 설치본은 업데이트 후에도 그 연결을 유지합니다. 기기 연결이 거부되어도 원격 배치와 미전송 변경은 해당 서버의 상태로 보존합니다.
-
-상단의 서버 버튼에서 원격 서버 주소를 입력하면 페어링 코드가 표시됩니다. 해당 서버의 MCP를 사용하는 에이전트에게 코드를 전달해 승인합니다. 연결 직후 내 PC의 자산, 개인 앱, 배치, 저장값을 순서대로 가져옵니다. 원격에 이미 있는 값은 보존하며 다른 내용은 건너뜁니다. 같은 메뉴의 **내 PC 앱과 데이터 가져오기**로 다시 실행하고 건너뛴 목록을 확인할 수 있습니다.
-
-**내 PC 서버로 전환**하면 로컬 배치로 돌아갑니다. 서버별 배치와 미전송 변경은 분리 보존됩니다. 외부 서비스 연결이나 로그인 정보, 워커 시크릿은 이관하지 않으므로 대상 서버와 기기에서 설정합니다.
-
-## 독립 서버 실행
-
-릴리스의 `kaleidoscope-orchestrator-x86_64-pc-windows-msvc.exe`를 내려받아 실행합니다. 별도 토큰 지정이 없으면 DB 경로 뒤에 `.token`을 붙인 파일을 만들고 다음 실행에도 재사용합니다.
-
-```sh
-kaleidoscope-orchestrator --bind 127.0.0.1:4219 --db ./data/kaleidoscope.db
-kaleidoscope-orchestrator --help
-kaleidoscope-orchestrator --db ./data/kaleidoscope.db --print-mcp-config
-```
-
-`--print-mcp-config`는 인증 토큰이 포함된 MCP 설정 JSON을 표준 출력으로 내보냅니다. 개인 에이전트 설정에만 저장합니다. 보통 실행 로그에는 토큰 값을 출력하지 않습니다. `--token`, `--token-file`을 지정할 수 있으며 기존 `KALEIDOSCOPE_BIND`, `KALEIDOSCOPE_DB_PATH`, `KALEIDOSCOPE_MCP_TOKEN` 환경변수도 지원합니다. CLI 옵션이 환경변수보다 우선합니다.
-
-```sh
-docker compose up -d --build
-docker compose logs orchestrator
-```
-
-Compose의 데이터 볼륨에 DB, 토큰과 백업을 보존하며 호스트 루프백의 4219 포트를 엽니다. 다른 PC에서 쓰려면 인증서를 둔 HTTPS 역방향 프록시를 연결합니다. 서버 워커를 쓰는 앱은 실행 환경에 필요한 의존성을 설치합니다. 기본 이미지는 Python 3를 포함합니다.
-
-서버 워커의 Python 3 실행 파일은 Linux에서는 `python3`, Windows에서는 `python`을 사용합니다. 데스크톱에서 Python 워커를 실행하려면 해당 실행 파일이 PATH에 있어야 합니다.
