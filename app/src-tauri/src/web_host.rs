@@ -26,6 +26,7 @@ type Page = Arc<Mutex<WebPage>>;
 
 pub struct TauriWebHost {
     app: AppHandle,
+    attaching: Mutex<()>,
     pages: Mutex<HashMap<String, Page>>,
 }
 
@@ -53,6 +54,7 @@ impl TauriWebHost {
     pub fn new(app: AppHandle) -> Self {
         Self {
             app,
+            attaching: Mutex::new(()),
             pages: Mutex::new(HashMap::new()),
         }
     }
@@ -193,6 +195,7 @@ fn register(view: &Webview, app: AppHandle, id: String, page: Page) -> Result<()
 impl WebHost for TauriWebHost {
     fn attach(&self, id: &str, url: &str) -> Result<WebPage, CoreError> {
         let url = parse_url(url, id)?;
+        let _attaching = self.attaching.lock().unwrap();
         if let Some(page) = self.pages.lock().unwrap().get(id).cloned() {
             return Ok(page.lock().unwrap().clone());
         }
