@@ -13,7 +13,7 @@ beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function setup(ui: Block, state: AppDefinition["state"] = {}) {
-  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 19, modules: {} }, permissions: [], state: { choice: null, ...state }, ui };
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 20, modules: {} }, permissions: [], state: { choice: null, ...state }, ui };
   const seed = makeTestSeed({ definitions: [definition] });
   seed.snapshot.shared.windows[0].state = definition.state ?? {};
   const transport = createFakeTransport(seed);

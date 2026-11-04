@@ -286,7 +286,7 @@ sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Bin
  */
 extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, 
 /**
- * (19판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
+ * (20판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
  */
 item_menu?: Array<ItemMenuEntry>, } | { "type": "folder", root: FolderRoot, 
 /**

@@ -1463,7 +1463,7 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
-        /// (19판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
+        /// (20판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         item_menu: Option<Vec<ItemMenuEntry>>,

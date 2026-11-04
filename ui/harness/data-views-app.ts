@@ -9,7 +9,7 @@ const surfaceCards = Array.from({ length: 240 }, (_, index) => ({ key: String(in
 export const dataViewsApp: AppDefinition = {
   id: "data-views-test",
   name: "보기 시험",
-  requires: { blocks: 19, modules: { files: 1 } },
+  requires: { blocks: 20, modules: { files: 1 } },
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }],
   state: { tab: 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8) },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [

@@ -28,7 +28,7 @@ fn item_menus_round_trip_and_expose_action_and_confirmation_slots() {
             {"label":"보관", "on_select":{"set_state":"selected"}, "danger":true,
              "confirm":{"title":"보관할까요?", "ok":"보관", "body":{"state":"selected"}}}
         ]);
-        let parsed = parse_app_definition(&definition(ui.clone(), 19).to_string())
+        let parsed = parse_app_definition(&definition(ui.clone(), 20).to_string())
             .unwrap_or_else(|error| panic!("{kind}: {error:?}"));
         let encoded = serde_json::to_value(&parsed).unwrap();
         assert_eq!(encoded["ui"]["item_menu"], ui["item_menu"], "{kind}");
@@ -58,13 +58,13 @@ fn item_menus_round_trip_and_expose_action_and_confirmation_slots() {
 fn item_menu_requires_current_block_set_and_rejects_invalid_entries() {
     for mut ui in blocks() {
         let kind = ui["type"].as_str().unwrap().to_owned();
+        assert!(parse_app_definition(&definition(ui.clone(), 19).to_string()).is_ok());
         ui["item_menu"] = json!([]);
+        let error = parse_app_definition(&definition(ui.clone(), 19).to_string())
+            .expect_err("항목 메뉴는 블록 세트 20판이 필요하다");
+        assert!(error.details.iter().any(|detail| detail.contains("item_menu") && detail.contains("20")), "{kind}: {error:?}");
         assert!(
-            parse_app_definition(&definition(ui.clone(), 18).to_string()).is_err(),
-            "{kind}"
-        );
-        assert!(
-            parse_app_definition(&definition(ui.clone(), 19).to_string()).is_ok(),
+            parse_app_definition(&definition(ui.clone(), 20).to_string()).is_ok(),
             "{kind}"
         );
         for entry in [
@@ -74,10 +74,24 @@ fn item_menu_requires_current_block_set_and_rejects_invalid_entries() {
         ] {
             ui["item_menu"] = json!([entry]);
             assert!(
-                parse_app_definition(&definition(ui.clone(), 19).to_string()).is_err(),
+                parse_app_definition(&definition(ui.clone(), 20).to_string()).is_err(),
                 "{kind}: {ui}"
             );
         }
+    }
+}
+
+#[test]
+fn item_menu_requires_block_set_20_inside_settings_ui() {
+    for mut ui in blocks() {
+        ui["item_menu"] = json!([]);
+        let mut app = definition(json!({"type":"text", "value":"본문"}), 19);
+        app["settings"] = json!({"ui": ui});
+        let error = parse_app_definition(&app.to_string())
+            .expect_err("설정 안 항목 메뉴도 블록 세트 20판이 필요하다");
+        assert!(error.details.iter().any(|detail| detail.contains("item_menu") && detail.contains("20")), "{error:?}");
+        app["requires"]["blocks"] = json!(20);
+        parse_app_definition(&app.to_string()).expect("20판 설정 안 항목 메뉴를 허용한다");
     }
 }
 
@@ -89,7 +103,7 @@ fn item_menu_copy_text_is_local_and_must_be_alone() {
             json!([{"copy_text":{"item":"url"}}]),
         ] {
             ui["item_menu"] = json!([{"label":"주소 복사", "on_select":action}]);
-            let parsed = parse_app_definition(&definition(ui.clone(), 19).to_string())
+            let parsed = parse_app_definition(&definition(ui.clone(), 20).to_string())
                 .unwrap_or_else(|error| panic!("{ui}: {error:?}"));
             let actions = data::all_ui_actions(&parsed);
             assert!(actions
@@ -101,7 +115,7 @@ fn item_menu_copy_text_is_local_and_must_be_alone() {
         ui["item_menu"] = json!([{"label":"주소 복사", "on_select":[
             {"copy_text":{"item":"url"}}, {"set_state":"selected"}
         ]}]);
-        assert!(parse_app_definition(&definition(ui, 19).to_string()).is_err());
+        assert!(parse_app_definition(&definition(ui, 20).to_string()).is_err());
     }
 }
 
@@ -109,7 +123,7 @@ fn item_menu_copy_text_is_local_and_must_be_alone() {
 fn item_menu_copy_text_rejects_expressions() {
     for mut ui in blocks() {
         ui["item_menu"] = json!([{"label":"복사", "on_select":{"copy_text":{"expr":"$item.url"}}}]);
-        let error = parse_app_definition(&definition(ui, 19).to_string()).expect_err("item_menu copy_text expression must fail");
+        let error = parse_app_definition(&definition(ui, 20).to_string()).expect_err("item_menu copy_text expression must fail");
         assert!(error.details.iter().any(|detail| detail.contains("행마다 계산하지 않습니다")), "{error:?}");
     }
 }
@@ -118,8 +132,20 @@ fn item_menu_copy_text_rejects_expressions() {
 fn item_menu_confirmation_body_accepts_item_bindings() {
     for binding in [json!({"item":"title"}), json!({"parent_item":"title"})] {
         let ui = json!({"type":"list", "items":[], "item_menu":[{"label":"지우기", "on_select":{"set_state":"selected"}, "confirm":{"title":"지울까요?", "body":binding}}]});
-        parse_app_definition(&definition(ui, 19).to_string()).expect("confirmation body should accept item scope");
+        parse_app_definition(&definition(ui, 20).to_string()).expect("confirmation body should accept item scope");
     }
+}
+
+#[test]
+fn item_menu_scope_does_not_skip_message_item_validation() {
+    let ui = json!({"type":"list", "items":[], "item_menu":[{
+        "label":"지우기", "on_select":{"set_state":"selected"},
+        "confirm":{"title":"지울까요?", "body":{"message":{"item":"label_key"}}}
+    }]});
+    let error = parse_app_definition(&definition(ui, 20).to_string())
+        .expect_err("메뉴 범위가 messages와 locale 검사를 건너뛰지 않는다");
+    assert!(error.details.iter().any(|detail| detail.starts_with("/messages:")), "{error:?}");
+    assert!(error.details.iter().any(|detail| detail.starts_with("/locale:")), "{error:?}");
 }
 
 #[test]

@@ -115,10 +115,10 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         details.push("dialog.on_confirm과 dialog.danger는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_new_block_set_19_fields && definition.requires.blocks < 19 {
-        details.push("stack.align, input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width, when.max_width와 item_menu는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
+        details.push("stack.align, input.columns, button.preview, button.prefix, 동적 PropertyField.label, format swatches, properties.layout, canvas.loading, when.min_width, when.max_width는 블록 세트 19판이라 requires.blocks가 19 이상이어야 합니다".into());
     }
     if uses_new_block_set_20_fields && definition.requires.blocks < 20 {
-        details.push("repeat.grid.item_width는 블록 세트 20판이라 requires.blocks가 20 이상이어야 합니다".into());
+        details.push("repeat.grid.item_width와 item_menu는 블록 세트 20판이라 requires.blocks가 20 이상이어야 합니다".into());
     }
     if uses_device_storage_scope {
         validate_module_version(
@@ -321,9 +321,6 @@ fn uses_block_set_19_fields(ui: &Value) -> bool {
                                 })
                             })
                 }
-                Some("list" | "table" | "tree" | "feed" | "thread") => {
-                    object.contains_key("item_menu")
-                }
                 Some("canvas") => object.contains_key("loading"),
                 Some("when") => {
                     object.contains_key("min_width") || object.contains_key("max_width")
@@ -345,6 +342,8 @@ fn uses_block_set_20_fields(value: &Value) -> bool {
                     .get("grid")
                     .and_then(Value::as_object)
                     .is_some_and(|grid| grid.contains_key("item_width")))
+                || (matches!(object.get("type").and_then(Value::as_str), Some("list" | "table" | "tree" | "feed" | "thread"))
+                    && object.contains_key("item_menu"))
                 || object.values().any(uses_block_set_20_fields)
         }
         Value::Array(values) => values.iter().any(uses_block_set_20_fields),
@@ -845,7 +844,9 @@ fn validate_ui_binding(
                 menu.ends_with("/item_menu") && !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit())
             })
         });
-        if menu_confirm_body || at.strip_suffix("/copy_text").is_some_and(is_item_menu_action) {
+        if matches!(binding, Binding::Item(_) | Binding::ParentItem(_))
+            && (menu_confirm_body || at.strip_suffix("/copy_text").is_some_and(is_item_menu_action))
+        {
             return;
         }
         if at.ends_with("/save_file/suggested_name") {
