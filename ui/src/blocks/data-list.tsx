@@ -30,7 +30,9 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
     const group = row.querySelector<HTMLElement>(":scope > .ks-view-badges");
     const badges = [...(group?.children ?? [])] as HTMLElement[];
     const meta = row.querySelector<HTMLElement>(":scope > .ks-view-meta");
+    const content = row.querySelector<HTMLElement>(":scope > .ks-list-content")!;
     const update = () => {
+      content.style.minWidth = "";
       if (group) group.style.display = "";
       badges.forEach(badge => { badge.style.display = ""; });
       if (meta) meta.style.display = "";
@@ -46,6 +48,7 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
         if (i === 0 && group) group.style.display = "none";
       }
       if (meta && !fits()) meta.style.display = "none";
+      if (!fits()) content.style.minWidth = "0";
     };
     const observer = new ResizeObserver(update);
     observer.observe(row);

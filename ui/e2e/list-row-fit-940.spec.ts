@@ -5,7 +5,7 @@ test("목록은 넓을 때 정보를 보존하고 좁을 때 배지와 시각 �
   const app = page.getByTestId("app-window-list-row-fit-940");
   const row = app.locator(".ks-list-row").first();
   await expect(row).toBeVisible();
-  for (const width of [400, 320, 220, 160, 120, 400]) {
+  for (const width of [400, 320, 220, 160, 120, 90, 400]) {
     await row.evaluate((e, width) => { e.style.width = `${width}px`; }, width);
     await row.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await expect.poll(() => row.evaluate((e) => {
