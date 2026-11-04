@@ -670,16 +670,20 @@ fn prepare(
     let gate = gate_key(runtime, name);
     let until = gate.as_ref().and_then(|key| gates::blocked(manager, key));
     let startup = match &runtime.definition.sources[name] {
-        SourceDecl::Request { .. } => runtime.definition.permissions.iter().find_map(|decl| {
-            match decl {
-                kaleidoscope_contract::PermissionDecl::Connection { id, connection, .. }
-                    if id == runtime.definition.sources[name].permission() =>
-                {
-                    Some(runtime.startup.for_connection(connection))
-                }
-                _ => None,
-            }
-        }),
+        SourceDecl::Request { .. } => {
+            runtime
+                .definition
+                .permissions
+                .iter()
+                .find_map(|decl| match decl {
+                    kaleidoscope_contract::PermissionDecl::Connection {
+                        id, connection, ..
+                    } if id == runtime.definition.sources[name].permission() => {
+                        Some(runtime.startup.for_connection(connection))
+                    }
+                    _ => None,
+                })
+        }
         _ => None,
     };
     let source = runtime.sources.get_mut(name)?;
@@ -1207,7 +1211,10 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 connected && runtime.visible && runtime.storage_reconnect_pending;
             let startup_reload = runtime.storage_startup_pending
                 && runtime.visible
-                && !matches!(startup.server, crate::startup_readiness::Readiness::Pending(_));
+                && !matches!(
+                    startup.server,
+                    crate::startup_readiness::Readiness::Pending(_)
+                );
             if runtime.attached > 0 && (defaults_changed || reconnect_reload || startup_reload) {
                 reloads.push(id.clone());
                 runtime.storage_startup_pending = false;
@@ -1241,8 +1248,10 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                     &runtime.definition.sources[&name],
                     SourceDecl::Request { .. }
                 ) && runtime.definition.permissions.iter().any(|decl| {
-                    matches!(decl, kaleidoscope_contract::PermissionDecl::Connection { id, .. }
-                        if id == runtime.definition.sources[&name].permission())
+                    matches!(decl, kaleidoscope_contract::PermissionDecl::Connection { id, connection, .. }
+                        if id == runtime.definition.sources[&name].permission()
+                            && !runtime.startup.known.iter().any(|info| info.name == *connection
+                                && info.kind == kaleidoscope_contract::registry::ConnectionKind::Oauth))
                 });
                 let startup_retry =
                     readiness_changed && runtime.sources[&name].startup_wait.is_some();

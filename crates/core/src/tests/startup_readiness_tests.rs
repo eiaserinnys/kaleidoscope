@@ -233,6 +233,83 @@ fn shutdown_releases_a_waiting_command() {
 }
 
 #[test]
+fn connected_event_does_not_restart_inflight_oauth_request() {
+    use std::io::Write;
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core_with_client(temp.path(), vec![runtime_app()], &host, registry_client());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "startup-runtime");
+    set_starting(&core);
+    let mut info = relay();
+    info.kind = ConnectionKind::Oauth;
+    info.base_url = base.clone();
+    *core.inner.connections.lock().unwrap() = vec![info];
+    core.inner
+        .login_store
+        .store(
+            "example",
+            crate::logins::LoginEntry {
+                issuer: base,
+                client_id: None,
+                redirect_port: None,
+                access_token: Some("token".into()),
+                refresh_token: None,
+                expires_at: None,
+            },
+        )
+        .unwrap();
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    let first_deadline = Instant::now() + Duration::from_secs(2);
+    let (mut first, _) = loop {
+        match listener.accept() {
+            Ok(stream) => break stream,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                assert!(
+                    Instant::now() < first_deadline,
+                    "OAuth 요청이 시작되지 않았다"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("연결 수락 실패: {error}"),
+        }
+    };
+    apps(&core);
+    first.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 7\r\nConnection: close\r\n\r\n\"value\"").unwrap();
+    drop(first);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut duplicate = false;
+    while Instant::now() < deadline {
+        if let Ok((mut stream, _)) = listener.accept() {
+            duplicate = true;
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 7\r\nConnection: close\r\n\r\n\"value\"");
+            break;
+        }
+        if matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value"),
+            Some(BindingValue::Ready { .. })
+        ) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!duplicate, "서버 연결 사건이 OAuth 원천을 중복 호출했다");
+    assert!(matches!(
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value"),
+        Some(BindingValue::Ready { .. })
+    ));
+}
+
+#[test]
 fn asset_waits_for_link_and_returns_the_download() {
     use kaleidoscope_contract::data::{AssetMediaRef, MediaRef};
     let temp = TempDir::new().unwrap();

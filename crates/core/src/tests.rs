@@ -1873,7 +1873,12 @@ impl RegistryClient for FakeRegistryClient {
         _: u32,
     ) -> Result<crate::registry_client::AssetDownload, RegistryError> {
         use sha2::{Digest, Sha256};
-        let bytes = self.asset_bytes.lock().unwrap().clone().ok_or(RegistryError::NotFound)?;
+        let bytes = self
+            .asset_bytes
+            .lock()
+            .unwrap()
+            .clone()
+            .ok_or(RegistryError::NotFound)?;
         Ok(crate::registry_client::AssetDownload {
             sha256: format!("{:x}", Sha256::digest(&bytes)),
             bytes,

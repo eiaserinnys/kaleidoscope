@@ -36,7 +36,10 @@ fn find_ready_connection(inner: &Arc<Inner>, name: &str) -> Option<ConnectionInf
     if let Some(info) = find_connection(inner, name) {
         return Some(info);
     }
-    crate::startup_readiness::wait(inner, crate::startup_readiness::WaitFor::ConnectionsSnapshot);
+    crate::startup_readiness::wait(
+        inner,
+        crate::startup_readiness::WaitFor::ConnectionsSnapshot,
+    );
     find_connection(inner, name)
 }
 
