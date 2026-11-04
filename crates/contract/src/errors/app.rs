@@ -27,6 +27,13 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}, 아이콘 자산 {asset} {version}판: SVG, PNG 또는 WebP 아이콘은 블록 세트 {required}판 이상이 필요합니다. requires.blocks를 고치세요.",
         fix: "requires.blocks를 필요한 판 이상으로 지정하세요"
     }
+    APP_BUTTON_DESCRIPTION_VERSION_LOW(at, required, required_min) {
+        class: InvalidAppDefinition,
+        place: "단추 설명 블록 판 확인",
+        cause: "단추 설명을 지원하지 않는 블록 세트 판이다",
+        message: "{at}의 button.description은 블록 세트 {required}판부터입니다. requires.blocks를 {required_min} 이상으로 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
     APP_INSTRUCTIONS_WINDOW_NOT_FOUND() { class: NotFound, place: "지침 읽기 창", cause: "앱 창이 없다", message: "지침을 읽을 앱 창이 없습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
     APP_INSTRUCTIONS_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "지침 읽기 권한", cause: "앱이 지침 기능을 선언하지 않았다", message: "앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 instructions를 선언하세요" }
     APP_INSTRUCTIONS_KIND_UNKNOWN(kind) { class: InvalidRequest, place: "지침 종류", cause: "지원하지 않는 지침 종류다", message: "지침 종류 {kind}를 찾지 못했습니다. 앱 코드에서 app_authoring을 사용하세요.", fix: "앱 코드에서 app_authoring을 사용하세요" }

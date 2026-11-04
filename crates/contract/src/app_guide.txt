@@ -89,3 +89,5 @@ storage.entries는 JSON 또는 Markdown 항목의 키, 스키마, 기본값을 �
 worker.webhook은 외부 POST 트리거를 선언합니다. enabled_entry는 기본값이 false인 전역 불리언 저장 항목이며, token_secret은 반드시 지정해야 하며 미리 시크릿을 설정해야 호출할 수 있습니다. 응답을 http_response로 정하고 defer로 선언된 동작을 뒤에 실행할 수 있습니다. worker.calls에 다른 앱 id를 선언하면 파이썬에서 kaleidoscope_worker.call_app과 read_app_storage를 사용할 수 있습니다. 자기 호출, 순환 호출과 네 단계 초과 호출은 거부됩니다.
 
 앱 정의의 settings와 window_title은 블록 세트 19판이 필요합니다. settings.ui는 앱 설정 패널의 블록 트리이며, 있으면 storage.entries의 presentation:settings 자동 폼 대신 이 트리를 표시합니다. settings.available은 선택 바인딩이고 생략하면 설정 버튼이 보이며, false면 버튼을 숨기고 열린 설정을 닫습니다. window_title.title은 창 제목 바인딩이고 meta는 제목 옆에 표시할 선택 바인딩입니다. 바인딩 포인터는 /settings/available, /settings/ui 아래, /window_title/title과 /window_title/meta입니다.
+
+button.description은 올림 또는 키보드 초점에 보이는 설명 바인딩입니다. icon_only의 label도 쉘 도움말로 보입니다. description을 쓰면 requires.blocks를 28 이상으로 선언합니다.

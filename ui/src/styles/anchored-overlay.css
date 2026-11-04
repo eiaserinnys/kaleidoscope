@@ -1,0 +1,33 @@
+.ks-anchored-overlay {
+  position: fixed;
+  z-index: 10000;
+  max-width: calc(100vw - 2 * var(--ks-space-3));
+  max-height: calc(100vh - 2 * var(--ks-space-3));
+  overflow: hidden auto;
+  border: var(--ks-line-width) solid var(--ks-color-glass-edge);
+  border-radius: var(--ks-radius-large);
+  background: var(--ks-material-popover);
+  box-shadow: var(--ks-shadow-popover);
+  color: var(--ks-color-text);
+  backdrop-filter: blur(var(--ks-blur-popover));
+}
+.ks-tooltip {
+  max-width: min(calc(2 * var(--ks-pane-min-size)), calc(100vw - 2 * var(--ks-space-3)));
+  padding: var(--ks-space-2);
+  font-size: var(--ks-type-body);
+  overflow: visible;
+  white-space: normal;
+}
+.ks-tooltip::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: calc(var(--ks-space-2) + var(--ks-line-width));
+}
+.ks-tooltip.is-below::before { top: auto; bottom: 100%; }
+.ks-tooltip-content {
+  max-height: calc(100vh - 2 * var(--ks-space-3) - 2 * var(--ks-space-2) - 2 * var(--ks-line-width));
+  overflow: hidden auto;
+}
+.ks-tooltip-line + .ks-tooltip-line { margin-top: var(--ks-space-1); color: var(--ks-color-muted); }

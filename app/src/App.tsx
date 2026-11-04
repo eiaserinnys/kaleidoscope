@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createShellStore, EmptyState, LayoutGrid, type CoreTransport, type ShellStore } from "@kaleidoscope/ui";
+import { createShellStore, EmptyState, LayoutGrid, TooltipProvider, type CoreTransport, type ShellStore } from "@kaleidoscope/ui";
 import { createCoreTransport } from "./core/transport";
 import { Shell } from "./shell/shell";
 
@@ -26,5 +26,5 @@ export default function App() {
   if (!runtime.store) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
-  return <Shell store={runtime.store} />;
+  return <TooltipProvider><Shell store={runtime.store} /></TooltipProvider>;
 }

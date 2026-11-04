@@ -7,6 +7,7 @@ import {
   ContextMenuHost,
   createFakeTransport,
   createHttpTransport,
+  TooltipProvider,
   createShellStore,
   installShellDragGuard,
   useShellSelector,
@@ -428,4 +429,4 @@ function FakeFilePanel({ transport: files }: { transport: FakeTransport }) {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<Harness />);
+createRoot(document.getElementById("root")!).render(<TooltipProvider><Harness /></TooltipProvider>);
