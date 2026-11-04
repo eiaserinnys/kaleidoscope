@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type React
 import { AppIcon, IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, forgetNumbered, openContextMenu, useShareView, windowActionActive, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 import { ProcessConsent } from "./process-consent";
+import { InstallationConsent } from "./installation-consent";
 import { windowMenuEntries } from "./window-menu";
 
 export interface WindowFrameProps {
@@ -229,6 +230,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
           {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited, reportWindowHeader, reportSettingsAvailable) : children}
         </div>
         <ProcessConsent store={store} windowId={appWindow.id} host={frameHost} />
+        <InstallationConsent store={store} windowId={appWindow.id} host={frameHost} />
       </div>
       {!isMaximized ? <div
         aria-hidden="true"

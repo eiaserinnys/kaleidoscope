@@ -151,12 +151,15 @@ fn consent_and_install_wire_roundtrip_and_legacy_app_omits_origin() {
         App, CoreEvent, CoreRequest,
     };
     let app_json = definition();
-    let event = json!({"event":"app.install_permission", "window_id":"window", "request_id":"request", "app_name":"앱", "release":3, "digest":"abc", "definition":app_json});
+    let event = json!({"event":"app.install_permission", "window_id":"window", "request_id":"request", "app_name":"앱", "release":3, "store_url":"https://example.test/store", "digest":"abc", "definition":app_json});
     let parsed: CoreEvent = serde_json::from_value(event.clone()).unwrap();
     assert_eq!(
-        serde_json::to_value(parsed).unwrap()["event"],
-        event["event"]
+        serde_json::to_value(parsed).unwrap()["store_url"],
+        event["store_url"]
     );
+    let mut missing_store = event.clone();
+    missing_store.as_object_mut().unwrap().remove("store_url");
+    assert!(serde_json::from_value::<CoreEvent>(missing_store).is_err());
     let response = json!({"op":"app.respond_install_permission", "window_id":"window", "request_id":"request", "digest":"abc", "allow":true});
     let parsed: CoreRequest = serde_json::from_value(response.clone()).unwrap();
     assert_eq!(serde_json::to_value(parsed).unwrap(), response);

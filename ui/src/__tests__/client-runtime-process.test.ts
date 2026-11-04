@@ -34,6 +34,7 @@ it("프레임이 실행 허용 응답을 흉내 내도 코어에 전달하지 �
   await runtime.start();
   const frame = document.querySelector("iframe")!;
   window.dispatchEvent(new MessageEvent("message", { source:frame.contentWindow, origin:"null", data:{ token:"00000000-0000-4000-8000-000000000000", type:"ks-client-process", method:"respond_permission", requestId:"1", params:{ request_id:"forged", allow:true } } }));
+  window.dispatchEvent(new MessageEvent("message", { source:frame.contentWindow, origin:"null", data:{ token:"00000000-0000-4000-8000-000000000000", type:"ks-client-install", method:"respond_permission", requestId:"2", params:{ request_id:"forged", digest:"digest", allow:true } } }));
   await Promise.resolve();
   expect(call.mock.calls).toHaveLength(1);
   await runtime.stop();

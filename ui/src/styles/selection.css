@@ -29,6 +29,7 @@ textarea,
 .ks-unknown-block,
 .ks-process-command,
 .ks-process-env,
+.ks-consent-value,
 .ks-metric-subvalue,
 .ks-combobox-description {
   user-select: text;
@@ -44,6 +45,8 @@ button,
 [role="menuitem"],
 label,
 summary,
+.ks-consent-label,
+.ks-install-consent .ks-dialog-body strong,
 .ks-table-row.is-activatable .ks-table-cell,
 .ks-data-text.is-interactive,
 .ks-data-button.is-chip,
@@ -55,6 +58,8 @@ summary,
 .ks-data-toolbar .ks-data-text * {
   user-select: none;
 }
+
+.ks-install-consent .ks-dialog-body strong.ks-consent-value { user-select: text; }
 
 .ks-table-grid .ks-table-cell { user-select: none; }
 .ks-table-grid .ks-table-content-title,
