@@ -19,6 +19,7 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
   raw: JsonValue | undefined; column: Column; rowKey: string; rowLabel: string; index: number; columnIndex: number;
   selected: boolean; focused: boolean; handlers: RefObject<GridHandlers>;
 }) {
+  const press = useRef<{ x: number; y: number } | null>(null);
   const text = cellValue(raw, column);
   const title = column.format === "content" && isObject(raw) && typeof raw.title === "string" ? raw.title : text;
   const error = column.format === "content" ? contentCellError(raw, column) : null;
@@ -27,7 +28,14 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
     onFocus={() => handlers.current.focus(rowKey, column.field)}
     onKeyDown={(event) => handlers.current.key(event, rowKey, column.field)}
     onMouseDown={(event) => { if (event.detail >= 2) event.preventDefault(); }}
-    onClick={(event) => { if (!window.getSelection()?.toString()) { event.currentTarget.focus({ preventScroll: true }); handlers.current.choose(rowKey, column.field); } }}
+    onPointerDown={(event) => { press.current = { x: event.clientX, y: event.clientY }; }}
+    onClick={(event) => {
+      const start = press.current; press.current = null;
+      // 지도 블록과 같은 4px 이동 문턱으로 이번 누름의 끌기만 가른다.
+      if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) return;
+      window.getSelection()?.removeAllRanges();
+      event.currentTarget.focus({ preventScroll: true }); handlers.current.choose(rowKey, column.field);
+    }}
     onContextMenu={(event) => handlers.current.menu(event, rowKey, event.currentTarget)}>
     {column.format === "badge" && isBadge(raw) ? <Badge value={raw} /> : formattedCell(raw, column) ?? text}
   </span>;
@@ -44,7 +52,7 @@ export const GridRow = memo(function GridRow({ row, index, start, columns, rowHe
       ? <span role="rowheader" aria-colindex={columnIndex + 1} key={column.field} className="ks-table-cell ks-grid-row-header" onContextMenu={(event) => {
           const first = event.currentTarget.parentElement?.querySelector<HTMLElement>('[role="gridcell"]');
           if (first) handlers.current.menu(event, row.key, first);
-        }}>{label}</span>
+        }}><span className="ks-grid-row-label">{label}</span></span>
       : <GridCell key={column.field} raw={row[column.field]} column={column} rowKey={row.key} rowLabel={label} index={index * count + columnIndex - (rowHeader ? 1 : 0)} columnIndex={columnIndex} selected={active === column.field} focused={focus === column.field} handlers={handlers} />)}
   </div>;
 });
@@ -63,7 +71,7 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
   keepRovingRow(virtual, currentRow);
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, visible);
-  const gridColumns = useMemo(() => columns.map((column) => width(column, rows)).join(" "), [columns, rows]);
+  const gridColumns = useMemo(() => columns.map((column) => width(column.field === rowHeader && !column.width ? { ...column, width: "medium" } : column, rows)).join(" "), [columns, rows, rowHeader]);
   const lines = Math.max(0, ...columns.filter((column) => column.format === "content").map((column) => column.max_lines ?? 3));
   const handlers = useRef<GridHandlers>(null!);
   const move = (row: number, column: number) => {
@@ -81,13 +89,22 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
     const pinned = rowHeader ? container.querySelector<HTMLElement>(".ks-grid-row-header")?.getBoundingClientRect().width ?? 0 : 0;
     if (rect.left < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - rect.left;
     if (rect.right > bounds.right) container.scrollLeft += rect.right - bounds.right;
+    const top = bounds.top + container.clientTop + (container.querySelector<HTMLElement>(".ks-table-header")?.getBoundingClientRect().height ?? 0);
+    const bottom = bounds.top + container.clientTop + container.clientHeight;
+    if (rect.top < top) container.scrollTop -= top - rect.top;
+    else if (rect.bottom > bottom) container.scrollTop += rect.bottom - bottom;
   };
   useEffect(() => {
-    if (!pending.current) return;
-    const row = rows.findIndex((item) => item.key === pending.current?.row);
-    const col = dataColumns.findIndex((item) => item.field === pending.current?.column);
+    const address = pending.current ?? current;
+    if (!address) return;
+    const row = rows.findIndex((item) => item.key === address.row);
+    const col = dataColumns.findIndex((item) => item.field === address.column);
     const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${row * dataColumns.length + col}"]`);
-    if (target) { target.focus({ preventScroll: true }); reveal(target); pending.current = null; }
+    if (target) {
+      if (pending.current) target.focus({ preventScroll: true });
+      if (document.activeElement === target) reveal(target);
+      pending.current = null;
+    }
   });
   useEffect(() => {
     if (current && (current.row !== focus?.row || current.column !== focus?.column)) {

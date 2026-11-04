@@ -42,6 +42,19 @@ test("동적 일정표의 선택과 고정 행 머리", async ({ page }) => {
     return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
   });
   expect(contrast).toBeGreaterThanOrEqual(4.5);
+  const lightCell = grid.getByRole("gridcell", { name: "작업 묶음 1, 2일, 긴 한글 제목과 검토 일정 1-2" });
+  const darkCell = grid.getByRole("gridcell", { name: "작업 묶음 1, 4일, 긴 한글 제목과 검토 일정 1-4" });
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await lightCell.focus(); await page.keyboard.press("Enter");
+    await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
+    await capture(page, `r3-${theme}-light-selected-dark-focus`);
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("ArrowLeft"); await page.keyboard.press("ArrowLeft");
+    await capture(page, `r3-${theme}-dark-selected-light-focus`);
+    await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
+    await capture(page, `r3-${theme}-dark-selected-and-focused`);
+  }
   await page.setViewportSize({ width: 400, height: 700 });
   await page.emulateMedia({ colorScheme: "dark" });
   await grid.evaluate((element) => { element.scrollLeft = 500; });
@@ -50,7 +63,7 @@ test("동적 일정표의 선택과 고정 행 머리", async ({ page }) => {
   const alignment = await pinned.evaluate((element) => {
     const root = element.closest("[role=grid]")!.getBoundingClientRect();
     const rect = element.getBoundingClientRect(), row = element.parentElement!;
-    return { left: Math.abs(rect.left - root.left), height: Math.abs(rect.height - row.clientHeight) };
+    return { left: Math.abs(rect.left - root.left), height: Math.abs(rect.height - (row.clientHeight - parseFloat(getComputedStyle(row).paddingBottom))) };
   });
   expect(alignment.left).toBeLessThanOrEqual(2);
   expect(alignment.height).toBeLessThanOrEqual(1);
@@ -70,6 +83,53 @@ test("동적 일정표의 선택과 고정 행 머리", async ({ page }) => {
     return element.getBoundingClientRect().left >= header.right - 1;
   });
   expect(revealed).toBe(true);
+});
+
+test("빈 칸 위쪽 가장자리 누름도 칸을 고른다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "일정표", exact: true }).click();
+  const grid = app.getByRole("grid"), cell = grid.getByRole("gridcell", { name: "작업 묶음 1, 1일, 빈 칸" });
+  const row = cell.locator("..");
+  const bounds = (await row.boundingBox())!, rect = (await cell.boundingBox())!;
+  await page.mouse.click(rect.x + rect.width / 2, bounds.y + 2);
+  await expect(cell).toHaveAttribute("aria-selected", "true");
+  await capture(page, "r3-empty-selected");
+});
+
+test("끌어 고른 글이 남아도 다른 칸 빈 자리를 누르면 고른다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "일정표", exact: true }).click();
+  const text = app.getByText("긴 한글 제목과 검토 일정 1-2", { exact: true });
+  const rect = (await text.boundingBox())!;
+  await page.mouse.move(rect.x + 4, rect.y + rect.height / 2);
+  await page.mouse.down(); await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2, { steps: 8 }); await page.mouse.up();
+  expect(await page.evaluate(() => window.getSelection()?.toString())).not.toBe("");
+  const cell = app.getByRole("gridcell", { name: "작업 묶음 1, 1일, 빈 칸" });
+  await cell.click();
+  await expect(cell).toHaveAttribute("aria-selected", "true");
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("");
+});
+
+test("ArrowDown 뒤 초점 칸 전체를 고정 열 머리 아래에 드러낸다", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 750 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "일정표", exact: true }).click();
+  const grid = app.getByRole("grid");
+  await grid.getByRole("gridcell").first().focus();
+  for (let row = 0; row < 12; row++) {
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(() => grid.evaluate((element) => {
+      const cell = document.activeElement!.getBoundingClientRect(), bounds = element.getBoundingClientRect();
+      const header = element.querySelector(".ks-table-header")!.getBoundingClientRect();
+      return cell.top >= header.bottom - 1 && cell.bottom <= bounds.top + element.clientTop + element.clientHeight + 1;
+    })).toBe(true);
+  }
+  await capture(page, "r3-arrow-down-last");
 });
 
 test("기존 표 행 선택과 정렬을 유지한다", async ({ page }) => {

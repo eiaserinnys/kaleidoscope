@@ -6,7 +6,7 @@ const grid = Array.from({ length: 24 }, (_, index) => ({ key: String(index), tit
 const rows = Array.from({ length: 70 }, (_, index) => ({ key: String(index), name: `행 ${index + 1}`, status: "길게 표시되는 진행 상태 배지", a: index, b: index + 1, c: index + 2, d: index + 3, e: index + 4 }));
 const surfaceCards = Array.from({ length: 240 }, (_, index) => ({ key: String(index), surface: `sample-${index}`, title: `견본 ${index + 1}`, aspect: index === 0 ? 9 / 16 : 1.6 }));
 const scheduleColumns = [{ field: "label", label: "담당" }, ...Array.from({ length: 12 }, (_, index) => ({ field: `period_${index}`, label: `${index + 1}일`, width: "wide" as const, format: "content" as const }))];
-const scheduleRows = Array.from({ length: 60 }, (_, index) => ({ key: `team-${index}`, label: `작업 묶음 ${index + 1}`, ...Object.fromEntries(Array.from({ length: 12 }, (_, column) => [`period_${column}`, (index + column) % 4 ? { title: `긴 한글 제목과 검토 일정 ${index + 1}-${column + 1}`, subtitle: "긴 본문과 자료를 살펴보고 다음 작업을 준비합니다. 화면 폭이 좁아도 내용이 칸 밖으로 나가지 않아야 합니다.", color: (index + column) % 2 ? "#d6eaff" : "#394667", badges: ["확인", ...(index % 2 ? ["진행 중"] : [])] } : null])) }));
+const scheduleRows = Array.from({ length: 60 }, (_, index) => ({ key: `team-${index}`, label: index === 1 ? "작업 묶음 2 이름이 아주 긴 담당 부서" : `작업 묶음 ${index + 1}`, ...Object.fromEntries(Array.from({ length: 12 }, (_, column) => [`period_${column}`, (index + column) % 4 ? { title: `긴 한글 제목과 검토 일정 ${index + 1}-${column + 1}`, ...(index === 0 && column === 3 ? {} : { subtitle: "긴 본문과 자료를 살펴보고 다음 작업을 준비합니다. 화면 폭이 좁아도 내용이 칸 밖으로 나가지 않아야 합니다." }), color: (index + Math.floor(column / 3)) % 2 ? "#394667" : "#d6eaff", badges: ["확인", ...(index % 2 ? ["진행 중"] : [])] } : null])) }));
 const largeColumns = [{ field: "label", label: "담당" }, ...Array.from({ length: 200 }, (_, index) => ({ field: `period_${index}`, label: `${index + 1}일`, width: "narrow" as const }))];
 const largeRows = Array.from({ length: 200 }, (_, index) => ({ key: `group-${index}`, label: `그룹 ${index + 1}` }));
 
@@ -26,7 +26,7 @@ export const dataViewsApp: AppDefinition = {
       ...["a", "b", "c", "d", "e"].map((field) => ({ field, label: field.toUpperCase(), width: "medium" as const, format: "number" as const })),
     ] } },
     { label: "일정표", child: { type: "stack", direction: "column", fill: 0, children: [
-      { type: "table", rows: { state: "schedule_rows" }, columns: { state: "schedule_columns" }, selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" }, item_menu: [{ label: "행 복사", on_select: { copy_text: { item: "label" } } }] },
+      { type: "table", rows: { state: "schedule_rows" }, columns: { state: "schedule_columns" }, selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } },
       { type: "text", value: { state: "schedule_choice" } },
     ] } },
     { label: "큰 일정표", child: { type: "table", rows: { state: "large_rows" }, columns: { state: "large_columns" }, selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
