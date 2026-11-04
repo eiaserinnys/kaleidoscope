@@ -127,7 +127,7 @@ impl AppState {
                     errors::CONN_RELAY_URL_INVALID(&connection.info.name),
                 )
             })?;
-        {
+        if !request.query.is_empty() {
             let mut query = url.query_pairs_mut();
             for (key, value) in request.query {
                 query.append_pair(&key, &value);

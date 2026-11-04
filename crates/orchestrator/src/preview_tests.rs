@@ -828,6 +828,35 @@ async fn stored_environment_reference_is_not_sent_to_the_origin() {
 }
 
 #[tokio::test]
+async fn relay_preserves_request_uri_with_and_without_query() {
+    let app = Router::new().fallback(any(|uri: axum::http::Uri| async move { uri.to_string() }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let state = AppState::in_memory("secret");
+    add_relay(&state, &format!("http://{address}"));
+    for (query, expected) in [
+        (Default::default(), "/items"),
+        ([("a".into(), "1".into())].into(), "/items?a=1"),
+    ] {
+        let request = ConnectionRequest {
+            app_id: "test".into(),
+            method: HttpMethod::Get,
+            path: "/items".into(),
+            query,
+            body: None,
+            accept: ConnectionAccept::Text,
+        };
+        let (reply, _) = state
+            .relay_preview_request("board", request, FileAccess::Read)
+            .await
+            .unwrap();
+        assert_eq!(reply.text.as_deref(), Some(expected));
+    }
+    server.abort();
+}
+
+#[tokio::test]
 async fn relay_preserves_403_rate_limit_without_retry_time() {
     let app = Router::new().fallback(any(|| async {
         (
