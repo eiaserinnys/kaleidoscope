@@ -54,14 +54,14 @@ test("fill을 생략한 중첩 stack은 자연 높이를 유지한다", async ({
   expect(sizes.overflow).toBe("visible");
 });
 
-test("고정 내용이 창보다 커도 명시 fill의 최소 높이를 남기고 몸통이 스크롤된다", async ({ page }) => {
+test("고정 내용이 창보다 커도 명시 fill의 최소 높이를 남기고 바깥 fill이 스크롤된다", async ({ page }) => {
   const { app, inner } = await open(page, "nested-fill");
   await app.locator(".ks-data-window").evaluate((el) => { (el as HTMLElement).style.height = "200px"; });
   await inner.locator(":scope > .ks-data-stack-item").first().evaluate((el) => {
     Object.assign((el as HTMLElement).style, { height: "350px", flex: "0 0 350px" });
   });
   const fill = inner.locator(":scope > .ks-data-stack-item.is-fill");
-  const body = app.locator(".ks-data-window-body");
+  const body = inner.locator("..");
   const sizes = await fill.evaluate((el) => ({
     fill: el.getBoundingClientRect().height,
     minimum: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-pane-min-size")),
@@ -75,14 +75,16 @@ test("고정 내용이 창보다 커도 명시 fill의 최소 높이를 남기�
   await capture(page, "nested-overflow");
 });
 
-for (const [width, height] of [[1000, 700], [360, 480]]) test(`${width} 폭의 기본 표가 최소 높이를 갖고 몸통 휠로 보인다`, async ({ page }) => {
+for (const [width, height] of [[1000, 700], [360, 480], [360, 240]]) test(`${width}×${height} 폭의 기본 표가 최소 높이를 갖고 fill 휠로 보이고 도구 막대는 고정된다`, async ({ page }) => {
   await page.setViewportSize({ width, height });
   await page.goto("/?preview=market");
   const app = page.getByTestId("app-window-market");
   const tabs = app.locator(".ks-data-stack-item.is-fill > .ks-data-tabs").first();
   await expect(tabs).toBeAttached();
   const fill = tabs.locator("..");
-  const body = app.locator(".ks-data-window-body");
+  const body = app.locator(".ks-data-window-body > .ks-data-stack > .ks-data-stack-item.is-fill");
+  const toolbar = app.locator(".ks-data-toolbar").first();
+  const y = (await toolbar.boundingBox())!.y;
   const sizes = await fill.evaluate((el) => ({
     fill: el.getBoundingClientRect().height,
     minimum: 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-pane-min-size")),
@@ -97,5 +99,29 @@ for (const [width, height] of [[1000, 700], [360, 480]]) test(`${width} 폭의 �
     return target.top < body.bottom && target.bottom > body.top;
   });
   expect(visibility).toBe(true);
-  await capture(page, `table-scroll-${width}`);
+  expect((await toolbar.boundingBox())!.y).toBe(y);
+  await capture(page, `table-scroll-${width}-${height}`);
+});
+
+for (const width of [360, 390]) test(`${width} 가로 fill 슬라이더는 최소 길이를 지킨다`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 600 });
+  await page.goto('/?preview=slider-fill');
+  const slider = page.getByRole('slider');
+  await expect(slider).toBeVisible();
+  const size = await slider.evaluate(el => ({ width: el.getBoundingClientRect().width, minimum: 3 * parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-6')) }));
+  expect(size.width).toBeGreaterThanOrEqual(size.minimum);
+});
+
+
+test("마지막이 조작인 중첩 stack은 fill 없이 자연 높이로 스크롤된다", async ({ page }) => {
+  const { app, inner } = await open(page, "nested-controls");
+  await expect(inner.locator(':scope > .is-fill')).toHaveCount(0);
+  const outer = inner.locator('..');
+  const head = app.getByText('고정 머리', { exact: true });
+  const y = (await head.boundingBox())!.y;
+  await outer.hover({ position: { x: 30, y: 50 } });
+  await page.mouse.wheel(0, 5000);
+  await expect.poll(() => outer.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+  expect((await head.boundingBox())!.y).toBe(y);
+  await expect(app.getByRole('button', { name: '끝 조작' })).toBeInViewport();
 });

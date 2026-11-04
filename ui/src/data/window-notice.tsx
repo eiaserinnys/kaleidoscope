@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { X } from "../components/icons";
 import { Button, IconButton, Notice } from "../components/primitives";
 import { useWindowData } from "./window-data";
@@ -32,28 +32,22 @@ export function WindowNotice() {
   const actions: [ReactNode] | [ReactNode, ReactNode] = message
     ? clientFailed ? [<Button key="restart" onClick={() => { void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
     : [<Button key="retry" onClick={() => { void data.refresh(failed); }}>다시 받기</Button>, closeButton];
-  if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} closeButton={closeButton} />;
+  if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} />;
   return <Notice role="alert" errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? `다시 받지 못했습니다: ${failed.join(", ")}`}</Notice>;
 }
 
 const STATUS_NOTICE_DURATION_MS = 5000;
 
-function TransientStatus({ data, message, sequence, closeButton }: {
-  data: ReturnType<typeof useWindowData>; message: string; sequence: number; closeButton: ReactNode;
+function TransientStatus({ data, message, sequence }: {
+  data: ReturnType<typeof useWindowData>; message: string; sequence: number;
 }) {
-  const [focused, setFocused] = useState(false);
-  const remaining = useRef(STATUS_NOTICE_DURATION_MS);
-  useEffect(() => { remaining.current = STATUS_NOTICE_DURATION_MS; }, [sequence]);
   useEffect(() => {
-    if (focused) return;
-    const started = Date.now();
     const timer = setTimeout(() => {
       if (data.getNoticeRole() === "status" && data.getStatusSequence() === sequence) data.setNotice(null);
-    }, remaining.current);
-    return () => { clearTimeout(timer); remaining.current = Math.max(0, remaining.current - (Date.now() - started)); };
-  }, [data, sequence, focused]);
-  return <div className="ks-window-status" data-ks-overlay
-    onFocus={() => setFocused(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
-    <Notice role="status" actions={[closeButton]}>{message}</Notice>
+    }, STATUS_NOTICE_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [data, sequence]);
+  return <div className="ks-window-status" data-ks-overlay>
+    <Notice role="status">{message}</Notice>
   </div>;
 }

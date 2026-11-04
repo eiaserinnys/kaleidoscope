@@ -23,8 +23,10 @@ afterEach(() => { cleanup(); store.dispose(); vi.useRealTimers(); vi.restoreAllM
 it("정보 알림은 잠시 보인 뒤 사라진다", () => {
   act(() => data.setStatus("저장했습니다"));
   expect(screen.getByRole("status").textContent).toContain("저장했습니다");
-  expect(screen.getByRole("button", { name: "닫기" })).toBeTruthy();
-  tick(5000);
+  expect(screen.queryByRole("button")).toBeNull();
+  tick(4999);
+  expect(screen.queryByRole("status")).toBeTruthy();
+  tick(1);
   expect(screen.queryByRole("status")).toBeNull();
 });
 
@@ -36,17 +38,11 @@ it("마우스를 올려도 정보 알림은 사라진다", () => {
   expect(screen.queryByRole("status")).toBeNull();
 });
 
-it("키보드 초점이 안에 있으면 남은 시간을 멈춘다", () => {
+it("정보 알림에는 초점과 닫기 조작이 없다", () => {
   act(() => data.setStatus("작업을 마쳤습니다"));
-  tick(2000);
-  const close = screen.getByRole("button", { name: "닫기" });
-  fireEvent.focus(close);
-  tick(10000);
-  expect(screen.queryByRole("status")).toBeTruthy();
-  fireEvent.blur(close, { relatedTarget: document.body });
-  tick(2999);
-  expect(screen.queryByRole("status")).toBeTruthy();
-  tick(1);
+  expect(screen.queryByRole("button")).toBeNull();
+  expect(screen.getByRole("status").querySelector('[tabindex], button, a')).toBeNull();
+  tick(5000);
   expect(screen.queryByRole("status")).toBeNull();
 });
 

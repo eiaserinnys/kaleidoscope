@@ -23,7 +23,7 @@ test("정보 알림은 몸통 높이를 유지하고 시간이 지나면 사라�
   expect(await page.evaluate(() => window.clientChatHarness.visibleText())).not.toContain("저장했습니다");
 });
 
-test("최소 창에서도 정보 알림이 본문 높이를 유지하고 닫힌다", async ({ page }) => {
+test("최소 창에서도 정보 알림이 본문 높이를 유지하고 자동으로 사라진다", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 600 });
   await page.goto("/?preview=client-chat-test");
   const app = page.getByTestId("app-window-client-chat");
@@ -36,11 +36,11 @@ test("최소 창에서도 정보 알림이 본문 높이를 유지하고 닫힌�
   expect((await body.boundingBox())!.height).toBe(before!.height);
   const output = process.env.KS_NOTICE_CAPTURE_DIR;
   if (output) { mkdirSync(output, { recursive: true }); await app.screenshot({ path: join(output, "status-narrow.png") }); }
-  await notice.getByRole("button", { name: "닫기" }).click();
-  await expect(notice).toHaveCount(0);
+  await expect(notice.getByRole("button")).toHaveCount(0);
+  await expect(notice).toHaveCount(0, { timeout: 8000 });
 });
 
-for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아래 도구 단추를 누르고 알림을 닫는다`, async ({ page }) => {
+for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아래 도구 단추를 누르고 자동 소멸한다`, async ({ page }) => {
   await page.setViewportSize({ width, height: 600 });
   await page.goto("/?preview=notice-fixture");
   const app = page.getByTestId("app-window-notice-fixture");
@@ -57,10 +57,17 @@ for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아�
   });
   const output = process.env.KS_NOTICE_CAPTURE_DIR;
   if (output) { mkdirSync(output, { recursive: true }); await app.screenshot({ path: join(output, `notice-click-${width}.png`) }); }
-  expect(geometry.overlap, JSON.stringify(geometry)).toBe(true);
+  const placement = await notice.evaluate(el => {
+    const n = el.getBoundingClientRect(), w = el.closest('.ks-data-window')!.getBoundingClientRect();
+    return { center: Math.abs((n.left + n.right - w.left - w.right) / 2), bottom: w.bottom - n.bottom };
+  });
+  expect(placement.center).toBeLessThanOrEqual(1);
+  expect(placement.bottom).toBeLessThan(30);
+  await expect(notice.getByRole("button")).toHaveCount(0);
   await target.click({ timeout: 1500 });
   await expect(app.getByText(width === 360 ? "시작 누름" : "끝 누름")).toBeVisible();
   await expect(notice).toBeVisible();
-  await notice.getByRole("button", { name: "닫기" }).click({ timeout: 1500 });
-  await expect(notice).toHaveCount(0);
+  // 모든 알림 표면이 클릭을 아래로 전달해야 한다.
+  expect(await notice.evaluate(el => getComputedStyle(el).pointerEvents)).toBe("none");
+  await expect(notice).toHaveCount(0, { timeout: 8000 });
 });

@@ -1,7 +1,6 @@
 .ks-data-window { display: flex; flex-direction: column; position: relative; container-name: ks-data-window; container-type: size; }
 .ks-data-window-body { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.ks-data-window-notice:has(> .ks-window-status) { position: absolute; right: var(--ks-space-3); top: var(--ks-space-3); z-index: 1; width: min(calc(100% - 2 * var(--ks-space-3)), var(--ks-window-min-width)); pointer-events: none; }
-.ks-window-status .ks-icon-button { pointer-events: auto; }
+.ks-data-window-notice:has(> .ks-window-status) { position: absolute; left: 50%; bottom: var(--ks-space-3); transform: translateX(-50%); z-index: 1; width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); pointer-events: none; }
 .ks-window-status > .ks-notice { background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
 .ks-data-stack { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .ks-data-stack.is-column { flex-direction: column; }
@@ -32,7 +31,6 @@
 .ks-data-stack-item.is-fill:has(> .ks-split) { min-height: var(--ks-pane-min-size); }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column { height: auto; min-height: 100%; }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill) > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
-.ks-data-stack-item.is-fill:has(> .ks-data-stack.is-column.has-explicit-fill) { overflow: visible; }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column.has-explicit-fill > .ks-data-stack-item.is-fill { flex: 1 1 0; min-height: var(--ks-pane-min-size); }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column.has-explicit-fill > .ks-data-stack-item.is-fill:has(> :is(.ks-data-tabs, .ks-table-scroll)) { min-height: calc(var(--ks-pane-min-size) * 2); }
 .ks-data-stack-item.is-fill > .ks-data-tabs { min-height: calc(var(--ks-pane-min-size) * 2); }
@@ -424,6 +422,7 @@
 
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-input-field { display: flex; width: 100%; min-width: 0; }
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > :is(.ks-slider-field, .ks-select-field) { width: 100%; min-width: 0; }
-.ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-slider-field > .ks-slider { flex: 1 1 auto; min-width: 0; }
+.ks-data-stack.is-row > .ks-data-stack-item.is-fill:has(> .ks-slider-field) { min-width: calc(var(--ks-space-6) * 3); }
+.ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-slider-field > .ks-slider { flex: 1 1 auto; min-width: calc(var(--ks-space-6) * 3); }
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-select-field > .ks-select-button { flex: 1 1 auto; }
 .ks-input-field > .ks-field-label { flex-shrink: 0; }
