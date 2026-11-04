@@ -3,7 +3,7 @@ import type { CoreError, WindowAction } from "../contract/contract";
 import * as errors from "../contract/shell-errors";
 import { pointerClick, setInputValue } from "./action-events";
 import { overlayOwner, ownedOverlays } from "./overlay-owner";
-import { selectOptions } from "./select-options";
+import { selectOptions, selectRegisteredOption } from "./select-options";
 
 export function clickElement(element: HTMLElement, gesture: "click" | "double_click" = "click"): void {
   const rect = element.getBoundingClientRect();
@@ -37,6 +37,7 @@ export function selectElement(windowId: string, element: HTMLElement, choice: Ex
   if (item.disabled) return errors.SHELL_WINDOW_CONTROL_TARGET_DISABLED({ target: item.label });
   if (element instanceof HTMLSelectElement) { setInputValue(element, String(item.value)); element.dispatchEvent(new Event("change", { bubbles: true })); return; }
   if (metadata) {
+    if (selectRegisteredOption(element, index)) return;
     const group = element.closest<HTMLElement>(".ks-data-segmented");
     if (group) { const target = group.querySelectorAll<HTMLButtonElement>("button")[index]; if (target) clickElement(target); else return unsupported(); return; }
     flushSync(() => clickElement(element));

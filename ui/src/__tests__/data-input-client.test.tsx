@@ -282,6 +282,23 @@ it("읽기 전용 검색 입력의 지우기 조작은 값을 보내지 않는�
   expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("검색어");
 });
 
+it.each([false, true])("목록 전용 검색 지우기는 빈 선택지 허용 여부 %s에 맞춰 확정한다", async (hasEmpty) => {
+  runtime.values = { text: "alpha" };
+  const input = { type: "input", kind: "search", value: { client: "text" }, on_change: { client: "change" }, options: hasEmpty ? ["", "alpha"] : ["alpha", "beta"], options_only: true };
+  render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+  const field = screen.getByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(field);
+  fireEvent.blur(field);
+  fireEvent.click(screen.getByRole("button", { name: "지우기" }));
+  if (hasEmpty) {
+    expect(field.value).toBe("");
+    await vi.waitFor(() => expect(runtime.act).toHaveBeenCalledWith("/input/on_change", "", undefined, undefined, undefined, { input: true }));
+  } else {
+    expect(field.value).toBe("alpha");
+    expect(runtime.act).not.toHaveBeenCalled();
+  }
+});
+
 it("초점을 유지한 채 읽기 전용을 해제한 뒤에도 편집 중 초안을 보존한다", () => {
   runtime.values = { text: "원본", locked: false };
   const input = { type: "input", label: "내용", value: { client: "text" }, read_only: { client: "locked" }, on_change: { client: "change" } };
@@ -351,6 +368,13 @@ it("라벨 입력과 묶음 선택지를 기존 선택기로 표시한다", () =
   expect(screen.getByText("기본")).toBeTruthy();
   fireEvent.click(screen.getByRole("menuitem", { name: "누아르" }));
   expect(runtime.act).toHaveBeenCalledWith("/select/on_change", "a");
+});
+
+it("평면 선택지의 설명을 메뉴에 표시한다", () => {
+  const select = { type: "select", label: "환경", value: "a", on_change: { client: "select" }, options: [{ value: "a", label: "첫째", description: "첫째 설명" }, { value: "b", label: "둘째" }] };
+  render(<SelectBlock block={select as never} context={{} as never} pointer="/select" />);
+  fireEvent.click(screen.getByRole("button", { name: "환경" }));
+  expect(screen.getByText("첫째 설명")).toBeTruthy();
 });
 
 it("자동 숫자로 정규화된 값이 이전과 같아도 흐린 입력 초안을 비운다", async () => {

@@ -8,12 +8,12 @@ import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-function setup(holdNewEvent = false) {
+function setup(holdNewEvent = false, withOptions = false) {
   const definition: AppDefinition = {
     ...mdEditorDefinition, requires: { blocks: 4, modules: {} },
     state: { draft: "", saved: "", search: "", note: "" },
     ui: { type: "stack", direction: "column", children: [
-      { type: "input", placeholder: "커맨드", value: { state: "draft" }, on_change: { set_state: "draft" }, on_submit: [{ set_state: "draft", value: "" }] },
+      { type: "input", placeholder: "커맨드", value: { state: "draft" }, on_change: { set_state: "draft" }, on_submit: [{ set_state: "draft", value: "" }], ...(withOptions ? { options: ["새 명령", "다른 명령"], options_only: true } : {}) },
       { type: "button", label: "추가", on_click: [{ set_state: "saved", value: { expr: "$state.draft" } }] },
       { type: "input", placeholder: "검색", value: { state: "search" }, on_change: { set_state: "search" }, on_submit: { set_state: "search" } },
       { type: "input", placeholder: "메모", rows: 3, value: { state: "note" }, on_change: { set_state: "note" }, on_submit: [{ set_state: "note", value: "" }] },
@@ -132,6 +132,40 @@ it("제출 뒤 새 입력을 바로 추가하면 새 값이 전달된다", async
   const calls = spy.mock.calls.map(([r]) => r).filter((r) => r.op === "data.act");
   const submitted = calls.findIndex((r) => r.op === "data.act" && r.pointer.endsWith("on_submit"));
   expect(calls.slice(submitted + 1).some((r) => r.op === "data.act" && r.pointer.endsWith("on_change") && r.event === "첫 명령")).toBe(false);
+});
+
+it("선택 직후 버튼은 입력 요청과 응답과 상태 이벤트가 모두 도착한 뒤 새 값을 읽는다", async () => {
+  const { store, spy, originalCall, eventHeld, releaseEvent } = setup(true, true);
+  const input = await screen.findByPlaceholderText("커맨드") as HTMLInputElement;
+  let releaseCall!: () => void;
+  let releaseReply!: () => void;
+  const pendingCall = new Promise<void>((resolve) => { releaseCall = resolve; });
+  const pendingReply = new Promise<void>((resolve) => { releaseReply = resolve; });
+  spy.mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.event === "새 명령") {
+      await pendingCall;
+      const reply = await originalCall(request);
+      await pendingReply;
+      return reply;
+    }
+    return originalCall(request);
+  });
+  fireEvent.focus(input);
+  fireEvent.pointerDown(screen.getByRole("option", { name: "새 명령" }));
+  fireEvent.click(screen.getByRole("option", { name: "새 명령" }));
+  fireEvent.click(screen.getByRole("button", { name: "추가" }));
+  await waitFor(() => expect(spy.mock.calls.some(([request]) => request.op === "data.act" && request.event === "새 명령")).toBe(true));
+  const clicked = () => spy.mock.calls.some(([request]) => request.op === "data.act" && request.pointer.endsWith("on_click"));
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseCall(); await pendingCall; });
+  await waitFor(() => expect(eventHeld()).toBe(true));
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseReply(); await pendingReply; });
+  await act(async () => { await Promise.resolve(); });
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseEvent(); });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.saved).toBe("새 명령"));
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change") && request.event === "새 명령")).toHaveLength(1);
 });
 
 it("포커스를 지킨 제출에서 바깥 값 변경만 반영하고 여러 줄은 Ctrl+Enter로 보낸다", async () => {

@@ -1138,7 +1138,13 @@ pub enum Tone {
 #[ts(export, export_to = "contract.ts")]
 pub enum SelectOption {
     Plain(String),
-    Labeled { value: JsonValue, label: String },
+    Labeled {
+        value: JsonValue,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        description: Option<String>,
+    },
 }
 
 /// `select`에서 선택지를 이름으로 묶는다.
@@ -1838,6 +1844,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         }
         Block::Input {
             value,
+            options,
             read_only,
             on_change,
             on_submit,
@@ -1850,6 +1857,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             placeholder,
             ..
         } => {
+            if let Some(options) = options {
+                bind!("options", options);
+            }
             if let Some(read_only) = read_only {
                 bind!("read_only", read_only);
             }
