@@ -20,7 +20,7 @@ error_catalog! { ENTRIES;
     APP_INPUT_OPTIONS_ONLY_WITHOUT_OPTIONS(at) { class: InvalidAppDefinition, place: "입력 선택지 전용 설정 검사", cause: "선택지 없이 options_only 선언", message: "{at}에 options_only가 있지만 options가 없습니다. 선택지 바인딩을 더하거나 options_only를 빼세요.", fix: "선택지 바인딩을 더하거나 options_only를 빼세요" }
     APP_INPUT_OPTIONS_ARRAY_INVALID(at, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "자료가 배열이 아님", message: "{at}/options: 입력 선택지 자료가 배열이 아닙니다. 받은 값: {received}. 앱 정의의 options 자료를 배열로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
     APP_INPUT_OPTIONS_ITEM_INVALID(at, index, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "항목이 문자열도 객체도 아님", message: "{at}/options: 입력 선택지 {index}번째가 문자열도 객체도 아닙니다. 받은 값: {received}. 앱 정의의 options 항목을 문자열 또는 객체로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
-    APP_INPUT_OPTIONS_KEY_MISSING(at, index, key) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "필수 키 누락", message: "{at}/options: 입력 선택지 {index}번째에 {key}가 없습니다. 받은 값: undefined. 앱 정의의 options 객체에 해당 키의 문자열을 더하세요.", fix: "앱 정의의 options 자료를 고치세요" }
+    APP_INPUT_OPTIONS_KEY_MISSING(at, index, key) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "필수 키 누락", message: "{at}/options: 입력 선택지 {index}번째에 {key}가 없습니다. 앱 정의의 options 객체에 이 키를 문자열로 더하세요.", fix: "앱 정의의 options 자료를 고치세요" }
     APP_INPUT_OPTIONS_KEY_NOT_STRING(at, index, key, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "키 값이 문자열이 아님", message: "{at}/options: 입력 선택지 {index}번째의 {key}가 문자열이 아닙니다. 받은 값: {received}. 앱 정의의 options 자료에서 해당 키를 문자열로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
     APP_ICON_VERSION_INVALID(app_id, asset, version) {
         class: InvalidAppDefinition,
