@@ -67,7 +67,8 @@ test("탭 넘침과 분할 폭, 반복 간격", async ({ page }) => {
   await page.keyboard.press("Home");
   await expect(app.getByRole("tab", { name: "목록" })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("End");
-  await expect(layoutTab).toHaveAttribute("aria-selected", "true");
+  // End는 이 탭 목록의 마지막 탭을 고른다. 견본에 탭이 늘어도 「배치」가 마지막이라고 가정하지 않는다.
+  await expect(list.getByRole("tab").last()).toHaveAttribute("aria-selected", "true");
 });
 
 test("repeat 기본 간격의 넓은 폭과 최소 폭", async ({ page }) => {
