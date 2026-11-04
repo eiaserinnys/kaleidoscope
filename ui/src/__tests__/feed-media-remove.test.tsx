@@ -13,7 +13,7 @@ beforeEach(() => { mockVirtualLayout(); vi.stubGlobal("ResizeObserver", class { 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function setup(ui: unknown) {
-  const definition = { ...mdViewerDefinition, requires: { blocks: 32, modules: {} }, state: { ...mdViewerDefinition.state, choice: null, removed: [] }, ui: ui as Block } as AppDefinition;
+  const definition = { ...mdViewerDefinition, requires: { blocks: 33, modules: {} }, state: { ...mdViewerDefinition.state, choice: null, removed: [] }, ui: ui as Block } as AppDefinition;
   const transport = createFakeTransport({ ...makeTestSeed({ definitions: [definition] }), media: { "builtin-icon": "data:image/png;base64,iVBORw0KGgo=" } });
   const calls = vi.spyOn(transport, "call");
   const store = createShellStore(transport);
