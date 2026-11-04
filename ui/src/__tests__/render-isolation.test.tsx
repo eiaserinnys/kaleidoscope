@@ -1046,6 +1046,19 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("다른 창의 날짜 변경은 날짜 입력과 이웃 글을 다시 그리지 않는다", async () => {
+    const dateInput: AppDefinition = { ...definition, requires: { blocks: 33, modules: {} }, state: { first: "2026-11-20", second: "옆 글" }, ui: { type: "stack", direction: "column", children: [
+      { type: "input", kind: "date", value: { state: "first" }, on_change: { set_state: "first" } },
+      { type: "text", value: { state: "second" } },
+    ] } };
+    const { store } = await setup([dateInput], { first: "2026-11-20", second: "옆 글" });
+    await setState(store, "window-a", "first", "2026-11-21");
+    await settleRenders();
+    expect(countFor("window-b")).toBe(0);
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    store.dispose();
+  });
+
   it("다음 쪽 상태 변화는 다른 창과 형제 블록을 다시 그리지 않는다", async () => {
     const paged: AppDefinition = { ...definition, ui: { type: "stack", direction: "column", children: [
       { type: "text", value: { state: "first" } },

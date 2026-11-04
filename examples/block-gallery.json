@@ -14,6 +14,11 @@
     "query": "",
     "memo": "",
     "choice_input": "사과",
+    "date": "2026-11-20",
+    "empty_date": null,
+    "bounded_date": "2026-11-20",
+    "time": "15:30",
+    "quarter_time": "09:15",
     "lang": "both",
     "compact": false,
     "count": 0,
@@ -201,6 +206,16 @@
               "type": "section",
               "title": "자동완성",
               "child": { "type": "input", "label": "이름", "value": { "state": "choice_input" }, "on_change": { "set_state": "choice_input" }, "options": [{ "value": "사과", "label": "사과", "description": "아삭한 과일입니다." }, { "value": "배", "label": "배", "description": "과즙이 풍부한 과일입니다." }, "귤"] }
+            },
+            {
+              "type": "section", "title": "날짜와 시간",
+              "child": { "type": "stack", "direction": "column", "children": [
+                { "type": "input", "kind": "date", "label": "날짜", "value": { "state": "date" }, "on_change": { "set_state": "date" } },
+                { "type": "input", "kind": "date", "label": "빈 날짜", "value": { "state": "empty_date" }, "on_change": { "set_state": "empty_date" } },
+                { "type": "input", "kind": "date", "label": "범위 날짜", "min": "2026-11-10", "max": "2026-11-25", "value": { "state": "bounded_date" }, "on_change": { "set_state": "bounded_date" } },
+                { "type": "input", "kind": "time", "label": "시간", "value": { "state": "time" }, "on_change": { "set_state": "time" } },
+                { "type": "input", "kind": "time", "label": "15분 간격", "step": 15, "value": { "state": "quarter_time" }, "on_change": { "set_state": "quarter_time" } }
+              ] }
             },
             {
               "type": "repeat",

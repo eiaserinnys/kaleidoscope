@@ -868,7 +868,7 @@ export type InputFormat = { kind: InputFormatKind, digits: number, };
 
 export type InputFormatKind = "decimal";
 
-export type InputKind = "text" | "search" | "number";
+export type InputKind = "text" | "search" | "number" | "date" | "time";
 
 /**
  * 식 변수 $apps의 각 항목. 출처 없는 앱의 관련 값은 null이다.

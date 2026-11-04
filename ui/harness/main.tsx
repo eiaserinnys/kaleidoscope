@@ -41,6 +41,7 @@ import { shellDefectFixtures } from "../e2e/fixtures/shell-defects";
 import { stackWhenFillApp } from "../e2e/fixtures/stack-when-fill";
 import { inputSpinApp } from "../e2e/fixtures/input-spin";
 import { inputOptionsApp } from "../e2e/fixtures/input-options-app";
+import { inputDateTimeApp } from "../e2e/fixtures/input-date-time-app";
 import { executeWindowAction, readWindowView, registerControlWindow } from "../src/share/window-control";
 import { describeVisible } from "../src/share/visible";
 
@@ -88,7 +89,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp];
+const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
@@ -285,6 +286,18 @@ const fakeTransport = createFakeTransport({
   },
 });
 
+let holdDateInput: string | null = null;
+let releaseDateInput: (() => void) | null = null;
+if (previewAppId === "input-date-time-fixture") {
+  const call = fakeTransport.call.bind(fakeTransport);
+  fakeTransport.call = async (request) => {
+    if (request.op === "data.act" && "event" in request && holdDateInput !== null && request.event === holdDateInput) {
+      holdDateInput = null;
+      await new Promise<void>((resolve) => { releaseDateInput = resolve; });
+    }
+    return call(request);
+  };
+}
 const coreUrl = new URLSearchParams(window.location.search).get("core");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
@@ -356,6 +369,23 @@ function Harness() {
   const storageWindow = snapshot?.shared.windows.find((item) => item.app_id === "storage-document");
   const clientChatWindow = snapshot?.shared.windows.find((item) => item.app_id === "client-chat-test");
   const optionsWindow = snapshot?.shared.windows.find((item) => item.app_id === "input-options-fixture");
+  const dateTimeWindow = snapshot?.shared.windows.find((item) => item.app_id === "input-date-time-fixture");
+  useEffect(() => {
+    if (previewAppId !== "input-date-time-fixture" || !dateTimeWindow) return;
+    const root = document.querySelector<HTMLElement>(`[data-window-id="${dateTimeWindow.id}"]`);
+    if (!root) return;
+    const unregister = registerControlWindow(dateTimeWindow.id, root, store);
+    Object.assign(window, { inputDateTimeHarness: {
+      read: () => readWindowView(dateTimeWindow.id),
+      act: (viewId: string, action: Parameters<typeof executeWindowAction>[2]) => executeWindowAction(dateTimeWindow.id, viewId, action, "date-time-test"),
+      state: () => store.getSnapshot()?.shared.windows.find((item) => item.id === dateTimeWindow.id)?.state,
+      calls: () => fakeTransport.getCalls().filter((call) => call.op === "data.act"),
+      hold: (value: string) => { holdDateInput = value; },
+      waiting: () => releaseDateInput !== null,
+      release: () => { releaseDateInput?.(); releaseDateInput = null; },
+    } });
+    return unregister;
+  }, [dateTimeWindow?.id]);
   useEffect(() => {
     if (previewAppId !== "input-options-fixture" || !optionsWindow) return;
     const root = document.querySelector<HTMLElement>(`[data-window-id="${optionsWindow.id}"]`);
@@ -435,7 +465,7 @@ function Harness() {
         remoteEdits.current += 1;
         await fakeTransport.call({ op: "storage.write", window_id: "storage-window", entry: "memo", content: `# 다른 기기의 문서 ${remoteEdits.current}`, expected_revision: result.revision });
       }}>다른 기기에서 수정</button> : null}
-      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "client-chat-test" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test" || previewAppId === "paging-test" || previewAppId === "paging-split-test" || previewAppId === "input-options-fixture")) ? <FakeFilePanel transport={fakeTransport} /> : null}
+      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "client-chat-test" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test" || previewAppId === "paging-test" || previewAppId === "paging-split-test" || previewAppId === "input-options-fixture" || previewAppId === "input-date-time-fixture")) ? <FakeFilePanel transport={fakeTransport} /> : null}
     </main>
   );
 }

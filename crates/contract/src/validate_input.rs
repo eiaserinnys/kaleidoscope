@@ -1,9 +1,50 @@
 use crate::{
     data::{self, Binding},
     AppDefinition, Block, CoreError, InputKind, BUTTON_DESCRIPTION_BLOCK_SET_VERSION,
-    INPUT_OPTIONS_BLOCK_SET_VERSION, INPUT_SPIN_BLOCK_SET_VERSION,
+    INPUT_DATE_TIME_BLOCK_SET_VERSION, INPUT_OPTIONS_BLOCK_SET_VERSION,
+    INPUT_SPIN_BLOCK_SET_VERSION,
 };
 use serde_json::Value;
+
+fn valid_date(value: &Value) -> bool {
+    let Some(value) = value.as_str() else {
+        return false;
+    };
+    let bytes = value.as_bytes();
+    if bytes.len() != 10
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || !bytes
+            .iter()
+            .enumerate()
+            .all(|(i, byte)| i == 4 || i == 7 || byte.is_ascii_digit())
+    {
+        return false;
+    }
+    let year: u32 = value[0..4].parse().unwrap();
+    let month: u32 = value[5..7].parse().unwrap();
+    let day: u32 = value[8..10].parse().unwrap();
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => 0,
+    };
+    year > 0 && day > 0 && day <= days
+}
+fn valid_time(value: &Value) -> bool {
+    let Some(value) = value.as_str() else {
+        return false;
+    };
+    let bytes = value.as_bytes();
+    bytes.len() == 5
+        && bytes[2] == b':'
+        && [0, 1, 3, 4].iter().all(|&i| bytes[i].is_ascii_digit())
+        && value[0..2].parse::<u32>().unwrap() < 24
+        && value[3..5].parse::<u32>().unwrap() < 60
+}
 
 fn has_description(value: &Value) -> bool {
     match value {
@@ -87,9 +128,53 @@ pub(crate) fn validate_input_extensions(definition: &AppDefinition) -> Result<()
                 kind,
                 multiline,
                 rows,
+                min,
+                max,
+                step,
                 ..
             } => {
-                if spin.is_some() && definition.requires.blocks < INPUT_SPIN_BLOCK_SET_VERSION {
+                let date = *kind == InputKind::Date;
+                let time = *kind == InputKind::Time;
+                let bounds_error =
+                    [("min", min), ("max", max)]
+                        .into_iter()
+                        .find_map(|(field, binding)| {
+                            if let Some(Binding::Literal(value)) = binding {
+                                if date && !valid_date(value) {
+                                    return Some(crate::errors::APP_INPUT_DATE_BOUND_INVALID(
+                                        pointer, field, value,
+                                    ));
+                                }
+                                if time && !valid_time(value) {
+                                    return Some(crate::errors::APP_INPUT_TIME_BOUND_INVALID(
+                                        pointer, field, value,
+                                    ));
+                                }
+                            }
+                            None
+                        });
+                if (date || time) && definition.requires.blocks < INPUT_DATE_TIME_BLOCK_SET_VERSION
+                {
+                    Some(crate::errors::APP_INPUT_DATE_TIME_VERSION_LOW(
+                        pointer,
+                        INPUT_DATE_TIME_BLOCK_SET_VERSION,
+                        INPUT_DATE_TIME_BLOCK_SET_VERSION,
+                    ))
+                } else if date && (*multiline || rows.is_some_and(|rows| rows > 1)) {
+                    Some(crate::errors::APP_INPUT_DATE_MULTILINE_INVALID(pointer))
+                } else if time && (*multiline || rows.is_some_and(|rows| rows > 1)) {
+                    Some(crate::errors::APP_INPUT_TIME_MULTILINE_INVALID(pointer))
+                } else if date && step.is_some() {
+                    Some(crate::errors::APP_INPUT_DATE_STEP_UNSUPPORTED(pointer))
+                } else if bounds_error.is_some() {
+                    bounds_error
+                } else if time
+                    && matches!(step, Some(Binding::Literal(value)) if !value.as_u64().is_some_and(|number| number > 0))
+                {
+                    Some(crate::errors::APP_INPUT_TIME_STEP_INVALID(pointer))
+                } else if spin.is_some()
+                    && definition.requires.blocks < INPUT_SPIN_BLOCK_SET_VERSION
+                {
                     Some(crate::errors::APP_INPUT_SPIN_VERSION_LOW(
                         pointer,
                         INPUT_SPIN_BLOCK_SET_VERSION,

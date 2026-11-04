@@ -6,15 +6,19 @@ import { useBinding, useWindowData } from "../data/window-data";
 import { useLocalDraft } from "../data/use-local-draft";
 import { BindingFailureNotice, DataState } from "../components/data-state";
 import { Combobox } from "../components/combobox";
+import { DatePicker } from "../components/date-picker";
+import { TimePicker } from "../components/time-picker";
 import { Notice } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
 import { IconButton } from "../components/primitives";
 import { SpinButtons, steppedNumber } from "../components/number-input";
 import { X } from "../components/icons";
 import { display, isMultilineInput } from "./data-layout";
-import { isWindowTop, useWindowVisible } from "../data/window-state";
+import { isWindowTop, useWindowStateValue, useWindowVisible } from "../data/window-state";
 import { inputDraft, decimalDigits, useInputDraft } from "./input-draft";
 import { inputOptionsError, normalizeInputOptions } from "./input-options";
+import * as shellErrors from "../contract/shell-errors";
+import { createDateTimeFormat, parseISODate, parseISOTime } from "./input-date-time";
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const uninitializedFocus = Symbol("uninitialized focus");
 const fieldPosition = (position: "inline" | "top" | "hidden" | undefined) => position && position !== "inline" ? ` is-label-${position}` : "";
@@ -32,6 +36,11 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const data = useWindowData();
   const multiline = block.kind !== "number" && isMultilineInput(block);
   const inputId = useId();
+  const dateTime = block.kind === "date" || block.kind === "time";
+  const localeState = useWindowStateValue(context, dateTime ? context.definition.locale?.state ?? null : null);
+  const locale = typeof localeState === "string" ? localeState : undefined;
+  const formatter = useMemo(() => createDateTimeFormat(locale), [locale]);
+  const editFormatter = useRef(formatter);
   const bound = useBinding(`${pointer}/value`, block.value);
   const optionsBinding = useBinding(`${pointer}/options`, block.options ?? null);
   const optionsValue = optionsBinding.status === "ready" ? optionsBinding.value : undefined;
@@ -45,12 +54,31 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const hasLabel = block.label != null;
   const labelText = hasLabel ? bindingText(label) : "";
   const current = bound.status === "ready" ? bound.value : null;
-  const minimum = useNumericBinding(`${pointer}/min`, block.min ?? null);
-  const maximum = useNumericBinding(`${pointer}/max`, block.max ?? null);
-  const step = useNumericBinding(`${pointer}/step`, block.step ?? null);
+  const minBinding = useBinding(`${pointer}/min`, block.min ?? null);
+  const maxBinding = useBinding(`${pointer}/max`, block.max ?? null);
+  const stepBinding = useBinding(`${pointer}/step`, block.step ?? null);
+  const minimum = numericBinding(minBinding);
+  const maximum = numericBinding(maxBinding);
+  const step = numericBinding(stepBinding);
+  const minValue = minBinding.status === "ready" ? minBinding.value : null;
+  const maxValue = maxBinding.status === "ready" ? maxBinding.value : null;
+  const stepValue = stepBinding.status === "ready" ? stepBinding.value : null;
+  const isDate = block.kind === "date";
+  const parseBound = isDate ? parseISODate : parseISOTime;
+  const minDateTime = typeof minValue === "string" ? parseBound(minValue) : null;
+  const maxDateTime = typeof maxValue === "string" ? parseBound(maxValue) : null;
+  const codec = useMemo(() => dateTime ? {
+    parse: (value: string) => {
+      const parsed = isDate ? editFormatter.current.parseDate(value) : editFormatter.current.parseTime(value);
+      if (parsed.valid && parsed.value !== null && ((minDateTime && parsed.value < minDateTime) || (maxDateTime && parsed.value > maxDateTime))) return { valid: false } as const;
+      return parsed;
+    },
+    format: (value: string | null) => isDate ? formatter.formatDate(value) : formatter.formatTime(value),
+  } : undefined, [dateTime, isDate, formatter, minDateTime, maxDateTime]);
   const focus = useBinding(`${pointer}/focus`, block.focus ?? null);
-  const initialDraft = inputDraft(current, block.kind, block.format);
+  const initialDraft = codec ? codec.format(typeof current === "string" ? current : null) : inputDraft(current, block.kind, block.format);
   const toEventValue = useCallback((value: string): JsonValue => {
+    if (codec) { const canonical = isDate ? parseISODate(value) : parseISOTime(value); if (canonical) return canonical; const parsed = codec.parse(value); return parsed.valid ? parsed.value : null; }
     if (block.kind !== "number") return value;
     if (value.trim() === "" || !Number.isFinite(Number(value))) return null;
     let number = Number(value);
@@ -58,17 +86,19 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     if (maximum !== null) number = Math.min(maximum, number);
     if (block.format?.kind === "decimal") number = Number(number.toFixed(decimalDigits(block.format.digits)));
     return number;
-  }, [block.kind, block.format, minimum, maximum]);
+  }, [block.kind, block.format, minimum, maximum, codec, isDate]);
   const prepare = useRef<() => void>(() => {});
   const { draft, change, finish, holding, send, mark, adopt } = useLocalDraft<string>(initialDraft, pointer, { sendOnChange: false, resetOnFailure: false, syncOnSuccess: true, toJson: toEventValue, prepare });
   const [focused, setFocused] = useState(false);
   const focusedRef = useRef(false);
+  useLayoutEffect(() => { if (!focused) editFormatter.current = formatter; }, [focused, formatter]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unregisterFlush = useRef<(() => void) | null>(null);
   const timerValue = useRef("");
   const inputElement = useRef<HTMLInputElement | null>(null);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
   const composing = useRef(false);
+  const tabKey = useRef(false);
   const edited = useRef(false);
   const spinPending = useRef(false);
   const spinning = useRef(false);
@@ -132,7 +162,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [block.rows, multiline]);
-  const { sendDraft, markChanged, commit, cancel, endSpin, choose, canSyncExternal } = useInputDraft({ block, pointer, data, readOnly, initialDraft, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin, composing, optionsOnly, optionValues });
+  const { sendDraft, markChanged, commit, cancel, endSpin, choose, canSyncExternal } = useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin, composing, optionsOnly, optionValues, codec });
   sendDraftRef.current = sendDraft;
   afterSpin.current = () => { if (!spinning.current && !focusedRef.current && !edited.current) finish(false); };
   const latestDraft = useRef(draft);
@@ -181,31 +211,33 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     }
     if (event.key !== "Enter" || event.nativeEvent.isComposing || composing.current || (multiline && !event.ctrlKey)) return;
     normalizeNumberDraft();
-    if (block.commit === "submit" || block.on_submit) { event.preventDefault(); commit(draft); }
+    if (dateTime || block.commit === "submit" || block.on_submit) { event.preventDefault(); if (!commit(draft)) return; }
     if (block.on_submit) {
       const submitted = mark();
       void data.act(`${pointer}/on_submit`, toEventValue(draft)).then((success) => { if (success) adopt(submitted); });
     }
   };
   const props = { id: inputId, className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: readOnly ? initialDraft : draft, readOnly, "aria-readonly": readOnly,
-    onFocus: () => { setFocused(true); focusedRef.current = true; holding.current = !readOnly; }, onBlur: () => {
+    onFocus: () => { setFocused(true); focusedRef.current = true; editFormatter.current = formatter; holding.current = !readOnly; }, onBlur: () => {
       setFocused(false);
       focusedRef.current = false;
       normalizeNumberDraft();
       if (spinButtons.current?.end()) return;
       if (spinPending.current && edited.current) { endSpin(); return; }
-      if (optionsOnly || (block.commit ?? "debounce") !== "submit") commit(draft);
-      finish(block.options === undefined ? !edited.current : canSyncExternal());
+      if (dateTime && block.commit === "submit") prepare.current();
+      else if (dateTime || optionsOnly || (block.commit ?? "debounce") !== "submit") commit(draft);
+      finish(dateTime || block.options !== undefined ? canSyncExternal() : !edited.current);
     },
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { latestDraft.current = event.currentTarget.value; markChanged(event.currentTarget.value); }, onKeyDown: keyDown,
-    onCompositionStart: () => { composing.current = true; if (block.options !== undefined) { if (timer.current) clearTimeout(timer.current); timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null; } },
-    onCompositionEnd: (event: React.CompositionEvent<HTMLInputElement | HTMLTextAreaElement>) => { composing.current = false; if (block.options !== undefined && edited.current) markChanged(event.currentTarget.value); },
+    onKeyDownCapture: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => { if (dateTime && !isDate) tabKey.current = event.key === "Tab"; },
+    onCompositionStart: () => { composing.current = true; if (block.options !== undefined || dateTime) { if (timer.current) clearTimeout(timer.current); timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null; } },
+    onCompositionEnd: (event: React.CompositionEvent<HTMLInputElement | HTMLTextAreaElement>) => { composing.current = false; if ((block.options !== undefined || dateTime) && edited.current) markChanged(event.currentTarget.value); },
   };
   const numericValue = block.kind === "number" && draft.trim() !== "" && Number.isFinite(Number(draft)) ? Number(draft) : undefined;
-  const input = <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${block.kind === "number" ? " is-number" : ""}${block.spin ? " has-spin" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}${block.columns !== undefined ? " has-columns" : ""}`}
+  const input = <div className={`ks-data-input${dateTime && isDate ? " has-date-time" : ""}${block.kind === "search" ? " is-search" : ""}${block.kind === "number" ? " is-number" : ""}${block.spin ? " has-spin" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}${block.columns !== undefined ? " has-columns" : ""}`}
     style={block.columns !== undefined ? { "--ks-input-columns": `${block.columns}ch` } as CSSProperties : undefined}>
     {block.kind === "search" ? <span className="ks-data-input-search"><DataIcon name="search" size="inline" /></span> : null}
-    {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : block.options !== undefined ? <WindowCombobox context={context} optionsOnly={optionsOnly} inputProps={{ ...props, type: "text" }} inputRef={inputElement} options={normalizedOptions?.ok ? normalizedOptions.options : []} ready={normalizedOptions?.ok === true} loading={optionsBinding.status === "loading"} onChoose={choose} onCommit={() => commit(draft)} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : <input {...props}
+    {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : dateTime && isDate ? <WindowDatePicker context={context} inputProps={props} inputRef={inputElement} value={typeof current === "string" ? current : null} min={minDateTime} max={maxDateTime} locale={formatter.locale} label={labelText} onChoose={choose} onEditingEnd={() => { if (block.commit === "submit") prepare.current(); else commit(draft); setFocused(false); finish(canSyncExternal()); }} /> : dateTime ? <WindowTimePicker context={context} inputProps={props} inputRef={inputElement} value={typeof current === "string" ? current : null} min={minDateTime} max={maxDateTime} step={typeof stepValue === "number" && Number.isInteger(stepValue) && stepValue > 0 ? stepValue : 30} locale={formatter.locale} onChoose={choose} onCommit={() => { if (block.commit === "submit" && tabKey.current) { tabKey.current = false; prepare.current(); return true; } tabKey.current = false; return commit(draft); }} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : block.options !== undefined ? <WindowCombobox context={context} optionsOnly={optionsOnly} loading={optionsBinding.status === "loading"} inputProps={{ ...props, type: "text" }} inputRef={inputElement} options={normalizedOptions?.ok ? normalizedOptions.options : []} ready={normalizedOptions?.ok === true} onChoose={choose} onCommit={() => commit(draft)} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : <input {...props}
       ref={inputElement}
       type="text"
       inputMode={block.kind === "number" ? "decimal" : undefined}
@@ -221,7 +253,9 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     {block.kind === "search" && (readOnly ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={readOnly} onClick={() => { markChanged(""); if (optionsOnly) commit(""); else sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
   const optionsError = normalizedOptions && !normalizedOptions.ok ? inputOptionsError(normalizedOptions) : null;
-  return <>{hasLabel ? <><div className={`ks-field ks-input-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <label htmlFor={inputId} className="ks-field-label" data-ks-share-skip="">{labelText}</label> : null}{input}</div><BindingFailureNotice value={label} /></> : input}{block.options !== undefined && optionsBinding.status !== "ready" && optionsBinding.status !== "loading" ? <DataState value={optionsBinding} compact /> : null}{block.options !== undefined && optionsError ? <Notice role="alert" errorId={optionsError.id}>{optionsError.message}</Notice> : null}</>;
+  const invalidBound = dateTime && block.min !== undefined && minBinding.status === "ready" && !minDateTime ? "min" : dateTime && block.max !== undefined && maxBinding.status === "ready" && !maxDateTime ? "max" : null;
+  const dateTimeError = invalidBound ? (isDate ? shellErrors.SHELL_INPUT_DATE_BOUND_INVALID({ field: invalidBound }) : shellErrors.SHELL_INPUT_TIME_BOUND_INVALID({ field: invalidBound })) : dateTime && !isDate && block.step !== undefined && stepBinding.status === "ready" && !(typeof stepValue === "number" && Number.isInteger(stepValue) && stepValue > 0) ? shellErrors.SHELL_INPUT_TIME_STEP_INVALID() : null;
+  return <>{hasLabel ? <><div className={`ks-field ks-input-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <label htmlFor={inputId} className="ks-field-label" data-ks-share-skip="">{labelText}</label> : null}{input}</div><BindingFailureNotice value={label} /></> : input}{block.options !== undefined && optionsBinding.status !== "ready" && optionsBinding.status !== "loading" ? <DataState value={optionsBinding} compact /> : null}{block.options !== undefined && optionsError ? <Notice role="alert" errorId={optionsError.id}>{optionsError.message}</Notice> : null}{dateTime && [minBinding, maxBinding, stepBinding].map((binding, index) => binding.status !== "ready" ? <DataState key={index} value={binding} compact /> : null)}{dateTimeError ? <Notice role="alert" errorId={dateTimeError.id}>{dateTimeError.message}</Notice> : null}</>;
 }
 
 function WindowCombobox({ context, ...props }: Omit<ComponentProps<typeof Combobox>, "visible"> & { context: BlockContext }) {
@@ -234,7 +268,8 @@ function WindowSpinButtons({ context, ...props }: Omit<ComponentProps<typeof Spi
   return <SpinButtons {...props} visible={visible} />;
 }
 
-function useNumericBinding(pointer: string, binding: Extract<Block, { type: "input" }>['min']): number | null {
-  const value = useBinding(pointer, binding ?? null);
+function numericBinding(value: ReturnType<typeof useBinding>): number | null {
   return value.status === "ready" && typeof value.value === "number" && Number.isFinite(value.value) ? value.value : null;
 }
+function WindowDatePicker({ context, ...props }: Omit<ComponentProps<typeof DatePicker>, "visible"> & { context: BlockContext }) { return <DatePicker {...props} visible={useWindowVisible(context)} />; }
+function WindowTimePicker({ context, ...props }: Omit<ComponentProps<typeof TimePicker>, "visible"> & { context: BlockContext }) { return <TimePicker {...props} visible={useWindowVisible(context)} />; }
