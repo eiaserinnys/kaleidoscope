@@ -93,6 +93,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const gesture = useRef<Gesture | null>(null), frame = useRef<number | null>(null), pendingEdit = useRef<Edit | null>(null);
   const editGeneration = useRef(0);
   const [preview, setPreview] = useState<Edit | null>(null), [dragging, setDragging] = useState(false);
+  const [tickWidths, setTickWidths] = useState<Record<string, number>>({});
   const [metrics, setMetrics] = useState({ width: 0, height: 0, left: 0, row: 1, header: 0, gap: 0, day: 1, week: 1, month: 1 });
   const [offset, setOffset] = useState({ x: 0, y: 0 }), [px, setPx] = useState(0);
   const initialized = useRef(false), previousRange = useRef<number | null>(null), pendingScroll = useRef<number | null>(null);
@@ -122,6 +123,27 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const from = Math.max(range.start, range.start + Math.floor(offset.x / pxDay) - 2);
   const to = Math.min(range.end, range.start + Math.ceil((offset.x + lineWidth) / pxDay) + 2);
   const rows = visibleRows(offset.y, Math.max(0, metrics.height - metrics.header), metrics.row, rowCount);
+
+  useLayoutEffect(() => {
+    const container = dayMeasure.current?.parentElement;
+    if (!container || scale === "month") return;
+    const labels = new Set<string>();
+    for (let day = range.start; day <= range.end; day++) {
+      if (scale === "week" && monday(day) !== day) continue;
+      const date = new Date(day * 86_400_000);
+      labels.add(scale === "day" ? dayNumber.formatToParts(date).find((part) => part.type === "day")!.value : formatDate.format(date));
+    }
+    const elements = [...labels].map((label) => {
+      const element = document.createElement("span");
+      element.style.display = "inline-block";
+      element.textContent = label;
+      return element;
+    });
+    container.append(...elements);
+    const widths = Object.fromEntries(elements.map((element) => [element.textContent!, element.getBoundingClientRect().width]));
+    elements.forEach((element) => element.remove());
+    setTickWidths(widths);
+  }, [scale, locale, range.start, range.end, dayNumber, formatDate, metrics.day]);
 
   const applyScale = (nextPx: number, left: number) => {
     pendingScroll.current = left;
@@ -336,7 +358,13 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
         </div>
         <div className="ks-dates-axis" style={{ left: metrics.left, width: totalWidth }}>
           <div className="ks-dates-months">{periods.map((month) => <div className="ks-dates-month" key={month.day} style={{ left: x(month.day), width: (month.end - month.day) * pxDay }}><PeriodLabel width={(month.end - month.day) * pxDay} left={metrics.left}>{scale === "month" ? formatYear.format(date(month.day)) : formatMonth.format(date(month.day))}</PeriodLabel></div>)}</div>
-          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <PeriodLabel key={month.day} width={(month.end - month.day) * pxDay} left={x(month.day)} tick>{monthOnly.format(date(month.day))}</PeriodLabel>) : dates.filter((day) => tracks.length > 0 || (x(day) >= offset.x && x(day) + pxDay * (scale === "week" ? 7 : 1) <= offset.x + lineWidth)).map((day) => <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width: pxDay * (scale === "week" ? 7 : 1) }}>{scale === "day" ? dayText(day) : formatDate.format(date(day))}</span>)}</div>
+          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <PeriodLabel key={month.day} width={(month.end - month.day) * pxDay} left={x(month.day)} tick>{monthOnly.format(date(month.day))}</PeriodLabel>) : dates.map((day) => {
+            const text = scale === "day" ? dayText(day) : formatDate.format(date(day));
+            if (tickWidths[text] === undefined) return null;
+            const width = pxDay * (scale === "week" ? 7 : 1), center = x(day) + width / 2, half = tickWidths[text] / 2;
+            if (center - half < Math.max(0, offset.x) || center + half > Math.min(totalWidth, offset.x + lineWidth)) return null;
+            return <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width }}>{text}</span>;
+          })}</div>
           <DateMarkers markers={markers} today={block.today !== false ? today : null} start={range.start} pxDay={pxDay} width={totalWidth} gap={metrics.gap} />
         </div>
       </div>

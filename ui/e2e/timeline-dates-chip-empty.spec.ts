@@ -37,6 +37,38 @@ async function schedule(page: Page, empty: boolean) {
   return app;
 }
 
+test("주 눈금도 글자가 들어가는 경계 칸을 표시한다", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 700 });
+  const app = await schedule(page, true);
+  const root = app.locator(".ks-timeline-dates");
+  for (let i = 0; i < 12 && await root.getAttribute("data-scale") === "day"; i++) {
+    await app.getByRole("button", { name: "축소" }).click();
+  }
+  await expect(root).toHaveAttribute("data-scale", "week");
+  const result = await root.evaluate((element) => {
+    const corner = element.querySelector(".ks-dates-corner")!.getBoundingClientRect();
+    const scroll = element.querySelector(".ks-dates-scroll")!.getBoundingClientRect();
+    const ticks = element.querySelector<HTMLElement>(".ks-dates-ticks")!;
+    const canvas = document.createElement("canvas").getContext("2d")!;
+    canvas.font = getComputedStyle(ticks).font;
+    const rendered = [...ticks.querySelectorAll<HTMLElement>(":scope > span")].map((tick) => parseFloat(tick.style.left));
+    const format = new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", timeZone: "UTC" });
+    const start = Date.UTC(2026, 9, 19);
+    const columns = [...element.querySelectorAll<HTMLElement>(".ks-dates-background > span[style*='width']")];
+    const candidates = columns.flatMap((column) => {
+      const rect = column.getBoundingClientRect(), x = parseFloat(column.style.left);
+      const day = Math.round(x / rect.width);
+      if (day % 7 !== 0) return [];
+      const text = format.format(new Date(start + day * 86400000));
+      const half = canvas.measureText(text).width / 2, center = rect.left + rect.width * 7 / 2;
+      return center - half >= corner.right && center + half <= scroll.right ? [{ x, text }] : [];
+    });
+    return { candidates, missing: candidates.filter((tick) => !rendered.some((x) => Math.abs(x - tick.x) < 0.1)) };
+  });
+  expect(result.candidates.length).toBeGreaterThan(0);
+  expect(result.missing).toEqual([]);
+});
+
 async function capture(page: Page, name: string) {
   const screenshot = await page.screenshot();
   const directory = process.env.KS_DATA_CAPTURE_DIR;
@@ -48,6 +80,73 @@ async function capture(page: Page, name: string) {
 }
 
 for (const width of [1200, 360]) {
+  test(`${width} 처음 그린 일정표의 날짜 글자는 보이는 만큼 표시한다`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 700 });
+    const app = await schedule(page, true);
+    const root = app.locator(".ks-timeline-dates");
+    await expect(root).toHaveAttribute("data-scale", "day");
+    await expect(root.locator(".ks-dates-ticks > span").first()).toBeVisible();
+    await capture(page, `initial-empty-${width}`);
+    const metrics = await root.evaluate((element) => {
+      const corner = element.querySelector(".ks-dates-corner")!.getBoundingClientRect();
+      const scroll = element.querySelector(".ks-dates-scroll")!.getBoundingClientRect();
+      const ticks = element.querySelector<HTMLElement>(".ks-dates-ticks")!;
+      const style = getComputedStyle(ticks);
+      const canvas = document.createElement("canvas").getContext("2d")!;
+      canvas.font = style.font;
+      const rendered = [...ticks.querySelectorAll<HTMLElement>(":scope > span")].map((tick) => parseFloat(tick.style.left));
+      const start = Date.UTC(2026, 9, 19);
+      const number = new Intl.DateTimeFormat("ko-KR", { day: "numeric", timeZone: "UTC" });
+      const columns = [...element.querySelectorAll<HTMLElement>(".ks-dates-background > span[style*='width']")];
+      const candidates = columns.map((column) => {
+        const rect = column.getBoundingClientRect();
+        const x = parseFloat(column.style.left);
+        const day = Math.round(x / rect.width);
+        const text = number.formatToParts(new Date(start + day * 86400000)).find((part) => part.type === "day")!.value;
+        const half = canvas.measureText(text).width / 2;
+        const center = rect.left + rect.width / 2;
+        return { x, text, left: center - half, right: center + half };
+      }).filter((tick) => tick.left >= corner.right && tick.right <= scroll.right);
+      const missing = candidates.filter((tick) => !rendered.some((x) => Math.abs(x - tick.x) < 0.1));
+      const first = ticks.querySelector("span")!;
+      const range = document.createRange(); range.selectNodeContents(first);
+      const firstLeft = range.getBoundingClientRect().left;
+      const month = [...element.querySelectorAll(".ks-dates-month")].find((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        return rect.right > corner.right && rect.left < scroll.right;
+      })!;
+      const monthLeft = month.querySelector("span")!.getBoundingClientRect().left;
+      return { candidates, missing, firstLeft, monthLeft, dayWidth: columns[0].getBoundingClientRect().width };
+    });
+    expect(metrics.candidates.length).toBeGreaterThan(0);
+    expect(metrics.missing).toEqual([]);
+    expect(Math.abs(metrics.firstLeft - metrics.monthLeft)).toBeLessThanOrEqual(metrics.dayWidth);
+  });
+
+  test(`${width} 트랙이 있는 처음 일정표의 끝 날짜는 잘리지 않는다`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 700 });
+    const app = await schedule(page, false);
+    const root = app.locator(".ks-timeline-dates");
+    await expect(root).toHaveAttribute("data-scale", "day");
+    await expect(root.locator(".ks-dates-ticks > span").first()).toBeVisible();
+    await capture(page, `initial-tracks-${width}`);
+    const metrics = await root.evaluate((element) => {
+      const corner = element.querySelector(".ks-dates-corner")!.getBoundingClientRect();
+      const scroll = element.querySelector(".ks-dates-scroll")!.getBoundingClientRect();
+      const texts = [...element.querySelectorAll(".ks-dates-ticks > span")].map((tick) => {
+        const range = document.createRange(); range.selectNodeContents(tick);
+        const rect = range.getBoundingClientRect();
+        return { text: tick.textContent, left: rect.left, right: rect.right };
+      }).filter((tick) => tick.right > corner.right && tick.left < scroll.right);
+      return { texts, left: corner.right, right: scroll.right };
+    });
+    expect(metrics.texts.length).toBeGreaterThan(0);
+    for (const tick of metrics.texts) {
+      expect.soft(tick.left, `눈금 ${tick.text}의 왼쪽`).toBeGreaterThanOrEqual(metrics.left - 1);
+      expect.soft(tick.right, `눈금 ${tick.text}의 오른쪽`).toBeLessThanOrEqual(metrics.right + 1);
+    }
+  });
+
   test(`${width} 날짜 없는 항목의 흐림과 색`, async ({ page }) => {
     await page.setViewportSize({ width, height: 700 });
     const app = await schedule(page, false);
