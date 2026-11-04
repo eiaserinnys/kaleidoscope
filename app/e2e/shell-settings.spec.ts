@@ -7,6 +7,8 @@ const base = "/harness.html?preview=shell-settings";
 test("서버 설정 진입과 전환, 닫기와 초점", async ({ page }) => {
   await page.goto(`${base}&link=embedded`);
   await expect(page.locator(".ks-harness-webview")).toBeVisible();
+  await mkdir(captures, { recursive: true });
+  await page.screenshot({ path: `${captures}/desktop-before-1440.png` });
   const gear = page.getByRole("button", { name: "설정", exact: true });
   await gear.click();
   await expect(page.getByRole("heading", { name: "설정" })).toBeFocused();
@@ -38,6 +40,20 @@ test("서버 설정 진입과 전환, 닫기와 초점", async ({ page }) => {
   await expect(gear).toBeFocused();
   await expect(page.locator(".ks-desktop-area")).toBeVisible();
   await expect(page.locator(".ks-harness-webview")).toBeVisible();
+  await page.screenshot({ path: `${captures}/desktop-after-1440.png` });
+});
+
+test("최소 화면에서 설정을 닫으면 데스크톱을 복원한다", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 600 });
+  await page.goto(`${base}&link=embedded`);
+  await expect(page.locator(".ks-harness-webview")).toBeVisible();
+  await mkdir(captures, { recursive: true });
+  await page.screenshot({ path: `${captures}/desktop-before-960.png` });
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
+  await page.getByRole("button", { name: "작업 화면으로 돌아가기" }).click();
+  await expect(page.locator(".ks-harness-webview")).toBeVisible();
+  await page.screenshot({ path: `${captures}/desktop-after-960.png` });
 });
 
 test("서버 상태를 넓은 화면과 최소 화면에서 확인한다", async ({ page }) => {
