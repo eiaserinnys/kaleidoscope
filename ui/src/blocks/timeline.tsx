@@ -152,6 +152,8 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     update();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     observer?.observe(scroller);
+    const measure = scroller.querySelector<HTMLElement>(".ks-timeline-ruler-measure");
+    if (measure) observer?.observe(measure);
     return () => { observer?.disconnect(); scroll.current = null; };
   }, [seconds, zoom, viewportControls]);
   const sendViewport = useMemo(() => createSerialSend(async (next: TimelineViewport) => {

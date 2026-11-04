@@ -162,7 +162,7 @@ cargo run -p kaleidoscope-devbridge -- --data-dir ./dev-data --port 1421 --serve
 pnpm --dir app dev
 ```
 
-Open `http://localhost:1420/?core=http://127.0.0.1:1421`, then pair this shell through your local MCP client. The development bridge accepts the UI origin `http://localhost:1420`.
+Open `http://localhost:1420/?core=http://127.0.0.1:1421`, then pair this shell through your local MCP client. The development bridge accepts the UI origin `http://localhost:1420`. 시험용 파일 선택은 `KALEIDOSCOPE_DEV_PICK_FILES`에 절대 경로의 JSON 배열을 지정한다. 예: `["/tmp/sample.txt"]`. 설정하지 않거나 빈 배열이면 파일 선택이 취소된다.
 
 For desktop development on a supported host, install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and set the server URL when building:
 

@@ -270,7 +270,8 @@ pub const CONTRACT_VERSION: u32 = 29;
 /// - 19판: 앱 정의의 `settings` 설정 트리와 `window_title` 창 제목 및 메타 바인딩, `dialog.on_confirm`과 `dialog.danger`.
 /// - 20판: 자동 열 격자 칸의 최소 폭을 고르는 `repeat.grid.item_width`,
 ///   `list`, `table`, `tree`, `feed`의 `item_menu`.
-pub const BLOCK_SET_VERSION: u32 = 20;
+/// - 21판: input, select, slider, color의 `label_position`과 slider의 `show_value`.
+pub const BLOCK_SET_VERSION: u32 = 21;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -1390,6 +1391,12 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        #[ts(optional, as = "Option<LabelPosition>")]
+        label_position: LabelPosition,
+        #[serde(default = "default_true", skip_serializing_if = "is_true")]
+        #[ts(optional, as = "Option<bool>")]
+        show_value: bool,
         min: f64,
         max: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1403,6 +1410,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        #[ts(optional, as = "Option<LabelPosition>")]
+        label_position: LabelPosition,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         disabled: Option<Binding>,
@@ -1822,6 +1832,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        #[ts(optional, as = "Option<LabelPosition>")]
+        label_position: LabelPosition,
         #[serde(default)]
         #[ts(optional, as = "Option<InputKind>")]
         kind: InputKind,
@@ -1850,6 +1863,9 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        #[ts(optional, as = "Option<LabelPosition>")]
+        label_position: LabelPosition,
         #[serde(default)]
         #[ts(optional, as = "Option<SelectStyle>")]
         style: SelectStyle,
@@ -2148,6 +2164,10 @@ enum RawBlock {
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        label_position: LabelPosition,
+        #[serde(default = "default_true", skip_serializing_if = "is_true")]
+        show_value: bool,
         min: f64,
         max: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2158,6 +2178,8 @@ enum RawBlock {
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        label_position: LabelPosition,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         disabled: Option<Binding>,
     },
@@ -2487,6 +2509,8 @@ enum RawBlock {
         on_change: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        label_position: LabelPosition,
         #[serde(default)]
         kind: InputKind,
         #[serde(default)]
@@ -2522,6 +2546,8 @@ enum RawBlock {
         options: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "is_inline")]
+        label_position: LabelPosition,
         #[serde(default)]
         style: SelectStyle,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2833,6 +2859,8 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                label_position,
+                show_value,
                 min,
                 max,
                 step,
@@ -2840,6 +2868,8 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                label_position,
+                show_value,
                 min,
                 max,
                 step,
@@ -2848,11 +2878,13 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                label_position,
                 disabled,
             } => Block::Color {
                 value,
                 on_change,
                 label,
+                label_position,
                 disabled,
             },
             RawBlock::Split {
@@ -3076,6 +3108,7 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                label_position,
                 kind,
                 multiline,
                 rows,
@@ -3093,6 +3126,7 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                label_position,
                 kind,
                 multiline,
                 rows,
@@ -3119,6 +3153,7 @@ impl From<RawBlock> for Block {
                 value,
                 on_change,
                 label,
+                label_position: LabelPosition::Inline,
                 kind,
                 multiline: true,
                 rows,
@@ -3131,6 +3166,7 @@ impl From<RawBlock> for Block {
                 on_change,
                 options,
                 label,
+                label_position,
                 style,
                 placeholder,
                 disabled,
@@ -3139,6 +3175,7 @@ impl From<RawBlock> for Block {
                 on_change,
                 options,
                 label,
+                label_position,
                 style,
                 placeholder,
                 disabled,
@@ -3666,6 +3703,27 @@ pub enum TextStyle {
     Body,
     Title,
     Meta,
+}
+
+/// 컨트롤의 이름표 위치. 생략하면 인라인이다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum LabelPosition {
+    #[default]
+    Inline,
+    Top,
+    Hidden,
+}
+
+fn is_inline(value: &LabelPosition) -> bool {
+    *value == LabelPosition::Inline
+}
+fn default_true() -> bool {
+    true
+}
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]

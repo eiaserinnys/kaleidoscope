@@ -158,6 +158,17 @@
 .ks-data-tab-panel .ks-field { display: grid; width: 100%; grid-template-columns: calc(var(--ks-space-6) * 2) minmax(0, 1fr) auto; }
 .ks-data-tab-panel .ks-slider-field { grid-template-columns: calc(var(--ks-space-6) * 2) minmax(0, 1fr) minmax(var(--ks-space-6), auto); }
 .ks-data-tab-panel .ks-select-field > .ks-button, .ks-data-tab-panel .ks-input-field > .ks-data-input, .ks-data-tab-panel .ks-color-control { grid-column: 2 / 4; width: 100%; }
+.ks-field.is-label-top { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); }
+.ks-field.is-label-top > :not(.ks-field-label) { width: 100%; }
+.ks-slider-field.is-label-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.ks-slider-field.is-label-top > .ks-field-label { grid-column: 1 / -1; }
+.ks-slider-field.is-label-top > .ks-slider-value { width: auto; }
+.ks-field.is-label-hidden { min-width: 0; }
+.ks-data-tab-panel .ks-field.is-label-hidden { grid-template-columns: minmax(0, 1fr) auto; }
+.ks-data-tab-panel .ks-field.is-label-hidden > :is(.ks-button, .ks-data-input, .ks-color-control, .ks-data-segmented) { grid-column: 1 / -1; }
+.ks-slider-field.is-value-hidden .ks-slider { flex: 1 1 auto; }
+.ks-data-tab-panel .ks-slider-field.is-value-hidden { grid-template-columns: calc(var(--ks-space-6) * 2) minmax(0, 1fr); }
+.ks-data-tab-panel .ks-slider-field.is-label-top.is-value-hidden, .ks-data-tab-panel .ks-slider-field.is-label-hidden.is-value-hidden { grid-template-columns: minmax(0, 1fr); }
 .ks-data-tab-panel .ks-select-group-label { display: none; }
 .ks-data-tab-panel .ks-color-control { display: grid; grid-template-columns: var(--ks-control-height) 1fr; }
 .ks-data-tab-panel .ks-color-code, .ks-data-tab-panel .ks-slider-value { text-align: right; }
@@ -367,7 +378,7 @@
   .ks-data-window :where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-anchor > .ks-canvas,
   .ks-data-window :where(.ks-split-pane, .ks-data-tab-panel) > .ks-data-section > .ks-data-section-child > .ks-canvas { height: auto; aspect-ratio: var(--ks-canvas-ratio, 16 / 9); }
 }
-.ks-timeline { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.ks-timeline { display: flex; flex-direction: column; min-height: 0; overflow: hidden; isolation: isolate; }
 .ks-timeline-layout { display: flex; min-height: 0; overflow: hidden; }
 .ks-timeline-labels { flex: 0 0 clamp(calc(var(--ks-space-6) * 2), 22cqw, calc(var(--ks-space-6) * 4)); overflow: hidden; }
 .ks-timeline-layout.has-controls .ks-timeline-labels { flex-basis: clamp(calc(var(--ks-icon-button-size) * 3 + var(--ks-space-3) * 2 + var(--ks-space-1) * 2), 22cqw, calc(var(--ks-icon-button-size) * 3 + var(--ks-space-3) * 2 + var(--ks-space-2) * 2)); }
