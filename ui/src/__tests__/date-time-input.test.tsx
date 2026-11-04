@@ -7,7 +7,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
-function setup(kind: "date" | "time", value: string | null, extra = {}) {
+function setup(kind: "date" | "time", value: string | number | null, extra = {}) {
   const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 35, modules: {} }, state: { draft: value, saved: "" }, ui: { type: "stack", direction: "column", children: [
     { type: "input", kind, label: "입력", value: { state: "draft" }, on_change: { set_state: "draft" }, ...extra },
     { type: "button", label: "확인", on_click: [{ set_state: "saved", value: { expr: "$state.draft" } }] },
@@ -21,6 +21,24 @@ function setup(kind: "date" | "time", value: string | null, extra = {}) {
   render(<AppWindowContent store={store} windowId="editor-window" />);
   return { store, spy, originalCall, transport };
 }
+it.each(["", "abc", 42, "2026-02-30"])("유효하지 않은 날짜 %s는 비우고 오늘 달을 연다", async (value) => {
+  setup("date", value);
+  const input = await screen.findByRole("textbox", { name: "입력" }) as HTMLInputElement;
+  expect(input.value).toBe("");
+  const button = screen.getByRole("button", { name: "날짜 선택" });
+  fireEvent.pointerDown(button); fireEvent.click(button);
+  const dialog = await screen.findByRole("dialog");
+  const today = new Date();
+  const todayLabel = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1)));
+  expect(dialog.textContent).toContain(todayLabel);
+});
+it.each(["", "abc", 42, "24:00"])("유효하지 않은 시간 %s는 비우고 선택된 행이 없다", async (value) => {
+  setup("time", value);
+  const input = await screen.findByRole("combobox", { name: "입력" }) as HTMLInputElement;
+  expect(input.value).toBe("");
+  fireEvent.focus(input);
+  expect(within(screen.getByRole("listbox")).queryByRole("option", { selected: true })).toBeNull();
+});
 it("날짜 초안을 유지하다 완성한 ISO만 보내고 부분 글은 되돌린다", async () => {
   const { store, spy } = setup("date", "2026-11-01");
   const input = await screen.findByRole("textbox", { name: "입력" }) as HTMLInputElement;
