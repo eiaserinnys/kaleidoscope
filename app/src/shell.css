@@ -528,6 +528,7 @@
 .ks-settings-inline > .ks-text-input { flex: 1 1 auto; min-width: 0; }
 .ks-settings-inline > .ks-button { flex: 0 0 auto; }
 .ks-settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ks-space-2); }
+.ks-dialog-overlay.ks-shell-dialog-layer { z-index: 3; }
 .shell-server-meta-group { display: flex; flex-direction: column; gap: var(--ks-space-1); }
 .shell-server-meta, .shell-server-skipped { font-size: var(--ks-type-meta); line-height: var(--ks-line-body); color: var(--ks-color-muted); }
 .shell-server-skipped, .shell-server-skipped-list { margin-block-start: var(--ks-space-1); }

@@ -5,18 +5,20 @@ import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
 import { writableControlSelector } from "./focus-rescue";
 
-export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, windowId }: { host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; windowId?: string }) {
+export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, windowId, busy = false }: { host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; windowId?: string; busy?: boolean }) {
   const titleId = useId();
   const bodyId = useId();
   const root = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const restore = useRef(true);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   const onKey = (event: Pick<KeyboardEvent, "key" | "shiftKey" | "preventDefault" | "stopPropagation">) => {
     const native = event as KeyboardEvent;
     const owner = windowId ?? ownerOf(host);
     const targetOwner = native.target instanceof Element ? ownerOf(native.target) : undefined;
     if (native.isTrusted === false && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
-    if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); onCancel(); return; }
+    if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); if (!busyRef.current) onCancel(); return; }
     if (event.key !== "Tab" || !root.current) return;
     const focusable = [...root.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
     if (!focusable.length) { event.preventDefault(); return; }
@@ -59,10 +61,10 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   }, [windowModal, active]);
   const heading = <div className="ks-dialog-title" id={titleId} title={windowModal ? title : undefined}>{title}</div>;
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
-  return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay} onMouseDown={(event) => { if (!windowModal && event.target === event.currentTarget) onCancel(); }}>
+  return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay} onMouseDown={(event) => { if (!busy && !windowModal && event.target === event.currentTarget) onCancel(); }}>
     <div className="ks-dialog" role="dialog" aria-modal={windowModal ? active : true} aria-labelledby={titleId} aria-describedby={windowModal && body != null ? bodyId : undefined} tabIndex={windowModal ? -1 : undefined} onKeyDown={windowModal ? onKey : undefined} ref={root}>
       {heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={windowModal ? 0 : undefined}>{content}</div> : null}
-      <div className="ks-dialog-actions">{showCancel ? <Button onClick={onCancel}>{cancelLabel}</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button onClick={(event) => { if (!windowModal) restore.current = false; onConfirm(event); }} variant={danger ? "default" : "emphasis"}>{ok}</Button></span></div>
+      <div className="ks-dialog-actions">{showCancel ? <Button disabled={busy} onClick={onCancel}>{cancelLabel}</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button disabled={busy} onClick={(event) => { if (!windowModal) restore.current = false; onConfirm(event); }} variant={danger ? "default" : "emphasis"}>{ok}</Button></span></div>
     </div>
   </div>, host);
 }

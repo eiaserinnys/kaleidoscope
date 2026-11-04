@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowLeft, Button, ErrorId, ErrorNotice, IconButton, Notice, StatusText, TextInput, SHELL_SERVER_PAIRING_CODE_COPY_FAILED, type CoreReply, type CoreRequest, type ShellSnapshot, type TransferResult } from "@kaleidoscope/ui";
+import { ArrowLeft, Button, ErrorId, ErrorNotice, IconButton, Notice, StatusText, TextInput, SHELL_SERVER_PAIRING_CODE_COPY_FAILED, type CoreReply, type CoreRequest, type ShellSnapshot, type ShellStore, type TransferResult } from "@kaleidoscope/ui";
 import { Copy, LoaderCircle } from "../../../ui/src/components/icons";
 import { serverLabel } from "./server-label";
+import { AccountSettings } from "./account-settings";
 
 type Entry = { kind: "gear" | "server"; sequence: number };
 
@@ -9,9 +10,10 @@ function Progress() {
   return <span className="ks-settings-apply-progress" role="status" aria-label="처리 중"><LoaderCircle size="inline" className="ks-settings-apply-spinner" /></span>;
 }
 
-export function ShellSettings({ snapshot, entry, onClose, call }: {
+export function ShellSettings({ snapshot, entry, onClose, call, store }: {
   snapshot: ShellSnapshot; entry: Entry; onClose: () => void;
   call: (request: CoreRequest) => Promise<CoreReply | undefined>;
+  store: ShellStore;
 }) {
   const title = useRef<HTMLHeadingElement>(null);
   const serverEntry = useRef<HTMLElement>(null);
@@ -95,10 +97,7 @@ export function ShellSettings({ snapshot, entry, onClose, call }: {
           </div></div>
         </div> : null}
       </section>
-      <section className="ks-settings-group" aria-labelledby={`${id}-account`}>
-        <h3 className="ks-data-section-title" id={`${id}-account`}>계정</h3>
-        <div className="ks-settings-entry"><div className="ks-settings-label-row"><span>기본 에이전트</span></div></div>
-      </section>
+      <AccountSettings store={store} />
     </div></div>
   </section>;
 }

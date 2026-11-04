@@ -36,6 +36,7 @@ import {
 } from "@kaleidoscope/ui";
 import { serverLabel } from "./server-label";
 import { ShellSettings } from "./shell-settings";
+import { MessageAppPrompt } from "./message-app-prompt";
 import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { importAppDefinition } from "./import-definition";
@@ -49,6 +50,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; kind: "gear" | "server"; sequence: number } | null>(null);
+  const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingDesktopId, setRenamingDesktopId] = useState<string | null>(null);
@@ -150,14 +152,14 @@ export function Shell({ store }: { store: ShellStore }) {
   const settingsButton = <IconButton aria-label="설정" title="설정" pressed={settings !== null} onClick={(event) => {
     if (settings) closeSettings(); else openSettings(event.currentTarget, "gear");
   }}><Settings /></IconButton>;
-  const settingsScreen = snapshot && settings ? <ShellSettings snapshot={snapshot} entry={settings} onClose={() => closeSettings()} call={runCommand} /> : null;
+  const settingsScreen = snapshot && settings ? <ShellSettings snapshot={snapshot} entry={settings} onClose={() => closeSettings()} call={runCommand} store={store} /> : null;
 
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
   if (!activeWorkspace || !activeDesktop) {
-    return <main className="app-root" data-settings-open={settings ? "" : undefined}>
+    return <main className="app-root" ref={setHost} data-settings-open={settings ? "" : undefined}>
       <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}{settingsButton}</div></header>
       <EmptyState
         icon={<LayoutGrid size="empty" />}
@@ -165,6 +167,7 @@ export function Shell({ store }: { store: ShellStore }) {
         action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined}
       />
       {settingsScreen}
+      {host ? <MessageAppPrompt store={store} host={host} /> : null}
     </main>;
   }
 
@@ -314,7 +317,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
 
   return (
-    <main className="app-root" data-settings-open={settings ? "" : undefined}>
+    <main className="app-root" ref={setHost} data-settings-open={settings ? "" : undefined}>
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar">
         <BrandMark />
@@ -421,6 +424,7 @@ export function Shell({ store }: { store: ShellStore }) {
       />
 
       {settingsScreen}
+      {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}

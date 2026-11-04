@@ -11,7 +11,7 @@ import {
 } from "@kaleidoscope/ui";
 import { Shell } from "./shell/shell";
 import { describeVisible } from "../../ui/src/share/visible";
-import type { App, AppDefinition, AppVersion, AppWindow, LinkStatus, ShellSnapshot } from "../../ui/src/contract/contract";
+import type { AccountPreferences, App, AppDefinition, AppVersion, AppWindow, LinkStatus, ShellSnapshot } from "../../ui/src/contract/contract";
 import "@kaleidoscope/ui/styles.css";
 import "./index.css";
 import "./shell.css";
@@ -36,6 +36,7 @@ declare global {
       getShareCalls: () => Array<{ window_id: string; view: import("../../ui/src/contract/contract").VisibleView }>;
       getCalls: () => CoreRequest[];
       describeVisible: (root: HTMLElement) => { text: string; visual: boolean };
+      setPreferences: (preferences: AccountPreferences | null) => void;
     };
   }
 }
@@ -207,6 +208,12 @@ if (harnessParams.has("empty-workspace")) {
 if (harnessParams.has("transfer-skips")) {
   snapshot.last_transfer = { imported: 3, skipped: ["app:sample-a", "value:sample-a/settings"] };
 }
+if (shellSettingsPreview) {
+  snapshot.shared.preferences = harnessParams.get("prefs") === "waiting" ? null : {
+    revision: 1, default_message_app_id: "agent",
+    asked_message_app_ids: harnessParams.has("prompt") ? [] : ["workspace-pas"],
+  };
+}
 
 const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 120 }, (_, i) => `줄 ${i + 1}`).join("\n") } : bottomMenuScenario
   ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`documents/z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
@@ -242,7 +249,7 @@ const transport: FakeTransport = createFakeTransport({
   ]) : requestedAppWindow === "html-report" ? [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }] : undefined,
   files,
 });
-if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsPreview && harnessParams.has("slow-link"))) {
+if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsPreview && (harnessParams.has("slow-link") || harnessParams.has("slow-preferences")))) {
   const call = transport.call.bind(transport);
   transport.call = (async (request: CoreRequest) => {
     if (pcAllowErrorScenario && request.op === "files.allow_pc") {
@@ -250,6 +257,7 @@ if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsP
     }
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
     if (shellSettingsPreview && harnessParams.has("slow-link") && request.op === "link.sync_local_to_remote") await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (shellSettingsPreview && harnessParams.has("slow-preferences") && (request.op === "shell.preferences.set_default" || request.op === "shell.preferences.answer")) await new Promise((resolve) => setTimeout(resolve, 2000));
     return call(request);
   }) as typeof transport.call;
 }
@@ -261,7 +269,14 @@ window.__kaleidoscopeHarness = {
   getShareCalls: transport.getShareCalls,
   getCalls: transport.getCalls,
   describeVisible,
+  setPreferences(preferences) {
+    const current = store.getSnapshot();
+    if (current) transport.emit({ event: "state.changed", snapshot: { ...current, shared: { ...current.shared, preferences } } });
+  },
 };
+if (shellSettingsPreview && harnessParams.get("prefs") === "waiting") {
+  setTimeout(() => window.__kaleidoscopeHarness?.setPreferences({ revision: 1, default_message_app_id: "agent", asked_message_app_ids: ["workspace-pas"] }), 6000);
+}
 
 function FakeWebViewLayer({ fakeTransport }: { fakeTransport: FakeTransport }) {
   const [views, setViews] = useState<FakeWebViewSnapshot[]>(() => fakeTransport.getWebViews());
