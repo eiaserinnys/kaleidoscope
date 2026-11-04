@@ -359,7 +359,7 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
  */
 meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, 
 /**
- * (블록 세트 34판) 항목 끝의 빼기 단추가 실행하는 동작.
+ * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
  */
 on_remove?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
@@ -994,7 +994,7 @@ export type NoticeAction = { label: Binding, on_click: Actions, };
 export type NoticeKind = "info" | "error" | "loading";
 
 /**
- * (블록 세트 34판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
+ * (블록 세트 36판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
  */
 export type OpenUrlAction = { open_url: Binding, };
 
