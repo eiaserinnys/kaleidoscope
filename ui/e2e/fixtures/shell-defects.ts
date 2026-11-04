@@ -3,6 +3,15 @@ import type { AppDefinition } from "../../src/contract/contract";
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
 export const shellDefectFixtures = [
+  { ...base, id: "notice-fixture", name: "알림 시험", state: { clicked: "대기" }, ui: { type: "stack", direction: "column", children: [
+    { type: "toolbar", start: [
+      { type: "button", label: "시작 단추", on_click: [{ set_state: "clicked", value: "시작 누름" }] },
+    ], end: [
+      { type: "button", label: "끝 단추 하나", on_click: [{ set_state: "clicked", value: "끝 누름" }] },
+      { type: "button", label: "끝 단추 둘", on_click: [{ set_state: "clicked", value: "둘째 누름" }] },
+    ] },
+    { type: "text", value: { state: "clicked" } },
+  ] } },
   { ...base, id: "follow-fixture", name: "따라가기 시험", state: { active: null, rows }, ui: { type: "stack", direction: "column", fill: 1, children: [
     { type: "button", label: "마지막 항목", on_click: [{ set_state: "active", value: "29" }] },
     { type: "repeat", key: "id", items: { state: "rows" }, follow_key: { state: "active" }, template: { type: "text", value: { item: "name" } } },

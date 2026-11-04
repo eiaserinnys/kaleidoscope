@@ -53,3 +53,49 @@ test("fill을 생략한 중첩 stack은 자연 높이를 유지한다", async ({
   expect(sizes.inner).toBeGreaterThan(sizes.parent);
   expect(sizes.overflow).toBe("visible");
 });
+
+test("고정 내용이 창보다 커도 명시 fill의 최소 높이를 남기고 몸통이 스크롤된다", async ({ page }) => {
+  const { app, inner } = await open(page, "nested-fill");
+  await app.locator(".ks-data-window").evaluate((el) => { (el as HTMLElement).style.height = "200px"; });
+  await inner.locator(":scope > .ks-data-stack-item").first().evaluate((el) => {
+    Object.assign((el as HTMLElement).style, { height: "350px", flex: "0 0 350px" });
+  });
+  const fill = inner.locator(":scope > .ks-data-stack-item.is-fill");
+  const body = app.locator(".ks-data-window-body");
+  const sizes = await fill.evaluate((el) => ({
+    fill: el.getBoundingClientRect().height,
+    minimum: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-pane-min-size")),
+  }));
+  expect(sizes.fill).toBeGreaterThanOrEqual(sizes.minimum);
+  const bodySizes = await body.evaluate((el) => ({ client: el.clientHeight, scroll: el.scrollHeight }));
+  expect(bodySizes.scroll).toBeGreaterThan(bodySizes.client);
+  await body.hover({ position: { x: 20, y: 40 } });
+  await page.mouse.wheel(0, 500);
+  await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  await capture(page, "nested-overflow");
+});
+
+for (const [width, height] of [[1000, 700], [360, 480]]) test(`${width} 폭의 기본 표가 최소 높이를 갖고 몸통 휠로 보인다`, async ({ page }) => {
+  await page.setViewportSize({ width, height });
+  await page.goto("/?preview=market");
+  const app = page.getByTestId("app-window-market");
+  const tabs = app.locator(".ks-data-stack-item.is-fill > .ks-data-tabs").first();
+  await expect(tabs).toBeAttached();
+  const fill = tabs.locator("..");
+  const body = app.locator(".ks-data-window-body");
+  const sizes = await fill.evaluate((el) => ({
+    fill: el.getBoundingClientRect().height,
+    minimum: 2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-pane-min-size")),
+  }));
+  expect(sizes.fill).toBeGreaterThanOrEqual(sizes.minimum);
+  await body.hover({ position: { x: 20, y: 100 } });
+  await page.mouse.wheel(0, 4000);
+  await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const visibility = await tabs.evaluate((el) => {
+    const target = el.getBoundingClientRect();
+    const body = el.closest(".ks-data-window-body")!.getBoundingClientRect();
+    return target.top < body.bottom && target.bottom > body.top;
+  });
+  expect(visibility).toBe(true);
+  await capture(page, `table-scroll-${width}`);
+});

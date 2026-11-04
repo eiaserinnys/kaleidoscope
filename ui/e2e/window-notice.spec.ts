@@ -39,3 +39,28 @@ test("최소 창에서도 정보 알림이 본문 높이를 유지하고 닫힌�
   await notice.getByRole("button", { name: "닫기" }).click();
   await expect(notice).toHaveCount(0);
 });
+
+for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아래 도구 단추를 누르고 알림을 닫는다`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 600 });
+  await page.goto("/?preview=notice-fixture");
+  const app = page.getByTestId("app-window-notice-fixture");
+  const target = app.getByRole("button", { name: width === 360 ? "시작 단추" : "끝 단추 하나" });
+  await expect(target).toBeVisible();
+  await page.evaluate(() => (window as unknown as { noticeFixture: { show(): void } }).noticeFixture.show());
+  const notice = app.getByRole("status").filter({ hasText: "저장했습니다" });
+  await expect(notice).toBeVisible();
+  const geometry = await target.evaluate((el) => {
+    const button = el.getBoundingClientRect();
+    const notice = el.closest(".ks-data-window")!.querySelector('.ks-window-status [role="status"]')!.getBoundingClientRect();
+    const x = button.left + button.width / 2, y = button.top + button.height / 2;
+    return { button: button.toJSON(), notice: notice.toJSON(), overlap: x > notice.left && x < notice.right && y > notice.top && y < notice.bottom };
+  });
+  const output = process.env.KS_NOTICE_CAPTURE_DIR;
+  if (output) { mkdirSync(output, { recursive: true }); await app.screenshot({ path: join(output, `notice-click-${width}.png`) }); }
+  expect(geometry.overlap, JSON.stringify(geometry)).toBe(true);
+  await target.click({ timeout: 1500 });
+  await expect(app.getByText(width === 360 ? "시작 누름" : "끝 누름")).toBeVisible();
+  await expect(notice).toBeVisible();
+  await notice.getByRole("button", { name: "닫기" }).click({ timeout: 1500 });
+  await expect(notice).toHaveCount(0);
+});

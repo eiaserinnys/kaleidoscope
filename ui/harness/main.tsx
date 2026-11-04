@@ -277,8 +277,10 @@ const coreUrl = new URLSearchParams(window.location.search).get("core");
 const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
 let clientChatWindowData: WindowData | null = null;
+let noticeFixtureData: WindowData | null = null;
 let holdClientChatSnapshot = false;
 const captureClientChatWindowData = (data: WindowData | null) => { clientChatWindowData = data; };
+const captureNoticeFixtureData = (data: WindowData | null) => { noticeFixtureData = data; };
 if (!coreUrl) {
   const clientChatCalls: Array<{ name: string; event: unknown }> = [];
   window.addEventListener("message", (event) => {
@@ -311,6 +313,7 @@ if (!coreUrl) {
       return state ? { loading: state.loading, busy: state.busy, items: state.items.length, queued: state.queued.length, attachments: state.attachments.size } : null;
     },
   } });
+  Object.assign(window, { noticeFixture: { show: () => noticeFixtureData?.setStatus("저장했습니다") } });
   exposeDocsHarness(fakeTransport, store);
   Object.assign(window, { conversationHarness: {
     emit: fakeTransport.emit,
@@ -397,7 +400,7 @@ function Harness() {
           const appWindow = snapshot?.shared.windows.find((item) => item.app_id === definition.id);
           return <section aria-label={definition.id} className={`ks-harness-window${previewOnly && previewAppId !== definition.id ? " is-hidden" : ""}`} data-app-id={definition.id} data-testid={`app-window-${definition.id}`} key={definition.id}>
             <header className="ks-harness-window-header">{definition.id === "shell-selection-test" ? <>선택 간격 시험 <label>비선택 레이블</label></> : definition.name}</header>
-            <div className="ks-harness-window-content">{appWindow && previewAppId === definition.id ? <AppWindowContent store={store} windowId={appWindow.id} /> : null}</div>
+            <div className="ks-harness-window-content">{appWindow && previewAppId === definition.id ? <AppWindowContent store={store} windowId={appWindow.id} onWindowData={definition.id === "notice-fixture" ? captureNoticeFixtureData : undefined} /> : null}</div>
           </section>;
         })}
       </div>

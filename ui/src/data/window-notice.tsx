@@ -41,19 +41,18 @@ const STATUS_NOTICE_DURATION_MS = 5000;
 function TransientStatus({ data, message, sequence, closeButton }: {
   data: ReturnType<typeof useWindowData>; message: string; sequence: number; closeButton: ReactNode;
 }) {
-  const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const remaining = useRef(STATUS_NOTICE_DURATION_MS);
   useEffect(() => { remaining.current = STATUS_NOTICE_DURATION_MS; }, [sequence]);
   useEffect(() => {
-    if (hovered || focused) return;
+    if (focused) return;
     const started = Date.now();
     const timer = setTimeout(() => {
       if (data.getNoticeRole() === "status" && data.getStatusSequence() === sequence) data.setNotice(null);
     }, remaining.current);
     return () => { clearTimeout(timer); remaining.current = Math.max(0, remaining.current - (Date.now() - started)); };
-  }, [data, sequence, hovered, focused]);
-  return <div className="ks-window-status" data-ks-overlay onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+  }, [data, sequence, focused]);
+  return <div className="ks-window-status" data-ks-overlay
     onFocus={() => setFocused(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <Notice role="status" actions={[closeButton]}>{message}</Notice>
   </div>;

@@ -28,16 +28,19 @@ it("정보 알림은 잠시 보인 뒤 사라진다", () => {
   expect(screen.queryByRole("status")).toBeNull();
 });
 
-it("마우스와 키보드 초점이 안에 있으면 남은 시간을 멈춘다", () => {
+it("마우스를 올려도 정보 알림은 사라진다", () => {
   act(() => data.setStatus("작업을 마쳤습니다"));
-  tick(2000);
   const notice = screen.getByRole("status");
   fireEvent.mouseEnter(notice.parentElement!);
-  tick(10000);
-  expect(screen.queryByRole("status")).toBeTruthy();
+  tick(5000);
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("키보드 초점이 안에 있으면 남은 시간을 멈춘다", () => {
+  act(() => data.setStatus("작업을 마쳤습니다"));
+  tick(2000);
   const close = screen.getByRole("button", { name: "닫기" });
   fireEvent.focus(close);
-  fireEvent.mouseLeave(notice.parentElement!);
   tick(10000);
   expect(screen.queryByRole("status")).toBeTruthy();
   fireEvent.blur(close, { relatedTarget: document.body });
