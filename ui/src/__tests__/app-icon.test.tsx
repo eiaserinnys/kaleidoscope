@@ -93,11 +93,13 @@ describe("쉘 앱 아이콘", () => {
     expect(iconCalls()).toHaveLength(0);
     fireEvent.click(launcher);
     await waitFor(() => expect(iconCalls()).toHaveLength(1));
+    expect(screen.getByRole("dialog", { name: "앱 열기" }).querySelector(".ks-icon-skeleton-icon")).not.toBeNull();
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] } } });
     await screen.findByTestId("app-window-md-viewer");
     expect(iconCalls()).toHaveLength(1);
     complete({ op: "app.icon", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } });
     await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(2));
+    expect(screen.getByRole("dialog", { name: "앱 열기" }).querySelector(".ks-icon-skeleton-icon")).toBeNull();
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] }, link: { state: "connected", mode: "remote", server_url: "https://second.test", device_name: "PC" } } });
     await waitFor(() => expect(iconCalls()).toHaveLength(2));
     store.dispose();

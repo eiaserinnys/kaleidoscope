@@ -107,7 +107,7 @@ describe("shell core events", () => {
     store.dispose();
   });
 
-  it("앱 열기 메뉴에서 기본 앱과 커스텀 앱을 각각 가나다순으로 열 수 있다", async () => {
+  it("앱 열기 격자에서 기본 앱과 커스텀 앱을 각각 가나다순으로 열 수 있다", async () => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");
     const definitions = [
@@ -126,14 +126,14 @@ describe("shell core events", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
 
-    const menu = screen.getByRole("menu");
-    expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱", "커스텀 앱"]);
-    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1);
-    expect([...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)).toEqual([
+    const menu = screen.getByRole("dialog", { name: "앱 열기" });
+    expect([...menu.querySelectorAll(".ks-view-group")].map((item) => item.textContent)).toEqual(["기본앱", "커스텀 앱"]);
+    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(0);
+    expect([...menu.querySelectorAll(".ks-icon-tile")].map((item) => item.textContent)).toEqual([
       "계산기", "날씨", "마크다운 편집기", "시안과 리포트", "에이전트", "웹 브라우저", "탐색기",
       "가나가 커스텀", "가나가 커스텀", "가나다 커스텀",
     ]);
-    fireEvent.click(screen.getByRole("menu").querySelectorAll('[role="menuitem"]')[7]);
+    fireEvent.click(screen.getByRole("dialog", { name: "앱 열기" }).querySelectorAll(".ks-icon-tile")[7]);
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
       op: "window.open",
       desktop_id: "desktop-1",
@@ -154,7 +154,7 @@ describe("shell core events", () => {
       },
     });
     fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
-    fireEvent.click(screen.getByRole("menu").querySelectorAll('[role="menuitem"]')[8]);
+    fireEvent.click(screen.getByRole("dialog", { name: "앱 열기" }).querySelectorAll(".ks-icon-tile")[8]);
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
       op: "window.open",
       desktop_id: "desktop-1",
@@ -174,10 +174,117 @@ describe("shell core events", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
 
-    const menu = screen.getByRole("menu");
-    expect([...menu.querySelectorAll(".ks-menu-group-heading")].map((item) => item.textContent)).toEqual(["기본앱"]);
+    const menu = screen.getByRole("dialog", { name: "앱 열기" });
+    expect([...menu.querySelectorAll(".ks-view-group")].map((item) => item.textContent)).toEqual(["기본앱"]);
     expect(menu.querySelector('[role="separator"]')).toBeNull();
     expect(screen.queryByText("커스텀 앱")).toBeNull();
+    store.dispose();
+  });
+
+  it("격자에서 키보드로 묶음 사이를 이동하고 닫으면 실행 단추로 돌아간다", async () => {
+    const definitions = [calculatorJson, weatherJson, agentJson, explorerJson, mdEditorJson,
+      { ...mdViewerJson, id: "custom-a", name: "가나" },
+      { ...mdViewerJson, id: "custom-b", name: "다라" },
+      { ...mdViewerJson, id: "custom-c", name: "마바" }] as AppDefinition[];
+    const snapshot = makeTestSnapshot({ definitions });
+    snapshot.shared.windows.forEach((window) => { window.id = `keyboard-window-${window.app_id}`; });
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("ks-icon-grid") ? 428 : 960;
+    });
+    render(<Shell store={store} />);
+    await store.ready;
+    const trigger = within(document.querySelector(".ks-shell-actions") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "앱 열기" });
+    const tiles = [...dialog.querySelectorAll<HTMLButtonElement>(".ks-icon-tile")];
+    await waitFor(() => expect(document.activeElement).toBe(tiles[0]));
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(tiles[0], { key: "ArrowRight" });
+    expect(document.activeElement).toBe(tiles[1]);
+    fireEvent.keyDown(tiles[1], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(tiles[4]);
+    fireEvent.keyDown(tiles[4], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(tiles[5]);
+    fireEvent.keyDown(tiles[5], { key: "ArrowUp" });
+    expect(document.activeElement).toBe(tiles[4]);
+    fireEvent.keyDown(tiles[4], { key: "End" });
+    expect(document.activeElement).toBe(tiles[7]);
+    fireEvent.keyDown(tiles[7], { key: "Home" });
+    expect(document.activeElement).toBe(tiles[0]);
+    fireEvent.keyDown(tiles[0], { key: "Escape" });
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "앱 열기" }), { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    const first = screen.getByRole("dialog", { name: "앱 열기" }).querySelector<HTMLButtonElement>(".ks-icon-tile")!;
+    fireEvent.click(first);
+    expect(document.activeElement).toBe(trigger);
+    await waitFor(() => expect(calls.mock.calls.some(([request]) => request.op === "window.open")).toBe(true));
+    width.mockRestore();
+    store.dispose();
+  });
+
+  it("빈 데스크톱의 앱 열기도 같은 패널을 열고 목록 변경을 반영한다", async () => {
+    const snapshot = makeTestSnapshot({ definitions: [calculatorJson] as AppDefinition[] });
+    snapshot.shared.windows = [];
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const trigger = within(document.querySelector(".ks-desktop-area") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    fireEvent.click(trigger);
+    expect(within(screen.getByRole("dialog", { name: "앱 열기" })).getByRole("button", { name: "계산기" })).toBeTruthy();
+    transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, apps: [] } } });
+    await waitFor(() => expect(within(screen.getByRole("dialog", { name: "앱 열기" })).getByText("앱 없음")).toBeTruthy());
+    expect(document.activeElement).toBe(screen.getByRole("dialog", { name: "앱 열기" }));
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "앱 열기" }), { key: "Escape" });
+    expect(document.activeElement).toBe(trigger);
+    store.dispose();
+  });
+
+  it("빈 데스크톱에서 앱을 열어 단추가 사라지면 우상단 단추에 초점을 보존한다", async () => {
+    const snapshot = makeTestSnapshot({ definitions: [calculatorJson] as AppDefinition[] });
+    const openedWindow = { ...snapshot.shared.windows[0], id: "opened-calculator", app_id: "calculator" };
+    snapshot.shared.windows = [];
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const original = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) => {
+      if (request.op === "window.open") {
+        transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [openedWindow] } } });
+        return Promise.resolve({ op: "window.open", window: openedWindow });
+      }
+      return original(request);
+    }) as typeof transport.call);
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const desktopTrigger = within(document.querySelector(".ks-desktop-area") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    const headerTrigger = within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    fireEvent.click(desktopTrigger);
+    fireEvent.click(within(screen.getByRole("dialog", { name: "앱 열기" })).getByRole("button", { name: "계산기" }));
+    await waitFor(() => expect(desktopTrigger.isConnected).toBe(false));
+    expect(document.activeElement).toBe(headerTrigger);
+    store.dispose();
+  });
+
+  it("바깥 누름은 초점이 없는 곳일 때만 실행 단추로 복구한다", async () => {
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    render(<Shell store={store} />);
+    await store.ready;
+    const trigger = within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    fireEvent.click(trigger);
+    const other = screen.getByRole("button", { name: "데스크톱 추가" });
+    fireEvent.pointerDown(other);
+    other.focus();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(document.activeElement).toBe(other);
     store.dispose();
   });
 

@@ -8,7 +8,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(page.locator(".ks-taskbar")).toHaveCount(0);
   await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
-  await page.getByRole("menuitem", { name: "계산기" }).click();
+  await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기" }).click();
 
   const window = page.getByTestId("app-window-calculator");
   const taskbarItem = page.locator(".ks-taskbar-window").filter({ hasText: "계산기" });
@@ -78,7 +78,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
 
 test("작업 표시줄 창 항목은 공통 스크롤바와 탭 너비 토큰을 쓴다", async ({ page }) => {
   await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
-  await page.getByRole("menuitem", { name: "계산기" }).click();
+  await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기" }).click();
 
   const taskbarItem = page.locator('.ks-taskbar-window[data-state="active"]').filter({ hasText: "계산기" });
   await expect(taskbarItem).toBeVisible();

@@ -20,9 +20,9 @@ test("런처와 창의 앱 아이콘이 테마와 앱 판을 따른다", async (
       await expect(icon).toHaveCSS("background-color", color);
       await page.screenshot({ path: path.join(output, `shell-icons-closed-${width}-${theme}.png`) });
       await page.locator(".ks-shell-actions").getByRole("button", { name: "앱 열기" }).click();
-      const menu = page.getByRole("menu");
-      await expect(menu.getByRole("menuitem", { name: "탐색기" }).locator("img.ks-app-icon")).toBeVisible();
-      await expect(menu.getByRole("menuitem", { name: "계산기" }).locator("svg.ks-app-icon")).toBeVisible();
+      const menu = page.getByRole("dialog", { name: "앱 열기" });
+      await expect(menu.getByRole("button", { name: "탐색기" }).locator("img.ks-app-icon")).toBeVisible();
+      await expect(menu.getByRole("button", { name: "계산기" }).locator("svg.ks-app-icon")).toBeVisible();
       const coords = await bar.evaluate((element) => {
         const get = (selector: string) => {
           const r = element.querySelector(selector)!.getBoundingClientRect();

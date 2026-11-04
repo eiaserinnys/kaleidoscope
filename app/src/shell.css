@@ -546,3 +546,11 @@
 .ks-install-details > .ks-process-command { margin: var(--ks-space-1) 0 0; }
 
 .ks-install-details[open]:not(:last-child) { margin-block-end: var(--ks-space-2); }
+
+.ks-app-launcher {
+  width: calc(3 * var(--ks-repeat-grid-item-width-small) + 2 * var(--ks-space-1) + 2 * var(--ks-space-2) + 2 * var(--ks-line-width));
+  max-height: min(calc(100vh - var(--ks-bar-height) - var(--ks-space-3)), calc(var(--ks-pane-min-size) * 3));
+  padding: var(--ks-space-2) 0 var(--ks-space-2) var(--ks-space-2);
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+}
