@@ -1,4 +1,9 @@
 error_catalog! { ENTRIES;
+    APP_STORE_MODULE_REQUIRED(app) { class: InvalidAppDefinition, place: "스토어 모듈 선언 검사", cause: "스토어를 쓰는 앱이 모듈 1판을 요구하지 않았다", message: "앱 ID {app}: 스토어를 사용하려면 requires.modules.store를 1 이상으로 선언하세요.", fix: "requires.modules.store를 1 이상으로 선언하세요" }
+    APP_STORE_SOURCE_ID_MISSING(source) { class: InvalidAppDefinition, place: "스토어 앱 원천 ID 검사", cause: "앱 상세 원천에 id 바인딩이 없다", message: "스토어 원천 {source}: 앱 상세에 필요한 id가 없습니다. 앱 정의의 원천에 id 바인딩을 추가하세요.", fix: "원천에 앱 id 바인딩을 추가하세요" }
+    APP_STORE_PERMISSION_UNDECLARED(location, permission) { class: InvalidAppDefinition, place: "스토어 사용 권한 선언 검사", cause: "스토어 권한이 선언되지 않았다", message: "앱 정의 {location}: 스토어 권한 {permission}이 선언되지 않았습니다. permissions에 이 권한을 추가하세요.", fix: "permissions에 스토어 권한을 추가하세요" }
+    APP_STORE_PERMISSION_MISMATCH(location, permission, module) { class: InvalidAppDefinition, place: "스토어 사용 권한 종류 검사", cause: "참조한 권한이 스토어 권한이 아니다", message: "앱 정의 {location}: 권한 {permission}의 모듈이 {module}입니다. 스토어 권한 ID를 지정하세요.", fix: "스토어 권한 ID를 지정하세요" }
+    APP_STORE_RELEASE_INVALID(location, value) { class: InvalidAppDefinition, place: "스토어 설치 판 검사", cause: "설치 판의 리터럴이 양의 정수가 아니다", message: "앱 정의 {location}: 설치 판 {value}은 1 이상의 정수여야 합니다. release 값을 고치세요.", fix: "release를 1 이상의 정수로 고치세요" }
     APP_ICON_VERSION_INVALID(app_id, asset, version) {
         class: InvalidAppDefinition,
         place: "앱 아이콘 자산 판 검사",

@@ -197,6 +197,7 @@ impl CompiledApp {
         let vars = Variables::new(state, data, storage, storage_meta, None, None);
         let plan = || -> Result<SourcePlan, String> {
             match source {
+                SourceDecl::Store(_) => Ok(SourcePlan::Invalid("스토어 모듈을 이 쉘에서 지원하지 않습니다".into())),
                 SourceDecl::Request {
                     permission,
                     path,
@@ -464,6 +465,7 @@ impl CompiledApp {
                 let action = actions.get(index).ok_or("없는 동작 단계입니다")?;
                 let base = format!("{pointer}/{index}");
                 match action {
+                    Action::StoreInstall(_) | Action::StoreRemove(_) => Err("스토어 모듈을 이 쉘에서 지원하지 않습니다".into()),
                     Action::Client(_)
                     | Action::PickFiles(_)
                     | Action::SaveFile(_)

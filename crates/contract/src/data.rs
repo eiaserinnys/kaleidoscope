@@ -316,21 +316,22 @@ pub fn call_budget(definition: &AppDefinition) -> Vec<HostCallBudget> {
     let mut budgets: BTreeMap<String, (f64, f64)> = BTreeMap::new();
 
     for (name, source) in &definition.sources {
-        let SourceDecl::Request { permission, .. } = source else {
-            continue;
+        let host = match source {
+            SourceDecl::Store(store) => Some(format!("store:{}", match store {
+                StoreSource::Index { permission, .. } | StoreSource::App { permission, .. } => permission,
+            })),
+            SourceDecl::Request { permission, .. } => definition
+                .permissions
+                .iter()
+                .find(|decl| decl.id() == permission)
+                .and_then(|decl| match decl {
+                    crate::PermissionDecl::Http { base_url, .. } => url::Url::parse(base_url)
+                        .ok()?.host_str().map(str::to_owned),
+                    crate::PermissionDecl::Connection { connection, .. } => Some(connection.clone()),
+                    _ => None,
+                }),
+            SourceDecl::File { .. } | SourceDecl::Folder { .. } => None,
         };
-        let host = definition
-            .permissions
-            .iter()
-            .find(|decl| decl.id() == permission)
-            .and_then(|decl| match decl {
-                crate::PermissionDecl::Http { base_url, .. } => url::Url::parse(base_url)
-                    .ok()?
-                    .host_str()
-                    .map(str::to_owned),
-                crate::PermissionDecl::Connection { connection, .. } => Some(connection.clone()),
-                _ => None,
-            });
         let Some(host) = host else {
             continue;
         };

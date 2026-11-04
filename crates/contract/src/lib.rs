@@ -240,7 +240,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 32;
+pub const CONTRACT_VERSION: u32 = 33;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -6113,7 +6113,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 32);
+        assert_eq!(CONTRACT_VERSION, 33);
         let Block::Tabs {
             header,
             keep_mounted,

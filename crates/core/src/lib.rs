@@ -607,6 +607,7 @@ impl Core {
             request @ (CoreRequest::WindowControlRespond { .. }
             | CoreRequest::WindowControlCapture { .. }
             | CoreRequest::WebControl { .. }) => window_control::handle(&self.inner, request),
+            CoreRequest::AppRespondInstallPermission { .. } => Err(kaleidoscope_contract::errors::APP_DEFINITION_REQUIRES_NEWER_SHELL()),
             CoreRequest::ProfilerReport { inputs, frames } => {
                 self.inner.profiler.report(inputs, frames);
                 Ok(CoreReply::ProfilerReport {})

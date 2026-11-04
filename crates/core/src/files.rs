@@ -69,6 +69,7 @@ pub(crate) fn permission(
         PermissionDecl::Connection { .. }
         | PermissionDecl::Http { .. }
         | PermissionDecl::Profiler { .. }
+        | PermissionDecl::Store { .. }
         | PermissionDecl::Process { .. } => {
             return Err(
                 kaleidoscope_contract::errors::FILE_ACCESS_PERMISSION_NOT_FILES(permission_id),
