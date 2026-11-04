@@ -51,7 +51,7 @@ fn scale_specific_fields_and_bad_dates_are_rejected() {
 #[test]
 fn dates_fields_require_new_block_set() {
     let mut value = definition(json!({"type":"timeline","scale":"dates","tracks":[]}));
-    value["requires"]["blocks"] = json!(BLOCK_SET_VERSION - 1);
+    value["requires"]["blocks"] = json!(kaleidoscope_contract::TIMELINE_DATES_BLOCK_SET_VERSION - 1);
     let error = parse_app_definition(&value.to_string()).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("APP_TIMELINE_VERSION_REQUIRED"));
 }
