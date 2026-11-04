@@ -161,7 +161,7 @@ pub const ICON_NAMES: &[&str] = &[
 /// - `{ "state": "키" }`: 창 상태 하나. 화면이 스스로 푼다.
 /// - `{ "expr": "JSONata 식" }`: 코어가 계산한 값. 규칙은 이 모듈 머리글에 있다.
 /// - 그 밖의 JSON: 그대로의 값. `state`나 `expr` 하나만 가진 객체는 리터럴로 쓸 수 없다(검사가 거부한다).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export, export_to = "contract.ts")]
 pub enum Binding {
@@ -172,6 +172,28 @@ pub enum Binding {
     ParentItem(ParentItemRef),
     Message(MessageRef),
     Literal(JsonValue),
+}
+
+impl<'de> Deserialize<'de> for Binding {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = JsonValue::deserialize(deserializer)?;
+        if value.is_object() {
+            macro_rules! reference {
+                ($ty:ty, $variant:ident) => {
+                    if let Ok(reference) = serde_json::from_value::<$ty>(value.clone()) {
+                        return Ok(Self::$variant(reference));
+                    }
+                };
+            }
+            reference!(StateRef, State);
+            reference!(ExprRef, Expr);
+            reference!(ClientRef, Client);
+            reference!(ItemRef, Item);
+            reference!(ParentItemRef, ParentItem);
+            reference!(MessageRef, Message);
+        }
+        Ok(Self::Literal(value))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
