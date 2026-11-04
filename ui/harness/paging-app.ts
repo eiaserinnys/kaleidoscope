@@ -5,7 +5,7 @@ const items = (start: number) => Array.from({ length: 30 }, (_, offset) => ({ ke
 const stories = (start: number) => Array.from({ length: 30 }, (_, offset) => ({ objectID: String(start + offset), title: `시험 이야기 ${start + offset}`, author: "작성자", points: start + offset, num_comments: 2 }));
 
 export const pagingApp: AppDefinition = {
-  id: "paging-test", name: "쪽 넘김 시험", requires: { blocks: 26, modules: { connection: 1 } },
+  id: "paging-test", name: "쪽 넘김 시험", requires: { blocks: 27, modules: { connection: 1 } },
   permissions: [{ module: "connection", id: "api", connection: "example", label: "API", access: "read" }, { module: "connection", id: "alternate", connection: "example", label: "다른 연결", access: "read" }],
   state: { tab: 0 },
   sources: {
@@ -54,8 +54,8 @@ export const pagingSplitApp: AppDefinition = {
 };
 
 export const pagingSeeds: Record<string, FakeSourceSeed> = {
-  ...Object.fromEntries(["grid_items", "icon_items"].map((source) => [source, { pages: [
-    { value: { items: [{ key: "1", title: "첫 칸" }], next: "2" }, delayMs: source === "icon_items" ? 1200 : 0 },
+  ...Object.fromEntries(["grid_items", "icon_items"].map((source) => [source, { delayMs: source === "icon_items" ? 1200 : 0, pages: [
+    { value: { items: [{ key: "1", title: "첫 칸" }], next: "2" } },
     { value: { items: [{ key: "2", title: "둘째 칸" }], next: "3" }, delayMs: 1200 },
     { value: { items: [{ key: "3", title: "셋째 칸" }], next: null }, delayMs: 500 },
   ] }])),
