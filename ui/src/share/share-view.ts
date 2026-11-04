@@ -1,11 +1,14 @@
 import { useEffect, type RefObject } from "react";
 import { SHARE_DEBOUNCE_MS } from "../contract/limits";
-import type { VisibleView } from "../contract/contract";
+import type { VisibleView, WindowGeometry } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
+import { toCoreError } from "../core/core-transport";
+import * as errors from "../contract/shell-errors";
 import { clientShare } from "../runtime/client-runtime";
 import { isFullyVisible, revealWebSurface } from "../blocks/web-surface-layer";
 import { describeVisible, limitShareText } from "./visible";
 import { registerControlWindow } from "./window-control";
+import { ownedOverlays } from "./overlay-owner";
 
 const SHARE_ISOLATE_BUDGET_MS = 2_500;
 const RAF_TIMEOUT_MS = 100;
@@ -45,6 +48,40 @@ async function twoFrames(): Promise<void> {
 }
 
 let prepareTail: Promise<void> = Promise.resolve();
+
+export function captureWindowForControl(store: ShellStore, windowId: string, requestId: string, rootElement?: HTMLElement): Promise<{ image_base64: string; geometry: WindowGeometry }> {
+  const run = prepareTail.then(async () => {
+    const element = rootElement ?? active.get(windowId)?.element;
+    const frame = element?.closest<HTMLElement>(".ks-window");
+    const rect = element?.getBoundingClientRect();
+    if (!element || !frame || !rect?.width || !rect.height) throw errors.SHELL_WINDOW_CONTROL_TARGET_HIDDEN({ target: "창" });
+    const frozen = await store.call({ op: "share.freeze" });
+    if (frozen.op !== "share.freeze" || !frozen.frozen) throw toCoreError("창 화면을 고정할 수 없습니다.");
+    const root = document.documentElement;
+    const overlays = ownedOverlays(windowId);
+    let restoreWeb: () => Promise<void> = async () => undefined;
+    try {
+      root.dataset.shareIsolating = "true";
+      frame.dataset.shareTarget = "true";
+      for (const overlay of overlays) overlay.setAttribute("data-share-target", "true");
+      restoreWeb = await revealWebSurface(windowId, store);
+      await twoFrames();
+      const current = element.getBoundingClientRect();
+      const bounds = { x: Math.round(current.x), y: Math.round(current.y), width: Math.round(current.width), height: Math.round(current.height) };
+      const reply = await store.call({ op: "window.control.capture", request_id: requestId, window_id: windowId, bounds });
+      if (reply.op !== "window.control.capture") throw toCoreError("창 캡처 응답이 올바르지 않습니다.");
+      return { image_base64: reply.image_base64, geometry: reply.geometry };
+    } finally {
+      try { await restoreWeb(); } catch { /* 화면 고정 해제는 계속한다. */ }
+      delete frame.dataset.shareTarget;
+      for (const overlay of overlays) overlay.removeAttribute("data-share-target");
+      delete root.dataset.shareIsolating;
+      try { await twoFrames(); } finally { await store.call({ op: "share.unfreeze" }); }
+    }
+  });
+  prepareTail = run.then(() => undefined, () => undefined);
+  return run;
+}
 
 export function prepareShareForSend(store: ShellStore): Promise<void> {
   const run = prepareTail.then(() => prepareOnce(store)).catch(() => undefined);

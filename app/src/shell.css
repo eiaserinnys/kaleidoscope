@@ -255,7 +255,7 @@
 }
 
 :root[data-share-isolating] .ks-window:not([data-share-target]),
-:root[data-share-isolating] [data-ks-overlay] {
+:root[data-share-isolating="true"] [data-ks-overlay]:not([data-share-target="true"]) {
   opacity: 0 !important;
 }
 

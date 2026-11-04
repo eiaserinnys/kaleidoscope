@@ -50,7 +50,7 @@ pub(crate) fn shared_window_order(state: &CoreState) -> Vec<String> {
     order
 }
 
-fn is_sharing(state: &CoreState, window_id: &str) -> bool {
+pub(crate) fn is_sharing(state: &CoreState, window_id: &str) -> bool {
     state.share.active_shares.iter().any(|id| id == window_id)
         && state
             .shared
@@ -360,7 +360,8 @@ pub(crate) fn view(
 }
 
 pub(crate) fn freeze(inner: &Inner) -> CoreReply {
-    inner.isolated_captures.lock().unwrap().clear();
+    let prev = std::mem::take(&mut *inner.isolated_captures.lock().unwrap());
+    *inner.window_control.saved_isolated.lock().unwrap() = prev;
     let frozen = match inner.host.web().map(|web| web.freeze()) {
         Some(Ok(frozen)) => frozen,
         Some(Err(error)) => {
@@ -369,10 +370,22 @@ pub(crate) fn freeze(inner: &Inner) -> CoreReply {
         }
         None => false,
     };
+    if !frozen {
+        restore_saved_captures(inner);
+    }
     CoreReply::ShareFreeze { frozen }
 }
 
+fn restore_saved_captures(inner: &Inner) {
+    let saved = std::mem::take(&mut *inner.window_control.saved_isolated.lock().unwrap());
+    let mut isolated = inner.isolated_captures.lock().unwrap();
+    if isolated.is_empty() {
+        *isolated = saved;
+    }
+}
+
 pub(crate) fn capture(inner: &Inner, window_id: &str) -> Result<CoreReply, CoreError> {
+    inner.window_control.saved_isolated.lock().unwrap().clear();
     let (bounds, has_web, title) = {
         let state = inner.state.lock().unwrap();
         let title = window_name(&state, window_id);
@@ -415,6 +428,7 @@ pub(crate) fn capture(inner: &Inner, window_id: &str) -> Result<CoreReply, CoreE
 }
 
 pub(crate) fn unfreeze(inner: &Inner) -> CoreReply {
+    restore_saved_captures(inner);
     if let Some(web) = inner.host.web() {
         if let Err(error) = web.unfreeze() {
             eprintln!("같이 보기 화면 고정 해제 실패: {}", error.message);
@@ -629,6 +643,7 @@ pub(crate) fn capture_for_send(
     existing_count: usize,
     existing_bytes: u64,
 ) -> (Vec<ConversationUpload>, Vec<(String, String)>) {
+    inner.window_control.saved_isolated.lock().unwrap().clear();
     let mut isolated = std::mem::take(&mut *inner.isolated_captures.lock().unwrap());
     let candidates = {
         let state = inner.state.lock().unwrap();
@@ -822,6 +837,13 @@ pub(crate) fn prepare_png(
     bytes: &[u8],
     crop: Option<(kaleidoscope_contract::Rect, f64)>,
 ) -> Option<(Vec<u8>, String)> {
+    prepare_png_with_size(bytes, crop).map(|(png, hash, _, _)| (png, hash))
+}
+
+pub(crate) fn prepare_png_with_size(
+    bytes: &[u8],
+    crop: Option<(kaleidoscope_contract::Rect, f64)>,
+) -> Option<(Vec<u8>, String, u32, u32)> {
     let mut image = image::load_from_memory(bytes).ok()?.to_rgba8();
     if let Some((bounds, scale)) = crop {
         if !scale.is_finite() || scale <= 0.0 {
@@ -852,7 +874,48 @@ pub(crate) fn prepare_png(
             FilterType::Lanczos3,
         );
     }
-    png_with_hash(image)
+    let (width, height) = image.dimensions();
+    let (png, hash) = png_with_hash(image)?;
+    Some((png, hash, width, height))
+}
+
+pub(crate) fn capture_for_control(
+    inner: &Inner,
+    window_id: &str,
+    bounds: kaleidoscope_contract::Rect,
+) -> Result<(String, kaleidoscope_contract::WindowGeometry), CoreError> {
+    restore_saved_captures(inner);
+    let unavailable = || errors::SHARE_CONTROL_IMAGE_UNAVAILABLE(window_id);
+    if bounds.width == 0 || bounds.height == 0 {
+        return Err(unavailable());
+    }
+    let web = inner.host.web().ok_or_else(unavailable)?;
+    let has_web = window_has_web(&inner.state.lock().unwrap(), window_id).unwrap_or(false);
+    let (bytes, crop) = if has_web {
+        (
+            web.capture(window_id)
+                .map_err(|_| unavailable())?
+                .ok_or_else(unavailable)?,
+            None,
+        )
+    } else {
+        let (bytes, scale) = web
+            .capture_shell()
+            .map_err(|_| unavailable())?
+            .ok_or_else(unavailable)?;
+        (bytes, Some((bounds, scale)))
+    };
+    let (png, _, pixel_width, pixel_height) =
+        prepare_png_with_size(&bytes, crop).ok_or_else(unavailable)?;
+    Ok((
+        STANDARD.encode(png),
+        kaleidoscope_contract::WindowGeometry {
+            css_width: bounds.width as f64,
+            css_height: bounds.height as f64,
+            pixel_width,
+            pixel_height,
+        },
+    ))
 }
 
 fn png_with_hash(image: RgbaImage) -> Option<(Vec<u8>, String)> {

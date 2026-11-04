@@ -37,6 +37,7 @@ mod state_events;
 mod storage;
 mod sync_state;
 mod web;
+mod window_control;
 
 #[cfg(test)]
 mod logins_tests;
@@ -114,6 +115,13 @@ pub trait UpdateHost: Send + Sync + 'static {
 
 /// 플랫폼 웹뷰의 수명과 조작. 페이지 변화는 Core::web_update로 알린다.
 pub trait WebHost: Send + Sync + 'static {
+    fn control(
+        &self,
+        window_id: &str,
+        _operation: &kaleidoscope_contract::WindowControlOperation,
+    ) -> Result<kaleidoscope_contract::WindowControlResult, CoreError> {
+        Err(errors::WEB_CONTROL_PLATFORM_UNSUPPORTED(window_id))
+    }
     fn attach(&self, window_id: &str, url: &str) -> Result<WebPage, CoreError>;
     fn place(&self, window_id: &str, bounds: Option<Rect>) -> Result<(), CoreError>;
     fn navigate(&self, window_id: &str, url: &str) -> Result<(), CoreError>;
@@ -211,6 +219,7 @@ pub(crate) struct Inner {
     pub(crate) conversation_streams: conversation_stream::Streams,
     pub(crate) conversation_sends: Mutex<HashSet<String>>,
     pub(crate) isolated_captures: Mutex<HashMap<String, share::IsolatedCapture>>,
+    pub(crate) window_control: window_control::WindowControlRuntime,
     pub(crate) connections: Mutex<Vec<kaleidoscope_contract::registry::ConnectionInfo>>,
     pub(crate) login_store: Arc<logins::Logins>,
     pub(crate) login_in_progress: Mutex<HashSet<String>>,
@@ -422,6 +431,7 @@ impl Core {
             conversation_streams: conversation_stream::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
             isolated_captures: Mutex::new(HashMap::new()),
+            window_control: window_control::WindowControlRuntime::default(),
             connections: Mutex::new(Vec::new()),
             login_store,
             login_in_progress: Mutex::new(HashSet::new()),
@@ -594,15 +604,9 @@ impl Core {
             | CoreRequest::RealtimeRelease { .. }) => {
                 realtime_host::dispatch::handle(&self.inner, request)
             }
-            CoreRequest::WindowControlRespond { response } => {
-                Err(errors::SHARE_CONTROL_RESPONSE_UNEXPECTED()
-                    .and_details(vec![format!("request_id: {}", response.request_id)]))
-            }
-            CoreRequest::WindowControlCapture { request_id, .. }
-            | CoreRequest::WebControl { request_id, .. } => {
-                Err(errors::SHARE_CONTROL_RESPONSE_UNEXPECTED()
-                    .and_details(vec![format!("request_id: {request_id}")]))
-            }
+            request @ (CoreRequest::WindowControlRespond { .. }
+            | CoreRequest::WindowControlCapture { .. }
+            | CoreRequest::WebControl { .. }) => window_control::handle(&self.inner, request),
             CoreRequest::ProfilerReport { inputs, frames } => {
                 self.inner.profiler.report(inputs, frames);
                 Ok(CoreReply::ProfilerReport {})
@@ -1186,6 +1190,7 @@ impl Inner {
 
     pub(crate) fn emit_state(self: &Arc<Self>, event: &state_events::StateEvent) {
         share::state_changed(self);
+        window_control::state_changed(self);
         self.layout_signal.notify();
         self.state_events.deliver(event, |event| self.notify(event));
         data_runtime::state_changed(self);

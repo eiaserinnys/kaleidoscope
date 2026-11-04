@@ -68,6 +68,7 @@ export type {
   Workspace,
 } from "./contract/contract";
 export { prepareShareForSend, useShareView } from "./share/share-view";
+export { useWindowControlHost } from "./share/window-control";
 export { describeNumbered, resolveNumbered, forgetNumbered } from "./share/numbered";
 export { windowActionActive } from "./share/action-context";
 export { readWindowView, executeWindowAction, setWindowViewGeometry } from "./share/window-control";

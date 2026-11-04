@@ -1,5 +1,6 @@
 import { flushSync } from "react-dom";
-import type { CoreError, WindowAction, WindowGeometry } from "../contract/contract";
+import { useEffect } from "react";
+import type { CoreError, WindowAction, WindowGeometry, WindowControlRequest, WindowControlResult } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { toCoreError } from "../core/core-transport";
 import * as errors from "../contract/shell-errors";
@@ -10,6 +11,7 @@ import { clickElement, selectElement } from "./action-select";
 import { describeNumbered, forgetNumbered, resolveNumbered } from "./numbered";
 import { inConsent, overlayOwner, ownedOverlays } from "./overlay-owner";
 import { flushPending } from "./pending-flush";
+import { captureWindowForControl } from "./share-view";
 
 type WindowEntry = { root: HTMLElement; store?: ShellStore; instance: string; sequence: number; viewId?: string; geometry?: WindowGeometry; focus?: WeakRef<HTMLElement> };
 const windows = new Map<string, WindowEntry>();
@@ -17,6 +19,7 @@ type Observation = { view_id: string; text: string; settled: boolean; geometry?:
 type ActionResult = { applied: boolean; error?: CoreError; before_text?: string; after?: Observation };
 
 export function registerControlWindow(windowId: string, root: HTMLElement, store?: ShellStore): () => void {
+  if (store) connectStore(store);
   const entry: WindowEntry = { root, store, instance: crypto.randomUUID(), sequence: 0 };
   windows.set(windowId, entry);
   const focus = (event: FocusEvent) => {
@@ -28,6 +31,51 @@ export function registerControlWindow(windowId: string, root: HTMLElement, store
     document.removeEventListener("focusin", focus);
     if (windows.get(windowId) === entry) { windows.delete(windowId); forgetNumbered(windowId); }
   };
+}
+
+const connectedStores = new WeakSet<ShellStore>();
+function connectStore(store: ShellStore): void {
+  if (connectedStores.has(store)) return;
+  connectedStores.add(store);
+  store.subscribeEvents?.((event) => {
+    if (event.event === "window.control") void handleControl(store, event.request);
+  });
+}
+
+export function useWindowControlHost(store: ShellStore): void {
+  useEffect(() => { connectStore(store); }, [store]);
+}
+
+async function handleControl(store: ShellStore, request: WindowControlRequest): Promise<void> {
+  let applied = false;
+  let result: WindowControlResult;
+  try {
+    const entry = windows.get(request.window_id);
+    if (!entry) throw errors.SHELL_WINDOW_CONTROL_REFERENCE_STALE({ target: "창" });
+    const window_title = entry.root.closest(".ks-window")?.querySelector(".ks-window-title")?.textContent?.trim() ?? "";
+    let before_text: string | undefined;
+    let after: Observation;
+    if (request.operation.kind === "read") {
+      after = readWindowView(request.window_id);
+    } else {
+      const action = await executeWindowAction(request.window_id, request.operation.view_id, request.operation.action, request.request_id);
+      applied = action.applied;
+      if (action.error) throw action.error;
+      if (!action.after) throw errors.SHELL_WINDOW_CONTROL_REFERENCE_STALE({ target: "창" });
+      before_text = action.before_text;
+      after = action.after;
+    }
+    let image_base64: string | undefined;
+    if (request.operation.image) {
+      const capture = await captureWindowForControl(store, request.window_id, request.request_id, entry.root);
+      image_base64 = capture.image_base64;
+      after.geometry = capture.geometry;
+      setWindowViewGeometry(request.window_id, after.view_id, capture.geometry);
+    }
+    result = { status: "ok", value: { before_text, after: { ...after, image_base64, app_name: "", window_title } } };
+  } catch (reason) { result = { status: "error", error: toCoreError(reason), applied }; }
+  try { await store.call({ op: "window.control.respond", response: { request_id: request.request_id, window_id: request.window_id, result } }); }
+  catch (reason) { console.error("창 제어 응답을 전송하지 못했습니다.", reason); }
 }
 
 export function readWindowView(windowId: string): Observation {

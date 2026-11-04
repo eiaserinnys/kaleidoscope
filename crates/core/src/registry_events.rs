@@ -14,10 +14,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
     }
     match event {
         DeviceEvent::WindowControl { request } => {
-            eprintln!(
-                "창 제어 요청은 아직 처리하지 않습니다: {}",
-                request.request_id
-            );
+            crate::window_control::handle_device_event(inner, generation, request);
         }
         DeviceEvent::AppsSnapshot { apps, deleted } => {
             let link_file = inner.link_file.lock().unwrap().clone();
