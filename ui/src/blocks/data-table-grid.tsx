@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import type { Column } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
@@ -67,12 +67,22 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
   const currentRow = rows.some((row) => row.key === focus?.row) ? rowIndex : Math.min(last.current.row, Math.max(0, rows.length - 1));
   const currentColumn = dataColumns.some((column) => column.field === focus?.column) ? columnIndex : Math.min(last.current.column, Math.max(0, dataColumns.length - 1));
   const current = rows[currentRow] && dataColumns[currentColumn] ? { row: rows[currentRow].key, column: dataColumns[currentColumn].field } : null;
-  const { scroll, virtual } = useVirtualRows(rows.length, 32);
+  const rowHeight = useRef(32);
+  const { scroll, virtual } = useVirtualRows(rows.length, rowHeight.current);
   keepRovingRow(virtual, currentRow);
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, visible);
   const gridColumns = useMemo(() => columns.map((column) => width(column.field === rowHeader && !column.width ? { ...column, width: "medium" } : column, rows)).join(" "), [columns, rows, rowHeader]);
   const lines = Math.max(0, ...columns.filter((column) => column.format === "content").map((column) => column.max_lines ?? 3));
+  useLayoutEffect(() => {
+    // CSS의 예약 높이와 행 간격까지 포함한 실측을 미마운트 행에도 쓴다.
+    const height = scroll.current?.querySelector<HTMLElement>(".ks-grid-row")?.getBoundingClientRect().height ?? 0;
+    if (!height || height === rowHeight.current) return;
+    rowHeight.current = height;
+    virtual.setOptions({ ...virtual.options, estimateSize: () => height });
+    // estimateSize 변경은 라이브러리의 측정 캐시를 자동 무효화하지 않는다.
+    virtual.measure();
+  }, [columns, lines, rows.length, visible, virtual]);
   const handlers = useRef<GridHandlers>(null!);
   const move = (row: number, column: number) => {
     row = Math.max(0, Math.min(rows.length - 1, row)); column = Math.max(0, Math.min(dataColumns.length - 1, column));
@@ -87,7 +97,8 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
     const ring = Number.parseFloat(getComputedStyle(target).getPropertyValue("--ks-focus-width")) || 0;
     const pinned = rowHeader ? container.querySelector<HTMLElement>(".ks-grid-row-header")?.getBoundingClientRect().width ?? 0 : 0;
     if (rect.left - ring < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - (rect.left - ring);
-    if (rect.right + ring > bounds.right) container.scrollLeft += rect.right + ring - bounds.right;
+    const right = bounds.left + container.clientLeft + container.clientWidth;
+    if (rect.right + ring > right) container.scrollLeft += rect.right + ring - right;
     const top = bounds.top + container.clientTop + (container.querySelector<HTMLElement>(".ks-table-header")?.getBoundingClientRect().height ?? 0);
     const bottom = bounds.top + container.clientTop + container.clientHeight;
     if (rect.top - ring < top) container.scrollTop -= top - (rect.top - ring);
@@ -107,6 +118,7 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
   });
   useEffect(() => {
     if (current && (current.row !== focus?.row || current.column !== focus?.column)) {
+      if (document.activeElement === document.body) { pending.current = current; virtual.scrollToIndex(currentRow, { align: "auto" }); }
       setFocus(current);
     }
   }, [current?.row, current?.column, focus?.row, focus?.column]);

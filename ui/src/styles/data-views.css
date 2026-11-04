@@ -68,9 +68,12 @@
 .ks-table-grid .ks-grid-corner { position: sticky; left: 0; z-index: 3; background: var(--ks-color-surface-solid); }
 .ks-table-grid .ks-table-header, .ks-grid-row { column-gap: var(--ks-space-1); }
 .ks-table-grid .ks-table-header { margin-bottom: var(--ks-space-1); }
+.ks-table-grid > .ks-table-inner { padding-inline-end: var(--ks-focus-width); }
 .ks-grid-row { align-items: stretch; padding: 0 0 var(--ks-space-1); border: 0; border-radius: 0; }
 .ks-grid-row:hover:not([data-menu-target]) { background-image: none; }
-.ks-table-grid.has-content .ks-grid-row, .ks-table-rows.has-content .ks-table-row { min-height: calc((var(--ks-grid-lines) + 2) * var(--ks-type-body) * var(--ks-line-body) + 4 * var(--ks-space-1)); }
+.ks-table-rows.has-content .ks-table-row { min-height: calc((var(--ks-grid-lines) + 2) * var(--ks-type-body) * var(--ks-line-body) + 4 * var(--ks-space-1)); }
+/* 제목과 본문, 배지, 묶음 간격 둘, 칸 위아래 여백, 행 사이 간격. */
+.ks-table-grid.has-content .ks-grid-row { min-height: calc((var(--ks-grid-lines) + 1) * var(--ks-type-body) * var(--ks-line-body) + var(--ks-type-meta) * var(--ks-line-body) + 5 * var(--ks-space-1)); }
 .ks-grid-row-header { position: sticky; left: 0; z-index: 1; display: flex; align-items: center; align-self: stretch; background: var(--ks-color-surface-solid); padding-block: var(--ks-space-1); }
 .ks-grid-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-grid-cell { position: relative; z-index: 0; overflow: visible; padding-block: var(--ks-space-1); }

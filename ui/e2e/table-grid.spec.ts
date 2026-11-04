@@ -165,6 +165,31 @@ test("칸을 누른 뒤 휠로 내린 표가 초점 칸으로 되돌아오지 �
   await capture(page, "r4-focused-wheel");
 });
 
+test("높은 행의 일정표에서 Ctrl+End와 Ctrl+Home 및 End 끝 칸을 드러낸다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "일정표", exact: true }).click();
+  const grid = app.getByRole("grid");
+  await grid.getByRole("gridcell").first().focus();
+  for (const [key, label] of [["Control+End", /작업 묶음 60, 12일/], ["Control+Home", /작업 묶음 1, 1일/], ["End", /작업 묶음 1, 12일/]] as const) {
+    await page.keyboard.press(key);
+    await expect(grid.getByRole("gridcell", { name: label })).toBeFocused();
+    // 행 높이가 실측으로 바뀐 뒤에도 도착한 칸과 링이 보이는지 확인한다.
+    await page.waitForTimeout(3500);
+    const visible = await grid.evaluate((element) => {
+      const cell = document.activeElement!, rect = cell.getBoundingClientRect(), root = element.getBoundingClientRect();
+      const ring = parseFloat(getComputedStyle(cell).getPropertyValue("--ks-focus-width"));
+      const header = element.querySelector(".ks-table-header")!.getBoundingClientRect();
+      const rowHeader = element.querySelector(".ks-grid-row-header")!.getBoundingClientRect();
+      return rect.top - ring >= header.bottom - 1 && rect.bottom + ring <= root.top + element.clientTop + element.clientHeight + 1 &&
+        rect.left - ring >= rowHeader.right - 1 && rect.right + ring <= root.left + element.clientLeft + element.clientWidth + 1;
+    });
+    expect(visible).toBe(true);
+    await capture(page, `r5-${key.replace("+", "-").toLowerCase()}`);
+  }
+});
+
 test("기존 표 행 선택과 정렬을 유지한다", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=data-views-test");

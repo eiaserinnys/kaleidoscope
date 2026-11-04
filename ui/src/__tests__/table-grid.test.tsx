@@ -5,6 +5,7 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { TableGrid } from "../blocks/data-table-grid";
 import { mockVirtualLayout } from "./virtual-layout";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 
@@ -20,6 +21,19 @@ function setup(ui: Block, state: AppDefinition["state"]) {
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport };
 }
+
+it("초점 행이 지워지면 같은 자리의 이웃 칸에 선택 호출 없이 초점을 돌린다", async () => {
+  const rows = [{ key: "a", label: "기획", mon: "회의" }, { key: "b", label: "제작", mon: "검토" }, { key: "c", label: "배포", mon: "공개" }];
+  const choose = vi.fn();
+  const props = { rows, columns: [{ field: "label", label: "항목" }, { field: "mon", label: "월요일" }], selected: null, rowHeader: "label", onChoose: choose, onChooseCell: choose };
+  const { rerender } = render(<TableGrid {...props} />);
+  const first = await screen.findByRole("gridcell", { name: "기획, 월요일, 회의" });
+  first.focus(); fireEvent.keyDown(first, { key: "ArrowDown" });
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("제작, 월요일, 검토");
+  rerender(<TableGrid {...props} rows={[rows[0], rows[2]]} />);
+  await waitFor(() => expect(document.activeElement?.getAttribute("aria-label")).toBe("배포, 월요일, 공개"));
+  expect(choose).not.toHaveBeenCalled();
+});
 
 it("빈 칸으로 이동할 때는 초점만 바꾸고 Enter로 주소와 행을 고른다", async () => {
   const row = { key: "a", label: "제작", mon: { title: "첫 검토", subtitle: "본문", badges: ["확인"] }, tue: null };
