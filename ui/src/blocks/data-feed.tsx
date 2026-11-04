@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Block, FeedEntry } from "../contract/contract";
+import type { BindingMore, Block, FeedEntry } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { validColor } from "../components/badge";
 import { DataState } from "../components/data-state";
@@ -11,7 +11,8 @@ import { MarkdownText } from "./markdown-text";
 import { Badges, GroupHeading, NoItems, VirtualSurface, asArray, asBadges, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
-import { useWindowStateValue } from "../data/window-state";
+import { useWindowStateValue, useWindowVisible } from "../data/window-state";
+import { useLoadMore } from "./load-more";
 
 function asFeedEntry(value: unknown): FeedEntry | null {
   if (!isObject(value) || typeof value.key !== "string" || !(typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")))) return null;
@@ -78,9 +79,9 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
 export function FeedBlock({ block, context, pointer }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/entries`, block.entries);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <FeedReady block={block} context={context} pointer={pointer} value={value.value} />;
+  return <FeedReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
 }
-function FeedReady({ block, context, pointer, value }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string; value: unknown }) {
+function FeedReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => new Set());
@@ -152,7 +153,9 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
   if (items.length) keepRovingRow(virtual, rowOf(roving.focus));
   const atEnd = useRef(true); const lastCount = useRef(0);
   useLayoutEffect(() => { if (block.follow && atEnd.current && rows.length > lastCount.current && rows.length) virtual.scrollToIndex(rows.length - 1, { align: "end" }); lastCount.current = rows.length; }, [rows.length, block.follow, virtual]);
-  if (!rows.some((row) => row.kind === "entry" || row.kind === "heading")) return <NoItems />;
+  const vrows = virtual.getVirtualItems();
+  const footer = useLoadMore(block.follow ? undefined : more, rows.length, vrows.at(-1)?.index ?? -1, data, useWindowVisible(context));
+  if (!rows.length && (!more || block.follow)) return <NoItems />;
   const choose = (entry: FeedEntry) => { if (block.on_select && !globalThis.getSelection()?.toString()) void data.act(`${pointer}/on_select`, entry.key, entry as unknown as JsonValue); };
   const toggleEntry = (key: string) => setCollapsedKeys((current) => {
     const next = new Set(current);
@@ -172,7 +175,7 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
     toggle: toggleEntry,
     copy: copyButton,
   };
-  const vrows = virtual.getVirtualItems(); const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
+  const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const heading = block.grouped ? rows.slice(0, first + 1).reverse().find((r) => r.kind === "heading") : undefined;
   return <><div className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight <= line; }}>
     {heading?.kind === "heading" && first > 0 && <div className="ks-view-sticky"><GroupHeading title={heading.title} meta={heading.meta} /></div>}
@@ -191,5 +194,6 @@ function FeedReady({ block, context, pointer, value }: { block: Extract<Block, {
         })()}
       </div>;
     })}</VirtualSurface>
+    {footer}
   </div>{menu.dialog}</>;
 }

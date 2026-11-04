@@ -35,6 +35,8 @@ fn reader_is_hacker_news_only() {
         ["feed_kind", "query", "search_input", "selected_story"]
     );
     assert_eq!(definition.name, "해커뉴스");
+    assert_eq!(definition.requires.blocks, 21);
+    assert_eq!(serde_json::to_value(&definition.sources["stories"]).unwrap()["page"], json!({"param":"page","next":"page + 1 < nbPages ? page + 1 : null","items":"hits"}));
 
     let mut types = Vec::new();
     let mut search_on_change = None;
@@ -125,7 +127,7 @@ fn reader_evaluates_nested_discussion_bindings() {
         None,
     );
 
-    let BindingValue::Ready { value: feed } =
+    let BindingValue::Ready { value: feed, .. } =
         &values["/ui/children/1/children/1/child/entries"]
     else {
         panic!("중첩 피드 식 결과")
@@ -140,13 +142,13 @@ fn reader_evaluates_nested_discussion_bindings() {
     assert_eq!(feed[1]["meta"], "2026-10-31 10:00");
     assert_eq!(feed[1]["badges"], json!([]));
 
-    let BindingValue::Ready { value: discussion_title } =
+    let BindingValue::Ready { value: discussion_title, .. } =
         &values["/ui/children/1/children/1/title"]
     else {
         panic!("토론 제목 식 결과")
     };
     assert_eq!(discussion_title, "Rust tools");
-    let BindingValue::Ready { value: story_meta } =
+    let BindingValue::Ready { value: story_meta, .. } =
         &values["/ui/children/1/children/1/meta"]
     else {
         panic!("이야기 메타 식 결과")
@@ -173,7 +175,7 @@ fn reader_empty_search_leaves_section_header_blank() {
     );
 
     for pointer in ["/ui/children/1/children/1/title", "/ui/children/1/children/1/meta"] {
-        let BindingValue::Ready { value } = &values[pointer] else {
+        let BindingValue::Ready { value, .. } = &values[pointer] else {
             panic!("빈 검색 머리 바인딩 결과: {pointer}: {:?}", values[pointer]);
         };
         assert!(value.is_null(), "{pointer}: {value}");
@@ -181,7 +183,7 @@ fn reader_empty_search_leaves_section_header_blank() {
 }
 
 #[test]
-fn reader_limits_roots_and_replies_while_including_depth_four() {
+fn reader_keeps_all_roots_replies_and_nested_depths() {
     let (definition, app) = reader();
     let html_body = format!("<p>{}</p>", "답글 &amp; 본문 ".repeat(20));
     let entity_body = format!("{} &amp; 본문", "답글 ".repeat(20));
@@ -191,7 +193,8 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
         2 => entity_body.as_str(),
         _ => plain_body.as_str(),
     };
-    let depth4 = json!({"id":"depth-4","author":"d4","text":body_for(4),"children":[]});
+    let depth5 = json!({"id":"depth-5","author":"d5","text":body_for(5),"children":[]});
+    let depth4 = json!({"id":"depth-4","author":"d4","text":body_for(4),"children":[depth5]});
     let depth3 = json!({"id":"depth-3","author":"d3","text":body_for(3),"children":[depth4]});
     let depth2 = json!({"id":"depth-2","author":"d2","text":body_for(2),"children":[depth3]});
     let mut depth1_children = vec![depth2];
@@ -225,14 +228,14 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
         &statuses,
         None,
     );
-    let BindingValue::Ready { value: feed } =
+    let BindingValue::Ready { value: feed, .. } =
         &values["/ui/children/1/children/1/child/entries"]
     else {
         panic!("중첩 댓글 제한 결과")
     };
-    assert_eq!(feed.as_array().unwrap().len(), 25);
+    assert_eq!(feed.as_array().unwrap().len(), 30);
     assert_eq!(feed[0]["key"], "root-0");
-    assert_eq!(feed[0]["children"].as_array().unwrap().len(), 8);
+    assert_eq!(feed[0]["children"].as_array().unwrap().len(), 9);
     assert_eq!(feed[0]["badges"], json!([]));
     assert_eq!(feed[1]["children"].as_array().unwrap().len(), 8);
     assert!(feed[0]["body"].as_str().unwrap().contains("답글 & 본문"));
@@ -240,6 +243,7 @@ fn reader_limits_roots_and_replies_while_including_depth_four() {
         feed[0]["children"][0]["children"][0]["children"][0]["children"][0]["key"],
         "depth-4"
     );
+    assert_eq!(feed[0]["children"][0]["children"][0]["children"][0]["children"][0]["children"][0]["key"], "depth-5");
 }
 
 #[test]

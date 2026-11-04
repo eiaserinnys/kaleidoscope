@@ -845,6 +845,9 @@ impl Core {
                 data_runtime::refresh(&self.inner, &window_id, &sources, false, true)?;
                 Ok(CoreReply::DataRefresh {})
             }
+            CoreRequest::DataMore { window_id, source } => {
+                Ok(CoreReply::DataMore { started: data_runtime::more(&self.inner, &window_id, &source)? })
+            }
             CoreRequest::DataMedia {
                 window_id,
                 media,

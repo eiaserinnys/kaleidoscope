@@ -131,7 +131,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         assert!(!reply[key].as_array().unwrap().is_empty(), "{key}");
     }
     assert!(
-        matches!(crate::data_runtime::binding_value(&core.inner, &profiler, "/ui/children/1/items"), Some(BindingValue::Ready { value }) if value.as_array().is_some_and(|items| items.len() == 4))
+        matches!(crate::data_runtime::binding_value(&core.inner, &profiler, "/ui/children/1/items"), Some(BindingValue::Ready { value, .. }) if value.as_array().is_some_and(|items| items.len() == 4))
     );
     for pointer in [
         "/ui/children/2/tabs/0/child/rows",
@@ -144,7 +144,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
         "/ui/children/2/tabs/5/child/rows",
     ] {
         assert!(
-            matches!(crate::data_runtime::binding_value(&core.inner, &profiler, pointer), Some(BindingValue::Ready { value }) if value.as_array().is_some_and(|rows| !rows.is_empty()) || value.is_object()),
+            matches!(crate::data_runtime::binding_value(&core.inner, &profiler, pointer), Some(BindingValue::Ready { value, .. }) if value.as_array().is_some_and(|rows| !rows.is_empty()) || value.is_object()),
             "{pointer}"
         );
     }

@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Block } from "../contract/contract";
+import type { BindingMore, Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
-import { useBinding, useDormant } from "../data/window-data";
+import { useBinding, useDormant, useWindowData } from "../data/window-data";
+import { useWindowVisible } from "../data/window-state";
+import { useLoadMore } from "./load-more";
 import { ItemScopeProvider, useItemScope, type ItemScope } from "../data/item-scope";
 import { DataState } from "../components/data-state";
 import { shareStructure } from "../core/shell-store";
@@ -34,7 +36,7 @@ export function RepeatBlock({ block, context, pointer }: { block: Repeat; contex
   }, [value, block.key]);
   useDormant(`${pointer}/template`, entries.length === 0);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} follow={follow.status === "ready" ? follow.value : null} />;
+  return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} follow={follow.status === "ready" ? follow.value : null} more={value.more} />;
 }
 
 const Row = memo(function Row({ item, itemKey, index, parent, template, context, pointer }: {
@@ -45,8 +47,8 @@ const Row = memo(function Row({ item, itemKey, index, parent, template, context,
   return <div className="ks-repeat-item" data-repeat-key={String(itemKey)}><ItemScopeProvider value={scope}>{renderBlock(template, context, `${pointer}/template`)}</ItemScopeProvider></div>;
 });
 
-function RepeatReady({ block, context, pointer, entries, parent, follow }: {
-  block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; follow: JsonValue;
+function RepeatReady({ block, context, pointer, entries, parent, follow, more }: {
+  block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; follow: JsonValue; more?: BindingMore;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<{ element: HTMLDivElement; margin: number } | null>(null);
@@ -123,6 +125,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => entries[index].key, [entries]);
   const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey, viewport);
+  const virtualRows = virtual.getVirtualItems();
   const followIndex = entries.findIndex((entry) => entry.key === follow);
   useEffect(() => {
     if (followIndex < 0 || Date.now() < pauseUntil.current) return;
@@ -151,11 +154,18 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
     onScroll={() => { if (draggingScrollbar.current) pause(); }}
     onKeyDown={(event) => { if (event.target === event.currentTarget && ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) pause(); }}>
     {block.virtual ? <div style={horizontal ? { width: virtual.getTotalSize(), height: "100%", position: "relative" } : { height: virtual.getTotalSize(), width: "100%", position: "relative" }}>
-      {virtual.getVirtualItems().map((virtualRow) => <div key={virtualRow.key} data-index={virtualRow.index} ref={virtual.measureElement}
+      {virtualRows.map((virtualRow) => <div key={virtualRow.key} data-index={virtualRow.index} ref={virtual.measureElement}
         className={layout === "grid" ? "ks-repeat-grid-row" : undefined}
         style={{ position: "absolute", top: 0, left: 0, ...(horizontal ? { height: "100%", transform: `translateX(${virtualRow.start - (viewport?.margin ?? 0)}px)` } : { width: "100%", transform: `translateY(${virtualRow.start - (viewport?.margin ?? 0)}px)` }), ...gridStyle }}>
         {entries.slice(virtualRow.index * rowSize, (virtualRow.index + 1) * rowSize).map(row)}
       </div>)}
     </div> : <div className="ks-repeat-content" style={gridStyle}>{entries.map(row)}</div>}
+    {block.virtual && !horizontal && more ? <RepeatLoadMore more={more} rows={Math.ceil(entries.length / rowSize)} last={virtualRows.at(-1)?.index ?? -1} context={context} /> : null}
   </div>;
+}
+
+function RepeatLoadMore({ more, rows, last, context }: { more: BindingMore; rows: number; last: number; context: BlockContext }) {
+  const data = useWindowData();
+  const visible = useWindowVisible(context);
+  return useLoadMore(more, rows, last, data, visible);
 }

@@ -383,7 +383,7 @@ fn market_currency_table_uses_full_subcent_asset_price() {
         .iter()
         .find_map(|(pointer, binding)| match binding {
             BindingValue::Ready {
-                value: Value::Array(rows),
+                value: Value::Array(rows), more: None
             } if pointer.ends_with("/rows")
                 && rows
                     .iter()

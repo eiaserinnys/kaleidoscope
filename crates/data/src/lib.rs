@@ -21,6 +21,21 @@ use kaleidoscope_contract::{
 };
 use serde_json::Value;
 
+/// 한 쪽 응답을 뿌리로 다음 쪽 식을 계산한다.
+pub fn evaluate_page_next(expr: &str, response: &Value, loaded: usize, pages: usize) -> Result<Value, String> {
+    let ast = parser::parse(expr).map_err(|error| error.to_string())?;
+    let mut context = Context::new();
+    context.bind("loaded".into(), JValue::from(serde_json::json!(loaded)));
+    context.bind("pages".into(), JValue::from(serde_json::json!(pages)));
+    let mut evaluator = Evaluator::with_options(context, EvaluatorOptions {
+        timeout_ms: Some(data::EXPR_TIMEOUT_MS),
+        max_stack_depth: Some(2000),
+        ..Default::default()
+    });
+    let result = evaluator.evaluate(&ast, &JValue::from(response.clone())).map_err(|error| error.to_string())?;
+    Ok(Value::from(&result))
+}
+
 pub struct CompiledApp {
     sources: BTreeMap<String, SourceDecl>,
     source_order: Vec<String>,
@@ -401,7 +416,7 @@ impl CompiledApp {
                 } else {
                     let started = std::time::Instant::now();
                     let result = match self.eval(&binding.pointer, &vars) {
-                        Ok(value) => BindingValue::Ready { value },
+                        Ok(value) => BindingValue::Ready { value, more: None },
                         Err(message) => BindingValue::Failed {
                             message,
                             id: None,

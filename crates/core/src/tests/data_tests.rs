@@ -44,15 +44,15 @@ fn client_inputs_include_state_literal_and_expression_and_follow_state() {
     };
     assert_eq!(
         view.values.get("/client/inputs/state"),
-        Some(&BindingValue::Ready { value: json!(1) })
+        Some(&BindingValue::Ready { value: json!(1), more: None })
     );
     assert_eq!(
         view.values.get("/client/inputs/literal"),
-        Some(&BindingValue::Ready { value: json!(7) })
+        Some(&BindingValue::Ready { value: json!(7), more: None })
     );
     assert_eq!(
         view.values.get("/client/inputs/expr"),
-        Some(&BindingValue::Ready { value: json!(2.0) })
+        Some(&BindingValue::Ready { value: json!(2.0), more: None })
     );
     core.handle(CoreRequest::WindowSetState {
         window_id: window.clone(),
@@ -61,7 +61,7 @@ fn client_inputs_include_state_literal_and_expression_and_follow_state() {
     .unwrap();
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/client/inputs/state")
-            == Some(BindingValue::Ready { value: json!(3) })
+            == Some(BindingValue::Ready { value: json!(3), more: None })
     });
 }
 
@@ -105,7 +105,7 @@ fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/value")
             == Some(BindingValue::Ready {
-                value: json!("첫째"),
+                value: json!("첫째"), more: None
             })
     });
     core.handle(CoreRequest::WindowSetState {
@@ -116,7 +116,7 @@ fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/value")
             == Some(BindingValue::Ready {
-                value: json!("둘째"),
+                value: json!("둘째"), more: None
             })
     });
     fs::write(folder.path().join("other.json"), r#"{"next":"f.json"}"#).unwrap();
@@ -126,7 +126,7 @@ fn source_pipeline_fetches_in_order_and_replans_when_state_changes() {
     assert_eq!(
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"),
         Some(BindingValue::Ready {
-            value: json!("새 값")
+            value: json!("새 값"), more: None
         })
     );
     core.handle(CoreRequest::WindowSetState {
@@ -363,11 +363,11 @@ fn attach_fetches_and_state_change_sends_only_changed_values() {
         if let Ok(CoreEvent::DataUpdate { view, .. }) =
             receiver.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/value"),Some(BindingValue::Ready{value}) if value == "One")
+            if matches!(view.values.get("/ui/children/0/value"),Some(BindingValue::Ready{value, ..}) if value == "One")
             {
                 ready = true;
             }
-            if matches!(view.values.get("/ui/children/2/items"),Some(BindingValue::Ready{value}) if value.as_array().is_some_and(|items| items.iter().any(|item| item["path"] == "one.json")))
+            if matches!(view.values.get("/ui/children/2/items"),Some(BindingValue::Ready{value, ..}) if value.as_array().is_some_and(|items| items.iter().any(|item| item["path"] == "one.json")))
             {
                 folder_ready = true;
             }
@@ -395,7 +395,7 @@ fn attach_fetches_and_state_change_sends_only_changed_values() {
         {
             if view.values.get("/ui/children/1/value")
                 == Some(&BindingValue::Ready {
-                    value: json!("second"),
+                    value: json!("second"), more: None
                 })
             {
                 assert!(!view.values.contains_key("/ui/children/0/value"));
@@ -514,7 +514,7 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
     while Instant::now() < deadline {
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"new"}]))
+            if matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == &json!([{"key":"new"}]))
             {
                 new_value = true;
                 break;
@@ -527,7 +527,7 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
     while Instant::now() < deadline {
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(50)) {
             assert!(
-                !matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"old"}]))
+                !matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == &json!([{"key":"old"}]))
             );
         }
     }
@@ -991,7 +991,7 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
         panic!("data.attach");
     };
     assert!(
-        matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"cached"}]))
+        matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == &json!([{"key":"cached"}]))
     );
     let errors = crate::data_runtime::layout_errors(&core.inner);
     assert!(errors
@@ -1155,7 +1155,7 @@ fn reattach_during_version_notification_uses_new_definition() {
     assert_eq!(
         view.values["/ui/value"],
         BindingValue::Ready {
-            value: json!("new")
+            value: json!("new"), more: None
         }
     );
 }
@@ -1212,7 +1212,7 @@ fn reattach_during_state_notification_uses_new_state() {
     assert_eq!(
         view.values["/ui/value"],
         BindingValue::Ready {
-            value: json!("new")
+            value: json!("new"), more: None
         }
     );
 }
@@ -1246,7 +1246,7 @@ fn path_change_failed_fetch_clears_prior_value() {
         assert!(Instant::now() < deadline, "initial value");
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == &json!([{"key":"previous"}]))
+            if matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == &json!([{"key":"previous"}]))
             {
                 break;
             }
@@ -1461,7 +1461,7 @@ fn storage_failed_while_offline_is_reloaded_after_connecting() {
     mark_connected(&core);
     crate::data_runtime::state_changed(&core.inner);
     wait_until(
-        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value }) if value == "one.json"),
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value, .. }) if value == "one.json"),
     );
 }
 
@@ -1510,7 +1510,7 @@ fn hidden_window_reloads_failed_storage_when_it_becomes_visible() {
     })
     .unwrap();
     wait_until(
-        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value }) if value == "one.json"),
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value, .. }) if value == "one.json"),
     );
 }
 
@@ -1550,7 +1550,7 @@ fn source_failed_while_offline_is_retried_after_connecting() {
     mark_connected(&core);
     crate::data_runtime::state_changed(&core.inner);
     wait_until(
-        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}])),
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == json!([{"key":"restored"}])),
     );
 }
 
@@ -1604,7 +1604,7 @@ fn hidden_window_retries_failed_source_when_it_becomes_visible() {
     })
     .unwrap();
     wait_until(
-        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}])),
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == json!([{"key":"restored"}])),
     );
 }
 
@@ -1665,10 +1665,10 @@ fn reconnect_replaces_in_flight_source_and_discards_its_late_failure() {
         .insert("/old".into(), response(200, json!([{"key":"restored"}])));
     release_retry.send(()).unwrap();
     wait_until(
-        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}])),
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == json!([{"key":"restored"}])),
     );
     assert!(
-        matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value }) if value == json!([{"key":"restored"}]))
+        matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == json!([{"key":"restored"}]))
     );
 }
 
@@ -1691,7 +1691,7 @@ fn storage_binding_drops_unlinked_defaults_when_the_link_goes_offline() {
     })
     .unwrap();
     wait_until(
-        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value }) if value == "local"),
+        || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value, .. }) if value == "local"),
     );
     *core.inner.link_file.lock().unwrap() = Some(connected_link_file());
     core.inner.state.lock().unwrap().link = LinkStatus::Offline {
@@ -1745,7 +1745,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
     })
     .unwrap();
     wait_until(
-        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One"), more: None })),
     );
     core.handle(CoreRequest::DataAct {
         window_id: window.clone(),
@@ -1767,7 +1767,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
         "two.json"
     );
     wait_until(
-        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("Two") })),
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("Two"), more: None })),
     );
     assert_eq!(*registry.storage_workspace.lock().unwrap(), workspace);
     let revision = "remote-revision".to_string();
@@ -1790,7 +1790,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
         },
     );
     wait_until(
-        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One") })),
+        || matches!(core.handle(CoreRequest::DataAttach { window_id: window.clone() , dormant: vec![]}).unwrap(), CoreReply::DataAttach {view} if view.values.get("/ui/children/0/value") == Some(&BindingValue::Ready { value: json!("One"), more: None })),
     );
     core.handle(CoreRequest::WindowSetState {
         window_id: window.clone(),
@@ -1869,7 +1869,7 @@ fn storage_change_recalculates_source_metadata_bindings() {
         if let Ok(CoreEvent::DataUpdate { view, .. }) =
             receiver.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/value"), Some(BindingValue::Ready { value }) if value.is_string())
+            if matches!(view.values.get("/ui/value"), Some(BindingValue::Ready { value, .. }) if value.is_string())
             {
                 received_time = true;
                 break;
@@ -1902,7 +1902,7 @@ fn storage_change_recalculates_source_metadata_bindings() {
         if let Ok(CoreEvent::DataUpdate { view, .. }) =
             receiver.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/value"), Some(BindingValue::Ready { value }) if value.is_null())
+            if matches!(view.values.get("/ui/value"), Some(BindingValue::Ready { value, .. }) if value.is_null())
             {
                 cleared = true;
                 break;
@@ -1971,6 +1971,7 @@ fn folder_and_file_sources_must_protect_data_dir() {
 
 mod liveness_tests;
 mod rate_limit_tests;
+mod paging_tests;
 
 #[test]
 fn action_modifiers_are_available_in_expressions_with_false_defaults() {

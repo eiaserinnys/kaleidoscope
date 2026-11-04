@@ -5,6 +5,9 @@ import { DataState } from "../components/data-state";
 import { validColor } from "../components/badge";
 import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
 import { useBinding, useWindowData } from "../data/window-data";
+import { useWindowVisible } from "../data/window-state";
+import { useLoadMore } from "./load-more";
+import type { BindingMore } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
 import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
@@ -24,12 +27,12 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
     {typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}<Badges values={item.badges} />
   </button>;
 });
-export function ListBlock({ block, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
+export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/items`, block.items);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <ListReady block={block} pointer={pointer} value={value.value} />;
+  return <ListReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
 }
-function ListReady({ block, pointer, value }: { block: Extract<Block, { type: "list" }>; pointer: string; value: unknown }) {
+function ListReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const grouped = useMemo(() => groups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
@@ -71,14 +74,15 @@ function ListReady({ block, pointer, value }: { block: Extract<Block, { type: "l
     choose: (item) => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); },
     menu: (event, item) => { if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },
   };
-  if (value === null) return null;
-  if (!items.length) return <NoItems />;
   const virtualRows = virtual.getVirtualItems();
+  const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, useWindowVisible(context));
+  if (value === null && !more) return null;
+  if (!items.length && !more) return <NoItems />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const currentHeading = block.grouped ? rows.slice(0, first + 1).reverse().find((row) => row.kind === "heading") : undefined;
   return <><div className={`ks-data-view ks-list${grid ? " is-grid" : ""}`} ref={scroll} role="listbox" aria-label="목록">
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
-    <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
+    {!items.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
       const entry = rows[row.index];
       return <div className={grid && entry.kind === "items" ? "ks-list-grid-row" : undefined} key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
         {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.items.map((item, n) => {
@@ -86,6 +90,7 @@ function ListReady({ block, pointer, value }: { block: Extract<Block, { type: "l
           return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} handlers={handlers} key={item.key} />;
         })}
       </div>;
-    })}</VirtualSurface>
+    })}</VirtualSurface>}
+    {footer}
   </div>{menu.dialog}</>;
 }

@@ -219,6 +219,18 @@ pub struct ExprRef {
     pub expr: String,
 }
 
+/// 요청 원천의 다음 쪽과 응답 항목의 위치.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct PageDecl {
+    pub param: String,
+    pub next: String,
+    #[serde(default)]
+    #[ts(optional, as = "Option<String>")]
+    pub items: String,
+}
+
 /// 원천 하나. `kind`로 가른다. 이름은 소문자로 시작하고 소문자, 숫자, `_`로 1~32자다(식에서 `$data.이름`으로 읽는다).
 /// 값 자리([`Binding`])의 식은 `$state`만 본다. 값이 null이면 그 원천을 부르지 않는다(`idle`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -240,6 +252,9 @@ pub enum SourceDecl {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         refresh_secs: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        page: Option<PageDecl>,
     },
     /// 기기마다 고른 폴더(모듈 `files`)의 파일 하나를 읽는다. `path`는 [`FileRef`]의 경로 규칙을 따른다.
     /// 없는 파일이면 실패다. `json`이면 JSON으로 읽고, 읽지 못하면 실패다.
@@ -282,6 +297,8 @@ pub struct HostCallBudget {
 }
 
 /// 앱 정의의 기본 화면과 전체 원천을 호스트별 분당 호출 수로 계산한다.
+/// 목록 끝에 닿아 호출하는 `data.more`는 자동 호출이 아니므로 넣지 않는다.
+/// 쪽을 둘 이상 받은 원천은 `refresh_secs` 자동 다시 받기를 쉰다.
 pub fn call_budget(definition: &AppDefinition) -> Vec<HostCallBudget> {
     let dormant = default_dormant(&definition.ui, &definition.state);
     let live = live_sources(definition, &dormant);
@@ -1136,6 +1153,9 @@ pub enum SourceStatus {
 pub enum BindingValue {
     Ready {
         value: JsonValue,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        more: Option<BindingMore>,
     },
     /// 기대는 원천을 처음 받는 중이다. 블록은 불러오는 모습을 보인다.
     Loading {},
@@ -1157,6 +1177,27 @@ pub enum BindingValue {
         permission: String,
     },
 }
+
+/// 목록이 다음 쪽을 받을 수 있는 상태.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct BindingMore {
+    pub source: String,
+    pub state: MoreState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub retry: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum MoreState { Ready, Loading, Failed }
 
 /// `data.media` 응답의 내용.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

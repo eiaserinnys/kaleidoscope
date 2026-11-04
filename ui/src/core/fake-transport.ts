@@ -344,6 +344,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "data.refresh":
         await data.refresh(request.window_id, request.sources ?? []);
         return { op: "data.refresh" };
+      case "data.more":
+        return { op: "data.more", started: await data.more(request.window_id, request.source) };
       case "data.act":
         await data.act(request.window_id, request.pointer, request.event ?? null, request.item);
         return { op: "data.act" };

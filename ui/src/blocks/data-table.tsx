@@ -1,10 +1,12 @@
 import { memo, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import type { Block, Column, SortSpec } from "../contract/contract";
+import type { BindingMore, Block, Column, SortSpec } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
 import { DataState } from "../components/data-state";
-import { useBinding, useWindowData } from "../data/window-data";
+import { useBinding, useWindowData, type WindowData } from "../data/window-data";
+import { useWindowVisible } from "../data/window-state";
+import { useLoadMore } from "./load-more";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
 import { NoItems, VirtualSurface, asArray, dateText, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
@@ -56,19 +58,20 @@ function formattedCell(value: JsonValue | undefined, column: Column): ReactNode 
   return undefined;
 }
 const numericColumn = (column: Column) => column.format === "number" || column.format === "date" || column.format === "delta";
-export function TableBlock({ block, pointer }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string }) {
+export function TableBlock({ block, context, pointer }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/rows`, block.rows);
   if (value.status !== "ready") return <DataState value={value} />;
-  return <TableReady block={block} pointer={pointer} value={value.value} />;
+  return <TableReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
 }
-function TableReady({ block, pointer, value }: { block: Extract<Block, { type: "table" }>; pointer: string; value: unknown }) {
+function TableReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const rows = useMemo(() => asArray(value).filter(validRow), [value]);
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
+  const visible = useWindowVisible(context);
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
-  return <><TableView columns={block.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from(anchor.querySelectorAll('[role="cell"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
+  return <><TableView columns={block.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} more={more} data={data} visible={visible} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from(anchor.querySelectorAll('[role="cell"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
 }
 
 export interface TableViewProps {
@@ -83,6 +86,9 @@ export interface TableViewProps {
   renderCell?: (row: Row, column: Column) => ReactNode | undefined;
   compareRows?: (a: Row, b: Row, sort: SortSpec) => number;
   rowProps?: (row: Row) => Record<string, string>;
+  more?: BindingMore;
+  data?: WindowData;
+  visible?: boolean;
 }
 
 type TableHandlers = {
@@ -98,7 +104,7 @@ const TableRow = memo(function TableRow({ row, index, start, active, focused, co
   </div>;
 });
 
-export function TableView({ columns: sourceColumns, rows: sourceRows, initialSort, selected, ariaLabel = "표", onChoose, onActivate, onContextMenu, renderCell, compareRows, rowProps }: TableViewProps) {
+export function TableView({ columns: sourceColumns, rows: sourceRows, initialSort, selected, ariaLabel = "표", onChoose, onActivate, onContextMenu, renderCell, compareRows, rowProps, more, data, visible = true }: TableViewProps) {
   const [sort, setSort] = useState<SortSpec | null>(initialSort ?? null);
   const rows = useMemo(() => {
     if (!sort) return sourceRows;
@@ -121,6 +127,8 @@ export function TableView({ columns: sourceColumns, rows: sourceRows, initialSor
   const { scroll, virtual } = useVirtualRows(rows.length, 32);
   const roving = useRoving(rows, selected, scroll, virtual);
   keepRovingRow(virtual, roving.focus);
+  const virtualRows = virtual.getVirtualItems();
+  const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, visible);
   const handlers = useRef<TableHandlers>(null!);
   handlers.current = {
     focus: roving.setFocus,
@@ -136,10 +144,11 @@ export function TableView({ columns: sourceColumns, rows: sourceRows, initialSor
       <div className="ks-table-header" role="row">
         {sourceColumns.map((column) => <div role="columnheader" aria-sort={sort?.field === column.field ? sort.desc ? "descending" : "ascending" : "none"} key={column.field}><button className={numericColumn(column) ? "is-numeric" : undefined} type="button" onClick={() => toggleSort(column.field)}>{column.label}{sort?.field === column.field && <DataIcon name={sort.desc ? "chevron-down" : "chevron-up"} size="inline" />}</button></div>)}
       </div>
-      {!rows.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtual.getVirtualItems().map((v) => {
+      {!rows.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((v) => {
         const row = rows[v.index];
         return <TableRow key={row.key} row={row} index={v.index} start={v.start} active={row.key === selected} focused={roving.focus === v.index} columns={sourceColumns} measure={virtual.measureElement} handlers={handlers} renderCell={renderCell} rowProps={rowProps} activatable={Boolean(onActivate)} />;
       })}</VirtualSurface>}
+      {footer}
     </div>
   </div>;
 }
