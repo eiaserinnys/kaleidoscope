@@ -133,7 +133,8 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
   if (!Number.isFinite(token) || token <= 0) throw SHELL_TREE_CONTROL_HEIGHT_MISSING();
   const interactiveIndex = flat.findIndex((row) => row.node.interactiveContent);
   const itemKey = useCallback((index: number) => flat[index].id, [flat]);
-  const { virtual } = useVirtualRows(flat.length, token, scrollRef, false, itemKey);
+  const rowKeys = useMemo(() => flat.map((row) => [row.id]), [flat]);
+  const { virtual } = useVirtualRows(flat.length, token, scrollRef, false, itemKey, undefined, rowKeys);
   const isRowVisible = useCallback((id: string | null | undefined) => {
     const row = virtual.getVirtualItems().find((item) => flat[item.index].id === id);
     const offset = virtual.scrollOffset ?? 0;

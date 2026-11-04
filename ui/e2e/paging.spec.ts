@@ -78,10 +78,15 @@ for (const view of [
       await scroll.getByRole("button", { name: "다시 받기" }).click();
     }
     await row(25).focus();
+    if (view.role === "listbox") await expect(row(25)).toHaveAttribute("aria-setsize", "30");
+    else await expect(scroll).toHaveAttribute("aria-rowcount", "30");
     const beforeAppend = await scroll.evaluate((element) => element.scrollTop);
+    expect(beforeAppend).toBeGreaterThan(0);
     await expect(row(31)).toBeVisible();
     await expect(row(25)).toBeFocused();
-    expect(Math.abs(await scroll.evaluate((element) => element.scrollTop) - beforeAppend)).toBeLessThanOrEqual(1);
+    const afterAppend = await scroll.evaluate((element) => element.scrollTop);
+    console.log(`${view.tab} 쪽 추가 스크롤: ${beforeAppend} → ${afterAppend}`);
+    expect(Math.abs(afterAppend - beforeAppend)).toBeLessThanOrEqual(1);
 
     const calls = await page.evaluate(() => (window as any).conversationHarness.calls().filter((call: { op: string }) => call.op === "data.act").length);
     await app.getByRole("button", { name: "새로 받기" }).evaluate((button: HTMLButtonElement) => button.click());

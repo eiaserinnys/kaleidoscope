@@ -125,7 +125,8 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
   }, [layout, block.grid?.columns, block.grid?.item_width, block.gap]);
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => entries[index].key, [entries]);
-  const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey, viewport);
+  const rowKeys = useMemo(() => Array.from({ length: Math.ceil(entries.length / rowSize) }, (_, i) => entries.slice(i * rowSize, (i + 1) * rowSize).map((entry) => entry.key)), [entries, rowSize]);
+  const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey, viewport, rowKeys);
   const virtualRows = virtual.getVirtualItems();
   const followIndex = entries.findIndex((entry) => entry.key === follow);
   useEffect(() => {

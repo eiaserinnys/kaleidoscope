@@ -61,7 +61,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     }
     return result;
   }, [grouped, block.grouped, grid, columns]);
-  const { virtual } = useVirtualRows(rows.length, grid ? 220 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll);
+  const rowKeys = useMemo(() => rows.map((row) => row.kind === "items" ? row.items.map((item) => item.key) : []), [rows]);
+  const { virtual } = useVirtualRows(rows.length, grid ? 220 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys);
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;

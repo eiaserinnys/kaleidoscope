@@ -68,7 +68,8 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
   const currentColumn = dataColumns.some((column) => column.field === focus?.column) ? columnIndex : Math.min(last.current.column, Math.max(0, dataColumns.length - 1));
   const current = rows[currentRow] && dataColumns[currentColumn] ? { row: rows[currentRow].key, column: dataColumns[currentColumn].field } : null;
   const rowHeight = useRef(32);
-  const { scroll, virtual } = useVirtualRows(rows.length, rowHeight.current);
+  const rowKeys = useMemo(() => rows.map((row) => [row.key]), [rows]);
+  const { scroll, virtual } = useVirtualRows(rows.length, rowHeight.current, undefined, false, undefined, undefined, rowKeys);
   keepRovingRow(virtual, currentRow);
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, visible);

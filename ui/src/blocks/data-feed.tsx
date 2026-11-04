@@ -110,7 +110,8 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   }, [value, block.grouped, collapsedGroups, collapsedKeys]);
   const items = useMemo(() => rows.flatMap((row) => row.kind === "entry" ? [row.item.entry] : []), [rows]);
   const entryRows = useMemo(() => rows.flatMap((row, index) => row.kind === "entry" ? [index] : []), [rows]);
-  const { scroll, virtual } = useVirtualRows(rows.length, 72);
+  const rowKeys = useMemo(() => rows.map((row) => row.kind === "entry" ? [row.item.entry.key] : []), [rows]);
+  const { scroll, virtual } = useVirtualRows(rows.length, 72, undefined, false, undefined, undefined, rowKeys);
   const [copyFeedback, setCopyFeedback] = useState<Record<string, "copied" | "failed">>({});
   const copyTimers = useRef(new Map<string, number>());
   useEffect(() => () => {
