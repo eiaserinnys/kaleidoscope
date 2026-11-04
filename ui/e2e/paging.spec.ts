@@ -168,6 +168,8 @@ async function checkFooterGeometry(scroll: Locator, view: FooterView, state: "lo
       rowEnd: row.right - (name === "table" ? parseFloat(rowStyle.paddingRight) : 0),
       contentStart: content.left, contentEnd: content.right, bottomSpace: box.bottom - inner.bottom,
       iconRight: icon?.right, textLeft: text?.left, actionRight: action?.right,
+      actionLeft: action?.left, actionTop: action?.top, textBottom: text?.bottom,
+      footerContentWidth: footer.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
       iconCenter: icon && (icon.top + icon.height / 2),
       firstLineCenter: text && textStyle && (text.top + parseFloat(textStyle.paddingTop) + parseFloat(textStyle.lineHeight) / 2),
     };
@@ -181,7 +183,10 @@ async function checkFooterGeometry(scroll: Locator, view: FooterView, state: "lo
   if (state === "failed") {
     expect(metrics.textLeft! - metrics.iconRight!).toBeGreaterThanOrEqual(0);
     expect(metrics.textLeft! - metrics.iconRight!).toBeLessThanOrEqual(8);
-    expect(Math.abs(metrics.actionRight! - metrics.rowEnd)).toBeLessThanOrEqual(1);
+    if (metrics.footerContentWidth <= 420) {
+      expect(metrics.actionTop!).toBeGreaterThanOrEqual(metrics.textBottom!);
+      expect(Math.abs(metrics.actionLeft! - metrics.rowStart)).toBeLessThanOrEqual(1);
+    } else expect(Math.abs(metrics.actionRight! - metrics.rowEnd)).toBeLessThanOrEqual(1);
     expect(Math.abs(metrics.iconCenter! - metrics.firstLineCenter!)).toBeLessThanOrEqual(1);
   }
 }
@@ -327,6 +332,10 @@ for (const width of [1200, 360]) test(`분할 칸 ${width} 바닥 줄이 칸 너
   await expect(list.getByRole("button", { name: "더 보기" })).toBeVisible();
   await showFooter(table); await showFooter(list);
   await checkFooterGeometry(table, tableView, "failed");
+  if (width === 360) {
+    const heights = await table.evaluate(element => ({ pane: element.clientHeight, footer: element.querySelector(".ks-load-more")!.getBoundingClientRect().height }));
+    expect(heights.footer).toBeLessThan(heights.pane / 2);
+  }
   await checkFooterGeometry(list, listView, "manual");
   if (captures) await app.screenshot({ path: join(captures, `split-${width}-failed-more.png`) });
 });
@@ -341,12 +350,24 @@ for (const view of [
   await app.getByRole("tab", { name: view.tab }).click();
   const scroll = app.locator(view.selector);
   await expect(scroll.locator(view.row).first()).toBeAttached();
+  const rowStart = await scroll.locator(view.row).first().evaluate(element => element.getBoundingClientRect().left);
+  if (view.name === "repeat") {
+    await emitFooter(page, { ...footerViews[0], pointer: view.pointer }, { source: "list_items", state: "loading", retry: false });
+    const footer = await showFooter(scroll);
+    const start = await footer.locator(".ks-data-skeleton").evaluate(element => element.getBoundingClientRect().left);
+    expect(Math.abs(start - rowStart)).toBeLessThanOrEqual(1);
+    await capture(page, "repeat-360-loading");
+  }
   await page.evaluate(({ pointer }) => {
     const value = Array.from({ length: 30 }, (_, index) => ({ key: String(index + 1), title: `항목 ${index + 1}`, body: `내용 ${index + 1}` }));
     const more = { source: "list_items", state: "failed", retry: true, id: "DATA_TEST_PAGE_FAILED", message: "다음 쪽을 받지 못했습니다. 연결을 확인한 뒤 다시 받으세요." };
     (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: { sources: {}, values: { [pointer]: { status: "ready", value, more } } } });
   }, view);
   await showFooter(scroll);
+  if (view.name === "repeat") {
+    const start = await scroll.locator(".ks-load-more .ks-empty-state-icon").evaluate(element => element.getBoundingClientRect().left);
+    expect(Math.abs(start - rowStart)).toBeLessThanOrEqual(1);
+  }
   const widths = await scroll.evaluate((element) => ({ content: element.scrollWidth, view: element.clientWidth }));
   expect(widths.content).toBeLessThanOrEqual(widths.view);
   await capture(page, `${view.name}-360-failed`);
