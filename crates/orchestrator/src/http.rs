@@ -13,7 +13,12 @@ pub fn router(state: AppState) -> Router {
     let service = StreamableHttpService::new(
         move || Ok(McpServer::new(mcp_state.clone())),
         LocalSessionManager::default().into(),
-        StreamableHttpServerConfig::default().with_json_response(true),
+        // /mcp는 모든 요청에 bearer를 요구하므로 DNS 리바인딩된 페이지가 인증된 요청을 만들 수 없다.
+        // 원격 서버는 프록시의 공개 Host로 사용하며, 같은 라우터를 쓰는 내장 서버도 bearer가 필수다.
+        // 따라서 루프백만 허용하는 rmcp 기본 Host 검사를 끈다.
+        StreamableHttpServerConfig::default()
+            .with_json_response(true)
+            .disable_allowed_hosts(),
     );
     let mcp = Router::new()
         .route_service("/mcp", service)

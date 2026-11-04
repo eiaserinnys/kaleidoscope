@@ -234,6 +234,48 @@ async fn mcp_requires_bearer_token() {
 }
 
 #[tokio::test]
+async fn mcp_public_host_accepts_valid_bearer_token() {
+    let app = router(AppState::in_memory("secret"));
+    let request = Request::builder()
+        .method("POST")
+        .uri("/mcp")
+        .header(header::HOST, "eiaserinnys.me")
+        .header(header::AUTHORIZATION, "Bearer secret")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::ACCEPT, "application/json, text/event-stream")
+        .body(Body::from(
+            json!({
+                "jsonrpc":"2.0",
+                "id":1,
+                "method":"initialize",
+                "params":{
+                    "protocolVersion":"2025-03-26",
+                    "capabilities":{},
+                    "clientInfo":{"name":"test","version":"1"}
+                }
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn mcp_public_host_requires_bearer_token() {
+    let app = router(AppState::in_memory("secret"));
+    let mut request = request("POST", "/mcp", None, Body::empty());
+    request
+        .headers_mut()
+        .insert(header::HOST, "eiaserinnys.me".parse().unwrap());
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let error: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(error["id"], "SERVER_HTTP_MCP_AUTH_REJECTED");
+}
+
+#[tokio::test]
 async fn mcp_http_uses_workspace_header_defaults_and_requires_explicit_delete_id() {
     let state = AppState::in_memory("secret");
     let make_workspace = |id: &str| Workspace {
