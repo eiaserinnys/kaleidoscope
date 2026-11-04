@@ -36,6 +36,7 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-icon-calculator", 1),
     ("builtin-icon-weather", 1),
     ("builtin-icon-store", 1),
+    ("builtin-agent-client", 5),
 ];
 
 // BUNDLED_ASSET_KEYS와 같은 순서. 코어의 번들 매니페스트 대조 시험이 형식을 확인한다.
@@ -61,6 +62,7 @@ const BUNDLED_ASSET_FORMATS: &[AssetFormat] = &[
     AssetFormat::Svg,
     AssetFormat::Svg,
     AssetFormat::Svg,
+    AssetFormat::Javascript,
 ];
 
 pub fn bundled_asset_format(id: &str, version: u32) -> Option<AssetFormat> {
@@ -82,7 +84,7 @@ pub const WEATHER_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-icon-weather", 1),
 ];
 pub const AGENT_ASSET_KEYS: &[(&str, u32)] = &[
-    ("builtin-agent-client", 4),
+    ("builtin-agent-client", 5),
     ("builtin-icon-agent", 1),
 ];
 
