@@ -61,6 +61,8 @@ pub mod mcp;
 pub mod media;
 pub mod process;
 pub mod realtime;
+pub mod registry_install;
+pub mod store_client;
 pub mod retired;
 pub mod server;
 pub mod share;
@@ -80,6 +82,8 @@ pub use mcp::*;
 pub use media::*;
 pub use process::*;
 pub use realtime::*;
+pub use registry_install::*;
+pub use store_client::*;
 pub use server::*;
 pub use share::*;
 pub use shell::*;
@@ -107,6 +111,8 @@ const CONNECTION_ENTRIES: [ErrorEntry; conn::ENTRIES.len() + realtime::ENTRIES.l
     connection_entries();
 
 pub const AREAS: &[(&str, &[ErrorEntry])] = &[
+    ("STORECLIENT", store_client::ENTRIES),
+    ("REGISTRYINSTALL", registry_install::ENTRIES),
     ("APP", app::ENTRIES),
     ("DESK", desk::ENTRIES),
     ("FILE", file::ENTRIES),

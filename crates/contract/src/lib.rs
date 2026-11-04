@@ -207,6 +207,7 @@ pub mod transfer;
 /// MCP와 로컬 에이전트가 공유하는 앱 제작 안내.
 pub const APP_AUTHORING_GUIDE: &str = include_str!("app_guide.txt");
 
+pub mod store;
 pub mod app_storage;
 pub mod assets;
 pub mod builtin;
@@ -365,6 +366,12 @@ pub const UPDATE_CHECK_INTERVAL_SECS: u64 = 300;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct App {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub origin: Option<store::StoreOrigin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub installed_version: Option<u32>,
     /// 앱 정의의 `id`.
     pub id: String,
     /// 지금 쓰는 버전의 정의에 있는 `name`.
@@ -1117,6 +1124,8 @@ pub enum PermissionDecl {
     Process { id: String, label: String },
     /// 이 기기에서 코어 성능 기록을 조회하고 측정한다.
     Profiler { id: String, label: String },
+    /// 앱스토어에서 목록 읽기와 앱 설치·삭제.
+    Store { id: String, label: String },
 }
 
 /// (모듈 `files` 2판) `files` 권한이 가리키는 범위.
@@ -1184,7 +1193,8 @@ impl PermissionDecl {
             | PermissionDecl::Connection { id, .. }
             | PermissionDecl::Http { id, .. }
             | PermissionDecl::Profiler { id, .. }
-            | PermissionDecl::Process { id, .. } => id,
+            | PermissionDecl::Process { id, .. }
+            | PermissionDecl::Store { id, .. } => id,
         }
     }
 
@@ -1196,6 +1206,7 @@ impl PermissionDecl {
             PermissionDecl::Http { .. } => "http",
             PermissionDecl::Process { .. } => "process",
             PermissionDecl::Profiler { .. } => "profiler",
+            PermissionDecl::Store { .. } => "store",
         }
     }
 
@@ -1205,7 +1216,7 @@ impl PermissionDecl {
                 *access
             }
             PermissionDecl::Process { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
-            PermissionDecl::Profiler { .. } => FileAccess::Readwrite,
+            PermissionDecl::Profiler { .. } | PermissionDecl::Store { .. } => FileAccess::Readwrite,
         }
     }
 }
@@ -4664,6 +4675,9 @@ pub enum CoreRequest {
     #[serde(rename = "connection.realtime.release")]
     RealtimeRelease { window_id: String, session: String },
 
+    #[serde(rename = "app.respond_install_permission")]
+    AppRespondInstallPermission { window_id: String, request_id: String, digest: String, allow: bool },
+
     /// 프로세스 명령. 허용 응답은 쉘에서만 보낸다.
     #[serde(rename = "process.start")]
     ProcessStart {
@@ -5361,6 +5375,8 @@ pub enum CoreReply {
     },
     #[serde(rename = "context.commit")]
     ContextCommit {},
+    #[serde(rename = "app.respond_install_permission")]
+    AppRespondInstallPermission {},
     #[serde(rename = "process.respond_permission")]
     ProcessRespondPermission {},
     #[serde(rename = "process.attach")]
@@ -5561,6 +5577,8 @@ pub enum CoreEvent {
         window_id: String,
         update: app_storage::StorageUpdate,
     },
+    #[serde(rename = "app.install_permission")]
+    AppInstallPermission { window_id: String, request_id: String, app_name: String, release: u32, digest: String, definition: AppDefinition },
     /// 쉘이 사용자에게 실행 허용을 묻는다.
     #[serde(rename = "process.permission")]
     ProcessPermission {
