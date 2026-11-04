@@ -32,6 +32,29 @@ it.each(["list", "grid"] as const)("%s 목록은 배지와 날짜의 순서를 �
   expect(text.indexOf("표식") < text.indexOf("날짜")).toBe(layout === "list");
   vi.unstubAllGlobals();
 });
+it("아이콘 목록은 이름만 보이고 선택할 때 원래 항목을 보낸다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  const item = { key: "a", title: "계산기 플러스", subtitle: "설명", meta: "날짜", color: "#abcdef", badges: [{ text: "표식" }] };
+  const { calls } = setup({ type: "list", layout: "icons", items: [item], on_select: { set_state: "choice" } } as unknown as Block, { choice: null });
+  const tile = await screen.findByRole("option", { name: item.title });
+  expect(tile.classList.contains("ks-icon-tile")).toBe(true);
+  expect(tile.querySelector(".lucide-layout-grid")).not.toBeNull();
+  expect(tile.textContent).toBe(item.title);
+  fireEvent.click(tile);
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a", item })));
+  vi.unstubAllGlobals();
+});
+it.each([[360, 6], [1000, 18]])("%i 폭의 초기 아이콘 뼈대는 두 줄과 한 줄 이름을 쓴다", async (width, count) => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
+  const { transport } = setup({ type: "list", layout: "icons", items: { expr: "[]" } });
+  await screen.findByText("없음", { exact: true });
+  await act(async () => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/items": { status: "loading" } } } }));
+  const loading = await screen.findByRole("status", { name: "불러오는 중" });
+  expect(loading.querySelectorAll(".ks-icon-tile-skeleton")).toHaveLength(count);
+  for (const name of loading.querySelectorAll(".ks-icon-skeleton-name")) expect(name.children).toHaveLength(1);
+  vi.unstubAllGlobals();
+});
 it("moves through grouped list entries and selects the focused item", async () => {
   const { calls } = setup({ type: "list", grouped: true, items: [{ title: "묶음", items: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }] }], on_select: { set_state: "choice" } }, { choice: null });
   const first = await screen.findByRole("option", { name: "하나" });

@@ -21,11 +21,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-type Kind = "list" | "grouped" | "list-grid" | "feed" | "table" | "grid" | "tree" | "repeat";
+type Kind = "list" | "grouped" | "list-grid" | "list-icons" | "feed" | "table" | "grid" | "tree" | "repeat";
 const items = (prefix: string, count = 80) => Array.from({ length: count }, (_, i) => ({ key: `${prefix}-${i}`, title: `${prefix} ${i}`, body: `${prefix} ${i}` }));
 function block(kind: Kind): Block {
   const binding = { state: "rows" };
-  if (kind === "list" || kind === "grouped" || kind === "list-grid") return { type: "list", items: binding, grouped: kind === "grouped", ...(kind === "list-grid" ? { layout: "grid" } : {}) };
+  if (kind === "list" || kind === "grouped" || kind === "list-grid" || kind === "list-icons") return { type: "list", items: binding, grouped: kind === "grouped", ...(kind === "list-grid" ? { layout: "grid" } : kind === "list-icons" ? { layout: "icons" } : {}) };
   if (kind === "feed") return { type: "feed", entries: binding };
   if (kind === "table" || kind === "grid") return { type: "table", rows: binding, columns: [{ field: "title", label: "제목" }], ...(kind === "grid" ? { selection: "cell" } : {}) };
   if (kind === "tree") return { type: "tree", items: binding };
@@ -35,7 +35,7 @@ function value(kind: Kind, rows: ReturnType<typeof items>) {
   return kind === "grouped" ? [{ title: "묶음", items: rows }] : rows;
 }
 async function setup(kind: Kind) {
-  const rows = items("이전");
+  const rows = items("이전", kind === "list-icons" ? 240 : 80);
   const state = { rows: value(kind, rows) };
   const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 25, modules: {} }, permissions: [], state, ui: block(kind) };
   const seed = makeTestSeed({ definitions: [definition] });
@@ -51,7 +51,7 @@ async function setup(kind: Kind) {
   return { rows, scroller, update, scroll, store };
 }
 
-it.each(["list", "grouped", "list-grid", "feed", "table", "grid", "tree", "repeat"] as Kind[])("%s에서 보이던 키가 모두 사라지면 맨 위로 간다", async (kind) => {
+it.each(["list", "grouped", "list-grid", "list-icons", "feed", "table", "grid", "tree", "repeat"] as Kind[])("%s에서 보이던 키가 모두 사라지면 맨 위로 간다", async (kind) => {
   const { rows, scroller, update, scroll, store } = await setup(kind);
   await scroll();
   await update([rows[0], ...items("새 목록")]);
@@ -73,7 +73,7 @@ it("트리에서 폴더를 펼치고 접어도 보던 위치를 지킨다", asyn
   expect(tree.scrollTop).toBe(800);
 });
 
-it.each(["list", "grouped", "list-grid", "feed", "table", "grid", "tree", "repeat"] as Kind[])("%s에서 새로 읽기, 이어 붙이기, 일부 삭제와 앞 삽입은 위치를 지킨다", async (kind) => {
+it.each(["list", "grouped", "list-grid", "list-icons", "feed", "table", "grid", "tree", "repeat"] as Kind[])("%s에서 새로 읽기, 이어 붙이기, 일부 삭제와 앞 삽입은 위치를 지킨다", async (kind) => {
   const { rows, scroller, update, scroll, store } = await setup(kind);
   await scroll();
   for (const next of [rows.map((row) => ({ ...row, title: `${row.title}!` })), [...rows, ...items("다음", 10)], rows.filter((_, i) => i !== 21), [...items("앞", 2), ...rows]]) {

@@ -317,20 +317,21 @@
   margin-inline-start: auto;
 }
 
-.ks-explorer-icons {
+.ks-icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(var(--ks-space-6) * 3), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--ks-space-6) * 3 + var(--ks-space-2)), 1fr));
   align-content: start;
-  gap: var(--ks-space-2);
-  padding: var(--ks-space-3);
+  gap: var(--ks-space-1);
 }
 
-.ks-explorer-icon {
+.ks-explorer-icons { padding: var(--ks-space-2); }
+
+.ks-icon-tile {
   display: flex;
   min-width: 0;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--ks-space-1);
   border: 0;
   border-radius: var(--ks-radius-small);
@@ -338,25 +339,24 @@
   color: var(--ks-color-text);
   cursor: pointer;
   font: inherit;
-  padding: var(--ks-space-2);
+  padding: var(--ks-space-4) var(--ks-space-2) var(--ks-space-3);
   text-align: center;
 }
 
-.ks-explorer-icon:hover {
+.ks-icon-tile:hover {
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
-.ks-explorer-icon.is-selected {
+.ks-icon-tile.is-selected {
   background: var(--ks-color-selection);
 }
 
-.ks-explorer-icon-name {
+.ks-icon-tile-name {
   display: -webkit-box;
   width: 100%;
   overflow: hidden;
   font-size: var(--ks-type-body);
   line-height: var(--ks-line-body);
-  overflow-wrap: anywhere;
   text-align: center;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;

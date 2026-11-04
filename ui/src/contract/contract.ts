@@ -916,7 +916,7 @@ color?: string, badges?: Array<Badge>,
  */
 image?: MediaRef, };
 
-export type ListLayout = "rows" | "grid";
+export type ListLayout = "rows" | "grid" | "icons";
 
 /**
  * `map` 블록의 지점 하나.

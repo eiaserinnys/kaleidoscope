@@ -24,7 +24,15 @@ import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 
 const rowRenders = vi.hoisted(() => new Map<string, number>());
+const tileRenders = vi.hoisted(() => new Map<string, number>());
 const blockWrapperRenders = vi.hoisted(() => new Map<string, number>());
+vi.mock("../components/icon-tile", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../components/icon-tile")>();
+  return { ...actual, IconTile: (props: Parameters<typeof actual.IconTile>[0]) => {
+    tileRenders.set(props.name, (tileRenders.get(props.name) ?? 0) + 1);
+    return <actual.IconTile {...props} />;
+  } };
+});
 vi.mock("../components/tree/tree-row", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../components/tree/tree-row")>();
   const { memo } = await import("react");
@@ -1017,6 +1025,42 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     expect(countFor("window-a", "/ui/children/0")).toBe(0);
     expect(countFor("window-a", "/ui/children/2")).toBe(0);
     expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("아이콘 목록은 다른 창과 형제를 격리하고 선택과 쪽 추가에 필요한 타일만 그린다", async () => {
+    mockVirtualLayout();
+    const paged: AppDefinition = { ...definition, ui: { type: "stack", direction: "column", children: [
+      { type: "text", value: { state: "first" } },
+      { type: "list", layout: "icons", items: { expr: "$data.sample" }, selected: { state: "second" } },
+      { type: "text", value: { state: "compound" } },
+    ] } };
+    const { store, transport } = await setup([paged], { first: "a", second: "a", compound: "c" });
+    const rows = [{ key: "a", title: "아이콘 하나" }, { key: "b", title: "아이콘 둘" }, { key: "c", title: "아이콘 셋" }];
+    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: {
+      "/ui/children/1/items": { status: "ready", value: rows },
+      "/ui/children/1/selected": { status: "ready", value: "a" },
+    } } }));
+    await screen.findByRole("option", { name: "아이콘 셋" });
+    await settleRenders(); tileRenders.clear(); calls.length = 0;
+    await setState(store, "window-b", "first", "다른 창");
+    await settleRenders();
+    expect(tileRenders.size).toBe(0);
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    tileRenders.clear(); calls.length = 0;
+    await setState(store, "window-a", "second", "b");
+    await settleRenders();
+    expect(Object.fromEntries(tileRenders)).toEqual({ "아이콘 하나": 1, "아이콘 둘": 1 });
+    expect(countFor("window-a", "/ui/children/0")).toBe(0);
+    expect(countFor("window-a", "/ui/children/2")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    tileRenders.clear();
+    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: {
+      "/ui/children/1/items": { status: "ready", value: [...rows, { key: "d", title: "아이콘 넷" }] },
+    } } }));
+    await settleRenders();
+    for (const row of rows) expect(tileRenders.get(row.title) ?? 0).toBeLessThanOrEqual(1);
+    expect(tileRenders.get("아이콘 넷")).toBe(1);
     store.dispose();
   });
 

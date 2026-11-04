@@ -11,6 +11,29 @@ async function capture(page: import("@playwright/test").Page, name: string) {
   await page.getByTestId("app-window-paging-test").screenshot({ path: join(captures, `${name}.png`) });
 }
 
+for (const [tab, source] of [["격자 목록", "grid_items"], ["아이콘 목록", "icon_items"]] as const) {
+  test(`${tab}은 다음 쪽이 마지막 줄만 채워도 자동으로 이어 받는다`, async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 800 });
+    await page.goto("/?preview=paging-test");
+    const app = page.getByTestId("app-window-paging-test");
+    await app.getByRole("tab", { name: tab, exact: true }).click();
+    if (tab === "아이콘 목록") {
+      await expect(app.locator(".ks-list.is-icons > .ks-icon-skeleton-grid")).toBeVisible();
+      await capture(page, "icons-initial-loading");
+    }
+    const list = app.getByRole("listbox");
+    await expect(list.getByRole("option", { name: "첫 칸" })).toBeVisible();
+    if (tab === "아이콘 목록") {
+      await expect(list.locator(".ks-icon-skeleton-grid")).toBeVisible();
+      await capture(page, "icons-next-loading");
+    }
+    await expect(list.getByRole("option", { name: "셋째 칸" })).toBeVisible();
+    const calls = await page.evaluate((name) => (window as any).conversationHarness.calls().filter((call: { op: string; source?: string }) => call.op === "data.more" && call.source === name).length, source);
+    expect(calls).toBe(2);
+    await expect(list.getByRole("button", { name: "더 보기" })).toHaveCount(0);
+  });
+}
+
 test("목록은 다음 쪽을 기다리고 실패 뒤 다시 받아 이어 붙인다", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/?preview=paging-test");

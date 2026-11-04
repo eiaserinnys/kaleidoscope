@@ -5,6 +5,7 @@ import { ArrowUp, ChevronRight, Download, File, FileCode, FileImage, FileText, F
 import { toCoreError } from "../core/core-transport";
 import { TableView, type Row } from "./data-table";
 import { useRoving } from "./data-view-common";
+import { IconTile, useIconGridColumns } from "../components/icon-tile";
 import type { BlockContext } from "./block-context";
 
 type ExplorerRow = Row & { kind: "dir" | "file" };
@@ -132,7 +133,7 @@ export function ExplorerContent({
   const grid = useRef<HTMLDivElement>(null);
   const breadcrumbRef = useRef<HTMLElement>(null);
   const ellipsisRef = useRef<HTMLSpanElement>(null);
-  const [gridColumns, setGridColumns] = useState(1);
+  const gridColumns = useIconGridColumns(grid, view === "icons" && entries !== null && entries.length > 0);
   const roving = useRoving(rows, selected, grid);
 
   const readFolder = async (directory: string, showLoading = false) => {
@@ -191,25 +192,6 @@ export function ExplorerContent({
     globalThis.window.addEventListener("focus", refresh);
     return () => globalThis.window.removeEventListener("focus", refresh);
   }, [permission, store, window.id]);
-
-  useEffect(() => {
-    const element = grid.current;
-    if (view !== "icons" || !element) return;
-    const resize = () => {
-      const style = getComputedStyle(element);
-      const unit = Number.parseFloat(style.getPropertyValue("--ks-space-6")) || 32;
-      const gap = Number.parseFloat(style.getPropertyValue("--ks-space-2")) || 8;
-      const minimum = unit * 3;
-      const contentWidth = element.clientWidth
-        - (Number.parseFloat(style.paddingInlineStart) || 0)
-        - (Number.parseFloat(style.paddingInlineEnd) || 0);
-      setGridColumns(Math.max(1, Math.floor((contentWidth + gap) / (minimum + gap))));
-    };
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [view, entries]);
 
   const segments = folder ? folder.split("/") : [];
   const breadcrumb = [{ name: scope === "pc" ? permissionLabel : rootName, path: "" }, ...segments.map((name, index) => ({
@@ -275,15 +257,12 @@ export function ExplorerContent({
     {error ? <div className="ks-inline-error" role="alert">{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</div>
       : !visible && loading ? <StatusText>불러오는 중</StatusText>
       : visible && sortedEntries.length === 0 ? <div className="ks-explorer-empty"><EmptyState icon={<FolderOpen size="empty" />} text="빈 폴더" /></div>
-          : view === "icons" ? <div aria-label="폴더 내용" className="ks-data-view ks-explorer-icons" ref={grid} role="listbox">
+          : view === "icons" ? <div aria-label="폴더 내용" className="ks-data-view ks-icon-grid ks-explorer-icons" ref={grid} role="listbox">
             {sortedEntries.map((entry, index) => {
               const active = selected === entry.path;
-              return <button aria-label={entry.name} aria-posinset={index + 1} aria-selected={active} aria-setsize={sortedEntries.length} className={`ks-explorer-icon${active ? " is-selected" : ""}`} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
+              return <IconTile name={entry.name} icon={entry.kind === "dir" ? directoryIcon(entry, "tile") : fileIcon(entry, "tile")} selected={active} aria-label={entry.name} aria-posinset={index + 1} aria-selected={active} aria-setsize={sortedEntries.length} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
                 if (entry.kind === "file") { event.preventDefault(); setSelected(entry.path); onContextFile(event.currentTarget, entry.path); }
-              }} onDoubleClick={(event) => activate(event.currentTarget, entry)} onFocus={() => roving.setFocus(index)} onKeyDown={(event) => roving.keyDown(event, index, () => activate(event.currentTarget, entry), gridColumns)} role="option" tabIndex={roving.focus === index ? 0 : -1} title={entry.name} type="button">
-                {entry.kind === "dir" ? directoryIcon(entry, "tile") : fileIcon(entry, "tile")}
-                <span className="ks-explorer-icon-name">{entry.name}</span>
-              </button>;
+              }} onDoubleClick={(event) => activate(event.currentTarget, entry)} onFocus={() => roving.setFocus(index)} onKeyDown={(event) => roving.keyDown(event, index, () => activate(event.currentTarget, entry), gridColumns)} role="option" tabIndex={roving.focus === index ? 0 : -1} title={entry.name} />;
             })}
           </div>
           : <TableView ariaLabel="폴더 내용" columns={columns} compareRows={compareRows} onActivate={(row, anchor) => {
