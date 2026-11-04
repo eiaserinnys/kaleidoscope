@@ -11,7 +11,7 @@ import { Dialog } from "../components/dialog";
 import { X } from "../components/icons";
 import { Select, Toggle } from "../components/select-toggle";
 import { Button, ErrorId, IconButton } from "../components/primitives";
-import { display } from "./data-layout";
+import { display, isMultilineInput } from "./data-layout";
 import { asArray } from "./data-view-common";
 import { createSerialSend, createThrottledSend } from "../data/throttled-send";
 import { isWindowTop, useWindowVisible } from "../data/window-state";
@@ -36,7 +36,7 @@ const bindingName = (value: unknown, fallback: string) => {
 
 export function InputBlock({ block, pointer }: Props<"input">) {
   const data = useWindowData();
-  const multiline = Boolean(block.multiline || (block.rows ?? 0) >= 2);
+  const multiline = isMultilineInput(block);
   const bound = useBinding(`${pointer}/value`, block.value);
   const label = useBinding(`${pointer}/label`, block.label ?? null);
   const placeholder = useBinding(`${pointer}/placeholder`, block.placeholder ?? null);
