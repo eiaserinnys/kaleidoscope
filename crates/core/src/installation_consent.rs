@@ -1,5 +1,5 @@
 //! 설치 요청의 소유 창과 확인한 묶음을 묶어 동의를 기다린다.
-use std::{collections::HashMap, sync::{mpsc, Arc, Mutex}};
+use std::{collections::HashMap, sync::{atomic::Ordering, mpsc, Arc, Mutex}};
 use kaleidoscope_contract::{errors, AppDefinition, CoreError, CoreEvent, CoreReply};
 use crate::Inner;
 
@@ -22,7 +22,9 @@ pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, re
         if !state.shared.windows.iter().any(|w| w.id == window && w.app_id == app && w.app_version == version) {
             return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED());
         }
-        inner.installation_consents.pending.lock().unwrap().insert(request_id.clone(), Pending {
+        let mut pending = inner.installation_consents.pending.lock().unwrap();
+        if inner.shutting_down.load(Ordering::SeqCst) { return Ok(false); }
+        pending.insert(request_id.clone(), Pending {
             window: window.into(), app: app.into(), version, digest: digest.into(), reply,
         });
     }

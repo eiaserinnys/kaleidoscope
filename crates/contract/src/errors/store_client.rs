@@ -41,7 +41,7 @@ error_catalog! { ENTRIES;
     }
     STORECLIENT_INSTALL_LOCAL_MODIFIED(app) {
         class: InvalidRequest, place: "스토어 설치 수정본 검사", cause: "설치 후 앱이 수정되었다",
-        message: "{app} 앱을 설치한 뒤 수정했습니다. 수정본을 보존하려고 업데이트를 멈췄습니다.", fix: "수정본을 확인하세요"
+        message: "{app} 앱을 설치한 뒤 수정했습니다. 수정본을 보관한 뒤 삭제하고 다시 설치하세요.", fix: "수정본을 보관한 뒤 삭제하고 다시 설치하세요"
     }
     STORECLIENT_INSTALL_WINDOW_MISSING() {
         class: NotFound, place: "스토어 설치 창 검사", cause: "요청한 창이 없다",

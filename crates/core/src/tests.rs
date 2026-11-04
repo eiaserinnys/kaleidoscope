@@ -1838,6 +1838,8 @@ struct FakeRegistryClient {
     store_apps: Mutex<BTreeMap<String, RegistryApp>>,
     store_requests: Mutex<Vec<kaleidoscope_contract::store::DeviceInstallRequest>>,
     store_server: Mutex<Option<kaleidoscope_orchestrator::AppState>>,
+    store_install_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
+    store_remove_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
     asset_bytes: Mutex<Option<Vec<u8>>>,
     storage_reads: AtomicUsize,
     preferences_replies: Mutex<VecDeque<Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError>>>,
@@ -1887,6 +1889,11 @@ impl RegistryClient for FakeRegistryClient {
         app.app.origin = Some(request.origin.clone());
         app.app.installed_version = Some(version);
         apps.insert(definition.id, app.clone());
+        drop(apps);
+        if let Some((ready, resume)) = self.store_install_pause.lock().unwrap().take() {
+            ready.send(()).unwrap();
+            resume.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
         Ok(kaleidoscope_contract::store::DeviceInstallReply { app, unchanged: false })
     }
     fn remove_store_app(&self, _: &str, _: &str, id: &str, request: &kaleidoscope_contract::store::DeviceRemoveRequest) -> Result<(), RegistryError> {
@@ -1894,6 +1901,10 @@ impl RegistryClient for FakeRegistryClient {
             let _: Value = store_runtime_tests::server_request(&server, "DELETE", &format!("/api/device/apps/{id}"), request)?;
         }
         self.store_apps.lock().unwrap().remove(id);
+        if let Some((ready, resume)) = self.store_remove_pause.lock().unwrap().take() {
+            ready.send(()).unwrap();
+            resume.recv_timeout(Duration::from_secs(10)).unwrap();
+        }
         Ok(())
     }
     fn asset_get(

@@ -1,6 +1,91 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+fn store_caller() -> (TempDir, Arc<Core>, Arc<FakeRegistryClient>, String) {
+    let temp = TempDir::new().unwrap();
+    let definition = json!({"id":"store-caller","name":"스토어 호출자","requires":{"blocks":4,"modules":{"store":1}},
+        "permissions":[{"module":"store","id":"catalog","label":"스토어"}],"ui":{"type":"text","value":"시험"}}).to_string();
+    let registry = registry_client();
+    let core = Arc::new(open_core_with_client(temp.path(), vec![definition], &Arc::new(FakeHost::default()), registry.clone()));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "store-caller");
+    mark_connected(&core);
+    *core.inner.store_transport.lock().unwrap() = Some(Arc::new(crate::store::tests::fixture().0));
+    (temp, core, registry, window)
+}
+
+fn install_example(core: Arc<Core>, window: String) -> thread::JoinHandle<Result<bool, CoreError>> {
+    thread::spawn(move || crate::store::install::install(&core.inner, &window, "catalog", json!("https://example.com/appstore"), json!("example"), json!(3)))
+}
+
+fn switch_cache(core: &Core) {
+    let definition = json!({"id":"example","name":"새 서버 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"새 서버"}}).to_string();
+    let mut state = core.inner.state.lock().unwrap();
+    core.inner.generation.fetch_add(1, Ordering::SeqCst);
+    crate::app_commands::import_registry(&mut state, registry_app(2, &definition));
+}
+
+#[test]
+fn store_install_response_from_previous_server_does_not_change_current_cache() {
+    let (_temp, core, registry, window) = store_caller();
+    let (consent_tx, consent_rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, .. } = event { consent_tx.send((request_id.clone(), digest.clone())).unwrap(); }));
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (resume_tx, resume_rx) = mpsc::channel();
+    *registry.store_install_pause.lock().unwrap() = Some((ready_tx, resume_rx));
+    let task = install_example(core.clone(), window.clone());
+    let (request_id, digest) = consent_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { window_id:window, request_id, digest, allow:true }).unwrap();
+    ready_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    switch_cache(&core);
+    resume_tx.send(()).unwrap();
+    assert_eq!(task.join().unwrap().unwrap_err().id.as_deref(), Some("STORECLIENT_INSTALL_CONTEXT_CHANGED"));
+    let state = core.inner.state.lock().unwrap();
+    assert_eq!(state.shared.apps.iter().find(|a| a.id == "example").unwrap().name, "새 서버 앱");
+}
+
+#[test]
+fn store_install_does_not_send_after_server_changes_during_consent() {
+    let (_temp, core, registry, window) = store_caller();
+    let (consent_tx, consent_rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, .. } = event { consent_tx.send((request_id.clone(), digest.clone())).unwrap(); }));
+    let task = install_example(core.clone(), window.clone());
+    let (request_id, digest) = consent_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    switch_cache(&core);
+    core.handle(CoreRequest::AppRespondInstallPermission { window_id:window, request_id, digest, allow:true }).unwrap();
+    assert_eq!(task.join().unwrap().unwrap_err().id.as_deref(), Some("STORECLIENT_INSTALL_CONTEXT_CHANGED"));
+    assert!(registry.store_requests.lock().unwrap().is_empty());
+}
+
+#[test]
+fn store_remove_response_from_previous_server_does_not_change_current_cache() {
+    let (_temp, core, registry, window) = store_caller();
+    let old = json!({"id":"example","name":"이전 서버 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"이전"}}).to_string();
+    crate::app_commands::import_registry(&mut core.inner.state.lock().unwrap(), registry_app(1, &old));
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (resume_tx, resume_rx) = mpsc::channel();
+    *registry.store_remove_pause.lock().unwrap() = Some((ready_tx, resume_rx));
+    let target = core.clone();
+    let task = thread::spawn(move || crate::store::install::remove(&target.inner, &window, "catalog", json!("example")));
+    ready_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    switch_cache(&core);
+    resume_tx.send(()).unwrap();
+    assert_eq!(task.join().unwrap().unwrap_err().id.as_deref(), Some("STORECLIENT_INSTALL_CONTEXT_CHANGED"));
+    let state = core.inner.state.lock().unwrap();
+    assert_eq!(state.shared.apps.iter().find(|a| a.id == "example").unwrap().name, "새 서버 앱");
+}
+
+#[test]
+fn store_consent_registration_after_shutdown_cancels_immediately() {
+    let (_temp, core, _registry, window) = store_caller();
+    let definition = core.inner.state.lock().unwrap().shared.app_versions.iter().find(|a| a.app_id == "store-caller").unwrap().definition.clone();
+    core.shutdown();
+    let (tx, rx) = mpsc::channel();
+    let waiter = core.clone();
+    thread::spawn(move || { let _ = tx.send(crate::installation_consent::wait(&waiter.inner, &window, "store-caller", 1, 3, "digest", &definition)); });
+    assert!(!rx.recv_timeout(Duration::from_secs(2)).expect("종료 후 동의 등록이 대기했습니다").unwrap());
+}
+
 pub(super) fn server_request<T: serde::de::DeserializeOwned>(server: &kaleidoscope_orchestrator::AppState, method: &str, path: &str, body: &impl serde::Serialize) -> Result<T, RegistryError> {
     use tower::ServiceExt;
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
@@ -19,11 +104,12 @@ pub(super) fn server_request<T: serde::de::DeserializeOwned>(server: &kaleidosco
 }
 
 fn test_server(directory: &Path) -> (kaleidoscope_orchestrator::AppState, PathBuf) {
+    let directory = directory.canonicalize().unwrap();
     let path = directory.join("store_test_db.sqlite");
     std::env::set_var("TEST_DATABASE_URL", &path);
     let path = PathBuf::from(std::env::var_os("TEST_DATABASE_URL").unwrap());
-    let name = path.to_string_lossy();
-    assert!(name.contains("test") && !["atom_db", "reverie", "soulstream", "serendipity"].iter().any(|production| name.contains(production)));
+    assert_eq!(path.parent(), Some(directory.as_path()));
+    assert_eq!(path.file_name().and_then(|name| name.to_str()), Some("store_test_db.sqlite"));
     let server = kaleidoscope_orchestrator::AppState::open(&path, "test-mcp-token".into()).unwrap();
     let db = rusqlite::Connection::open(&path).unwrap();
     for table in ["devices", "apps", "asset_versions"] {
