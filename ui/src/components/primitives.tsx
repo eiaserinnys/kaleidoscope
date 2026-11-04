@@ -17,6 +17,7 @@ export interface ButtonProps {
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
   "aria-disabled"?: boolean;
+  "aria-busy"?: boolean;
   "data-ks-user-consent"?: boolean;
   onPointerEnter?: React.PointerEventHandler<HTMLButtonElement>;
   onPointerLeave?: React.PointerEventHandler<HTMLButtonElement>;
@@ -40,6 +41,7 @@ export function Button({
   "aria-invalid": invalid,
   "aria-describedby": describedBy,
   "aria-disabled": ariaDisabled,
+  "aria-busy": ariaBusy,
   "data-ks-user-consent": userConsent,
   onPointerEnter, onPointerLeave, onPointerDown, onFocus, onBlur,
 }: ButtonProps) {
@@ -54,6 +56,7 @@ export function Button({
       aria-invalid={invalid}
       aria-describedby={describedBy}
       aria-disabled={ariaDisabled}
+      aria-busy={ariaBusy}
       data-ks-user-consent={userConsent || undefined}
       onClick={onClick}
       onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onPointerDown={onPointerDown} onFocus={onFocus} onBlur={onBlur}
@@ -84,15 +87,17 @@ export interface IconButtonProps {
   onLostPointerCapture?: React.PointerEventHandler<HTMLButtonElement>;
   onBlur?: React.FocusEventHandler<HTMLButtonElement>;
   "aria-disabled"?: boolean;
+  "aria-busy"?: boolean;
   "data-ks-user-consent"?: boolean;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, tabIndex, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "data-ks-user-consent": userConsent }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, tabIndex, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "aria-busy": ariaBusy, "data-ks-user-consent": userConsent }: IconButtonProps) {
   const button = (
     <button
       aria-label={label}
       aria-pressed={pressed}
       aria-disabled={ariaDisabled}
+      aria-busy={ariaBusy}
       data-ks-user-consent={userConsent || undefined}
       className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${variant === "embedded" ? " is-embedded" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}

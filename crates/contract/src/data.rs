@@ -104,6 +104,7 @@ pub const ICON_NAMES: &[&str] = &[
     "eye-off",
     "file",
     "file-text",
+    "film",
     "filter",
     "folder",
     "folder-open",
@@ -111,6 +112,7 @@ pub const ICON_NAMES: &[&str] = &[
     "history",
     "house",
     "image",
+    "image-play",
     "info",
     "link",
     "list-filter",
@@ -140,6 +142,7 @@ pub const ICON_NAMES: &[&str] = &[
     "skip-forward",
     "square",
     "star",
+    "sticker",
     "tag",
     "trash-2",
     "triangle-alert",
@@ -1924,6 +1927,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             label,
             description,
             icon,
+            variant,
             on_click,
             confirm,
             disabled,
@@ -1935,6 +1939,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 bind!("pressed", value);
             }
             bind!("label", label);
+            if !matches!(variant, Binding::Literal(_)) {
+                bind!("variant", variant);
+            }
             if let Some(description) = description { bind!("description", description); }
             if let Some(icon) = icon {
                 bind!("icon", icon);

@@ -461,3 +461,7 @@
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-slider-field > .ks-slider { flex: 1 1 auto; min-width: calc(var(--ks-space-6) * 3); }
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-select-field > .ks-select-button { flex: 1 1 auto; }
 .ks-input-field > .ks-field-label { flex-shrink: 0; }
+
+.ks-data-section-action:empty { display: none; }
+.ks-data-section-actions:not(:has(> .ks-data-section-action:not(:empty))) { display: none; }
+.ks-data-stack.is-column > .ks-data-stack-item:not(:empty) ~ .ks-data-stack-item:not(:has(~ .ks-data-stack-item:not(:empty))) > .ks-data-toolbar { border-top: var(--ks-line-width) solid var(--ks-color-border); border-bottom: 0; }

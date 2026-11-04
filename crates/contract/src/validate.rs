@@ -77,6 +77,7 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
     crate::validate_input::validate_input_extensions(&definition)?;
+    crate::validate_button::validate_button_extensions(&definition)?;
 
     validate_store_contract(&definition)?;
 
@@ -2401,7 +2402,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         }
         Block::Button {
             variant, pressed, ..
-        } => matches!(variant, crate::ButtonVariant::Chip) || pressed.is_some(),
+        } => matches!(variant, Binding::Literal(value) if value.as_str() == Some("chip")) || pressed.is_some(),
         _ => false,
     };
     if uses_v14_fields && definition.requires.blocks < 14 {
@@ -3351,9 +3352,16 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         Block::Button {
             label,
             icon,
+            variant,
             preview,
             ..
         } => {
+            validate_ui_binding(variant, definition, details, &format!("{at}/variant"));
+            if let Binding::Literal(value) = variant {
+                if serde_json::from_value::<crate::ButtonVariant>(value.clone()).is_err() {
+                    details.push(format!("{at}/variant: 단추 강조 이름이 올바르지 않습니다"));
+                }
+            }
             if definition.requires.blocks < 12
                 && (!matches!(label, Binding::Literal(_))
                     || icon

@@ -226,6 +226,7 @@ pub mod registry;
 pub mod size;
 pub mod validate;
 mod validate_input;
+mod validate_button;
 pub mod window_control;
 pub mod worker;
 pub use window_control::*;
@@ -290,7 +291,8 @@ pub const CONTRACT_VERSION: u32 = 35;
 /// - 29판: client의 메시지 수신 능력.
 /// - 30판: `list`의 아이콘 격자 배치.
 /// - 31판: `input.spin` 숫자 스핀 단추.
-pub const BLOCK_SET_VERSION: u32 = INPUT_SPIN_BLOCK_SET_VERSION;
+/// - 32판: 단추 강조 바인딩과 움직이는 그림 아이콘.
+pub const BLOCK_SET_VERSION: u32 = BUTTON_VARIANT_ICON_BLOCK_SET_VERSION;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
 pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
 pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
@@ -341,6 +343,8 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("process", 1),
 ];
 
+/// 단추 강조 바인딩과 새 아이콘을 처음 지원한 블록 세트 판.
+pub const BUTTON_VARIANT_ICON_BLOCK_SET_VERSION: u32 = 32;
 /// 지원 범위를 알리지 않는 옛 쉘(블록 세트 3판 전)이 그릴 수 있는 블록 세트 판. 서버가 그런 기기에 보낼 앱을
 /// 거를 때 쓴다([`registry`]의 「기기마다 그릴 수 있는 앱만」 절).
 pub const LEGACY_BLOCK_SET_VERSION: u32 = 2;
@@ -2001,9 +2005,9 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         icon_only: bool,
-        #[serde(default)]
-        #[ts(optional, as = "Option<ButtonVariant>")]
-        variant: ButtonVariant,
+        #[serde(default = "default_button_variant")]
+        #[ts(optional, as = "Option<Binding>")]
+        variant: Binding,
         on_click: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2691,8 +2695,8 @@ enum RawBlock {
         icon: Option<Binding>,
         #[serde(default)]
         icon_only: bool,
-        #[serde(default)]
-        variant: ButtonVariant,
+        #[serde(default = "default_button_variant")]
+        variant: Binding,
         on_click: Actions,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         confirm: Option<Confirm>,
@@ -3925,6 +3929,10 @@ pub enum ButtonVariant {
     /// 테두리 없는 가벼운 단추.
     Ghost,
     Chip,
+}
+
+fn default_button_variant() -> Binding {
+    Binding::Literal(JsonValue::String("default".into()))
 }
 
 /// 항목 메뉴의 동작. `$event`는 블록의 `on_select`와 같은 항목 키(트리도 같은 값), `$item`은 항목이다.

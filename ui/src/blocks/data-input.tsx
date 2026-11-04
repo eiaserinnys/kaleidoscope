@@ -7,6 +7,7 @@ import type { BlockContext } from "./block-context";
 import { useBinding, useWindowData } from "../data/window-data";
 import { BindingFailureNotice, DataState, isMessageBindingFailure } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
+import { LoaderCircle } from "../components/icons";
 import { Dialog } from "../components/dialog";
 import { Select, Toggle } from "../components/select-toggle";
 import { Button, ErrorId, IconButton } from "../components/primitives";
@@ -134,13 +135,16 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const description = useBinding(`${pointer}/description`, block.description ?? null);
   const visible = useWindowVisible(context);
   const icon = useBinding(`${pointer}/icon`, block.icon ?? null);
+  const variantBinding = useBinding(`${pointer}/variant`, block.variant ?? "default");
   const prefix = useBinding(`${pointer}/prefix`, block.prefix ?? null);
   const pressed = useBinding(`${pointer}/pressed`, block.pressed ?? null);
   const disabled = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const body = useBinding(`${pointer}/confirm/body`, block.confirm?.body ?? null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
   const busyRef = useRef(false);
+  const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [copySucceeded, setCopySucceeded] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
@@ -161,15 +165,20 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     ? [labelText, bindingFailure.id].filter(Boolean).join(": ")
     : labelLoading ? "불러오는 중" : prefixText ? `${prefixText}: ${labelText}` : labelText;
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
+  const variant = variantBinding.status === "ready" && typeof variantBinding.value === "string" && ["default", "primary", "danger", "ghost", "chip"].includes(variantBinding.value) ? variantBinding.value : "default";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
-  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); if (progressTimer.current) clearTimeout(progressTimer.current); }, []);
   const run = async (restore: boolean, modifiers?: ReturnType<typeof eventModifiers>) => {
     if (busyRef.current) return;
     busyRef.current = true;
     restoreAfterAction.current = restore;
     setConfirm(false);
     setBusy(true);
+    progressTimer.current = setTimeout(() => { setShowProgress(true); progressTimer.current = null; }, 250);
     const succeeded = await data.act(`${pointer}/on_click`, null, undefined, modifiers);
+    if (progressTimer.current) clearTimeout(progressTimer.current);
+    progressTimer.current = null;
+    setShowProgress(false);
     busyRef.current = false;
     setBusy(false);
     if (succeeded && copyTextAction(block.on_click)) {
@@ -190,7 +199,8 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const buttonLabel = labelLoading ? <span aria-hidden="true" className="ks-data-button-label ks-data-skeleton"><i /></span> : prefixText
     ? <><span className="ks-data-button-prefix">{prefixText}</span><span className="ks-data-button-label is-emphasized ks-truncate-label">{labelText}</span></>
     : <span className="ks-data-button-label ks-truncate-label">{labelText}</span>;
-  const contents = <>{bindingFailure ? <DataIcon name="triangle-alert" /> : hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
+  const progress = <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>;
+  const contents = <>{!(showProgress && block.icon_only) && (bindingFailure ? <DataIcon name="triangle-alert" /> : hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null)}{!block.icon_only ? buttonLabel : null}{showProgress ? progress : null}</>;
   const onClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (busyRef.current) return;
     const modifiers = eventModifiers(event);
@@ -203,28 +213,29 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     <DataIcon name="triangle-alert" size="inline" /><ErrorId id={bindingFailure.id} />
   </span> : null;
   const dialog = confirm && block.confirm && host
-    ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={block.variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} />
+    ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} />
     : null;
-  const className = `ks-data-button is-${block.variant ?? "default"}`;
+  const className = `ks-data-button is-${variant}`;
   if (block.preview) return <div ref={setOpener} className={`${className} has-preview`}>
     <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`} title={previewError ?? undefined}>
       <div className="ks-data-button-card-content">
         <div className="ks-data-button-card-preview" aria-hidden="true" inert><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
-        <div aria-hidden={bindingFailure ? undefined : true} className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}`}>
+        <div aria-hidden={bindingFailure ? undefined : true} className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}${showProgress ? " is-progress" : ""}`}>
           {!bindingFailure && prefixText ? <><span className="ks-data-button-prefix">{prefixText}</span><wbr /></> : null}
           {!bindingFailure ? labelLoading ? <span aria-hidden="true" className="ks-data-button-label ks-data-skeleton"><i /></span> : <span className="ks-data-button-label is-emphasized">{labelText}</span> : null}
           {previewFailure}
+          {showProgress ? progress : null}
         </div>
       </div>
-      <Tooltip content={tooltipContent} enabled={visible}><Button aria-label={accessibleName} className="ks-data-button-card-action" aria-pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>
+      <Tooltip content={tooltipContent} enabled={visible}><Button aria-label={accessibleName} className="ks-data-button-card-action" aria-pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} aria-busy={busy || undefined} onClick={onClick}>
         <span className="ks-accessible-hidden">{accessibleName}</span>
       </Button></Tooltip>
     </div>
     {status}{dialog}
   </div>;
   const control = <span ref={setOpener} className={className}>{block.icon_only
-    ? <IconButton aria-label={accessibleName} tooltip={tooltipContent} tooltipEnabled={visible} pressed={pressedValue} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>{contents}</IconButton>
-    : <Tooltip content={tooltipContent} enabled={visible}><Button aria-label={accessibleName} aria-pressed={pressedValue} variant={block.variant === "primary" ? "emphasis" : "default"} disabled={unavailable} aria-disabled={busy || undefined} onClick={onClick}>{contents}</Button></Tooltip>}
+    ? <IconButton aria-label={accessibleName} tooltip={tooltipContent} tooltipEnabled={visible} pressed={pressedValue} className={showProgress ? "is-progress" : undefined} disabled={unavailable} aria-disabled={busy || undefined} aria-busy={busy || undefined} onClick={onClick}>{contents}</IconButton>
+    : <Tooltip content={tooltipContent} enabled={visible}><Button aria-label={accessibleName} aria-pressed={pressedValue} className={showProgress ? "is-progress" : undefined} variant={variant === "primary" ? "emphasis" : "default"} disabled={unavailable} aria-disabled={busy || undefined} aria-busy={busy || undefined} onClick={onClick}>{contents}</Button></Tooltip>}
     {status}{dialog}
   </span>;
   return bindingFailure

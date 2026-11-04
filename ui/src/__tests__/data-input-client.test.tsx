@@ -477,3 +477,76 @@ it("image preview의 포커스 가능한 자식은 inert이고 탭 순서에는 
   expect(preview.contains(cardButton)).toBe(false);
   expect(tabStops).toEqual([cardButton]);
 });
+
+it("단추는 늦은 동작 중 초점을 유지하고 250ms 뒤 진행을 보인다", async () => {
+  vi.useFakeTimers();
+  let finish!: (value: boolean) => void;
+  runtime.act.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+  try {
+    const button = { type: "button", label: "번역", on_click: { client: "go" } };
+    render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+    const control = screen.getByRole("button", { name: "번역" }) as HTMLButtonElement;
+    control.focus();
+    fireEvent.click(control);
+    expect(document.activeElement).toBe(control);
+    expect(control.disabled).toBe(false);
+    expect(control.getAttribute("aria-busy")).toBe("true");
+    expect(control.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(control);
+    expect(runtime.act).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(249); });
+    expect(control.querySelector(".ks-button-progress")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(control.querySelector(".ks-button-progress")).toBeTruthy();
+    await act(async () => { finish(true); });
+    expect(control.querySelector(".ks-button-progress")).toBeNull();
+    expect(document.activeElement).toBe(control);
+  } finally { vi.useRealTimers(); }
+});
+
+it("빠른 단추 동작은 진행 표시를 보이지 않는다", async () => {
+  vi.useFakeTimers();
+  try {
+    const button = { type: "button", label: "실행", on_click: { client: "go" } };
+    render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+    const control = screen.getByRole("button", { name: "실행" });
+    await act(async () => { fireEvent.click(control); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(control.querySelector(".ks-button-progress")).toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+
+it("단추 강조가 바인딩 값으로 바뀌어도 같은 단추에 초점이 남는다", () => {
+  runtime.values = { style: "default" };
+  const button = { type: "button", label: "번역", variant: { client: "style" }, on_click: { client: "go" } };
+  const draw = () => <ButtonBlock block={button as never} context={{} as never} pointer="/button" />;
+  const view = render(draw());
+  const control = screen.getByRole("button", { name: "번역" });
+  control.focus();
+  runtime.values.style = "primary";
+  view.rerender(draw());
+  expect(control.classList.contains("ks-button-emphasis")).toBe(true);
+  expect(document.activeElement).toBe(control);
+  runtime.values.style = "unknown";
+  view.rerender(draw());
+  expect(control.classList.contains("ks-button-default")).toBe(true);
+});
+
+it("아이콘 단추는 오래 도는 동안 기존 아이콘 대신 진행을 보인다", async () => {
+  vi.useFakeTimers();
+  let finish!: (value: boolean) => void;
+  runtime.act.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+  try {
+    const button = { type: "button", label: "새로 받기", icon: "refresh-cw", icon_only: true, on_click: { client: "go" } };
+    render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+    const control = screen.getByRole("button", { name: "새로 받기" });
+    control.focus();
+    fireEvent.click(control);
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(control.getAttribute("aria-busy")).toBe("true");
+    expect(control.querySelector(".ks-button-progress")).toBeTruthy();
+    expect(control.querySelector(".lucide-refresh-cw")).toBeNull();
+    expect(document.activeElement).toBe(control);
+    await act(async () => { finish(true); });
+  } finally { vi.useRealTimers(); }
+});
