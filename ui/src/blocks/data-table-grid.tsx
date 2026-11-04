@@ -37,7 +37,7 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
       event.currentTarget.focus({ preventScroll: true }); handlers.current.choose(rowKey, column.field);
     }}
     onContextMenu={(event) => handlers.current.menu(event, rowKey, event.currentTarget)}>
-    {column.format === "badge" && isBadge(raw) ? <Badge value={raw} /> : formattedCell(raw, column) ?? text}
+    <span className="ks-grid-cell-value">{column.format === "badge" && isBadge(raw) ? <Badge value={raw} /> : formattedCell(raw, column) ?? text}</span>
   </span>;
 });
 
@@ -80,35 +80,33 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
     const address = { row: rows[row].key, column: dataColumns[column].field };
     last.current = { row, column }; pending.current = address; setFocus(address);
     virtual.scrollToIndex(row, { align: "auto" });
-    const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${row * dataColumns.length + column}"]`);
-    if (target) { target.focus({ preventScroll: true }); pending.current = null; reveal(target); }
   };
   const reveal = (target: HTMLElement) => {
     const container = scroll.current; if (!container) return;
     const rect = target.getBoundingClientRect(), bounds = container.getBoundingClientRect();
+    const ring = Number.parseFloat(getComputedStyle(target).getPropertyValue("--ks-focus-width")) || 0;
     const pinned = rowHeader ? container.querySelector<HTMLElement>(".ks-grid-row-header")?.getBoundingClientRect().width ?? 0 : 0;
-    if (rect.left < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - rect.left;
-    if (rect.right > bounds.right) container.scrollLeft += rect.right - bounds.right;
+    if (rect.left - ring < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - (rect.left - ring);
+    if (rect.right + ring > bounds.right) container.scrollLeft += rect.right + ring - bounds.right;
     const top = bounds.top + container.clientTop + (container.querySelector<HTMLElement>(".ks-table-header")?.getBoundingClientRect().height ?? 0);
     const bottom = bounds.top + container.clientTop + container.clientHeight;
-    if (rect.top < top) container.scrollTop -= top - rect.top;
-    else if (rect.bottom > bottom) container.scrollTop += rect.bottom - bottom;
+    if (rect.top - ring < top) container.scrollTop -= top - (rect.top - ring);
+    else if (rect.bottom + ring > bottom) container.scrollTop += rect.bottom + ring - bottom;
   };
   useEffect(() => {
-    const address = pending.current ?? current;
+    const address = pending.current;
     if (!address) return;
     const row = rows.findIndex((item) => item.key === address.row);
     const col = dataColumns.findIndex((item) => item.field === address.column);
     const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${row * dataColumns.length + col}"]`);
     if (target) {
-      if (pending.current) target.focus({ preventScroll: true });
-      if (document.activeElement === target) reveal(target);
       pending.current = null;
+      target.focus({ preventScroll: true });
+      reveal(target);
     }
   });
   useEffect(() => {
     if (current && (current.row !== focus?.row || current.column !== focus?.column)) {
-      if (document.activeElement === document.body) { pending.current = current; virtual.scrollToIndex(currentRow, { align: "auto" }); }
       setFocus(current);
     }
   }, [current?.row, current?.column, focus?.row, focus?.column]);

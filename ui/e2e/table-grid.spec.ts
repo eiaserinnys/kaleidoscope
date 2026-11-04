@@ -46,7 +46,22 @@ test("동적 일정표의 선택과 고정 행 머리", async ({ page }) => {
   const darkCell = grid.getByRole("gridcell", { name: "작업 묶음 1, 4일, 긴 한글 제목과 검토 일정 1-4" });
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme });
+    await page.reload();
+    const tab = app.getByRole("tab", { name: "일정표", exact: true });
+    await tab.click();
+    await first.focus(); await page.keyboard.press("ArrowRight");
+    await capture(page, `r4-${theme}-light-focus-only`);
+    await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
+    await capture(page, `r4-${theme}-dark-focus-only`);
+    await page.keyboard.press("Enter");
+    await capture(page, `r4-${theme}-dark-selected-and-focused`);
+    await tab.focus();
+    await capture(page, `r4-${theme}-dark-selected-only`);
     await lightCell.focus(); await page.keyboard.press("Enter");
+    await capture(page, `r4-${theme}-light-selected-and-focused`);
+    await tab.focus();
+    await capture(page, `r4-${theme}-light-selected-only`);
+    await lightCell.focus();
     await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
     await capture(page, `r3-${theme}-light-selected-dark-focus`);
     await page.keyboard.press("Enter");
@@ -130,6 +145,24 @@ test("ArrowDown 뒤 초점 칸 전체를 고정 열 머리 아래에 드러낸�
     })).toBe(true);
   }
   await capture(page, "r3-arrow-down-last");
+});
+
+test("칸을 누른 뒤 휠로 내린 표가 초점 칸으로 되돌아오지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 750 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "일정표", exact: true }).click();
+  const grid = app.getByRole("grid");
+  await grid.getByRole("gridcell").first().click();
+  await grid.hover();
+  await page.mouse.wheel(0, 3400);
+  await expect.poll(() => grid.evaluate((element) => element.scrollTop)).toBeGreaterThan(1000);
+  const position = await grid.evaluate((element) => element.scrollTop);
+  await grid.evaluate((element) => { element.scrollTop += 250; });
+  await expect.poll(() => grid.evaluate((element) => element.scrollTop)).toBeGreaterThan(position);
+  const settled = await grid.evaluate((element) => new Promise<number>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(element.scrollTop)))));
+  expect(settled).toBeGreaterThan(position);
+  await capture(page, "r4-focused-wheel");
 });
 
 test("기존 표 행 선택과 정렬을 유지한다", async ({ page }) => {
