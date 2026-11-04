@@ -7,13 +7,13 @@ export type Spec = { name: string; command: string; args: string[]; env: Record<
 type ProcessSnapshot = { handle: string; after: number; checkpoint: State | null; cwd: string; services: Record<string, string | null>; exit: unknown | null };
 type ProcessPort = {
   attach(params: { key: string }): Promise<ProcessSnapshot | null>;
-  start(params: { key: string; permission: string; cwd_permission: string; spec: Omit<Spec, "auth_methods">; services: string[] }): Promise<{ status?: string; handle?: string; cwd?: string; services?: Record<string, string | null> }>;
-  read(params: { handle: string; after: number; max_bytes: number }): Promise<{ bytes: number[]; next: number; stderr_tail: number[]; exit: unknown | null }>;
-  ack(params: { handle: string; after: number; checkpoint: State }): Promise<unknown>;
+  start(params: { key: string; permission: string; cwd_permission: string; spec: Omit<Spec, "auth_methods">; services?: string[] }): Promise<{ status?: string; handle?: string; cwd?: string; services?: Record<string, string | null> }>;
+  read(params: { handle: string; after: number; max_bytes: number }): Promise<{ bytes: number[]; next: number; stderr_tail: number[]; exit: { code: number | null } | null }>;
+  ack(params: { handle: string; after: number; checkpoint: State | null }): Promise<unknown>;
   write(params: { handle: string; bytes: Uint8Array; checkpoint: State }): Promise<unknown>;
   stop(params: { handle: string }): Promise<unknown>;
   file_uri(key: string): Promise<string>;
-  onReady(listener: (handle: string) => void): unknown;
+  onReady(listener: (handle: string) => void): () => void;
   onServicesChanged(listener: (handle: string) => void): unknown;
 };
 type Prepared = { text: string | null; images: { name: string; mime: string; bytes: Uint8Array }[]; ticket: string };

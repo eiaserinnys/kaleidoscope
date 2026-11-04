@@ -19,6 +19,11 @@
       "label": "에이전트 실행"
     },
     {
+      "module": "process",
+      "id": "install",
+      "label": "프로그램 설치"
+    },
+    {
       "module": "files",
       "id": "work",
       "access": "readwrite",
@@ -133,6 +138,51 @@
             ]
           }
         ]
+      },
+      {
+        "id": "programs",
+        "key": "settings/programs",
+        "kind": "json",
+        "label": "프로그램",
+        "presentation": "hidden",
+        "schema": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "winget": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "name",
+              "winget",
+              "url"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "default": {
+          "npx": {
+            "name": "Node.js",
+            "winget": "OpenJS.NodeJS.LTS",
+            "url": "https://nodejs.org/"
+          },
+          "agy": {
+            "name": "Antigravity CLI",
+            "winget": "Google.AntigravityCLI",
+            "url": "https://antigravity.google/docs/getting-started/"
+          }
+        }
       }
     ]
   },
@@ -360,6 +410,62 @@
             {
               "type": "when",
               "value": {
+                "client": "show_install"
+              },
+              "child": {
+                "type": "notice",
+                "kind": "error",
+                "message": {
+                  "client": "error_message"
+                },
+                "error_id": {
+                  "client": "error_id"
+                },
+                "actions": [
+                  {
+                    "label": {
+                      "client": "install_label"
+                    },
+                    "on_click": {
+                      "client": "install"
+                    }
+                  },
+                  {
+                    "label": "다시 시도",
+                    "on_click": {
+                      "client": "retry"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "show_installing"
+              },
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "small",
+                "children": [
+                  {
+                    "type": "progress",
+                    "value": null,
+                    "max": 1
+                  },
+                  {
+                    "type": "text",
+                    "value": {
+                      "client": "install_message"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "when",
+              "value": {
                 "client": "show_failed"
               },
               "child": {
@@ -451,14 +557,14 @@
   "assets": [
     {
       "id": "builtin-agent-client",
-      "version": 2
+      "version": 3
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 2
+      "version": 3
     },
     "inputs": {},
     "outputs": {
@@ -554,6 +660,18 @@
       },
       "error_id": {
         "default": null
+      },
+      "show_install": {
+        "default": false
+      },
+      "show_installing": {
+        "default": false
+      },
+      "install_label": {
+        "default": ""
+      },
+      "install_message": {
+        "default": ""
       }
     },
     "channels": [
@@ -571,17 +689,20 @@
       "answer",
       "cancel",
       "send",
-      "attachment"
+      "attachment",
+      "install"
     ],
     "commands": {},
     "state_keys": [
       "agent_id"
     ],
     "storage_entries": [
-      "agents"
+      "agents",
+      "programs"
     ],
     "process_permissions": [
-      "run"
+      "run",
+      "install"
     ],
     "device_storage": {
       "prefixes": [

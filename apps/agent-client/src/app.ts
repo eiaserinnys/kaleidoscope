@@ -2,6 +2,7 @@ import { AgentSession, type Host, type SessionView, type Spec } from "./session.
 import { agentError } from "./errors.ts";
 
 type Agent = Spec & { id: string };
+type Program = { name: string; winget: string; url: string };
 type Action = { event?: any; item?: any; parent_item?: any };
 type Bridge = {
   process: Host["process"];
@@ -25,6 +26,8 @@ export class AppClient {
   private readonly defaults: Agent[];
   private readonly session: AgentSession;
   private agents: Agent[] = [];
+  private programs: Record<string, Program> = {};
+  private installing = false;
   private selected: Agent | null = null;
   private folder: string | null = null;
   private stage: "loading" | "agents" | "folder" | "session" | "error" = "loading";
@@ -57,6 +60,7 @@ export class AppClient {
       publish: (view) => this.receive(view), uuid: () => crypto.randomUUID(), now: () => new Date().toISOString(),
     };
     this.session = new AgentSession(host);
+    client.onStorageChange("programs", (value) => { this.programs = value as Record<string, Program>; this.update(); });
     client.onStorageChange("agents", (value) => { void this.acceptAgents(value); }, (error) => { this.storageFailure = true; this.showError(error); });
     client.onLifecycle((event) => { if (event.phase === "ready") this.update(); });
     client.files.on_grant("work", (folder) => { this.folder = folder; this.update(); if (folder && this.restoring && !this.choosingFolder) void this.restore(); });
@@ -64,6 +68,7 @@ export class AppClient {
     client.handle("back_agent", () => this.backAgent());
     client.handle("pick_folder", () => this.pickFolder());
     client.handle("retry", () => this.retryStart());
+    client.handle("install", () => this.install());
     client.handle("reset_agents", () => this.resetAgents());
     client.handle("authenticate", ({ item }) => this.session.authenticate(String(item?.id ?? "")));
     client.handle("configure", ({ item, event }) => this.session.configure(String(item?.id ?? ""), event));
@@ -158,14 +163,83 @@ export class AppClient {
     finally { this.choosingFolder = false; }
   }
 
-  private async retryStart(): Promise<void> {
+  private async retryStart(installed?: Program): Promise<void> {
     if (this.storageFailure || !this.selected) { await this.retryStorage(); return; }
     this.stage = "session";
     this.error = null;
     this.retry = false;
     this.update();
     try { if (!await this.session.retry()) { this.stage = "folder"; this.retry = true; this.update(); } }
-    catch (error) { this.showError(error); }
+    catch (error) {
+      if (installed && (error as { id?: string })?.id === "PROCESS_START_COMMAND_NOT_FOUND") {
+        this.showError(agentError("AGENT_INSTALL_COMMAND_STILL_MISSING", installed.name, this.selected.command));
+      } else this.showError(error);
+    }
+  }
+
+  private async install(): Promise<void> {
+    const program = this.selected && this.programs[this.selected.command];
+    if (!program || !this.canInstall()) return;
+    this.installing = true;
+    this.update();
+    try {
+      const result = await this.client.process.start({ key: "install", permission: "install", cwd_permission: "work", spec: {
+        name: `${program.name} 설치`, command: "winget", args: ["install", "--id", program.winget, "--exact", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"], env: {},
+      } });
+      if (result.status === "cancelled") return;
+      if (!result.handle) throw agentError("AGENT_START_HANDLE_MISSING");
+      const { code, output } = await this.readInstaller(result.handle);
+      if (code === 0) {
+        this.installing = false;
+        await this.retryStart(program);
+        return;
+      }
+      const unsigned = code === null ? null : code >>> 0;
+      const id = unsigned === 0x8A15003A || unsigned === 0x8A15010F ? "AGENT_INSTALL_BLOCKED_BY_POLICY"
+        : unsigned === 0x8A15010C ? "AGENT_INSTALL_CANCELLED_BY_USER" : "AGENT_INSTALL_FAILED";
+      const hex = unsigned === null ? "알 수 없음" : `0x${unsigned.toString(16).toUpperCase().padStart(8, "0")}`;
+      this.showError(agentError(id, program.name, program.url, hex, output));
+    } catch (error) {
+      if ((error as { id?: string })?.id === "PROCESS_START_COMMAND_NOT_FOUND") this.showError(agentError("AGENT_INSTALL_WINGET_NOT_FOUND", program.name, program.url));
+      else this.showError(error);
+    } finally {
+      this.installing = false;
+      this.update();
+    }
+  }
+
+  private async readInstaller(handle: string): Promise<{ code: number | null; output: string }> {
+    let after = 0, stdout = "", queue = Promise.resolve(), done = false;
+    const decoder = new TextDecoder();
+    return new Promise((resolve, reject) => {
+      const read = async () => {
+        if (done) return;
+        try {
+          for (;;) {
+            const result = await this.client.process.read({ handle, after, max_bytes: 65536 });
+            stdout = (stdout + decoder.decode(Uint8Array.from(result.bytes), { stream: true })).slice(-65536);
+            if (result.next !== after) { after = result.next; await this.client.process.ack({ handle, after, checkpoint: null }); }
+            if (result.bytes.length) continue;
+            if (result.exit) {
+              done = true;
+              unsubscribe();
+              const stderr = new TextDecoder().decode(Uint8Array.from(result.stderr_tail));
+              const output = (stderr || stdout).split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? "출력이 없습니다";
+              resolve({ code: result.exit.code, output });
+            }
+            return;
+          }
+        } catch (error) { done = true; unsubscribe(); reject(error); }
+      };
+      const schedule = () => { queue = queue.then(read); };
+      const unsubscribe = this.client.process.onReady((ready) => { if (ready === handle) schedule(); });
+      schedule();
+    });
+  }
+
+  private canInstall(): boolean {
+    const failureId = this.error?.id ?? this.view?.failure?.id;
+    return !this.installing && failureId === "PROCESS_START_COMMAND_NOT_FOUND" && !!this.selected && !!this.programs[this.selected.command] && /Windows/i.test(navigator.userAgent);
   }
 
   private async settingsAgent(id: string): Promise<void> {
@@ -241,18 +315,25 @@ export class AppClient {
     const chat = this.stage === "session" && (phase === "ready" || phase === "responding");
     const failure = this.view?.failure;
     let message = this.error?.message ?? "";
-    if (failure) message = this.failureMessage(failure);
+    if (failure && !this.error) message = this.failureMessage(failure);
+    const program = this.selected && this.programs[this.selected.command];
+    const missing = (this.error?.id ?? failure?.id) === "PROCESS_START_COMMAND_NOT_FOUND" && !!program;
+    const unsupported = missing && !/Windows/i.test(navigator.userAgent);
+    if (missing && program) message = unsupported
+      ? agentError("AGENT_INSTALL_UNSUPPORTED_PLATFORM", this.selected!.name, program.name, program.url).message
+      : `${this.selected?.name}을(를) 시작하려면 ${program.name}이(가) 필요합니다.`;
     const controls = (this.view?.controls ?? []).map((control) => ({ ...control, is_select: control.kind === "select", is_boolean: control.kind === "boolean", checked: control.value === true }));
     const output = {
       show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
       show_empty: this.stage === "agents" && this.agents.length === 0, show_folder: this.stage === "folder",
-      show_starting: this.stage === "session" && (!phase || phase === "starting"), show_login: this.stage === "session" && phase === "login",
-      show_failed: this.stage === "error" || (this.stage === "session" && phase === "failed"), show_chat: chat,
-      show_retry: this.retry && (this.stage === "folder" || this.stage === "error" || (this.stage === "session" && phase === "failed")), show_back: this.agents.length > 1,
-      show_selected: !!this.selected && this.stage !== "agents" && this.stage !== "loading",
-      show_single: !!this.selected && this.agents.length <= 1,
-      show_picked_folder: !!this.folder && (this.stage !== "folder" || this.retry) && this.stage !== "agents" && this.stage !== "loading",
+      show_starting: !this.installing && this.stage === "session" && (!phase || phase === "starting"), show_login: this.stage === "session" && phase === "login",
+      show_failed: !this.installing && !this.canInstall() && (this.stage === "error" || (this.stage === "session" && phase === "failed")), show_install: this.canInstall(),
+      show_installing: this.installing, install_label: program ? `${program.name} 설치` : "", install_message: program ? `${program.name} 설치 중` : "", show_chat: chat,
+      show_retry: this.retry && (this.stage === "folder" || this.stage === "error" || (this.stage === "session" && phase === "failed")), show_back: !this.installing && this.agents.length > 1,
+      show_selected: !this.installing && !!this.selected && this.stage !== "agents" && this.stage !== "loading",
+      show_single: !this.installing && !!this.selected && this.agents.length <= 1,
+      show_picked_folder: !this.installing && !!this.folder && (this.stage !== "folder" || this.retry) && this.stage !== "agents" && this.stage !== "loading",
       show_login_error: phase === "login" && !!failure,
       show_pick_folder: this.stage === "folder" && !this.retry,
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),
@@ -260,7 +341,7 @@ export class AppClient {
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
       permissions: this.view?.permissions ?? [], auth_methods: this.view?.authMethods ?? [],
-      has_error: !!(this.error || failure), error_message: message, error_id: this.error?.id ?? failure?.id ?? null,
+      has_error: !!(this.error || failure), error_message: message, error_id: unsupported ? "AGENT_INSTALL_UNSUPPORTED_PLATFORM" : this.error?.id ?? failure?.id ?? null,
     };
     const signature = JSON.stringify(output);
     if (signature !== this.lastOutputs) { this.lastOutputs = signature; this.client.publish(output); }

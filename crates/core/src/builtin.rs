@@ -86,6 +86,10 @@ const FILES: &[(&str, &[u8])] = &[
         include_bytes!("../../../apps/assets/agent/client-v1.js"),
     ),
     (
+        "agent/client-v2.js",
+        include_bytes!("../../../apps/assets/agent/client-v2.js"),
+    ),
+    (
         "agent/client.js",
         include_bytes!("../../../apps/assets/agent/client.js"),
     ),

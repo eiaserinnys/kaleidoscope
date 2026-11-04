@@ -2,13 +2,14 @@ import functools
 import importlib.util
 import json
 import os
+import shlex
 import tempfile
 import time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = Path(os.environ['SCRATCH_WORKSPACE_DIR']) / '.local/tmp/card933/agent-f/r2'
+OUT = Path(os.environ['SCRATCH_WORKSPACE_DIR']) / '.local/tmp/card933/agent-install'
 OUT.mkdir(parents=True, exist_ok=True)
 spec = importlib.util.spec_from_file_location('sandbox', Path(os.environ['AGENT_COMMON_FILES_DIR']) / 'skills/kaleidoscope-app/scripts/sandbox.py')
 sandbox = importlib.util.module_from_spec(spec)
@@ -48,10 +49,18 @@ def main():
         folder = Path(directory) / '작업폴더'
         folder.mkdir()
         sb = sandbox.Sandbox(ROOT, OUT, folder, address)
+        bin_dir = Path(directory) / 'bin'
+        bin_dir.mkdir()
+        fake_agent = ROOT / 'target/debug/kaleidoscope-acp-test-agent'
+        winget = bin_dir / 'winget'
+        winget.write_text('#!/bin/sh\nsleep 4\ncase "$*" in *Test.Failure*) echo "시험 설치 실패"; exit 1;; esac\nln -s ' + shlex.quote(str(fake_agent)) + ' ' + shlex.quote(str(bin_dir / 'fixture-agent')) + '\n', encoding='utf-8')
+        winget.chmod(0o755)
         spawn = sb._spawn
         def local_spawn(name, command, **env):
             if name in ('server', 'bridge'):
                 command[0] = str(ROOT / 'target/debug' / Path(command[0]).name)
+            if name == 'bridge':
+                env['PATH'] = str(bin_dir) + os.pathsep + os.environ['PATH']
             return spawn(name, command, **env)
         sb._spawn = local_spawn
         browser = None
@@ -72,7 +81,12 @@ def main():
             assert 'window' in opened, opened
             window_id = opened['window']['id']
             with sync_playwright() as playwright:
-                browser = sb.open_page(playwright, (1100, 800))
+                browser = playwright.chromium.launch(args=[f"--host-resolver-rules=MAP localhost {address}"])
+                sb.page = browser.new_page(viewport={"width": 1100, "height": 800}, user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+                sb.page.on('console', lambda m: sb.console.append(f'{m.type}: {m.text}') if m.type in ('error', 'warning') else None)
+                sb.page.on('pageerror', lambda e: sb.console.append(f'pageerror: {e}'))
+                sb.page.goto(f'http://localhost:{sandbox.UI_PORT}/?core={sb.bridge}')
+                sb.page.wait_for_load_state('networkidle')
                 page = sb.page
                 app = sb.window('agent')
                 app.get_by_role('button', name='에이전트 하나', exact=True).wait_for(timeout=30000)
@@ -170,6 +184,44 @@ def main():
                 assert Path(pid_log).read_text(encoding='utf-8').split() == pids
                 print('7 passed: 선택과 폴더, 실행 허용, 한 턴 실패 후 대화, 설정, 승인과 스트리밍 중 실제 리로드, 큐와 중복 없는 전송', flush=True)
                 print('pids:', pids, 'console:', sb.console[-10:], flush=True)
+                # 실제 코어 PATH에 있는 가짜 설치기만 실행한다.
+                sb.core({'op':'window.close', 'window_id':window_id})
+                program_table = {
+                    'fixture-agent': {'name':'시험 프로그램', 'winget':'Test.Success', 'url':'https://example.test/'},
+                    'broken-agent': {'name':'실패 프로그램', 'winget':'Test.Failure', 'url':'https://example.test/'},
+                }
+                result = sb.mcp.call('write_app_storage', {'app_id':'agent', 'entry_id':'programs', 'content':program_table})
+                assert not result['is_error'], result['text']
+                for command, label, success in [('fixture-agent', '시험 프로그램', True), ('broken-agent', '실패 프로그램', False)]:
+                    one = [{'id':command, 'name':'시험 에이전트', 'command':command, 'args':[], 'env':env}]
+                    current = sb.mcp.call('read_app_storage', {'app_id':'agent', 'entry_id':'agents'})
+                    assert not current['is_error'], current['text']
+                    result = sb.mcp.call('write_app_storage', {'app_id':'agent', 'entry_id':'agents', 'content':one, 'expected_revision':current['data']['revision']})
+                    assert not result['is_error'], result['text']
+                    opened = sb.core({'op':'window.open', 'desktop_id':desktop, 'app_id':'agent', 'rect':{'x':20,'y':20,'width':620,'height':680}})
+                    window_id = opened['window']['id']
+                    app = sb.window('agent')
+                    app.get_by_role('button', name='폴더 선택', exact=True).click(timeout=30000)
+                    app.get_by_role('dialog').get_by_role('button', name='허용', exact=True).click(timeout=30000)
+                    button = app.get_by_role('button', name=f'{label} 설치', exact=True)
+                    button.wait_for(timeout=30000)
+                    capture(sb, app, f'install-{command}-offer')
+                    button.click()
+                    dialog = app.get_by_role('dialog')
+                    dialog.wait_for(timeout=30000)
+                    capture(sb, app, f'install-{command}-permission')
+                    dialog.get_by_role('button', name='허용', exact=True).click()
+                    app.get_by_text(f'{label} 설치 중', exact=True).wait_for(timeout=30000)
+                    capture(sb, app, f'install-{command}-progress')
+                    if success:
+                        app.get_by_role('textbox', name='메시지').wait_for(timeout=30000)
+                        capture(sb, app, 'install-success-chat')
+                    else:
+                        app.get_by_text('AGENT_INSTALL_FAILED', exact=True).wait_for(timeout=30000)
+                        app.get_by_text('0x00000001', exact=False).wait_for(timeout=30000)
+                        capture(sb, app, 'install-failure')
+                    sb.core({'op':'window.close', 'window_id':window_id})
+                print('2 passed: 가짜 설치기 성공 후 시작, 설치 실패 안내', flush=True)
                 browser.close()
                 browser = None
         finally:
