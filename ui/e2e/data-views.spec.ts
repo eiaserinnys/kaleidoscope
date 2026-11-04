@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
+import { selectTab } from "./tab-helper";
 
 const output = process.env.KS_DATA_CAPTURE_DIR;
 async function capture(page: Page, name: string) {
@@ -125,7 +126,7 @@ test("표 머리 고정과 가로 스크롤, 흐름 따라가기", async ({ page
   await expect.poll(async () => (await header.boundingBox())!.y).toBeCloseTo(top, 0);
   expect(await table.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
   await capture(page, "table-narrow");
-  await app.getByRole("tab", { name: "흐름 시험", exact: true }).click();
+  await selectTab(app, "흐름 시험");
   const feed = app.locator(".ks-feed");
   await expect(feed.getByText("내용 35")).toBeVisible();
   await app.getByRole("button", { name: "추가" }).click();
@@ -166,8 +167,10 @@ test("400px 선택 흐름에 Tab으로 들어가고 화살표와 Enter로 고른
   await page.goto("/?preview=data-views-test");
   const app = page.getByTestId("app-window-data-views-test");
   const tab = app.getByRole("tab", { name: "선택 흐름 시험" });
-  await tab.click();
+  await selectTab(app, "선택 흐름 시험");
   await tab.focus();
+  await page.keyboard.press("Tab");
+  await expect(app.getByRole("button", { name: "탭 더 보기" })).toBeFocused();
   const feed = app.getByRole("feed");
   const first = feed.getByRole("article").filter({ hasText: "첫 번째 내용" });
   const second = feed.getByRole("article").filter({ hasText: "두 번째 내용" });

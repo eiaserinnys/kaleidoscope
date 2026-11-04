@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { selectTab } from "./tab-helper";
 
 async function conflict(page: Page, kind: "code" | "markdown") {
   if (kind === "code") {
@@ -59,9 +60,8 @@ test("이미지 수신 실패를 알리고 다시 받기로 복구한다", async
     const context = await browser.newContext({ viewport: { width, height: 800 } });
     const page = await context.newPage();
     await page.goto("/?preview=block-gallery");
-    await expect(page.getByRole("tab", { name: "미디어", exact: true })).toBeVisible();
     await page.route("**/assets/landscape.png**", (route) => route.abort());
-    await page.getByRole("tab", { name: "미디어", exact: true }).click();
+    await selectTab(page.getByTestId("app-window-block-gallery"), "미디어");
     await page.getByText("landscape.png", { exact: true }).click();
     const image = page.locator(".ks-image-view");
     await expect(image.getByRole("button", { name: "다시 받기" })).toBeVisible();
@@ -119,9 +119,8 @@ test("손상된 소리를 알리고 다른 파일 선택으로 복구한다", as
     const context = await browser.newContext({ viewport: { width, height: 800 } });
     const page = await context.newPage();
     await page.goto("/?preview=block-gallery");
-    await expect(page.getByRole("tab", { name: "미디어", exact: true })).toBeVisible();
     await page.route("**/assets/tone.wav**", (route) => route.fulfill({ contentType: "audio/wav", body: "broken wav" }));
-    await page.getByRole("tab", { name: "미디어", exact: true }).click();
+    await selectTab(page.getByTestId("app-window-block-gallery"), "미디어");
     await page.getByRole("tab", { name: "소리", exact: true }).click();
     await page.getByText("tone.wav", { exact: true }).click();
     const player = page.locator(".ks-media-player");

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { selectTab } from "./tab-helper";
 
 async function openGallery(page: Page) {
   await page.goto("/?preview=block-gallery");
@@ -95,7 +96,7 @@ test("좁은 재생기는 두 줄로 위치와 음량을 조절하고 넓으면 
     const context = await browser.newContext({ viewport: { width, height: 800 } });
     const page = await context.newPage();
     await openGallery(page);
-    await page.getByRole("tab", { name: "미디어" }).click();
+    await selectTab(page.getByTestId("app-window-block-gallery"), "미디어");
     await page.getByRole("tab", { name: "소리" }).click();
     await page.getByText("tone.wav").click();
     const audio = page.locator("audio");
@@ -159,7 +160,7 @@ test("코드와 미디어를 넓은 폭과 400px에서 캡처한다", async ({ b
     }));
     console.log(`code-${width}: ${JSON.stringify(codeBounds)}`);
     await page.screenshot({ path: info.outputPath(`code-${width}.png`) });
-    await page.getByRole("tab", { name: "미디어" }).click();
+    await selectTab(page.getByTestId("app-window-block-gallery"), "미디어");
     await page.getByText("landscape.png").click();
     await expect(page.locator(".ks-image-frame img")).toBeVisible();
     await page.screenshot({ path: info.outputPath(`media-${width}.png`) });

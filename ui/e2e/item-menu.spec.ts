@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { selectTab } from "./tab-helper";
 
 test("확정 삭제 뒤 다음 행에서 키보드 탐색을 이어간다", async ({ page }) => {
   await page.goto("/?preview=data-views-test");
@@ -99,7 +100,7 @@ for (const [name, width, height] of [["wide", 1440, 900], ["narrow", 520, 720]] 
     await app.getByRole("tab", { name: "표 시험" }).click();
     await app.locator(".ks-table-row").first().click({ button: "right" });
     await capture("table");
-    await app.getByRole("tab", { name: "선택 흐름 시험" }).click();
+    await selectTab(app, "선택 흐름 시험");
     await app.getByRole("article").first().click({ button: "right" });
     await capture("feed");
   });
