@@ -30,6 +30,9 @@ test("여러 에이전트는 가운데 선택을 거쳐 폴더를 고르고, 실
   assert.equal(views.at(-1).show_retry, true);
   assert.equal(views.at(-1).show_picked_folder, true);
   assert.equal(views.at(-1).folder_label, "작업");
+  await handlers.get("back_agent")!({});
+  assert.equal(views.at(-1).show_agents, true);
+  assert.equal(views.at(-1).show_retry, false);
 });
 
 test("에이전트가 하나일 때 폴더 grant 알림과 선택 결과가 겹쳐도 한 번만 실행한다", async () => {

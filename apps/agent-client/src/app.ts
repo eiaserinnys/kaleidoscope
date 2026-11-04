@@ -134,6 +134,7 @@ export class AppClient {
     this.client.setState("agent_id", null);
     this.view = null;
     this.error = null;
+    this.retry = false;
     this.stage = "agents";
     this.update();
   }
@@ -248,7 +249,7 @@ export class AppClient {
       show_empty: this.stage === "agents" && this.agents.length === 0, show_folder: this.stage === "folder",
       show_starting: this.stage === "session" && (!phase || phase === "starting"), show_login: this.stage === "session" && phase === "login",
       show_failed: this.stage === "error" || (this.stage === "session" && phase === "failed"), show_chat: chat,
-      show_retry: this.retry, show_back: this.agents.length > 1,
+      show_retry: this.retry && (this.stage === "folder" || this.stage === "error" || (this.stage === "session" && phase === "failed")), show_back: this.agents.length > 1,
       show_selected: !!this.selected && this.stage !== "agents" && this.stage !== "loading",
       show_single: !!this.selected && this.agents.length <= 1,
       show_picked_folder: !!this.folder && (this.stage !== "folder" || this.retry) && this.stage !== "agents" && this.stage !== "loading",

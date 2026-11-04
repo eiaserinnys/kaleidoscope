@@ -451,14 +451,14 @@
   "assets": [
     {
       "id": "builtin-agent-client",
-      "version": 1
+      "version": 2
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 1
+      "version": 2
     },
     "inputs": {},
     "outputs": {
