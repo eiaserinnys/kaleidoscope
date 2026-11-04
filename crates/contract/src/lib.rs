@@ -180,8 +180,9 @@
 //! # 쉘 업데이트 (10판)
 //! 설치본 쉘(Windows NSIS)이 새 판을 스스로 받아 깐다. 디렉터는 업데이터가 든 첫 판만 손으로 깐다.
 //! - 묻고 받는 것은 앱 크레이트(Tauri 업데이터)가 한다. 쉘을 켜고 [`UPDATE_FIRST_CHECK_DELAY_SECS`] 뒤 한 번, 그 뒤로
-//!   [`UPDATE_CHECK_INTERVAL_SECS`](5분)마다 업데이트 서버(`https://eiaserinnys.me/tauri-update/update/kaleidoscope`,
-//!   서비스 `tauri-app-updater`)에 묻는다. 새 판이 있으면 바로 받아 서명을 확인하고 [`UpdateStatus::Ready`]로 알린다.
+//!   [`UPDATE_CHECK_INTERVAL_SECS`](5분)마다 R2 정적 매니페스트(`https://kaleidoscope.eiaserinnys.me/releases/latest.json`)에
+//!   먼저 묻고 연결이나 HTTP 오류면 공용 업데이트 서버(서비스 `tauri-app-updater`)에 묻는다. 새 판이 있으면 바로 받아 서명을 확인하고
+//!   [`UpdateStatus::Ready`]로 알린다.
 //!   받은 설치본은 메모리에만 있어 다시 시작하지 않고 쉘을 끄면 다음에 켤 때 다시 받는다. `ready`인 동안에는 묻지 않는다.
 //! - 쉘은 혼자 다시 시작하지 않는다. 디렉터가 화면에서 고르면 화면이 편집기의 저장 대기분을 먼저 저장하고(저장이
 //!   실패하거나 충돌이면 다시 시작하지 않는다) `update.restart`를 부른다. 코어는 디스크에 쓸 것을 쓰고 설치를 시작한다.
@@ -190,6 +191,7 @@
 //!   메모리에만 두는 것은 다시 계산될 때까지 비어 있다.
 //! - 서명은 쉘에 들어 있는 공개 키로 받은 직후와 깔기 직전에 확인한다. 맞지 않으면 깔지 않고 [`UpdateStatus::Failed`]다.
 //!   서명 비밀 키는 리포의 GitHub secrets에만 있고 릴리스 워크플로가 서명한다.
+//!   릴리스 워크플로는 설치본, 서명, `latest.json`을 R2 `releases/`에 올린다.
 //! - 개발용 HTTP 다리, 브라우저 하니스, 업데이터 설정이 없는 빌드는 늘 [`UpdateStatus::Unavailable`]이다.
 
 use std::collections::BTreeMap;

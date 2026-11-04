@@ -42,7 +42,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEzQzBFOEQ4REE1RUI5RDkKUldUWnVWN2EyT2pBb3czZ1I5eklLWmFBVU5ZOXlRU2xHZ0ZnZExhNkxMdlVFMjFGcEtLWHpKR1kK",
-      "endpoints": ["https://eiaserinnys.me/tauri-update/update/kaleidoscope?platform={{target}}&arch={{arch}}&bundle_type={{bundle_type}}&current_version={{current_version}}"],
+      "endpoints": ["https://kaleidoscope.eiaserinnys.me/releases/latest.json", "https://eiaserinnys.me/tauri-update/update/kaleidoscope?platform={{target}}&arch={{arch}}&bundle_type={{bundle_type}}&current_version={{current_version}}"],
       "windows": { "installMode": "passive" }
     }
   }
