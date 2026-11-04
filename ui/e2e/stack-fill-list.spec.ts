@@ -10,7 +10,7 @@ test("쌓기의 여러 글칸이 남은 높이를 나누고 긴 글은 칸 안�
   await expect(slots).toHaveCount(2);
   const before = await Promise.all([first.boundingBox(), second.boundingBox(), slots.nth(0).boundingBox(), slots.nth(1).boundingBox()]);
   expect(Math.abs(before[0]!.height - before[1]!.height)).toBeLessThanOrEqual(1);
-  expect(Math.abs(before[0]!.height - before[2]!.height)).toBeLessThanOrEqual(8);
+  expect(Math.abs(before[0]!.height - before[2]!.height)).toBeLessThanOrEqual(1);
   await first.fill(Array(20).fill("긴 글").join("\n"));
   expect((await first.boundingBox())!.height).toBe(before[0]!.height);
   expect(await first.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);

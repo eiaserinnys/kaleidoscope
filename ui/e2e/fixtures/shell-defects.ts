@@ -26,7 +26,7 @@ export const shellDefectFixtures = [
     { type: "button", label: "표 열기", on_click: [{ set_state: "open", value: true }] },
     { type: "dialog", title: "표 선택", open: { state: "open" }, on_close: [{ set_state: "open", value: false }], child: { type: "section", title: "항목", child: { type: "table", columns: [{ field: "title", label: "제목" }], rows: [{ key: "a", title: "하나" }] } } },
   ] } },
-  { ...base, requires: { blocks: 33, modules: {} }, id: "stack-fill-list-fixture", name: "채움 시험", state: { first: "", second: "" }, ui: {
+  { ...base, requires: { blocks: 34, modules: {} }, id: "stack-fill-list-fixture", name: "채움 시험", state: { first: "", second: "" }, ui: {
     type: "section", title: "답글", child: { type: "stack", direction: "column", gap: "small", fill: [0, 1], children: [
       { type: "input", label: "한국어", multiline: true, value: { state: "first" }, on_change: { set_state: "first" } },
       { type: "input", label: "영어", multiline: true, rows: 3, value: { state: "second" }, on_change: { set_state: "second" } },
