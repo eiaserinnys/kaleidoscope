@@ -93,6 +93,7 @@ pub(crate) fn activate(
     let dir = archive(inner, &file);
     let exists = dir.join("state.json").exists();
     let mut shared = storage::load_shared(&dir)?;
+    shared.preferences = None;
     let device = if exists {
         storage::load_device(&dir)?
     } else {
@@ -509,6 +510,76 @@ mod tests {
         ));
         assert_eq!(core.inner.generation.load(Ordering::SeqCst), 1);
         drop(state);
+        core.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod preferences_switch_tests {
+    use super::*;
+    use kaleidoscope_contract::{preferences::AccountPreferences, registry::DeviceEvent};
+    struct Host;
+    impl crate::Host for Host {
+        fn pick_folder(&self) -> Option<PathBuf> {
+            None
+        }
+    }
+    #[test]
+    fn switching_waits_for_target_server_preferences() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = crate::Core::open(
+            CoreConfig {
+                data_dir: dir.path().into(),
+                seed_definitions: vec![],
+                server_url: "https://example.test".into(),
+                device_name: "PC".into(),
+                embedded_server: None,
+            },
+            Arc::new(Host),
+        )
+        .unwrap();
+        let link = LinkFile {
+            revoked: false,
+            format: 1,
+            mode: ServerMode::Remote,
+            server_url: "https://example.test".into(),
+            device_id: "device".into(),
+            device_name: "PC".into(),
+            token: "token".into(),
+        };
+        let old = AccountPreferences {
+            revision: 10,
+            default_message_app_id: Some("old".into()),
+            asked_message_app_ids: vec![],
+        };
+        core.inner.state.lock().unwrap().shared.preferences = Some(old.clone());
+        activate(&core.inner, link.clone(), 0).unwrap();
+        core.inner.state.lock().unwrap().shared.preferences = Some(old);
+        activate(&core.inner, link, 0).unwrap();
+        assert!(core
+            .inner
+            .state
+            .lock()
+            .unwrap()
+            .shared
+            .preferences
+            .is_none());
+        let fresh = AccountPreferences {
+            revision: 1,
+            default_message_app_id: Some("agent".into()),
+            asked_message_app_ids: vec![],
+        };
+        crate::registry_events::apply_event(
+            &core.inner,
+            0,
+            DeviceEvent::PreferencesSnapshot {
+                preferences: fresh.clone(),
+            },
+        );
+        assert_eq!(
+            core.inner.state.lock().unwrap().shared.preferences,
+            Some(fresh)
+        );
         core.shutdown();
     }
 }

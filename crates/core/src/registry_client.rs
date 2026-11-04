@@ -66,6 +66,18 @@ pub(crate) struct AssetDownload {
 }
 
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn post_preferences(
+        &self,
+        _url: &str,
+        _token: &str,
+        _operation: &str,
+        _body: &serde_json::Value,
+    ) -> Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError> {
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "preferences unavailable",
+        ))
+    }
     fn post_window_control_response(
         &self,
         server_url: &str,
@@ -403,6 +415,35 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn post_preferences(
+        &self,
+        url: &str,
+        token: &str,
+        operation: &str,
+        body: &serde_json::Value,
+    ) -> Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!(
+                "{}/api/device/preferences/{operation}",
+                url.trim_end_matches('/')
+            ))
+            .bearer_auth(token)
+            .json(body)
+            .send()
+            .map_err(request_failure)?;
+        let status = response.status();
+        let host = response_host(&response);
+        if status.is_success() {
+            return response.json().map_err(response_read_failure);
+        }
+        let bytes = response.bytes().map_err(response_read_failure)?;
+        if let Ok(error) = serde_json::from_slice::<CoreError>(&bytes) {
+            return Err(RegistryError::Validation(error));
+        }
+        check_status(status, &bytes, &host)?;
+        Err(status_failure(status, &host))
+    }
     fn post_window_control_response(
         &self,
         server_url: &str,

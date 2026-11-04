@@ -1,4 +1,67 @@
 error_catalog! { ENTRIES;
+    SERVER_PREFERENCES_BODY_INVALID() {
+        class: InvalidRequest,
+        place: "쉘 설정 요청",
+        cause: "요청 본문의 형식이 올바르지 않다",
+        message: "쉘 설정 요청의 형식이 올바르지 않습니다. 쉘을 최신 판으로 업데이트하세요",
+        fix: "쉘을 최신 판으로 업데이트하세요"
+    }
+    SERVER_PREFERENCES_APP_NOT_FOUND() {
+        class: NotFound,
+        place: "쉘 설정 앱 검사",
+        cause: "선택한 앱이 없다",
+        message: "선택한 앱을 찾을 수 없습니다. 쉘 설정에서 다른 앱을 고르세요",
+        fix: "쉘 설정에서 다른 앱을 고르세요"
+    }
+    SERVER_PREFERENCES_APP_NOT_RECEIVABLE(app) {
+        class: InvalidRequest,
+        place: "쉘 설정 앱 수신 검사",
+        cause: "선택한 앱이 메시지를 받지 않는다",
+        message: "{app}은 메시지를 받는 앱으로 선택할 수 없습니다. 쉘 설정에서 다른 앱을 고르세요",
+        fix: "쉘 설정에서 다른 앱을 고르세요"
+    }
+    SERVER_PREFERENCES_READ_FAILED() {
+        class: Server,
+        place: "계정 설정 읽기",
+        cause: "서버 저장소를 읽지 못했다",
+        message: "계정의 쉘 설정을 읽지 못했습니다. 서버 저장소 상태를 확인한 뒤 다시 연결하세요",
+        fix: "서버 저장소 상태를 확인한 뒤 다시 연결하세요"
+    }
+    SERVER_PREFERENCES_WRITE_FAILED() {
+        class: Server,
+        place: "계정 설정 쓰기",
+        cause: "서버 저장소에 저장하지 못했다",
+        message: "기본 에이전트 설정을 저장하지 못했습니다. 서버 저장소 상태를 확인한 뒤 다시 시도하세요",
+        fix: "서버 저장소 상태를 확인한 뒤 다시 시도하세요"
+    }
+    SERVER_PREFERENCES_NOT_CONNECTED() {
+        class: Server,
+        place: "기본 에이전트 설정 변경",
+        cause: "서버에 연결되어 있지 않다",
+        message: "서버에 연결되어 있지 않아 기본 에이전트를 바꾸지 못했습니다. 서버에 연결한 뒤 다시 시도하세요",
+        fix: "서버에 연결한 뒤 다시 시도하세요"
+    }
+    SERVER_PREFERENCES_REQUEST_SEND_FAILED() {
+        class: Server,
+        place: "계정 설정 요청 전송",
+        cause: "서버로 요청을 보내지 못했다",
+        message: "기본 에이전트 설정을 서버에 보내지 못했습니다. 서버 연결을 확인한 뒤 다시 시도하세요",
+        fix: "서버 연결을 확인한 뒤 다시 시도하세요"
+    }
+    SERVER_PREFERENCES_RESPONSE_STATUS_FAILED() {
+        class: Server,
+        place: "계정 설정 서버 응답",
+        cause: "서버가 설정 요청을 거부했다",
+        message: "서버가 기본 에이전트 설정 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요",
+        fix: "서버 상태를 확인한 뒤 다시 시도하세요"
+    }
+    SERVER_PREFERENCES_RESPONSE_READ_FAILED() {
+        class: Server,
+        place: "계정 설정 응답 읽기",
+        cause: "서버 응답을 읽지 못했다",
+        message: "기본 에이전트 설정의 서버 응답을 읽지 못했습니다. 서버와 쉘을 확인한 뒤 다시 시도하세요",
+        fix: "서버와 쉘을 확인한 뒤 다시 시도하세요"
+    }
     SERVER_MCP_ACCOUNT_LOOKUP_DATABASE_FAILED() {
         class: Server,
         place: "MCP 계정 조회",

@@ -122,6 +122,11 @@ impl AppState {
             }
         }
         let mut initial_events = vec![snapshot];
+        if registry_version >= registry::PREFERENCES_REGISTRY_VERSION {
+            initial_events.push(DeviceEvent::PreferencesSnapshot {
+                preferences: self.read_preferences(&self.device_account_id(&device_id)?)?,
+            });
+        }
         if supported.as_ref().is_some_and(|supported| {
             supported
                 .modules
@@ -178,7 +183,7 @@ impl AppState {
                 loop {
                     tokio::select! {
                         received=rx.recv()=>match received {
-                            Ok(event)=>if !(matches!(event.event, DeviceEvent::WindowControl { .. }) && registry_version < 12) { if let Some(event) = state.event_for_broadcast(&device_id, event) { return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); } },
+                            Ok(event)=>if !(matches!(event.event, DeviceEvent::WindowControl { .. }) && registry_version < 12) && !(matches!(event.event, DeviceEvent::PreferencesChanged { .. } | DeviceEvent::PreferencesSnapshot { .. }) && registry_version < registry::PREFERENCES_REGISTRY_VERSION) { if let Some(event) = state.event_for_broadcast(&device_id, event) { return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); } },
                             Err(broadcast::error::RecvError::Closed)|Err(broadcast::error::RecvError::Lagged(_))=>{drop(guard);return None}
                         },
                         _=interval.tick()=>{

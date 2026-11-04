@@ -31,6 +31,7 @@ mod connection_snapshot_race_tests;
 mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
+mod preferences_tests;
 mod process_tests;
 mod profiler_concurrency_tests;
 mod profiler_tests;
@@ -1835,6 +1836,8 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 struct FakeRegistryClient {
     asset_bytes: Mutex<Option<Vec<u8>>>,
     storage_reads: AtomicUsize,
+    preferences_replies: Mutex<VecDeque<Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError>>>,
+    preferences_requests: Mutex<Vec<(String, Value)>>,
     control_responses: Mutex<Vec<kaleidoscope_contract::WindowControlResponse>>,
     raw_values_enabled: std::sync::atomic::AtomicBool,
     legacy_storage_not_found: std::sync::atomic::AtomicBool,
@@ -1884,6 +1887,10 @@ impl RegistryClient for FakeRegistryClient {
             bytes,
             mime: "text/javascript".into(),
         })
+    }
+    fn post_preferences(&self, _: &str, _: &str, operation: &str, body: &Value) -> Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError> {
+        self.preferences_requests.lock().unwrap().push((operation.to_string(), body.clone()));
+        self.preferences_replies.lock().unwrap().pop_front().expect("preferences reply")
     }
     fn post_window_control_response(
         &self,

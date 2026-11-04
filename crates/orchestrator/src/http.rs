@@ -88,6 +88,12 @@ pub fn router(state: AppState) -> Router {
             post(super::app_storage_http::device_collection_move),
         )
         .route("/events", get(device_events))
+        .route("/preferences", get(super::preferences::get_preferences))
+        .route(
+            "/preferences/default",
+            post(super::preferences::set_default),
+        )
+        .route("/preferences/answer", post(super::preferences::answer))
         .route(
             "/window-control/{request_id}",
             post(super::window_control::device_reply).layer(DefaultBodyLimit::disable()),

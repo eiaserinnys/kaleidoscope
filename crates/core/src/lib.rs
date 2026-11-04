@@ -32,6 +32,7 @@ mod profiler;
 mod registry_client;
 mod registry_events;
 mod share;
+mod shell_preferences;
 mod state_commands;
 mod state_events;
 mod startup_readiness;
@@ -638,6 +639,10 @@ impl Core {
             CoreRequest::LinkSyncLocalToRemote {} => server_switch::sync(&self.inner),
             CoreRequest::LinkCancel {} => link::cancel(&self.inner),
             CoreRequest::LinkUnlink {} => link::unlink(&self.inner),
+            request @ (CoreRequest::ShellPreferencesSetDefault { .. }
+            | CoreRequest::ShellPreferencesAnswer { .. }) => {
+                shell_preferences::handle(&self.inner, request)
+            }
             CoreRequest::ClientHttpRead {
                 window_id,
                 permission,

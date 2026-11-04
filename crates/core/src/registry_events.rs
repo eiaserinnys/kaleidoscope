@@ -13,8 +13,12 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
         return false;
     }
     match event {
-        // P2에서 계정 설정을 적용한다. 이 계약 단계에서는 서버가 이벤트를 보내지 않는다.
-        DeviceEvent::PreferencesSnapshot { .. } | DeviceEvent::PreferencesChanged { .. } => {}
+        DeviceEvent::PreferencesSnapshot { preferences }
+        | DeviceEvent::PreferencesChanged { preferences } => {
+            if let Err(error) = crate::shell_preferences::apply(inner, generation, preferences) {
+                link::set_offline(inner, generation, &link::load_link(inner), error);
+            }
+        }
         DeviceEvent::WindowControl { request } => {
             crate::window_control::handle_device_event(inner, generation, request);
         }
