@@ -87,6 +87,16 @@ pub(super) async fn device_delete(
     Path(app_id): Path<String>,
     Json(request): Json<DeviceRemoveRequest>,
 ) -> Response {
+    match super::registry_install::registry_owner_account(&state, &device.0) {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return super::http::error_response(
+                StatusCode::FORBIDDEN,
+                errors::REGISTRYINSTALL_REMOVE_ACCOUNT_FORBIDDEN(&app_id),
+            )
+        }
+        Err(error) => return super::http::error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+    }
     match state.delete_app(
         &app_id,
         Some(&device.0),

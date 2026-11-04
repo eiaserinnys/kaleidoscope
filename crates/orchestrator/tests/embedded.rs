@@ -86,15 +86,16 @@ async fn embedded_migrates_v14_through_preferences_and_installation_then_restart
         .unwrap();
     assert!(response.status().is_success());
     let events = tokio::time::timeout(Duration::from_secs(10), async {
-        let mut buffer = String::new();
+        let mut buffer = Vec::new();
         loop {
             let chunk = response
                 .chunk()
                 .await
                 .unwrap()
                 .expect("이벤트 스트림이 끝났습니다");
-            buffer.push_str(std::str::from_utf8(&chunk).unwrap());
-            let events: Vec<Value> = buffer
+            buffer.extend_from_slice(&chunk);
+            let text = String::from_utf8_lossy(&buffer);
+            let events: Vec<Value> = text
                 .lines()
                 .filter_map(|line| line.strip_prefix("data: "))
                 .filter_map(|data| serde_json::from_str(data).ok())

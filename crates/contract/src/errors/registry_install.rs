@@ -1,4 +1,12 @@
 error_catalog! { ENTRIES;
+    REGISTRYINSTALL_INSTALL_ACCOUNT_FORBIDDEN(app_id) {
+        class: PermissionDenied, place: "기기 앱 설치 계정 확인", cause: "기기의 계정이 레지스트리 주인 계정이 아니다",
+        message: "앱 {app_id}을 설치할 수 없습니다. 이 기기는 앱 레지스트리의 주인 계정에 연결되어 있지 않습니다. 주인 계정의 기기에서 다시 시도하세요.", fix: "주인 계정의 기기에서 다시 시도하세요"
+    }
+    REGISTRYINSTALL_REMOVE_ACCOUNT_FORBIDDEN(app_id) {
+        class: PermissionDenied, place: "기기 앱 삭제 계정 확인", cause: "기기의 계정이 레지스트리 주인 계정이 아니다",
+        message: "앱 {app_id}을 삭제할 수 없습니다. 이 기기는 앱 레지스트리의 주인 계정에 연결되어 있지 않습니다. 주인 계정의 기기에서 다시 시도하세요.", fix: "주인 계정의 기기에서 다시 시도하세요"
+    }
     REGISTRYINSTALL_EXPECTED_VERSION_CONFLICT(app_id) {
         class: Conflict, place: "설치·삭제 판 확인", cause: "앱의 현재 판이 요청한 판과 다르다",
         message: "앱 {app_id}의 현재 판이 바뀌어 처리하지 못했습니다. 앱 목록을 새로 고친 뒤 다시 시도하세요.", fix: "앱 목록을 새로 고치세요"

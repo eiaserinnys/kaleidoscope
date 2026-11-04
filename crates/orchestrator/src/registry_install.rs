@@ -22,6 +22,14 @@ pub(super) struct InstallGuard {
     pub account: String,
 }
 
+pub(super) fn registry_owner_account(
+    state: &AppState,
+    device_id: &str,
+) -> Result<Option<String>, CoreError> {
+    let account = state.device_account_id(device_id)?;
+    Ok((account == state.mcp_account_id()?).then_some(account))
+}
+
 pub(super) fn read_installation(
     raw: Option<String>,
     id: &str,
@@ -193,9 +201,18 @@ pub(super) async fn device_install(
     Extension(device): Extension<(String, String)>,
     Json(request): Json<DeviceInstallRequest>,
 ) -> Response {
+    let account = match registry_owner_account(&state, &device.0) {
+        Ok(Some(account)) => account,
+        Ok(None) => {
+            return super::http::error_response(
+                StatusCode::FORBIDDEN,
+                errors::REGISTRYINSTALL_INSTALL_ACCOUNT_FORBIDDEN(&request.origin.store_app_id),
+            )
+        }
+        Err(error) => return super::http::error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
+    };
     let result = (|| {
         validate_bundle(&request)?;
-        let account = state.device_account_id(&device.0)?;
         let guard = InstallGuard {
             origin: request.origin,
             expected: request.expected_current_version.map(|v| v.get()),

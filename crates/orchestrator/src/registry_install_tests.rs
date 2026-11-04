@@ -28,10 +28,20 @@ fn bundle(id: &str, release: u32, name: &str, expected: Option<u32>) -> Value {
 }
 
 async fn call(state: &AppState, method: &str, path: &str, body: Value) -> (StatusCode, Value) {
+    call_as(state, "test-token", method, path, body).await
+}
+
+async fn call_as(
+    state: &AppState,
+    token: &str,
+    method: &str,
+    path: &str,
+    body: Value,
+) -> (StatusCode, Value) {
     let request = Request::builder()
         .method(method)
         .uri(path)
-        .header(header::AUTHORIZATION, "Bearer test-token")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap();
@@ -457,4 +467,84 @@ async fn byte_count_hash_and_encoding_failures_have_distinct_codes() {
     encoding["manifest_base64"] = json!("***");
     let (_, error) = call(&state, "POST", "/api/device/app-installs", encoding).await;
     assert_eq!(error["id"], "REGISTRYINSTALL_MANIFEST_ENCODING_INVALID");
+}
+
+fn add_other_device(state: &AppState) {
+    let db = state.lock_db().unwrap();
+    db.execute("INSERT INTO accounts(id,display_name,created_at) VALUES('other-account','다른 계정','now')", []).unwrap();
+    db.execute("INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES('other-device','다른 기기','other-account',?1,'now')", [sha256_hex(b"other-token")]).unwrap();
+}
+
+#[tokio::test]
+async fn other_account_cannot_update_installed_app_or_assets() {
+    let (_dir, state) = setup();
+    add_other_device(&state);
+    let first = bundle_with_asset("owned-install", "<svg/>", false);
+    assert_eq!(
+        call(&state, "POST", "/api/device/app-installs", first)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let before = state.app("owned-install", None).unwrap().unwrap();
+    let assets = state.list_assets().unwrap();
+    let mut update = bundle_with_asset("owned-install", "<svg/>", true);
+    change_manifest(&mut update, |manifest| {
+        manifest["release"] = json!(2);
+        let files = manifest["files"].as_object_mut().unwrap();
+        *files = std::mem::take(files)
+            .into_iter()
+            .map(|(path, value)| {
+                (
+                    path.replacen("apps/owned-install/1/", "apps/owned-install/2/", 1),
+                    value,
+                )
+            })
+            .collect();
+    });
+    update["origin"]["release"] = json!(2);
+    update["expected_current_version"] = json!(1);
+    let (status, error) = call_as(
+        &state,
+        "other-token",
+        "POST",
+        "/api/device/app-installs",
+        update,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{error}");
+    assert_eq!(error["id"], "REGISTRYINSTALL_INSTALL_ACCOUNT_FORBIDDEN");
+    assert_eq!(state.app("owned-install", None).unwrap().unwrap(), before);
+    assert_eq!(state.list_assets().unwrap(), assets);
+    assert!(state
+        .get_asset("other-account", "new-icon", 1)
+        .unwrap()
+        .is_none());
+}
+
+#[tokio::test]
+async fn other_account_cannot_delete_installed_app_or_assets() {
+    let (_dir, state) = setup();
+    add_other_device(&state);
+    let first = bundle_with_asset("owned-delete", "<svg/>", false);
+    assert_eq!(
+        call(&state, "POST", "/api/device/app-installs", first)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let before = state.app("owned-delete", None).unwrap().unwrap();
+    let assets = state.list_assets().unwrap();
+    let (status, error) = call_as(
+        &state,
+        "other-token",
+        "DELETE",
+        "/api/device/apps/owned-delete",
+        json!({"expected_current_version":1}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{error}");
+    assert_eq!(error["id"], "REGISTRYINSTALL_REMOVE_ACCOUNT_FORBIDDEN");
+    assert_eq!(state.app("owned-delete", None).unwrap().unwrap(), before);
+    assert_eq!(state.list_assets().unwrap(), assets);
 }
