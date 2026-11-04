@@ -66,7 +66,7 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
-  return removable ? <div role="listitem" data-list-index={index} className={`ks-list-item${grid || icons ? " is-grid" : ""}${active ? " is-selected" : ""}`}>{row}<IconButton className="ks-list-remove" onFocus={() => handlers.current.focus(index)} aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
+  return removable ? <div role="listitem" onFocus={() => handlers.current.focus(index)} data-list-index={index} className={`ks-list-item${grid || icons ? " is-grid" : ""}${active ? " is-selected" : ""}`}>{row}<IconButton className="ks-list-remove" aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
 });
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/items`, block.items);
