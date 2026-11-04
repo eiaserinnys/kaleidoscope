@@ -24,7 +24,7 @@
 .ks-data-stack.gap-large { gap: var(--ks-space-5); }
 .ks-data-stack-item { flex: 0 0 auto; min-width: 0; min-height: 0; }
 .ks-data-stack-item:empty { display: none; }
-.ks-data-stack-item.is-fill { --ks-stack-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; padding: var(--ks-stack-ring); margin: calc(-1 * var(--ks-stack-ring)); scroll-padding: var(--ks-stack-ring); }
+.ks-data-stack-item.is-fill { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
 .ks-data-stack.has-fill-list > .ks-data-stack-item.is-fill { flex: 1 1 0; }
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-data-input > textarea),
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-input-field > .ks-data-input > textarea) { min-height: min-content; }
@@ -32,7 +32,6 @@
 .ks-data-stack-item:not(.is-fill) > .ks-data-stack.is-center { height: 100%; }
 .ks-data-stack.gap-small > .ks-data-stack-item > .ks-repeat:not(.is-grid):not([class*="gap-"]) > .ks-repeat-content { gap: var(--ks-space-2); }
 .ks-data-stack-item.is-fill:has(> .ks-split) { min-height: var(--ks-pane-min-size); }
-.ks-data-stack-item.is-fill > .ks-split { width: calc(100% + 2 * var(--ks-stack-ring)); height: calc(100% + 2 * var(--ks-stack-ring)); margin: calc(-1 * var(--ks-stack-ring)); }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column { height: auto; min-height: 100%; }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill) > .ks-data-stack-item.is-fill { flex: 0 0 auto; overflow: visible; }
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column.has-explicit-fill > .ks-data-stack-item.is-fill { flex: 1 1 0; min-height: var(--ks-pane-min-size); }
