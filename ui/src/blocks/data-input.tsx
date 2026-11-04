@@ -378,13 +378,14 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const confirmModifiers = useRef<ReturnType<typeof eventModifiers> | undefined>(undefined);
   const close = useCallback(() => setConfirm(false), []);
   const labelText = label.status === "ready" && typeof label.value === "string" ? label.value : "";
+  const labelLoading = label.status === "loading";
   const prefixText = block.prefix !== undefined ? bindingText(prefix) : "";
   const labelFailure = isMessageBindingFailure(label) ? label : null;
   const prefixFailure = isMessageBindingFailure(prefix) ? prefix : null;
   const bindingFailure = labelFailure ?? prefixFailure;
   const accessibleName = bindingFailure
     ? [labelText, bindingFailure.id].filter(Boolean).join(": ")
-    : prefixText ? `${prefixText}: ${labelText}` : labelText;
+    : labelLoading ? "불러오는 중" : prefixText ? `${prefixText}: ${labelText}` : labelText;
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
   useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
@@ -403,7 +404,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
       copyTimer.current = setTimeout(() => { setCopySucceeded(false); copyTimer.current = null; }, 1500);
     }
   };
-  const unavailable = disabled.status !== "ready" || Boolean(disabled.value) || bindingFailure !== null;
+  const unavailable = disabled.status !== "ready" || Boolean(disabled.value) || bindingFailure !== null || labelLoading;
   useLayoutEffect(() => {
     if (!busy && !unavailable && restoreAfterAction.current) {
       restoreAfterAction.current = false;
@@ -412,7 +413,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   });
   const hasIcon = (ICON_NAMES as readonly string[]).includes(iconText);
   const copied = copySucceeded && copyTextAction(block.on_click);
-  const buttonLabel = prefixText
+  const buttonLabel = labelLoading ? <span aria-hidden="true" className="ks-data-button-label ks-data-skeleton"><i /></span> : prefixText
     ? <><span className="ks-data-button-prefix">{prefixText}</span><span className="ks-data-button-label is-emphasized ks-truncate-label">{labelText}</span></>
     : <span className="ks-data-button-label ks-truncate-label">{labelText}</span>;
   const contents = <>{bindingFailure ? <DataIcon name="triangle-alert" /> : hasIcon ? <DataIcon name={copied ? "check" : iconText} /> : null}{!block.icon_only ? buttonLabel : null}</>;
@@ -437,7 +438,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
         <div className="ks-data-button-card-preview" aria-hidden="true" inert><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
         <div aria-hidden={bindingFailure ? undefined : true} className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}`}>
           {!bindingFailure && prefixText ? <><span className="ks-data-button-prefix">{prefixText}</span><wbr /></> : null}
-          {!bindingFailure ? <span className="ks-data-button-label is-emphasized">{labelText}</span> : null}
+          {!bindingFailure ? labelLoading ? <span aria-hidden="true" className="ks-data-button-label ks-data-skeleton"><i /></span> : <span className="ks-data-button-label is-emphasized">{labelText}</span> : null}
           {previewFailure}
         </div>
       </div>

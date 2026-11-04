@@ -4,14 +4,29 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ButtonBlock, ColorBlock, InputBlock, SelectBlock, ToggleBlock } from "../blocks/data-input";
 import "../styles/data-input-preview.css";
 
-const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined }));
+const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, loading: false, act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined }));
 const previewRender = vi.hoisted(() => vi.fn());
 vi.mock("../render/render-block", () => ({ renderBlock: (...args: unknown[]) => previewRender(...args) }));
 vi.mock("../data/window-data", () => ({
   useWindowData: () => runtime,
-  useBinding: (_pointer: string, binding: unknown) => ({ status: "ready", value: binding && typeof binding === "object" && "client" in binding ? runtime.values[(binding as { client: string }).client] : binding && typeof binding === "object" && "state" in binding ? 120 : binding }),
+  useBinding: (pointer: string, binding: unknown) => runtime.loading && pointer === "/button/label" ? { status: "loading" } : ({ status: "ready", value: binding && typeof binding === "object" && "client" in binding ? runtime.values[(binding as { client: string }).client] : binding && typeof binding === "object" && "state" in binding ? 120 : binding }),
 }));
-afterEach(() => { cleanup(); runtime.values = {}; runtime.act.mockClear(); previewRender.mockClear(); });
+afterEach(() => { cleanup(); runtime.values = {}; runtime.loading = false; runtime.act.mockClear(); previewRender.mockClear(); });
+
+it("단추 이름을 불러오는 동안 한 줄 대기 표시를 보이고 누름을 막는다", () => {
+  runtime.loading = true;
+  const button = { type: "button", label: { client: "label" }, on_click: { client: "go" } };
+  const view = render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+  const control = screen.getByRole("button", { name: "불러오는 중" }) as HTMLButtonElement;
+  expect(control.disabled).toBe(true);
+  expect(control.querySelector(".ks-data-skeleton i")).toBeTruthy();
+  fireEvent.click(control);
+  expect(runtime.act).not.toHaveBeenCalled();
+  runtime.loading = false;
+  runtime.values.label = "실행";
+  view.rerender(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+  expect((screen.getByRole("button", { name: "실행" }) as HTMLButtonElement).disabled).toBe(false);
+});
 
 it.each([false, true])("읽기 전용 %s줄 입력은 동작을 막고 해제하면 다시 편집한다", async (multiline) => {
   runtime.values = { text: "저장된 내용", locked: false };

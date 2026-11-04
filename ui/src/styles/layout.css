@@ -24,17 +24,22 @@
   touch-action: none;
 }
 
+.ks-split-row > .ks-split-handle {
+  margin-inline-start: calc(-1 * var(--ks-scrollbar-thumb-inset));
+}
+
 .ks-split-column .ks-split-handle {
   width: 100%;
   height: var(--ks-split-handle-size);
   align-self: start;
+  margin-block-start: calc(-1 * var(--ks-scrollbar-thumb-inset));
   cursor: row-resize;
 }
 
 .ks-split-handle::after {
   position: absolute;
   top: 0;
-  left: 0;
+  left: var(--ks-scrollbar-thumb-inset);
   width: var(--ks-line-width);
   height: 100%;
   background: var(--ks-color-border);
@@ -43,7 +48,7 @@
 }
 
 .ks-split-column .ks-split-handle::after {
-  top: 0;
+  top: var(--ks-scrollbar-thumb-inset);
   left: 0;
   width: 100%;
   height: var(--ks-line-width);

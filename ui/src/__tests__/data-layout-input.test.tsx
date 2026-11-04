@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BlockContext } from "../blocks/block-context";
 import { StackBlock } from "../blocks/data-layout";
+import { SplitPanes } from "../blocks/split";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
@@ -11,6 +12,24 @@ import { describeVisible } from "../share/visible";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("도구 막대 텍스트 항목은 줄어들 수 있는 항목으로 표시한다", async () => {
+  const definition: AppDefinition = { ...mdEditorDefinition, ui: { type: "toolbar", start: [
+    { type: "text", style: "title", value: "긴 제목" },
+    { type: "button", label: "실행", on_click: { set_state: "value" } },
+  ] } };
+  render(<AppWindowContent store={createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })))} windowId="editor-window" />);
+  const title = await screen.findByText("긴 제목");
+  expect(title.closest(".ks-data-toolbar-item")?.classList.contains("is-text")).toBe(true);
+  expect(screen.getByRole("button", { name: "실행" }).closest(".ks-data-toolbar-item")?.classList.contains("is-text")).toBe(false);
+});
+
+it.each(["row", "column"] as const)("%s 분할은 구분선 폭을 격자 트랙에 둔다", (direction) => {
+  const view = render(<SplitPanes direction={direction} children={[<span key="a">하나</span>, <span key="b">둘</span>]} />);
+  const split = view.container.querySelector(".ks-split") as HTMLElement;
+  const template = direction === "row" ? split.style.gridTemplateColumns : split.style.gridTemplateRows;
+  expect(template).toContain("var(--ks-line-width)");
+});
 
 it("stack.align maps cross-axis alignment and center placement keeps precedence", () => {
   for (const align of ["start", "center", "end", "baseline"] as const) {

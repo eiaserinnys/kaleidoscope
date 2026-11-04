@@ -221,7 +221,8 @@ test("분할 탭의 첫 내용 간격과 패널 가로 시작선을 맞춘다", 
   const inputButton = await box(inputToolbar.locator("button").first());
   const firstInputTabButton = await box(gallery.getByRole("tab").first());
   expectWithinOnePixel(inputButton.x, firstInputTabButton.x);
-  expectWithinOnePixel(inputButton.y, inputTabBox.y + inputTabBox.height + 8);
+  // D5 의도 변경: 첫 도구 막대의 위쪽 여백을 복원한다.
+  expectWithinOnePixel(inputButton.y, inputTabBox.y + inputTabBox.height + 16);
   await capture(page, "block-gallery-input-wide");
 
   await page.goto("/?preview=earth");
