@@ -12,7 +12,7 @@ import type { AppDefinition } from "../src/contract/contract";
 import "../src/styles/index.css";
 import "../../app/src/shell.css";
 
-const definition: AppDefinition = { ...mdViewerDefinition, id: "control-fixture", requires: { blocks: 30, modules: {} }, permissions: [], state: { text: "기존", selected: "하나", enabled: false, tab: "0", clicked: null, submitted: null, number: 2 }, ui: {
+const definition: AppDefinition = { ...mdViewerDefinition, id: "control-fixture", requires: { blocks: 31, modules: {} }, permissions: [], state: { text: "기존", selected: "하나", enabled: false, tab: "0", clicked: null, submitted: null, number: 2 }, ui: {
   type: "stack", direction: "column", children: [
     { type: "button", label: "실행", on_click: { set_state: "clicked" } },
     { type: "input", label: "대상 입력", value: { state: "text" }, on_change: { set_state: "text" }, on_submit: { set_state: "submitted" } },

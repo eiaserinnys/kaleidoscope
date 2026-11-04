@@ -94,10 +94,10 @@ test("누르고 놓은 스핀은 마지막 값만 보내고 바로 누른 동작
   await up.hover();
   await page.mouse.down();
   await page.waitForTimeout(1000);
-  const value = Number(await field.inputValue());
-  expect(value).toBeGreaterThan(3);
+  expect(Number(await field.inputValue())).toBeGreaterThan(3);
   expect((await calls()).length).toBe(initial);
   await page.mouse.up();
+  const value = Number(await field.inputValue());
   await expect.poll(async () => (await calls()).length).toBe(initial + 1);
   expect((await calls()).at(-1).event).toBe(value);
   await up.click();

@@ -1396,7 +1396,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
 
   it("숫자 스핀 값 변화는 다른 창과 형제를 다시 그리지 않는다", async () => {
     const app: AppDefinition = {
-      id: "spin-isolation", name: "숫자 입력 격리", requires: { blocks: 30, modules: {} }, permissions: [],
+      id: "spin-isolation", name: "숫자 입력 격리", requires: { blocks: 31, modules: {} }, permissions: [],
       state: { value: 2, other: "고정" },
       ui: { type: "stack", direction: "column", children: [
         { type: "input", kind: "number", spin: true, label: "수량", value: { state: "value" }, on_change: { set_state: "value" } },
