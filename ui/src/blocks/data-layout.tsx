@@ -171,11 +171,13 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
       key={tabIndex}
       pointer={`${pointer}/tabs/${tabIndex}`}
     />)}
-    {block.keep_mounted ? block.tabs.map((tab, tabIndex) => {
+    {block.tabs.map((tab, tabIndex) => {
       const selectedTab = tabIndex === index;
-      if (!selectedTab && !visited.has(tabIndex)) return null;
+      if (!selectedTab && (!block.keep_mounted || !visited.has(tabIndex))) {
+        return <div key={tabIndex} id={`${id}-panel-${tabIndex}`} aria-labelledby={showHeader ? `${id}-tab-${tabIndex}` : undefined} className="ks-data-tab-panel" hidden inert role="tabpanel" />;
+      }
       return <BoundTabPanel key={tabIndex} id={`${id}-panel-${tabIndex}`} labelledBy={`${id}-tab-${tabIndex}`} pointer={`${pointer}/tabs/${tabIndex}/label`} binding={tab.label} showHeader={showHeader} selected={selectedTab} collapsed={collapsed}>{renderChild(tabIndex)}</BoundTabPanel>;
-    }) : <BoundTabPanel id={`${id}-panel-${index}`} labelledBy={`${id}-tab-${index}`} pointer={`${pointer}/tabs/${index}/label`} binding={block.tabs[index].label} showHeader={showHeader} selected={true} collapsed={collapsed}>{renderChild(index)}</BoundTabPanel>}
+    })}
   </div>;
 }
 

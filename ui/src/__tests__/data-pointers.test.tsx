@@ -428,6 +428,10 @@ it("탭 화살표와 Home, End는 선택을 바꾸고 탭과 패널을 연결한
   const store = createShellStore(createFakeTransport(seed));
   render(<AppWindowContent store={store} windowId="viewer-window" />);
   const first = await screen.findByRole("tab", { name: "첫 탭" });
+  for (const tab of screen.getAllByRole("tab")) {
+    const panel = document.getElementById(tab.getAttribute("aria-controls")!);
+    expect(panel?.getAttribute("aria-labelledby")).toBe(tab.id);
+  }
   first.focus();
   await userEvent.keyboard("{ArrowRight}");
   const second = screen.getByRole("tab", { name: "둘째 탭" });
