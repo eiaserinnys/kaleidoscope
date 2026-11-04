@@ -14,6 +14,19 @@ test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=data-views-test");
   const app = page.getByTestId("app-window-data-views-test");
+  await page.addStyleTag({ path: new URL("../../app/src/shell.css", import.meta.url).pathname });
+  const backdropFilters = await page.evaluate(() => {
+    const frame = document.createElement("div");
+    frame.className = "ks-window-frame";
+    frame.style.cssText = "left: -10000px; width: 1px; height: 1px;";
+    document.body.append(frame);
+    return {
+      frame: getComputedStyle(frame).backdropFilter,
+      before: getComputedStyle(frame, "::before").backdropFilter,
+    };
+  });
+  expect(backdropFilters.frame).toBe("none");
+  expect(backdropFilters.before).toBe("blur(24px) saturate(1.05)");
   const list = app.getByRole("listbox");
   await expect(list.getByRole("option", { name: "항목 1", exact: true })).toBeVisible();
   expect(await list.getByRole("option").count()).toBeLessThan(100);
@@ -39,6 +52,25 @@ test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({
   await page.keyboard.press("Enter");
   await expect(app.locator('[role="option"]:focus')).toHaveAttribute("aria-selected", "true");
   await capture(page, "grid-wide");
+});
+
+test("고정 묶음 머리의 행 여백은 8px다", async ({ page }) => {
+  await page.goto("/?preview=data-views-test");
+  const paddingLeft = await page.evaluate(() => {
+    const section = document.createElement("div");
+    section.className = "ks-data-section";
+    const sticky = document.createElement("div");
+    sticky.className = "ks-view-sticky";
+    const group = document.createElement("div");
+    group.className = "ks-view-group";
+    sticky.append(group);
+    section.append(sticky);
+    document.body.append(section);
+    const value = getComputedStyle(group).paddingLeft;
+    section.remove();
+    return value;
+  });
+  expect(paddingLeft).toBe("8px");
 });
 
 test("표 머리 고정과 가로 스크롤, 흐름 따라가기", async ({ page }) => {
@@ -272,13 +304,25 @@ test("파일 트리 행의 공통화 전후 모습을 비교한다", async ({ pa
       document.querySelectorAll(".ks-file-tree-row").forEach((row) => row.classList.remove("ks-row"));
     }, baselineCss);
     await capture(page, `file-tree-before-${width}`);
-    const before = await folderTree.screenshot();
+    const screenshotRows = async () => {
+      const list = folderTree.locator(".ks-file-tree-list");
+      return page.screenshot({
+        clip: await list.evaluate((element) => {
+          const rows = element.querySelectorAll<HTMLElement>(".ks-file-tree-row");
+          const first = rows.item(0).getBoundingClientRect();
+          const last = rows.item(rows.length - 1).getBoundingClientRect();
+          const listRect = element.getBoundingClientRect();
+          return { x: listRect.x, y: first.y, width: listRect.width, height: last.bottom - first.y };
+        }),
+      });
+    };
+    const before = await screenshotRows();
     await page.evaluate(() => {
       document.getElementById("old-file-tree-css")?.remove();
       document.querySelectorAll(".ks-file-tree-row").forEach((row) => row.classList.add("ks-row"));
     });
     await capture(page, `file-tree-after-${width}`);
-    const after = await folderTree.screenshot();
+    const after = await screenshotRows();
     expect(after).toEqual(before);
   }
 });

@@ -481,11 +481,8 @@
 }
 
 .ks-markdown-text h1 {
-  font-family: var(--ks-font-display);
-  font-size: 1.867em;
-  font-weight: 400;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
+  font-size: 1.333em;
+  line-height: var(--ks-line-document);
 }
 
 .ks-markdown-text h2 {
@@ -565,16 +562,13 @@
 }
 
 .ks-markdown-text blockquote {
-  border-inline-start: 0;
+  border-inline-start: var(--ks-space-1) solid var(--ks-color-border);
   color: var(--ks-color-muted);
-  font-family: var(--ks-font-display);
-  font-size: 1.2em;
-  font-style: italic;
   margin-inline: 0;
-  padding: 0;
+  padding-inline-start: var(--ks-space-3);
 }
 
-.ks-markdown-text input[type="checkbox"] { accent-color: var(--ks-color-share); }
+.ks-markdown-text input[type="checkbox"] { accent-color: var(--ks-color-positive); }
 
 .ks-agent-chat-state {
   width: 100%;
@@ -751,7 +745,7 @@
   font-style: italic;
 }
 
-.ks-editor-view .ks-live-heading-1 { font-family: var(--ks-font-display); font-size: 1.867em; font-weight: 400; letter-spacing: -0.01em; line-height: 1.2; }
+.ks-editor-view .ks-live-heading-1 { font-size: 1.333em; line-height: var(--ks-line-document); }
 .ks-editor-view .ks-live-heading-2 { font-size: 1.067em; font-weight: 700; }
 .ks-editor-view .ks-live-heading-3,
 .ks-editor-view .ks-live-heading-4,
@@ -776,12 +770,9 @@
 .ks-editor-view .ks-live-muted { color: var(--ks-color-muted); }
 .ks-editor-view .ks-live-image { font-style: italic; }
 .ks-editor-view .ks-live-quote {
-  border-inline-start: 0;
+  border-inline-start: var(--ks-space-1) solid var(--ks-color-border);
   color: var(--ks-color-muted);
-  font-family: var(--ks-font-display);
-  font-size: 1.2em;
-  font-style: italic;
-  padding: 0;
+  padding-inline-start: var(--ks-space-3);
 }
 .ks-editor-view .ks-live-quote-marker {
   color: var(--ks-color-muted);
@@ -808,7 +799,7 @@
 .ks-live-task.is-checked::after {
   width: .3em;
   height: .6em;
-  border: solid var(--ks-color-share);
+  border: solid var(--ks-color-positive);
   border-width: 0 var(--ks-focus-width) var(--ks-focus-width) 0;
   content: "";
   transform: rotate(45deg);
