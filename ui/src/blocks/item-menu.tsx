@@ -59,8 +59,13 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
         if (entry.confirm) setPending(chosen); else void run(chosen);
       },
     }));
-    if (menu.length) menu.push({ id: "item-menu-separator", type: "separator" });
-    menu.push({ id: "item-menu-copy", label: copyLabel, onSelect: () => { void writeMenuClipboard(copyText, copyLabel); } });
+    const copy: MenuEntry = { id: "item-menu-copy", label: copyLabel, onSelect: () => { void writeMenuClipboard(copyText, copyLabel); } };
+    const separator: MenuEntry = { id: "item-menu-separator", type: "separator" };
+    if (menu.length && entries?.[0]?.danger) menu.unshift(copy, separator);
+    else {
+      if (menu.length) menu.push(separator);
+      menu.push(copy);
+    }
     if (event) openContextMenu(event, menu, { anchor });
     else {
       const rect = anchor.getBoundingClientRect();

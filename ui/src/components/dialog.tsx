@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Button } from "./primitives";
 import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
+import { writableControlSelector } from "./focus-rescue";
 
 export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, windowId }: { host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; windowId?: string }) {
   const titleId = useId();
@@ -32,7 +33,13 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
     const owner = windowId ?? ownerOf(host);
-    if (!windowModal && (!owner || !preserveWindowActionFocus(owner))) root.current?.querySelector<HTMLButtonElement>(danger ? ".ks-dialog-actions > button" : ".ks-dialog-confirm button")?.focus();
+    if (!windowModal && (!owner || !preserveWindowActionFocus(owner))) {
+      const input = [...(root.current?.querySelectorAll<HTMLElement>(`.ks-dialog-body :is(${writableControlSelector})`) ?? [])]
+        .find((element) => !element.closest("[hidden], [inert]")
+          && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
+      const target = input ?? root.current?.querySelector<HTMLElement>(showCancel ? ".ks-dialog-actions > button" : ".ks-dialog-confirm button");
+      target?.focus();
+    }
     if (!windowModal) document.addEventListener("keydown", onKey);
     return () => {
       if (!windowModal) document.removeEventListener("keydown", onKey);
@@ -45,7 +52,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
         }
       } else if (restore.current) previous?.focus();
     };
-  }, [host, onCancel, inertSelector, windowModal, danger]);
+  }, [host, onCancel, inertSelector, windowModal, showCancel]);
   useLayoutEffect(() => {
     const owner = windowId ?? ownerOf(host);
     if (windowModal && active && (!owner || !preserveWindowActionFocus(owner))) root.current?.focus({ preventScroll: true });

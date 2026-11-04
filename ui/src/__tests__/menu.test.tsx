@@ -171,4 +171,12 @@ describe("Menu", () => {
 
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Available" }));
   });
+
+  it("chooses a safe enabled item before a dangerous one", () => {
+    render(<Menu anchor={document.createElement("button")} onClose={() => undefined} items={[
+      { id: "danger", label: "삭제", danger: true },
+      { id: "safe", label: "복사" },
+    ]} />);
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "복사" }));
+  });
 });

@@ -85,7 +85,16 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   }, [readOnly]);
   useEffect(() => {
     if (focus.status !== "ready") return;
-    if (previousFocus.current === uninitializedFocus) { previousFocus.current = focus.value; return; }
+    if (previousFocus.current === uninitializedFocus) {
+      previousFocus.current = focus.value;
+      if (focus.value === false || focus.value === null || !isWindowTop(data.store.getSnapshot(), data.windowId)) return;
+      const target = inputElement.current ?? textarea.current;
+      const active = document.activeElement;
+      if (active !== target && active instanceof HTMLElement && active.matches('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
+      target?.focus();
+      target?.select();
+      return;
+    }
     if (Object.is(previousFocus.current, focus.value)) return;
     previousFocus.current = focus.value;
     if (focus.value === false || focus.value === null) return;
