@@ -99,7 +99,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
         .filter(({ item }) => item && !item.disabled);
       if (enabled.length === 0) return;
       event.preventDefault();
-      const current = enabled.findIndex(({ item }) => item === (event.isTrusted ? document.activeElement : event.target));
+      const current = enabled.findIndex(({ item }) => item === (!event.isTrusted && targetOwner && windowActionActive(targetOwner) ? event.target : document.activeElement));
       const delta = event.key === "ArrowDown" ? 1 : -1;
       const next = (current + delta + enabled.length) % enabled.length;
       if (!owner || !preserveWindowActionFocus(owner)) enabled[next].item?.focus();
