@@ -15,20 +15,51 @@ fn has_description(value: &Value) -> bool {
     }
 }
 
-fn invalid_option(value: &Value) -> bool {
-    if value.is_string() {
-        return false;
-    }
-    match value.as_object() {
-        Some(option) => {
-            !option.get("value").is_some_and(Value::is_string)
-                || !option.get("label").is_some_and(Value::is_string)
-                || option
-                    .get("description")
-                    .is_some_and(|description| !description.is_string())
+fn short_value(value: &Value) -> String {
+    value.to_string().chars().take(120).collect()
+}
+
+fn validate_options(at: &str, value: &Value) -> Option<CoreError> {
+    let Some(entries) = value.as_array() else {
+        return Some(crate::errors::APP_INPUT_OPTIONS_ARRAY_INVALID(
+            at,
+            short_value(value),
+        ));
+    };
+    for (index, entry) in entries.iter().enumerate() {
+        if entry.is_string() {
+            continue;
         }
-        None => true,
+        let Some(object) = entry.as_object() else {
+            return Some(crate::errors::APP_INPUT_OPTIONS_ITEM_INVALID(
+                at,
+                index + 1,
+                short_value(entry),
+            ));
+        };
+        for key in ["value", "label", "description"] {
+            match object.get(key) {
+                None if key == "description" => {}
+                None => {
+                    return Some(crate::errors::APP_INPUT_OPTIONS_KEY_MISSING(
+                        at,
+                        index + 1,
+                        key,
+                    ))
+                }
+                Some(value) if !value.is_string() => {
+                    return Some(crate::errors::APP_INPUT_OPTIONS_KEY_NOT_STRING(
+                        at,
+                        index + 1,
+                        key,
+                        short_value(value),
+                    ))
+                }
+                _ => {}
+            }
+        }
     }
+    None
 }
 
 pub(crate) fn validate_input_extensions(definition: &AppDefinition) -> Result<(), CoreError> {
@@ -59,7 +90,11 @@ pub(crate) fn validate_input_extensions(definition: &AppDefinition) -> Result<()
                 ..
             } => {
                 if spin.is_some() && definition.requires.blocks < INPUT_SPIN_BLOCK_SET_VERSION {
-                    Some(crate::errors::APP_INPUT_SPIN_VERSION_LOW(pointer, INPUT_SPIN_BLOCK_SET_VERSION, INPUT_SPIN_BLOCK_SET_VERSION))
+                    Some(crate::errors::APP_INPUT_SPIN_VERSION_LOW(
+                        pointer,
+                        INPUT_SPIN_BLOCK_SET_VERSION,
+                        INPUT_SPIN_BLOCK_SET_VERSION,
+                    ))
                 } else if spin.is_some() && !matches!(kind, InputKind::Number) {
                     Some(crate::errors::APP_INPUT_SPIN_KIND_INVALID(pointer))
                 } else if (options.is_some() || options_only.is_some())
@@ -78,12 +113,7 @@ pub(crate) fn validate_input_extensions(definition: &AppDefinition) -> Result<()
                 } else if options.is_some() && (*multiline || rows.is_some_and(|rows| rows > 1)) {
                     Some(crate::errors::APP_INPUT_OPTIONS_MULTILINE_INVALID(pointer))
                 } else if let Some(Binding::Literal(value)) = options {
-                    match value.as_array() {
-                        Some(entries) => entries.iter().position(invalid_option).map(|index| {
-                            crate::errors::APP_INPUT_OPTIONS_VALUE_INVALID(pointer, index + 1)
-                        }),
-                        None => Some(crate::errors::APP_INPUT_OPTIONS_VALUE_INVALID(pointer, 1)),
-                    }
+                    validate_options(pointer, value)
                 } else {
                     None
                 }

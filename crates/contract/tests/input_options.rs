@@ -59,7 +59,7 @@ fn invalid_combinations_and_literal_values_have_specific_errors() {
     );
     assert_eq!(
         error_id(input(json!(["a", {"value": 2, "label":"둘"}])), 32),
-        "APP_INPUT_OPTIONS_VALUE_INVALID"
+        "APP_INPUT_OPTIONS_KEY_NOT_STRING"
     );
 }
 
@@ -71,4 +71,27 @@ fn select_literal_description_requires_the_options_version() {
         "APP_SELECT_DESCRIPTION_VERSION_LOW"
     );
     assert!(parse_app_definition(&definition(block, 32).to_string()).is_ok());
+}
+
+#[test]
+fn option_errors_distinguish_causes_and_values() {
+    for (value, suffix, text) in [
+        (json!(12), "ARRAY_INVALID", "12"),
+        (json!([12]), "ITEM_INVALID", "12"),
+        (json!([{}]), "KEY_MISSING", "value"),
+        (
+            json!([{"value":"a", "label":12}]),
+            "KEY_NOT_STRING",
+            "label",
+        ),
+        (
+            json!([{"value":"a", "label":"A", "description":12}]),
+            "KEY_NOT_STRING",
+            "description",
+        ),
+    ] {
+        let error = parse_app_definition(&definition(input(value), 32).to_string()).unwrap_err();
+        assert_eq!(error.id.unwrap(), format!("APP_INPUT_OPTIONS_{suffix}"));
+        assert!(error.message.contains(text));
+    }
 }

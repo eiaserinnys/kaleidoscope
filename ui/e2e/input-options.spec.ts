@@ -118,10 +118,61 @@ test("원천 선택지를 기다리는 화면과 잘못된 선택지 오류를 �
   const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.emulateMedia({ colorScheme: "light" });
-  await page.goto("/?preview=input-options-fixture&options-delay=10000");
+  await page.goto("/?preview=input-options-fixture&options-delay=6000");
   const app = page.getByTestId("app-window-input-options-fixture");
   const loadingField = app.locator(".ks-data-stack-item").filter({ has: page.getByRole("combobox", { name: "연결 선택지" }) });
-  await expect(loadingField.getByRole("status", { name: "불러오는 중" })).toBeVisible();
-  await expect(app.getByText("SHELL_INPUT_OPTIONS_VALUE_INVALID")).toBeVisible();
+  await expect(loadingField.getByRole("status")).toHaveCount(0);
+  const next = app.getByRole("combobox", { name: "잘못된 선택지" });
+  const before = await next.boundingBox();
+  if (output) await page.screenshot({ path: join(output, "원천-받기전.png") });
+  await loadingField.getByRole("combobox").focus();
+  await expect(page.getByRole("listbox").getByRole("status")).toBeVisible();
+  expect(await page.locator(".ks-combobox-skeleton i").count()).toBe(3);
+  if (output) await page.screenshot({ path: join(output, "원천-뼈대.png") });
+  await expect(page.getByRole("option", { name: "첫째" })).toBeVisible();
+  expect((await next.boundingBox())!.y).toBe(before!.y);
+  if (output) {
+    await page.screenshot({ path: join(output, "원천-받은뒤.png") });
+    writeFileSync(join(output, "loading-metrics.json"), JSON.stringify({ before, after: await next.boundingBox() }));
+  }
+  await expect(app.getByText("SHELL_INPUT_OPTIONS_KEY_NOT_STRING")).toBeVisible();
   if (output) await page.screenshot({ path: join(output, "원천-불러오는중.png") });
+});
+
+
+test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른다", async ({ page }) => {
+  const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
+  const metrics = [];
+  for (const [width, theme] of [[1200, "light"], [360, "dark"]] as const) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto("/?preview=block-gallery");
+    await page.getByTestId("app-window-block-gallery").getByRole("tab", { name: "입력" }).click();
+    const input = page.getByRole("combobox", { name: "이름" });
+    await input.scrollIntoViewIfNeeded(); await input.focus();
+    const popup = page.locator(".ks-combobox-popup");
+    await expect(popup).toBeVisible();
+    expect(await popup.evaluate((e) => e.classList.contains("is-above"))).toBe(false);
+    const row = page.getByRole("option").first(); await row.hover();
+    const boxes = { input: (await input.boundingBox())!, popup: (await popup.boundingBox())!, row: (await row.boundingBox())! };
+    expect(boxes.row.x - boxes.popup.x).toBe(4);
+    expect(boxes.popup.width).toBe(boxes.input.width);
+    metrics.push({ width, theme, boxes, below: 800 - boxes.input.y - boxes.input.height });
+    if (output) {
+      await page.screenshot({ path: join(output, `이름-${width}.png`) });
+      await popup.screenshot({ path: join(output, `행-확대-${width}.png`), scale: "css" });
+    }
+    await input.press("Escape");
+  }
+  await page.setViewportSize({ width: 1200, height: 470 });
+  const input = page.getByRole("combobox", { name: "이름" });
+  await input.blur(); await input.scrollIntoViewIfNeeded(); await input.focus();
+  await input.hover(); await page.mouse.wheel(0, 80); await page.waitForTimeout(100);
+  const i = (await input.boundingBox())!; const p = (await page.locator(".ks-combobox-popup").boundingBox())!;
+  expect(Math.abs(i.x - p.x)).toBeLessThan(1);
+  expect(Math.min(Math.abs(p.y - i.y - i.height - 8), Math.abs(i.y - p.y - p.height - 8))).toBeLessThan(1);
+  if (output) {
+    await page.screenshot({ path: join(output, "스크롤-1200x470.png") });
+    writeFileSync(join(output, "fix2-metrics.json"), JSON.stringify({ metrics, scroll: { input: i, popup: p } }, null, 2));
+  }
 });

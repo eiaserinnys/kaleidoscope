@@ -18,6 +18,7 @@
   min-height: 0;
   max-height: calc(var(--ks-pane-min-size) * 2);
   overflow: auto;
+  padding: var(--ks-space-1);
 }
 .ks-combobox-option:hover:not(:disabled):not(.is-active) { background-image: none; }
 .ks-combobox-option.is-active { background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover)); }
@@ -44,3 +45,6 @@
   min-height: 0;
   max-height: var(--ks-pane-min-size);
 }
+
+.ks-combobox-skeleton { gap: 0; }
+.ks-combobox-skeleton i { box-sizing: border-box; height: max(var(--ks-control-height), calc(var(--ks-type-body) * var(--ks-line-body) + 2 * var(--ks-space-2))); border-block: var(--ks-space-2) solid transparent; background-clip: padding-box; }

@@ -12,6 +12,7 @@ type Props = {
   inputRef: RefObject<HTMLInputElement | null>;
   options: InputOption[];
   ready: boolean;
+  loading?: boolean;
   visible: boolean;
   optionsOnly?: boolean;
   onChoose: (value: string) => void;
@@ -19,7 +20,7 @@ type Props = {
   onEditingEnd: () => void;
 };
 
-export function Combobox({ inputProps, inputRef, options, ready, visible, optionsOnly = false, onChoose, onCommit, onEditingEnd }: Props) {
+export function Combobox({ inputProps, inputRef, options, ready, loading = false, visible, optionsOnly = false, onChoose, onCommit, onEditingEnd }: Props) {
   const id = useId();
   const listId = `${id}-list`;
   const descriptionId = `${id}-description`;
@@ -38,9 +39,9 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, option
   const shown = open ? filtered : options;
   const surface = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<HTMLInputElement | null>(null);
-  const popupVisible = open && (optionsOnly || filtered.length > 0);
+  const popupVisible = open && (loading || optionsOnly || filtered.length > 0);
   const position = useAnchoredOverlay(popupVisible ? anchor : null, surface, { offsetToken: "--ks-space-2", alignEndOnOverflow: true });
-  const layout = useComboboxLayout(open ? anchor : null, options.some((option) => Boolean(option.description)));
+  const layout = useComboboxLayout(open ? anchor : null, options, loading);
   const optionKey = useCallback((index: number) => filtered[index].index, [filtered]);
   const { scroll, virtual } = useVirtualRows(filtered.length, DEFAULT_VIRTUAL_ROW_ESTIMATE, undefined, false, optionKey);
   const index = active === null ? -1 : filtered.findIndex((option) => option.index === active);
@@ -73,7 +74,7 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, option
     return () => document.removeEventListener("pointerdown", outside);
   }, [open, anchor]);
   const show = () => {
-    if (!ready || inputProps.readOnly) return;
+    if ((!ready && !loading) || inputProps.readOnly) return;
     setAnchor(inputRef.current); setQuery(""); setActive(options.find((option) => option.value === text)?.index ?? null); setOpen(true);
   };
   const changeActive = (direction: number) => {
@@ -106,7 +107,7 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, option
       onCommit(); onEditingEnd(); setOpen(false);
     }}>
       <div className="ks-combobox-list" role="listbox" id={listId} ref={scroll}>
-        {filtered.length ? <VirtualSurface virtual={virtual}>{rows.map((row) => {
+        {loading ? <div className="ks-data-skeleton ks-combobox-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div> : filtered.length ? <VirtualSurface virtual={virtual}>{rows.map((row) => {
           const option = filtered[row.index];
           return <OptionRow key={option.index} option={option} id={`${id}-option-${option.index}`} top={row.start} selected={text === option.value} active={option.index === active} size={filtered.length} position={row.index + 1} descriptionId={descriptionId} measure={virtual.measureElement} onActive={setActive} onChoose={choose} />;
         })}</VirtualSurface> : <div className="ks-combobox-empty">일치 없음</div>}
@@ -118,12 +119,13 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, option
 
 type ComboboxLayout = { far: boolean; above: boolean; style: CSSProperties };
 
-function useComboboxLayout(anchor: HTMLElement | null, hasDescriptions: boolean): ComboboxLayout | null {
+function useComboboxLayout(anchor: HTMLElement | null, options: InputOption[], loading: boolean): ComboboxLayout | null {
   const [layout, setLayout] = useState<ComboboxLayout | null>(null);
-  const descriptions = useRef(hasDescriptions);
-  descriptions.current = hasDescriptions;
+  const choices = useRef({ options, loading });
+  choices.current = { options, loading };
   useLayoutEffect(() => {
     if (!anchor) { setLayout(null); return; }
+    let openedAbove: boolean | undefined;
     const measure = () => {
       const rect = anchor.getBoundingClientRect();
       const css = getComputedStyle(anchor);
@@ -135,10 +137,17 @@ function useComboboxLayout(anchor: HTMLElement | null, hasDescriptions: boolean)
       const width = Math.min(Math.max(rect.width, pane), Math.max(window.innerWidth - 2 * inset, 0));
       const position = computeAnchoredPosition({ rect, width, height: 0, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, inset, offset, alignEndOnOverflow: true });
       const far = position.left + width + line + 2 * pane > window.innerWidth - inset;
-      const required = 2 * pane + (far && descriptions.current ? pane + line : 0);
+      const { options, loading } = choices.current;
+      const bodyHeight = token("--ks-type-body") * token("--ks-line-body");
+      const metaHeight = token("--ks-type-meta") * token("--ks-line-body");
+      const rowHeight = (option?: InputOption) => Math.max(token("--ks-control-height"), bodyHeight + (option && option.label !== option.value ? metaHeight : 0) + 2 * offset);
+      const total = loading ? 3 * rowHeight() : options.reduce((sum, option) => sum + rowHeight(option), 0);
+      const padding = 2 * token("--ks-space-1");
+      const required = Math.min(total, 2 * pane - padding) + padding + (far && options.some((option) => Boolean(option.description)) ? pane + line : 0);
       const below = window.innerHeight - inset - rect.bottom - offset;
       const aboveSpace = rect.top - inset - offset;
-      const above = below < required && aboveSpace > below;
+      const above = openedAbove ?? (below < required && aboveSpace > below);
+      openedAbove = above;
       setLayout({ far, above, style: {
         left: position.left,
         top: above ? undefined : rect.bottom + offset,
@@ -148,8 +157,15 @@ function useComboboxLayout(anchor: HTMLElement | null, hasDescriptions: boolean)
       } as CSSProperties });
     };
     measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    let frame = 0;
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); }); };
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    return () => {
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+      if (frame) cancelAnimationFrame(frame);
+    };
   }, [anchor]);
   return layout;
 }

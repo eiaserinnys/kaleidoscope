@@ -182,3 +182,27 @@ it.each(["value-3", "value-1"])("연속 선택 뒤 첫 응답이 와도 미일�
   await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe(lastValue));
   expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change"))).toHaveLength(2);
 });
+
+it("선택지 세 개가 아래에 들어가면 아래로 연다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  const ref = createRef<HTMLInputElement>();
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 20, right: 220, top: 510, bottom: 550, width: 200, height: 40 } as DOMRect);
+  const css = document.documentElement.style;
+  for (const [key, value] of Object.entries({ "--ks-space-1": "4px", "--ks-space-2": "8px", "--ks-space-3": "12px", "--ks-pane-min-size": "160px", "--ks-control-height": "40px", "--ks-type-body": "14px", "--ks-line-body": "1.5", "--ks-line-width": "1px" })) css.setProperty(key, value);
+  vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
+  render(<Combobox inputRef={ref} inputProps={{}} ready visible options={["사과", "배", "포도"].map((value, index) => ({ value, label: value, index, searchValue: value, searchLabel: value }))} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} />);
+  fireEvent.focus(screen.getByRole("combobox"));
+  expect(document.querySelector(".ks-combobox-popup")?.classList.contains("is-above")).toBe(false);
+  cleanup(); css.cssText = "";
+});
+
+it("불러오는 중에도 열면 목록 자리에 뼈대 세 줄을 보인다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  render(<Combobox inputRef={createRef<HTMLInputElement>()} inputProps={{}} ready={false} loading visible options={[]} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} />);
+  expect(screen.queryByRole("status")).toBeNull();
+  fireEvent.focus(screen.getByRole("combobox"));
+  expect(within(screen.getByRole("listbox")).getByRole("status")).toBeTruthy();
+  expect(document.querySelectorAll(".ks-combobox-list .ks-data-skeleton i")).toHaveLength(3);
+});

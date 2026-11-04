@@ -16,3 +16,18 @@ describe("입력 선택지", () => {
     expect(normalizeInputOptions("하나").ok).toBe(false);
   });
 });
+
+it.each([
+  [12, "ARRAY_INVALID"], [[12], "ITEM_INVALID"], [[{}], "KEY_MISSING"],
+  [[{ value: 12, label: "둘" }], "KEY_NOT_STRING"],
+  [[{ value: "a", label: "A", description: 12 }], "KEY_NOT_STRING"],
+])("잘못된 자료 %j의 원인 %s를 구분한다", (value, reason) => {
+  expect(normalizeInputOptions(value)).toMatchObject({ ok: false, reason });
+});
+
+it("오류 문구에 항목 번호와 키와 받은 값을 담는다", async () => {
+  const { inputOptionsError } = await import("../blocks/input-options");
+  const result = normalizeInputOptions(["정상", { value: 12, label: "둘" }]);
+  if (result.ok) throw new Error("잘못된 선택지를 허용했습니다");
+  expect(inputOptionsError(result)).toMatchObject({ id: "SHELL_INPUT_OPTIONS_KEY_NOT_STRING", message: "입력 선택지 2번째의 value가 문자열이 아닙니다. 받은 값: 12. 앱 정의의 options 자료에서 해당 키를 문자열로 고치세요." });
+});

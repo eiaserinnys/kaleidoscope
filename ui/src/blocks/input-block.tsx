@@ -7,7 +7,6 @@ import { useLocalDraft } from "../data/use-local-draft";
 import { BindingFailureNotice, DataState } from "../components/data-state";
 import { Combobox } from "../components/combobox";
 import { Notice } from "../components/primitives";
-import * as shellErrors from "../contract/shell-errors";
 import { DataIcon } from "../components/data-icons";
 import { IconButton } from "../components/primitives";
 import { SpinButtons, steppedNumber } from "../components/number-input";
@@ -15,7 +14,7 @@ import { X } from "../components/icons";
 import { display, isMultilineInput } from "./data-layout";
 import { isWindowTop, useWindowVisible } from "../data/window-state";
 import { inputDraft, decimalDigits, useInputDraft } from "./input-draft";
-import { normalizeInputOptions } from "./input-options";
+import { inputOptionsError, normalizeInputOptions } from "./input-options";
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const uninitializedFocus = Symbol("uninitialized focus");
 const fieldPosition = (position: "inline" | "top" | "hidden" | undefined) => position && position !== "inline" ? ` is-label-${position}` : "";
@@ -206,7 +205,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const input = <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${block.kind === "number" ? " is-number" : ""}${block.spin ? " has-spin" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}${block.columns !== undefined ? " has-columns" : ""}`}
     style={block.columns !== undefined ? { "--ks-input-columns": `${block.columns}ch` } as CSSProperties : undefined}>
     {block.kind === "search" ? <span className="ks-data-input-search"><DataIcon name="search" size="inline" /></span> : null}
-    {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : block.options !== undefined ? <WindowCombobox context={context} optionsOnly={optionsOnly} inputProps={{ ...props, type: "text" }} inputRef={inputElement} options={normalizedOptions?.ok ? normalizedOptions.options : []} ready={normalizedOptions?.ok === true} onChoose={choose} onCommit={() => commit(draft)} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : <input {...props}
+    {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : block.options !== undefined ? <WindowCombobox context={context} optionsOnly={optionsOnly} inputProps={{ ...props, type: "text" }} inputRef={inputElement} options={normalizedOptions?.ok ? normalizedOptions.options : []} ready={normalizedOptions?.ok === true} loading={optionsBinding.status === "loading"} onChoose={choose} onCommit={() => commit(draft)} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : <input {...props}
       ref={inputElement}
       type="text"
       inputMode={block.kind === "number" ? "decimal" : undefined}
@@ -221,8 +220,8 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     {block.kind === "number" && block.spin ? <WindowSpinButtons context={context} ref={spinButtons} increment={(direction, held) => increment(direction, 1, held)} onEnd={() => { spinning.current = false; endSpin(); if (!spinPending.current && !edited.current && !focusedRef.current) finish(); }} atMin={minimum !== null && numericValue !== undefined && numericValue <= minimum} atMax={maximum !== null && numericValue !== undefined && numericValue >= maximum} readOnly={readOnly} /> : null}
     {block.kind === "search" && (readOnly ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={readOnly} onClick={() => { markChanged(""); if (optionsOnly) commit(""); else sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
-  const optionsError = normalizedOptions && !normalizedOptions.ok ? shellErrors.SHELL_INPUT_OPTIONS_VALUE_INVALID({ index: String(normalizedOptions.index) }) : null;
-  return <>{hasLabel ? <><div className={`ks-field ks-input-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <label htmlFor={inputId} className="ks-field-label" data-ks-share-skip="">{labelText}</label> : null}{input}</div><BindingFailureNotice value={label} /></> : input}{block.options !== undefined && optionsBinding.status !== "ready" ? <DataState value={optionsBinding} compact /> : null}{block.options !== undefined && optionsError ? <Notice role="alert" errorId={optionsError.id}>{optionsError.message}</Notice> : null}</>;
+  const optionsError = normalizedOptions && !normalizedOptions.ok ? inputOptionsError(normalizedOptions) : null;
+  return <>{hasLabel ? <><div className={`ks-field ks-input-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <label htmlFor={inputId} className="ks-field-label" data-ks-share-skip="">{labelText}</label> : null}{input}</div><BindingFailureNotice value={label} /></> : input}{block.options !== undefined && optionsBinding.status !== "ready" && optionsBinding.status !== "loading" ? <DataState value={optionsBinding} compact /> : null}{block.options !== undefined && optionsError ? <Notice role="alert" errorId={optionsError.id}>{optionsError.message}</Notice> : null}</>;
 }
 
 function WindowCombobox({ context, ...props }: Omit<ComponentProps<typeof Combobox>, "visible"> & { context: BlockContext }) {
