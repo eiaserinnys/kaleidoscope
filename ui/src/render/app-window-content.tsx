@@ -163,8 +163,9 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       const lost = active === document.body || (active instanceof HTMLElement && active.classList.contains("ks-window-content") && scope.contains(active));
       if (focused && !scope.contains(focused)) { focused = null; restore = lost; }
       if (!restore || !lost) return;
-      let target = collectionTarget(changes) ?? nearTarget();
+      let target = collectionTarget(changes);
       if (pointer) {
+        target ??= nearTarget();
         if (!target || target.matches(writableControlSelector)) target = windowContentTarget();
       } else {
         const visible = visibleControls(content);

@@ -60,7 +60,7 @@ describe("app definition renderer", () => {
     const first = await screen.findByRole("button", { name: "선택" });
     first.focus();
     await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { visible: false } }); });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "뒤로" })));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음" })));
   });
 
   it("목록 항목을 키보드로 지우면 강조 단추 대신 다음 항목으로 초점을 옮긴다", async () => {
@@ -226,7 +226,7 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(next));
   });
 
-  it("모음에 새 조작이 함께 들어오면 가까운 같은 자리로 옮긴다", async () => {
+  it("모음에 새 조작이 함께 들어오면 이웃 대신 새 화면의 강조 단추로 옮긴다", async () => {
     const fixture = await focusFixture('<div role="list"><button>이전 항목</button><button>남은 항목</button></div><button class="ks-button-emphasis">다음 화면</button>');
     const group = fixture.firstElementChild!;
     const first = screen.getByRole("button", { name: "이전 항목" });
@@ -235,7 +235,7 @@ describe("app definition renderer", () => {
     const replacement = document.createElement("button");
     replacement.textContent = "새 항목";
     group.replaceChild(replacement, first);
-    await waitFor(() => expect(document.activeElement).toBe(replacement));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음 화면" })));
   });
 
   it("승인 목록이 비면 말풍선 대신 대화 입력칸으로 초점을 옮긴다", async () => {
