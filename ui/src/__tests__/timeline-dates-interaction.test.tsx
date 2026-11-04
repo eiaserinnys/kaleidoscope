@@ -8,6 +8,8 @@ vi.mock("../share/visible", () => ({ useShareDescriber: (_root: unknown, describ
 vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, useWindowGrants: () => [], useWindowStateValue: () => "ko-KR" }));
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains("ks-dates-period-text")) return { width: 180, height: 16 } as DOMRect;
+    if (this.classList.contains("ks-dates-name-measure")) return { width: this.textContent === "짧음" ? 12 : 100, height: 16 } as DOMRect;
     if (this.classList.contains("ks-dates-corner")) return { left: 0, top: 0, width: 128, height: 96 } as DOMRect;
     if (this.classList.contains("ks-dates-row-measure")) return { left: 0, top: 0, width: 0, height: 40 } as DOMRect;
     if (this.parentElement?.classList.contains("ks-dates-measure")) return { left: 0, top: 0, width: 12, height: 16 } as DOMRect;
@@ -107,4 +109,19 @@ it("ko-KR 일 눈금은 접미사 없는 날짜 숫자만 보인다", () => {
   const ticks = [...view.container.querySelectorAll(".ks-dates-ticks > span")];
   expect(ticks.length).toBeGreaterThan(0);
   expect(ticks.every((tick) => /^\d+$/.test(tick.textContent!))).toBe(true);
+});
+
+it("짧게 걸친 해 이름은 숨기고 가운데 해는 온전히 보인다", () => {
+  render(<TimelineBlock block={{ ...block, controls: true, tracks: [{ id: "year", items: [{ id: "year-item", start: "2026-01-05", end: "2026-12-18" }] }] }} pointer="/ui" context={context} />);
+  fireEvent.click(screen.getByRole("button", { name: "전체 맞춤" }));
+  expect(getComputedStyle(screen.getByText("2025년", { exact: true })).visibility).toBe("hidden");
+  expect(getComputedStyle(screen.getByText("2027년", { exact: true })).visibility).toBe("hidden");
+  expect(getComputedStyle(screen.getByText("2026년", { exact: true })).visibility).toBe("visible");
+});
+
+it.each([["each", "긴 이름 전체", true], ["each", "짧음", false], ["pack", "긴 이름 전체", false]] as const)("%s 줄의 %s 이름은 필요할 때만 전체를 밖에 둔다", (lanes, label, outside) => {
+  const view = render(<TimelineBlock block={{ ...block, lanes, tracks: [{ id: "track", items: [{ ...block.tracks[0].items[0], label }] }] }} pointer="/ui" context={context} />);
+  const name = view.container.querySelector(".ks-timeline-label")!;
+  expect(name.textContent).toBe(label);
+  expect(name.classList.contains("is-outside")).toBe(outside);
 });

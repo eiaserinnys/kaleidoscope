@@ -334,8 +334,8 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
           {block.controls !== false && <><IconButton aria-label="축소" disabled={!canViewport || pxDay <= minPx} onClick={() => zoom(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canViewport || pxDay >= maxPx} onClick={() => zoom(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true && <IconButton aria-label="전체 맞춤" disabled={!canViewport || pxDay <= minPx} onClick={() => { applyScale(minPx, 0); queueViewport(0, minPx); }}><DataIcon name="maximize-2" size="inline" /></IconButton>}</>}
         </div>
         <div className="ks-dates-axis" style={{ left: metrics.left, width: totalWidth }}>
-          <div className="ks-dates-months">{periods.map((month) => <div className="ks-dates-month" key={month.day} style={{ left: x(month.day), width: (month.end - month.day) * pxDay }}><span style={{ left: metrics.left }}>{scale === "month" ? formatYear.format(date(month.day)) : formatMonth.format(date(month.day))}</span></div>)}</div>
-          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <span key={month.day} style={{ left: x(month.day), width: (month.end - month.day) * pxDay, justifyContent: "flex-start" }}>{monthOnly.format(date(month.day))}</span>) : dates.map((day) => <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width: pxDay * (scale === "week" ? 7 : 1) }}>{scale === "day" ? dayText(day) : formatDate.format(date(day))}</span>)}</div>
+          <div className="ks-dates-months">{periods.map((month) => <div className="ks-dates-month" key={month.day} style={{ left: x(month.day), width: (month.end - month.day) * pxDay }}><PeriodLabel width={(month.end - month.day) * pxDay} left={metrics.left}>{scale === "month" ? formatYear.format(date(month.day)) : formatMonth.format(date(month.day))}</PeriodLabel></div>)}</div>
+          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <PeriodLabel key={month.day} width={(month.end - month.day) * pxDay} left={x(month.day)} tick>{monthOnly.format(date(month.day))}</PeriodLabel>) : dates.map((day) => <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width: pxDay * (scale === "week" ? 7 : 1) }}>{scale === "day" ? dayText(day) : formatDate.format(date(day))}</span>)}</div>
           <DateMarkers markers={markers} today={block.today !== false ? today : null} start={range.start} pxDay={pxDay} width={totalWidth} gap={metrics.gap} />
         </div>
       </div>
@@ -367,16 +367,33 @@ const DateRow = memo(function DateRow({ row, track, top, height, from, to, pxDay
 });
 
 const DateBar = memo(function DateBar({ item, track, pxDay, scrollLeft, rangeStart, selected, preview, lanes, formatDate, handlers, readOnly }: { item: Item; track: Track; pxDay: number; scrollLeft: number; rangeStart: number; selected: boolean; preview: Edit | null; lanes: "single" | "pack" | "each"; formatDate: Intl.DateTimeFormat; handlers: React.RefObject<Handlers>; readOnly: boolean }) {
+    const measure = useRef<HTMLSpanElement>(null);
+    const [nameSize, setNameSize] = useState({ width: 0, padding: 0 });
+    useLayoutEffect(() => {
+      const element = measure.current;
+      if (!element) return;
+      const read = () => {
+        const style = getComputedStyle(element);
+        const next = { width: element.getBoundingClientRect().width, padding: 2 * (parseFloat(style.getPropertyValue("--ks-space-1")) || 0) + 2 * (parseFloat(style.getPropertyValue("--ks-line-width")) || 0) };
+        setNameSize((old) => old.width === next.width && old.padding === next.padding ? old : next);
+      };
+      read();
+      const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(read);
+      observer?.observe(element);
+      return () => observer?.disconnect();
+    }, [item.label, item.start === null]);
     if (item.start === null || item.end === null) return <button type="button" className={`ks-dates-undated${selected ? " is-selected" : ""}`} key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
     const start = preview?.id === item.id ? dateToDay(preview.start)! : item.start, end = preview?.id === item.id ? dateToDay(preview.end)! : item.end;
-    const labelOffset = Math.max(0, Math.min((end - start + 1) * pxDay, scrollLeft - (start - rangeStart) * pxDay));
+    const outside = lanes === "each" && nameSize.width > Math.max(0, (end - start + 1) * pxDay - nameSize.padding);
+    const labelOffset = outside ? 0 : Math.max(0, Math.min((end - start + 1) * pxDay, scrollLeft - (start - rangeStart) * pxDay));
     const name = `${item.label}, ${formatDate.format(new Date(start * 86_400_000))} – ${formatDate.format(new Date(end * 86_400_000))}`;
     const canEdit = !track.locked && !readOnly;
     const onPointerDown = (event: PointerEvent<HTMLElement>, kind: Edit["kind"]) => handlers.current.begin(event, track, item, kind);
     return <div role="button" tabIndex={0} aria-label={name} title={name} key={item.id} className={`ks-timeline-item is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}${canEdit && item.movable ? "" : " is-fixed"}${lanes === "each" ? " is-each" : ""}`}
       style={{ left: (start - rangeStart) * pxDay, width: (end - start + 1) * pxDay }} onKeyDown={(event) => handlers.current.keyItem(event, track, item)} onPointerDown={(event) => onPointerDown(event, "move")} onPointerMove={(event) => handlers.current.move(event)} onPointerUp={(event) => handlers.current.finish(event, "commit")} onPointerCancel={(event) => handlers.current.finish(event, "cancel")}>
       {canEdit && (item.resizable || item.resizeStartOnly) && <span className="ks-timeline-handle is-start" onPointerDown={(event) => onPointerDown(event, "resize_start")} />}
-      <span className="ks-timeline-label" style={{ marginLeft: labelOffset, overflow: labelOffset ? "hidden" : undefined, maxWidth: labelOffset ? Math.max(0, (end - start + 1) * pxDay - labelOffset) : undefined }}>{item.label}</span>
+      <span ref={measure} className="ks-dates-name-measure" aria-hidden="true">{item.label}</span>
+      <span className={`ks-timeline-label${outside ? " is-outside" : ""}`} style={outside ? undefined : { marginLeft: labelOffset, maxWidth: labelOffset ? Math.max(0, (end - start + 1) * pxDay - labelOffset) : undefined }}>{item.label}</span>
       {canEdit && item.resizable && !item.resizeStartOnly && <span className="ks-timeline-handle is-end" onPointerDown={(event) => onPointerDown(event, "resize_end")} />}
     </div>;
 });
@@ -412,3 +429,22 @@ const DateMarkers = memo(function DateMarkers({ markers, today, start, pxDay, wi
   }, [labels, widths, pxDay, width, gap, start]);
   return <div className="ks-dates-markers" ref={root}>{labels.map((label) => <span key={label.id} data-marker={label.id} className={label.today ? "is-today" : undefined} style={{ left: placed[label.id] ?? 0, visibility: placed[label.id] === undefined ? "hidden" : undefined }}>{label.label}</span>)}</div>;
 });
+
+
+function PeriodLabel({ width, left, tick = false, children }: { width: number; left: number; tick?: boolean; children: string }) {
+  const text = useRef<HTMLSpanElement>(null);
+  const [fits, setFits] = useState(false);
+  useLayoutEffect(() => {
+    const element = text.current;
+    if (!element) return;
+    const read = () => {
+      const style = getComputedStyle(element.parentElement!);
+      setFits(element.getBoundingClientRect().width + (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0) <= width);
+    };
+    read();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(read);
+    observer?.observe(element);
+    return () => observer?.disconnect();
+  }, [width, children]);
+  return <span style={{ left, ...(tick ? { width, justifyContent: "flex-start", paddingInline: "var(--ks-space-1)", boxSizing: "border-box" as const } : {}) }}><span ref={text} className="ks-dates-period-text" style={{ visibility: fits ? undefined : "hidden" }}>{children}</span></span>;
+}

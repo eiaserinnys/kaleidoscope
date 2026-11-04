@@ -5,7 +5,9 @@ import { join } from "node:path";
 const out = process.env.KS_DATA_CAPTURE_DIR;
 test.use({ locale: "ko-KR", timezoneId: "Asia/Seoul" });
 async function shot(page: Page, name: string) {
-  if (out) { mkdirSync(out, { recursive: true }); await page.screenshot({ path: join(out, `${name}.png`) }); }
+  const suffix = process.env.KS_CAPTURE_SUFFIX ?? "";
+  if (suffix && !["r2-1200-fit", "r2-360-fit", "r2-1200-day"].includes(name)) return;
+  if (out) { mkdirSync(out, { recursive: true }); await page.screenshot({ path: join(out, `${name}${suffix}.png`) }); }
 }
 async function schedule(page: Page) {
   await page.goto("/?preview=block-gallery");
@@ -69,7 +71,7 @@ for (const width of [1200, 360]) {
     await shot(page, `r2-${width}-day`);
     if (width === 360) await shot(page, "r2-360-initial");
     if (out) writeFileSync(join(out, `r2-${width}-metrics.json`), JSON.stringify(metrics, null, 2));
-    if (out) {
+    if (out && !process.env.KS_CAPTURE_SUFFIX) {
       const session = await page.context().newCDPSession(page);
       const capture = await session.send("Page.captureScreenshot", { format: "png", clip: { x: metrics.edge, y: metrics.row.y, width: metrics.right - metrics.edge, height: metrics.row.height, scale: 2 } });
       writeFileSync(join(out, `r2-${width}-markers.png`), Buffer.from(capture.data, "base64"));
@@ -103,6 +105,18 @@ for (const width of [1200, 360]) {
     await expect.poll(() => scroll.evaluate((el) => el.scrollLeft)).toBe(0);
     const fitted = await scroll.evaluate((el) => ({ width: el.clientWidth, total: el.scrollWidth }));
     expect(fitted.total).toBeLessThanOrEqual(fitted.width + 1);
+    const periodLabels = await root.locator(".ks-dates-period-text").evaluateAll((labels) => labels.map((label) => {
+      const box = (label.closest(".ks-dates-month") ?? label.parentElement)!.getBoundingClientRect();
+      return { text: label.textContent, visible: getComputedStyle(label).visibility !== "hidden", width: label.getBoundingClientRect().width, box: box.width };
+    }));
+    expect(periodLabels.find((label) => label.text === "2025년")?.visible).toBe(false);
+    expect(periodLabels.find((label) => label.text === "2027년")?.visible).toBe(false);
+    expect(periodLabels.find((label) => label.text === "2026년")?.visible).toBe(true);
+    if (width === 1200) expect(periodLabels.filter((label) => label.text === "12월")[0].visible).toBe(false);
+    for (const label of periodLabels.filter((label) => label.visible)) expect(label.width).toBeLessThanOrEqual(label.box);
+    const outside = await root.locator(".ks-timeline-label.is-outside").evaluateAll((labels) => labels.map((label) => ({ x: label.getBoundingClientRect().x, end: label.parentElement!.getBoundingClientRect().right })));
+    expect(outside.length).toBeGreaterThan(0);
+    for (const label of outside) expect(Math.abs(label.x - label.end - 4)).toBeLessThanOrEqual(1);
     const chips = await root.locator(".ks-dates-markers").evaluate((row) => [...row.children].filter((el) => getComputedStyle(el).visibility !== "hidden").map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right }; }).sort((a, b) => a.left - b.left));
     for (let i = 1; i < chips.length; i++) expect(chips[i].left - chips[i - 1].right).toBeGreaterThanOrEqual(4 - 1);
     await shot(page, `r2-${width}-fit`);
