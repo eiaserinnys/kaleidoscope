@@ -18,6 +18,18 @@ type Clip = { left: number; top: number; right: number; bottom: number };
 const intersect = (a: Clip, b: Clip): Clip => ({ left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom) });
 const overlaps = (r: Clip, clip: Clip) => r.right > clip.left && r.left < clip.right && r.bottom > clip.top && r.top < clip.bottom;
 
+function labelText(label: HTMLLabelElement): string {
+  const fieldLabel = label.querySelector(".ks-field-label");
+  if (fieldLabel) return fieldLabel.textContent ?? "";
+  const copy = label.cloneNode(true) as HTMLLabelElement;
+  copy.querySelectorAll("input, textarea, select, button").forEach((control) => control.remove());
+  return copy.textContent ?? "";
+}
+
+function mediaFilename(src: string): string {
+  return /^https?:\/\//i.test(src) ? src.split("/").pop() || "" : "";
+}
+
 export function visibleClip(element: HTMLElement): Clip {
   let clip: Clip = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
   for (let parent: HTMLElement | null = element; parent; parent = parent.parentElement) {
@@ -119,16 +131,18 @@ export function describeVisible(root: HTMLElement, numbered = false): { text: st
     if (block && !inline) newline();
     if (node.getAttribute("aria-selected") === "true" || (node.hasAttribute("aria-current") && node.getAttribute("aria-current") !== "false")) append("› ", true);
     if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement || role === "checkbox" || role === "switch") {
-      const label = node.getAttribute("aria-label") || ("labels" in node ? Array.from((node as HTMLInputElement).labels ?? []).map((el) => el.textContent).join(" ") : "") || node.getAttribute("placeholder") || "";
+      const label = node.getAttribute("aria-label") || ("labels" in node ? Array.from((node as HTMLInputElement).labels ?? []).map(labelText).join(" ") : "") || node.getAttribute("placeholder") || "";
       if ((node instanceof HTMLInputElement && node.type === "checkbox") || role === "checkbox" || role === "switch") {
         const checked = node instanceof HTMLInputElement ? node.checked : node.getAttribute("aria-checked") === "true";
         append(`${checked ? "[x]" : "[ ]"} ${label || node.textContent || ""}`);
       } else if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement) append(`${label}: ${numbered && node instanceof HTMLInputElement && node.type === "password" ? "••••" : node.value}`);
     } else if (node instanceof HTMLImageElement) {
-      append(`[이미지: ${node.alt || node.currentSrc.split("/").pop() || ""}]`);
+      const name = node.alt || mediaFilename(node.currentSrc);
+      if (name) append(`[이미지: ${name}]`);
       if (rect.width > 24 || rect.height > 24) visual = true;
     } else if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
-      append(`[${node instanceof HTMLVideoElement ? "영상" : "소리"}: ${node.getAttribute("aria-label") || node.getAttribute("title") || node.currentSrc.split("/").pop() || ""}]`);
+      const name = node.getAttribute("aria-label") || node.getAttribute("title") || mediaFilename(node.currentSrc);
+      if (name) append(`[${node instanceof HTMLVideoElement ? "영상" : "소리"}: ${name}]`);
       if (node instanceof HTMLVideoElement) visual = true;
     } else if (node instanceof HTMLCanvasElement) {
       visual = true;
