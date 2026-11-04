@@ -136,7 +136,8 @@ it.each([
   const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
   await waitFor(() => expect(view.container.querySelector(".ks-data-stack")).not.toBeNull());
   const element = view.container.querySelector(".ks-data-stack")!;
-  expect(Array.from(element.children).flatMap((child, index) => child.classList.contains("is-fill") ? [index] : [])).toEqual(expected);
+  const content = element.querySelector(":scope > .ks-stack-scroll > .ks-stack-scroll-content") ?? element;
+  expect(Array.from(content.children).flatMap((child, index) => child.classList.contains("is-fill") ? [index] : [])).toEqual(expected);
   expect(element.classList.contains("has-explicit-fill")).toBe(explicit);
   if (_name === "가로 입력과 단추") {
     const row = element.querySelector(".ks-data-stack.is-row")!;

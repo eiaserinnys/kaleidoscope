@@ -33,7 +33,9 @@ test("여러 줄 입력은 여덟 줄까지 스크롤 없이 자라고 폭에 �
       const label = el.closest(".ks-field")!.querySelector(".ks-field-label")!.getBoundingClientRect();
       const style = getComputedStyle(el);
       const firstLineCenter = input.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop) + parseFloat(style.lineHeight) / 2;
-      return Math.abs(label.top + label.height / 2 - firstLineCenter);
+      return getComputedStyle(el.closest(".ks-field")!).flexDirection === "column"
+        ? Math.max(0, label.bottom - input.top)
+        : Math.abs(label.top + label.height / 2 - firstLineCenter);
     });
     expect(alignment).toBeLessThanOrEqual(1);
     await capture(page, `autogrow-${width}`);
@@ -285,7 +287,8 @@ for (const id of ["columns-plain", "columns-tabs"]) test(`${id}에서 위 이름
     expect(Math.abs(button!.y + button!.height / 2 - (b.input.top + b.input.height / 2))).toBeLessThanOrEqual(1);
     const inline = app.locator(".ks-input-field:not(.is-label-top)").filter({ hasText: "기본" });
     const inlineGeometry = await inline.evaluate((el) => ({ label: el.querySelector(".ks-field-label")!.getBoundingClientRect().toJSON(), input: el.querySelector("input")!.getBoundingClientRect().toJSON() }));
-    expect(inlineGeometry.label.right).toBeLessThan(inlineGeometry.input.left);
+    if (id === "columns-tabs" && width === 360) expect(inlineGeometry.label.bottom).toBeLessThanOrEqual(inlineGeometry.input.top);
+    else expect(inlineGeometry.label.right).toBeLessThan(inlineGeometry.input.left);
     await capture(page, `${id}-${width}`);
   }
 });

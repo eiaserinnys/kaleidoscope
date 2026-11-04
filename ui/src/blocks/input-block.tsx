@@ -27,7 +27,7 @@ function bindingText(value: ReturnType<typeof useBinding>): string {
 }
 
 function fitTextarea(element: HTMLTextAreaElement) {
-  if (element.matches(".ks-data-stack-item.is-fill > .ks-data-input > textarea, .ks-data-stack-item.is-fill > .ks-input-field > .ks-data-input > textarea")) {
+  if (getComputedStyle(element).getPropertyValue("--ks-fill-textarea-height").trim() === "100%") {
     element.style.height = "";
     return;
   }

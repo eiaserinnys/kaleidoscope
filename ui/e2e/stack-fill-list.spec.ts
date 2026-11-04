@@ -6,7 +6,7 @@ test("쌓기의 여러 글칸이 남은 높이를 나누고 긴 글은 칸 안�
   const app = page.getByTestId("app-window-stack-fill-list-fixture");
   const first = app.getByRole("textbox", { name: "한국어" });
   const second = app.getByRole("textbox", { name: "영어" });
-  const slots = app.locator(".ks-data-stack.has-fill-list > .ks-data-stack-item.is-fill");
+  const slots = app.locator(".ks-data-stack.has-fill-list > .ks-data-stack-item.is-fill:not(.ks-stack-scroll)");
   await expect(slots).toHaveCount(2);
   const before = await Promise.all([first.boundingBox(), second.boundingBox(), slots.nth(0).boundingBox(), slots.nth(1).boundingBox()]);
   expect(Math.abs(before[0]!.height - before[1]!.height)).toBeLessThanOrEqual(1);

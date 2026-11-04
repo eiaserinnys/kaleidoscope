@@ -1,0 +1,552 @@
+[
+  {
+    "id": "sel-probe-a",
+    "name": "정렬 시험",
+    "requires": {
+      "blocks": 33,
+      "modules": {}
+    },
+    "permissions": [],
+    "state": {
+      "t1": "",
+      "m1": "",
+      "t2": "",
+      "m2": "",
+      "r1": "",
+      "r2": "",
+      "idea": "",
+      "ct": "카드 제목",
+      "stage": "a",
+      "clicks": 0
+    },
+    "ui": {
+      "type": "split",
+      "direction": "row",
+      "sizes": [
+        42,
+        58
+      ],
+      "children": [
+        {
+          "type": "section",
+          "title": "구역 쌓기",
+          "child": {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "children": [
+              {
+                "type": "properties",
+                "fields": [
+                  {
+                    "label": "한국어",
+                    "value": "고마워요! 패링 판정은 여러 번 맞췄어요.",
+                    "format": "text"
+                  },
+                  {
+                    "label": "올린 글",
+                    "value": "Thanks! We tuned the parry window.",
+                    "format": "text"
+                  },
+                  {
+                    "label": "체감 · 습도 · 강수",
+                    "value": "21도 · 40% · 0mm",
+                    "format": "text"
+                  }
+                ]
+              },
+              {
+                "type": "input",
+                "value": {
+                  "state": "t1"
+                },
+                "on_change": [
+                  {
+                    "set_state": "t1"
+                  }
+                ],
+                "label": "제목"
+              },
+              {
+                "type": "input",
+                "value": {
+                  "state": "m1"
+                },
+                "on_change": [
+                  {
+                    "set_state": "m1"
+                  }
+                ],
+                "label": "메모",
+                "multiline": true
+              },
+              {
+                "type": "stack",
+                "direction": "row",
+                "gap": "small",
+                "children": [
+                  {
+                    "type": "input",
+                    "value": {
+                      "state": "r1"
+                    },
+                    "on_change": [
+                      {
+                        "set_state": "r1"
+                      }
+                    ],
+                    "placeholder": "한 줄"
+                  },
+                  {
+                    "type": "input",
+                    "value": {
+                      "state": "r2"
+                    },
+                    "on_change": [
+                      {
+                        "set_state": "r2"
+                      }
+                    ],
+                    "multiline": true,
+                    "placeholder": "여러 줄"
+                  }
+                ]
+              },
+              {
+                "type": "stack",
+                "direction": "row",
+                "gap": "small",
+                "align": "end",
+                "children": [
+                  {
+                    "type": "button",
+                    "label": "무시",
+                    "on_click": [
+                      {
+                        "set_state": "clicks",
+                        "value": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "button",
+                    "label": "올리기",
+                    "variant": "primary",
+                    "on_click": [
+                      {
+                        "set_state": "clicks",
+                        "value": 2
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "split",
+          "direction": "column",
+          "sizes": [
+            50,
+            50
+          ],
+          "children": [
+            {
+              "type": "section",
+              "title": "답글",
+              "child": {
+                "type": "tabs",
+                "header": false,
+                "tabs": [
+                  {
+                    "label": "답글",
+                    "child": {
+                      "type": "stack",
+                      "direction": "column",
+                      "gap": "small",
+                      "children": [
+                        {
+                          "type": "properties",
+                          "fields": [
+                            {
+                              "label": "한국어",
+                              "value": "고마워요! 패링 판정은 여러 번 맞췄어요.",
+                              "format": "text"
+                            },
+                            {
+                              "label": "올린 글",
+                              "value": "Thanks! We tuned the parry window.",
+                              "format": "text"
+                            },
+                            {
+                              "label": "체감 · 습도 · 강수",
+                              "value": "21도 · 40% · 0mm",
+                              "format": "text"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "input",
+                          "value": {
+                            "state": "t2"
+                          },
+                          "on_change": [
+                            {
+                              "set_state": "t2"
+                            }
+                          ],
+                          "label": "제목"
+                        },
+                        {
+                          "type": "input",
+                          "value": {
+                            "state": "m2"
+                          },
+                          "on_change": [
+                            {
+                              "set_state": "m2"
+                            }
+                          ],
+                          "label": "메모",
+                          "multiline": true
+                        },
+                        {
+                          "type": "stack",
+                          "direction": "row",
+                          "gap": "small",
+                          "align": "end",
+                          "children": [
+                            {
+                              "type": "button",
+                              "label": "무시",
+                              "on_click": [
+                                {
+                                  "set_state": "clicks",
+                                  "value": 1
+                                }
+                              ]
+                            },
+                            {
+                              "type": "button",
+                              "label": "올리기",
+                              "variant": "primary",
+                              "on_click": [
+                                {
+                                  "set_state": "clicks",
+                                  "value": 2
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "section",
+              "title": "카드",
+              "child": {
+                "type": "tabs",
+                "tabs": [
+                  {
+                    "label": "카드",
+                    "child": {
+                      "type": "stack",
+                      "direction": "column",
+                      "gap": "small",
+                      "children": [
+                        {
+                          "type": "input",
+                          "value": {
+                            "state": "ct"
+                          },
+                          "on_change": [
+                            {
+                              "set_state": "ct"
+                            }
+                          ],
+                          "label": "제목"
+                        },
+                        {
+                          "type": "select",
+                          "label": "단계",
+                          "style": "dropdown",
+                          "value": {
+                            "state": "stage"
+                          },
+                          "options": [
+                            {
+                              "value": "a",
+                              "label": "아이디어"
+                            },
+                            {
+                              "value": "b",
+                              "label": "진행"
+                            }
+                          ],
+                          "on_change": [
+                            {
+                              "set_state": "stage"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "input",
+                          "value": {
+                            "state": "idea"
+                          },
+                          "on_change": [
+                            {
+                              "set_state": "idea"
+                            }
+                          ],
+                          "label": "아이디어",
+                          "multiline": true
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "label": "댓글",
+                    "child": {
+                      "type": "text",
+                      "value": "댓글"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "sel-probe-b",
+    "name": "자람 시험",
+    "requires": {
+      "blocks": 33,
+      "modules": {}
+    },
+    "permissions": [],
+    "state": {
+      "n1": "",
+      "n2": "",
+      "n3": "",
+      "dlg": false,
+      "nt": "중첩 쌓기",
+      "dt": "대화상자"
+    },
+    "ui": {
+      "type": "stack",
+      "direction": "column",
+      "gap": "medium",
+      "children": [
+        {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "input",
+              "value": {
+                "state": "nt"
+              },
+              "on_change": [
+                {
+                  "set_state": "nt"
+                }
+              ],
+              "label": "제목"
+            },
+            {
+              "type": "input",
+              "value": {
+                "state": "n1"
+              },
+              "on_change": [
+                {
+                  "set_state": "n1"
+                }
+              ],
+              "label": "메모",
+              "multiline": true
+            }
+          ]
+        },
+        {
+          "type": "stack",
+          "direction": "row",
+          "gap": "small",
+          "children": [
+            {
+              "type": "input",
+              "value": {
+                "state": "n2"
+              },
+              "on_change": [
+                {
+                  "set_state": "n2"
+                }
+              ],
+              "label": "가로",
+              "multiline": true
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "label": "대화상자 열기",
+          "on_click": [
+            {
+              "set_state": "dlg",
+              "value": true
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "open": {
+            "state": "dlg"
+          },
+          "title": "메모 남기기",
+          "on_close": [
+            {
+              "set_state": "dlg",
+              "value": false
+            }
+          ],
+          "child": {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "children": [
+              {
+                "type": "input",
+                "value": {
+                  "state": "dt"
+                },
+                "on_change": [
+                  {
+                    "set_state": "dt"
+                  }
+                ],
+                "label": "제목"
+              },
+              {
+                "type": "input",
+                "value": {
+                  "state": "n3"
+                },
+                "on_change": [
+                  {
+                    "set_state": "n3"
+                  }
+                ],
+                "label": "메모",
+                "multiline": true
+              }
+            ]
+          }
+        },
+        {
+          "type": "text",
+          "value": "아래 남는 칸"
+        }
+      ]
+    }
+  },
+  {
+    "id": "stack-action-tail",
+    "name": "결정 줄",
+    "requires": {
+      "blocks": 36,
+      "modules": {}
+    },
+    "permissions": [],
+    "state": {},
+    "ui": {
+      "type": "split",
+      "direction": "column",
+      "sizes": [
+        50,
+        50
+      ],
+      "children": [
+        {
+          "type": "text",
+          "value": "원글"
+        },
+        {
+          "type": "section",
+          "title": "답글",
+          "child": {
+            "type": "tabs",
+            "header": false,
+            "tabs": [
+              {
+                "label": "답글",
+                "child": {
+                  "type": "stack",
+                  "direction": "column",
+                  "gap": "small",
+                  "fill": [
+                    0,
+                    1
+                  ],
+                  "children": [
+                    {
+                      "type": "input",
+                      "label": "한국어",
+                      "multiline": true,
+                      "value": "",
+                      "on_change": []
+                    },
+                    {
+                      "type": "input",
+                      "label": "영어",
+                      "multiline": true,
+                      "value": "",
+                      "on_change": []
+                    },
+                    {
+                      "type": "stack",
+                      "direction": "column",
+                      "children": [
+                        {
+                          "type": "text",
+                          "value": "첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용\n첨부 내용"
+                        },
+                        {
+                          "type": "input",
+                          "label": "첨부 이름",
+                          "value": "첨부",
+                          "on_change": []
+                        }
+                      ]
+                    },
+                    {
+                      "type": "stack",
+                      "direction": "row",
+                      "children": [
+                        {
+                          "type": "button",
+                          "label": "올리기",
+                          "on_click": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
