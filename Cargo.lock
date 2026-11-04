@@ -2243,7 +2243,7 @@ dependencies = [
 
 [[package]]
 name = "kaleidoscope-app"
-version = "0.6.32"
+version = "0.6.33"
 dependencies = [
  "base64 0.22.1",
  "dirs",
