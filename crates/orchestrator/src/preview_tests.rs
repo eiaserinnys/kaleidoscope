@@ -32,6 +32,22 @@ fn definition() -> Value {
 }
 
 #[tokio::test]
+async fn preview_evaluates_sample_apps_and_defaults_to_empty() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let definition = json!({"id":"store-preview","name":"스토어 미리보기","requires":{"blocks":4,"modules":{"store":1}},
+        "permissions":[{"module":"store","id":"catalog","label":"스토어"}],
+        "ui":{"type":"text","value":{"expr":"$count($apps)"}}});
+    let empty = result_value(server.preview_app_result(args(definition.clone())).await.unwrap());
+    assert_eq!(empty["values"][0]["status"], "ready");
+    assert_eq!(empty["values"][0]["value"], "0");
+    let mut input = args(definition);
+    input.apps = Some(vec![serde_json::from_value(json!({"id":"example","name":"보기","version":1,"origin":null,"installed_version":null,"modified":false,"icon":null})).unwrap()]);
+    let result = result_value(server.preview_app_result(input).await.unwrap());
+    assert_eq!(result["values"][0]["status"], "ready");
+    assert_eq!(result["values"][0]["value"], "1");
+}
+
+#[tokio::test]
 async fn preview_uses_default_locale_and_marks_repeat_values() {
     let server = McpServer::new(AppState::in_memory("secret"));
     let definition = json!({"id":"repeat-preview", "name":"반복 미리보기", "requires":{"blocks":14,"modules":{}},

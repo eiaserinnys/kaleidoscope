@@ -61,14 +61,6 @@ pub(crate) struct StoreClient<T = PublicTransport> {
     pub(super) server: StoreUrl,
     pub(super) transport: T,
 }
-impl StoreClient<PublicTransport> {
-    pub(crate) fn new(server: &str) -> Result<Self, CoreError> {
-        Ok(Self {
-            server: StoreUrl::parse(server)?,
-            transport: PublicTransport,
-        })
-    }
-}
 impl<T: Transport> StoreClient<T> {
     pub(crate) fn with_transport(server: &str, transport: T) -> Result<Self, CoreError> {
         Ok(Self {

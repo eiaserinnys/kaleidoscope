@@ -259,6 +259,23 @@ fn reads_index_detail_bundle_and_visible_media() {
 }
 
 #[test]
+fn listing_and_detail_return_media_references_without_downloading_images() {
+    struct Observed { inner: Loopback, paths: Arc<Mutex<Vec<String>>> }
+    impl Transport for Observed {
+        fn get(&self, origin: &str, allowed: &[String], path: &str, limit: u64) -> Result<PublicResponse, PublicHttpError> {
+            self.paths.lock().unwrap().push(path.into());
+            self.inner.get(origin, allowed, path, limit)
+        }
+    }
+    let (mock, _, _) = fixture();
+    let paths = Arc::new(Mutex::new(Vec::new()));
+    let client = StoreClient::with_transport("https://example.com/appstore", Observed { inner: mock, paths: paths.clone() }).unwrap();
+    assert!(client.index("catalog").unwrap().items[0].icon.is_some());
+    assert!(!client.app("example", "catalog").unwrap().screenshots.is_empty());
+    assert_eq!(*paths.lock().unwrap(), vec!["/appstore/index.json", "/appstore/apps/example/index.json", "/appstore/apps/example/3/manifest.json"]);
+}
+
+#[test]
 fn rejects_distinct_fetch_and_bundle_failures() {
     let (mock, _, _) = fixture();
     let client = client(mock.clone());

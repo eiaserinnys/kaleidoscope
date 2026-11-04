@@ -1075,6 +1075,36 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("긴 목록은 가상화가 그린 항목보다 많은 이미지를 미리 받지 않는다", async () => {
+    mockVirtualLayout();
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("ks-media-thumbnail")
+        ? { width: 32, height: 32, top: 0, left: 0, right: 32, bottom: 32, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+        : originalRect.call(this);
+    });
+    const list: AppDefinition = { ...definition, ui: { type: "list", layout: "icons", items: { expr: "$data.sample" } } };
+    const { store, transport } = await setup([list]);
+    const original = store.call.bind(store);
+    const mediaCalls: string[] = [];
+    vi.spyOn(store, "call").mockImplementation(((request: Parameters<typeof original>[0]) => {
+      if (request.op === "data.media") {
+        mediaCalls.push(JSON.stringify(request.media));
+        return Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } });
+      }
+      return original(request);
+    }) as typeof store.call);
+    const items = Array.from({ length: 200 }, (_, i) => ({ key: String(i), title: `앱 ${i}`, image: { permission: "catalog", path: `apps/${i}.png`, query: { server: "https://store.example" } } }));
+    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: { "/ui/items": { status: "ready", value: items } } } }));
+    await waitFor(() => expect(mediaCalls.length).toBeGreaterThan(0));
+    await settleRenders();
+    const window = document.querySelector('[data-window-id="window-a"]')!;
+    const rendered = window.querySelectorAll('[role="option"]').length;
+    expect(rendered).toBeLessThan(items.length);
+    expect(mediaCalls.length).toBeLessThanOrEqual(rendered);
+    store.dispose();
+  });
+
   it("다음 쪽 상태 변화는 다른 창과 형제 블록을 다시 그리지 않는다", async () => {
     const paged: AppDefinition = { ...definition, ui: { type: "stack", direction: "column", children: [
       { type: "text", value: { state: "first" } },

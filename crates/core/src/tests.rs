@@ -1837,6 +1837,7 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 struct FakeRegistryClient {
     store_apps: Mutex<BTreeMap<String, RegistryApp>>,
     store_requests: Mutex<Vec<kaleidoscope_contract::store::DeviceInstallRequest>>,
+    store_server: Mutex<Option<kaleidoscope_orchestrator::AppState>>,
     asset_bytes: Mutex<Option<Vec<u8>>>,
     storage_reads: AtomicUsize,
     preferences_replies: Mutex<VecDeque<Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError>>>,
@@ -1873,6 +1874,11 @@ struct FakeRegistryClient {
 impl RegistryClient for FakeRegistryClient {
     fn install_store_app(&self, _: &str, _: &str, request: &kaleidoscope_contract::store::DeviceInstallRequest) -> Result<kaleidoscope_contract::store::DeviceInstallReply, RegistryError> {
         self.store_requests.lock().unwrap().push(request.clone());
+        if let Some(server) = self.store_server.lock().unwrap().clone() {
+            let reply: kaleidoscope_contract::store::DeviceInstallReply = store_runtime_tests::server_request(&server, "POST", "/api/device/app-installs", request)?;
+            self.store_apps.lock().unwrap().insert(reply.app.app.id.clone(), reply.app.clone());
+            return Ok(reply);
+        }
         let definition: kaleidoscope_contract::AppDefinition = serde_json::from_str(&request.definition_json).unwrap();
         let mut apps = self.store_apps.lock().unwrap();
         let old = apps.get(&definition.id);
@@ -1883,7 +1889,10 @@ impl RegistryClient for FakeRegistryClient {
         apps.insert(definition.id, app.clone());
         Ok(kaleidoscope_contract::store::DeviceInstallReply { app, unchanged: false })
     }
-    fn remove_store_app(&self, _: &str, _: &str, id: &str, _: &kaleidoscope_contract::store::DeviceRemoveRequest) -> Result<(), RegistryError> {
+    fn remove_store_app(&self, _: &str, _: &str, id: &str, request: &kaleidoscope_contract::store::DeviceRemoveRequest) -> Result<(), RegistryError> {
+        if let Some(server) = self.store_server.lock().unwrap().clone() {
+            let _: Value = store_runtime_tests::server_request(&server, "DELETE", &format!("/api/device/apps/{id}"), request)?;
+        }
         self.store_apps.lock().unwrap().remove(id);
         Ok(())
     }
