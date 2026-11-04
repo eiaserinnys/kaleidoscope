@@ -7,6 +7,10 @@ import "../src/styles/index.css";
 import "../../app/src/shell.css";
 
 const seed = makeTestSeed();
+const mode = new URLSearchParams(window.location.search).get("link");
+if (mode === "embedded" || mode === "remote") {
+  seed.snapshot.link = { state: "connected", mode, server_url: mode === "embedded" ? "http://localhost:18400" : "https://server.example.org", device_name: "내 기기" };
+}
 const appWindow = seed.snapshot.shared.windows[0];
 seed.snapshot.shared.windows = [{ ...appWindow, z: 2, rect: { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight } }];
 const fake = createFakeTransport(seed);
@@ -26,9 +30,9 @@ const sample = {
     { module: "profiler", id: "performance", label: "성능 측정" },
     { module: "store", id: "catalog", label: "스토어" },
   ], state: {}, ui: { type: "text", value: "자료" },
-  storage: { entries: [{ id: "settings", key: "settings/{workspace_id}", kind: "json", default: { language: "ko" }, schema: { type: "object" }, label: "자료 수집 설정", presentation: "settings" }] },
+  storage: { entries: [{ id: "settings", key: "settings/{workspace_id}", kind: "json", default: { language: "ko" }, schema: { type: "object" }, label: "자료 수집 설정", description: "자료 수집 범위", presentation: "settings" }] },
   client: { runtime: "javascript", entry: { id: "research-client", version: 1 }, inputs: {}, outputs: {}, actions: ["collect"], commands: {}, state_keys: [], storage_entries: ["settings"], http_permissions: ["public"], process_permissions: ["convert"], device_storage: { prefixes: ["research/"], scope: "window" }, capabilities: ["share"] },
-  worker: { runtime: "python3", code: "def run(action, data):\n    return {'status': 'ready'}", actions: ["collect", "refresh"], schedule: { interval_secs: 3600, enabled_entry: "settings" }, secrets: [{ id: "archive-token", description: "자료 연결 토큰" }], watch_entries: ["settings"] },
+  worker: { runtime: "python3", code: "def run(action, data):\n    return {'status': 'ready'}", actions: ["collect", "refresh"], schedule: { interval_secs: 3600, jitter_secs: 60, enabled_entry: "settings" }, webhook: { enabled_entry: "settings", token_secret: "webhook-token" }, secrets: [{ id: "archive-token", description: "자료 연결 토큰" }], watch_entries: ["settings"] },
   agent: { protocol: "conversation-v1", permission: "notes", base_path: "/conversation", namespace: "research", profile: "assistant", collection: "threads", model_order: ["model"], selected_model: "model", title_template: "자료 정리", initial_instruction_template: "자료를 정리합니다.", instructions_template: "출처를 함께 기록합니다.", thread_entry: "settings" },
 } as unknown as AppDefinition;
 const light = { ...sample, id: "clock", name: "간단한 시계", permissions: [], storage: undefined, client: undefined, worker: undefined, agent: undefined };

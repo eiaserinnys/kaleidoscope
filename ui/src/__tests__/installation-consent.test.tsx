@@ -24,7 +24,7 @@ const definition = {
   ],
   storage: { entries: [{ id: "prefs", label: "환경 설정", key: "prefs/{workspace_id}", kind: "json", collection: false, presentation: "settings", default: { theme: "dark" }, schema: { type: "object" } }] },
   client: { runtime: "javascript", entry: { id: "client", version: 1 }, inputs: {}, outputs: {}, actions: [], commands: {}, state_keys: [], storage_entries: ["prefs"], http_permissions: ["web"], process_permissions: ["run"], capabilities: ["share"], device_storage: { prefixes: ["drafts"], scope: "window" } },
-  worker: { runtime: "python3", code: "print('hello')", actions: ["sync"], schedule: { interval_secs: 60, enabled_entry: "prefs" }, secrets: [{ id: "api-key", description: "접근 키" }], watch_entries: ["prefs"] },
+  worker: { runtime: "python3", code: "print('hello')", actions: ["sync"], schedule: { interval_secs: 60, jitter_secs: 30, enabled_entry: "prefs" }, webhook: { enabled_entry: "prefs", token_secret: "webhook-token" }, secrets: [{ id: "api-key", description: "접근 키" }], watch_entries: ["prefs"] },
   agent: { protocol: "chat", permission: "team", base_path: "/chat", namespace: "work", profile: "writer", collection: "threads", model_order: ["model"], selected_model: "model", title_template: "제목", initial_instruction_template: "처음 지시", instructions_template: "긴 지시", thread_entry: "prefs" },
 } as unknown as AppDefinition;
 
@@ -38,7 +38,7 @@ async function setup() {
   const appWindow = snapshot.shared.windows[0];
   render(<WindowFrame area={{ width: 960, height: 552 }} appName="앱" isTop sharing={false} shareable={false} store={store}
     onCall={async () => undefined} onMinimize={() => {}} onMaximize={() => {}} onRestore={() => {}} window={appWindow}><button>본문</button></WindowFrame>);
-  const emit = (app = definition) => act(() => receive({ event: "app.install_permission", window_id: appWindow.id, request_id: "request", app_name: "자료 수집", release: 3, store_url: "https://store.example.org/apps", digest: "digest-1", definition: app } as CoreEvent));
+  const emit = (app = definition, id = "request") => act(() => receive({ event: "app.install_permission", window_id: appWindow.id, request_id: id, app_name: id === "request" ? "자료 수집" : id, release: 3, store_url: "https://store.example.org/apps", digest: `digest-${id}`, definition: app } as CoreEvent));
   const change = (next: (value: ShellSnapshot) => ShellSnapshot) => act(() => { snapshot = next(snapshot); receive({ event: "state.changed", snapshot, sequence: 2 }); });
   call.mockClear();
   return { appWindow, call, store, emit, change };
@@ -54,7 +54,20 @@ it("설치 선언 전체와 출처를 읽고 접힌 상세를 열 수 있다", a
   expect(dialog.textContent).toContain("기준 주소: https://example.org");
   expect(dialog.textContent).toContain("허용 경로: /one, /two");
   expect(dialog.textContent).toContain("모음: threads");
-  expect(dialog.textContent).toContain("범위: 창별");
+  expect(dialog.textContent).toContain("drafts 아래, 창별, 파일당 512 MiB");
+  expect(dialog.textContent).toContain("client 1판");
+  expect(dialog.textContent).toContain("1분마다, prefs로 켜고 끔");
+  expect(dialog.textContent).toContain("지연 최대 30초");
+  expect(dialog.textContent).toContain("prefs로 켜고 끔, 토큰 비밀값 webhook-token");
+  expect(dialog.textContent).toContain("api-key (접근 키)");
+  expect(dialog.textContent).not.toContain("입력:");
+  expect(dialog.textContent).not.toContain("출력:");
+  expect(dialog.textContent).not.toContain("창 상태:");
+  expect(dialog.textContent).not.toContain("문서 · docs");
+  expect(within(dialog).getByText("제목 양식").closest("details")?.querySelector("pre")?.classList.contains("ks-process-command")).toBe(true);
+  expect(within(dialog).getByText("제목 양식").classList.contains("ks-install-meta")).toBe(true);
+  expect(within(dialog).getByText("시작 자산:").parentElement?.classList.contains("ks-install-meta")).toBe(true);
+  expect(within(dialog).getByText("HTTPS 권한:").parentElement?.classList.contains("ks-install-meta")).toBe(false);
   expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "취소" }));
   store.dispose();
 });
@@ -67,7 +80,7 @@ it("빈 선언을 표시하고 합성 허용은 거부하며 취소는 같은 di
   fireEvent.click(within(dialog).getByRole("button", { name: "허용하고 설치" }));
   expect(call).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole("button", { name: "취소" }));
-  expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "request", digest: "digest-1", allow: false });
+  expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "request", digest: "digest-request", allow: false });
   store.dispose();
 });
 
@@ -77,10 +90,57 @@ it("Escape와 창 닫기는 취소하고 숨김은 대기를 유지한다", asyn
   expect(call).not.toHaveBeenCalled();
   change((snapshot) => ({ ...snapshot, shared: { ...snapshot.shared, windows: snapshot.shared.windows.map((item) => item.id === appWindow.id ? { ...item, minimized: false } : item) } }));
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-  expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "request", digest: "digest-1", allow: false });
+  expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "request", digest: "digest-request", allow: false });
   call.mockClear(); emit();
   change((snapshot) => ({ ...snapshot, shared: { ...snapshot.shared, windows: snapshot.shared.windows.filter((item) => item.id !== appWindow.id) } }));
-  expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "request", digest: "digest-1", allow: false });
+  expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "request", digest: "digest-request", allow: false });
+  store.dispose();
+});
+
+it("같은 창의 설치 요청을 순서대로 보여 주고 응답한다", async () => {
+  const { appWindow, call, emit, store } = await setup();
+  emit(definition, "A"); emit(definition, "B");
+  expect(screen.getByRole("dialog").textContent).toContain("A");
+  expect(store.getInstallConsent(appWindow.id)?.request_id).toBe("A");
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+  expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "A", digest: "digest-A", allow: false });
+  expect(screen.getByRole("dialog").textContent).toContain("B");
+  expect(store.getInstallConsent(appWindow.id)?.request_id).toBe("B");
+  store.dispose();
+});
+
+it("큐의 뒤 요청에 응답해도 앞 요청은 그대로 유지한다", async () => {
+  const { appWindow, emit, store } = await setup();
+  emit(definition, "A"); emit(definition, "B");
+  await act(async () => { await store.call({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: "B", digest: "digest-B", allow: false }); });
+  expect(store.getInstallConsent(appWindow.id)?.request_id).toBe("A");
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+  expect(store.getInstallConsent(appWindow.id)).toBeUndefined();
+  store.dispose();
+});
+
+it.each(["제거", "앱 교체"])("창 %s 시 대기 중인 설치 요청을 모두 거절한다", async (action) => {
+  const { appWindow, call, emit, change, store } = await setup();
+  emit(definition, "A"); emit(definition, "B");
+  change((snapshot) => ({ ...snapshot, shared: { ...snapshot.shared, windows: action === "제거"
+    ? snapshot.shared.windows.filter((item) => item.id !== appWindow.id)
+    : snapshot.shared.windows.map((item) => item.id === appWindow.id ? { ...item, app_id: "new-app" } : item) } }));
+  for (const id of ["A", "B"]) expect(call).toHaveBeenCalledWith({ op: "app.respond_install_permission", window_id: appWindow.id, request_id: id, digest: `digest-${id}`, allow: false });
+  expect(store.getInstallConsent(appWindow.id)).toBeUndefined();
+  store.dispose();
+});
+
+it.each([
+  [{ state: "connected", mode: "embedded", server_url: "http://localhost:1", device_name: "기기" }, "이 PC의 내장 서버에서 Python 코드를 실행합니다."],
+  [{ state: "offline", mode: "embedded", server_url: "http://localhost:1", device_name: "기기", reason: null }, "이 PC의 내장 서버에서 Python 코드를 실행합니다."],
+  [{ state: "connected", mode: "remote", server_url: "https://server.example.org/path", device_name: "기기" }, "server.example.org 서버에서 Python 코드를 실행합니다."],
+  [{ state: "offline", mode: "remote", server_url: "https://server.example.org/path", device_name: "기기", reason: null }, "server.example.org 서버에서 Python 코드를 실행합니다."],
+  [{ state: "unlinked" }, "연결한 서버에서 Python 코드를 실행합니다."],
+] as const)("연결 상태에 맞는 서버 실행 위치를 표시한다", async (link, message) => {
+  const { change, emit, store } = await setup();
+  change((snapshot) => ({ ...snapshot, link }));
+  emit();
+  expect(screen.getByRole("dialog").textContent).toContain(message);
   store.dispose();
 });
 

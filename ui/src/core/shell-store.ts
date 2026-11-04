@@ -36,12 +36,13 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   };
   const listeners = new Set<() => void>();
   const eventListeners = new Set<(event: CoreEvent) => void>();
-  const installConsents = new Map<string, InstallConsent>();
+  const installConsents = new Map<string, InstallConsent[]>();
   const consentListeners = new Map<string, Set<() => void>>();
-  const setConsent = (windowId: string, request?: InstallConsent) => {
-    if (request) installConsents.set(windowId, request);
+  const setConsent = (windowId: string, requests: InstallConsent[]) => {
+    const previous = installConsents.get(windowId)?.[0];
+    if (requests.length) installConsents.set(windowId, requests);
     else installConsents.delete(windowId);
-    consentListeners.get(windowId)?.forEach((listener) => listener());
+    if (previous !== requests[0]) consentListeners.get(windowId)?.forEach((listener) => listener());
   };
   const iconCache: ShellStore["iconCache"] = new Map();
   const notify = () => {
@@ -49,12 +50,14 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   };
   const unsubscribe = transport.subscribe((event: CoreEvent) => {
     if (event.event === "state.changed") {
-      for (const [windowId, request] of installConsents) {
+      for (const [windowId, requests] of installConsents) {
         const oldWindow = snapshot?.shared.windows.find((item) => item.id === windowId);
         const nextWindow = event.snapshot.shared.windows.find((item) => item.id === windowId);
         if (!nextWindow || (oldWindow && (oldWindow.app_id !== nextWindow.app_id || oldWindow.app_version !== nextWindow.app_version))) {
-          setConsent(windowId);
-          void transport.call({ op: "app.respond_install_permission", window_id: windowId, request_id: request.request_id, digest: request.digest, allow: false });
+          setConsent(windowId, []);
+          for (const request of requests) {
+            void transport.call({ op: "app.respond_install_permission", window_id: windowId, request_id: request.request_id, digest: request.digest, allow: false });
+          }
         }
       }
       const previousLink = snapshot?.link;
@@ -67,7 +70,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       notify();
       advance(event.sequence);
     } else {
-      if (event.event === "app.install_permission") setConsent(event.window_id, event);
+      if (event.event === "app.install_permission") setConsent(event.window_id, [...(installConsents.get(event.window_id) ?? []), event]);
       for (const listener of eventListeners) listener(event);
     }
   });
@@ -97,8 +100,9 @@ export function createShellStore(transport: CoreTransport): ShellStore {
         || (request.op === "process.respond_permission" && request.allow)
         || (request.op === "app.respond_install_permission" && request.allow)
       )) return Promise.reject(SHELL_WINDOW_CONTROL_CONSENT_BLOCKED());
-      if (request.op === "app.respond_install_permission" && installConsents.get(request.window_id)?.request_id === request.request_id) {
-        setConsent(request.window_id);
+      if (request.op === "app.respond_install_permission") {
+        const requests = installConsents.get(request.window_id);
+        if (requests) setConsent(request.window_id, requests.filter((item) => item.request_id !== request.request_id));
       }
       const result = transport.call(request);
       return windowId ? trackWindowAction(windowId, result) : result;
@@ -121,7 +125,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       eventListeners.add(listener);
       return () => eventListeners.delete(listener);
     },
-    getInstallConsent: (windowId) => installConsents.get(windowId),
+    getInstallConsent: (windowId) => installConsents.get(windowId)?.[0],
     subscribeInstallConsent(windowId, listener) {
       const listeners = consentListeners.get(windowId) ?? new Set<() => void>();
       listeners.add(listener);
