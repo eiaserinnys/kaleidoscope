@@ -984,6 +984,7 @@ impl Core {
         let debounced = matches!(
             request,
             CoreRequest::WindowSetState { .. }
+                | CoreRequest::WindowPatchState { .. }
                 | CoreRequest::WindowSetRect { .. }
                 | CoreRequest::WindowRaise { .. }
                 | CoreRequest::WindowMinimize { .. }
@@ -1010,23 +1011,11 @@ impl Core {
         entries: std::collections::BTreeMap<String, serde_json::Value>,
     ) -> Result<ShellSnapshot, CoreError> {
         self.apply_state_change_mode(true, |state| {
-            let mut next = state
-                .shared
-                .windows
-                .iter()
-                .find(|window| window.id == window_id)
-                .ok_or_else(|| {
-                    errors::DESK_WINDOW_STATE_WINDOW_NOT_FOUND()
-                        .and_details(vec![format!("window_id: {}", window_id)])
-                })?
-                .state
-                .clone();
-            next.extend(entries);
             state_commands::handle(
                 state,
-                CoreRequest::WindowSetState {
+                CoreRequest::WindowPatchState {
                     window_id: window_id.into(),
-                    state: next,
+                    patch: entries,
                 },
             )
         })

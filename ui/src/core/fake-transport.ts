@@ -210,7 +210,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   };
 
   const data = createFakeData(seed.data ?? {}, findWindow, (window) => definitionFor(window) ?? undefined,
-    async (windowId, state) => { await callRequest({ op: "window.set_state", window_id: windowId, state }); },
+    async (windowId, patch) => { await callRequest({ op: "window.patch_state", window_id: windowId, patch }); },
     (windowId, view) => emit({ event: "data.update", window_id: windowId, view }));
 
   const permissionFor = (windowId: string, permission: string) => {
@@ -537,15 +537,17 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         emitState();
         return { op: "window.set_rect", window: clone(updated) };
       }
-      case "window.set_state": {
+      case "window.set_state":
+      case "window.patch_state": {
         const window = findWindow(request.window_id);
         const definition = definitionFor(window);
         const declared = definition?.state ?? {};
-        const unknownKeys = Object.keys(request.state).filter((key) => !Object.hasOwn(declared, key));
+        const next = request.op === "window.patch_state" ? { ...window.state, ...request.patch } : request.state;
+        const unknownKeys = Object.keys(next).filter((key) => !Object.hasOwn(declared, key));
         if (unknownKeys.length > 0) {
           return fail("invalid_request", "선언되지 않은 창 상태 키입니다", unknownKeys);
         }
-        const updated: AppWindow = { ...window, state: clone(request.state), updated_at: new Date().toISOString() };
+        const updated: AppWindow = { ...window, state: clone(next), updated_at: new Date().toISOString() };
         snapshot = {
           ...snapshot,
           shared: {
@@ -555,7 +557,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         };
         emitState();
         await data.stateChanged(updated);
-        return { op: "window.set_state", window: clone(updated) };
+        return { op: request.op, window: clone(updated) };
       }
       case "files.open": {
         const { window: explorerWindow, declaration: sourcePermission } = permissionFor(request.window_id, request.permission);

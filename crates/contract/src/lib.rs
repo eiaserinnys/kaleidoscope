@@ -4206,6 +4206,13 @@ pub enum CoreRequest {
         window_id: String,
         state: BTreeMap<String, JsonValue>,
     },
+    /// 창 상태의 현재 값 위에 patch의 키만 덮어 합치고 나머지 키는 유지한다.
+    /// 창, 선언된 키, 크기는 `window.set_state`와 같이 검사한다.
+    #[serde(rename = "window.patch_state")]
+    WindowPatchState {
+        window_id: String,
+        patch: BTreeMap<String, JsonValue>,
+    },
 
     /// 앱 정의 JSON 원문을 가져와 앱 버전 하나로 저장하고 그 버전을 지금 버전으로 둔다.
     /// 같은 id의 앱이 있으면 새 버전이 되고, 그 앱의 열린 창은 새 버전으로 옮긴다.
@@ -5288,6 +5295,8 @@ pub enum CoreReply {
     WindowClose {},
     #[serde(rename = "window.set_state")]
     WindowSetState { window: AppWindow },
+    #[serde(rename = "window.patch_state")]
+    WindowPatchState { window: AppWindow },
 
     #[serde(rename = "app.import")]
     AppImport { app: App, version: AppVersion },
@@ -6591,6 +6600,13 @@ mod tests {
         };
         assert_eq!(request.meta().op, "window.set_state");
         assert_eq!(request.meta().window_id.as_deref(), Some("window-7"));
+
+        let request = CoreRequest::WindowPatchState {
+            window_id: "window-8".into(),
+            patch: BTreeMap::from([("large".into(), JsonValue::String("payload".into()))]),
+        };
+        assert_eq!(request.meta().op, "window.patch_state");
+        assert_eq!(request.meta().window_id.as_deref(), Some("window-8"));
 
         let request = CoreRequest::ConversationAttachment {
             window_id: "chat-2".into(),

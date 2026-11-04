@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AppDefinition, Block, CoreReply } from "../contract/contract";
+import type { AppDefinition, Block, CoreEvent, CoreReply } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
@@ -8,8 +8,55 @@ import { describeVisible } from "../share/visible";
 import { flushSandboxes } from "../blocks/sandbox-flush";
 import { ContextMenuHost } from "../components/context-menu";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
+import { ClientRuntime } from "../runtime/client-runtime";
+import type { WindowData } from "../data/window-data";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it("클라이언트 상태 메시지는 허용 키만 보내고 지연 중 다른 키를 보존한다", async () => {
+  const definition: AppDefinition = { ...mdEditorDefinition, state: { a: 0, b: 0, current_file: null } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const subscribe = transport.subscribe.bind(transport);
+  let held: CoreEvent | undefined;
+  vi.spyOn(transport, "subscribe").mockImplementation((listener) => subscribe((event) => {
+    if (event.event === "state.changed" && !held) { held = event; return; }
+    if (held) { listener(held); held = undefined; }
+    listener(event);
+  }));
+  const store = createShellStore(transport);
+  await store.ready;
+  const original = store.call.bind(store);
+  let release!: () => void;
+  const delay = new Promise<void>((resolve) => { release = resolve; });
+  const call = vi.spyOn(store, "call").mockImplementation(async (request) => {
+    const result = original(request);
+    if (call.mock.calls.length === 1) await delay;
+    return result;
+  });
+  const client = { state_keys: ["a", "b"], storage_entries: [], commands: {}, capabilities: [] };
+  const runtime = new ClientRuntime(store, { windowId: "editor-window", setNotice: vi.fn() } as unknown as WindowData, definition, client as never);
+  const frame = document.createElement("iframe");
+  document.body.append(frame);
+  Object.assign(runtime, { frame, token: "test-token" });
+  const receive = (patch: object) => (runtime as any).receive(new MessageEvent("message", {
+    source: frame.contentWindow, origin: "null", data: { token: "test-token", type: "ks-sandbox-state-set", patch },
+  }));
+  receive({ a: 1, forbidden: 5 });
+  await Promise.resolve();
+  expect(held).toMatchObject({ event: "state.changed", snapshot: { shared: { windows: [{ state: { a: 1, b: 0 } }] } } });
+  expect(store.getSnapshot()?.shared.windows[0].state).toEqual({ a: 0, b: 0, current_file: null });
+  receive({ b: 1 });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.b).toBe(1));
+  receive({ forbidden: 5 });
+  expect(call.mock.calls.map(([request]) => request)).toEqual([
+    { op: "window.patch_state", window_id: "editor-window", patch: { a: 1 } },
+    { op: "window.patch_state", window_id: "editor-window", patch: { b: 1 } },
+  ]);
+  release();
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state).toEqual({ a: 1, b: 1, current_file: null }));
+  frame.remove();
+  store.dispose();
+});
 
 it("샌드박스의 올바른 토큰을 가진 선택 복사만 메뉴로 연다", async () => {
   vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000001");
@@ -64,9 +111,9 @@ it("샌드박스의 허용된 상태와 저장을 중계하고 같이 볼 이미
   message({ type: "ks-sandbox-state-set", patch: { count: 2, private: "차단" } }, "https://outside.test");
   window.dispatchEvent(new MessageEvent("message", { source: iframe.contentWindow, origin: "null", data: { type: "ks-sandbox-state-set", token: "틀린 토큰", patch: { count: 9 } } }));
   window.dispatchEvent(new MessageEvent("message", { source: window, origin: "null", data: { type: "ks-sandbox-state-set", token: "00000000-0000-4000-8000-000000000001", patch: { count: 9 } } }));
-  expect(spy.mock.calls.some(([request]) => request.op === "window.set_state")).toBe(false);
+  expect(spy.mock.calls.some(([request]) => request.op === "window.patch_state")).toBe(false);
   message({ type: "ks-sandbox-state-set", patch: { count: 2, private: "차단" } });
-  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "window.set_state", state: { count: 2, private: "비공개" } })));
+  await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "window.patch_state", patch: { count: 2 } })));
   message({ type: "ks-sandbox-storage-set", requestId: "1", entry: "draft", content: "새 문서" });
   await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.objectContaining({ op: "storage.write", entry: "draft", content: "새 문서", expected_revision: "r1" })));
   post.mockClear();

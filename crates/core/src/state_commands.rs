@@ -1,8 +1,9 @@
 use chrono::{SecondsFormat, Utc};
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use kaleidoscope_contract::{
-    errors, AppWindow, CoreError, CoreReply, CoreRequest, Desktop, Rect, Workspace,
+    errors, AppWindow, CoreError, CoreReply, CoreRequest, Desktop, JsonValue, Rect, Workspace,
     WINDOW_STATE_MAX_BYTES,
 };
 
@@ -38,6 +39,49 @@ pub(crate) fn new_desktop(
         created_at: now.clone(),
         updated_at: now,
     }
+}
+
+fn set_window_state(
+    state: &mut CoreState,
+    window_id: &str,
+    next: BTreeMap<String, JsonValue>,
+) -> Result<AppWindow, CoreError> {
+    let (app_id, app_version) = state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .map(|window| (window.app_id.clone(), window.app_version))
+        .ok_or_else(|| {
+            errors::DESK_WINDOW_STATE_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window_id: {window_id}")])
+        })?;
+    let definition = app_commands::definition_for(&state.shared, &app_id, app_version)
+        .ok_or_else(|| errors::DESK_WINDOW_STATE_APP_VERSION_NOT_FOUND(&app_id, app_version))?;
+    if let Some(key) = next.keys().find(|key| !definition.state.contains_key(*key)) {
+        return Err(errors::DESK_WINDOW_STATE_KEY_NOT_DECLARED(&app_id, key)
+            .and_details(vec![format!("window_id: {window_id}")]));
+    }
+    let bytes = serde_json::to_vec(&next).map_err(|_| {
+        errors::DESK_WINDOW_STATE_SERIALIZATION_FAILED(&app_id)
+            .and_details(vec![format!("window_id: {window_id}")])
+    })?;
+    if bytes.len() > WINDOW_STATE_MAX_BYTES {
+        return Err(errors::DESK_WINDOW_STATE_TOO_LARGE(
+            &app_id,
+            kaleidoscope_contract::size::format_byte_limit(WINDOW_STATE_MAX_BYTES as u64),
+        )
+        .and_details(vec![format!("window_id: {window_id}")]));
+    }
+    let window = state
+        .shared
+        .windows
+        .iter_mut()
+        .find(|window| window.id == window_id)
+        .unwrap();
+    window.state = next;
+    window.updated_at = timestamp();
+    Ok(window.clone())
 }
 
 pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<CoreReply, CoreError> {
@@ -561,46 +605,24 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         CoreRequest::WindowSetState {
             window_id,
             state: next,
-        } => {
-            let (app_id, app_version) = state
+        } => Ok(CoreReply::WindowSetState {
+            window: set_window_state(state, &window_id, next)?,
+        }),
+        CoreRequest::WindowPatchState { window_id, patch } => {
+            let mut next = state
                 .shared
                 .windows
                 .iter()
                 .find(|window| window.id == window_id)
-                .map(|window| (window.app_id.clone(), window.app_version))
                 .ok_or_else(|| {
                     errors::DESK_WINDOW_STATE_WINDOW_NOT_FOUND()
-                        .and_details(vec![format!("window_id: {}", &window_id)])
-                })?;
-            let definition = app_commands::definition_for(&state.shared, &app_id, app_version)
-                .ok_or_else(|| {
-                    errors::DESK_WINDOW_STATE_APP_VERSION_NOT_FOUND(&app_id, app_version)
-                })?;
-            if let Some(key) = next.keys().find(|key| !definition.state.contains_key(*key)) {
-                return Err(errors::DESK_WINDOW_STATE_KEY_NOT_DECLARED(&app_id, key)
-                    .and_details(vec![format!("window_id: {window_id}")]));
-            }
-            let bytes = serde_json::to_vec(&next).map_err(|_| {
-                errors::DESK_WINDOW_STATE_SERIALIZATION_FAILED(&app_id)
-                    .and_details(vec![format!("window_id: {window_id}")])
-            })?;
-            if bytes.len() > WINDOW_STATE_MAX_BYTES {
-                return Err(errors::DESK_WINDOW_STATE_TOO_LARGE(
-                    &app_id,
-                    kaleidoscope_contract::size::format_byte_limit(WINDOW_STATE_MAX_BYTES as u64),
-                )
-                .and_details(vec![format!("window_id: {window_id}")]));
-            }
-            let window = state
-                .shared
-                .windows
-                .iter_mut()
-                .find(|window| window.id == window_id)
-                .unwrap();
-            window.state = next;
-            window.updated_at = timestamp();
-            Ok(CoreReply::WindowSetState {
-                window: window.clone(),
+                        .and_details(vec![format!("window_id: {window_id}")])
+                })?
+                .state
+                .clone();
+            next.extend(patch);
+            Ok(CoreReply::WindowPatchState {
+                window: set_window_state(state, &window_id, next)?,
             })
         }
         CoreRequest::AppImport { definition_json } => app_commands::import(state, definition_json),
