@@ -61,6 +61,7 @@ pub mod mcp;
 pub mod media;
 pub mod process;
 pub mod realtime;
+pub mod registry_install;
 pub mod retired;
 pub mod server;
 pub mod share;
@@ -80,6 +81,7 @@ pub use mcp::*;
 pub use media::*;
 pub use process::*;
 pub use realtime::*;
+pub use registry_install::*;
 pub use server::*;
 pub use share::*;
 pub use shell::*;
@@ -116,6 +118,7 @@ pub const AREAS: &[(&str, &[ErrorEntry])] = &[
     ("CONV", conv::ENTRIES),
     ("MEDIA", media::ENTRIES),
     ("PROCESS", process::ENTRIES),
+    ("REGISTRYINSTALL", registry_install::ENTRIES),
     ("WEB", web::ENTRIES),
     ("WORKER", worker::ENTRIES),
     ("ASSET", asset::ENTRIES),

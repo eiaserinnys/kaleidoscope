@@ -57,7 +57,7 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::PREFERENCES_SCHEMA_VERSION
+        storage::INSTALLATION_SCHEMA_VERSION
     );
     let fresh_violations = db
         .prepare("PRAGMA foreign_key_check")
@@ -81,6 +81,7 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
          INSERT INTO app_storage_buckets(id,account_id,app_id)
              SELECT id,account_id,app_id FROM saved_app_storage_buckets;
          DROP TABLE saved_app_storage_buckets;
+         ALTER TABLE apps DROP COLUMN installation_json;
          PRAGMA user_version=9;
          PRAGMA foreign_keys=ON;",
     )
@@ -99,7 +100,7 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::PREFERENCES_SCHEMA_VERSION
+        storage::INSTALLATION_SCHEMA_VERSION
     );
     let stored: (String, String) = db
         .query_row(

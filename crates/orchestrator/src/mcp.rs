@@ -340,65 +340,7 @@ impl McpServer {
         &self,
         Parameters(args): Parameters<DeleteAppArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        let result = (|| -> Result<usize, CoreError> {
-            if kaleidoscope_contract::builtin::is_builtin(&args.app_id) {
-                return Err(kaleidoscope_contract::errors::MCP_DELETE_APP_BUILTIN(
-                    &args.app_id,
-                ));
-            }
-            let account_id = self.state.mcp_account_id()?;
-            let windows = {
-                let db = self.state.lock_db()?;
-                let updated = db
-                    .execute(
-                        "UPDATE apps SET deleted_at=?2 WHERE id=?1 AND deleted_at IS NULL",
-                        params![args.app_id, timestamp()],
-                    )
-                    .map_err(|error| {
-                        kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
-                            .and_details(vec![error.to_string()])
-                    })?;
-                if updated == 0 {
-                    return Err(kaleidoscope_contract::errors::MCP_DELETE_APP_NOT_FOUND(
-                        &args.app_id,
-                    ));
-                }
-                let mut statement = db.prepare("SELECT v.id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.app_id=?1 AND w.account_id=?2").map_err(|error| {
-                    kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
-                        .and_details(vec![error.to_string()])
-                })?;
-                let ids = statement
-                    .query_map(params![args.app_id, account_id], |row| {
-                        row.get::<_, String>(0)
-                    })
-                    .map_err(|error| {
-                        kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
-                            .and_details(vec![error.to_string()])
-                    })?;
-                ids.collect::<rusqlite::Result<Vec<_>>>().map_err(|error| {
-                    kaleidoscope_contract::errors::MCP_DELETE_APP_DATABASE_FAILED(&args.app_id)
-                        .and_details(vec![error.to_string()])
-                })?
-            };
-            let (_, changed) = self.state.apply_layout_changes(
-                None,
-                &registry::LayoutChanges {
-                    deleted_windows: windows,
-                    ..Default::default()
-                },
-            )?;
-            let count = changed.deleted_windows.len();
-            if !changed.is_empty() {
-                self.state.send_event_for_account(
-                    DeviceEvent::LayoutChanged { changes: changed },
-                    &account_id,
-                );
-            }
-            self.state.send_event(DeviceEvent::AppDeleted {
-                app_id: args.app_id.clone(),
-            });
-            Ok(count)
-        })();
+        let result = self.state.delete_app(&args.app_id, None, None);
         Ok(match result {
             Ok(closed_windows) => json_result(
                 json!({"app_id":args.app_id,"deleted":true,"closed_windows":closed_windows}),

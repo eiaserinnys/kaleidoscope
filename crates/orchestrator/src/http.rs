@@ -40,6 +40,15 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/apps", post(device_upload))
         .route(
+            "/app-installs",
+            post(super::registry_install::device_install)
+                .layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
+        )
+        .route(
+            "/apps/{app_id}",
+            axum::routing::delete(super::app_delete::device_delete),
+        )
+        .route(
             "/apps/{app_id}/worker",
             post(super::worker_http::device_invoke),
         )
