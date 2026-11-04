@@ -9,31 +9,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 fn wait_for_connection(inner: &Inner) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    let mut sequence = inner.layout_signal.sequence();
-    loop {
-        let waiting = {
-            let state = inner.state.lock().unwrap();
-            inner
-                .link_connecting
-                .load(std::sync::atomic::Ordering::SeqCst)
-                && matches!(state.link, LinkStatus::Offline { reason: None, .. })
-                && inner
-                    .link_file
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .is_some_and(|file| !file.revoked)
-        };
-        if !waiting {
-            break;
-        }
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        if remaining.is_zero() {
-            break;
-        }
-        sequence = inner.layout_signal.wait_after(sequence, remaining);
-    }
+    crate::startup_readiness::wait(inner, crate::startup_readiness::WaitFor::Server);
 }
 
 pub(crate) struct Context {

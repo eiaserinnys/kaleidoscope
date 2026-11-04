@@ -34,6 +34,7 @@ mod registry_events;
 mod share;
 mod state_commands;
 mod state_events;
+mod startup_readiness;
 mod storage;
 mod sync_state;
 mod web;
@@ -52,7 +53,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
@@ -203,6 +204,7 @@ pub(crate) struct Inner {
     pub(crate) attachment_opener: Arc<dyn AttachmentOpener>,
     pub(crate) link_file: Mutex<Option<storage::LinkFile>>,
     pub(crate) link_connecting: AtomicBool,
+    pub(crate) shutting_down: AtomicBool,
     pub(crate) generation: AtomicU64,
     pub(crate) layout_connection_epoch: AtomicU64,
     pub(crate) connections_snapshot_epoch: AtomicU64,
@@ -256,6 +258,14 @@ impl LayoutSignal {
             .unwrap();
         *current
     }
+
+    pub(crate) fn wait_after_change(&self, sequence: u64) -> u64 {
+        let current = self.sequence.lock().unwrap();
+        *self
+            .changed
+            .wait_while(current, |current| *current == sequence)
+            .unwrap()
+    }
 }
 
 pub struct Core {
@@ -266,6 +276,9 @@ pub struct Core {
 impl Drop for Core {
     fn drop(&mut self) {
         if self.owner {
+            self.inner.shutting_down.store(true, Ordering::SeqCst);
+            self.inner.generation.fetch_add(1, Ordering::SeqCst);
+            self.inner.layout_signal.notify();
             process_host::shutdown(&self.inner);
             realtime_host::shutdown_sessions(&self.inner);
             if let Err(err) = self.flush_storage() {
@@ -409,6 +422,7 @@ impl Core {
             attachment_opener,
             link_file: Mutex::new(link_file.clone()),
             link_connecting: AtomicBool::new(false),
+            shutting_down: AtomicBool::new(false),
             generation: AtomicU64::new(0),
             layout_connection_epoch: AtomicU64::new(0),
             connections_snapshot_epoch: AtomicU64::new(0),
@@ -903,6 +917,9 @@ impl Core {
     }
 
     pub fn shutdown(&self) {
+        self.inner.shutting_down.store(true, Ordering::SeqCst);
+        self.inner.generation.fetch_add(1, Ordering::SeqCst);
+        self.inner.layout_signal.notify();
         client_files::release_all(&self.inner);
         process_host::shutdown(&self.inner);
         realtime_host::shutdown_sessions(&self.inner);

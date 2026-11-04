@@ -57,6 +57,8 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             inner.layout_signal.notify();
             if let Some(event) = state_event {
                 inner.emit_state(&event);
+            } else {
+                crate::data_runtime::state_changed(inner);
             }
             crate::share::on_connected(inner);
             crate::layout_reporter::start(Arc::clone(inner), generation, epoch);
@@ -306,6 +308,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                 crate::data_runtime::connections_changed(inner, &changed);
                 crate::realtime_host::state_changed(inner);
             }
+            crate::data_runtime::state_changed(inner);
             crate::conversation_send::recover(inner);
             crate::conversation_reconcile::schedule(inner);
         }

@@ -39,6 +39,7 @@ mod realtime_tests;
 mod server_switch_tests;
 mod share_capture_tests;
 mod shared_state_recovery_tests;
+mod startup_readiness_tests;
 mod window_control_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
@@ -1832,6 +1833,8 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 
 #[derive(Default)]
 struct FakeRegistryClient {
+    asset_bytes: Mutex<Option<Vec<u8>>>,
+    storage_reads: AtomicUsize,
     control_responses: Mutex<Vec<kaleidoscope_contract::WindowControlResponse>>,
     raw_values_enabled: std::sync::atomic::AtomicBool,
     legacy_storage_not_found: std::sync::atomic::AtomicBool,
@@ -1862,6 +1865,21 @@ struct FakeRegistryClient {
 }
 
 impl RegistryClient for FakeRegistryClient {
+    fn asset_get(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: u32,
+    ) -> Result<crate::registry_client::AssetDownload, RegistryError> {
+        use sha2::{Digest, Sha256};
+        let bytes = self.asset_bytes.lock().unwrap().clone().ok_or(RegistryError::NotFound)?;
+        Ok(crate::registry_client::AssetDownload {
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            bytes,
+            mime: "text/javascript".into(),
+        })
+    }
     fn post_window_control_response(
         &self,
         _: &str,
@@ -1926,6 +1944,7 @@ impl RegistryClient for FakeRegistryClient {
         _: &str,
         workspace: &str,
     ) -> Result<kaleidoscope_contract::app_storage::StorageReadReply, RegistryError> {
+        self.storage_reads.fetch_add(1, Ordering::SeqCst);
         if self.legacy_storage_not_found.load(Ordering::SeqCst) {
             return Err(RegistryError::NotFound);
         }

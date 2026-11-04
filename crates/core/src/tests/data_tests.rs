@@ -1339,7 +1339,7 @@ fn app_storage_unavailable_never_looks_like_a_null_default() {
         mode: link_file.mode,
         server_url: link_file.server_url,
         device_name: link_file.device_name,
-        reason: None,
+        reason: Some(kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED()),
     };
     assert!(!core.inner.link_connecting.load(Ordering::SeqCst));
     let error = crate::app_storage::read(&core.inner, &window, "choice").unwrap_err();
@@ -1472,7 +1472,7 @@ fn storage_failed_while_offline_is_reloaded_after_connecting() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: None,
+        reason: Some(kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED()),
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1511,7 +1511,7 @@ fn hidden_window_reloads_failed_storage_when_it_becomes_visible() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: None,
+        reason: Some(kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED()),
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1561,7 +1561,7 @@ fn source_failed_while_offline_is_retried_after_connecting() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: None,
+        reason: Some(kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED()),
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1606,7 +1606,7 @@ fn hidden_window_retries_failed_source_when_it_becomes_visible() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: None,
+        reason: Some(kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED()),
     };
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
@@ -1725,7 +1725,7 @@ fn storage_binding_drops_unlinked_defaults_when_the_link_goes_offline() {
         mode: kaleidoscope_contract::ServerMode::Remote,
         server_url: "https://registry.test".into(),
         device_name: "test-device".into(),
-        reason: None,
+        reason: Some(kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED()),
     };
     let event = {
         let state = core.inner.state.lock().unwrap();

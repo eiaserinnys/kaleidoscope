@@ -63,6 +63,8 @@ struct Runtime {
     using_defaults: bool,
     connected: bool,
     storage_reconnect_pending: bool,
+    storage_startup_pending: bool,
+    startup: crate::startup_readiness::Snapshot,
     definition: AppDefinition,
     compiled: CompiledApp,
     state: BTreeMap<String, Value>,
@@ -96,6 +98,7 @@ struct Source {
     status: SourceStatus,
     generation: u64,
     in_flight: bool,
+    startup_wait: Option<crate::startup_readiness::WaitFor>,
     last_fetched: Option<Instant>,
     last_success_at: Option<chrono::DateTime<chrono::Utc>>,
     last_success_instant: Option<Instant>,
@@ -149,6 +152,7 @@ impl Runtime {
                         status: SourceStatus::Idle {},
                         generation: 0,
                         in_flight: false,
+                        startup_wait: None,
                         last_fetched: None,
                         last_success_at: None,
                         last_success_instant: None,
@@ -165,6 +169,8 @@ impl Runtime {
             using_defaults,
             connected,
             storage_reconnect_pending: false,
+            storage_startup_pending: false,
+            startup: Default::default(),
             definition,
             compiled,
             state,
@@ -592,6 +598,7 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
     let source = runtime.sources.get_mut(name).unwrap();
     source.generation = manager.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     source.in_flight = false;
+    source.startup_wait = None;
     source.last_fetched = None;
     source.retrying_after_failure = false;
     source.waiting = None;
@@ -662,10 +669,31 @@ fn prepare(
 ) -> Option<Job> {
     let gate = gate_key(runtime, name);
     let until = gate.as_ref().and_then(|key| gates::blocked(manager, key));
+    let startup = match &runtime.definition.sources[name] {
+        SourceDecl::Request { .. } => runtime.definition.permissions.iter().find_map(|decl| {
+            match decl {
+                kaleidoscope_contract::PermissionDecl::Connection { id, connection, .. }
+                    if id == runtime.definition.sources[name].permission() =>
+                {
+                    Some(runtime.startup.for_connection(connection))
+                }
+                _ => None,
+            }
+        }),
+        _ => None,
+    };
     let source = runtime.sources.get_mut(name)?;
     if source.in_flight || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_)) {
         return None;
     }
+    if let Some(crate::startup_readiness::Readiness::Pending(reason)) = startup {
+        source.startup_wait = Some(reason);
+        source.status = SourceStatus::Loading {
+            has_value: runtime.data.contains_key(name),
+        };
+        return None;
+    }
+    source.startup_wait = None;
     let pages = source.paging.pages.max(1);
     source.paging.generation += 1;
     source.paging.state = paging::PagingState::Idle;
@@ -964,6 +992,7 @@ pub(crate) fn attach(
             &state,
             inner.link_file.lock().unwrap().is_some(),
         );
+        let startup = crate::startup_readiness::snapshot_locked(inner, &state);
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         if windows
             .get(window_id)
@@ -972,7 +1001,7 @@ pub(crate) fn attach(
             windows.remove(window_id);
         }
         let runtime = windows.entry(window_id.into()).or_insert_with(|| {
-            Runtime::new(
+            let mut runtime = Runtime::new(
                 version,
                 definition.clone(),
                 window.state.clone(),
@@ -982,7 +1011,9 @@ pub(crate) fn attach(
                     kaleidoscope_contract::LinkStatus::Connected { .. }
                 ),
                 inner.profiler.clone(),
-            )
+            );
+            runtime.startup = startup;
+            runtime
         });
         let already_attached = runtime.attached > 0;
         runtime.visible = liveness::visible(
@@ -1146,6 +1177,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             state.link,
             kaleidoscope_contract::LinkStatus::Connected { .. }
         );
+        let startup = crate::startup_readiness::snapshot_locked(inner, &state);
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         windows.retain(|id, runtime| {
             state
@@ -1157,6 +1189,10 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
         let mut pending = Vec::new();
         let mut reloads = Vec::new();
         for (id, runtime) in windows.iter_mut() {
+            let readiness_changed = runtime.startup.server != startup.server
+                || runtime.startup.connections != startup.connections
+                || runtime.startup.known != startup.known;
+            runtime.startup = startup.clone();
             runtime.visible = liveness::visible(
                 &state,
                 id,
@@ -1169,8 +1205,12 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             runtime.storage_reconnect_pending |= just_connected;
             let reconnect_reload =
                 connected && runtime.visible && runtime.storage_reconnect_pending;
-            if runtime.attached > 0 && (defaults_changed || reconnect_reload) {
+            let startup_reload = runtime.storage_startup_pending
+                && runtime.visible
+                && !matches!(startup.server, crate::startup_readiness::Readiness::Pending(_));
+            if runtime.attached > 0 && (defaults_changed || reconnect_reload || startup_reload) {
                 reloads.push(id.clone());
+                runtime.storage_startup_pending = false;
                 if reconnect_reload {
                     runtime.storage_reconnect_pending = false;
                 }
@@ -1181,7 +1221,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 .iter()
                 .find(|window| window.id == *id)
                 .unwrap();
-            if runtime.state == window.state && !just_connected {
+            if runtime.state == window.state && !just_connected && !readiness_changed {
                 continue;
             }
             let started = Instant::now();
@@ -1197,7 +1237,17 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
             let live = liveness::live_sources(runtime);
             let mut changed_sources = BTreeSet::new();
             for name in names {
+                let connection_source = matches!(
+                    &runtime.definition.sources[&name],
+                    SourceDecl::Request { .. }
+                ) && runtime.definition.permissions.iter().any(|decl| {
+                    matches!(decl, kaleidoscope_contract::PermissionDecl::Connection { id, .. }
+                        if id == runtime.definition.sources[&name].permission())
+                });
+                let startup_retry =
+                    readiness_changed && runtime.sources[&name].startup_wait.is_some();
                 if just_connected
+                    && connection_source
                     && !matches!(runtime.sources[&name].status, SourceStatus::Ready { .. })
                 {
                     let source = runtime.sources.get_mut(&name).unwrap();
@@ -1240,8 +1290,10 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
                 if changed || runtime.sources[&name].status != old_status {
                     changed_sources.insert(name.clone());
                 }
-                let retry = just_connected
-                    && !matches!(runtime.sources[&name].status, SourceStatus::Ready { .. });
+                let retry = startup_retry
+                    || (just_connected
+                        && connection_source
+                        && !matches!(runtime.sources[&name].status, SourceStatus::Ready { .. }));
                 if should_prepare_after_plan(runtime, &live, &name, changed || retry, false) {
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, id, &name, false) {
                         pending.push(job);

@@ -446,6 +446,16 @@ mod freshness_tests {
 /// None은 재연결 snapshot이나 최초 연결이며 전부 다시 읽는다.
 pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
     let (reads, metadata) = {
+        let state = inner.state.lock().unwrap();
+        let using_defaults = crate::app_storage::uses_defaults_for(
+            &state,
+            inner.link_file.lock().unwrap().is_some(),
+        );
+        let pending_startup = !using_defaults
+            && matches!(
+                crate::startup_readiness::snapshot_locked(inner, &state).server,
+                crate::startup_readiness::Readiness::Pending(_)
+            );
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         let Some(runtime) = windows.get_mut(window) else {
             return;
@@ -453,6 +463,35 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
         if runtime.attached == 0 {
             return;
         }
+        if pending_startup {
+            runtime.storage_startup_pending = true;
+            for (name, slot) in &mut runtime.storage {
+                if selected.is_none_or(|selected| selected == name) {
+                    slot.generation = inner
+                        .data_runtimes
+                        .next_generation
+                        .fetch_add(1, Ordering::SeqCst)
+                        + 1;
+                    slot.in_flight = false;
+                    slot.status = Status::Loading;
+                    slot.value = None;
+                }
+            }
+            if selected.is_none() && runtime.storage_meta.needed {
+                runtime.storage_meta.generation = inner
+                    .data_runtimes
+                    .next_generation
+                    .fetch_add(1, Ordering::SeqCst)
+                    + 1;
+                runtime.storage_meta.in_flight = false;
+                runtime.storage_meta.status = Status::Loading;
+                runtime.storage_meta.value = None;
+            }
+            let pending = replan(inner, window, runtime, selected);
+            jobs(inner, pending);
+            return;
+        }
+        runtime.storage_startup_pending = false;
         let mut reads = Vec::new();
         for (name, slot) in &mut runtime.storage {
             if selected.is_some_and(|selected| selected != name) {
