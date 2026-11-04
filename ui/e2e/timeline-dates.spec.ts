@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 async function capture(page: Page, name: string) {
@@ -16,6 +16,8 @@ async function chooseSchedule(page: Page, app: ReturnType<Page["getByTestId"]>) 
   }
 }
 
+test.use({ locale: "ko-KR" });
+
 for (const width of [1200, 360]) {
   test(`날짜 일정표 ${width} 폭의 눈금과 고정 머리`, async ({ page }) => {
     await page.setViewportSize({ width, height: 600 });
@@ -30,7 +32,30 @@ for (const width of [1200, 360]) {
     const trackBox = await firstTrack.boundingBox();
     const headerBox = await firstTrack.locator(".ks-dates-track-header").boundingBox();
     expect(Math.abs(trackBox!.height - headerBox!.height)).toBeLessThanOrEqual(1);
+    await page.evaluate(() => document.fonts.ready);
     await capture(page, `dates-${width}-day`);
+    if (width === 360) return;
+    const alignment = await timeline.evaluate((root) => {
+      const rect = (element: Element) => { const r = element.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right, bottom: r.bottom, cx: r.x + r.width / 2, cy: r.y + r.height / 2 }; };
+      const corner = rect(root.querySelector(".ks-dates-corner")!);
+      const track = root.querySelector(".ks-dates-track")!;
+      const head = rect(track.querySelector(".ks-dates-track-header")!);
+      const rows = rect(track.querySelector(".ks-dates-track-rows")!);
+      const scrollLeft = root.querySelector<HTMLElement>(".ks-dates-scroll")!.scrollLeft;
+      const firstRow = rect(track.querySelector(".ks-dates-row")!);
+      const name = rect(track.querySelector(".ks-dates-track-name .ks-list-title")!);
+      const tick = [...root.querySelectorAll<HTMLElement>(".ks-dates-ticks > span")].find((element) => rect(element).cx > corner.right)!;
+      const column = [...root.querySelectorAll<HTMLElement>(".ks-dates-background > span")].find((element) => element.style.left === tick.style.left && parseFloat(element.style.width) > 0)!;
+      const bar = root.querySelector(".ks-timeline-item")!;
+      const barBox = rect(bar), rowBox = rect(bar.closest(".ks-dates-row")!);
+      const topGap = barBox.y - rowBox.y, bottomGap = rowBox.bottom - barBox.bottom;
+      return { corner, head, rows, scrollLeft, rowsViewportLeft: rows.x + scrollLeft, firstRow, name, tick: rect(tick), column: rect(column), bar: barBox, row: rowBox, topGap, bottomGap,
+        differences: { headWidth: Math.abs(corner.width-head.width), headEdge: Math.abs(head.right-(rows.x+scrollLeft)), tickCenter: Math.abs(rect(tick).cx-rect(column).cx), barSpacing: Math.abs(topGap-bottomGap), nameCenter: Math.abs(name.cy-firstRow.cy) } };
+    });
+    console.log(`날짜 정렬 좌표: ${JSON.stringify(alignment)}`);
+    const directory = process.env.KS_DATA_CAPTURE_DIR;
+    if (directory) writeFileSync(join(directory, "metrics.json"), JSON.stringify(alignment, null, 2));
+    for (const [name, difference] of Object.entries(alignment.differences)) expect(difference, name).toBeLessThanOrEqual(1);
     for (let i = 0; i < 12 && await timeline.getAttribute("data-scale") === "day"; i++) await app.getByRole("button", { name: "축소" }).click();
     await expect(timeline).toHaveAttribute("data-scale", "week");
     await capture(page, `dates-${width}-week`);
@@ -53,12 +78,23 @@ for (const width of [1200, 360]) {
     const scroll = timeline.locator(".ks-dates-scroll");
     const corner = timeline.locator(".ks-dates-corner");
     const before = await corner.boundingBox();
-    await scroll.evaluate((element) => { element.scrollLeft = element.scrollWidth / 2; element.scrollTop = element.scrollHeight / 2; });
+    await scroll.evaluate((element) => { element.scrollLeft = element.scrollWidth / 2; });
+    await expect.poll(() => scroll.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    const firstHeader = timeline.locator(".ks-dates-track-header").first();
+    expect(Math.abs((await firstHeader.boundingBox())!.x - before!.x)).toBeLessThanOrEqual(1);
+    const monthLabel = await timeline.evaluate((root) => {
+      const corner = root.querySelector(".ks-dates-corner")!.getBoundingClientRect();
+      const right = root.querySelector(".ks-dates-scroll")!.getBoundingClientRect().right;
+      return [...root.querySelectorAll(".ks-dates-month > span")].filter((element) => { const rect = element.getBoundingClientRect(); return rect.right > corner.right && rect.left < right; }).map((element) => element.textContent);
+    });
+    expect(monthLabel.some((label) => label?.includes("월"))).toBe(true);
+    await capture(page, `dates-${width}-horizontal`);
+    await scroll.evaluate((element) => { element.scrollTop = element.scrollHeight / 2; });
     await expect.poll(() => scroll.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     const after = await corner.boundingBox();
     expect(Math.abs(before!.x - after!.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(before!.y - after!.y)).toBeLessThanOrEqual(1);
-    await capture(page, `dates-${width}-scrolled`);
+    await capture(page, `dates-${width}-vertical`);
   });
 }
 
@@ -84,13 +120,6 @@ test("응답을 기다릴 때 일정표의 로딩 상태를 표시한다", async
     harness.emit({ event: "state.changed", snapshot });
   });
   await expect(app.getByRole("status")).toBeVisible();
-  await page.evaluate(async () => {
-    const harness = (window as any).__ksHarness;
-    const { snapshot } = await harness.call({ op: "state.get" });
-    const appWindow = snapshot.shared.windows.find((item: any) => item.app_id === "block-gallery");
-    const { view } = await harness.call({ op: "data.attach", window_id: appWindow.id });
-    harness.emit({ event: "data.update", window_id: appWindow.id, view });
-  });
   await capture(page, "dates-loading");
   await expect(app.locator(".ks-timeline-dates")).toBeVisible();
 });

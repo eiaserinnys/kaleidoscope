@@ -71,6 +71,9 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "metrics": add("items", block.items); break;
     case "button_grid": add("buttons", block.buttons); break;
     case "chart": add("series", block.series); break;
+    case "timeline":
+      for (const name of ["duration", "position", "tracks", "markers", "ticks", "selection", "snap", "viewport", "off_days"] as const) add(name, block[name]);
+      break;
     case "map": add("points", block.points); break;
   }
   return slots.concat(childBlocks(block, pointer).flatMap(([path, child]) => expressionSlots(child, path)));
