@@ -206,7 +206,7 @@ fn local_commands_track_changed_entities_including_deletions() {
 }
 
 #[test]
-fn share_and_sent_context_changes_mark_desktop_pending_for_sync() {
+fn share_is_local_but_sent_context_changes_mark_desktop_pending_for_sync() {
     use crate::sync_state::EntityKind::Desktop;
     let dir = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -219,12 +219,13 @@ fn share_and_sent_context_changes_mark_desktop_pending_for_sync() {
     mark_connected(&core);
     let (_, desktop_id) = active_ids(&core);
     let window_id = open_window(&core, &desktop_id, "test-md-editor");
+    core.inner.state.lock().unwrap().sync.pending.clear();
     core.handle(CoreRequest::ShareSet {
         window_id: window_id.clone(),
         on: true,
     })
     .unwrap();
-    assert!(is_pending(&core, Desktop, &desktop_id));
+    assert!(!is_pending(&core, Desktop, &desktop_id));
 
     let clear_pending = || {
         let mut state = core.inner.state.lock().unwrap();
@@ -262,7 +263,87 @@ fn share_and_sent_context_changes_mark_desktop_pending_for_sync() {
 }
 
 #[test]
-fn another_core_keeps_synced_share_baselines_before_view_arrives() {
+fn share_remote_layout_cannot_enable_or_disable_local_permission() {
+    let first_dir = TempDir::new().unwrap();
+    let second_dir = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let first = open_core(
+        &first_dir.path().join("data"),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+    );
+    let (_, desktop_id) = active_ids(&first);
+    let window_id = open_window(&first, &desktop_id, "test-md-editor");
+    let first_snapshot = snapshot(&first);
+    let mut legacy_desktop = first_snapshot.shared.desktops[0].clone();
+    legacy_desktop.sharing = vec![window_id.clone()];
+
+    let client = registry_client();
+    let second = open_core_with_client(
+        &second_dir.path().join("data"),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&second);
+    crate::registry_events::apply_event(
+        &second.inner,
+        0,
+        DeviceEvent::LayoutSnapshot {
+            workspaces: first_snapshot.shared.workspaces,
+            desktops: vec![legacy_desktop.clone()],
+            windows: first_snapshot.shared.windows,
+        },
+    );
+    assert!(snapshot(&second).sharing.is_empty());
+    assert!(snapshot(&second).shared.desktops[0].sharing.is_empty());
+    let view = kaleidoscope_contract::VisibleView {
+        text: "다른 기기 글".into(),
+        visual: false,
+        occluded: false,
+        image_base64: None,
+        bounds: Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 80,
+        },
+    };
+    second
+        .handle(CoreRequest::ShareView {
+            window_id: window_id.clone(),
+            view: view.clone(),
+        })
+        .unwrap();
+    crate::share::on_connected(&second.inner);
+    assert!(client.share_puts.lock().unwrap().is_empty());
+
+    second
+        .handle(CoreRequest::ShareSet {
+            window_id: window_id.clone(),
+            on: true,
+        })
+        .unwrap();
+    legacy_desktop.sharing.clear();
+    crate::registry_events::apply_event(
+        &second.inner,
+        0,
+        DeviceEvent::LayoutChanged {
+            changes: LayoutChanges {
+                desktops: vec![legacy_desktop],
+                ..Default::default()
+            },
+        },
+    );
+    assert_eq!(snapshot(&second).sharing, vec![window_id.clone()]);
+    second
+        .handle(CoreRequest::ShareView { window_id, view })
+        .unwrap();
+    assert_eq!(client.share_puts.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn another_core_keeps_synced_share_baselines_after_local_opt_in() {
     let first_dir = TempDir::new().unwrap();
     let second_dir = TempDir::new().unwrap();
     let png = test_png(8, 8);
@@ -338,14 +419,20 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
         },
     );
     let second_snapshot = snapshot(&second);
-    assert_eq!(second_snapshot.sharing, vec![window_id.clone()]);
+    assert!(second_snapshot.sharing.is_empty());
     assert!(
         crate::share::prepare_text(&second.inner, &workspace_id, "thread")
             .unwrap()
             .0
-            .contains("그대로")
+            .contains("같이 보기 끝")
     );
 
+    second
+        .handle(CoreRequest::ShareSet {
+            window_id: window_id.clone(),
+            on: true,
+        })
+        .unwrap();
     second
         .handle(CoreRequest::ShareView { window_id, view })
         .unwrap();
@@ -357,7 +444,7 @@ fn another_core_keeps_synced_share_baselines_before_view_arrives() {
     );
     let (same_attachments, _) =
         crate::share::capture_for_send(&second.inner, &workspace_id, "thread", 0, 0);
-    assert!(same_attachments.is_empty());
+    assert_eq!(same_attachments.len(), 1);
 }
 
 #[test]

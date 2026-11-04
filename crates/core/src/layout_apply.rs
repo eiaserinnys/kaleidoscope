@@ -192,18 +192,10 @@ pub(crate) fn reconcile(state: &mut CoreState) {
         valid
     });
     for desktop in &mut state.shared.desktops {
-        let mut seen = HashSet::new();
-        desktop.sharing.retain(|id| {
-            state
-                .shared
-                .windows
-                .iter()
-                .any(|window| window.id == *id && window.desktop_id == desktop.id)
-                && seen.insert(id.clone())
-        });
+        desktop.sharing.clear();
         for contexts in desktop.last_sent_context.values_mut() {
             for (id, context) in contexts.iter_mut() {
-                if !desktop.sharing.iter().any(|sharing| sharing == id) {
+                if !state.share.active_shares.contains(id) {
                     context.visual_hash = None;
                 }
             }

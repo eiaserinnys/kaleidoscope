@@ -394,7 +394,7 @@ pub struct SentShareContext {
     pub visual_hash: Option<String>,
 }
 
-/// 화면 한 장. 앱 창 배치와 같이 보기 상태, 대화별 마지막 컨텍스트를 가진다.
+/// 화면 한 장. 앱 창 배치와 대화별 마지막 컨텍스트를 가진다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct Desktop {
@@ -403,7 +403,7 @@ pub struct Desktop {
     pub name: String,
     /// 워크스페이스 안의 순서. 0부터.
     pub position: u32,
-    /// 이 데스크톱에서 같이 보기를 켠 창 id. 켠 순서다.
+    /// 옛 판 호환용. 새 코어는 쓰거나 읽지 않으며 정본은 기기 코어 메모리다.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(optional, as = "Option<Vec<String>>")]
     pub sharing: Vec<String>,
@@ -617,7 +617,7 @@ pub struct ShellSnapshot {
     pub device: DeviceState,
     pub supported: Supported,
     pub link: LinkStatus,
-    /// 같이 보기 상태가 저장된 데스크톱과 현재 살아 있는 창에서 계산한 id. 켠 순서다.
+    /// 이 기기 코어 메모리에서 같이 보기를 켠 살아 있는 창 id. 켠 순서다.
     pub sharing: Vec<String>,
     /// (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
     pub update: UpdateStatus,

@@ -579,7 +579,7 @@ source_meta?: { [key in string]: SourceMeta },
 values: { [key in string]: BindingValue }, };
 
 /**
- * 화면 한 장. 앱 창 배치와 같이 보기 상태, 대화별 마지막 컨텍스트를 가진다.
+ * 화면 한 장. 앱 창 배치와 대화별 마지막 컨텍스트를 가진다.
  */
 export type Desktop = { id: string, workspace_id: string, name: string, 
 /**
@@ -587,7 +587,7 @@ export type Desktop = { id: string, workspace_id: string, name: string,
  */
 position: number, 
 /**
- * 이 데스크톱에서 같이 보기를 켠 창 id. 켠 순서다.
+ * 옛 판 호환용. 새 코어는 쓰거나 읽지 않으며 정본은 기기 코어 메모리다.
  */
 sharing?: Array<string>, 
 /**
@@ -1128,7 +1128,7 @@ export type SharedState = { apps: Array<App>, app_versions: Array<AppVersion>, w
  */
 export type ShellSnapshot = { last_transfer?: TransferResult, transfer_error?: string, embedded_available: boolean, shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
 /**
- * 같이 보기 상태가 저장된 데스크톱과 현재 살아 있는 창에서 계산한 id. 켠 순서다.
+ * 이 기기 코어 메모리에서 같이 보기를 켠 살아 있는 창 id. 켠 순서다.
  */
 sharing: Array<string>, 
 /**

@@ -7,9 +7,9 @@ use image::{imageops::FilterType, DynamicImage, ImageFormat, RgbaImage};
 use kaleidoscope_contract::registry::ShareUpload;
 use kaleidoscope_contract::{
     conversation::ConversationUpload, errors, CoreError, CoreReply, ErrorCode, LinkStatus,
-    SentShareContext, SharedState, VisibleView, AGENT_ATTACHMENTS_MAX,
-    AGENT_ATTACHMENTS_TOTAL_MAX_BYTES, AGENT_ATTACHMENT_MAX_BYTES, SHARE_CAPTURE_MAX_EDGE,
-    SHARE_CAPTURE_NAME_PREFIX, SHARE_TEXT_MAX_BYTES,
+    SentShareContext, VisibleView, AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
+    AGENT_ATTACHMENT_MAX_BYTES, SHARE_CAPTURE_MAX_EDGE, SHARE_CAPTURE_NAME_PREFIX,
+    SHARE_TEXT_MAX_BYTES,
 };
 use sha2::{Digest, Sha256};
 
@@ -27,22 +27,21 @@ pub(crate) struct IsolatedCapture {
 
 #[derive(Clone, Default, PartialEq)]
 pub(crate) struct ShareState {
-    pub(crate) active_shares: HashSet<String>,
+    pub(crate) active_shares: Vec<String>,
     views: HashMap<String, VisibleView>,
     uploaded: HashMap<String, ShareUpload>,
     pending_deletes: HashSet<String>,
 }
 
-pub(crate) fn shared_window_order(shared: &SharedState) -> Vec<String> {
-    let mut seen = HashSet::new();
+pub(crate) fn shared_window_order(state: &CoreState) -> Vec<String> {
     let mut order = Vec::new();
-    for desktop in &shared.desktops {
-        for id in &desktop.sharing {
-            if shared
+    for desktop in &state.shared.desktops {
+        for id in &state.share.active_shares {
+            if state
+                .shared
                 .windows
                 .iter()
                 .any(|window| window.id == *id && window.desktop_id == desktop.id)
-                && seen.insert(id.clone())
             {
                 order.push(id.clone());
             }
@@ -51,22 +50,13 @@ pub(crate) fn shared_window_order(shared: &SharedState) -> Vec<String> {
     order
 }
 
-pub(crate) fn shared_window_ids(shared: &SharedState) -> HashSet<String> {
-    shared_window_order(shared).into_iter().collect()
-}
-
 fn is_sharing(state: &CoreState, window_id: &str) -> bool {
-    let Some(window) = state
-        .shared
-        .windows
-        .iter()
-        .find(|window| window.id == window_id)
-    else {
-        return false;
-    };
-    state.shared.desktops.iter().any(|desktop| {
-        desktop.id == window.desktop_id && desktop.sharing.iter().any(|id| id == window_id)
-    })
+    state.share.active_shares.iter().any(|id| id == window_id)
+        && state
+            .shared
+            .windows
+            .iter()
+            .any(|window| window.id == window_id)
 }
 
 fn persist_shared_change(
@@ -115,7 +105,7 @@ pub(crate) fn prepare_text(
         .iter()
         .filter(|desktop| desktop.workspace_id == workspace)
         .flat_map(|desktop| {
-            desktop.sharing.iter().filter_map(|id| {
+            state.share.active_shares.iter().filter_map(|id| {
                 let alive = state
                     .shared
                     .windows
@@ -167,7 +157,6 @@ pub(crate) fn mark_sent_text(
             .iter()
             .filter(|(id, _)| {
                 window_desktops.get(*id) == Some(&desktop.id)
-                    || desktop.sharing.iter().any(|sharing| sharing == *id)
                     || desktop
                         .last_sent_context
                         .get(conversation)
@@ -274,21 +263,16 @@ pub(crate) fn set(
             .iter()
             .position(|desktop| desktop.id == desktop_id)
             .ok_or_else(|| errors::SHARE_SET_DESKTOP_NOT_FOUND(&title))?;
-        let was_on = state.shared.desktops[desktop_index]
-            .sharing
-            .iter()
-            .any(|id| id == window_id);
+        let was_on = state.share.active_shares.iter().any(|id| id == window_id);
         if was_on == on {
             return Ok(CoreReply::ShareSet {});
         }
         let before = state.clone();
-        let desktop = &mut state.shared.desktops[desktop_index];
         if on {
-            desktop.sharing.push(window_id.to_owned());
-            desktop.updated_at = crate::state_commands::timestamp();
-            state.share.active_shares.insert(window_id.to_owned());
+            state.share.active_shares.push(window_id.to_owned());
         } else {
-            desktop.sharing.retain(|id| id != window_id);
+            let desktop = &mut state.shared.desktops[desktop_index];
+            let old_context = desktop.last_sent_context.clone();
             for contexts in desktop.last_sent_context.values_mut() {
                 if let Some(context) = contexts.get_mut(window_id) {
                     context.visual_hash = None;
@@ -298,8 +282,10 @@ pub(crate) fn set(
             desktop
                 .last_sent_context
                 .retain(|_, contexts| !contexts.is_empty());
-            desktop.updated_at = crate::state_commands::timestamp();
-            state.share.active_shares.remove(window_id);
+            if desktop.last_sent_context != old_context {
+                desktop.updated_at = crate::state_commands::timestamp();
+            }
+            state.share.active_shares.retain(|id| id != window_id);
             state.share.views.remove(window_id);
             state.share.uploaded.remove(window_id);
             state.share.pending_deletes.insert(window_id.to_owned());
@@ -552,11 +538,11 @@ fn delete_pending(inner: &Inner, window_id: &str) {
 pub(crate) fn state_changed(inner: &Inner) {
     let removed = {
         let mut state = inner.state.lock().unwrap();
-        let live = shared_window_ids(&state.shared);
         let removed: Vec<_> = state
             .share
             .active_shares
-            .difference(&live)
+            .iter()
+            .filter(|id| !state.shared.windows.iter().any(|window| window.id == **id))
             .cloned()
             .collect();
         for id in &removed {
@@ -564,7 +550,7 @@ pub(crate) fn state_changed(inner: &Inner) {
             state.share.uploaded.remove(id);
             state.share.pending_deletes.insert(id.clone());
         }
-        state.share.active_shares = live;
+        state.share.active_shares.retain(|id| !removed.contains(id));
         removed
     };
     for id in removed {
@@ -580,7 +566,9 @@ pub(crate) fn on_connected(inner: &Inner) {
         } else {
             None
         };
-        let uploads = shared_window_ids(&state.shared)
+        let uploads = state
+            .share
+            .active_shares
             .iter()
             .filter_map(|id| {
                 state.share.views.get(id).and_then(|view| {
@@ -623,12 +611,7 @@ pub(crate) fn on_connected(inner: &Inner) {
 pub(crate) fn clear_server_before_unlink(inner: &Inner) {
     let (ids, file) = {
         let state = inner.state.lock().unwrap();
-        (
-            shared_window_ids(&state.shared)
-                .into_iter()
-                .collect::<Vec<_>>(),
-            link_file(inner),
-        )
+        (state.share.active_shares.clone(), link_file(inner))
     };
     if let Some(file) = file {
         for id in ids {
@@ -663,7 +646,7 @@ pub(crate) fn capture_for_send(
                         && desktop.workspace_id == workspace_id
                 })
                 .into_iter()
-                .flat_map(|desktop| desktop.sharing.iter())
+                .flat_map(|_| state.share.active_shares.iter())
                 .filter_map(|id| {
                     let window = state.shared.windows.iter().find(|window| {
                         &window.id == id
@@ -791,6 +774,9 @@ pub(crate) fn mark_sent_visuals(inner: &Inner, conversation: &str, sent: Vec<(St
     let mut state = inner.state.lock().unwrap();
     let before = state.clone();
     for (id, hash) in sent {
+        if !is_sharing(&state, &id) {
+            continue;
+        }
         let desktop_id = state
             .shared
             .windows
@@ -808,9 +794,6 @@ pub(crate) fn mark_sent_visuals(inner: &Inner, conversation: &str, sent: Vec<(St
         else {
             continue;
         };
-        if !desktop.sharing.iter().any(|sharing| sharing == &id) {
-            continue;
-        }
         let context = desktop
             .last_sent_context
             .entry(conversation.to_owned())

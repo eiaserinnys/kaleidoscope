@@ -32,9 +32,9 @@ mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
 mod process_tests;
-mod realtime_tests;
 mod profiler_concurrency_tests;
 mod profiler_tests;
+mod realtime_tests;
 mod server_switch_tests;
 mod share_capture_tests;
 mod shared_state_recovery_tests;
@@ -651,6 +651,60 @@ fn 대화_삭제는_현재_snapshot과_미전송_없는_작업_정본에서만_�
 }
 
 #[test]
+fn share_legacy_stored_permission_starts_off_and_does_not_upload() {
+    let temp = TempDir::new().unwrap();
+    let data_dir = temp.path().join("data");
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(
+        &data_dir,
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        Arc::clone(&client),
+    );
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "test-md-editor");
+    drop(core);
+
+    let path = data_dir.join("state.json");
+    let mut stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    stored["desktops"][0]["sharing"] = json!([window_id.clone()]);
+    fs::write(&path, serde_json::to_vec(&stored).unwrap()).unwrap();
+    assert!(crate::storage::load_shared(&data_dir).unwrap().desktops[0]
+        .sharing
+        .is_empty());
+
+    let reopened = open_core_with_client(
+        &data_dir,
+        vec![test_definition(MD_EDITOR)],
+        &host,
+        Arc::clone(&client),
+    );
+    mark_connected(&reopened);
+    crate::share::on_connected(&reopened.inner);
+    assert!(snapshot(&reopened).sharing.is_empty());
+    assert!(snapshot(&reopened).shared.desktops[0].sharing.is_empty());
+    reopened
+        .handle(CoreRequest::ShareView {
+            window_id,
+            view: kaleidoscope_contract::VisibleView {
+                text: "보내면 안 되는 글".into(),
+                visual: false,
+                occluded: false,
+                image_base64: None,
+                bounds: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 100,
+                    height: 80,
+                },
+            },
+        })
+        .unwrap();
+    assert!(client.share_puts.lock().unwrap().is_empty());
+}
+
+#[test]
 fn share_set_updates_snapshot_once_and_share_view_validates_size() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -826,10 +880,7 @@ fn shared_view_baselines_survive_core_restart() {
 
     let before_restart = snapshot(&core);
     assert_eq!(before_restart.sharing, vec![window.clone()]);
-    assert_eq!(
-        before_restart.shared.desktops[0].sharing,
-        vec![window.clone()]
-    );
+    assert!(before_restart.shared.desktops[0].sharing.is_empty());
     let context = &before_restart.shared.desktops[0].last_sent_context["thread"][&window];
     assert_eq!(context.app_name.as_deref(), Some("마크다운 편집기"));
     assert_eq!(context.text.as_deref(), Some("첫 화면"));
@@ -838,17 +889,21 @@ fn shared_view_baselines_survive_core_restart() {
 
     let reopened = open();
     let after_restart = snapshot(&reopened);
-    assert_eq!(after_restart.sharing, vec![window.clone()]);
-    assert_eq!(
-        after_restart.shared.desktops[0].sharing,
-        vec![window.clone()]
-    );
+    assert!(after_restart.sharing.is_empty());
+    assert!(after_restart.shared.desktops[0].sharing.is_empty());
     assert!(
         crate::share::prepare_text(&reopened.inner, &workspace, "thread")
             .unwrap()
             .0
-            .contains("그대로")
+            .contains("같이 보기 끝")
     );
+
+    reopened
+        .handle(CoreRequest::ShareSet {
+            window_id: window.clone(),
+            on: true,
+        })
+        .unwrap();
 
     reopened
         .handle(CoreRequest::ShareView {
@@ -875,7 +930,7 @@ fn shared_view_baselines_survive_core_restart() {
     );
     let (same_attachments, _) =
         crate::share::capture_for_send(&reopened.inner, &workspace, "thread", 0, 0);
-    assert!(same_attachments.is_empty());
+    assert_eq!(same_attachments.len(), 1);
 
     reopened
         .handle(CoreRequest::ShareView {
