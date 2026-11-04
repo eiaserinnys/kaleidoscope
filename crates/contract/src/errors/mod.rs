@@ -67,6 +67,7 @@ pub mod server;
 pub mod share;
 pub mod shell;
 pub mod storage;
+pub mod store_client;
 pub mod web;
 pub mod worker;
 
@@ -86,6 +87,7 @@ pub use server::*;
 pub use share::*;
 pub use shell::*;
 pub use storage::*;
+pub use store_client::*;
 pub use web::*;
 pub use worker::*;
 
@@ -113,6 +115,7 @@ pub const AREAS: &[(&str, &[ErrorEntry])] = &[
     ("DESK", desk::ENTRIES),
     ("FILE", file::ENTRIES),
     ("STORAGE", storage::ENTRIES),
+    ("STORECLIENT", store_client::ENTRIES),
     ("DATA", data::ENTRIES),
     ("CONN", &CONNECTION_ENTRIES),
     ("CONV", conv::ENTRIES),
