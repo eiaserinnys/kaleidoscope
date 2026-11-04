@@ -19,6 +19,14 @@ pub(super) struct ShareStore {
 }
 
 impl ShareStore {
+    pub(super) fn control_candidates(&self, window: &str) -> Vec<(String, SharedView)> {
+        self.views.iter().filter(|((_, id), _)| id == window)
+            .map(|((device, _), view)| (device.clone(), view.clone())).collect()
+    }
+
+    pub(super) fn contains(&self, device: &str, window: &str) -> bool {
+        self.views.contains_key(&(device.to_string(), window.to_string()))
+    }
     pub(super) fn put(
         &mut self,
         device_id: &str,
@@ -98,6 +106,7 @@ impl AppState {
     pub(super) fn delete_shared_view(&self, device_id: &str, window_id: &str) {
         if let Ok(mut shares) = self.0.shares.lock() {
             shares.delete(device_id, window_id);
+            self.window_control_share_deleted(device_id, window_id);
         }
     }
 

@@ -9,6 +9,8 @@ error_catalog! { ENTRIES;
     MCP_WINDOW_CONTROL_REPLY_EXPIRED() { class: NotFound, place: "창 제어 응답 대기 조회", cause: "요청을 찾지 못했거나 대기가 끝났다", message: "이 창 제어 요청의 대기가 끝났습니다. 새 요청 결과만 보내세요.", fix: "새 요청 결과만 보내세요" }
     MCP_WINDOW_CONTROL_REPLY_BODY_INVALID() { class: InvalidRequest, place: "창 제어 응답 본문 검사", cause: "응답을 계약 형식으로 읽지 못했다", message: "창 제어 응답 형식이 맞지 않습니다. 기기의 응답 계약을 확인하세요.", fix: "기기의 응답 계약을 확인하세요" }
     MCP_WINDOW_CONTROL_REPLY_TOO_LARGE(limit) { class: InvalidRequest, place: "창 제어 응답 크기 검사", cause: "응답이 허용 크기를 넘었다", message: "창 제어 응답이 허용 크기 {limit}를 넘었습니다. 화면 글과 PNG 크기를 줄이세요.", fix: "화면 글과 PNG 크기를 줄이세요" }
+    MCP_WINDOW_CONTROL_TYPE_TEXT_TOO_LARGE(size) { class: InvalidRequest, place: "act_window 서버 입력 글 크기 검사", cause: "입력 글이 16KiB를 넘었다", message: "넣을 글이 {size}라 한 번에 넣을 수 있는 16KiB를 넘었습니다. 글을 나눠 mode append로 이어 넣으세요.", fix: "글을 나눠 mode append로 이어 넣으세요" }
+    MCP_WINDOW_CONTROL_SCROLL_AMOUNT_OUT_OF_RANGE(amount) { class: InvalidRequest, place: "act_window 서버 스크롤 양 검사", cause: "스크롤 양이 허용 범위 밖이다", message: "스크롤 양 {amount}은 쓸 수 없습니다. 1에서 10000 사이의 CSS 픽셀 값으로 다시 요청하세요.", fix: "1에서 10000 사이의 CSS 픽셀 값으로 다시 요청하세요" }
     MCP_UPLOAD_APP_SERIALIZE_FAILED() {
         class: Server,
         place: "upload_app 입력 준비",

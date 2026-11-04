@@ -155,9 +155,12 @@ impl AppState {
         }
         let state = self.clone();
         let interval = tokio::time::interval(Duration::from_secs(registry::PING_INTERVAL_SECS));
+        self.0.window_control_versions.lock().unwrap_or_else(|e| e.into_inner())
+            .entry(device_id.clone()).or_default().push(registry_version);
         let guard = ConnectionGuard {
             state: state.clone(),
             device_id: device_id.clone(),
+            registry_version,
         };
         let first = stream::iter(
             initial_events
@@ -166,11 +169,11 @@ impl AppState {
         );
         let rest = stream::unfold(
             (rx, interval, state, device_id, Some(guard)),
-            |(mut rx, mut interval, state, device_id, guard)| async move {
+            move |(mut rx, mut interval, state, device_id, guard)| async move {
                 loop {
                     tokio::select! {
                         received=rx.recv()=>match received {
-                            Ok(event)=>if let Some(event) = state.event_for_broadcast(&device_id, event) { return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); },
+                            Ok(event)=>if !(matches!(event.event, DeviceEvent::WindowControl { .. }) && registry_version < 12) { if let Some(event) = state.event_for_broadcast(&device_id, event) { return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); } },
                             Err(broadcast::error::RecvError::Closed)|Err(broadcast::error::RecvError::Lagged(_))=>{drop(guard);return None}
                         },
                         _=interval.tick()=>{
@@ -188,15 +191,23 @@ impl AppState {
 struct ConnectionGuard {
     state: AppState,
     device_id: String,
+    registry_version: u32,
 }
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         if let Ok(mut map) = self.state.0.connections.lock() {
+            let mut versions = self.state.0.window_control_versions.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(entries) = versions.get_mut(&self.device_id) {
+                if let Some(index) = entries.iter().position(|v| *v == self.registry_version) { entries.remove(index); }
+                if entries.is_empty() { versions.remove(&self.device_id); }
+            }
+            drop(versions);
             if let Some(count) = map.get_mut(&self.device_id) {
                 *count = count.saturating_sub(1);
                 if *count == 0 {
                     map.remove(&self.device_id);
                     self.state.delete_device_shared_views(&self.device_id);
+                    self.state.window_control_device_disconnected(&self.device_id);
                     if let Ok(mut support) = self.state.0.device_support.lock() {
                         support.remove(&self.device_id);
                     }
