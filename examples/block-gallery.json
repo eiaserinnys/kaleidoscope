@@ -173,7 +173,7 @@
                 { "type": "text", "style": "meta", "value": { "expr": "$string($state.count) & '번'" } }
               ],
               "end": [
-                { "type": "button", "label": "모두 지우기", "variant": "danger", "confirm": { "title": "모두 지울까요?", "body": { "expr": "'지금 ' & $string($state.count) & '번을 지웁니다.'" }, "ok": "지우기" }, "on_click": [{ "set_state": "count", "value": 0 }, { "set_state": "query", "value": "" }] }
+                { "type": "button", "label": "모두 지우기", "description": "현재 입력과 횟수를 모두 지우고 처음 상태로 되돌립니다.", "variant": "danger", "confirm": { "title": "모두 지울까요?", "body": { "expr": "'지금 ' & $string($state.count) & '번을 지웁니다.'" }, "ok": "지우기" }, "on_click": [{ "set_state": "count", "value": 0 }, { "set_state": "query", "value": "" }] }
               ]
             },
             {
