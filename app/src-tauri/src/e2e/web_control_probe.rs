@@ -10,6 +10,7 @@ use tauri::Webview;
 mod measure;
 #[path = "share_isolate/native_input.rs"]
 mod native_input;
+mod product;
 use measure::{measure_ax, measure_click, measure_key, measure_type};
 
 const APP_ID: &str = "e2e-web-control-probe";
@@ -445,6 +446,8 @@ pub(super) fn scenario(
         return Err(format!("A의 쉘 전경 또는 웹뷰 표시 준비 실패: {a_setup}"));
     }
     let a = phase(&view, &mut probe, true, "a");
+    let host = app.state::<Arc<crate::web_host::TauriWebHost>>();
+    let a_product = product::phase(host.as_ref(), &view, &id, &mut probe, true, out, "a");
     capture(out, "a-visible")?;
     let b_setup = probe.prepare()?;
     let position = main.inner_position().map_err(|e| e.to_string())?;
@@ -463,12 +466,14 @@ pub(super) fn scenario(
         ));
     }
     let b = phase(&view, &mut probe, false, "b");
+    let b_product = product::phase(host.as_ref(), &view, &id, &mut probe, false, out, "b");
     capture(out, "b-covered")?;
     place(core, &id, None)?;
     if visible(&view)? {
         return Err("C의 웹뷰가 숨겨지지 않음".into());
     }
     let c = phase(&view, &mut probe, false, "c");
+    let c_product = product::phase(host.as_ref(), &view, &id, &mut probe, false, out, "c");
     capture(out, "c-hidden")?;
     let alternative = if needs_fallback(&c) {
         Some(fallback(app, core, out, &id, bounds, &view, &mut probe))
@@ -476,7 +481,8 @@ pub(super) fn scenario(
         None
     };
     let output = json!({"fixture_url":url,"window_id":id,"web_bounds":geometry,"shell_handle":shell_handle,"a_setup":a_setup,"b_setup":b_setup,
-        "states":{"a_visible":a,"b_covered":b,"c_hidden":c,"c_prime_cover":alternative}});
+        "states":{"a_visible":a,"b_covered":b,"c_hidden":c,"c_prime_cover":alternative},
+        "product":{"a_visible":a_product,"b_covered":b_product,"c_hidden":c_product}});
     fs::write(
         out.join("web-control-results.json"),
         serde_json::to_vec_pretty(&output).map_err(|e| e.to_string())?,

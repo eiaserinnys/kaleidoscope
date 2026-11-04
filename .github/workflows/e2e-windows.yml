@@ -75,6 +75,7 @@ jobs:
             if (-not (Test-Path $resultPath)) { throw '웹 화면 실측 결과가 없음' }
             $result = Get-Content -Raw -Encoding utf8 $resultPath | ConvertFrom-Json
             foreach ($phase in @('a_visible', 'b_covered', 'c_hidden')) {
+              if ($result.product.$phase.status -ne '된다') { throw "제품 웹 제어 실패: $phase $($result.product.$phase.detail | ConvertTo-Json -Compress -Depth 20)" }
               foreach ($field in @('ax', 'click', 'type', 'key', 'focus')) {
                 if ($result.states.$phase.$field.status -notin @('된다', '안 된다', '측정 실패')) { throw "실측 결과 누락: $phase.$field" }
                 Write-Host "$phase.$field : $($result.states.$phase.$field.status)"

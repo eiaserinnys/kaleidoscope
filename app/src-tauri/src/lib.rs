@@ -33,7 +33,7 @@ struct DialogHost {
     app: AppHandle,
     updater: Arc<updater::TauriUpdateHost>,
     #[cfg(windows)]
-    web: web_host::TauriWebHost,
+    web: Arc<web_host::TauriWebHost>,
 }
 
 impl Host for DialogHost {
@@ -96,7 +96,7 @@ impl Host for DialogHost {
     }
     #[cfg(windows)]
     fn web(&self) -> Option<&dyn kaleidoscope_core::WebHost> {
-        Some(&self.web)
+        Some(self.web.as_ref())
     }
     fn updater(&self) -> Option<&dyn kaleidoscope_core::UpdateHost> {
         Some(self.updater.as_ref())
@@ -236,7 +236,11 @@ async fn core_bytes(
                 &bytes,
             )
             .map(|()| Vec::new()),
-        "client.http_read" | "client.blob_put" | "process.write" | "connection.realtime.read" | "connection.realtime.send" => {
+        "client.http_read"
+        | "client.blob_put"
+        | "process.write"
+        | "connection.realtime.read"
+        | "connection.realtime.send" => {
             #[cfg(feature = "e2e")]
             e2e::observe_bytes(&operation);
             core.client_binary(&operation, &window, &handle, &bytes)
@@ -275,6 +279,10 @@ pub fn run() {
             };
             app.manage(embedded);
             let updater = Arc::new(updater::TauriUpdateHost::default());
+            #[cfg(windows)]
+            let web = Arc::new(web_host::TauriWebHost::new(app.handle().clone()));
+            #[cfg(all(windows, feature = "e2e"))]
+            app.manage(Arc::clone(&web));
             let core = match Core::open(
                 CoreConfig {
                     embedded_server: Some(embedded_info),
@@ -289,7 +297,7 @@ pub fn run() {
                     app: app.handle().clone(),
                     updater: Arc::clone(&updater),
                     #[cfg(windows)]
-                    web: web_host::TauriWebHost::new(app.handle().clone()),
+                    web,
                 }),
             ) {
                 Ok(core) => Arc::new(core),

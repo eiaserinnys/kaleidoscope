@@ -4,10 +4,12 @@
 <body>
 <button id="button">Probe button</button>
 <label for="input">Probe input</label><input id="input">
+<label for="choice">Probe choice</label><select id="choice"><option value="one">First</option><option value="two">Second</option></select>
 <a href="#link">Probe link</a>
 <p id="clicks">click-count 0</p>
 <p id="inputs">input-count 0</p>
 <p id="keys">enter-count 0</p>
+<div id="scroll" style="height: 80px; overflow: auto"><button id="scroll-target">Scroll target</button><div style="height: 500px"></div></div>
 <script>
 let clicks = 0, inputs = 0, keys = 0;
 document.querySelector('#button').addEventListener('click', () => { document.querySelector('#clicks').textContent = `click-count ${++clicks}`; });

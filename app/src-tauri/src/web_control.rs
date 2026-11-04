@@ -14,6 +14,7 @@ pub(crate) enum ProbeCall {
     Mouse { pressed: bool, x: f64, y: f64 },
     InsertText(String),
     Enter { down: bool },
+    Evaluate(String),
 }
 
 impl ProbeCall {
@@ -38,6 +39,10 @@ impl ProbeCall {
                     "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13,
                     "nativeVirtualKeyCode": 13
                 }),
+            ),
+            Self::Evaluate(expression) => (
+                "Runtime.evaluate",
+                json!({"expression": expression, "returnByValue": true}),
             ),
         }
     }
