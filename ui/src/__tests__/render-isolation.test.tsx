@@ -14,6 +14,7 @@ import * as windowData from "../data/window-data";
 import { useWindowData, WindowDataProvider, type WindowData } from "../data/window-data";
 import type { BlockContext } from "../blocks/block-context";
 import { TimelineBlock } from "../blocks/timeline";
+import { WindowNotice } from "../data/window-notice";
 import * as renderBlockModule from "../render/render-block";
 import { ClientRuntime } from "../runtime/client-runtime";
 import { grantFor, makeTestSeed, makeTestSnapshot } from "./fixtures";
@@ -1284,6 +1285,33 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await settleRenders();
     expect(countFor("window-b")).toBe(0);
     expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    store.dispose();
+  });
+
+  it("창 정보 알림 표시와 소멸은 형제 내용과 다른 창을 다시 그리지 않는다", async () => {
+    const snapshot = testSnapshot([definition]);
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    await store.ready;
+    const windows = snapshot.shared.windows;
+    let firstData: WindowData | undefined;
+    const firstRender = vi.fn();
+    const secondRender = vi.fn();
+    function Probe() { firstData = useWindowData(); return null; }
+    function Body({ track }: { track: () => void }) { track(); return <div>창 내용</div>; }
+    render(<>
+      <WindowDataProvider store={store} windowId={windows[0].id} definition={definition}><Probe /><WindowNotice /><Body track={firstRender} /></WindowDataProvider>
+      <WindowDataProvider store={store} windowId={windows[1].id} definition={definition}><WindowNotice /><Body track={secondRender} /></WindowDataProvider>
+    </>);
+    const firstCount = firstRender.mock.calls.length;
+    const secondCount = secondRender.mock.calls.length;
+    vi.useFakeTimers();
+    act(() => { firstData!.setStatus("완료했습니다"); });
+    expect(screen.getByRole("status").textContent).toContain("완료했습니다");
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(firstRender).toHaveBeenCalledTimes(firstCount);
+    expect(secondRender).toHaveBeenCalledTimes(secondCount);
+    vi.useRealTimers();
     store.dispose();
   });
 

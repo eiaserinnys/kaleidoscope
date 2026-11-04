@@ -37,6 +37,7 @@ import { makeLongConversation } from "./chat-long-history";
 import { blockSet18Fixtures } from "../e2e/fixtures/blocks-18";
 import { previewGridFixtures } from "../e2e/fixtures/preview-grid";
 import { shellDefectFixtures } from "../e2e/fixtures/shell-defects";
+import { describeVisible } from "../src/share/visible";
 
 const mdEditor = mdEditorJson as AppDefinition;
 installShellDragGuard();
@@ -297,6 +298,7 @@ if (!coreUrl) {
   });
   Object.assign(window, { clientChatHarness: {
     calls: () => [...clientChatCalls],
+    visibleText: () => { const app = document.querySelector<HTMLElement>('[data-testid="app-window-client-chat"]'); return app ? describeVisible(app).text : ""; },
     clear: () => { clientChatCalls.length = 0; },
     // 성능 측정기가 주기마다 보내는 profiler.report는 사용자 조작과 무관해 세지 않는다.
     coreCalls: () => fakeTransport.getCalls().filter((call) => call.op !== "profiler.report").length,

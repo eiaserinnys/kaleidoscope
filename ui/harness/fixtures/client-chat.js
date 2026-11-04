@@ -82,6 +82,7 @@
 
   window.addEventListener("message", (event) => {
     if (event.source !== parent || !event.data || typeof event.data !== "object") return;
+    if (event.data.type === "chat-test-notice") client.notice("저장했습니다");
     if (event.data.type === "chat-test-emit-many") {
       for (let index = 0; index < 100; index += 1) {
         client.chat.publish("thread", { kind: "event", event: { kind: "text", stream_id: "many", text: `조각 ${index + 1}` } });
