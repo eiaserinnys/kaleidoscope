@@ -258,7 +258,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     for (id, version) in [
         ("profiler", 3),
         ("agent", 4),
-        ("slackbot", 3),
+        ("slackbot", 2),
         ("explorer", 3),
         ("md-editor", 4),
         ("html-report", 2),

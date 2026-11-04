@@ -9,7 +9,6 @@ import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import profiler from "../../../apps/profiler.json";
-import slackbot from "../../../apps/slackbot.json";
 
 beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -131,7 +130,6 @@ const builtinTables = [
   { name: "느린 구간", block: profilerTabs[3].child, field: "target", label: "대상 복사" },
   { name: "느린 식", block: profilerTabs[4].child, field: "expr", label: "식 복사" },
   { name: "최근 구간", block: profilerTabs[5].child, field: "target", label: "대상 복사" },
-  { name: "로그", block: slackbot.ui.children[3], field: "key", label: "로그 ID 복사" },
 ];
 
 for (const { name, block, field, label } of builtinTables) {

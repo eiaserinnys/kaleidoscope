@@ -55,9 +55,9 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "slackbot",
         name: "슬랙봇",
-        version: 3,
-        updated_at: "2026-11-04T00:00:00Z",
-        blocks: 20,
+        version: 2,
+        updated_at: "2026-11-02T00:00:00Z",
+        blocks: 9,
         modules: &[("storage", 2), ("worker", 1)],
         assets: &[],
     },
