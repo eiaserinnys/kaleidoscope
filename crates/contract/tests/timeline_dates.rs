@@ -55,3 +55,9 @@ fn dates_fields_require_new_block_set() {
     let error = parse_app_definition(&value.to_string()).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("APP_TIMELINE_VERSION_REQUIRED"));
 }
+
+#[test]
+fn 하루_휴일_목록은_리터럴로_검사를_통과한다() {
+    let app = parse(json!({"type":"timeline", "scale":"dates", "tracks":[], "off_days":["2026-12-25"]})).unwrap();
+    assert_eq!(serde_json::to_value(app).unwrap()["ui"]["off_days"], json!(["2026-12-25"]));
+}
