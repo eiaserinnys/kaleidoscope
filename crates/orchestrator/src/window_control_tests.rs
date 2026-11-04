@@ -449,8 +449,12 @@ async fn version_input_offline_and_invalid_replies() {
     });
     let _req = next_request(&mut events, &state, "pc").await;
     drop(stream);
+    let error = task.await.unwrap().unwrap_err().error;
     assert_eq!(
-        task.await.unwrap().unwrap_err().error.id.as_deref(),
+        error.id.as_deref(),
         Some("MCP_WINDOW_CONTROL_DEVICE_OFFLINE")
     );
+    assert!(error.message.contains("PC 기기"));
+    assert!(!error.message.contains("pc"));
+    assert!(error.details.iter().any(|detail| detail == "device_id: pc"));
 }

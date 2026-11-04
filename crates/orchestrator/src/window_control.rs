@@ -14,6 +14,10 @@ use tokio::sync::oneshot;
 const REPLY_LIMIT: usize = 15 * 1024 * 1024;
 const WAIT: Duration = Duration::from_secs(15);
 
+fn device_offline(name: &str, id: &str) -> CoreError {
+    errors::MCP_WINDOW_CONTROL_DEVICE_OFFLINE(name).and_details(vec![format!("device_id: {id}")])
+}
+
 #[derive(Debug)]
 pub(crate) struct ControlOutput {
     pub output: WindowControlToolOutput,
@@ -39,6 +43,7 @@ impl From<CoreError> for ControlError {
 type Reply = Result<WindowControlResult, CoreError>;
 struct Pending {
     device_id: String,
+    device_name: String,
     window_id: String,
     sender: Option<oneshot::Sender<Reply>>,
     deadline: Instant,
@@ -196,7 +201,7 @@ impl AppState {
             // 연결 종료 처리와 같은 순서로 잠가 등록 직후 끊기는 경우에도 대기를 정리한다.
             let connections = self.0.connections.lock().unwrap_or_else(|e| e.into_inner());
             if !connections.contains_key(&device) {
-                return Err(errors::MCP_WINDOW_CONTROL_DEVICE_OFFLINE(&view.device_name).into());
+                return Err(device_offline(&view.device_name, &device).into());
             }
             let shares = self
                 .0
@@ -241,6 +246,7 @@ impl AppState {
                 request_id.clone(),
                 Pending {
                     device_id: device.clone(),
+                    device_name: view.device_name.clone(),
                     window_id: window.clone(),
                     sender: Some(sender),
                     deadline: Instant::now() + WAIT,
@@ -258,9 +264,7 @@ impl AppState {
         };
         let result = match tokio::time::timeout(WAIT, receiver).await {
             Ok(Ok(result)) => result?,
-            Ok(Err(_)) => {
-                return Err(errors::MCP_WINDOW_CONTROL_DEVICE_OFFLINE(&view.device_name).into())
-            }
+            Ok(Err(_)) => return Err(device_offline(&view.device_name, &device).into()),
             Err(_) => return Err(errors::MCP_WINDOW_CONTROL_TIMEOUT(&window).into()),
         };
         let value = match result {
@@ -363,7 +367,7 @@ impl AppState {
         for id in ids {
             if let Some(mut pending) = control.pending.remove(&id) {
                 if let Some(sender) = pending.sender.take() {
-                    let _ = sender.send(Err(errors::MCP_WINDOW_CONTROL_DEVICE_OFFLINE(device)));
+                    let _ = sender.send(Err(device_offline(&pending.device_name, device)));
                 }
             }
         }
