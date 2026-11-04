@@ -26,7 +26,7 @@ error_catalog! { ENTRIES;
         class: InvalidAppDefinition,
         place: "시간축 필수 필드 검사",
         cause: "초 단위 시간축의 필수 필드가 없다",
-        message: "{path}: seconds 시간축에 {field}가 없습니다. 앱 정의에 {field}를 지정하세요.",
+        message: "{path}: seconds 시간축에 {field}가 없습니다. 앱 정의에 빠진 필드를 지정하세요.",
         fix: "초 단위 시간축에 필수 필드를 지정하세요"
     }
     APP_TIMELINE_SECONDS_FIELD_FORBIDDEN(path, field, value) {
