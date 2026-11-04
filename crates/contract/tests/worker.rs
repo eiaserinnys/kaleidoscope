@@ -48,13 +48,42 @@ fn webhook_and_interapp_targets_are_validated() {
         assert!(parse_app_definition(&invalid.to_string()).is_err());
     }
     for webhook in [
-        json!({"enabled_entry":"missing"}),
+        json!({"enabled_entry":"missing", "token_secret":"token"}),
         json!({"token_secret":"missing"}),
     ] {
         let mut invalid = app.clone();
         invalid["worker"]["webhook"] = webhook;
         assert!(parse_app_definition(&invalid.to_string()).is_err());
     }
+}
+
+#[test]
+fn webhook_requires_a_nonblank_token_secret() {
+    for webhook in [
+        json!({}),
+        json!({"token_secret":""}),
+        json!({"token_secret":"  "}),
+    ] {
+        let mut app = definition();
+        app["worker"]["webhook"] = webhook;
+        let error = parse_app_definition(&app.to_string()).unwrap_err();
+        assert_eq!(
+            error.id.as_deref(),
+            Some("APP_DEFINITION_WEBHOOK_TOKEN_SECRET_REQUIRED")
+        );
+    }
+}
+
+#[test]
+fn webhook_schema_requires_token_secret() {
+    let schema = kaleidoscope_contract::app_definition_schema();
+    assert!(schema["$defs"]["WorkerWebhookDecl"]["required"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("token_secret")));
+    assert!(schema["$defs"]["WorkerWebhookDecl"]["properties"]["token_secret"]
+        .get("default")
+        .is_none());
 }
 
 #[test]

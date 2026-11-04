@@ -114,16 +114,24 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
 }
 
 pub(crate) fn ensure_builtin(state: &mut CoreState) {
-    if state.shared.apps.iter().any(|app| app.id == "md-viewer") {
-        state.shared.apps.retain(|app| app.id != "md-viewer");
+    if state
+        .shared
+        .apps
+        .iter()
+        .any(|app| kaleidoscope_contract::builtin::is_retired_builtin(&app.id))
+    {
+        state
+            .shared
+            .apps
+            .retain(|app| !kaleidoscope_contract::builtin::is_retired_builtin(&app.id));
         state
             .shared
             .app_versions
-            .retain(|version| version.app_id != "md-viewer");
+            .retain(|version| !kaleidoscope_contract::builtin::is_retired_builtin(&version.app_id));
         state
             .device
             .pc_access
-            .retain(|access| access.app_id != "md-viewer");
+            .retain(|access| !kaleidoscope_contract::builtin::is_retired_builtin(&access.app_id));
     }
     remove_retired_windows(state, false);
     crate::layout_apply::reconcile(state);
@@ -145,20 +153,23 @@ pub(crate) fn ensure_builtin(state: &mut CoreState) {
 }
 
 pub(crate) fn remove_retired_windows(state: &mut CoreState, sync: bool) {
-    if state.shared.apps.iter().any(|app| app.id == "md-viewer") {
-        return;
-    }
     let retired_windows: Vec<String> = state
         .shared
         .windows
         .iter()
-        .filter(|window| window.app_id == "md-viewer")
+        .filter(|window| {
+            kaleidoscope_contract::builtin::is_retired_builtin(&window.app_id)
+                && !state.shared.apps.iter().any(|app| app.id == window.app_id)
+        })
         .map(|window| window.id.clone())
         .collect();
+    if retired_windows.is_empty() {
+        return;
+    }
     state
         .shared
         .windows
-        .retain(|window| window.app_id != "md-viewer");
+        .retain(|window| !retired_windows.contains(&window.id));
     state
         .device
         .grants
@@ -187,7 +198,10 @@ pub(crate) fn remove_registry_app(state: &mut CoreState, app_id: &str) {
         .device
         .pc_access
         .retain(|access| access.app_id != app_id);
-    state.device.process_access.retain(|access| access.app_id != app_id);
+    state
+        .device
+        .process_access
+        .retain(|access| access.app_id != app_id);
 }
 
 fn version_app(state: &CoreState, version: &AppVersion) -> App {
@@ -209,8 +223,11 @@ fn apply_version(state: &mut CoreState, app: App, version: AppVersion, replace_h
             if id == &access.permission))
     });
     state.device.process_access.retain(|access| {
-        access.app_id != app.id || definition.permissions.iter().any(|permission| matches!(permission,
-            kaleidoscope_contract::PermissionDecl::Process { id, .. } if id == &access.permission))
+        access.app_id != app.id
+            || definition.permissions.iter().any(|permission| {
+                matches!(permission,
+            kaleidoscope_contract::PermissionDecl::Process { id, .. } if id == &access.permission)
+            })
     });
 
     if state.shared.apps.iter().any(|current| current.id == app.id) {

@@ -240,6 +240,13 @@ error_catalog! { ENTRIES;
         message: "when 블록에는 value, min_width, max_width 중 하나 이상이 필요합니다. 조건을 추가한 뒤 다시 시도하세요.",
         fix: "when 블록에 value, min_width, max_width 중 하나 이상을 지정하세요"
     }
+    APP_DEFINITION_WEBHOOK_TOKEN_SECRET_REQUIRED() {
+        class: InvalidAppDefinition,
+        place: "앱 정의 웹훅 토큰 시크릿 검사",
+        cause: "worker.webhook에 token_secret이 없다",
+        message: "/worker/webhook/token_secret: 웹훅에는 호출 토큰을 담을 워커 시크릿을 반드시 지정해야 합니다. worker.secrets에 시크릿을 선언하고 /worker/webhook/token_secret에 그 id를 지정하세요.",
+        fix: "worker.secrets에 시크릿을 선언하고 /worker/webhook/token_secret에 그 id를 지정하세요"
+    }
     APP_DEFINITION_REQUIRES_NEWER_SHELL() {
         class: UnsupportedApp,
         place: "앱 정의 호환성 검사",

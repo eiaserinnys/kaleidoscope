@@ -60,7 +60,9 @@ fn save(db: &Connection, spec: &BuiltinRuntimeSpec) -> Result<(), CoreError> {
 impl AppState {
     pub fn register_builtin_specs(&self, specs: &[BuiltinRuntimeSpec]) -> Result<(), CoreError> {
         for spec in specs {
-            definition(spec)?;
+            if !kaleidoscope_contract::builtin::is_retired_builtin(&spec.app_id) {
+                definition(spec)?;
+            }
         }
         let db = self.lock_db()?;
         let tx = db.unchecked_transaction().map_err(|error| {
@@ -70,6 +72,19 @@ impl AppState {
             )
         })?;
         for spec in specs {
+            if kaleidoscope_contract::builtin::is_retired_builtin(&spec.app_id) {
+                tx.execute(
+                    "DELETE FROM builtin_app_specs WHERE app_id=?1",
+                    [&spec.app_id],
+                )
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED(),
+                    )
+                })?;
+                continue;
+            }
             save(&tx, spec)?;
         }
         tx.commit().map_err(|error| {
@@ -188,6 +203,9 @@ pub(super) fn load_definition(
     db: &Connection,
     app_id: &str,
 ) -> Result<Option<AppDefinition>, CoreError> {
+    if !kaleidoscope_contract::builtin::is_builtin(app_id) {
+        return Ok(None);
+    }
     let row: Option<(u32, Option<String>, Option<String>)> = db
         .query_row(
             "SELECT version,storage_json,worker_json FROM builtin_app_specs WHERE app_id=?1",

@@ -92,7 +92,8 @@ async fn invoke_inner(
             return Err(kaleidoscope_contract::errors::WORKER_WEBHOOK_DISABLED(&app));
         }
     }
-    if let Some(secret) = webhook.token_secret {
+    {
+        let secret = webhook.token_secret;
         let stored: Option<String> = state
             .lock_db()
             .map_err(pre_auth_error)?

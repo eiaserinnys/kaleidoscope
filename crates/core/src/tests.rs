@@ -32,9 +32,9 @@ mod file_write_tests;
 mod layout_sync_tests;
 mod pc_tests;
 mod process_tests;
-mod realtime_public_tests;
 mod profiler_concurrency_tests;
 mod profiler_tests;
+mod realtime_public_tests;
 mod realtime_tests;
 mod server_switch_tests;
 mod share_capture_tests;
@@ -274,7 +274,6 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     for (id, version) in [
         ("profiler", 3),
         ("agent", 5),
-        ("slackbot", 2),
         ("explorer", 3),
         ("md-editor", 4),
         ("html-report", 2),
@@ -289,7 +288,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
             .iter()
             .any(|app| app.id == id && app.current_version == version));
     }
-    assert_eq!(apps.len(), 12);
+    assert_eq!(apps.len(), 11);
     let error = core
         .handle(CoreRequest::AppImport {
             definition_json: MD_EDITOR.into(),
@@ -336,6 +335,95 @@ fn retired_builtin_is_removed_from_existing_device_state() {
         .grants
         .iter()
         .any(|grant| grant.window_id == window));
+}
+
+#[test]
+fn retired_builtin_slackbot_is_removed_independently_of_md_viewer() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    let (_, desktop) = active_ids(&core);
+    let source_window = open_window(&core, &desktop, "agent");
+    let mut state = core.inner.state.lock().unwrap();
+    let mut app = state
+        .shared
+        .apps
+        .iter()
+        .find(|app| app.id == "agent")
+        .unwrap()
+        .clone();
+    app.id = "slackbot".into();
+    let mut version = state
+        .shared
+        .app_versions
+        .iter()
+        .find(|version| version.app_id == "agent")
+        .unwrap()
+        .clone();
+    version.app_id = "slackbot".into();
+    let mut window = state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == source_window)
+        .unwrap()
+        .clone();
+    window.id = "retired-slackbot-window".into();
+    window.app_id = "slackbot".into();
+    state.shared.apps.retain(|app| app.id != "slackbot");
+    state
+        .shared
+        .app_versions
+        .retain(|version| version.app_id != "slackbot");
+    state.shared.apps.push(app);
+    state.shared.app_versions.push(version);
+    state.shared.windows.push(window.clone());
+    state
+        .device
+        .pc_access
+        .push(kaleidoscope_contract::PcAccess {
+            app_id: "slackbot".into(),
+            permission: "test".into(),
+            granted_at: "now".into(),
+        });
+    crate::storage::save_state(temp.path(), &state.shared, &state.device).unwrap();
+    drop(state);
+    drop(core);
+    let reopened = open_core(temp.path(), vec![], &host);
+    let current = snapshot(&reopened);
+    assert!(!current.shared.apps.iter().any(|app| app.id == "slackbot"));
+    assert!(!current
+        .shared
+        .app_versions
+        .iter()
+        .any(|version| version.app_id == "slackbot"));
+    assert!(!current
+        .device
+        .pc_access
+        .iter()
+        .any(|access| access.app_id == "slackbot"));
+    assert!(!current
+        .shared
+        .windows
+        .iter()
+        .any(|item| item.id == window.id));
+
+    let mut state = reopened.inner.state.lock().unwrap();
+    let mut md_viewer = state
+        .shared
+        .apps
+        .iter()
+        .find(|app| app.id == "agent")
+        .unwrap()
+        .clone();
+    md_viewer.id = "md-viewer".into();
+    state.shared.apps.push(md_viewer);
+    state.shared.windows.push(window.clone());
+    crate::app_commands::remove_retired_windows(&mut state, true);
+    assert!(!state.shared.windows.iter().any(|item| item.id == window.id));
+    assert!(state
+        .sync
+        .contains(crate::sync_state::EntityKind::Window, &window.id));
 }
 
 #[test]
@@ -481,7 +569,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .find(|w| w.id == window_id)
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(snapshot(&reopened).shared.apps.len(), 12);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 11);
 }
 
 #[test]
@@ -1780,7 +1868,10 @@ impl RegistryClient for FakeRegistryClient {
         _: &str,
         response: &kaleidoscope_contract::WindowControlResponse,
     ) -> Result<(), RegistryError> {
-        self.control_responses.lock().unwrap().push(response.clone());
+        self.control_responses
+            .lock()
+            .unwrap()
+            .push(response.clone());
         Ok(())
     }
     fn values_get(
@@ -2816,7 +2907,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert_eq!(snapshot.shared.apps.len(), 12);
+    assert_eq!(snapshot.shared.apps.len(), 11);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()

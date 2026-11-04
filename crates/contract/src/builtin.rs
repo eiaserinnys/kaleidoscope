@@ -24,8 +24,12 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
 ];
 
 // 날씨 자산 뒤에 에이전트 client의 보존 판과 현재 판이 온다.
-pub const WEATHER_ASSET_KEYS: &[(&str, u32)] = BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 2).0;
-pub const AGENT_ASSET_KEYS: &[(&str, u32)] = BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 1).1;
+pub const WEATHER_ASSET_KEYS: &[(&str, u32)] =
+    BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 2).0;
+pub const AGENT_ASSET_KEYS: &[(&str, u32)] =
+    BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 1).1;
+
+pub const RETIRED_BUILTIN_APP_IDS: &[&str] = &["md-viewer", "slackbot"];
 
 pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
@@ -52,15 +56,6 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
             ("worker", 1),
         ],
         assets: AGENT_ASSET_KEYS,
-    },
-    BuiltinIdentity {
-        id: "slackbot",
-        name: "슬랙봇",
-        version: 2,
-        updated_at: "2026-11-02T00:00:00Z",
-        blocks: 9,
-        modules: &[("storage", 2), ("worker", 1)],
-        assets: &[],
     },
     BuiltinIdentity {
         id: "explorer",
@@ -150,6 +145,9 @@ pub fn builtin_identity(id: &str) -> Option<&'static BuiltinIdentity> {
 }
 pub fn is_builtin(id: &str) -> bool {
     builtin_identity(id).is_some()
+}
+pub fn is_retired_builtin(id: &str) -> bool {
+    RETIRED_BUILTIN_APP_IDS.contains(&id)
 }
 pub fn is_bundled_asset(id: &str, version: u32) -> bool {
     BUNDLED_ASSET_KEYS.contains(&(id, version))

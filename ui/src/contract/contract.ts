@@ -1505,9 +1505,9 @@ export type WorkerWebhookDecl = {
  */
 enabled_entry?: string, 
 /**
- * 호출 토큰을 담을 워커 시크릿. 선언하면 미설정 시 호출을 거부한다.
+ * 호출 토큰을 담을 워커 시크릿. 반드시 지정하며 미설정 시 호출을 거부한다.
  */
-token_secret?: string, };
+token_secret: string, };
 
 /**
  * 작업 주제 하나. 데스크톱 여러 장을 가진다.

@@ -219,7 +219,7 @@ fn events_send_supported_header() {
             serde_json::from_slice(&body).unwrap();
         assert!(specs
             .iter()
-            .any(|spec| spec.app_id == "slackbot" && spec.worker.is_some()));
+            .any(|spec| spec.app_id == "agent" && spec.worker.is_some()));
         register
             .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .unwrap();

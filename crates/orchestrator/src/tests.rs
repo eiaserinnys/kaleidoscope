@@ -14,7 +14,6 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     for id in [
         "profiler",
         "agent",
-        "slackbot",
         "explorer",
         "md-editor",
         "html-report",
@@ -27,7 +26,7 @@ fn builtin_apps_are_listed_and_upload_is_rejected() {
     ] {
         assert!(apps.iter().any(|app| app.id == id && app.builtin));
     }
-    assert_eq!(apps.len(), 12);
+    assert_eq!(apps.len(), 11);
     assert!(state.publish_app(EDITOR, "agent", false, None).is_err());
 }
 
@@ -83,8 +82,68 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        13
+        14
     );
+}
+
+#[test]
+fn worker_migration_v14_removes_retired_builtin_rows() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    let db = state.lock_db().unwrap();
+    for id in ["md-viewer", "slackbot", "agent"] {
+        db.execute(
+            "INSERT INTO builtin_app_specs(app_id,version,updated_at) VALUES(?1,1,'now')",
+            [id],
+        )
+        .unwrap();
+        db.execute("INSERT INTO app_secrets(account_id,app_id,secret_id,value,updated_at) VALUES(?1,?2,'token','value','now')", params![account, id]).unwrap();
+        db.execute(
+            "INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?1)",
+            params![id, account],
+        )
+        .unwrap();
+        db.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at) VALUES(?1,'key','json','{}','1','now')", [id]).unwrap();
+        db.execute("INSERT INTO windows(id,desktop_id,app_id,data,created_at) VALUES(?1,'desktop',?1,'{}','now')", [id]).unwrap();
+    }
+    db.pragma_update(None, "user_version", 13).unwrap();
+    migrate(&db).unwrap();
+    assert_eq!(
+        db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
+            .unwrap(),
+        14
+    );
+    for table in [
+        "builtin_app_specs",
+        "app_secrets",
+        "app_storage_buckets",
+        "windows",
+    ] {
+        let count: i64 = db
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE app_id IN ('md-viewer','slackbot')"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "{table}");
+        let count: i64 = db
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE app_id='agent'"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "{table}");
+    }
+    let ids: Vec<String> = db
+        .prepare("SELECT bucket_id FROM app_storage_items ORDER BY bucket_id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(ids, ["agent"]);
 }
 
 #[test]
@@ -1032,7 +1091,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, 14);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -1076,7 +1135,7 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 13);
+    assert_eq!(version, 14);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db

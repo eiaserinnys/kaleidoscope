@@ -57,10 +57,10 @@ pub struct WorkerWebhookDecl {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub enabled_entry: Option<String>,
-    /// 호출 토큰을 담을 워커 시크릿. 선언하면 미설정 시 호출을 거부한다.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub token_secret: Option<String>,
+    /// 호출 토큰을 담을 워커 시크릿. 반드시 지정하며 미설정 시 호출을 거부한다.
+    #[serde(default)]
+    #[schemars(!default)]
+    pub token_secret: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
