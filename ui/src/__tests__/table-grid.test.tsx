@@ -76,4 +76,6 @@ it("칸의 색, 제목, 본문과 단일 배지를 표시하고 잘못된 칸만
   expect(screen.getByText("의제를 확인한다")).toBeTruthy();
   expect(screen.getByText("확인")).toBeTruthy();
   expect(screen.getByText("SHELL_TABLE_CELL_CONTENT_INVALID")).toBeTruthy();
+  const errorCell = screen.getByRole("gridcell", { name: "기획, 화요일, 오류: 표의 bad 칸 내용을 읽지 못했습니다. 앱의 칸 출력을 고치세요., SHELL_TABLE_CELL_CONTENT_INVALID" });
+  expect(errorCell.querySelector("[title]")?.getAttribute("title")).toBe("표의 bad 칸 내용을 읽지 못했습니다. 앱의 칸 출력을 고치세요. SHELL_TABLE_CELL_CONTENT_INVALID");
 });

@@ -170,5 +170,24 @@ test("잘못된 내용 칸과 정상 칸을 함께 표시한다", async ({ page 
   await page.keyboard.press("Control+C");
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("SHELL_TABLE_CELL_CONTENT_INVALID");
   await page.evaluate(() => window.getSelection()!.removeAllRanges());
-  await capture(page, "20261104-1740-table-error-after");
+  const message = "표의 day 칸 내용을 읽지 못했습니다. 앱의 칸 출력을 고치세요.";
+  const code = "SHELL_TABLE_CELL_CONTENT_INVALID";
+  const cell = app.getByRole("gridcell", { name: `제작, 첫째 날, 오류: ${message}, ${code}` });
+  await expect(cell.locator(".ks-table-content")).toHaveAttribute("title", `${message} ${code}`);
+  for (const [width, height, name] of [[1000, 750, "wide"], [400, 700, "narrow"]] as const) {
+    await page.setViewportSize({ width, height });
+    const bounds = await cell.evaluate((element) => {
+      const code = element.querySelector(".ks-error-id")!;
+      const codeBounds = code.getBoundingClientRect(), cellBounds = element.getBoundingClientRect();
+      const style = getComputedStyle(code);
+      return { inside: codeBounds.top >= cellBounds.top && codeBounds.bottom <= cellBounds.bottom && codeBounds.right <= cellBounds.right,
+        oneLine: codeBounds.height <= parseFloat(style.lineHeight) + 1, ellipsis: style.textOverflow,
+        height: cellBounds.height, reserved: (Number(getComputedStyle(element.closest('[role="grid"]')!).getPropertyValue("--ks-grid-lines")) + 2) * parseFloat(style.getPropertyValue("--ks-type-body")) * Number(style.getPropertyValue("--ks-line-body")) + 4 * parseFloat(style.getPropertyValue("--ks-space-1")) };
+    });
+    expect(bounds.inside).toBe(true);
+    expect(bounds.oneLine).toBe(true);
+    expect(bounds.ellipsis).toBe("ellipsis");
+    expect(bounds.height).toBeLessThanOrEqual(bounds.reserved + 1);
+    await capture(page, `20261104-1800-table-error-${name}-after`);
+  }
 });

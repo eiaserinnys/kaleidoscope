@@ -5,6 +5,7 @@ import { Badge, isBadge } from "../components/badge";
 import { useLoadMore } from "./load-more";
 import { keepRovingRow, NoItems, useVirtualRows, VirtualSurface, isObject } from "./data-view-common";
 import { cellValue, formattedCell, numericColumn, width, type Row, type TableViewProps } from "./data-table";
+import { contentCellError } from "./data-table-cell";
 
 type Address = { row: string; column: string };
 type GridHandlers = {
@@ -20,7 +21,8 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
 }) {
   const text = cellValue(raw, column);
   const title = column.format === "content" && isObject(raw) && typeof raw.title === "string" ? raw.title : text;
-  return <span role="gridcell" aria-label={`${rowLabel}, ${column.label}, ${raw == null ? "빈 칸" : title}`} aria-selected={selected} aria-colindex={columnIndex + 1} data-focus-index={index}
+  const error = column.format === "content" ? contentCellError(raw, column) : null;
+  return <span role="gridcell" aria-label={`${rowLabel}, ${column.label}, ${error ? `오류: ${error.message}, ${error.id}` : raw == null ? "빈 칸" : title}`} aria-selected={selected} aria-colindex={columnIndex + 1} data-focus-index={index}
     tabIndex={focused ? 0 : -1} className={`ks-table-cell ks-grid-cell${numericColumn(column) ? " is-numeric" : ""}${selected ? " is-selected" : ""}`}
     onFocus={() => handlers.current.focus(rowKey, column.field)}
     onKeyDown={(event) => handlers.current.key(event, rowKey, column.field)}
