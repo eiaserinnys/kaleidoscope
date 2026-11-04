@@ -18,3 +18,17 @@ it("시험 코어가 시간축의 모든 식 바인딩 값을 전달한다", asy
   unsubscribe();
   await transport.call({ op: "data.detach", window_id: "viewer-window" });
 });
+
+it("시험 코어가 시간축 선택·편집·범위 동작을 전달한다", async () => {
+  const definition: AppDefinition = { id: "timeline-actions", name: "시간축", requires: { blocks: 31, modules: {} }, permissions: [], state: { selected: null, edited: null, viewed: null },
+    ui: { type: "timeline", scale: "dates", tracks: [], on_select: { set_state: "selected" }, on_edit: { set_state: "edited" }, on_viewport: { set_state: "viewed" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  await transport.call({ op: "data.attach", window_id: "viewer-window" });
+  for (const field of ["on_select", "on_edit", "on_viewport"]) {
+    await expect(transport.call({ op: "data.act", window_id: "viewer-window", pointer: `/ui/${field}`, event: { value: field } })).resolves.toEqual(expect.objectContaining({ op: "data.act" }));
+  }
+  const reply = await transport.call({ op: "state.get" });
+  if (reply.op !== "state.get") throw new Error("시험 상태 응답이 없습니다");
+  expect(reply.snapshot.shared.windows.find((window) => window.id === "viewer-window")!.state).toEqual(expect.objectContaining({ selected: { value: "on_select" }, edited: { value: "on_edit" }, viewed: { value: "on_viewport" } }));
+  await transport.call({ op: "data.detach", window_id: "viewer-window" });
+});

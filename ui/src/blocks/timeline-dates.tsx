@@ -93,9 +93,9 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const gesture = useRef<Gesture | null>(null), frame = useRef<number | null>(null), pendingEdit = useRef<Edit | null>(null);
   const editGeneration = useRef(0);
   const [preview, setPreview] = useState<Edit | null>(null), [dragging, setDragging] = useState(false);
-  const [metrics, setMetrics] = useState({ width: 0, height: 0, left: 0, row: 1, header: 0, day: 1, week: 1, month: 1 });
+  const [metrics, setMetrics] = useState({ width: 0, height: 0, left: 0, row: 1, header: 0, gap: 0, day: 1, week: 1, month: 1 });
   const [offset, setOffset] = useState({ x: 0, y: 0 }), [px, setPx] = useState(0);
-  const initialized = useRef(false), pendingScroll = useRef<number | null>(null);
+  const initialized = useRef(false), previousRange = useRef<number | null>(null), pendingScroll = useRef<number | null>(null);
   const tracks = useMemo(() => readTracks(tracksValue, block.lanes ?? "pack"), [tracksValue, block.lanes]);
   const markers = useMemo(() => readMarkers(markerValue), [markerValue]);
   const offDays = useMemo(() => new Set(Array.isArray(daysValue) ? daysValue.flatMap((value) => { const day = dateToDay(value); return day === null ? [] : [day]; }) : []), [daysValue]);
@@ -111,6 +111,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const formatYear = useMemo(() => new Intl.DateTimeFormat(locale, { year: "numeric", timeZone: "UTC" }), [locale]);
   const monthOnly = useMemo(() => new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }), [locale]);
   const dayNumber = useMemo(() => new Intl.DateTimeFormat(locale, { day: "numeric", timeZone: "UTC" }), [locale]);
+  const dayText = (day: number) => dayNumber.formatToParts(new Date(day * 86_400_000)).find((part) => part.type === "day")!.value;
   const date = (day: number) => new Date(day * 86_400_000);
   const lineWidth = Math.max(1, metrics.width - metrics.left);
   const minPx = lineWidth / (range.end - range.start + 1);
@@ -120,7 +121,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const totalWidth = (range.end - range.start + 1) * pxDay;
   const from = Math.max(range.start, range.start + Math.floor(offset.x / pxDay) - 2);
   const to = Math.min(range.end, range.start + Math.ceil((offset.x + lineWidth) / pxDay) + 2);
-  const rows = visibleRows(Math.max(0, offset.y - metrics.header), metrics.height, metrics.row, rowCount);
+  const rows = visibleRows(offset.y, Math.max(0, metrics.height - metrics.header), metrics.row, rowCount);
 
   const applyScale = (nextPx: number, left: number) => {
     pendingScroll.current = left;
@@ -129,7 +130,11 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   };
   useLayoutEffect(() => {
     const element = scroll.current;
-    if (!element || pendingScroll.current === null) return;
+    if (!element) return;
+    const delta = previousRange.current === null ? 0 : previousRange.current - range.start;
+    previousRange.current = range.start;
+    if (delta && initialized.current) pendingScroll.current = (pendingScroll.current ?? element.scrollLeft) + delta * pxDay;
+    if (pendingScroll.current === null) return;
     element.scrollLeft = pendingScroll.current;
     pendingScroll.current = null;
     setOffset((old) => old.x === element.scrollLeft ? old : { ...old, x: element.scrollLeft });
@@ -145,7 +150,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
       const monthWidth = (monthMeasure.current?.getBoundingClientRect().width || 1) * 1.5 + gap;
       const next = { width: element.clientWidth || element.getBoundingClientRect().width, height: element.clientHeight || element.getBoundingClientRect().height,
         left: corner.current?.getBoundingClientRect().width || 0, row: rowMeasure.current?.getBoundingClientRect().height || 1,
-        header: corner.current?.getBoundingClientRect().height || 0, day: dayWidth, week: weekWidth, month: monthWidth };
+        header: corner.current?.getBoundingClientRect().height || 0, gap, day: dayWidth, week: weekWidth, month: monthWidth };
       setMetrics((old) => Object.keys(next).every((key) => old[key as keyof typeof old] === next[key as keyof typeof next]) ? old : next);
     };
     measure();
@@ -158,7 +163,8 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
     if (initialized.current || !scroll.current || !metrics.width || metrics.day <= 1) return;
     const initialPx = bound ? lineWidth / (bound.end - bound.start + 1) : metrics.day;
     const nextPx = Math.max(minPx, Math.min(maxPx, initialPx));
-    const first = bound?.start ?? (today >= range.start && today <= range.end ? monday(today - 7) : range.start);
+    let first = bound?.start ?? (today >= range.start && today <= range.end ? monday(today - 7) : range.start);
+    if (!bound && (today + 0.5 - first) * nextPx > lineWidth * 2 / 3) first = today + 0.5 - lineWidth / (3 * nextPx);
     applyScale(nextPx, Math.max(0, (first - range.start) * nextPx));
     if (bound) sentViewport.current = `${bound.start}:${bound.end}`;
 
@@ -255,7 +261,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const finish = (event: PointerEvent<HTMLElement>, phase: "commit" | "cancel") => {
     const current = gesture.current; if (!current || event.pointerId !== current.id) return;
     gesture.current = null; if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null; pendingEdit.current = null;
-    const next = editAt(current, current.delta, phase);
+    const next = editAt(current, phase === "cancel" ? 0 : current.delta, phase);
     if (phase === "commit" && next.start === dayToDate(current.start) && next.end === dayToDate(current.end)) { setPreview(null); select(current.item.id); return; }
     if (phase === "cancel") { setPreview(null); void sendEdit(next, eventModifiers(event)); return; }
     const generation = editGeneration.current;
@@ -263,7 +269,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
     void sendEdit(next, eventModifiers(event))?.then(() => { if (editGeneration.current === generation && !gesture.current) setPreview(null); });
   };
   useEffect(() => {
-    const cancel = (event: globalThis.KeyboardEvent) => { const current = gesture.current; if (event.key !== "Escape" || !current) return; gesture.current = null; if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null; pendingEdit.current = null; setPreview(null); sendEdit(editAt(current, current.delta, "cancel")); };
+    const cancel = (event: globalThis.KeyboardEvent) => { const current = gesture.current; if (event.key !== "Escape" || !current) return; gesture.current = null; if (frame.current !== null) cancelAnimationFrame(frame.current); frame.current = null; pendingEdit.current = null; setPreview(null); sendEdit(editAt(current, 0, "cancel")); };
     document.addEventListener("keydown", cancel); return () => document.removeEventListener("keydown", cancel);
   });
   const keyItem = (event: KeyboardEvent<HTMLElement>, track: Track, item: Item) => {
@@ -272,8 +278,13 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
     event.preventDefault(); const delta = event.key === "ArrowRight" ? 1 : -1;
     sendEdit({ phase: "commit", kind: "move", id: item.id, track: track.id, start: dayToDate(item.start + delta), end: dayToDate(item.end + delta) }, eventModifiers(event));
   };
-  useShareDescriber(root, () => ({ text: `[일정] ${dayToDate(from)} – ${dayToDate(to)}\n${tracks.flatMap((track) => {
-    const items = track.rows.flatMap((row) => visibleItems(row, from, to)).slice(0, 8);
+  const firstVisibleDay = range.start + offset.x / pxDay;
+  const lastVisibleDay = firstVisibleDay + lineWidth / pxDay;
+  const firstVisibleRow = Math.floor(offset.y / metrics.row);
+  const lastVisibleRow = Math.ceil((offset.y + Math.max(0, metrics.height - metrics.header)) / metrics.row);
+  useShareDescriber(root, () => ({ text: `[일정] ${dayToDate(Math.floor(firstVisibleDay))} – ${dayToDate(Math.ceil(lastVisibleDay) - 1)}\n${tracks.flatMap((track) => {
+    const items = track.rows.flatMap((row, index) => track.first + index >= firstVisibleRow && track.first + index < lastVisibleRow
+      ? visibleItems(row, Math.floor(firstVisibleDay), Math.ceil(lastVisibleDay) - 1) : []).slice(0, 8);
     return items.length ? [`${track.label}: ${items.map((item) => item.start === null ? item.label : `${item.label} (${dayToDate(item.start)} – ${dayToDate(item.end!)})`).join(", ")}`] : [];
   }).join("\n")}`, visual: false }));
 
@@ -304,7 +315,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const columns: number[] = [];
   if (scale !== "month") for (let day = from; day <= to; day++) columns.push(day);
   const x = (day: number) => (day - range.start) * pxDay;
-  const rowStyle = { height: rowCount * metrics.row, width: metrics.left + totalWidth };
+  const rowStyle = { height: Math.max(rowCount * metrics.row, metrics.height - metrics.header), width: metrics.left + totalWidth };
   const beginPan = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !scroll.current) return;
     capturePointer(event); pan.current = { x: event.clientX, y: event.clientY, left: scroll.current.scrollLeft, top: scroll.current.scrollTop }; setDragging(true);
@@ -317,15 +328,15 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
   const endPan = () => { pan.current = null; setDragging(false); };
   return <div className="ks-timeline ks-timeline-dates" data-scale={scale} ref={root}>
     <div className={`ks-dates-scroll${dragging ? " is-panning" : ""}`} ref={scroll} onScroll={onScroll} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan}>
-      <div className="ks-dates-measure" aria-hidden="true"><span ref={dayMeasure}>30</span><span ref={weekMeasure}>{formatDate.format(date(dateToDay("2026-12-31")!))}</span><span ref={monthMeasure}>{monthOnly.format(date(dateToDay("2026-12-01")!))}</span><div ref={rowMeasure} className="ks-dates-row-measure" /></div>
+      <div className="ks-dates-measure" aria-hidden="true"><span ref={dayMeasure}>{dayText(dateToDay("2026-12-30")!)}</span><span ref={weekMeasure}>{formatDate.format(date(dateToDay("2026-12-31")!))}</span><span ref={monthMeasure}>{monthOnly.format(date(dateToDay("2026-12-01")!))}</span><div ref={rowMeasure} className="ks-dates-row-measure" /></div>
       <div className="ks-dates-header" style={{ width: metrics.left + totalWidth }}>
         <div className="ks-dates-corner" ref={corner} onPointerDown={(event) => event.stopPropagation()}>
-          {block.controls !== false && <><IconButton aria-label="축소" disabled={!canViewport || pxDay <= minPx} onClick={() => zoom(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canViewport || pxDay >= maxPx} onClick={() => zoom(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true && <IconButton aria-label="전체 맞춤" disabled={!canViewport || pxDay <= minPx} onClick={() => zoom(minPx / pxDay)}><DataIcon name="maximize-2" size="inline" /></IconButton>}</>}
+          {block.controls !== false && <><IconButton aria-label="축소" disabled={!canViewport || pxDay <= minPx} onClick={() => zoom(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canViewport || pxDay >= maxPx} onClick={() => zoom(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true && <IconButton aria-label="전체 맞춤" disabled={!canViewport || pxDay <= minPx} onClick={() => { applyScale(minPx, 0); queueViewport(0, minPx); }}><DataIcon name="maximize-2" size="inline" /></IconButton>}</>}
         </div>
         <div className="ks-dates-axis" style={{ left: metrics.left, width: totalWidth }}>
           <div className="ks-dates-months">{periods.map((month) => <div className="ks-dates-month" key={month.day} style={{ left: x(month.day), width: (month.end - month.day) * pxDay }}><span style={{ left: metrics.left }}>{scale === "month" ? formatYear.format(date(month.day)) : formatMonth.format(date(month.day))}</span></div>)}</div>
-          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <span key={month.day} style={{ left: x(month.day) }}>{monthOnly.format(date(month.day))}</span>) : dates.map((day) => <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width: pxDay * (scale === "week" ? 7 : 1) }}>{scale === "day" ? dayNumber.format(date(day)) : formatDate.format(date(day))}</span>)}</div>
-          <div className="ks-dates-markers">{markers.filter((marker) => marker.day >= from && marker.day <= to).map((marker) => <span key={marker.id} style={{ left: x(marker.day + 0.5) }}>{marker.label}</span>)}{block.today !== false && today >= from && today <= to && <span className="is-today" style={{ left: x(today + 0.5) }}>오늘</span>}</div>
+          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <span key={month.day} style={{ left: x(month.day), width: (month.end - month.day) * pxDay, justifyContent: "flex-start" }}>{monthOnly.format(date(month.day))}</span>) : dates.map((day) => <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width: pxDay * (scale === "week" ? 7 : 1) }}>{scale === "day" ? dayText(day) : formatDate.format(date(day))}</span>)}</div>
+          <DateMarkers markers={markers} today={block.today !== false ? today : null} start={range.start} pxDay={pxDay} width={totalWidth} gap={metrics.gap} />
         </div>
       </div>
       <div className="ks-dates-body" style={rowStyle}>
@@ -335,14 +346,14 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
           {markers.filter((marker) => marker.day >= from && marker.day <= to).map((marker) => <span className="is-marker" key={marker.id} style={{ left: x(marker.day + 0.5) }} />)}
           {block.today !== false && today >= from && today <= to && <span className="is-today" style={{ left: x(today + 0.5) }} />}
         </div>
-        {!tracks.length && <div className="ks-dates-empty" style={{ left: metrics.left }}><NoItems /></div>}
+        {!tracks.length && <div className="ks-dates-empty" style={{ left: metrics.left + offset.x, width: lineWidth, height: Math.max(metrics.row, metrics.height - metrics.header) }}><NoItems /></div>}
         {tracks.filter((track) => track.first < rows.end && track.first + track.rows.length > rows.start).map((track) => <div className="ks-dates-track" key={track.id} style={{ top: track.first * metrics.row, height: track.rows.length * metrics.row, width: metrics.left + totalWidth }}>
           <div className="ks-dates-track-header" style={{ width: metrics.left }} onPointerDown={(event) => event.stopPropagation()}><div className="ks-dates-track-name" style={{ top: metrics.header }}>
             {track.image && <MediaThumbnail media={track.image} size={32} />}<span className="ks-list-content"><span className="ks-list-title">{track.label}</span></span>{track.meta && <span className="ks-view-meta">{track.meta}</span>}
           </div></div>
           <div className="ks-dates-track-rows" style={{ left: metrics.left, width: totalWidth }}>{track.rows.map((row, index) => {
             const absolute = track.first + index; if (absolute < rows.start || absolute >= rows.end) return null;
-            return <DateRow key={absolute} row={row} track={track} top={index * metrics.row} height={metrics.row} from={from} to={to} pxDay={pxDay} rangeStart={range.start} selected={selected} preview={row.some((item) => item.id === preview?.id) ? preview : null} lanes={block.lanes ?? "pack"} formatDate={formatDate} handlers={handlers} readOnly={!!block.read_only || !block.on_edit} />;
+            return <DateRow key={absolute} row={row} track={track} top={index * metrics.row} height={metrics.row} from={from} to={to} pxDay={pxDay} scrollLeft={offset.x} rangeStart={range.start} selected={selected} preview={row.some((item) => item.id === preview?.id) ? preview : null} lanes={block.lanes ?? "pack"} formatDate={formatDate} handlers={handlers} readOnly={!!block.read_only || !block.on_edit} />;
           })}</div>
         </div>)}
       </div>
@@ -351,20 +362,53 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
 }
 
 type Handlers = { begin: (event: PointerEvent<HTMLElement>, track: Track, item: Item, kind: Edit["kind"]) => void; move: (event: PointerEvent<HTMLElement>) => void; finish: (event: PointerEvent<HTMLElement>, phase: "commit" | "cancel") => void; keyItem: (event: KeyboardEvent<HTMLElement>, track: Track, item: Item) => void; select: (id: string) => void };
-const DateRow = memo(function DateRow({ row, track, top, height, from, to, pxDay, rangeStart, selected, preview, lanes, formatDate, handlers, readOnly }: { row: Item[]; track: Track; top: number; height: number; from: number; to: number; pxDay: number; rangeStart: number; selected: unknown[]; preview: Edit | null; lanes: "single" | "pack" | "each"; formatDate: Intl.DateTimeFormat; handlers: React.RefObject<Handlers>; readOnly: boolean }) {
-  return <div className="ks-dates-row" style={{ top, height }}>{visibleItems(row, from, to).map((item) => <DateBar key={item.id} item={item} track={track} pxDay={pxDay} rangeStart={rangeStart} selected={selected.includes(item.id)} preview={preview?.id === item.id ? preview : null} lanes={lanes} formatDate={formatDate} handlers={handlers} readOnly={readOnly} />)}</div>;
+const DateRow = memo(function DateRow({ row, track, top, height, from, to, pxDay, scrollLeft, rangeStart, selected, preview, lanes, formatDate, handlers, readOnly }: { row: Item[]; track: Track; top: number; height: number; from: number; to: number; pxDay: number; scrollLeft: number; rangeStart: number; selected: unknown[]; preview: Edit | null; lanes: "single" | "pack" | "each"; formatDate: Intl.DateTimeFormat; handlers: React.RefObject<Handlers>; readOnly: boolean }) {
+  return <div className="ks-dates-row" style={{ top, height }}>{visibleItems(row, from, to).map((item) => <DateBar key={item.id} item={item} track={track} pxDay={pxDay} scrollLeft={scrollLeft} rangeStart={rangeStart} selected={selected.includes(item.id)} preview={preview?.id === item.id ? preview : null} lanes={lanes} formatDate={formatDate} handlers={handlers} readOnly={readOnly} />)}</div>;
 });
 
-const DateBar = memo(function DateBar({ item, track, pxDay, rangeStart, selected, preview, lanes, formatDate, handlers, readOnly }: { item: Item; track: Track; pxDay: number; rangeStart: number; selected: boolean; preview: Edit | null; lanes: "single" | "pack" | "each"; formatDate: Intl.DateTimeFormat; handlers: React.RefObject<Handlers>; readOnly: boolean }) {
-    if (item.start === null || item.end === null) return <button type="button" className="ks-dates-undated" key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
+const DateBar = memo(function DateBar({ item, track, pxDay, scrollLeft, rangeStart, selected, preview, lanes, formatDate, handlers, readOnly }: { item: Item; track: Track; pxDay: number; scrollLeft: number; rangeStart: number; selected: boolean; preview: Edit | null; lanes: "single" | "pack" | "each"; formatDate: Intl.DateTimeFormat; handlers: React.RefObject<Handlers>; readOnly: boolean }) {
+    if (item.start === null || item.end === null) return <button type="button" className={`ks-dates-undated${selected ? " is-selected" : ""}`} key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
     const start = preview?.id === item.id ? dateToDay(preview.start)! : item.start, end = preview?.id === item.id ? dateToDay(preview.end)! : item.end;
+    const labelOffset = Math.max(0, Math.min((end - start + 1) * pxDay, scrollLeft - (start - rangeStart) * pxDay));
     const name = `${item.label}, ${formatDate.format(new Date(start * 86_400_000))} – ${formatDate.format(new Date(end * 86_400_000))}`;
     const canEdit = !track.locked && !readOnly;
     const onPointerDown = (event: PointerEvent<HTMLElement>, kind: Edit["kind"]) => handlers.current.begin(event, track, item, kind);
     return <div role="button" tabIndex={0} aria-label={name} title={name} key={item.id} className={`ks-timeline-item is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}${canEdit && item.movable ? "" : " is-fixed"}${lanes === "each" ? " is-each" : ""}`}
       style={{ left: (start - rangeStart) * pxDay, width: (end - start + 1) * pxDay }} onKeyDown={(event) => handlers.current.keyItem(event, track, item)} onPointerDown={(event) => onPointerDown(event, "move")} onPointerMove={(event) => handlers.current.move(event)} onPointerUp={(event) => handlers.current.finish(event, "commit")} onPointerCancel={(event) => handlers.current.finish(event, "cancel")}>
       {canEdit && (item.resizable || item.resizeStartOnly) && <span className="ks-timeline-handle is-start" onPointerDown={(event) => onPointerDown(event, "resize_start")} />}
-      <span className="ks-timeline-label">{item.label}</span>
+      <span className="ks-timeline-label" style={{ marginLeft: labelOffset, overflow: labelOffset ? "hidden" : undefined, maxWidth: labelOffset ? Math.max(0, (end - start + 1) * pxDay - labelOffset) : undefined }}>{item.label}</span>
       {canEdit && item.resizable && !item.resizeStartOnly && <span className="ks-timeline-handle is-end" onPointerDown={(event) => onPointerDown(event, "resize_end")} />}
     </div>;
+});
+
+
+const DateMarkers = memo(function DateMarkers({ markers, today, start, pxDay, width, gap }: { markers: Marker[]; today: number | null; start: number; pxDay: number; width: number; gap: number }) {
+  const root = useRef<HTMLDivElement>(null);
+  const [widths, setWidths] = useState<number[]>([]);
+  const labels = useMemo(() => [
+    ...(today !== null ? [{ id: "today", label: "오늘", day: today, today: true }] : []),
+    ...[...markers].sort((a, b) => a.day - b.day).map((marker) => ({ ...marker, id: `marker:${marker.id}`, today: false })),
+  ], [markers, today]);
+  useLayoutEffect(() => {
+    const next = [...(root.current?.querySelectorAll<HTMLElement>("[data-marker]") ?? [])].map((element) => {
+      const previous = element.style.maxWidth;
+      element.style.maxWidth = "none";
+      const measured = element.getBoundingClientRect().width;
+      element.style.maxWidth = previous;
+      return measured;
+    });
+    setWidths((old) => old.length === next.length && old.every((value, index) => value === next[index]) ? old : next);
+  }, [labels, pxDay]);
+  const placed = useMemo(() => {
+    const occupied: { left: number; right: number }[] = [], next: Record<string, number> = {};
+    labels.forEach((label, index) => {
+      if (widths[index] === undefined) return;
+      const chipWidth = Math.min(width, widths[index]);
+      const left = Math.max(0, Math.min(width - chipWidth, (label.day - start + 0.5) * pxDay - chipWidth / 2));
+      if (occupied.some((chip) => left < chip.right + gap && left + chipWidth + gap > chip.left)) return;
+      occupied.push({ left, right: left + chipWidth }); next[label.id] = left;
+    });
+    return next;
+  }, [labels, widths, pxDay, width, gap, start]);
+  return <div className="ks-dates-markers" ref={root}>{labels.map((label) => <span key={label.id} data-marker={label.id} className={label.today ? "is-today" : undefined} style={{ left: placed[label.id] ?? 0, visibility: placed[label.id] === undefined ? "hidden" : undefined }}>{label.label}</span>)}</div>;
 });

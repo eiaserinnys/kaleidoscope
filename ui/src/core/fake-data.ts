@@ -34,6 +34,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   if ("item_menu" in block) block.item_menu?.forEach((_, index) => add(`item_menu/${index}/on_select`));
   switch (block.type) {
     case "button_grid": add("on_press"); break;
+    case "timeline": for (const field of ["on_select", "on_edit", "on_viewport"] as const) add(field, block[field] !== undefined); break;
     case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;
     case "folder": add("on_select", block.on_select !== undefined); break;
     case "map": case "chart": case "list": case "table": case "feed": add("on_select", block.on_select !== undefined); break;

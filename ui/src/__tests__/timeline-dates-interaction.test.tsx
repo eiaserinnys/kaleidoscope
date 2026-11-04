@@ -2,10 +2,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TimelineBlock } from "../blocks/timeline";
 
-const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), holdInput: () => () => {} }));
+const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), holdInput: () => () => {}, describe: null as null | (() => { text: string }) }));
 vi.mock("../data/window-data", () => ({ useWindowData: () => runtime, useBinding: (_: string, value: unknown) => ({ status: "ready", value }) }));
-vi.mock("../share/visible", () => ({ useShareDescriber: () => {} }));
-vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, useWindowGrants: () => [], useWindowStateValue: () => null }));
+vi.mock("../share/visible", () => ({ useShareDescriber: (_root: unknown, describe: () => { text: string }) => { runtime.describe = describe; } }));
+vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, useWindowGrants: () => [], useWindowStateValue: () => "ko-KR" }));
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     if (this.classList.contains("ks-dates-corner")) return { left: 0, top: 0, width: 128, height: 96 } as DOMRect;
@@ -55,4 +55,56 @@ it("일반 휠은 확대하지 않고 Ctrl 휠은 확대한다", () => {
   fireEvent.wheel(scroll, { deltaY: -100, clientX: 300, ctrlKey: true });
   expect(parseFloat(axis.style.width)).toBeGreaterThan(width);
   expect(runtime.act).not.toHaveBeenCalled();
+});
+
+it.each(["Escape", "pointercancel"])("%s 취소는 옮기기 전 날짜를 전달한다", (kind) => {
+  vi.stubGlobal("PointerEvent", MouseEvent);
+  Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable: true, value: () => {} });
+  render(<TimelineBlock block={block} pointer="/ui" context={context} />);
+  const item = screen.getByRole("button", { name: /작업/ });
+  fireEvent.pointerDown(item, { clientX: 100 });
+  fireEvent.pointerMove(item, { clientX: 180 });
+  if (kind === "Escape") fireEvent.keyDown(document, { key: "Escape" });
+  else fireEvent.pointerCancel(item);
+  expect(runtime.act.mock.calls.find(([, value]) => value.phase === "cancel")?.[1]).toEqual(expect.objectContaining({ start: "2026-11-10", end: "2026-11-12" }));
+});
+
+it("같이 보기는 300트랙의 실제 보이는 줄만 담는다", () => {
+  const tracks = Array.from({ length: 300 }, (_, i) => ({ id: `track-${i}`, label: `행${i}`, items: [{ id: `item-${i}`, label: `항목${i}`, start: "2026-11-10", end: "2026-11-12" }] }));
+  const view = render(<TimelineBlock block={{ ...block, tracks }} pointer="/ui" context={context} />);
+  const scroll = view.container.querySelector(".ks-dates-scroll")!;
+  scroll.scrollTop = 400; fireEvent.scroll(scroll);
+  const text = runtime.describe!().text;
+  expect(text).toContain("행10:");
+  expect(text).not.toContain("행9:");
+  expect(text).not.toContain("행299:");
+});
+
+it("범위 시작 변경은 보던 첫날을 유지하고 끝만 바뀌면 이동하지 않는다", () => {
+  const view = render(<TimelineBlock block={block} pointer="/ui" context={context} />);
+  const scroll = view.container.querySelector<HTMLElement>(".ks-dates-scroll")!;
+  const axis = view.container.querySelector<HTMLElement>(".ks-dates-axis")!;
+  const beforeWidth = parseFloat(axis.style.width);
+  scroll.scrollLeft = 100; fireEvent.scroll(scroll);
+  const tracks = [{ ...block.tracks[0], items: [...block.tracks[0].items, { id: "earlier", label: "이전", start: "2026-11-03", end: "2026-11-04", movable: false }] }];
+  view.rerender(<TimelineBlock block={{ ...block, tracks }} pointer="/ui" context={context} />);
+  expect(scroll.scrollLeft).toBeCloseTo(100 + parseFloat(axis.style.width) - beforeWidth);
+  const left = scroll.scrollLeft;
+  view.rerender(<TimelineBlock block={{ ...block, tracks: [{ ...tracks[0], items: [...tracks[0].items, { id: "later", label: "이후", start: "2026-12-10", end: "2026-12-12", movable: false }] }] }} pointer="/ui" context={context} />);
+  expect(scroll.scrollLeft).toBe(left);
+});
+
+it("전체 맞춤은 스크롤을 처음으로 옮긴다", () => {
+  const view = render(<TimelineBlock block={{ ...block, controls: true }} pointer="/ui" context={context} />);
+  const scroll = view.container.querySelector<HTMLElement>(".ks-dates-scroll")!;
+  scroll.scrollLeft = 100; fireEvent.scroll(scroll);
+  fireEvent.click(screen.getByRole("button", { name: "전체 맞춤" }));
+  expect(scroll.scrollLeft).toBe(0);
+});
+
+it("ko-KR 일 눈금은 접미사 없는 날짜 숫자만 보인다", () => {
+  const view = render(<TimelineBlock block={block} pointer="/ui" context={context} />);
+  const ticks = [...view.container.querySelectorAll(".ks-dates-ticks > span")];
+  expect(ticks.length).toBeGreaterThan(0);
+  expect(ticks.every((tick) => /^\d+$/.test(tick.textContent!))).toBe(true);
 });
