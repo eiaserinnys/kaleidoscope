@@ -1,6 +1,6 @@
 import type { AppDefinition } from "../../src/contract/contract";
 import stackFillRegressions from "./stack-fill-regressions.json";
-import stackContexts from "./stack-contexts.json";
+import stackContexts from "./stack-contexts";
 
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
