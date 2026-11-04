@@ -85,12 +85,12 @@ pub(super) fn scenario(
     let counts = &echo.counts;
     let mut run = || -> Result<(), String> {
         wait("내장 서버 연결", 20, || {
-            matches!(core.handle(CoreRequest::StateGet {}), Ok(CoreReply::StateGet { snapshot })
+            matches!(core.handle(CoreRequest::StateGet {}), Ok(CoreReply::StateGet { snapshot, .. })
                 if matches!(snapshot.link, kaleidoscope_core::kaleidoscope_contract::LinkStatus::Connected { .. }))
         })?;
         fixture::install(app, core, &echo.origin)?;
         let snapshot = match call(core, CoreRequest::StateGet {})? {
-            CoreReply::StateGet { snapshot } => snapshot,
+            CoreReply::StateGet { snapshot, .. } => snapshot,
             _ => return Err("상태 응답이 아님".into()),
         };
         let workspace = snapshot

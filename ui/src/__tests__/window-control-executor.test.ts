@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createElement } from "react";
+import type { AppDefinition } from "../contract/contract";
+import { createFakeTransport } from "../core/fake-transport";
+import { createShellStore } from "../core/shell-store";
+import { AppWindowContent } from "../render/app-window-content";
 import { executeWindowAction, readWindowView, registerControlWindow, setWindowViewGeometry } from "../share/window-control";
+import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
 let unregister: (() => void) | undefined;
@@ -8,7 +15,7 @@ beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
   vi.spyOn(document, "createRange").mockImplementation(() => ({ setStart() {}, setEnd() {}, getClientRects: () => [rect] }) as unknown as Range);
 });
-afterEach(() => { unregister?.(); unregister = undefined; document.body.replaceChildren(); vi.restoreAllMocks(); });
+afterEach(() => { unregister?.(); unregister = undefined; cleanup(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 function setup(markup: string) {
   document.body.innerHTML = `<main id="root">${markup}</main>`;
@@ -27,6 +34,71 @@ it("번호 단추를 사람 입력 순서로 누르고 더블클릭을 구별한
   const result = await executeWindowAction("one", view.view_id, { kind: "click", target: number("실행"), gesture: "double_click" }, "req");
   expect(result.applied).toBe(true);
   expect(seen).toEqual(["pointerdown:1", "mousedown:1", "pointerup:1", "mouseup:1", "click:1", "pointerdown:2", "mousedown:2", "pointerup:2", "mouseup:2", "click:2", "dblclick:2"]);
+});
+
+it("입력 상태 이벤트가 늦어도 단추 동작이 끝나야 창 조작이 완료된다", async () => {
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 4, modules: {} }, state: { draft: "", saved: "" },
+    ui: { type: "stack", direction: "column", children: [
+      { type: "input", placeholder: "입력", value: { state: "draft" }, on_change: { set_state: "draft" } },
+      { type: "button", label: "추가", on_click: [{ set_state: "saved", value: { expr: "$state.draft" } }] },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { ...definition.state };
+  const transport = createFakeTransport(seed);
+  const subscribe = transport.subscribe.bind(transport);
+  let releaseEvent = () => {};
+  let eventHeld = false;
+  transport.subscribe = (listener) => subscribe((event) => {
+    if (event.event === "state.changed" && event.snapshot.shared.windows[0].state.draft === "새 글" && !eventHeld) {
+      eventHeld = true;
+      releaseEvent = () => listener(event);
+    } else listener(event);
+  });
+  const originalCall = transport.call.bind(transport);
+  let changeReplied = false;
+  let buttonStarted = false;
+  let releaseButton!: () => void;
+  const buttonPending = new Promise<void>((resolve) => { releaseButton = resolve; });
+  vi.spyOn(transport, "call").mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.pointer.endsWith("on_click")) {
+      buttonStarted = true;
+      const reply = await originalCall(request);
+      await buttonPending;
+      return reply;
+    }
+    const reply = await originalCall(request);
+    if (request.op === "data.act" && request.pointer.endsWith("on_change")) changeReplied = true;
+    return reply;
+  });
+  const store = createShellStore(transport);
+  const rendered = render(createElement(AppWindowContent, { store, windowId: "editor-window" }));
+  const input = await screen.findByPlaceholderText("입력");
+  const root = rendered.container.firstElementChild as HTMLElement;
+  unregister = registerControlWindow("editor-window", root, store);
+  const view = readWindowView("editor-window");
+  const number = Number(view.text.match(/\[(\d+)\] [^\n]*추가/)?.[1]);
+  expect(number).toBeGreaterThan(0);
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "새 글" } });
+  let completed = false;
+  const action = executeWindowAction("editor-window", view.view_id, { kind: "click", target: number, gesture: "click" }, "req")
+    .then((result) => { completed = true; return result; });
+  await waitFor(() => { expect(eventHeld).toBe(true); expect(changeReplied).toBe(true); });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 250)); });
+  const completedBeforeEvent = completed;
+  await act(async () => { releaseEvent(); });
+  await waitFor(() => expect(buttonStarted).toBe(true));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 250)); });
+  const completedBeforeButton = completed;
+  await act(async () => { releaseButton(); await buttonPending; });
+  const result = await action;
+  expect(completedBeforeEvent).toBe(false);
+  expect(completedBeforeButton).toBe(false);
+  expect(result.after?.settled).toBe(true);
+  expect(store.getSnapshot()?.shared.windows[0].state.saved).toBe("새 글");
+  store.dispose();
 });
 
 it("입력은 다른 창의 포커스를 옮기지 않고 input 이벤트로 전달한다", async () => {

@@ -243,7 +243,7 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         json!({"visible": core.shell_visible()}),
     )?;
     let snapshot = match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => snapshot,
+        CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),
     };
     let workspace = snapshot
@@ -466,7 +466,7 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         return Err(format!("unexpected folder grant: {grant:?}"));
     }
     let snapshot = match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => snapshot,
+        CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),
     };
     if !snapshot.device.grants.contains(&grant) {

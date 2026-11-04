@@ -246,6 +246,7 @@ export class ClientRuntime {
 
   action(name: string, event: JsonValue, item?: JsonValue, args?: JsonValue, scope?: ItemScope, modifiers?: EventModifiers) {
     if (!this.client.actions.includes(name) || !this.frame) return false;
+    this.sync();
     const context: ClientActionContext = { event, ...(item === undefined ? {} : { item }), ...(args === undefined ? {} : { args }), ...(scope ? { parent_item: scope.parent_item, key: scope.key, index: scope.index } : {}), ...(modifiers === undefined ? {} : { modifiers }) };
     if (windowActionActive(this.data.windowId)) {
       const requestId = crypto.randomUUID();

@@ -4,7 +4,7 @@ pub(super) fn snapshot(
     core: &Core,
 ) -> Result<kaleidoscope_core::kaleidoscope_contract::ShellSnapshot, String> {
     match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => Ok(snapshot),
+        CoreReply::StateGet { snapshot, .. } => Ok(snapshot),
         reply => Err(format!("unexpected state response: {reply:?}")),
     }
 }

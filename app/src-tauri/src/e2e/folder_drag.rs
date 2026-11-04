@@ -62,7 +62,7 @@ pub(super) fn scenario(
         },
     )?;
     let snapshot = match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => snapshot,
+        CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),
     };
     let workspace = snapshot
@@ -181,7 +181,7 @@ fn probe(
 ) -> Result<(), String> {
     let native = native_windows::capture(from, to);
     let snapshot = match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => snapshot,
+        CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => return Err(format!("unexpected probe state: {reply:?}")),
     };
     let windows = serde_json::to_string(&snapshot.shared.windows).map_err(|e| e.to_string())?;

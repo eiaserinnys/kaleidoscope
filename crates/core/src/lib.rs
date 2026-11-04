@@ -615,6 +615,7 @@ impl Core {
                 let state = self.inner.state.lock().unwrap();
                 Ok(CoreReply::StateGet {
                     snapshot: snapshot(&state),
+                    sequence: self.inner.state_events.sequence(),
                 })
             }
             CoreRequest::LinkStart { server_url } => link::start(&self.inner, server_url),

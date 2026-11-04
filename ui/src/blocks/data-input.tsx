@@ -60,10 +60,12 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     if (block.format?.kind === "decimal") number = Number(number.toFixed(decimalDigits(block.format.digits)));
     return number;
   }, [block.kind, block.format, minimum, maximum]);
-  const { draft, change, finish, holding, send } = useLocalDraft<string>(initialDraft, pointer, { sendOnChange: false, resetOnFailure: false, syncOnSuccess: true, toJson: toEventValue });
+  const prepare = useRef<() => void>(() => {});
+  const { draft, change, finish, holding, send, mark, adopt } = useLocalDraft<string>(initialDraft, pointer, { sendOnChange: false, resetOnFailure: false, syncOnSuccess: true, toJson: toEventValue, prepare });
   const [focused, setFocused] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unregisterFlush = useRef<(() => void) | null>(null);
+  const timerValue = useRef("");
   const inputElement = useRef<HTMLInputElement | null>(null);
   const textarea = useRef<HTMLTextAreaElement | null>(null);
   const composing = useRef(false);
@@ -114,9 +116,11 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     unregisterFlush.current?.(); unregisterFlush.current = null;
     edited.current = false;
     const normalized = toEventValue(value);
-    change(typeof normalized === "number" ? inputDraft(normalized, block.kind, block.format) : value);
+    const formatted = typeof normalized === "number" ? inputDraft(normalized, block.kind, block.format) : value;
+    if (formatted !== value) change(formatted);
     return send(value, false);
   }, [block.kind, block.format, change, send, toEventValue]);
+  prepare.current = () => { if (timer.current) sendDraft(timerValue.current); };
   const markChanged = (value: string) => {
     if (readOnly) return;
     edited.current = true;
@@ -124,9 +128,10 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     if (timer.current) clearTimeout(timer.current);
     unregisterFlush.current?.(); unregisterFlush.current = null;
     if ((block.commit ?? "debounce") === "debounce") {
-      timer.current = setTimeout(() => { void sendDraft(value); }, 300);
+      timerValue.current = value;
+      timer.current = setTimeout(() => { void sendDraft(timerValue.current); }, 300);
       const element = inputElement.current ?? textarea.current;
-      if (element) unregisterFlush.current = registerPendingFlush(element, () => sendDraft(value));
+      if (element) unregisterFlush.current = registerPendingFlush(element, () => sendDraft(timerValue.current));
     }
   };
   const commit = (value: string) => { if (!readOnly && edited.current) sendDraft(value); };
@@ -157,9 +162,11 @@ export function InputBlock({ block, pointer }: Props<"input">) {
       return;
     }
     if (event.key !== "Enter" || event.nativeEvent.isComposing || composing.current || (multiline && !event.ctrlKey)) return;
-    if (block.commit === "submit") { event.preventDefault(); commit(draft); }
-    else if (block.on_submit) event.preventDefault();
-    if (block.on_submit) void data.act(`${pointer}/on_submit`, toEventValue(draft));
+    if (block.commit === "submit" || block.on_submit) { event.preventDefault(); commit(draft); }
+    if (block.on_submit) {
+      const submitted = mark();
+      void data.act(`${pointer}/on_submit`, toEventValue(draft)).then((success) => { if (success) adopt(submitted); });
+    }
   };
   const props = { className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: readOnly ? initialDraft : draft, readOnly, "aria-readonly": readOnly,
     onFocus: () => { setFocused(true); holding.current = !readOnly; }, onBlur: () => {
@@ -215,13 +222,15 @@ function validGroup(value: unknown): value is { name: string; options: unknown[]
 function useLocalDraft<T extends JsonValue>(
   current: T,
   pointer: string,
-  options: { sendOnChange?: boolean; toJson?: (value: T) => JsonValue; intervalMs?: number; resetOnFailure?: boolean; syncOnSuccess?: boolean } = {},
+  options: { sendOnChange?: boolean; toJson?: (value: T) => JsonValue; intervalMs?: number; resetOnFailure?: boolean; syncOnSuccess?: boolean; prepare?: { current: () => void } } = {},
 ) {
   const data = useWindowData();
   const [draft, setDraft] = useState(current);
   const holding = useRef(false);
   const inFlight = useRef(0);
   const revision = useRef(0);
+  const externalChanges = useRef(0);
+  const adoptRevision = useRef<number | null>(null);
   const latest = useRef(current);
   latest.current = current;
   const sendOnChange = options.sendOnChange ?? true;
@@ -232,7 +241,7 @@ function useLocalDraft<T extends JsonValue>(
     inFlight.current += 1;
     let success = false;
     try {
-      success = await data.act(`${pointer}/on_change`, toJson(value));
+      success = await data.act(`${pointer}/on_change`, toJson(value), undefined, undefined, undefined, { input: true });
       if (!success && resetOnFailure && !holding.current && revision.current === sentRevision) setDraft(latest.current);
     } finally {
       inFlight.current -= 1;
@@ -242,13 +251,25 @@ function useLocalDraft<T extends JsonValue>(
   const enqueue = (value: T, coalesce: boolean) => serialSend({ value, revision: revision.current }, { coalesce });
   const throttled = useMemo(() => createThrottledSend((next: T) => enqueue(next, true), options.intervalMs ?? 100), [options.intervalMs, serialSend]);
   useEffect(() => () => throttled.flush(), [throttled]);
+  useEffect(() => data.holdInput(() => {
+    options.prepare?.current();
+    if (sendOnChange) throttled.flush();
+    return serialSend.idle();
+  }), [data, options.prepare, sendOnChange, serialSend, throttled]);
   useEffect(() => {
-    if (!holding.current && inFlight.current === 0) setDraft(current);
+    externalChanges.current += 1;
+    if ((!holding.current || adoptRevision.current === revision.current) && inFlight.current === 0) setDraft(current);
   }, [current]);
   const change = (next: T) => { revision.current += 1; setDraft(next); if (sendOnChange) throttled.send(next); };
   const finish = (sync = true) => { if (sendOnChange) throttled.flush(); holding.current = false; if (sync && inFlight.current === 0) setDraft(latest.current); };
   const send = (next: T, coalesce = false) => enqueue(next, coalesce);
-  return { draft, change, finish, holding, send };
+  const mark = () => ({ revision: revision.current, externalChanges: externalChanges.current });
+  const adopt = (submitted: ReturnType<typeof mark>) => {
+    if (revision.current !== submitted.revision) return;
+    adoptRevision.current = submitted.revision;
+    if (externalChanges.current !== submitted.externalChanges && inFlight.current === 0) setDraft(latest.current);
+  };
+  return { draft, change, finish, holding, send, mark, adopt };
 }
 
 export function SliderBlock({ block, pointer, context }: Props<"slider">) {

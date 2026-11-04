@@ -31,7 +31,7 @@ fn wait_for(mut predicate: impl FnMut() -> bool) {
     panic!("실제 서버 동작을 기다리다 시간 초과");
 }
 fn connected(core: &Core, mode: ServerMode) -> bool {
-    matches!(core.handle(CoreRequest::StateGet {}).unwrap(), CoreReply::StateGet { snapshot } if matches!(snapshot.link, LinkStatus::Connected { mode: actual, .. } if actual == mode))
+    matches!(core.handle(CoreRequest::StateGet {}).unwrap(), CoreReply::StateGet { snapshot, .. } if matches!(snapshot.link, LinkStatus::Connected { mode: actual, .. } if actual == mode))
 }
 fn config(dir: &Path, info: &EmbeddedServer, remote: &str) -> CoreConfig {
     CoreConfig {
@@ -120,7 +120,7 @@ fn watch_pas_on_next_connected(
     let weak = Arc::downgrade(core);
     let callback_window = window_id;
     core.subscribe(Box::new(move |event| {
-        let kaleidoscope_contract::CoreEvent::StateChanged { snapshot } = event else {
+        let kaleidoscope_contract::CoreEvent::StateChanged { snapshot, .. } = event else {
             return;
         };
         if !matches!(&snapshot.link, LinkStatus::Connected { mode: actual, .. } if *actual == mode)
@@ -292,7 +292,7 @@ async fn storage_list_and_get_recover_during_startup_and_both_server_switches() 
         let event_local_window = local_window.clone();
         let (switch_tx, switch_rx) = std::sync::mpsc::channel();
         core.subscribe(Box::new(move |event| {
-            let kaleidoscope_contract::CoreEvent::StateChanged { snapshot } = event else { return; };
+            let kaleidoscope_contract::CoreEvent::StateChanged { snapshot, .. } = event else { return; };
             let LinkStatus::Offline { mode, reason: None, .. } = &snapshot.link else { return; };
             let mode = *mode;
             let Some(core) = weak.upgrade() else { return; };
@@ -375,7 +375,7 @@ async fn real_remote_reconnect_recovers_storage_source_and_asset() {
         core.subscribe(Box::new(move |event| {
             match event {
                 kaleidoscope_contract::CoreEvent::DataUpdate { window_id, view } if window_id == &window_listener => updates_listener.lock().unwrap().push(serde_json::to_value(view).unwrap()),
-                kaleidoscope_contract::CoreEvent::StateChanged { snapshot } if matches!(snapshot.link, LinkStatus::Offline { mode: ServerMode::Remote, .. }) && armed_listener.swap(false, Ordering::SeqCst) => {
+                kaleidoscope_contract::CoreEvent::StateChanged { snapshot, .. } if matches!(snapshot.link, LinkStatus::Offline { mode: ServerMode::Remote, .. }) && armed_listener.swap(false, Ordering::SeqCst) => {
                     let core = weak.upgrade().unwrap();
                     call(&core, json!({"op":"data.attach","window_id":window_listener}));
                     let request: CoreRequest = serde_json::from_value(json!({"op":"data.media","window_id":window_listener,"media":{"asset":"test-script","version":1}})).unwrap();

@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ButtonBlock, ColorBlock, InputBlock, SelectBlock, ToggleBlock } from "../blocks/data-input";
 import "../styles/data-input-preview.css";
 
-const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, act: vi.fn().mockResolvedValue(true) }));
+const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined }));
 const previewRender = vi.hoisted(() => vi.fn());
 vi.mock("../render/render-block", () => ({ renderBlock: (...args: unknown[]) => previewRender(...args) }));
 vi.mock("../data/window-data", () => ({
@@ -39,7 +39,7 @@ it.each([false, true])("읽기 전용 %s줄 입력은 동작을 막고 해제하
   fireEvent.focus(field);
   fireEvent.change(field, { target: { value: "다시 수정" } });
   fireEvent.blur(field);
-  await vi.waitFor(() => expect(runtime.act).toHaveBeenCalledWith("/input/on_change", "다시 수정"));
+  await vi.waitFor(() => expect(runtime.act).toHaveBeenCalledWith("/input/on_change", "다시 수정", undefined, undefined, undefined, { input: true }));
 });
 
 it("읽기 전용 검색 입력의 지우기 조작은 값을 보내지 않는다", () => {
@@ -90,8 +90,8 @@ it("전환 전에 확정한 편집은 순서대로 전송하고 전환 뒤 새 �
   fireEvent.keyDown(field, { key: "Enter" });
   await act(async () => complete(true));
   expect(runtime.act).toHaveBeenCalledTimes(2);
-  expect(runtime.act).toHaveBeenNthCalledWith(1, "/input/on_change", "첫 편집");
-  expect(runtime.act).toHaveBeenNthCalledWith(2, "/input/on_change", "다음 편집");
+  expect(runtime.act).toHaveBeenNthCalledWith(1, "/input/on_change", "첫 편집", undefined, undefined, undefined, { input: true });
+  expect(runtime.act).toHaveBeenNthCalledWith(2, "/input/on_change", "다음 편집", undefined, undefined, undefined, { input: true });
   expect(runtime.act).not.toHaveBeenCalledWith("/input/on_submit", expect.anything());
 });
 

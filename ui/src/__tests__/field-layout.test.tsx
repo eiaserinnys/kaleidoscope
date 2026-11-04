@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ColorBlock, InputBlock, SelectBlock, SliderBlock } from "../blocks/data-input";
 
 vi.mock("../data/window-data", () => ({
-  useWindowData: () => ({ act: vi.fn().mockResolvedValue(true), store: { getSnapshot: () => ({}) } }),
+  useWindowData: () => ({ act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined, store: { getSnapshot: () => ({}) } }),
   useBinding: (_pointer: string, value: unknown) => ({ status: "ready", value }),
 }));
 vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, isWindowTop: () => true }));
