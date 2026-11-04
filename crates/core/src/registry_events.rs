@@ -301,6 +301,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             inner.layout_signal.notify();
             if !changed.is_empty() {
                 crate::data_runtime::connections_changed(inner, &changed);
+                crate::realtime_host::state_changed(inner);
             }
             crate::conversation_send::recover(inner);
             crate::conversation_reconcile::schedule(inner);

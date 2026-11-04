@@ -2,7 +2,7 @@
 use super::*;
 use kaleidoscope_contract::data;
 
-pub(super) fn visible(state: &crate::CoreState, window_id: &str, shell_visible: bool) -> bool {
+pub(crate) fn visible(state: &crate::CoreState, window_id: &str, shell_visible: bool) -> bool {
     if !shell_visible {
         return false;
     }

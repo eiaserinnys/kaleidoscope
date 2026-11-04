@@ -60,6 +60,7 @@ pub mod file;
 pub mod mcp;
 pub mod media;
 pub mod process;
+pub mod realtime;
 pub mod retired;
 pub mod server;
 pub mod share;
@@ -78,6 +79,7 @@ pub use file::*;
 pub use mcp::*;
 pub use media::*;
 pub use process::*;
+pub use realtime::*;
 pub use server::*;
 pub use share::*;
 pub use shell::*;
@@ -85,13 +87,32 @@ pub use storage::*;
 pub use web::*;
 pub use worker::*;
 
+const fn connection_entries() -> [ErrorEntry; conn::ENTRIES.len() + realtime::ENTRIES.len()] {
+    let mut entries = [conn::ENTRIES[0]; conn::ENTRIES.len() + realtime::ENTRIES.len()];
+    let mut index = 0;
+    while index < conn::ENTRIES.len() {
+        entries[index] = conn::ENTRIES[index];
+        index += 1;
+    }
+    let mut realtime_index = 0;
+    while realtime_index < realtime::ENTRIES.len() {
+        entries[index] = realtime::ENTRIES[realtime_index];
+        index += 1;
+        realtime_index += 1;
+    }
+    entries
+}
+
+const CONNECTION_ENTRIES: [ErrorEntry; conn::ENTRIES.len() + realtime::ENTRIES.len()] =
+    connection_entries();
+
 pub const AREAS: &[(&str, &[ErrorEntry])] = &[
     ("APP", app::ENTRIES),
     ("DESK", desk::ENTRIES),
     ("FILE", file::ENTRIES),
     ("STORAGE", storage::ENTRIES),
     ("DATA", data::ENTRIES),
-    ("CONN", conn::ENTRIES),
+    ("CONN", &CONNECTION_ENTRIES),
     ("CONV", conv::ENTRIES),
     ("MEDIA", media::ENTRIES),
     ("PROCESS", process::ENTRIES),

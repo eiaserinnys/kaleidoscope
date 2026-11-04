@@ -123,15 +123,15 @@ struct ServerState {
     stream_item: bool,
 }
 
-struct OAuthFixture {
-    base: String,
+pub(super) struct OAuthFixture {
+    pub(super) base: String,
     state: Arc<Mutex<ServerState>>,
     stop: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
 
 impl OAuthFixture {
-    fn start() -> Self {
+    pub(super) fn start() -> Self {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         listener.set_nonblocking(true).unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());

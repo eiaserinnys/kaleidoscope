@@ -69,6 +69,7 @@ pub(crate) fn activate(
         return Err(errors::SERVER_SWITCH_CANCELLED());
     }
     crate::process_host::server_changed(inner);
+    crate::realtime_host::shutdown_sessions(inner);
     crate::data_runtime::server_changed(inner);
     crate::client_files::release_all(inner);
     crate::client_services::server_changed(inner);
