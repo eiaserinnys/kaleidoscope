@@ -23,9 +23,17 @@
 
 /* 프레임과 레일 */
 .ks-html-content { position: relative; display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; }
-.ks-html-content iframe { flex: 1 1 0; width: 0; min-width: 0; border: 0; background: var(--ks-color-surface-solid); }
-.ks-html-content iframe:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
-.ks-html-rail { display: flex; flex: 0 0 calc(var(--ks-space-6) * 8); flex-direction: column; min-width: 0; min-height: 0; border-inline-start: var(--ks-line-width) solid var(--ks-color-border); background: var(--ks-color-surface); }
+.ks-html-content > iframe { flex: 1 1 0; width: 0; min-width: 0; border: 0; background: var(--ks-color-surface-solid); }
+.ks-html-content > iframe:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-html-document { display: grid; flex: 1 1 0; min-width: 0; min-height: 0; place-items: center; background: var(--ks-color-surface-solid); }
+.ks-html-document > .ks-html-state { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.ks-html-document iframe { width: 100%; height: 100%; min-width: 0; min-height: 0; border: 0; background: var(--ks-color-surface-solid); }
+.ks-html-document iframe:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-html-rail { display: flex; flex: 0 0 calc(var(--ks-space-6) * 8); flex-direction: column; min-width: var(--ks-html-side-min); min-height: 0; background: var(--ks-color-surface); }
+.ks-html-rail[hidden] { display: none; }
+.ks-html-content:not(.is-compact):has(.ks-html-divider) .ks-html-document { min-width: var(--ks-html-document-min); }
+.ks-html-divider { flex: 0 0 var(--ks-split-handle-size); margin-inline-end: calc(var(--ks-html-divider-width) - var(--ks-split-handle-size)); }
+.ks-html-content.is-compact .ks-html-rail { min-width: 0; border-inline-start: var(--ks-line-width) solid var(--ks-color-border); }
 /* 스크롤바 칸을 늘 비워 두고 안쪽 여백에서 그만큼 뺀다. 스크롤이 생겨도 칸 폭과 오른쪽 가장자리가 그대로다. */
 .ks-html-rail-body { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; gap: var(--ks-space-3); overflow: hidden auto; scrollbar-gutter: stable; padding: var(--ks-space-3) calc(var(--ks-space-3) - var(--ks-space-2)) var(--ks-space-3) var(--ks-space-3); }
 .ks-html-rail-foot { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--ks-space-1); border-block-start: var(--ks-line-width) solid var(--ks-color-border); padding: var(--ks-space-2) var(--ks-space-3); }
@@ -121,7 +129,7 @@
   .ks-html-save-label { display: none; }
   .ks-html-save-icon { display: block; }
   .ks-html-header .ks-html-save { width: var(--ks-control-height); padding: 0; }
-  .ks-html-rail { position: absolute; inset: 0; z-index: 1; flex: none; border-inline-start: 0; }
+  .ks-html-rail { position: absolute; inset: 0; z-index: 1; flex: none; border-inline-start: 0; background: var(--ks-color-surface-solid); }
 }
 @container ks-data-window (max-height: 300px) {
   .ks-html-rail { overflow: hidden auto; scrollbar-gutter: stable; }

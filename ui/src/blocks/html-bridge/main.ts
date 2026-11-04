@@ -172,9 +172,13 @@ document.addEventListener("contextmenu", (event) => {
   if (text || menuTarget) send({ type: "ks-html-context-menu", requestId: menuRequestId, x: event.clientX, y: event.clientY, text, editable: Boolean(menuTarget), readOnly: Boolean(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === "password" });
 });
 document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
+let downPoint: { x: number; y: number } | null = null;
+let dragged = false;
+const movedBeyondThreshold = (event: MouseEvent) => Boolean(downPoint && Math.hypot(event.clientX - downPoint.x, event.clientY - downPoint.y) > 4);
 document.addEventListener("mousedown", (event) => {
   if (locked) { event.preventDefault(); event.stopPropagation(); return; }
   if (mode !== "select" || isPinEvent(event)) return;
+  downPoint = { x: event.clientX, y: event.clientY }; dragged = false;
   document.documentElement.removeAttribute("data-ks-pending");
   if (editing && event.target !== editing.element) finishEdit(false);
   const current = getSelection();
@@ -182,9 +186,14 @@ document.addEventListener("mousedown", (event) => {
     current.removeAllRanges();
   }
 }, true);
+document.addEventListener("mousemove", (event) => {
+  if (movedBeyondThreshold(event)) dragged = true;
+}, true);
 document.addEventListener("mouseup", (event) => {
   if (locked || mode !== "select" || editing) return;
-  if (event.detail >= 2 && event.target instanceof HTMLElement && !event.target.children.length && event.target.textContent?.trim()) return;
+  dragged ||= movedBeyondThreshold(event);
+  downPoint = null;
+  if (!dragged && event.detail >= 2 && event.target instanceof HTMLElement && !event.target.children.length && event.target.textContent?.trim()) return;
   const current = getSelection(); if (!current || current.isCollapsed || !current.toString().trim() || !current.rangeCount) return;
   const range = current.getRangeAt(0); const node = range.commonAncestorContainer;
   const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
@@ -208,7 +217,7 @@ document.addEventListener("click", (event) => {
   if (getSelection()?.toString().trim()) return;
   if (event.target instanceof Element) select(event.target.closest("[data-ks-n]"));
 }, true);
-document.addEventListener("dblclick", (event) => { if (!locked && mode === "select" && event.target instanceof Element) { event.preventDefault(); startEdit(event.target); } }, true);
+document.addEventListener("dblclick", (event) => { if (!locked && mode === "select" && !dragged && event.target instanceof Element) { event.preventDefault(); startEdit(event.target); } }, true);
 document.addEventListener("focusout", (event) => { if (editing && event.target === editing.element) finishEdit(false); }, true);
 document.addEventListener("keydown", (event) => {
   if (locked) { event.preventDefault(); event.stopPropagation(); return; }

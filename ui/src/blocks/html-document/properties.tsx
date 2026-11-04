@@ -31,7 +31,8 @@ export function PropertyFace({ model }: { model: Model }) {
   const displayBefore = useRef(new Map<number, string>());
   const pointerDown = useRef(false);
   const selection = model.selection;
-  if (!selection) return <div className="ks-html-rail-body"><div className="ks-html-rail-empty"><EmptyState icon={<MousePointer2 size="empty" />} text="요소를 고르세요" /></div></div>;
+  if (!selection) return <div className="ks-html-rail-body"><div className="ks-html-rail-empty"><EmptyState icon={<MousePointer2 size="empty" />} text={model.compact ? "요소를 고르세요" : undefined} /></div></div>;
+  if (selection.anchor.kind === "text") return <div className="ks-html-rail-body"><div className="ks-html-rail-empty"><EmptyState icon={<MousePointer2 size="empty" />} text="요소를 누르면 속성을 고칠 수 있습니다" /></div></div>;
   const styles = selection.styles; const display = styles.display ?? "";
   const layout = ["flex", "inline-flex", "grid", "inline-grid"].includes(display);
   const grid = display.includes("grid"); const vertical = grid ? styles["grid-auto-flow"]?.startsWith("column") : styles["flex-direction"]?.startsWith("column");
@@ -56,7 +57,7 @@ export function PropertyFace({ model }: { model: Model }) {
   const crossOptions = ["flex-start", "center", "flex-end"].map((item, index) => ({ label: ["교차축 앞", "교차축 가운데", "교차축 뒤"][index], value: item, icon: crossIcons[index] }));
   const outsideColor = (target: HTMLElement) => !target.closest("[data-color], .ks-html-swatches");
   return <div className="ks-html-rail-body" onPointerDownCapture={() => { pointerDown.current = true; }} onPointerUpCapture={() => { pointerDown.current = false; }} onPointerCancelCapture={() => { pointerDown.current = false; }} onClickCapture={(event) => { if (outsideColor(event.target as HTMLElement)) setActiveColor(null); }} onFocusCapture={(event) => { if (!pointerDown.current && outsideColor(event.target as HTMLElement)) setActiveColor(null); }} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { pointerDown.current = false; setActiveColor(null); } }}>
-    <Target selection={selection} choose={(n) => model.send({ type: "ks-html-select-number", n })} />
+    {model.compact ? <Target selection={selection} choose={(n) => model.send({ type: "ks-html-select-number", n })} /> : null}
     <div className="ks-html-actions" role="toolbar" aria-label="요소">
       <IconButton aria-label="위로 Alt+↑" disabled={body || selection.first} onClick={() => action("ArrowUp", { alt: true })}><ArrowUp /></IconButton>
       <IconButton aria-label="아래로 Alt+↓" disabled={body || selection.last} onClick={() => action("ArrowDown", { alt: true })}><ArrowDown /></IconButton>
