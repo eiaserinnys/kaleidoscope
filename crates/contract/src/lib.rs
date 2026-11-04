@@ -352,6 +352,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("profiler", 1),
     ("client", RECEIVE_MESSAGE_CLIENT_VERSION),
     ("process", 1),
+    ("store", 1),
 ];
 
 /// 단추 강조 바인딩과 새 아이콘을 처음 지원한 블록 세트 판.

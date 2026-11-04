@@ -192,6 +192,7 @@ fn args(definition: Value) -> PreviewArgs {
         window_id: None,
         workspace_id: None,
         data: None,
+        apps: None,
         max_chars: None,
     }
 }
@@ -635,6 +636,7 @@ async fn preview_uses_the_current_registry_definition_by_app_id() {
             )]
             .into(),
         ),
+        apps: None,
         max_chars: None,
     };
 

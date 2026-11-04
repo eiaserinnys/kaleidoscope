@@ -66,6 +66,7 @@ struct Runtime {
     storage_startup_pending: bool,
     startup: crate::startup_readiness::Snapshot,
     definition: AppDefinition,
+    apps: Option<Vec<kaleidoscope_contract::store::InstalledAppValue>>,
     compiled: CompiledApp,
     state: BTreeMap<String, Value>,
     sources: BTreeMap<String, Source>,
@@ -172,6 +173,7 @@ impl Runtime {
             storage_startup_pending: false,
             startup: Default::default(),
             definition,
+            apps: None,
             compiled,
             state,
             sources,
@@ -287,6 +289,7 @@ impl Runtime {
             &storage,
             &meta,
             &self.data_meta_values(),
+            self.apps.as_deref(),
             &statuses,
             None,
             &mut |binding, ms| {
@@ -340,6 +343,7 @@ impl Runtime {
             &storage,
             &meta,
             &self.data_meta_values(),
+            self.apps.as_deref(),
             &statuses,
             Some(selected),
             &mut |binding, ms| {
@@ -629,6 +633,7 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
                     id: error.id,
                 }
             }
+            SourcePlan::StoreInvalid(error) => SourceStatus::Failed { message: error.message.clone(), has_value: false, id: error.id.clone() },
             _ => SourceStatus::Idle {},
         };
     }
@@ -638,6 +643,9 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
 
 fn gate_key(runtime: &Runtime, name: &str) -> Option<String> {
     let permission = runtime.definition.sources[name].permission();
+    if let SourcePlan::StoreIndex { server, .. } | SourcePlan::StoreApp { server, .. } = &runtime.sources[name].plan {
+        return url::Url::parse(server).ok()?.host_str().map(str::to_owned);
+    }
     runtime
         .definition
         .permissions
@@ -687,7 +695,7 @@ fn prepare(
         _ => None,
     };
     let source = runtime.sources.get_mut(name)?;
-    if source.in_flight || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_)) {
+    if source.in_flight || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_) | SourcePlan::StoreInvalid(_)) {
         return None;
     }
     if let Some(crate::startup_readiness::Readiness::Pending(reason)) = startup {
@@ -1017,6 +1025,7 @@ pub(crate) fn attach(
                 inner.profiler.clone(),
             );
             runtime.startup = startup;
+            runtime.apps = apps_for(&state, &definition);
             runtime
         });
         let already_attached = runtime.attached > 0;
@@ -1168,6 +1177,41 @@ pub(crate) fn server_changed(inner: &Inner) {
     inner.data_runtimes.windows.lock().unwrap().clear();
     inner.data_runtimes.request_cache.lock().unwrap().clear();
     gates::clear(&inner.data_runtimes);
+}
+
+pub(crate) fn apps_for(state: &crate::CoreState, definition: &AppDefinition) -> Option<Vec<kaleidoscope_contract::store::InstalledAppValue>> {
+    if !definition.permissions.iter().any(|p| matches!(p, kaleidoscope_contract::PermissionDecl::Store { .. })) {
+        return None;
+    }
+    Some(state.shared.apps.iter().map(|app| kaleidoscope_contract::store::InstalledAppValue {
+        id: app.id.clone(),
+        name: app.name.clone(),
+        version: app.current_version,
+        origin: app.origin.clone(),
+        installed_version: app.installed_version,
+        modified: app.origin.is_some() && app.installed_version != Some(app.current_version),
+        icon: app_commands::definition_for(&state.shared, &app.id, app.current_version).and_then(|def| def.icon),
+    }).collect())
+}
+
+/// 앱 목록 변화만 전달하며 목록을 쓰지 않는 식은 다시 계산하지 않는다.
+pub(crate) fn apps_changed(inner: &Arc<Inner>) {
+    let state = inner.state.lock().unwrap();
+    let mut windows = inner.data_runtimes.windows.lock().unwrap();
+    for (id, runtime) in windows.iter_mut() {
+        if runtime.apps.is_none() { continue; }
+        let apps = apps_for(&state, &runtime.definition);
+        if runtime.apps == apps { continue; }
+        runtime.apps = apps;
+        let selected: BTreeSet<_> = runtime.compiled.binding_dependencies().iter()
+            .filter(|binding| binding.apps)
+            .map(|binding| binding.pointer.clone()).collect();
+        if selected.is_empty() { continue; }
+        let next = runtime.view_selected(&selected);
+        if let Some(view) = runtime.diff_view(next).filter(|_| runtime.attached > 0) {
+            let _ = inner.data_runtimes.events.send((id.clone(), runtime.version, view));
+        }
+    }
 }
 
 pub(crate) fn state_changed(inner: &Arc<Inner>) {
@@ -1472,7 +1516,7 @@ fn run_due(inner: &Arc<Inner>, only_window: Option<&str>) -> Vec<JoinHandle<()>>
                     && live.contains(&name)
                     && liveness::deps_ready(runtime, &name)
                     && !source.in_flight
-                    && !matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_))
+                    && !matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_) | SourcePlan::StoreInvalid(_))
                     && source
                         .waiting
                         .is_none_or(|until| until <= chrono::Utc::now())

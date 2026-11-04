@@ -1059,6 +1059,22 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("설치 목록을 쓰는 값이 바뀌어도 다른 창과 형제 블록은 다시 그리지 않는다", async () => {
+    const storeView: AppDefinition = { ...definition, ui: { type: "stack", direction: "column", children: [
+      { type: "text", value: { expr: "$count($apps)" } },
+      { type: "text", value: { state: "second" } },
+    ] } };
+    const { store, transport } = await setup([storeView]);
+    calls.length = 0;
+    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: {
+      "/ui/children/0/value": { status: "ready", value: 1 },
+    } } }));
+    await settleRenders();
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
   it("다음 쪽 상태 변화는 다른 창과 형제 블록을 다시 그리지 않는다", async () => {
     const paged: AppDefinition = { ...definition, ui: { type: "stack", direction: "column", children: [
       { type: "text", value: { state: "first" } },

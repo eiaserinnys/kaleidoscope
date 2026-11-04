@@ -273,7 +273,7 @@ pub(crate) fn get(
         let original = if let Some(entry) = inner.media_cache.get(&original_key) {
             entry
         } else {
-            let client = crate::store::StoreClient::new(server.as_str())?;
+            let client = crate::store::client(inner, server.as_str())?;
             let (bytes, mime) =
                 crate::store::read_media(&client, &media.path).map_err(|e| e.error)?;
             let (width, height) = dimensions(&bytes, &mime);

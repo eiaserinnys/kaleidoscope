@@ -28,6 +28,59 @@ fn fixture() -> AppDefinition {
 }
 
 #[test]
+fn store_sources_resolve_bindings_and_stay_idle_for_null() {
+    let mut value = serde_json::to_value(fixture()).unwrap();
+    value["sources"] = json!({
+        "index":{"kind":"store","store":"index","permission":"catalog","server":{"state":"server"}},
+        "detail":{"kind":"store","store":"app","permission":"catalog","server":{"state":"server"},"id":{"state":"selected"}}
+    });
+    let app = CompiledApp::compile(&serde_json::from_value(value).unwrap());
+    let state = map(json!({"server":"https://store.example", "selected":"notes"}));
+    assert!(matches!(app.plan_source("index", &state), SourcePlan::StoreIndex { permission, server } if permission == "catalog" && server == "https://store.example"));
+    assert!(matches!(app.plan_source("detail", &state), SourcePlan::StoreApp { permission, server, id } if permission == "catalog" && server == "https://store.example" && id == "notes"));
+    let mut state = state;
+    state.insert("selected".into(), Value::Null);
+    assert_eq!(app.plan_source("detail", &state), SourcePlan::Idle);
+    state.insert("server".into(), Value::Null);
+    assert_eq!(app.plan_source("index", &state), SourcePlan::Idle);
+    state.insert("server".into(), json!(123));
+    assert!(matches!(app.plan_source("index", &state), SourcePlan::StoreInvalid(error) if error.id.as_deref() == Some("STORECLIENT_INDEX_SERVER_INVALID")));
+    state.insert("server".into(), json!("https://store.example"));
+    state.insert("selected".into(), json!(123));
+    assert!(matches!(app.plan_source("detail", &state), SourcePlan::StoreInvalid(error) if error.id.as_deref() == Some("STORECLIENT_DETAIL_ID_INVALID")));
+}
+
+#[test]
+fn store_actions_resolve_event_and_state_bindings() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["ui"]["children"][0]["on_select"] = json!([
+        {"store.install":{"permission":"catalog","server":"https://store.example","id":{"state":"selected"},"release":{"expr":"$event.release"}}},
+        {"store.remove":{"permission":"catalog","id":{"state":"selected"}}}
+    ]);
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    let state = map(json!({"selected":"notes"}));
+    let empty = BTreeMap::new();
+    let event = json!({"release":2});
+    let env = Env { state: &state, data: &empty, data_meta: &empty, storage: &empty, storage_meta: &empty, apps: None, event: &event, item: &Value::Null, modifiers: None };
+    assert_eq!(app.action_step("/ui/children/0/on_select", 0, &env).unwrap(), Step::StoreInstall { permission:"catalog".into(), server:json!("https://store.example"), id:json!("notes"), release:json!(2.0) });
+    assert_eq!(app.action_step("/ui/children/0/on_select", 1, &env).unwrap(), Step::StoreRemove { permission:"catalog".into(), id:json!("notes") });
+}
+
+#[test]
+fn apps_expression_only_recalculates_the_selected_binding() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["ui"]["children"][1]["value"] = json!({"expr":"$count($apps)"});
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    let apps = vec![serde_json::from_value(json!({"id":"notes","name":"메모","version":1,"origin":null,"installed_version":null,"modified":false,"icon":null})).unwrap()];
+    let selected = app.binding_dependencies().iter().filter(|b| b.apps).map(|b| b.pointer.clone()).collect();
+    let mut evaluated = Vec::new();
+    let values = app.evaluate_profiled(&BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), Some(&apps), &BTreeMap::new(), Some(&selected), &mut |binding, _| evaluated.push(binding.pointer.clone()));
+    assert_eq!(evaluated, vec!["/ui/children/1/value"]);
+    assert!(matches!(&values["/ui/children/1/value"], BindingValue::Ready { value, .. } if value.as_f64() == Some(1.0)));
+    assert!(!kaleidoscope_contract::data::apps_ref("'$apps' & $apps_extra /* $apps */"));
+}
+
+#[test]
 fn worker_action_evaluates_arguments_in_event_context() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["ui"]["children"][0]["on_select"] =
@@ -42,6 +95,7 @@ fn worker_action_evaluates_arguments_in_event_context() {
         data_meta: &empty,
         storage: &empty,
         storage_meta: &empty,
+        apps: None,
         event: &event,
         item: &item,
         modifiers: None,
@@ -78,6 +132,7 @@ fn set_storage_resolves_collection_doc_from_window_state() {
         data_meta: &empty,
         storage: &empty,
         storage_meta: &empty,
+        apps: None,
         event: &event,
         item: &item,
         modifiers: None,
@@ -265,6 +320,7 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
         data_meta: &BTreeMap::new(),
         storage: &BTreeMap::new(),
         storage_meta: &BTreeMap::new(),
+        apps: None,
         event: &event,
         item: &item,
         modifiers: None,
@@ -305,6 +361,7 @@ fn explicit_null_differs_from_missing_value() {
         data_meta: &BTreeMap::new(),
         storage: &BTreeMap::new(),
         storage_meta: &BTreeMap::new(),
+        apps: None,
         event: &event,
         item: &item,
         modifiers: None,
@@ -376,6 +433,7 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
         data_meta: &BTreeMap::new(),
         storage: &storage,
         storage_meta: &storage_meta,
+        apps: None,
         event: &event,
         item: &item,
         modifiers: None,

@@ -29,6 +29,8 @@ pub(super) struct PreviewArgs {
     pub(super) workspace_id: Option<String>,
     /// 기기 원천이나 relay 원천에 대신 넣을 표본 값.
     data: Option<BTreeMap<String, Value>>,
+    /// 스토어 권한 앱의 $apps 식에 사용할 설치 앱 표본. 생략하면 빈 목록입니다.
+    apps: Option<Vec<kaleidoscope_contract::store::InstalledAppValue>>,
     /// 결과 값 하나를 표시할 최대 글자 수(기본 4000, 최대 20000).
     #[schemars(range(min = 1, max = 20000))]
     max_chars: Option<usize>,
@@ -46,6 +48,7 @@ impl McpServer {
             window_id,
             workspace_id,
             data: samples,
+            apps,
             max_chars,
         } = args;
         let builtin_app_id = app_id
@@ -129,6 +132,8 @@ impl McpServer {
         };
 
         let samples = samples.unwrap_or_default();
+        let apps = apps.unwrap_or_default();
+        let apps = definition.permissions.iter().any(|p| matches!(p, PermissionDecl::Store { .. })).then_some(apps.as_slice());
         let compiled = CompiledApp::compile(&definition);
         let missing_connections = match self.state.missing_app_connections(&definition) {
             Ok(connections) => connections,
@@ -170,12 +175,13 @@ impl McpServer {
                 statuses.insert(name.clone(), status);
                 continue;
             }
-            match compiled.plan_source_with_data_and_storage(
+            match compiled.plan_source_with_apps(
                 name,
                 &state,
                 &data,
                 &storage,
                 &storage_meta,
+                apps,
             ) {
                 SourcePlan::Idle => {
                     statuses.insert(name.clone(), SourceStatus::Idle {});
@@ -186,7 +192,8 @@ impl McpServer {
                         kaleidoscope_contract::errors::DATA_SOURCE_PLAN_INVALID(name, message);
                     preview_failure(&mut statuses, &mut source_results, name, error, None);
                 }
-                SourcePlan::File { .. } | SourcePlan::Folder { .. } => {
+                SourcePlan::StoreInvalid(error) => preview_failure(&mut statuses, &mut source_results, name, error, None),
+                SourcePlan::File { .. } | SourcePlan::Folder { .. } | SourcePlan::StoreIndex { .. } | SourcePlan::StoreApp { .. } => {
                     statuses.insert(name.clone(), SourceStatus::Idle {});
                     source_results.insert(name.clone(), json!({"state":"idle"}));
                     notes.push(format!(
@@ -442,14 +449,16 @@ impl McpServer {
             };
             (name.clone(), value)
         }).collect();
-        let mut evaluated = compiled.evaluate_with_data_meta(
+        let mut evaluated = compiled.evaluate_profiled(
             &state,
             &data,
             &storage,
             &storage_meta,
             &data_meta,
+            apps,
             &statuses,
             None,
+            &mut |_, _| {},
         );
         for (pointer, value) in &mut evaluated {
             if let BindingValue::Failed {

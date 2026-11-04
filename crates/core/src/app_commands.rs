@@ -80,18 +80,17 @@ pub(crate) fn import_registry(state: &mut CoreState, received: RegistryApp) -> b
     if !crate::supported().renders_app(&received.version.definition) {
         return false;
     }
-    if state
-        .shared
-        .apps
-        .iter()
-        .any(|app| app.id == received.app.id && app.current_version == received.app.current_version)
-        && state.shared.app_versions.iter().any(|version| {
+    if state.shared.app_versions.iter().any(|version| {
             version.app_id == received.app.id
                 && version.version == received.app.current_version
                 && version.definition == received.version.definition
         })
     {
-        return false;
+        if let Some(current) = state.shared.apps.iter_mut().find(|app| app.id == received.app.id && app.current_version == received.app.current_version) {
+            if *current == received.app { return false; }
+            *current = received.app;
+            return true;
+        }
     }
 
     let app_id = received.app.id.clone();

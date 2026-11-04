@@ -73,10 +73,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-type Reply = (u16, &'static str, Vec<u8>);
+pub(crate) type Reply = (u16, &'static str, Vec<u8>);
 #[derive(Clone)]
-struct Loopback {
-    files: Arc<Mutex<BTreeMap<String, Reply>>>,
+pub(crate) struct Loopback {
+    pub(crate) files: Arc<Mutex<BTreeMap<String, Reply>>>,
     address: IpAddr,
 }
 impl Transport for Loopback {
@@ -150,7 +150,7 @@ fn sha(bytes: &[u8]) -> String {
 fn entry(bytes: &[u8]) -> Value {
     json!({"sha256":sha(bytes),"bytes":bytes.len()})
 }
-fn fixture() -> (Loopback, Vec<u8>, Vec<u8>) {
+pub(crate) fn fixture() -> (Loopback, Vec<u8>, Vec<u8>) {
     let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>"#.to_vec();
     let mut png = std::io::Cursor::new(Vec::new());
     image::DynamicImage::new_rgba8(1, 1)

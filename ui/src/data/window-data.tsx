@@ -101,7 +101,7 @@ function resolveBindingValue(
   }
 }
 
-function recoveryVisible(snapshot: ShellSnapshot | null, windowId: string) {
+export function recoveryVisible(snapshot: ShellSnapshot | null, windowId: string) {
   if (!snapshot || !isWindowVisible(snapshot, windowId)) return false;
   const window = snapshot.shared.windows.find((item) => item.id === windowId);
   return !!window && !snapshot.shared.windows.some((item) => item.desktop_id === window.desktop_id && !item.minimized && item.maximized && item.z > window.z);
@@ -164,6 +164,7 @@ export class WindowData {
   private shareSequence = 0;
   private dormantPointers = new Set<string>();
   private dormantInstances = new Map<string, Map<object, boolean>>();
+  private dormantListeners = new Set<() => void>();
   private dormantScheduled = false;
   private restarting = false;
   private surfaceGeneration = 0;
@@ -416,6 +417,7 @@ export class WindowData {
     if (this.dormantPointers.has(pointer) === dormant) return;
     if (dormant) this.dormantPointers.add(pointer);
     else this.dormantPointers.delete(pointer);
+    this.dormantListeners.forEach((listener) => listener());
     if (!this.active || this.dormantScheduled) return;
     this.dormantScheduled = true;
     const mount = this.mounts;
@@ -435,6 +437,14 @@ export class WindowData {
     if (dormant === null) group.delete(instance); else group.set(instance, dormant);
     this.setDormant(pointer, [...group.values()].every(Boolean));
     if (!group.size) this.dormantInstances.delete(pointer);
+    this.dormantListeners.forEach((listener) => listener());
+  };
+
+  subscribeDormant = (listener: () => void) => { this.dormantListeners.add(listener); return () => this.dormantListeners.delete(listener); };
+  isDormant = (pointer: string, instance?: object) => {
+    const contains = (prefix: string) => pointer === prefix || pointer.startsWith(`${prefix}/`);
+    if ([...this.dormantPointers].some(contains)) return true;
+    return instance !== undefined && [...this.dormantInstances].some(([prefix, group]) => contains(prefix) && group.get(instance) === true);
   };
 
   attachSurface = (id: string, canvas: OffscreenCanvas, css_width: number, css_height: number, dpr: number, visible: boolean) => {

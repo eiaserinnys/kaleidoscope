@@ -30,7 +30,7 @@ impl From<CoreError> for StoreFailure {
     }
 }
 
-pub(crate) trait Transport {
+pub(crate) trait Transport: Send + Sync {
     fn get(
         &self,
         origin: &str,
@@ -38,6 +38,11 @@ pub(crate) trait Transport {
         path: &str,
         limit: u64,
     ) -> Result<PublicResponse, PublicHttpError>;
+}
+impl<T: Transport + ?Sized> Transport for std::sync::Arc<T> {
+    fn get(&self, origin: &str, paths: &[String], path: &str, limit: u64) -> Result<PublicResponse, PublicHttpError> {
+        (**self).get(origin, paths, path, limit)
+    }
 }
 pub(crate) struct PublicTransport;
 impl Transport for PublicTransport {

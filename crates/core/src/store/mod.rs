@@ -1,10 +1,11 @@
 //! 정적 스토어의 공개 자료와 설치 전 묶음.
 pub(crate) mod bundle;
 pub(crate) mod fetch;
+pub(crate) mod install;
 mod media;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use kaleidoscope_contract::{data::ResourceMediaRef, errors, CoreError};
 use std::collections::BTreeMap;
@@ -12,6 +13,15 @@ use url::{Host, Url};
 
 pub(crate) use fetch::StoreClient;
 pub(crate) use media::{media_key, read_media};
+
+pub(crate) fn client(inner: &crate::Inner, server: &str) -> Result<StoreClient<std::sync::Arc<dyn fetch::Transport>>, CoreError> {
+    #[cfg(test)]
+    if let Some(transport) = inner.store_transport.lock().unwrap().clone() {
+        return StoreClient::with_transport(server, transport);
+    }
+    let _ = inner;
+    StoreClient::with_transport(server, std::sync::Arc::new(fetch::PublicTransport))
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct StoreUrl {

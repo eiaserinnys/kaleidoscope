@@ -60,6 +60,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             let Some(epoch) = applied else {
                 return false;
             };
+            crate::data_runtime::apps_changed(inner);
             inner.layout_signal.notify();
             if let Some(event) = state_event {
                 inner.emit_state(&event);
@@ -79,6 +80,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             });
             match result {
                 Ok((true, event)) => {
+                    crate::data_runtime::apps_changed(inner);
                     if let Some(event) = event {
                         inner.emit_state(&event);
                     }
@@ -109,6 +111,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             if applied.is_none() {
                 return false;
             }
+            crate::data_runtime::apps_changed(inner);
             if let Some(event) = state_event {
                 inner.emit_state(&event);
             }
