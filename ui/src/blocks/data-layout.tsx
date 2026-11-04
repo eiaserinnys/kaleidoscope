@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
@@ -191,7 +191,14 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
 
 export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
   const children = (items: Block[], name: string) => items.map((child, index) => <div className={`ks-data-toolbar-item${child.type === "input" ? " is-input" : child.type === "text" ? " is-text" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/${name}/${index}`)}</div>);
-  return <div className="ks-data-toolbar"><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
+  const revealFocus = (event: FocusEvent<HTMLDivElement>) => {
+    const track = event.currentTarget;
+    const bounds = track.getBoundingClientRect();
+    const focused = event.target.getBoundingClientRect();
+    if (focused.left < bounds.left) track.scrollLeft += focused.left - bounds.left;
+    else if (focused.right > bounds.right) track.scrollLeft += focused.right - bounds.right;
+  };
+  return <div className="ks-data-toolbar" onFocus={revealFocus}><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
 }
 
 export function SectionBlock({ block, context, pointer }: Props<"section">) {
