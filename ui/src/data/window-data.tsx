@@ -10,6 +10,7 @@ import { ClientRuntime } from "../runtime/client-runtime";
 import { useBlockRenderProbe } from "../render/render-probe";
 import { isWindowVisible, useWindowStateValue } from "./window-state";
 import { itemPath, useItemScope, type ItemScope } from "./item-scope";
+import { trackWindowAction } from "../share/action-context";
 
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
@@ -489,7 +490,10 @@ export class WindowData {
     return resolved.status === "ready" ? resolved.value : null;
   }
 
-  act = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
+  act = (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) =>
+    trackWindowAction(this.windowId, this.actInternal(pointer, event, item, modifiers, scope, options));
+
+  private actInternal = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
     try {
       if (!options?.input) {
         const pending: Promise<void>[] = [];
