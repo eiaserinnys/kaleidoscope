@@ -293,7 +293,8 @@ pub const CONTRACT_VERSION: u32 = 35;
 /// - 31판: `input.spin` 숫자 스핀 단추.
 /// - 32판: 단추 강조 바인딩과 움직이는 그림 아이콘.
 /// - 33판: 입력 선택지와 선택지 설명.
-pub const BLOCK_SET_VERSION: u32 = INPUT_OPTIONS_BLOCK_SET_VERSION;
+/// - 34판: timeline 날짜 눈금과 줄 배치.
+pub const BLOCK_SET_VERSION: u32 = TIMELINE_DATES_BLOCK_SET_VERSION;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
 pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
 pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
@@ -301,6 +302,8 @@ pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
 pub const INPUT_SPIN_BLOCK_SET_VERSION: u32 = 31;
 /// 입력 선택지와 선택지 설명의 첫 블록 세트 판.
 pub const INPUT_OPTIONS_BLOCK_SET_VERSION: u32 = 33;
+/// timeline 날짜 눈금의 첫 블록 세트 판.
+pub const TIMELINE_DATES_BLOCK_SET_VERSION: u32 = 34;
 /// 앱 아이콘 자산 참조의 첫 블록 세트 판.
 pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 /// 분할의 반응형 방향과 반복 간격의 첫 블록 세트 판.
@@ -1273,6 +1276,23 @@ fn skip_default_tabs_keep_mounted(value: &bool) -> bool {
     !*value
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum TimelineScale {
+    Seconds,
+    Dates,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum TimelineLanes {
+    Single,
+    Pack,
+    Each,
+}
+
 /// 블록. 블록 세트 4판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
 ///
 /// 4판 블록의 값 자리는 [`Binding`](리터럴, 창 상태, 식)이고, 이벤트 자리는 [`Actions`]다. 블록이 받는 데이터
@@ -1388,6 +1408,18 @@ pub enum Block {
     Timeline {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        scale: Option<TimelineScale>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        lanes: Option<TimelineLanes>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        today: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        off_days: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         viewport: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1395,8 +1427,12 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         controls: Option<bool>,
-        duration: Binding,
-        position: Binding,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        duration: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        position: Option<Binding>,
         tracks: Binding,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2218,14 +2254,24 @@ enum RawBlock {
         on_pointer: Option<Actions>,
     },
     Timeline {
+        #[serde(default)]
+        scale: Option<TimelineScale>,
+        #[serde(default)]
+        lanes: Option<TimelineLanes>,
+        #[serde(default)]
+        today: Option<bool>,
+        #[serde(default)]
+        off_days: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         viewport: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_viewport: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         controls: Option<bool>,
-        duration: Binding,
-        position: Binding,
+        #[serde(default)]
+        duration: Option<Binding>,
+        #[serde(default)]
+        position: Option<Binding>,
         tracks: Binding,
         #[serde(default)]
         markers: Option<Binding>,
@@ -2935,6 +2981,10 @@ impl From<RawBlock> for Block {
                 on_pointer,
             },
             RawBlock::Timeline {
+                scale,
+                lanes,
+                today,
+                off_days,
                 viewport,
                 on_viewport,
                 controls,
@@ -2950,6 +3000,10 @@ impl From<RawBlock> for Block {
                 on_select,
                 on_edit,
             } => Block::Timeline {
+                scale,
+                lanes,
+                today,
+                off_days,
                 viewport,
                 on_viewport,
                 controls,
@@ -7128,6 +7182,7 @@ mod tests {
             &example("card-board.json").replace(r#""blocks": 4"#, r#""blocks": 3"#),
             "블록 세트 4판",
         );
+
         rejected(
             &example("card-board.json").replace(
                 r#""modules": { "connection": 1 }"#,

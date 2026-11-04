@@ -143,6 +143,12 @@ pub struct TimelineTrack {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub meta: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub image: Option<crate::data::MediaRef>,
     #[serde(default)]
     #[ts(optional, as = "Option<bool>")]
     pub locked: bool,
@@ -170,8 +176,15 @@ pub struct Waveform {
 #[ts(export, export_to = "contract.ts")]
 pub struct TimelineItem {
     pub id: String,
-    pub start: f64,
-    pub end: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub start: Option<TimelineTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub end: Option<TimelineTime>,
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub muted: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub label: Option<String>,
@@ -208,7 +221,7 @@ pub enum Tone {
 #[ts(export, export_to = "contract.ts")]
 pub struct TimelineMarker {
     pub id: String,
-    pub time: f64,
+    pub time: TimelineTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub label: Option<String>,
@@ -244,8 +257,16 @@ pub struct TimelineEdit {
     pub kind: EditKind,
     pub id: String,
     pub track: Option<String>,
-    pub start: f64,
-    pub end: f64,
+    pub start: TimelineTime,
+    pub end: TimelineTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum TimelineTime {
+    Seconds(f64),
+    Date(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -510,10 +531,10 @@ pub struct ClientActionContext {
     #[ts(optional)]
     pub modifiers: Option<EventModifiers>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct TimelineViewport {
-    pub start: f64,
-    pub end: f64,
+    pub start: TimelineTime,
+    pub end: TimelineTime,
 }

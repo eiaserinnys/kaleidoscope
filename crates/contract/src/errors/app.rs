@@ -22,6 +22,97 @@ error_catalog! { ENTRIES;
     APP_INPUT_OPTIONS_ITEM_INVALID(at, index, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "항목이 문자열도 객체도 아님", message: "{at}/options: 입력 선택지 {index}번째가 문자열도 객체도 아닙니다. 받은 값: {received}. 앱 정의의 options 항목을 문자열 또는 객체로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
     APP_INPUT_OPTIONS_KEY_MISSING(at, index, key) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "필수 키 누락", message: "{at}/options: 입력 선택지 {index}번째에 {key} 키가 없습니다. 앱 정의의 options 객체에 이 키를 문자열로 더하세요.", fix: "앱 정의의 options 자료를 고치세요" }
     APP_INPUT_OPTIONS_KEY_NOT_STRING(at, index, key, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "키 값이 문자열이 아님", message: "{at}/options: 입력 선택지 {index}번째의 {key} 키 값이 문자열이 아닙니다. 받은 값: {received}. 앱 정의의 options 자료에서 해당 키를 문자열로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
+    APP_TIMELINE_FIELD_REQUIRED(path, field) {
+        class: InvalidAppDefinition,
+        place: "시간축 필수 필드 검사",
+        cause: "초 단위 시간축의 필수 필드가 없다",
+        message: "{path}: seconds 시간축에 {field}가 없습니다. 앱 정의에 {field}를 지정하세요.",
+        fix: "초 단위 시간축에 필수 필드를 지정하세요"
+    }
+    APP_TIMELINE_SECONDS_FIELD_FORBIDDEN(path, field, value) {
+        class: InvalidAppDefinition,
+        place: "초 단위 시간축 필드 검사",
+        cause: "날짜 전용 필드를 초 단위 시간축에 지정했다",
+        message: "{path}: seconds 시간축에 {field} 값 {value}를 쓸 수 없습니다. 날짜 전용 필드를 제거하세요.",
+        fix: "초 단위 시간축에서 날짜 전용 필드를 제거하세요"
+    }
+    APP_TIMELINE_DATES_FIELD_FORBIDDEN(path, field, value) {
+        class: InvalidAppDefinition,
+        place: "날짜 단위 시간축 필드 검사",
+        cause: "초 전용 필드를 날짜 단위 시간축에 지정했다",
+        message: "{path}: dates 시간축에 {field} 값 {value}를 쓸 수 없습니다. 초 전용 필드를 제거하세요.",
+        fix: "날짜 단위 시간축에서 초 전용 필드를 제거하세요"
+    }
+    APP_TIMELINE_VERSION_REQUIRED(path, version, required) {
+        class: InvalidAppDefinition,
+        place: "시간축 날짜 필드 판 검사",
+        cause: "날짜 필드에 필요한 블록 세트 판이 낮다",
+        message: "{path}: 블록 세트 {version}판은 시간축 날짜 필드를 지원하지 않습니다. requires.blocks를 {required} 이상으로 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 지정하세요"
+    }
+    APP_TIMELINE_ITEM_DATE_INVALID(path, field, value) {
+        class: InvalidAppDefinition,
+        place: "시간축 항목 날짜 검사",
+        cause: "항목 날짜가 유효한 달력 날짜가 아니다",
+        message: "{path}: 항목 {field} 값 {value}는 올바른 날짜가 아닙니다. YYYY-MM-DD 형식의 실제 날짜로 고치세요.",
+        fix: "항목 날짜를 실제 달력 날짜로 지정하세요"
+    }
+    APP_TIMELINE_ITEM_DATE_PAIR_INCOMPLETE(path, id, missing) {
+        class: InvalidAppDefinition,
+        place: "시간축 항목 날짜 쌍 검사",
+        cause: "항목의 시작일과 끝날 중 하나만 있다",
+        message: "{path}: 항목 {id}에 {missing}이 없습니다. 시작일과 끝날을 둘 다 지정하거나 둘 다 비우세요.",
+        fix: "항목의 시작일과 끝날을 함께 지정하세요"
+    }
+    APP_TIMELINE_ITEM_DATE_REVERSED(path, id, start, end) {
+        class: InvalidAppDefinition,
+        place: "시간축 항목 날짜 순서 검사",
+        cause: "항목 시작일이 끝날보다 늦다",
+        message: "{path}: 항목 {id}의 시작일 {start}이 끝날 {end}보다 늦습니다. 날짜 순서를 고치세요.",
+        fix: "항목 시작일을 끝날 이전으로 고치세요"
+    }
+    APP_TIMELINE_ITEM_SECONDS_INVALID(path, id, start, end) {
+        class: InvalidAppDefinition,
+        place: "시간축 항목 초 검사",
+        cause: "초 단위 항목의 시작과 끝이 숫자가 아니다",
+        message: "{path}: 항목 {id}의 start {start}, end {end}는 초 단위 숫자여야 합니다. start와 end를 숫자로 고치세요.",
+        fix: "항목 시작과 끝을 초 단위 숫자로 지정하세요"
+    }
+    APP_TIMELINE_MARKER_DATE_INVALID(path, value) {
+        class: InvalidAppDefinition,
+        place: "시간축 마커 날짜 검사",
+        cause: "마커 날짜가 유효한 달력 날짜가 아니다",
+        message: "{path}: 마커 날짜 {value}가 올바르지 않습니다. YYYY-MM-DD 형식의 실제 날짜로 고치세요.",
+        fix: "마커 날짜를 실제 달력 날짜로 지정하세요"
+    }
+    APP_TIMELINE_MARKER_SECONDS_INVALID(path, value) {
+        class: InvalidAppDefinition,
+        place: "시간축 마커 초 검사",
+        cause: "초 단위 마커가 숫자가 아니다",
+        message: "{path}: 마커 시간 {value}는 초 단위 숫자가 아닙니다. time을 숫자로 고치세요.",
+        fix: "마커 시간을 초 단위 숫자로 지정하세요"
+    }
+    APP_TIMELINE_OFF_DAY_INVALID(path, value) {
+        class: InvalidAppDefinition,
+        place: "시간축 쉬는 날 검사",
+        cause: "쉬는 날이 유효한 달력 날짜가 아니다",
+        message: "{path}: off_days 값 {value}가 올바르지 않습니다. YYYY-MM-DD 형식의 실제 날짜 목록으로 고치세요.",
+        fix: "쉬는 날을 실제 날짜 목록으로 지정하세요"
+    }
+    APP_TIMELINE_VIEWPORT_DATE_INVALID(path, field, value) {
+        class: InvalidAppDefinition,
+        place: "시간축 뷰포트 날짜 검사",
+        cause: "뷰포트 날짜가 유효한 달력 날짜가 아니다",
+        message: "{path}: viewport.{field} 값 {value}가 올바르지 않습니다. YYYY-MM-DD 형식의 실제 날짜로 고치세요.",
+        fix: "뷰포트 날짜를 실제 달력 날짜로 지정하세요"
+    }
+    APP_TIMELINE_VIEWPORT_DATE_REVERSED(path, start, end) {
+        class: InvalidAppDefinition,
+        place: "시간축 뷰포트 날짜 순서 검사",
+        cause: "뷰포트 시작일이 끝날보다 늦다",
+        message: "{path}: viewport 시작일 {start}이 끝날 {end}보다 늦습니다. 날짜 순서를 고치세요.",
+        fix: "뷰포트 시작일을 끝날 이전으로 고치세요"
+    }
     APP_ICON_VERSION_INVALID(app_id, asset, version) {
         class: InvalidAppDefinition,
         place: "앱 아이콘 자산 판 검사",

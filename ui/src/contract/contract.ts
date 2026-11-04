@@ -285,7 +285,7 @@ max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: 
 /**
  * (19판) 참이면 표준 로딩 표현을 보인다.
  */
-loading?: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, show_value?: boolean, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
+loading?: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", scale?: TimelineScale, lanes?: TimelineLanes, today?: boolean, off_days?: Binding, viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration?: Binding, position?: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, show_value?: boolean, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
 /**
  * row 분할의 자기 폭이 이 값보다 작으면 column으로 놓는다. 0은 쓸 수 없다.
  */
@@ -1425,15 +1425,21 @@ export type ThreadRef = { id: string, title: string, created_at: string, archive
 
 export type ThreadSnapshot = { cursor: string, busy: boolean, tool: string | null, stream_id: string | null, text: string | null, items: Array<ConversationItem>, };
 
-export type TimelineEdit = { phase: EditPhase, kind: EditKind, id: string, track: string | null, start: number, end: number, };
+export type TimelineEdit = { phase: EditPhase, kind: EditKind, id: string, track: string | null, start: TimelineTime, end: TimelineTime, };
 
-export type TimelineItem = { id: string, start: number, end: number, label?: string, tone?: Tone, series?: number, movable?: boolean, resizable?: boolean, resize_start_only?: boolean, };
+export type TimelineItem = { id: string, start?: TimelineTime, end?: TimelineTime, muted?: boolean, label?: string, tone?: Tone, series?: number, movable?: boolean, resizable?: boolean, resize_start_only?: boolean, };
 
-export type TimelineMarker = { id: string, time: number, label?: string, movable?: boolean, };
+export type TimelineLanes = "single" | "pack" | "each";
 
-export type TimelineTrack = { id: string, label?: string, locked?: boolean, items: Array<TimelineItem>, waveform?: Waveform, };
+export type TimelineMarker = { id: string, time: TimelineTime, label?: string, movable?: boolean, };
 
-export type TimelineViewport = { start: number, end: number, };
+export type TimelineScale = "seconds" | "dates";
+
+export type TimelineTime = number | string;
+
+export type TimelineTrack = { id: string, label?: string, meta?: string, image?: MediaRef, locked?: boolean, items: Array<TimelineItem>, waveform?: Waveform, };
+
+export type TimelineViewport = { start: TimelineTime, end: TimelineTime, };
 
 export type Tone = "neutral" | "accent" | "success" | "warning" | "danger";
 

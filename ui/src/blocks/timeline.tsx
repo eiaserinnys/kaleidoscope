@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import type { Actions, Block, EventModifiers, TimelineViewport } from "../contract/contract";
+import type { Actions, Block, EventModifiers } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
@@ -12,6 +12,7 @@ import { capturePointer } from "../share/pointer-capture";
 import { eventModifiers } from "../runtime/shortcuts";
 import { clockPosition, isClock } from "../data/clock";
 import type { BlockContext } from "./block-context";
+import { TimelineDatesBlock } from "./timeline-dates";
 
 export { clockPosition } from "../data/clock";
 
@@ -22,6 +23,8 @@ type Marker = { id: string; time: number; label?: string; movable?: boolean };
 type Edit = { phase: "preview" | "commit" | "cancel"; kind: "move" | "resize_start" | "resize_end" | "move_marker"; id: string; track: string | null; start: number; end: number };
 type Gesture = { pointerId: number; x: number; width: number; original: Edit; current: Edit };
 type TimelineData = Extract<Block, { type: "timeline" }>;
+type SecondsTimelineData = TimelineData & Required<Pick<TimelineData, "duration" | "position">>;
+type SecondsViewport = { start: number; end: number };
 const LEGACY_RULER_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60];
 const RULER_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 14400, 21600, 28800, 43200, 86400];
 
@@ -49,24 +52,24 @@ export function rulerTime(seconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${(seconds - minutes * 60).toFixed(1).padStart(4, "0")}`;
 }
 
-function readViewport(value: unknown): TimelineViewport | null {
+function readViewport(value: unknown): SecondsViewport | null {
   if (!value || typeof value !== "object" || Array.isArray(value) || !("start" in value) || !("end" in value)) return null;
   const { start, end } = value as { start: unknown; end: unknown };
   return typeof start === "number" && Number.isFinite(start) && typeof end === "number" && Number.isFinite(end) && end > start ? { start, end } : null;
 }
 
-function clampViewport(value: TimelineViewport, duration: number): TimelineViewport {
+function clampViewport(value: SecondsViewport, duration: number): SecondsViewport {
   if (duration <= 0) return { start: 0, end: 0 };
   const span = Math.max(Math.min(2, duration), Math.min(duration, value.end - value.start));
   const start = Math.max(0, Math.min(duration - span, value.start));
   return { start, end: start + span };
 }
 
-function sameViewport(left: TimelineViewport | null, right: TimelineViewport | null): boolean {
+function sameViewport(left: SecondsViewport | null, right: SecondsViewport | null): boolean {
   return left === right || (!!left && !!right && left.start === right.start && left.end === right.end);
 }
 
-function zoomViewport(viewport: TimelineViewport, duration: number, factor: number, fraction: number, anchorTime: number): TimelineViewport {
+function zoomViewport(viewport: SecondsViewport, duration: number, factor: number, fraction: number, anchorTime: number): SecondsViewport {
   if (duration <= 0) return { start: 0, end: 0 };
   const currentSpan = viewport.end - viewport.start;
   const maxZoom = Math.max(1, duration / 2);
@@ -82,6 +85,12 @@ function isClientAction(actions: Actions | undefined): boolean {
 }
 
 export function TimelineBlock({ block, pointer, context }: { block: TimelineData; pointer: string; context: BlockContext }) {
+  return block.scale === "dates"
+    ? <TimelineDatesBlock block={block} pointer={pointer} context={context} />
+    : <TimelineSecondsBlock block={block as SecondsTimelineData} pointer={pointer} context={context} />;
+}
+
+function TimelineSecondsBlock({ block, pointer, context }: { block: SecondsTimelineData; pointer: string; context: BlockContext }) {
   const data = useWindowData();
   const visible = useWindowVisible(context);
   const serialSeek = useMemo(() => createSerialSend((value: number) => data.act(`${pointer}/on_seek`, value)), [data, pointer]);
@@ -96,10 +105,10 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const root = useRef<HTMLDivElement>(null), body = useRef<HTMLDivElement>(null), playhead = useRef<HTMLDivElement>(null), ruler = useRef<HTMLDivElement>(null), scroll = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null), previewFrame = useRef<number | null>(null), pendingPreview = useRef<{ edit: Edit; modifiers: EventModifiers } | null>(null);
   const seekFrame = useRef<number | null>(null), pendingSeek = useRef<number | null>(null);
-  const viewportFrame = useRef<number | null>(null), pendingViewport = useRef<TimelineViewport | null>(null);
+  const viewportFrame = useRef<number | null>(null), pendingViewport = useRef<SecondsViewport | null>(null);
   const scrollHandler = useRef<(() => void) | null>(null);
   const wheelHandler = useRef<((event: globalThis.WheelEvent) => void) | null>(null);
-  const [localViewport, setLocalViewport] = useState<TimelineViewport | null>(null), [draftViewport, setDraftViewport] = useState<TimelineViewport | null>(null), [preview, setPreview] = useState<Edit | null>(null);
+  const [localViewport, setLocalViewport] = useState<SecondsViewport | null>(null), [draftViewport, setDraftViewport] = useState<SecondsViewport | null>(null), [preview, setPreview] = useState<Edit | null>(null);
   const seconds = duration.status === "ready" && typeof duration.value === "number" && Number.isFinite(duration.value) ? Math.max(0, duration.value) : 0;
   const trackData = tracks.status === "ready" && Array.isArray(tracks.value) ? tracks.value.filter((v): v is unknown & Track => !!v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string" && Array.isArray(v.items)) : [];
   const markerData = markers.status === "ready" && Array.isArray(markers.value) ? markers.value.filter((v): v is unknown & Marker => !!v && typeof v === "object" && !Array.isArray(v) && typeof v.id === "string" && typeof v.time === "number") : [];
@@ -110,14 +119,14 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
   const clock = isClock(rawPosition) ? rawPosition : null;
   const hasViewportBinding = block.viewport !== undefined;
   const boundViewport = hasViewportBinding && viewportBinding.status === "ready" ? readViewport(viewportBinding.value) : null;
-  const latestBoundViewport = useRef<TimelineViewport | null>(boundViewport);
+  const latestBoundViewport = useRef<SecondsViewport | null>(boundViewport);
   latestBoundViewport.current = boundViewport;
-  const fullViewport: TimelineViewport = { start: 0, end: seconds };
+  const fullViewport: SecondsViewport = { start: 0, end: seconds };
   const requestedViewport = hasViewportBinding ? draftViewport ?? boundViewport ?? fullViewport : localViewport ?? fullViewport;
   const viewportRange = clampViewport(requestedViewport, seconds);
   const currentViewport = useRef(viewportRange);
   currentViewport.current = viewportRange;
-  const draftViewportRef = useRef<TimelineViewport | null>(draftViewport);
+  const draftViewportRef = useRef<SecondsViewport | null>(draftViewport);
   draftViewportRef.current = draftViewport;
   const viewportSpan = Math.max(0.001, viewportRange.end - viewportRange.start);
   const zoom = seconds > 0 ? seconds / viewportSpan : 1;
@@ -157,7 +166,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     if (measure) observer?.observe(measure);
     return () => { observer?.disconnect(); scroll.current = null; };
   }, [seconds, zoom, viewportControls]);
-  const sendViewport = useMemo(() => createSerialSend(async (next: TimelineViewport) => {
+  const sendViewport = useMemo(() => createSerialSend(async (next: SecondsViewport) => {
     const accepted = await data.act(`${pointer}/on_viewport`, next);
     if (!accepted && sameViewport(draftViewportRef.current, next)) {
       const fallback = latestBoundViewport.current ?? fullViewport;
@@ -174,7 +183,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     if (!next) return;
     sendViewport(next, { coalesce: true });
   };
-  const changeViewport = (next: TimelineViewport) => {
+  const changeViewport = (next: SecondsViewport) => {
     const normalized = clampViewport(next, seconds);
     if (!hasViewportBinding) {
       if (sameViewport(currentViewport.current, normalized)) return;
@@ -190,7 +199,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
     pendingViewport.current = normalized;
     if (viewportFrame.current === null) viewportFrame.current = requestAnimationFrame(flushViewport);
   };
-  const viewportFromScroll = (): TimelineViewport | null => {
+  const viewportFromScroll = (): SecondsViewport | null => {
     const scroller = scroll.current, content = body.current;
     const contentWidth = content?.getBoundingClientRect().width ?? 0;
     if (!scroller || !content || contentWidth <= 0 || scroller.clientWidth <= 0 || seconds <= 0) return null;

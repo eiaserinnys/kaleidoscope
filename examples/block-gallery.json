@@ -20,7 +20,8 @@
     "amount": 1.5,
     "picture": null,
     "sound": null,
-    "config": null
+    "config": null,
+    "timeline_selection": null
   },
   "sources": {
     "pictures": { "kind": "folder", "permission": "media", "recursive": true, "extensions": ["png", "jpg", "jpeg", "webp", "gif"] },
@@ -212,6 +213,47 @@
               ],
               "template": { "type": "button", "variant": "chip", "label": { "item": "label" }, "description": { "item": "description" }, "preview": { "type": "image", "src": { "state": "picture" } }, "on_click": [{ "set_state": "count", "value": 0 }] }
             }
+          ]
+        }
+      },
+      {
+        "label": "일정",
+        "child": {
+          "type": "timeline",
+          "scale": "dates",
+          "lanes": "each",
+          "controls": true,
+          "selection": { "state": "timeline_selection" },
+          "on_select": { "set_state": "timeline_selection" },
+          "off_days": ["2026-11-05", "2026-12-25"],
+          "markers": [
+            { "id": "m1", "time": "2026-11-13", "label": "검토" },
+            { "id": "m2", "time": "2026-11-27", "label": "공유" },
+            { "id": "m3", "time": "2026-12-18", "label": "마감" }
+          ],
+          "tracks": [
+            { "id": "a", "label": "기획", "meta": "3건", "image": { "permission": "media", "path": "landscape.png" }, "items": [
+              { "id": "a1", "label": "범위 정리", "start": "2026-01-05", "end": "2026-01-16", "tone": "accent", "muted": true },
+              { "id": "a2", "label": "일정 검토", "start": "2026-11-09", "end": "2026-11-20", "tone": "warning" },
+              { "id": "a3", "label": "추가 검토" }
+            ] },
+            { "id": "b", "label": "화면", "meta": "2건", "items": [
+              { "id": "b1", "label": "화면 구성", "start": "2026-11-09", "end": "2026-11-27", "tone": "accent" },
+              { "id": "b2", "label": "세부 화면", "start": "2026-11-23", "end": "2026-12-04" }
+            ] },
+            { "id": "c", "label": "자료", "meta": "2건", "items": [
+              { "id": "c1", "label": "자료 수집", "start": "2026-11-04", "end": "2026-11-16", "tone": "success" },
+              { "id": "c2", "label": "자료 검토", "start": "2026-11-17", "end": "2026-11-30" }
+            ] },
+            { "id": "d", "label": "구현", "items": [{ "id": "d1", "label": "첫 구현", "start": "2026-11-12", "end": "2026-12-02", "tone": "accent" }] },
+            { "id": "e", "label": "연결", "items": [{ "id": "e1", "label": "연결 시험", "start": "2026-11-18", "end": "2026-12-08", "tone": "warning" }] },
+            { "id": "f", "label": "검증", "items": [{ "id": "f1", "label": "기능 검증", "start": "2026-11-23", "end": "2026-12-10" }] },
+            { "id": "g", "label": "기록", "items": [{ "id": "g1", "label": "문서 정리", "start": "2026-11-30", "end": "2026-12-11" }] },
+            { "id": "h", "label": "품질", "items": [{ "id": "h1", "label": "오류 확인", "start": "2026-12-01", "end": "2026-12-14", "tone": "danger" }] },
+            { "id": "i", "label": "운영", "items": [{ "id": "i1", "label": "운영 준비", "start": "2026-12-04", "end": "2026-12-15" }] },
+            { "id": "j", "label": "공유", "items": [{ "id": "j1", "label": "공유 자료", "start": "2026-12-08", "end": "2026-12-16" }] },
+            { "id": "k", "label": "최종 검토", "items": [{ "id": "k1", "label": "결과 검토", "start": "2026-12-14", "end": "2026-12-18", "tone": "success" }] },
+            { "id": "l", "label": "후속", "items": [{ "id": "l1", "label": "후속 일정" }] }
           ]
         }
       },

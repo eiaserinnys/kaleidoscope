@@ -1,0 +1,40 @@
+.ks-timeline-dates { flex: 1 1 auto; height: 100%; }
+.ks-dates-scroll { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; cursor: grab; }
+.ks-dates-scroll.is-panning { cursor: grabbing; }
+.ks-dates-measure { position: absolute; visibility: hidden; pointer-events: none; white-space: nowrap; font-size: var(--ks-type-meta); }
+.ks-dates-row-measure { height: calc(var(--ks-control-height) * 1.25); }
+.ks-dates-header { position: sticky; top: 0; z-index: 5; height: calc(var(--ks-control-height) * 3); background: var(--ks-color-surface-solid); }
+.ks-dates-corner { position: sticky; z-index: 7; left: 0; display: flex; align-items: center; gap: var(--ks-space-1); box-sizing: border-box; width: clamp(calc(var(--ks-space-6) * 4), 28cqw, calc(var(--ks-space-6) * 7)); height: 100%; padding-inline: var(--ks-space-3); background: var(--ks-color-surface-solid); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-dates-corner .ks-icon-button { flex: 0 0 auto; }
+.ks-dates-axis { position: absolute; top: 0; height: 100%; font-size: var(--ks-type-meta); }
+.ks-dates-months, .ks-dates-ticks, .ks-dates-markers { position: relative; height: var(--ks-control-height); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-dates-month { position: absolute; top: 0; bottom: 0; }
+.ks-dates-month > span { position: sticky; display: inline-flex; align-items: center; height: 100%; padding-inline: var(--ks-space-1); white-space: nowrap; }
+.ks-dates-ticks > span, .ks-dates-markers > span { position: absolute; display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; white-space: nowrap; }
+.ks-dates-ticks .is-weekend { color: var(--ks-color-muted); }
+.ks-dates-ticks .is-off { color: var(--ks-color-danger); }
+.ks-dates-markers > span { height: auto; padding: var(--ks-space-1); background: var(--ks-color-surface-raised); border-radius: var(--ks-radius-small); }
+.ks-dates-markers > .is-today { color: var(--ks-color-accent); }
+.ks-dates-body { position: relative; }
+.ks-dates-background { position: absolute; top: 0; bottom: 0; pointer-events: none; }
+.ks-dates-background > span { position: absolute; top: 0; bottom: 0; }
+.ks-dates-background .is-off { background: var(--ks-color-hover); }
+.ks-dates-background .is-week, .ks-dates-background .is-month { border-left: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-dates-background .is-marker { border-left: var(--ks-line-width) dashed var(--ks-color-border); }
+.ks-dates-background .is-today { width: var(--ks-line-width); background: var(--ks-color-accent); }
+.ks-dates-track { position: absolute; left: 0; border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-dates-track-header { position: sticky; z-index: 4; left: 0; height: calc(var(--ks-control-height) * 1.25); background: var(--ks-color-surface-solid); }
+.ks-dates-track-name { display: flex; align-items: center; box-sizing: border-box; gap: var(--ks-space-3); height: 100%; min-width: 0; padding-inline: var(--ks-space-3); }
+.ks-dates-track-name .ks-list-content { flex: 1 1 auto; min-width: 0; }
+.ks-dates-track-name .ks-list-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-dates-track-name > .ks-view-meta { flex: 0 0 auto; }
+.ks-dates-track-rows { position: absolute; top: 0; bottom: 0; }
+.ks-dates-row { position: absolute; left: 0; right: 0; border-bottom: var(--ks-line-width) dashed var(--ks-color-border); }
+.ks-dates-row:last-child { border-bottom: 0; }
+.ks-dates-row .ks-timeline-label { text-overflow: ellipsis; }
+.ks-dates-row .ks-timeline-item.is-each { overflow: visible; }
+.ks-dates-row .ks-timeline-item.is-each .ks-timeline-label { overflow: visible; }
+.ks-dates-row .ks-timeline-item.is-muted { opacity: .56; }
+.ks-dates-undated { position: sticky; left: clamp(calc(var(--ks-space-6) * 4), 28cqw, calc(var(--ks-space-6) * 7)); top: var(--ks-space-1); display: inline-flex; align-items: center; gap: var(--ks-space-1); max-width: calc(100% - var(--ks-space-3)); height: calc(100% - var(--ks-space-2)); padding-inline: var(--ks-space-2); overflow: hidden; border: var(--ks-line-width) dashed var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); color: inherit; white-space: nowrap; text-overflow: ellipsis; }
+.ks-dates-undated > span { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
+.ks-dates-empty { position: absolute; right: 0; }
