@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 mod files_write;
+mod realtime;
 #[cfg(windows)]
 mod folder_drag;
 #[cfg(windows)]
@@ -29,6 +30,7 @@ enum ScenarioKind {
     ShareIsolate,
     Update,
     FilesWrite,
+    Realtime,
 }
 
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
@@ -37,6 +39,7 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
         Some("share-isolate") => ScenarioKind::ShareIsolate,
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("files-write") => ScenarioKind::FilesWrite,
+        Some("realtime") => ScenarioKind::Realtime,
         _ => ScenarioKind::WebView,
     }
 }
@@ -66,6 +69,11 @@ pub(crate) fn setting(name: &str) -> Option<std::ffi::OsString> {
 
 pub(crate) fn observe_ui(request: &CoreRequest) {
     ui::observe(request);
+    realtime::observe(request);
+}
+
+pub(crate) fn observe_bytes(operation: &str) {
+    realtime::observe_bytes(operation);
 }
 
 pub(crate) fn complete_ui(request: &CoreRequest, elapsed_ms: u128) {
@@ -511,6 +519,7 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 #[cfg(windows)]
                 ScenarioKind::ShareIsolate => share_isolate::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
+                ScenarioKind::Realtime => realtime::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::FilesWrite => match setting("PICK_FOLDER") {
                     Some(folder) => {
@@ -542,6 +551,7 @@ mod tests {
     #[test]
     fn scenario_setting_selects_file_and_update_scenarios() {
         assert_eq!(scenario_kind(Some("files-write")), ScenarioKind::FilesWrite);
+        assert_eq!(scenario_kind(Some("realtime")), ScenarioKind::Realtime);
         assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
         #[cfg(windows)]
         assert_eq!(

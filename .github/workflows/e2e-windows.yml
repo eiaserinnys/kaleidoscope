@@ -14,6 +14,7 @@ on:
       - 'crates/acp-test-agent/**'
       - 'crates/core/**'
       - 'crates/contract/**'
+      - 'ui/e2e/fixtures/realtime/**'
       - 'Cargo.lock'
 
 jobs:
@@ -43,7 +44,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: target/release/kaleidoscope-app.exe
-          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'pnpm-lock.yaml', 'examples/**') }}
+          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'ui/e2e/fixtures/realtime/**', 'pnpm-lock.yaml', 'examples/**') }}
       - if: steps.executable-cache.outputs.cache-hit != 'true'
         run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol,e2e
       - name: 실행 파일 캐시 저장
@@ -207,6 +208,64 @@ jobs:
           } finally {
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
             Stop-Process -Id $recorder.Id -Force -ErrorAction SilentlyContinue
+          }
+      - name: 실시간 연결 판정 자체 시험
+        shell: pwsh
+        run: |
+          rustc --edition 2021 --test app/src-tauri/src/e2e/realtime/checks.rs -o "$env:RUNNER_TEMP/realtime-checks.exe"
+          if ($LASTEXITCODE -ne 0) { throw '실시간 판정 시험 컴파일 실패' }
+          & "$env:RUNNER_TEMP/realtime-checks.exe"
+          if ($LASTEXITCODE -ne 0) { throw '실시간 판정 시험 실패' }
+      - name: 실시간 연결 시나리오 데이터 초기화
+        shell: pwsh
+        run: ./app/e2e-windows/reset-app-data.ps1
+      - name: 실시간 연결 시나리오
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-realtime-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-realtime-localappdata'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/realtime'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-realtime-webview'
+          # Tauri는 APPDATA 환경변수 대신 Known Folder 경로를 읽는다(reset-app-data.ps1과 같다).
+          $config = Get-Content ./app/src-tauri/tauri.conf.json | ConvertFrom-Json
+          $dataDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) $config.identifier
+          New-Item -ItemType Directory -Force $dataDir, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT | Out-Null
+          # 로그인 경로는 로컬 Chromium 시험이 맡고, 여기서는 격리된 시험 토큰만 넣는다.
+          '{"fixture-echo":{"issuer":"http://127.0.0.1","access_token":"fixture-secret"}}' | Set-Content -Encoding utf8NoBOM (Join-Path $dataDir 'logins.json')
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=realtime', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -PassThru
+          try {
+            $captured = @{}
+            $deadline = (Get-Date).AddMinutes(3)
+            while ((Get-Date) -lt $deadline) {
+              foreach ($name in @('01-realtime', '99-realtime-failure')) {
+                $request = Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.request"
+                if ((Test-Path $request) -and -not $captured.ContainsKey($name)) {
+                  $destination = Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.png"
+                  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./app/e2e-windows/capture.ps1 $destination
+                  if ($LASTEXITCODE -ne 0) { throw "실시간 화면 캡처 실패: $name" }
+                  New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.done") | Out-Null
+                  $captured[$name] = $true
+                }
+              }
+              $app.Refresh()
+              if ($app.HasExited) { break }
+              Start-Sleep -Milliseconds 200
+            }
+            $app.Refresh()
+            if (-not $app.HasExited) { throw '실시간 연결 E2E 시간 초과' }
+            $events = @(Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            foreach ($step in @('realtime.roundtrip', 'realtime.csp', 'realtime.minimized', 'realtime.restored', 'realtime.reload', 'complete')) {
+              $check = @($events | Where-Object { $_.step -eq $step })
+              if ($check.Count -ne 1) { throw "실시간 검사 누락 또는 중복: $step" }
+              Write-Host "$step : $($check[0].data | ConvertTo-Json -Compress)"
+            }
+            if ($app.ExitCode -ne 0) { throw "실시간 연결 E2E 실패: $($app.ExitCode)" }
+            if (-not $captured.ContainsKey('01-realtime')) { throw '실시간 연결 캡처 누락' }
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            if (-not $app.WaitForExit(10000)) { throw '실시간 앱 종료 시간 초과' }
+            $app.Dispose()
           }
       - name: 캡처와 로그 보존
         if: always()

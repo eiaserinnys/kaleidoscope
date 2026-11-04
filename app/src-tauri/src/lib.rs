@@ -235,6 +235,8 @@ async fn core_bytes(
             )
             .map(|()| Vec::new()),
         "client.http_read" | "client.blob_put" | "process.write" | "connection.realtime.read" | "connection.realtime.send" => {
+            #[cfg(feature = "e2e")]
+            e2e::observe_bytes(&operation);
             core.client_binary(&operation, &window, &handle, &bytes)
         }
         _ => Err(errors::SHELL_IPC_OPERATION_UNSUPPORTED()),
