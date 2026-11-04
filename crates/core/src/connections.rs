@@ -32,15 +32,25 @@ pub(crate) fn find_connection(inner: &Arc<Inner>, name: &str) -> Option<Connecti
         .cloned()
 }
 
-fn find_ready_connection(inner: &Arc<Inner>, name: &str) -> Option<ConnectionInfo> {
+enum ConnectionLookup {
+    Found(ConnectionInfo),
+    Missing,
+    ServerNotConnected,
+}
+
+fn find_ready_connection(inner: &Arc<Inner>, name: &str) -> ConnectionLookup {
     if let Some(info) = find_connection(inner, name) {
-        return Some(info);
+        return ConnectionLookup::Found(info);
     }
-    crate::startup_readiness::wait(
+    let readiness = crate::startup_readiness::wait(
         inner,
         crate::startup_readiness::WaitFor::ConnectionsSnapshot,
     );
-    find_connection(inner, name)
+    if readiness == crate::startup_readiness::Readiness::Failed {
+        ConnectionLookup::ServerNotConnected
+    } else {
+        find_connection(inner, name).map_or(ConnectionLookup::Missing, ConnectionLookup::Found)
+    }
 }
 
 #[derive(Debug)]
@@ -257,8 +267,15 @@ pub(crate) fn login(
             _ => return Err(errors::CONN_LOGIN_PERMISSION_MISSING(permission)),
         }
     };
-    let info = find_ready_connection(inner, &connection_name)
-        .ok_or_else(|| errors::CONN_LOGIN_CONNECTION_MISSING(&connection_name))?;
+    let info = match find_ready_connection(inner, &connection_name) {
+        ConnectionLookup::Found(info) => info,
+        ConnectionLookup::Missing => {
+            return Err(errors::CONN_LOGIN_CONNECTION_MISSING(&connection_name));
+        }
+        ConnectionLookup::ServerNotConnected => {
+            return Err(errors::CONN_LOGIN_SERVER_NOT_CONNECTED(&connection_name));
+        }
+    };
     if info.kind != ConnectionKind::Oauth {
         return Err(errors::CONN_LOGIN_NOT_OAUTH(&connection_name));
     }
@@ -336,8 +353,15 @@ pub(crate) fn authorize_access(
         }
         (window.app_id.clone(), connection.clone())
     };
-    let info = find_ready_connection(inner, &connection)
-        .ok_or_else(|| errors::CONN_AUTHORIZE_CONNECTION_MISSING(&connection))?;
+    let info = match find_ready_connection(inner, &connection) {
+        ConnectionLookup::Found(info) => info,
+        ConnectionLookup::Missing => {
+            return Err(errors::CONN_AUTHORIZE_CONNECTION_MISSING(&connection));
+        }
+        ConnectionLookup::ServerNotConnected => {
+            return Err(errors::CONN_AUTHORIZE_SERVER_NOT_CONNECTED(&connection));
+        }
+    };
     if !valid_request_path(path)
         || (!info.paths.is_empty() && !info.paths.iter().any(|prefix| path.starts_with(prefix)))
     {

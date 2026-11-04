@@ -426,6 +426,13 @@ error_catalog! { ENTRIES;
         message: "연결 {connection} 설정을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
         fix: "set_connection으로 연결을 등록하세요"
     }
+    CONN_LOGIN_SERVER_NOT_CONNECTED(connection) {
+        class: Server,
+        place: "연결 로그인",
+        cause: "연결 설정을 받아 올 서버에 연결되지 않았다",
+        message: "연결 {connection}의 설정을 받아 올 kaleidoscope 서버에 연결되어 있지 않아 로그인할 수 없습니다. 서버 연결을 확인한 뒤 다시 시도하세요.",
+        fix: "쉘에서 서버 연결을 확인하세요"
+    }
     CONN_LOGIN_NOT_OAUTH(connection) {
         class: InvalidRequest,
         place: "연결 로그인",
@@ -474,6 +481,13 @@ error_catalog! { ENTRIES;
         cause: "앱이 선언한 연결 설정이 없다",
         message: "연결 {connection} 설정을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.",
         fix: "set_connection으로 연결을 등록하세요"
+    }
+    CONN_AUTHORIZE_SERVER_NOT_CONNECTED(connection) {
+        class: Server,
+        place: "연결 권한 확인",
+        cause: "연결 설정을 받아 올 서버에 연결되지 않았다",
+        message: "연결 {connection}의 설정을 받아 올 kaleidoscope 서버에 연결되어 있지 않습니다. 서버 연결을 확인한 뒤 다시 시도하세요.",
+        fix: "쉘에서 서버 연결을 확인하세요"
     }
     CONN_AUTHORIZE_PATH_DENIED(connection) {
         class: PermissionDenied,

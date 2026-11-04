@@ -194,6 +194,75 @@ fn runtime_pending_becomes_failed_on_link_failure() {
 }
 
 #[test]
+fn missing_connection_after_link_failure_reports_server_unavailable() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core_with_client(temp.path(), vec![runtime_app()], &host, registry_client());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "startup-runtime");
+    set_starting(&core);
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    crate::link::set_offline(
+        &core.inner,
+        0,
+        &connected_link_file(),
+        kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED(),
+    );
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    let Some(BindingValue::Failed { id, message, .. }) =
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value")
+    else {
+        panic!("연결 원천이 실패 상태여야 한다");
+    };
+    assert_eq!(id.as_deref(), Some("CONN_AUTHORIZE_SERVER_NOT_CONNECTED"));
+    assert_eq!(message, "연결 example의 설정을 받아 올 kaleidoscope 서버에 연결되어 있지 않습니다. 서버 연결을 확인한 뒤 다시 시도하세요.");
+    let error = crate::connections::login(&core.inner, &window, "api").unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("CONN_LOGIN_SERVER_NOT_CONNECTED"));
+    assert_eq!(error.code, ErrorCode::Server);
+    assert_eq!(error.message, "연결 example의 설정을 받아 올 kaleidoscope 서버에 연결되어 있지 않아 로그인할 수 없습니다. 서버 연결을 확인한 뒤 다시 시도하세요.");
+}
+
+#[test]
+fn empty_connection_snapshot_confirms_missing_connection() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core_with_client(temp.path(), vec![runtime_app()], &host, registry_client());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "startup-runtime");
+    set_starting(&core);
+    core.handle(CoreRequest::DataAttach {
+        window_id: window.clone(),
+        dormant: vec![],
+    })
+    .unwrap();
+    apps(&core);
+    connections(&core, vec![]);
+    wait_until(|| {
+        matches!(
+            crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value"),
+            Some(BindingValue::Failed { .. })
+        )
+    });
+    let Some(BindingValue::Failed { id, .. }) =
+        crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value")
+    else {
+        panic!("연결 원천이 실패 상태여야 한다");
+    };
+    assert_eq!(id.as_deref(), Some("CONN_AUTHORIZE_CONNECTION_MISSING"));
+    let error = crate::connections::login(&core.inner, &window, "api").unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("CONN_LOGIN_CONNECTION_MISSING"));
+}
+
+#[test]
 fn shutdown_releases_a_waiting_command() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
