@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { defaultRangeExtractor, measureElement, observeElementOffset, observeElementRect, useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import type { Badge as BadgeValue, Group } from "../contract/contract";
 import { Badge, isBadge } from "../components/badge";
@@ -27,11 +27,27 @@ export function dateText(value: unknown) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
 }
-export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false, getItemKey?: (index: number) => string | number, viewport?: { element: HTMLDivElement; margin: number } | null) {
+type RowKeys = readonly (readonly (string | number)[])[];
+export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false, getItemKey?: (index: number) => string | number, viewport?: { element: HTMLDivElement; margin: number } | null, rowKeys?: RowKeys) {
   const local = useRef<HTMLDivElement>(null);
   const scroll = supplied ?? local;
   const position = useRef(0);
   const hidden = useRef(false);
+  const previous = useRef<{ keys: RowKeys; virtual: Virtualizer<HTMLDivElement, Element> } | null>(null);
+  // 새 옵션을 가상화기에 넣기 전에 이전 행의 화면 범위를 읽는다.
+  const reset = useMemo(() => {
+    const old = previous.current;
+    if (!rowKeys || !old || old.keys === rowKeys) return false;
+    const before = old.keys.flat();
+    const after = rowKeys.flat();
+    if (before.length === after.length && before.every((key, index) => key === after[index])) return false;
+    const offset = old.virtual.scrollOffset ?? 0;
+    if (offset === 0) return false;
+    const size = horizontal ? old.virtual.scrollRect?.width : old.virtual.scrollRect?.height;
+    const next = new Set(after);
+    return !old.virtual.getVirtualItems().some((row) => row.end > offset && row.start < offset + (size ?? 0)
+      && old.keys[row.index]?.some((key) => next.has(key)));
+  }, [rowKeys]);
   const virtual = useVirtualizer({
     count, getScrollElement: () => viewport?.element ?? scroll.current, estimateSize: () => estimate, overscan: 4, horizontal, getItemKey,
     scrollMargin: viewport?.margin ?? 0,
@@ -61,6 +77,10 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
       callback(rect);
     }),
   });
+  useLayoutEffect(() => {
+    if (rowKeys) previous.current = { keys: rowKeys, virtual };
+    if (reset) { position.current = 0; virtual.scrollToOffset(0); }
+  }, [rowKeys, reset, virtual]);
   return { scroll, virtual };
 }
 export function useRoving<T extends { key: string }>(items: T[], selected: unknown, scroll: RefObject<HTMLDivElement | null>, virtual?: Virtualizer<HTMLDivElement, Element>, rowOf?: (index: number) => number) {

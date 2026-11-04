@@ -162,7 +162,8 @@ function RowTableView({ columns: sourceColumns, rows: sourceRows, initialSort, s
       return sort.desc ? -cmp : cmp;
     });
   }, [sourceRows, sourceColumns, sort, compareRows]);
-  const { scroll, virtual } = useVirtualRows(rows.length, 32);
+  const rowKeys = useMemo(() => rows.map((row) => [row.key]), [rows]);
+  const { scroll, virtual } = useVirtualRows(rows.length, 32, undefined, false, undefined, undefined, rowKeys);
   const roving = useRoving(rows, selected, scroll, virtual);
   keepRovingRow(virtual, roving.focus);
   const virtualRows = virtual.getVirtualItems();
