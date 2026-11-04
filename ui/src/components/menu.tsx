@@ -68,7 +68,8 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
     if (menu && checked) menu.scrollTop = checked.offsetTop - (menu.clientHeight - checked.offsetHeight) / 2;
     const focusTarget = checked && !checked.disabled
       ? checked
-      : itemRefs.current.find((item) => item && !item.disabled);
+      : itemRefs.current.find((item) => item && !item.disabled && !item.classList.contains("ks-menu-item-danger"))
+        ?? itemRefs.current.find((item) => item && !item.disabled);
     if (!owner || !preserveWindowActionFocus(owner)) {
       if (checked) focusTarget?.focus({ preventScroll: true });
       else focusTarget?.focus();

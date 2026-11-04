@@ -116,6 +116,36 @@ describe("app definition renderer", () => {
     return fixture;
   }
 
+  it("포인터로 repeat 줄을 지우면 이웃 줄의 같은 자리에 초점을 둔다", async () => {
+    await focusFixture('<div class="ks-repeat-content"><div><button>첫 행</button><button>첫 해제</button></div><div><button>둘째 행</button><button>둘째 해제</button></div></div>');
+    const removed = screen.getByRole("button", { name: "첫 해제" });
+    fireEvent.pointerDown(removed);
+    removed.focus();
+    removed.parentElement!.remove();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "둘째 해제" })));
+  });
+
+  it("포인터로 가지를 바꾸면 같은 자리의 새 단추에 초점을 둔다", async () => {
+    await focusFixture('<div><button>해제</button></div>');
+    const old = screen.getByRole("button", { name: "해제" });
+    fireEvent.pointerDown(old);
+    old.focus();
+    const next = document.createElement("button");
+    next.textContent = "모두 해제";
+    old.replaceWith(next);
+    await waitFor(() => expect(document.activeElement).toBe(next));
+  });
+
+  it("포인터 복구 대상이 입력이면 입력 대신 창 내용에 초점을 둔다", async () => {
+    const fixture = await focusFixture('<div><button>해제</button><input aria-label="검색" /></div>');
+    const old = screen.getByRole("button", { name: "해제" });
+    fireEvent.pointerDown(old);
+    old.focus();
+    old.remove();
+    await waitFor(() => expect(document.activeElement).toBe(fixture.closest(".ks-app-window-content")));
+    expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true);
+  });
+
   it("실제 목록의 끝 항목과 마지막 항목 삭제를 구분한다", async () => {
     const definition: AppDefinition = {
       id: "focus-empty-list", name: "목록 초점", requires: { blocks: 14, modules: {} }, permissions: [],

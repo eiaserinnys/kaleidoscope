@@ -8,7 +8,7 @@ import type { ShellStore } from "../core/shell-store";
 import type { CoreError, Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
 import { registerAppShortcuts } from "../runtime/shortcuts";
-import { focusRescued } from "../components/focus-rescue";
+import { focusRescued, writableControlSelector } from "../components/focus-rescue";
 import { renderBlock } from "./render-block";
 import * as shellErrors from "../contract/shell-errors";
 
@@ -119,6 +119,21 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       }
       restore = false;
     };
+    const windowContentTarget = () => {
+      const windowContent = content.closest<HTMLElement>(".ks-window-content") ?? content;
+      if (!windowContent.hasAttribute("tabindex")) windowContent.tabIndex = -1;
+      windowContent.classList.add("ks-focus-rescue-empty");
+      windowContent.addEventListener("blur", () => windowContent.classList.remove("ks-focus-rescue-empty"), { once: true });
+      return windowContent;
+    };
+    const nearTarget = () => {
+      for (const { ancestor, controlIndex } of focusPath) {
+        if (!content.contains(ancestor)) continue;
+        const controls = visibleControls(ancestor);
+        if (controls.length) return controls[Math.min(Math.max(controlIndex, 0), controls.length - 1)];
+      }
+      return undefined;
+    };
     const collectionTarget = (changes: MutationRecord[]): HTMLElement | undefined => {
       const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"], [role="table"]')) : undefined;
       if (!collection || !focusedItem || focusedItem.isConnected) return;
@@ -141,24 +156,23 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       const target = visible.find((element) => element.classList.contains("ks-agent-chat-input"))
         ?? visible.filter((element) => Boolean(element.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
       if (target) return target;
-      const windowContent = content.closest<HTMLElement>(".ks-window-content") ?? content;
-      if (!windowContent.hasAttribute("tabindex")) windowContent.tabIndex = -1;
-      windowContent.classList.add("ks-focus-rescue-empty");
-      windowContent.addEventListener("blur", () => windowContent.classList.remove("ks-focus-rescue-empty"), { once: true });
-      return windowContent;
+      return windowContentTarget();
     };
     const observer = new MutationObserver((changes) => {
       const active = document.activeElement;
       const lost = active === document.body || (active instanceof HTMLElement && active.classList.contains("ks-window-content") && scope.contains(active));
       if (focused && !scope.contains(focused)) { focused = null; restore = lost; }
       if (!restore || !lost) return;
-      // 포인터로 시작한 화면 전환에는 키보드 초점 테두리를 만들지 않는다.
-      if (pointer) { restore = false; return; }
       let target = collectionTarget(changes);
-      const visible = visibleControls(content);
-      target ??= visible.find((element) => element.classList.contains("ks-button-emphasis"))
-        ?? visible.find((element) => element.classList.contains("ks-agent-chat-input")) ?? visible[0];
-      if (target) { restore = false; focusRescued(target); }
+      if (pointer) {
+        target ??= nearTarget();
+        if (!target || target.matches(writableControlSelector)) target = windowContentTarget();
+      } else {
+        const visible = visibleControls(content);
+        target ??= visible.find((element) => element.classList.contains("ks-button-emphasis"))
+          ?? visible.find((element) => element.classList.contains("ks-agent-chat-input")) ?? visible[0];
+      }
+      if (target) { restore = false; focusRescued(target, pointer ? { preventScroll: true } : undefined); }
     });
     scope.addEventListener("focusin", onFocus);
     scope.addEventListener("pointerdown", onPointer, true);

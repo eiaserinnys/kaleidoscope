@@ -24,6 +24,15 @@ function setup(ui: Block, state: AppDefinition["state"] = {}) {
 }
 
 const menu = [{ label: "고르기", on_select: { set_state: "choice" } }];
+it.each([true, false])("첫 앱 메뉴 위험 여부 %s에 따라 복사와 첫 초점의 순서를 정한다", async (danger) => {
+  setup({ type: "list", items: [{ key: "a", title: "목록" }], item_menu: [{ label: "동작", danger, on_select: { set_state: "choice" } }] });
+  const row = await screen.findByRole("option", { name: "목록" });
+  row.focus();
+  fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+  const items = await screen.findAllByRole("menuitem");
+  expect(items.map((item) => item.textContent)).toEqual(danger ? ["제목 복사", "동작"] : ["동작", "제목 복사"]);
+  expect(document.activeElement).toBe(items[0]);
+});
 for (const confirm of [false, true]) {
   for (const last of [false, true]) {
     it(`table 삭제 초점: 확인 ${confirm ? "있음" : "없음"}, ${last ? "마지막 하나" : "가운데"} 삭제 뒤 강조 단추를 거치지 않는다`, async () => {

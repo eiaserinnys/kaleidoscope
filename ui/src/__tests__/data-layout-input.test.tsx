@@ -379,11 +379,11 @@ it("traps tab within the dialog and makes the window body and notice inert", asy
   const buttons = dialog.querySelectorAll("button");
   expect(document.querySelector(".ks-data-window-body")?.hasAttribute("inert")).toBe(true);
   expect(document.querySelector(".ks-data-window-notice")?.hasAttribute("inert")).toBe(true);
-  expect(document.activeElement).toBe(buttons[1]);
-  fireEvent.keyDown(document, { key: "Tab" });
   expect(document.activeElement).toBe(buttons[0]);
   fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
   expect(document.activeElement).toBe(buttons[1]);
+  fireEvent.keyDown(document, { key: "Tab" });
+  expect(document.activeElement).toBe(buttons[0]);
   fireEvent.keyDown(document, { key: "Escape" });
   expect(document.activeElement).toBe(opener);
   expect(document.querySelector(".ks-data-window-body")?.hasAttribute("inert")).toBe(false);

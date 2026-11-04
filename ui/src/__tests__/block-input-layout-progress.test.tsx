@@ -32,6 +32,24 @@ function setup(ui: Block, state: Record<string, JsonValue>) {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("입력 블록 확장", () => {
+  it("첫 focus 값이 참이면 맨 위 창의 입력을 선택한다", async () => {
+    setup({ type: "input", value: "검색어", on_change: { set_state: "name" }, focus: true }, { name: "검색어" });
+    const input = await screen.findByRole("textbox") as HTMLInputElement;
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(input.value.length);
+  });
+
+  it("첫 focus 값은 다른 입력에서 쓰는 초점을 빼앗지 않는다", async () => {
+    const other = document.createElement("input");
+    document.body.append(other);
+    other.focus();
+    try {
+      setup({ type: "input", value: "검색어", on_change: { set_state: "name" }, focus: true }, { name: "검색어" });
+      await screen.findAllByRole("textbox");
+      expect(document.activeElement).toBe(other);
+    } finally { other.remove(); }
+  });
   it("숫자 입력을 지정한 자릿수로 보이고 Enter와 이어진 blur에서 한 번 확정한다", async () => {
     const { spy } = setup(
       { type: "input", kind: "number", value: { state: "amount" }, on_change: { set_state: "amount" }, commit: "submit", format: { kind: "decimal", digits: 2 }, min: 0, max: 10, step: 0.05 },

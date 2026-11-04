@@ -5,12 +5,14 @@ import { ownerOf } from "../share/overlay-owner";
 import { preserveWindowActionFocus } from "../share/action-context";
 const rescued = new WeakSet<Element>();
 
-export function focusRescued(element: HTMLElement) {
+export const writableControlSelector = 'textarea:not(:disabled):not([readonly]), input:not(:disabled):not([readonly]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="file"]), select:not(:disabled), [contenteditable]:not([contenteditable="false"])';
+
+export function focusRescued(element: HTMLElement, options?: FocusOptions) {
   const owner = ownerOf(element);
   if (owner && preserveWindowActionFocus(owner)) return;
   rescued.add(element);
   element.addEventListener("blur", () => rescued.delete(element), { once: true });
-  element.focus();
+  element.focus(options);
 }
 
 /** 초점이 아직 사용자 것으로 정해지지 않았는가: 문서 본문이거나 쉘이 대신 옮긴 요소. */
