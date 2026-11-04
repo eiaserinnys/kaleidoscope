@@ -403,6 +403,7 @@ function makeStore(snapshot: ShellSnapshot, calls: CoreRequest[]): ShellStore {
     getError: () => null,
     subscribe: () => () => undefined,
     subscribeEvents: () => () => undefined,
+    getInstallConsent: () => undefined, subscribeInstallConsent: () => () => undefined,
     ready: Promise.resolve(),
     dispose: () => undefined,
   } as unknown as ShellStore;

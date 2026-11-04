@@ -533,3 +533,4 @@
 .ks-window-consent-overlay .ks-dialog-body > * { flex: 0 0 auto; }
 .ks-window-consent-overlay .ks-dialog-actions { flex: 0 0 auto; }
 .ks-window-consent-overlay .ks-process-env { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
+.ks-install-warning { color: var(--ks-color-warning); }

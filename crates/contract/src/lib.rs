@@ -246,7 +246,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 35;
+pub const CONTRACT_VERSION: u32 = 36;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -5728,7 +5728,7 @@ pub enum CoreEvent {
         update: app_storage::StorageUpdate,
     },
     #[serde(rename = "app.install_permission")]
-    AppInstallPermission { window_id: String, request_id: String, app_name: String, release: u32, digest: String, definition: AppDefinition },
+    AppInstallPermission { window_id: String, request_id: String, app_name: String, release: u32, store_url: String, digest: String, definition: AppDefinition },
     /// 쉘이 사용자에게 실행 허용을 묻는다.
     #[serde(rename = "process.permission")]
     ProcessPermission {

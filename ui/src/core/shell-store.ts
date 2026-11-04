@@ -15,11 +15,15 @@ export interface ShellStore {
   reached(sequence: number): Promise<void> | null;
   subscribe(listener: () => void): () => void;
   subscribeEvents(listener: (event: CoreEvent) => void): () => void;
+  getInstallConsent(windowId: string): InstallConsent | undefined;
+  subscribeInstallConsent(windowId: string, listener: () => void): () => void;
   ready: Promise<void>;
   dispose(): void;
   nativeFiles?: boolean;
   bytes?: CoreTransport["bytes"];
 }
+
+export type InstallConsent = Extract<CoreEvent, { event: "app.install_permission" }>;
 
 export function createShellStore(transport: CoreTransport): ShellStore {
   let snapshot: ShellSnapshot | null = null;
@@ -32,12 +36,27 @@ export function createShellStore(transport: CoreTransport): ShellStore {
   };
   const listeners = new Set<() => void>();
   const eventListeners = new Set<(event: CoreEvent) => void>();
+  const installConsents = new Map<string, InstallConsent>();
+  const consentListeners = new Map<string, Set<() => void>>();
+  const setConsent = (windowId: string, request?: InstallConsent) => {
+    if (request) installConsents.set(windowId, request);
+    else installConsents.delete(windowId);
+    consentListeners.get(windowId)?.forEach((listener) => listener());
+  };
   const iconCache: ShellStore["iconCache"] = new Map();
   const notify = () => {
     for (const listener of listeners) listener();
   };
   const unsubscribe = transport.subscribe((event: CoreEvent) => {
     if (event.event === "state.changed") {
+      for (const [windowId, request] of installConsents) {
+        const oldWindow = snapshot?.shared.windows.find((item) => item.id === windowId);
+        const nextWindow = event.snapshot.shared.windows.find((item) => item.id === windowId);
+        if (!nextWindow || (oldWindow && (oldWindow.app_id !== nextWindow.app_id || oldWindow.app_version !== nextWindow.app_version))) {
+          setConsent(windowId);
+          void transport.call({ op: "app.respond_install_permission", window_id: windowId, request_id: request.request_id, digest: request.digest, allow: false });
+        }
+      }
       const previousLink = snapshot?.link;
       const nextLink = event.snapshot.link;
       const previousServer = previousLink && "server_url" in previousLink ? previousLink.server_url : "";
@@ -48,6 +67,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       notify();
       advance(event.sequence);
     } else {
+      if (event.event === "app.install_permission") setConsent(event.window_id, event);
       for (const listener of eventListeners) listener(event);
     }
   });
@@ -75,7 +95,11 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       if (windowId && windowActionActive(windowId) && (
         request.op === "files.allow_pc" || request.op === "files.pick_folder" || request.op === "connection.login"
         || (request.op === "process.respond_permission" && request.allow)
+        || (request.op === "app.respond_install_permission" && request.allow)
       )) return Promise.reject(SHELL_WINDOW_CONTROL_CONSENT_BLOCKED());
+      if (request.op === "app.respond_install_permission" && installConsents.get(request.window_id)?.request_id === request.request_id) {
+        setConsent(request.window_id);
+      }
       const result = transport.call(request);
       return windowId ? trackWindowAction(windowId, result) : result;
     }) as CoreTransport["call"],
@@ -96,6 +120,13 @@ export function createShellStore(transport: CoreTransport): ShellStore {
     subscribeEvents(listener) {
       eventListeners.add(listener);
       return () => eventListeners.delete(listener);
+    },
+    getInstallConsent: (windowId) => installConsents.get(windowId),
+    subscribeInstallConsent(windowId, listener) {
+      const listeners = consentListeners.get(windowId) ?? new Set<() => void>();
+      listeners.add(listener);
+      consentListeners.set(windowId, listeners);
+      return () => { listeners.delete(listener); if (!listeners.size) consentListeners.delete(windowId); };
     },
     ready,
     dispose() {

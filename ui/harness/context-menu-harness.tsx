@@ -50,7 +50,7 @@ function Harness() {
   }, []);
   if (new URLSearchParams(window.location.search).has("title")) {
     const snapshot = makeTestSnapshot();
-    const store = { getSnapshot: () => snapshot, subscribe: () => () => {}, subscribeEvents: () => () => {}, call: async () => undefined };
+    const store = { getSnapshot: () => snapshot, subscribe: () => () => {}, subscribeEvents: () => () => {}, getInstallConsent: () => undefined, subscribeInstallConsent: () => () => {}, call: async () => undefined };
     return <main className="app-root"><ContextMenuHost /><WindowFrame area={{ width: window.innerWidth, height: window.innerHeight }} appName="문서" isTop sharing={false} shareable hasSettings store={store as never} onCall={async () => undefined} onMinimize={() => {}} onMaximize={() => {}} onRestore={() => {}} window={snapshot.shared.windows[0]}><p>창 내용</p></WindowFrame></main>;
   }
   return <main className="ks-harness"><ContextMenuHost /><h1>입력과 문서</h1>

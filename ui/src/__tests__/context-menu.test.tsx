@@ -272,7 +272,7 @@ describe("창 제목 줄 메뉴", () => {
     const onCall = vi.fn().mockResolvedValue(undefined);
     const onMinimize = vi.fn();
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
-    const store = { getSnapshot: () => snapshot, subscribe: () => () => {}, subscribeEvents: () => () => {}, call: onCall };
+    const store = { getSnapshot: () => snapshot, subscribe: () => () => {}, subscribeEvents: () => () => {}, getInstallConsent: () => undefined, subscribeInstallConsent: () => () => {}, call: onCall };
     render(<><ContextMenuHost /><WindowFrame area={{ width: 960, height: 600 }} appName="테스트 창" isTop sharing shareable hasSettings store={store as never} onCall={onCall} onMinimize={onMinimize} onMaximize={() => {}} onRestore={() => {}} window={appWindow}>본문</WindowFrame></>);
     fireEvent.contextMenu(screen.getByText("테스트 창"));
     expect(screen.getByRole("menuitem", { name: "같이 보기" }).getAttribute("aria-current")).toBe("true");

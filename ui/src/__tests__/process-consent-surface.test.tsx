@@ -26,6 +26,7 @@ function setup(top = "editor-window") {
     getSnapshot: () => snapshot, getError: () => null,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     subscribeEvents: (listener: (event: CoreEvent) => void) => { events.add(listener); return () => events.delete(listener); },
+    getInstallConsent: () => undefined, subscribeInstallConsent: () => () => {},
     call, ready: Promise.resolve(), dispose: () => undefined,
   } as unknown as ShellStore;
   const onCall = vi.fn(async (_request: CoreRequest) => undefined);
