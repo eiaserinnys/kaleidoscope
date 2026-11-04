@@ -110,8 +110,8 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "weather",
         name: "날씨",
-        version: 1,
-        updated_at: "2026-10-31T00:00:00Z",
+        version: 2,
+        updated_at: "2026-11-04T00:00:00Z",
         blocks: 9,
         modules: &[("assets", 1), ("http", 1)],
         assets: WEATHER_ASSET_KEYS,
@@ -137,9 +137,9 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         id: "reader",
         name: "해커뉴스",
-        version: 3,
-        updated_at: "2026-11-02T00:00:00Z",
-        blocks: 10,
+        version: 4,
+        updated_at: "2026-11-04T00:00:00Z",
+        blocks: 22,
         modules: &[("http", 1)],
         assets: &[],
     },

@@ -271,7 +271,8 @@ pub const CONTRACT_VERSION: u32 = 29;
 /// - 20판: 자동 열 격자 칸의 최소 폭을 고르는 `repeat.grid.item_width`,
 ///   `list`, `table`, `tree`, `feed`의 `item_menu`.
 /// - 21판: input, select, slider, color의 `label_position`과 slider의 `show_value`.
-pub const BLOCK_SET_VERSION: u32 = 21;
+/// - 22판: request 원천의 `page`(쪽 넘김)와 목록 블록의 다음 쪽 받기, `data.more`.
+pub const BLOCK_SET_VERSION: u32 = 22;
 /// 이 쉘이 제공하는 모듈과 버전.
 /// - `files` 1판: 기기마다 고른 폴더의 파일 목록, 읽기, 쓰기, 탐색기에서 다른 앱으로 열기(`files.open`).
 ///   목록의 항목은 계약 8판부터 크기와 바뀐 시각을 담는다(앱 정의와 무관해 모듈 판은 그대로다).
@@ -4429,6 +4430,9 @@ pub enum CoreRequest {
         #[ts(optional, as = "Option<Vec<String>>")]
         sources: Vec<String>,
     },
+    /// 원천의 다음 쪽을 받는다. 시작 여부를 바로 응답하고 결과는 `data.update`로 보낸다.
+    #[serde(rename = "data.more")]
+    DataMore { window_id: String, source: String },
     /// 이미지와 소리 원본 하나를 받는다. `media`의 권한은 그 창의 앱이 선언한 것이어야 한다(`permission_denied`).
     /// 코어는 원본을 (권한, 경로, 쿼리)로 캐시한다. 이미지이고 `max_px`가 있으면 긴 변이 그 값을 넘지 않게 줄여서
     /// 보낸다(PNG, JPEG, WebP, GIF 첫 장. 투명이 있으면 PNG, 아니면 JPEG). 원본이 [`data::MEDIA_MAX_BYTES`]보다
@@ -5221,6 +5225,8 @@ pub enum CoreReply {
     DataAct {},
     #[serde(rename = "data.refresh")]
     DataRefresh {},
+    #[serde(rename = "data.more")]
+    DataMore { started: bool },
     #[serde(rename = "data.media")]
     DataMedia { media: data::MediaData },
     #[serde(rename = "connection.login")]
@@ -7172,7 +7178,7 @@ mod tests {
                     (
                         "/ui/title".to_string(),
                         data::BindingValue::Ready {
-                            value: JsonValue::String("가".into()),
+                            value: JsonValue::String("가".into()), more: None
                         },
                     ),
                     (

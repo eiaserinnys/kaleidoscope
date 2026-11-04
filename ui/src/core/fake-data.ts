@@ -1,10 +1,20 @@
 import jsonata from "jsonata";
-import type { Action, Actions, AppDefinition, AppWindow, Binding, BindingValue, Block, DataView, SourceStatus } from "../contract/contract";
+import type { Action, Actions, AppDefinition, AppWindow, Binding, BindingMore, BindingValue, Block, DataView, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 
-export interface FakeSourceSeed { value?: JsonValue; error?: string; login?: string; delayMs?: number }
+export interface FakePageSeed { value?: JsonValue; error?: string; id?: string; delayMs?: number }
+export interface FakeSourceSeed { value?: JsonValue; error?: string; login?: string; delayMs?: number; pages?: FakePageSeed[] }
 export interface FakeDataSeed { sources?: Record<string, FakeSourceSeed>; callError?: string }
-type Context = { window: AppWindow; definition: AppDefinition; view: DataView; values: Record<string, JsonValue>; inputs: Record<string, string>; timers: Array<ReturnType<typeof setInterval>>; attached: boolean };
+type Context = { window: AppWindow; definition: AppDefinition; view: DataView; values: Record<string, JsonValue>; inputs: Record<string, string>; pages: Record<string, { next: number; received: number; more?: BindingMore }>; timers: Array<ReturnType<typeof setInterval>>; attached: boolean };
+
+function appendPage(current: JsonValue, incoming: JsonValue | undefined, path: string): JsonValue {
+  const copy = structuredClone(current);
+  const keys = path ? path.split(".") : [];
+  const get = (value: JsonValue | undefined) => keys.reduce<JsonValue | undefined>((item, key) => item && typeof item === "object" && !Array.isArray(item) ? item[key] : undefined, value);
+  const target = get(copy), extra = get(incoming);
+  if (Array.isArray(target) && Array.isArray(extra)) target.push(...extra);
+  return copy;
+}
 
 function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
   switch (block.type) {
@@ -47,6 +57,7 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "table": add("rows", block.rows); break;
     case "properties": block.fields.forEach((field, index) => add(`fields/${index}/value`, field.value)); break;
     case "feed": add("entries", block.entries); break;
+    case "repeat": add("items", block.items); break;
     case "text": case "code": add("value", block.value); break;
     case "markdown": case "html_view": case "sandbox": add("value", block.value); break;
     case "select": add("options", block.options); break;
@@ -104,6 +115,8 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
         try { value = { status: "ready", value: await evaluate(binding, context) }; }
         catch (error) { value = { status: "failed", message: error instanceof Error ? error.message : String(error), retry: [] }; }
       }
+      const paged = [...new Set(names)].filter((name) => context.definition.sources?.[name]?.kind === "request" && context.pages[name]);
+      if (value.status === "ready" && paged.length === 1 && context.pages[paged[0]].more) value.more = context.pages[paged[0]].more;
       if (JSON.stringify(context.view.values[pointer]) !== JSON.stringify(value)) { context.view.values[pointer] = value; changed[pointer] = value; }
     }
     return changed;
@@ -128,7 +141,23 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       let status: SourceStatus;
       if (sourceSeed.login) status = { state: "login_required", permission: sourceSeed.login };
       else if (sourceSeed.error) status = { state: "failed", message: sourceSeed.error, has_value: hasValue };
-      else { context.values[name] = sourceSeed.value ?? null; status = { state: "ready", updated_at: new Date().toISOString() }; }
+      else {
+        context.values[name] = structuredClone(sourceSeed.pages?.[0]?.value ?? sourceSeed.value ?? null);
+        if (source.kind === "request" && source.page && sourceSeed.pages) {
+          const previous = context.pages[name];
+          let received = 1;
+          let next = 1;
+          while (previous && received < previous.received && next < previous.next) {
+            const previousPage = sourceSeed.pages[next++];
+            if (previousPage && !previousPage.error) {
+              context.values[name] = appendPage(context.values[name], previousPage.value, source.page.items ?? "");
+              received++;
+            }
+          }
+          context.pages[name] = { next, received, more: next < sourceSeed.pages.length ? { source: name, state: "ready", retry: false } : undefined };
+        }
+        status = { state: "ready", updated_at: new Date().toISOString() };
+      }
       context.view.sources[name] = status;
       publish(context, { sources: { [name]: status }, values: await recalculate(context) });
     }));
@@ -137,12 +166,12 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
     async attach(id: string) {
       const window = getWindow(id); const definition = getDefinition(window);
       if (!definition) throw { code: "not_found", message: "앱 정의를 찾을 수 없습니다", details: [] };
-      const context: Context = { window, definition, view: { sources: {}, values: {} }, values: {}, inputs: {}, timers: [], attached: true };
+      const context: Context = { window, definition, view: { sources: {}, values: {} }, values: {}, inputs: {}, pages: {}, timers: [], attached: true };
       attached.set(id, context);
       for (const [name, source] of Object.entries(definition.sources ?? {})) {
         context.inputs[name] = await sourceInputs(context, name);
         context.view.sources[name] = { state: "loading", has_value: false };
-        if (source.refresh_secs) context.timers.push(setInterval(() => { void refresh(context, [name]); }, source.refresh_secs * 1000));
+        if (source.refresh_secs) context.timers.push(setInterval(() => { if ((context.pages[name]?.received ?? 0) < 2) void refresh(context, [name]); }, source.refresh_secs * 1000));
       }
       await recalculate(context);
       const view = structuredClone(context.view);
@@ -156,12 +185,33 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       const changed: string[] = [];
       for (const name of Object.keys(context.definition.sources ?? {})) {
         const input = await sourceInputs(context, name);
-        if (context.inputs[name] !== input) { context.inputs[name] = input; changed.push(name); }
+        if (context.inputs[name] !== input) { context.inputs[name] = input; delete context.pages[name]; delete context.values[name]; changed.push(name); }
       }
       publish(context, { sources: {}, values: await recalculate(context) });
       if (changed.length) await refresh(context, changed);
     },
     async refresh(id: string, names: string[]) { const context = attached.get(id); if (!context) throw { code: "not_found", message: "연결된 데이터가 없습니다", details: [] }; await refresh(context, names); },
+    async more(id: string, name: string) {
+      const context = attached.get(id); const paging = context?.pages[name];
+      const source = context?.definition.sources?.[name];
+      const pages = seed.sources?.[name]?.pages;
+      if (!context || !paging || !pages || source?.kind !== "request" || !source.page || paging.more?.state === "loading" || !paging.more || paging.next >= pages.length) return false;
+      paging.more = { source: name, state: "loading", retry: false };
+      publish(context, { sources: {}, values: await recalculate(context) });
+      const result = pages[paging.next++];
+      void (async () => {
+        if (result.delayMs) await new Promise((resolve) => setTimeout(resolve, result.delayMs));
+        if (!context.attached) return;
+        if (result.error) paging.more = { source: name, state: "failed", message: result.error, id: result.id, retry: true };
+        else {
+          context.values[name] = appendPage(context.values[name], result.value, source.page!.items ?? "");
+          paging.received++;
+          paging.more = paging.next < pages.length ? { source: name, state: "ready", retry: false } : undefined;
+        }
+        publish(context, { sources: {}, values: await recalculate(context) });
+      })();
+      return true;
+    },
     async act(id: string, pointer: string, event: JsonValue, item?: JsonValue) {
       const context = attached.get(id); if (!context) throw { code: "not_found", message: "연결된 데이터가 없습니다", details: [] };
       if (!actionSlots(context.definition.ui).has(pointer)) throw { code: "invalid_request", message: "명령을 처리할 수 없습니다.", details: [] };

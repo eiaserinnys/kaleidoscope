@@ -137,13 +137,13 @@ fn 두_창은_같은_요청을_공유하고_명시적_갱신은_다시_요청한
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &second, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"a"}]),
+                value: json!([{"key":"a"}]), more: None
             })
     });
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &first, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"a"}]),
+                value: json!([{"key":"a"}]), more: None
             })
     });
     assert_eq!(client.connection_requests.lock().unwrap().len(), 1);
@@ -281,7 +281,7 @@ fn 다른_데스크톱과_최대화_뒤에서는_쉬고_재개와_재열기에�
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"old"}]),
+                value: json!([{"key":"old"}]), more: None
             })
     });
     let cover = open_window(&core, &desktop, "calculator");
@@ -305,7 +305,7 @@ fn 다른_데스크톱과_최대화_뒤에서는_쉬고_재개와_재열기에�
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"new"}]),
+                value: json!([{"key":"new"}]), more: None
             })
     });
     core.handle(CoreRequest::WindowClose { window_id: window })
@@ -316,7 +316,7 @@ fn 다른_데스크톱과_최대화_뒤에서는_쉬고_재개와_재열기에�
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &reopened, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"old"}]),
+                value: json!([{"key":"old"}]), more: None
             })
     });
     assert_eq!(client.connection_requests.lock().unwrap().len(), 2);
@@ -402,7 +402,7 @@ fn 보이는_상류의_강제_갱신은_숨긴_탭의_종속_원천을_부르지
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value")
             == Some(BindingValue::Ready {
-                value: json!("first"),
+                value: json!("first"), more: None
             })
     });
     client
@@ -418,7 +418,7 @@ fn 보이는_상류의_강제_갱신은_숨긴_탭의_종속_원천을_부르지
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value")
             == Some(BindingValue::Ready {
-                value: json!("second"),
+                value: json!("second"), more: None
             })
     });
     thread::sleep(Duration::from_millis(200));
@@ -466,7 +466,7 @@ fn 최소화된_창의_주기_요청은_멈추고_복원하면_기한_지난_값
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"a"}]),
+                value: json!([{"key":"a"}]), more: None
             })
     });
     core.handle(CoreRequest::WindowMinimize {

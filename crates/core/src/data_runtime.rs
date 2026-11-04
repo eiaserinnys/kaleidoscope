@@ -2,8 +2,10 @@
 // 기존 창별 원천 수명 경로가 이미 500줄을 넘는다. 별도 수명 리팩터링은 이 변경에 섞지 않는다.
 mod actions;
 mod liveness;
+mod paging;
 mod storage;
 pub(crate) use actions::{act, layout_errors};
+pub(crate) use paging::more;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, Weak};
@@ -98,6 +100,7 @@ struct Source {
     last_success_instant: Option<Instant>,
     retrying_after_failure: bool,
     waiting: Option<chrono::DateTime<chrono::Utc>>,
+    paging: paging::Paging,
 }
 struct Gate {
     until: chrono::DateTime<chrono::Utc>,
@@ -118,6 +121,8 @@ struct Job {
     gate: Option<String>,
     ttl: Duration,
     force: bool,
+    page: Option<kaleidoscope_contract::data::PageDecl>,
+    pages: usize,
 }
 
 impl Runtime {
@@ -146,6 +151,7 @@ impl Runtime {
                         last_success_instant: None,
                         retrying_after_failure: false,
                         waiting: None,
+                        paging: paging::Paging::default(),
                     },
                 )
             })
@@ -252,7 +258,7 @@ impl Runtime {
                             "/client/inputs/{}",
                             kaleidoscope_contract::data::escape_pointer(name)
                         ),
-                        BindingValue::Ready { value },
+                        BindingValue::Ready { value, more: None },
                     );
                 }
             }
@@ -302,6 +308,7 @@ impl Runtime {
                 values.insert(binding.pointer.clone(), status);
             }
         }
+        self.add_paging(&mut values, None);
         self.add_client_inputs(&mut values);
         DataView {
             values,
@@ -376,11 +383,27 @@ impl Runtime {
                 values.insert(binding.pointer.clone(), problem);
             }
         }
+        self.add_paging(&mut values, Some(selected));
         self.add_client_inputs(&mut values);
         DataView {
             values,
             sources: statuses,
             source_meta: self.source_meta(),
+        }
+    }
+    fn add_paging(
+        &self,
+        values: &mut BTreeMap<String, kaleidoscope_contract::data::BindingValue>,
+        selected: Option<&BTreeSet<String>>,
+    ) {
+        for binding in self.compiled.binding_dependencies() {
+            if selected.is_some_and(|selected| !selected.contains(&binding.pointer)) { continue; }
+            let mut paged = binding.data.iter().filter(|name| matches!(self.definition.sources.get(*name), Some(SourceDecl::Request { page: Some(_), .. })));
+            let Some(name) = paged.next() else { continue; };
+            if paged.next().is_some() { continue; }
+            if let Some(kaleidoscope_contract::data::BindingValue::Ready { more, .. }) = values.get_mut(&binding.pointer) {
+                *more = self.sources[name].paging.more(name);
+            }
         }
     }
     fn label_expression_failures(
@@ -569,7 +592,11 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
     source.last_fetched = None;
     source.retrying_after_failure = false;
     source.waiting = None;
+    source.paging = paging::Paging::default();
     if let Some(cached) = cache_hit {
+        if let SourceDecl::Request { page: Some(page), .. } = &runtime.definition.sources[name] {
+            source.paging = paging::first(name, page, &cached.value);
+        }
         runtime.data.insert(name.to_owned(), cached.value);
         source.last_fetched = Some(cached.fetched_instant);
         source.last_success_at = Some(cached.fetched_at);
@@ -646,6 +673,9 @@ fn prepare(
     if source.in_flight || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_)) {
         return None;
     }
+    let pages = source.paging.pages.max(1);
+    source.paging.generation += 1;
+    source.paging.state = paging::PagingState::Idle;
     if let Some(until) = until {
         source.waiting = Some(until);
         source.retrying_after_failure = true;
@@ -684,6 +714,8 @@ fn prepare(
                 .unwrap_or(300),
         ),
         force,
+        page: match &runtime.definition.sources[name] { SourceDecl::Request { page, .. } => page.clone(), _ => None },
+        pages,
     })
 }
 
@@ -781,6 +813,10 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     }
                     _ => None,
                 };
+                let rebuilt = match (&job.page, &result) {
+                    (Some(page), Ok(value)) => Some(paging::rebuild(&inner, &job, page, value)),
+                    _ => None,
+                };
                 let mut follow_up = Vec::new();
                 {
                     let state = inner.state.lock().unwrap();
@@ -830,7 +866,12 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                                 .as_ref()
                                 .and_then(|c| c.updated_at.clone())
                                 .unwrap_or_else(crate::state_commands::timestamp);
-                            runtime.data.insert(job.name.clone(), value.clone());
+                            if let Some((combined, paging)) = rebuilt {
+                                runtime.data.insert(job.name.clone(), combined);
+                                source.paging = paging;
+                            } else {
+                                runtime.data.insert(job.name.clone(), value.clone());
+                            }
                             source.last_fetched = Some(fetched_instant);
                             source.last_success_at = Some(fetched_at);
                             source.last_success_instant = Some(fetched_instant);
@@ -865,6 +906,9 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                         Err(RequestError::Core(err)) => {
                             if !runtime.data.contains_key(&job.name) {
                                 if let Some(cached) = fallback_cache.clone() {
+                                    if let Some(page) = &job.page {
+                                        source.paging = paging::first(&job.name, page, &cached.value);
+                                    }
                                     runtime.data.insert(job.name.clone(), cached.value);
                                     source.last_success_at = Some(cached.fetched_at);
                                     source.last_success_instant = Some(cached.fetched_instant);
@@ -1410,7 +1454,7 @@ fn run_due(inner: &Arc<Inner>, only_window: Option<&str>) -> Vec<JoinHandle<()>>
                     ) {
                         (None, _) => true,
                         (_, _) if source.waiting.is_some() => true,
-                        (Some(at), Some(secs)) => at.elapsed() >= Duration::from_secs(secs.into()),
+                        (Some(at), Some(secs)) => source.paging.pages < 2 && at.elapsed() >= Duration::from_secs(secs.into()),
                         (Some(_), None) => false,
                     };
                 if due {

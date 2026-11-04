@@ -516,6 +516,10 @@ export class WindowData {
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }
     catch (error) { this.setNotice(toCoreError(error)); }
   };
+  more = async (source: string) => {
+    try { await this.ready; return (await this.store.call({ op: "data.more", window_id: this.windowId, source })).started; }
+    catch (error) { this.setNotice(toCoreError(error)); return false; }
+  };
   login = async (permission: string) => {
     try { await this.store.call({ op: "connection.login", window_id: this.windowId, permission }); }
     catch (error) { this.setNotice(toCoreError(error)); }

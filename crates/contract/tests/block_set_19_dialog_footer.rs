@@ -89,7 +89,7 @@ fn dialog_confirm_action_and_danger_round_trip_through_cached_definition() {
 
 #[test]
 fn block_set_19_schema_exposes_dialog_footer_fields() {
-    assert_eq!(kaleidoscope_contract::BLOCK_SET_VERSION, 21);
+    assert_eq!(kaleidoscope_contract::BLOCK_SET_VERSION, 22);
     let schema = app_definition_schema().to_string();
     assert!(schema.contains("on_confirm"));
     assert!(schema.contains("danger"));

@@ -509,7 +509,7 @@ impl McpServer {
                         }
                     }),
                     Binding::State(reference) => BindingValue::Ready {
-                        value: state.get(&reference.state).cloned().unwrap_or(Value::Null),
+                        value: state.get(&reference.state).cloned().unwrap_or(Value::Null), more: None
                     },
                     Binding::Client(reference) => BindingValue::Ready {
                         value: definition
@@ -517,13 +517,13 @@ impl McpServer {
                             .as_ref()
                             .and_then(|client| client.outputs.get(&reference.client))
                             .map(|output| output.default.clone())
-                            .unwrap_or(Value::Null),
+                            .unwrap_or(Value::Null), more: None
                     },
                     Binding::Item(_)
                     | Binding::ParentItem(_)
                     | Binding::Message(kaleidoscope_contract::data::MessageRef {
                         message: kaleidoscope_contract::data::MessageKey::Item(_),
-                    }) => BindingValue::Ready { value: Value::Null },
+                    }) => BindingValue::Ready { value: Value::Null, more: None },
                     Binding::Message(kaleidoscope_contract::data::MessageRef {
                         message: kaleidoscope_contract::data::MessageKey::Key(key),
                     }) => {
@@ -532,11 +532,11 @@ impl McpServer {
                             .as_str()
                             .expect("검사된 기본 언어");
                         BindingValue::Ready {
-                            value: Value::String(definition.messages.as_ref().expect("검사된 메시지")[language][key].clone()),
+                            value: Value::String(definition.messages.as_ref().expect("검사된 메시지")[language][key].clone()), more: None
                         }
                     }
                     Binding::Literal(value) => BindingValue::Ready {
-                        value: value.clone(),
+                        value: value.clone(), more: None
                     },
                 };
                 let block = blocks
@@ -768,7 +768,7 @@ fn binding_result(
 ) -> Value {
     let mut output = json!({"pointer":pointer,"block":block,"field":field,"truncated":false});
     match result {
-        BindingValue::Ready { value } => {
+        BindingValue::Ready { value, .. } => {
             let raw = value.to_string();
             let truncated = raw.chars().count() > max_chars;
             let text = raw.chars().take(max_chars).collect::<String>();

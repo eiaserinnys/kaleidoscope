@@ -57,18 +57,18 @@ fn earth_selects_quake_for_map_and_dependent_requests() {
             "{pointer}: {value:?}"
         );
     }
-    let BindingValue::Ready { value: points } =
+    let BindingValue::Ready { value: points, .. } =
         &values["/ui/children/1/children/1/children/0/child/points"]
     else {
         panic!("지점 없음")
     };
     assert_eq!(points[1]["key"], "b");
-    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/children/0/items"] else {
+    let BindingValue::Ready { value: metrics, .. } = &values["/ui/children/1/children/0/items"] else {
         panic!("지표 없음")
     };
     assert_eq!(metrics[0]["value"], "M6.2");
     let BindingValue::Ready {
-        value: significance,
+        value: significance, ..
     } = &values["/ui/children/1/children/2/tabs/0/child/children/1/child/fields/1/value"]
     else {
         panic!("유의성 없음")
@@ -87,7 +87,7 @@ fn earth_selects_quake_for_map_and_dependent_requests() {
         &BTreeMap::new(),
         None,
     );
-    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/children/0/items"] else {
+    let BindingValue::Ready { value: metrics, .. } = &values["/ui/children/1/children/0/items"] else {
         panic!("대기질 지표 없음")
     };
     assert_eq!(metrics[2]["value"].as_f64(), Some(8.0));
@@ -118,7 +118,7 @@ fn map_and_table_keep_all_quakes_and_share_initial_selection() {
         "/ui/children/1/children/1/children/0/child/points",
         "/ui/children/1/children/1/children/1/child/rows",
     ] {
-        let BindingValue::Ready { value } = &values[pointer] else {
+        let BindingValue::Ready { value, .. } = &values[pointer] else {
             panic!("{pointer}: {:?}", values[pointer])
         };
         assert_eq!(value.as_array().unwrap().len(), 65);
@@ -162,7 +162,7 @@ fn filter_empty_stops_dependent_requests_and_clears_quake_views() {
         "/ui/children/1/children/1/children/1/child/rows",
     ] {
         assert!(
-            matches!(&values[pointer], BindingValue::Ready { value } if value == &json!([]) || value.is_null()),
+            matches!(&values[pointer], BindingValue::Ready { value, .. } if value == &json!([]) || value.is_null()),
             "{pointer}: {:?}",
             values[pointer]
         );
@@ -171,7 +171,7 @@ fn filter_empty_stops_dependent_requests_and_clears_quake_views() {
         let pointer =
             format!("/ui/children/1/children/2/tabs/0/child/children/1/child/fields/{index}/value");
         assert!(
-            matches!(&values[&pointer], BindingValue::Ready { value } if value.is_null()),
+            matches!(&values[&pointer], BindingValue::Ready { value, .. } if value.is_null()),
             "{pointer}: {:?}",
             values[&pointer]
         );

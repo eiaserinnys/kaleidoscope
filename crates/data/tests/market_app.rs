@@ -54,19 +54,19 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
             "{pointer}: {value:?}"
         );
     }
-    let BindingValue::Ready { value: metrics } = &values["/ui/children/1/children/0/items"] else {
+    let BindingValue::Ready { value: metrics, .. } = &values["/ui/children/1/children/0/items"] else {
         unreachable!()
     };
     assert_eq!(metrics[0]["value"], json!("133,527"));
     assert_eq!(metrics[2]["value"], json!("800"));
-    let BindingValue::Ready { value: series } = &values["/ui/children/1/children/2/child/series"]
+    let BindingValue::Ready { value: series, .. } = &values["/ui/children/1/children/2/child/series"]
     else {
         unreachable!()
     };
     assert_eq!(series[0]["points"][0]["open"], json!(126850.65));
     assert_eq!(series[0]["points"][0]["close"], json!(133527.0));
     assert_eq!(series[0]["points"][0]["x"].as_str().unwrap().len(), 5);
-    let BindingValue::Ready { value: rows } =
+    let BindingValue::Ready { value: rows, .. } =
         &values["/ui/children/1/children/3/tabs/0/child/rows"]
     else {
         unreachable!()
@@ -74,7 +74,7 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
     assert_eq!(rows.as_array().unwrap().len(), 8);
     assert_eq!(rows[0]["currency"], "KRW · 대한민국 원");
     assert_eq!(rows[0]["cpi"], json!("2.20%"));
-    let BindingValue::Ready { value: summary } =
+    let BindingValue::Ready { value: summary, .. } =
         &values["/ui/children/1/children/1/children/1/value"]
     else {
         unreachable!()
@@ -90,7 +90,7 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
         &BTreeMap::new(),
         None,
     );
-    let BindingValue::Ready { value: updated } =
+    let BindingValue::Ready { value: updated, .. } =
         &refreshed["/ui/children/1/children/1/children/1/value"]
     else {
         unreachable!()
@@ -110,7 +110,7 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
     );
     assert_eq!(
         cleared["/ui/children/1/children/1/children/1/value"],
-        BindingValue::Ready { value: json!("") }
+        BindingValue::Ready { value: json!(""), more: None }
     );
 }
 

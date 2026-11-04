@@ -933,6 +933,30 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("다음 쪽 상태 변화는 다른 창과 형제 블록을 다시 그리지 않는다", async () => {
+    const paged: AppDefinition = { ...definition, ui: { type: "stack", direction: "column", children: [
+      { type: "text", value: { state: "first" } },
+      { type: "list", items: { expr: "$data.sample" } },
+      { type: "text", value: { state: "second" } },
+    ] } };
+    const { store, transport } = await setup([paged]);
+    const rows = [{ key: "a", title: "첫 항목" }];
+    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: {
+      "/ui/children/1/items": { status: "ready", value: rows, more: { source: "sample", state: "loading", retry: false } },
+    } } }));
+    await settleRenders();
+    calls.length = 0;
+    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: {
+      "/ui/children/1/items": { status: "ready", value: rows, more: { source: "sample", state: "failed", message: "다음 쪽 실패", id: "DATA_TEST_PAGE_FAILED", retry: false } },
+    } } }));
+    await settleRenders();
+    expect(document.body.textContent).toContain("다음 쪽 실패");
+    expect(countFor("window-a", "/ui/children/0")).toBe(0);
+    expect(countFor("window-a", "/ui/children/2")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
   it("반복 항목 300개에서 바뀐 행만 다시 그린다", async () => {
     const rows = Array.from({ length: 300 }, (_, index) => ({ id: String(index), title: `항목 ${index}` }));
     const repeat: AppDefinition = { id: "repeat-isolation", name: "반복 격리", requires: { blocks: 14, modules: {} }, permissions: [],

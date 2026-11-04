@@ -69,7 +69,7 @@ pub(crate) fn act(
                     .cloned()
                     .unwrap_or(Value::Null),
                 data::Binding::Expr(_) => match runtime.last.values.get(&binding_pointer) {
-                    Some(BindingValue::Ready { value }) => value.clone(),
+                    Some(BindingValue::Ready { value, .. }) => value.clone(),
                     _ => {
                         return Err(errors::DATA_ACT_BUTTON_GRID_EXPR_NOT_READY()
                             .and_details(vec![format!("pointer: {}", &binding_pointer)]))

@@ -16,6 +16,20 @@ fn budget(definition: &kaleidoscope_contract::AppDefinition, host: &str) -> (f64
 }
 
 #[test]
+fn page_does_not_increase_automatic_call_budget() {
+    let mut definition = json!({
+        "id":"paging-budget", "name":"쪽 넘김 호출 예산", "requires":{"blocks":22,"modules":{"http":1}},
+        "permissions":[{"module":"http","id":"api","label":"API","base_url":"https://example.com","paths":["/items"]}],
+        "state":{}, "sources":{"items":{"kind":"request","permission":"api","path":"/items","refresh_secs":30,
+            "page":{"param":"cursor","next":"nextCursor","items":"items"}}},
+        "ui":{"type":"text","value":{"expr":"$data.items.items"}}
+    });
+    let with_page = parse(definition.clone());
+    definition["sources"]["items"].as_object_mut().unwrap().remove("page");
+    assert_eq!(call_budget(&with_page), call_budget(&parse(definition)));
+}
+
+#[test]
 fn every_builtin_stays_within_the_default_screen_budget() {
     let apps = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps");
     for entry in fs::read_dir(apps).unwrap() {

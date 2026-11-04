@@ -7,6 +7,19 @@
 .ks-badge { display: inline-block; flex: 0 0 auto; padding-inline: var(--ks-space-2); border-radius: var(--ks-radius-large); background: var(--ks-color-hover); color: var(--ks-color-text); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); white-space: nowrap; }
 .ks-view-badges { display: inline-flex; flex-wrap: wrap; gap: var(--ks-space-1); min-width: 0; }
 .ks-data-view { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: auto; }
+.ks-load-more { position: sticky; inset-inline-start: 0; width: 100%; min-width: 0; padding: var(--ks-space-2); container-type: inline-size; }
+.ks-list.is-grid > .ks-load-more, .ks-feed > .ks-load-more { padding-inline: var(--ks-space-3); }
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-feed > .ks-load-more { padding-inline: 0; }
+.ks-repeat > .ks-load-more { padding-inline: 0; }
+.ks-load-more .ks-data-state-compact[data-layout="row"] .ks-empty-state { width: 100%; justify-content: flex-start; align-items: flex-start; text-align: start; }
+.ks-load-more .ks-data-state-compact[data-layout="row"] .ks-empty-state-icon { margin-block-start: calc((var(--ks-control-height) - var(--ks-space-4)) / 2); }
+.ks-load-more .ks-data-state-compact[data-layout="row"] .ks-empty-state-text { flex: 1 1 0; min-width: 0; padding-block-start: calc((var(--ks-control-height) - 1lh) / 2); text-align: start; }
+.ks-load-more .ks-data-state-compact[data-layout="row"] .ks-empty-state-action { margin-inline-start: auto; }
+@container (max-width: 420px) {
+  .ks-load-more .ks-data-state-compact[data-layout="row"] .ks-empty-state { flex-wrap: wrap; }
+  .ks-load-more .ks-data-state-compact[data-layout="row"] .ks-empty-state-text { flex: 1 1 calc(100% - var(--ks-space-5)); }
+  .ks-load-more .ks-data-state-compact[data-layout="row"] .ks-empty-state-action { margin-inline-start: 0; }
+}
 .ks-repeat-content { display: flex; flex-direction: column; }
 .ks-repeat.is-row > .ks-repeat-content { flex-direction: row; }
 .ks-repeat.is-grid > .ks-repeat-content, .ks-repeat-grid-row { display: grid; gap: var(--ks-space-3); }

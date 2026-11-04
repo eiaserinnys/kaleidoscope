@@ -34,7 +34,7 @@ export function BindingFailureNotice({ value }: { value: BindingValue }) {
   return <Notice role="alert" errorId={value.id}>{value.message}</Notice>;
 }
 
-export function DataState({ value, compact = false, onRetry, onLogin }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; onRetry?: () => void; onLogin?: () => void }) {
+export function DataState({ value, compact = false, layout, loginFailure, onRetry, onLogin }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; layout?: "row"; loginFailure?: { message: string; id?: string }; onRetry?: () => void; onLogin?: () => void }) {
   const data = useWindowData();
   const context = { store: data.store, window: { id: data.windowId } };
   const { error, pick } = useFolderPick();
@@ -51,12 +51,12 @@ export function DataState({ value, compact = false, onRetry, onLogin }: { value:
   // 폴더 원천만 쓰는 블록에는 파일 트리처럼 폴더를 고를 다른 자리가 없다.
   if (ungranted !== undefined && value.status === "failed" && value.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN") {
     const retry = value.retry;
-    return <div className={compact ? "ks-data-state-compact" : "ks-data-state"}>
+    return <div className={compact ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
       <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : "폴더를 선택해 주세요"} action={<Button onClick={() => pick(ungranted, () => void data.refresh(retry))}>폴더 선택</Button>} />
     </div>;
   }
-  const failureText = loginError ? <>{loginError.message}{loginError.id ? <> <ErrorId id={loginError.id} /></> : null}</> : (value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : "로그인이 필요합니다");
-  return <div className={compact ? "ks-data-state-compact" : "ks-data-state"}>
+  const failureText = loginError ? <>{loginError.message}{loginError.id ? <> <ErrorId id={loginError.id} /></> : null}</> : value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : loginFailure ? <>{loginFailure.message}{loginFailure.id ? <> <ErrorId id={loginFailure.id} /></> : null}</> : "로그인이 필요합니다";
+  return <div className={compact ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
     <EmptyState icon={<DataIcon name={isLogin ? "log-in" : "triangle-alert"} size={compact ? "inline" : "empty"} />}
       text={failureText}
       action={isLogin

@@ -74,7 +74,7 @@ fn 한도_대기에는_마지막_값을_보존하고_시간이_지나면_다시_
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"old"}]),
+                value: json!([{"key":"old"}]), more: None
             })
     });
     let mut limited = response(429, json!({"error":"limit"}));
@@ -108,7 +108,7 @@ fn 한도_대기에는_마지막_값을_보존하고_시간이_지나면_다시_
     assert_eq!(
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items"),
         Some(BindingValue::Ready {
-            value: json!([{"key":"old"}])
+            value: json!([{"key":"old"}]), more: None
         })
     );
     client
@@ -121,7 +121,7 @@ fn 한도_대기에는_마지막_값을_보존하고_시간이_지나면_다시_
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/items")
             == Some(BindingValue::Ready {
-                value: json!([{"key":"new"}]),
+                value: json!([{"key":"new"}]), more: None
             })
     });
     assert_eq!(client.connection_requests.lock().unwrap().len(), 3);
@@ -241,7 +241,7 @@ fn 한도_응답_뒤_늦게_온_성공은_대기_관문을_지우지_않는다()
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/1/value")
             == Some(BindingValue::Ready {
-                value: json!("slow success"),
+                value: json!("slow success"), more: None
             })
     });
     core.handle(CoreRequest::DataRefresh {
@@ -258,7 +258,7 @@ fn 한도_응답_뒤_늦게_온_성공은_대기_관문을_지우지_않는다()
     wait_until(|| {
         crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value")
             == Some(BindingValue::Ready {
-                value: json!("retry success"),
+                value: json!("retry success"), more: None
             })
     });
     assert_eq!(client.connection_requests.lock().unwrap().len(), 3);
@@ -328,7 +328,7 @@ fn 두_창이_같은_한도에서_깨어나도_재시도는_한_번만_나간다
         wait_until(|| {
             crate::data_runtime::binding_value(&core.inner, window, "/ui/children/0/items")
                 == Some(BindingValue::Ready {
-                    value: json!([{"key":"ready"}]),
+                    value: json!([{"key":"ready"}]), more: None
                 })
         });
     }

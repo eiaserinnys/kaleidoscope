@@ -1183,7 +1183,23 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
             ));
         }
         match source {
-            SourceDecl::Request { path, query, .. } => {
+            SourceDecl::Request { path, query, page, .. } => {
+                if let Some(page) = page {
+                    if definition.requires.blocks < 22 {
+                        details.push(format!("{at}/page: 쪽 넘김은 블록 세트 22판이라 requires.blocks가 22 이상이어야 합니다"));
+                    }
+                    if page.param.is_empty() {
+                        details.push(format!("{at}/page/param: 다음 쪽 query 키를 입력하세요"));
+                    } else if query.contains_key(&page.param) {
+                        details.push(format!("{at}/page/param: query에 이미 있는 키입니다: {}", page.param));
+                    }
+                    if !page.items.is_empty() && page.items.split('.').any(str::is_empty) {
+                        details.push(format!("{at}/page/items: 점으로 이은 경로에 빈 부분을 둘 수 없습니다"));
+                    }
+                    if let Err(reason) = parse_expr(&page.next) {
+                        details.push(format!("{at}/page/next: 올바른 JSONata 식을 입력하세요. 원인: {reason}"));
+                    }
+                }
                 validate_binding_shape(path, definition, details, &format!("{at}/path"));
                 if let Binding::Literal(Value::String(path)) = path {
                     if !valid_request_path(path) {

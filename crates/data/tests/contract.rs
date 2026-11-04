@@ -139,7 +139,7 @@ fn source_meta_is_available_without_waiting_for_source_value() {
     assert_eq!(
         values["/ui/children/1/value"],
         BindingValue::Ready {
-            value: json!("16:10")
+            value: json!("16:10"), more: None
         }
     );
     assert_eq!(app.binding_dependencies()[1].data_meta, vec!["a"]);
@@ -190,7 +190,7 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
     assert_eq!(
         values["/ui/children/1/value"],
         BindingValue::Ready {
-            value: json!("old")
+            value: json!("old"), more: None
         }
     );
     assert!(matches!(
@@ -304,13 +304,13 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
     assert_eq!(
         values["/ui/children/0/items"],
         BindingValue::Ready {
-            value: json!("Stored")
+            value: json!("Stored"), more: None
         }
     );
     assert_eq!(
         values["/ui/children/1/value"],
         BindingValue::Ready {
-            value: json!("account-app")
+            value: json!("account-app"), more: None
         }
     );
     let dependency = app
@@ -368,13 +368,13 @@ fn storage_choices_bindings_are_evaluated_and_track_data_and_storage_dependencie
     assert_eq!(
         values["/storage/entries/0/choices"],
         BindingValue::Ready {
-            value: json!("model-a")
+            value: json!("model-a"), more: None
         }
     );
     assert_eq!(
         values["/storage/entries/1/choices"],
         BindingValue::Ready {
-            value: json!(["model-a", "model-b"])
+            value: json!(["model-a", "model-b"]), more: None
         }
     );
     let data_dependency = app
@@ -409,17 +409,17 @@ fn transforms_join_groups_and_limit_recursion() {
     assert_eq!(
         values["/ui/children/0/value"],
         BindingValue::Ready {
-            value: json!([{"key":"x","title":"X"}])
+            value: json!([{"key":"x","title":"X"}]), more: None
         }
     );
     assert_eq!(
         values["/ui/children/1/value"],
         BindingValue::Ready {
-            value: json!([{"key":"x","title":"Xavier"},{"key":"y","title":"Yara"}])
+            value: json!([{"key":"x","title":"Xavier"},{"key":"y","title":"Yara"}]), more: None
         }
     );
     assert!(
-        matches!(&values["/ui/children/2/value"], BindingValue::Ready { value } if value["A"].as_f64() == Some(2.0))
+        matches!(&values["/ui/children/2/value"], BindingValue::Ready { value, .. } if value["A"].as_f64() == Some(2.0))
     );
     assert!(matches!(
         values["/ui/children/3/value"],

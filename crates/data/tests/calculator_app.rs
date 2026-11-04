@@ -1,5 +1,5 @@
 use kaleidoscope_contract::{validate::parse_app_definition, JsonValue};
-use kaleidoscope_data::{CompiledApp, Env, Step};
+use kaleidoscope_data::{CompiledApp, Env, SourcePlan, Step};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -60,7 +60,7 @@ fn calculator_formula_uses_displayed_operator_symbols() {
     let mut state = definition.state;
     state.get_mut("calc").unwrap()["formula"] = json!("8 / 2 * 3 - 1 =");
     let values = app.evaluate(&state, &BTreeMap::new(), &BTreeMap::new());
-    let BindingValue::Ready { value } = &values["/ui/children/0/items"] else {
+    let BindingValue::Ready { value, .. } = &values["/ui/children/0/items"] else {
         panic!("표시식 계산 실패");
     };
     assert_eq!(value[0]["label"], "8 ÷ 2 × 3 − 1 =");
@@ -70,6 +70,10 @@ fn calculator_formula_uses_displayed_operator_symbols() {
 fn weather_city_selection_and_live_search_actions() {
     let definition = parse_app_definition(&app_file("weather.json")).unwrap();
     let app = CompiledApp::compile(&definition);
+    let mut search = definition.state.clone();
+    search.insert("search".into(), json!("서울"));
+    let SourcePlan::Request { query, .. } = app.plan_source("places", &search) else { panic!("도시 검색 계획"); };
+    assert_eq!(query["count"], "100");
     let empty = BTreeMap::new();
     let sources = BTreeMap::from([(
         "places".into(),
@@ -156,17 +160,17 @@ fn weather_forecast_produces_declared_images_and_future_hourly_points() {
     )]);
     let values = app.evaluate(&definition.state, &sources, &status);
     let pointer = "/ui/children/1/children/1/children/0/items";
-    let BindingValue::Ready { value } = &values[pointer] else {
+    let BindingValue::Ready { value, .. } = &values[pointer] else {
         panic!("현재 날씨 계산 실패: {:?}", values[pointer]);
     };
     assert_eq!(value[0]["image"]["asset"], "builtin-weather-showers");
     let pointer = "/ui/children/1/children/1/children/1/series";
-    let BindingValue::Ready { value } = &values[pointer] else {
+    let BindingValue::Ready { value, .. } = &values[pointer] else {
         panic!("시간별 계산 실패: {:?}", values[pointer]);
     };
     assert_eq!(value[0]["points"][0]["x"], "12:00");
     let pointer = "/ui/children/1/children/1/children/2/items";
-    let BindingValue::Ready { value } = &values[pointer] else {
+    let BindingValue::Ready { value, .. } = &values[pointer] else {
         panic!("일별 계산 실패: {:?}", values[pointer]);
     };
     assert_eq!(value[0]["title"], "오늘");
@@ -198,7 +202,7 @@ fn weather_daily_forecast_shows_each_korean_weekday() {
     )]);
     let values = app.evaluate(&definition.state, &sources, &status);
     let pointer = "/ui/children/1/children/1/children/2/items";
-    let BindingValue::Ready { value } = &values[pointer] else {
+    let BindingValue::Ready { value, .. } = &values[pointer] else {
         panic!("일별 계산 실패: {:?}", values[pointer]);
     };
     for (index, day) in ["월", "화", "수", "목", "금", "토", "일"]

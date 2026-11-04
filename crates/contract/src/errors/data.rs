@@ -1,4 +1,53 @@
 error_catalog! { ENTRIES;
+    DATA_RUNTIME_MORE_WINDOW_NOT_FOUND() {
+        class: NotFound,
+        place: "다음 쪽을 받을 창 확인",
+        cause: "원천이 속한 창이 없다",
+        message: "다음 쪽을 받을 창이 없습니다. 앱 열기에서 앱을 다시 여세요.",
+        fix: "앱 열기에서 앱을 다시 여세요"
+    }
+    DATA_RUNTIME_MORE_SOURCE_NOT_PAGED(source) {
+        class: InvalidRequest,
+        place: "다음 쪽을 받을 원천 확인",
+        cause: "원천에 쪽 넘김 선언이 없다",
+        message: "원천 {source}에 쪽 넘김 선언이 없습니다. 앱 정의의 원천에 page를 선언하세요.",
+        fix: "앱 정의의 원천에 page를 선언하세요"
+    }
+    DATA_SOURCE_PAGE_NEXT_FAILED(source, reason) {
+        class: InvalidRequest,
+        place: "다음 쪽 식 계산",
+        cause: "다음 쪽 값을 계산하지 못했다",
+        message: "원천 {source}의 다음 쪽 식을 계산하지 못했습니다. 앱 정의의 page.next를 고치세요. 원인: {reason}",
+        fix: "앱 정의의 page.next를 고치세요"
+    }
+    DATA_SOURCE_PAGE_NEXT_INVALID(source, kind) {
+        class: InvalidRequest,
+        place: "다음 쪽 식 결과 검사",
+        cause: "다음 쪽 식이 문자열이나 숫자가 아닌 값을 냈다",
+        message: "원천 {source}의 다음 쪽 식이 사용할 수 없는 {kind} 값을 냈습니다. 앱 정의의 page.next를 고치세요.",
+        fix: "앱 정의의 page.next를 고치세요"
+    }
+    DATA_SOURCE_PAGE_ITEMS_NOT_ARRAY(source, path) {
+        class: InvalidRequest,
+        place: "쪽 응답의 항목 배열 검사",
+        cause: "지정한 항목 위치가 배열이 아니다",
+        message: "원천 {source}의 항목 위치 {path}가 배열이 아닙니다. 앱 정의의 page.items와 응답 형식을 확인하세요.",
+        fix: "앱 정의의 page.items와 응답 형식을 확인하세요"
+    }
+    DATA_SOURCE_MORE_LOGIN_REQUIRED(source, permission) {
+        class: NotGranted,
+        place: "다음 쪽 요청 로그인 확인",
+        cause: "연결에 다시 로그인해야 한다",
+        message: "원천 {source}의 다음 쪽을 받으려면 {permission} 연결에 다시 로그인하세요.",
+        fix: "연결에 다시 로그인하세요"
+    }
+    DATA_SOURCE_MORE_RATE_LIMITED(source, time) {
+        class: Server,
+        place: "다음 쪽 요청 한도 확인",
+        cause: "요청 한도로 기다려야 한다",
+        message: "원천 {source}의 요청 한도에 도달했습니다. {time} 이후 다시 받기를 누르세요.",
+        fix: "표시된 시간 이후 다시 받기를 누르세요"
+    }
     DATA_PREVIEW_PUBLIC_REQUEST_FAILED(source) {
         class: Server,
         place: "미리 보기 공개 원천 요청",
