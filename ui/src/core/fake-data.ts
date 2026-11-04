@@ -224,7 +224,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       for (const action of list) {
         if ("set_state" in action) {
           const value = "value" in action && action.value !== undefined ? await evaluate(action.value, context, event, item) : event;
-          await setState(id, { ...context.window.state, [action.set_state]: value });
+          await setState(id, { [action.set_state]: value });
         } else if ("refresh" in action) await refresh(context, action.refresh);
         else if (seed.callError) throw { code: "server", message: seed.callError, details: [] };
       }

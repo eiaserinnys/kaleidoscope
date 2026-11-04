@@ -311,7 +311,7 @@ it("클라이언트가 발행한 행과 선택은 코어 동작 없이 표에 �
   await userEvent.click(screen.getByRole("button", { name: "계산" }));
   expect(await screen.findByText("계산된 행")).toBeTruthy();
   expect(screen.getByRole("columnheader", { name: "동적 이름" })).toBeTruthy();
-  expect(transport.getCalls().filter((call) => call.op === "data.act" || call.op === "window.set_state")).toHaveLength(0);
+  expect(transport.getCalls().filter((call) => call.op === "data.act" || call.op === "window.set_state" || call.op === "window.patch_state")).toHaveLength(0);
 });
 
 it("창 클라이언트 프레임의 발행은 표로만 전달된다", async () => {
@@ -336,7 +336,7 @@ it("창 클라이언트 프레임의 발행은 표로만 전달된다", async ()
   expect(frame.getAttribute("allow")).toBe("autoplay");
   act(() => window.dispatchEvent(new MessageEvent("message", { origin: "null", source: frame.contentWindow, data: { token: "00000000-0000-4000-8000-000000000010", type: "ks-client-publish", patch: { rows: [{ key: "a", title: "프레임 결과" }] } } })));
   expect(await screen.findByText("프레임 결과")).toBeTruthy();
-  expect(transport.getCalls().filter((request) => request.op === "data.act" || request.op === "window.set_state")).toHaveLength(0);
+  expect(transport.getCalls().filter((request) => request.op === "data.act" || request.op === "window.set_state" || request.op === "window.patch_state")).toHaveLength(0);
 });
 
 it("uses the contract's card-board pointers for supported bindings and actions", async () => {

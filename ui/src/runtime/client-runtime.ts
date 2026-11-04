@@ -530,9 +530,8 @@ export class ClientRuntime {
       if (!this.hostServices.hasCapability("keep_awake")) this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_KEEP_AWAKE_CAPABILITY_UNDECLARED());
       else void this.hostServices.keepAwake(message.enabled === true).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, false));
     } else if (message.type === "ks-sandbox-state-set" && message.patch && typeof message.patch === "object") {
-      const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.data.windowId)?.state ?? {};
       const patch = Object.fromEntries(Object.entries(message.patch).filter(([key]) => this.client.state_keys.includes(key))) as Record<string, JsonValue>;
-      void this.store.call({ op: "window.set_state", window_id: this.data.windowId, state: { ...state, ...patch } }).catch((error) => this.data.setNotice(toCoreError(error)));
+      if (Object.keys(patch).length) void this.store.call({ op: "window.patch_state", window_id: this.data.windowId, patch }).catch((error) => this.data.setNotice(toCoreError(error)));
     } else if ((message.type === "ks-sandbox-storage-get" || message.type === "ks-sandbox-storage-set") && this.client.storage_entries.includes(message.entry)) {
       const task = this.writes.catch(() => undefined).then(async () => {
         if (message.type === "ks-sandbox-storage-get" || !(message.entry in this.revisions)) {

@@ -78,9 +78,9 @@ export function patchWindowState(context: WindowStateTarget, patch: Record<strin
   queueMicrotask(() => {
     windows.delete(context.window.id);
     context.store.call({
-      op: "window.set_state",
+      op: "window.patch_state",
       window_id: context.window.id,
-      state: { ...readWindowState(context), ...pending.patch },
+      patch: pending.patch,
     }).then(pending.resolve, pending.reject);
   });
   return promise;

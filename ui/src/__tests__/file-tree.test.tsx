@@ -44,7 +44,7 @@ describe("file_tree block", () => {
     expect(screen.queryByRole("button", { name: "notes.txt" })).toBeNull();
   });
 
-  it("writes a selected file path through window.set_state", async () => {
+  it("writes a selected file path through window.patch_state", async () => {
     const transport = createFakeTransport(makeTestSeed({
       grants: [grantFor("editor-window", "docs")],
     }));
@@ -55,9 +55,9 @@ describe("file_tree block", () => {
     fireEvent.click(await screen.findByRole("treeitem", { name: "README.md" }));
 
     await waitFor(() => expect(call).toHaveBeenCalledWith({
-      op: "window.set_state",
+      op: "window.patch_state",
       window_id: "editor-window",
-      state: { current_file: "README.md" },
+      patch: { current_file: "README.md" },
     }));
     await waitFor(() => expect(store.getSnapshot()?.shared.windows[0]?.state.current_file).toBe("README.md"));
   });

@@ -53,7 +53,7 @@ it("같은 이동 이벤트를 받은 두 창의 서로 다른 경로 상태 키
       expect(store.getSnapshot()?.shared.windows.find((item) => item.id === id)?.state).toEqual({ first: "new/note.md", second: "new/note.md" });
     }
   });
-  expect(call.mock.calls.filter(([request]) => request.op === "window.set_state")).toHaveLength(2);
+  expect(call.mock.calls.filter(([request]) => request.op === "window.patch_state")).toHaveLength(2);
   store.dispose();
 });
 

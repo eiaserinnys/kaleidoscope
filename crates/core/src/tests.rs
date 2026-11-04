@@ -2951,6 +2951,86 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
 }
 
 #[test]
+fn window_patch_state_preserves_keys_and_validates_merged_state() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let mut definition: Value = serde_json::from_str(&test_definition(MD_VIEWER)).unwrap();
+    definition["state"] = json!({"a": 0, "b": 0, "current_file": null});
+    let core = open_core(temp.path(), vec![definition.to_string()], &host);
+    let (_, desktop_id) = active_ids(&core);
+    let window_id = open_window(&core, &desktop_id, "test-md-viewer");
+    let patch = |id: &str, value: Value| {
+        let request: CoreRequest = serde_json::from_value(json!({
+            "op": "window.patch_state", "window_id": id, "patch": value
+        }))
+        .unwrap();
+        core.handle(request)
+    };
+    let first = patch(&window_id, json!({"a": 1})).unwrap();
+    let first = serde_json::to_value(first).unwrap();
+    assert_eq!(
+        first["window"]["state"],
+        json!({"a": 1, "b": 0, "current_file": null})
+    );
+    let second = patch(&window_id, json!({"b": 1})).unwrap();
+    let second = serde_json::to_value(second).unwrap();
+    assert_eq!(
+        second["window"]["state"],
+        json!({"a": 1, "b": 1, "current_file": null})
+    );
+    assert_eq!(
+        expect_error(
+            patch(&window_id, json!({"unknown": 1})),
+            ErrorCode::InvalidRequest
+        )
+        .id
+        .as_deref(),
+        Some("DESK_WINDOW_STATE_KEY_NOT_DECLARED")
+    );
+    assert_eq!(
+        expect_error(patch("missing", json!({"a": 1})), ErrorCode::NotFound)
+            .id
+            .as_deref(),
+        Some("DESK_WINDOW_STATE_WINDOW_NOT_FOUND")
+    );
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .windows
+            .iter()
+            .find(|window| window.id == window_id)
+            .unwrap()
+            .state,
+        BTreeMap::from([
+            ("a".into(), json!(1)),
+            ("b".into(), json!(1)),
+            ("current_file".into(), Value::Null)
+        ])
+    );
+    let half = "x".repeat(kaleidoscope_contract::WINDOW_STATE_MAX_BYTES / 2);
+    patch(&window_id, json!({"a": half})).unwrap();
+    assert_eq!(
+        expect_error(
+            patch(&window_id, json!({"b": half})),
+            ErrorCode::InvalidRequest
+        )
+        .id
+        .as_deref(),
+        Some("DESK_WINDOW_STATE_TOO_LARGE")
+    );
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .windows
+            .iter()
+            .find(|window| window.id == window_id)
+            .unwrap()
+            .state["b"],
+        json!(1)
+    );
+}
+
+#[test]
 fn invalid_state_and_last_workspace_or_desktop_deletions_are_rejected() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

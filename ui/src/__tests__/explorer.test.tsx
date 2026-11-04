@@ -194,7 +194,7 @@ describe("explorer block", () => {
     await screen.findByRole("option", { name: "readme.txt" });
     fireEvent.click(await screen.findByRole("button", { name: "자세히 보기" }));
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
-      op: "window.set_state", window_id: "viewer-window", state: { folder: "", view: "details" },
+      op: "window.patch_state", window_id: "viewer-window", patch: { view: "details" },
     }));
     const table = await screen.findByRole("table", { name: "폴더 내용" });
     expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
@@ -211,7 +211,7 @@ describe("explorer block", () => {
     const folders = await screen.findByRole("tree", { name: "폴더 목록" });
     fireEvent.click(within(folders).getByRole("treeitem", { name: "notes" }));
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
-      op: "window.set_state", window_id: "viewer-window", state: { folder: "notes", view: "icons" },
+      op: "window.patch_state", window_id: "viewer-window", patch: { folder: "notes" },
     }));
     fireEvent.click(await screen.findByRole("option", { name: /a\.md/ }));
     fireEvent.doubleClick(screen.getByRole("option", { name: /a\.md/ }));
@@ -223,7 +223,7 @@ describe("explorer block", () => {
     const folders = await screen.findByRole("tree", { name: "폴더 목록" });
     fireEvent.click(within(folders).getByRole("treeitem", { name: "notes" }));
     expect(await screen.findByRole("option", { name: /a\.md/ })).toBeTruthy();
-    expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "window.set_state" }));
+    expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "window.patch_state" }));
   });
 
   it("describes visible explorer icons, details rows, and folder tree for sharing", async () => {
@@ -248,7 +248,7 @@ describe("explorer block", () => {
   it("returns to the selected root and persists it when the saved folder no longer exists", async () => {
     const { calls } = setup({ folder: "missing", view: "icons" });
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
-      op: "window.set_state", window_id: "viewer-window", state: { folder: "", view: "icons" },
+      op: "window.patch_state", window_id: "viewer-window", patch: { folder: "" },
     }));
     expect(await screen.findByRole("option", { name: "readme.txt" })).toBeTruthy();
   });
@@ -291,7 +291,7 @@ describe("explorer block", () => {
     await screen.findByRole("option", { name: "readme.txt" });
     fireEvent.click(screen.getByRole("button", { name: "자세히 보기" }));
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
-      op: "window.set_state", window_id: "viewer-window", state: { folder: "", view: "details" },
+      op: "window.patch_state", window_id: "viewer-window", patch: { view: "details" },
     }));
     await transport.call({
       op: "window.set_state", window_id: "viewer-window", state: { folder: "notes/deeper", view: "details" },
@@ -303,7 +303,7 @@ describe("explorer block", () => {
     act(() => globalThis.window.dispatchEvent(new Event("focus")));
 
     await waitFor(() => expect(calls).toHaveBeenCalledWith({
-      op: "window.set_state", window_id: "viewer-window", state: { folder: "", view: "details" },
+      op: "window.patch_state", window_id: "viewer-window", patch: { folder: "" },
     }));
     expect(await screen.findByRole("table", { name: "폴더 내용" })).toBeTruthy();
     expect(screen.getByRole("table", { name: "폴더 내용" }).querySelector('[data-file-path="readme.txt"]')).not.toBeNull();
