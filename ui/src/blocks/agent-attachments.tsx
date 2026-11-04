@@ -53,7 +53,7 @@ export function DraftChip({ attachment, onRemove, onPreview }: { attachment: Dra
 }
 
 export function AttachmentChip({ name, preview, removeLabel, onRemove }: { name: string; preview: ReactNode; removeLabel: string; onRemove: () => void }) {
-  return <div className="ks-agent-attachment-chip">{preview}<span className="ks-agent-attachment-name" title={name}>{name}</span><IconButton aria-label={removeLabel} onClick={onRemove}><X /></IconButton></div>;
+  return <div className="ks-agent-attachment-chip" role="listitem">{preview}<span className="ks-agent-attachment-name" title={name}>{name}</span><IconButton aria-label={removeLabel} onClick={onRemove}><X /></IconButton></div>;
 }
 
 export function PendingAttachment({ attachment, onPreview }: { attachment: DraftAttachment; onPreview: OpenPreview }) {

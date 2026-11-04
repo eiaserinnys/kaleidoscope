@@ -91,6 +91,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     if (!content) return;
     const scope = content.closest<HTMLElement>(".ks-window-frame") ?? content;
     let focused: HTMLElement | null = null;
+    let focusedItem: HTMLElement | null = null;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
     let inContent = false;
     let restore = false;
@@ -105,11 +106,46 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       if (!(target instanceof HTMLElement) || target.classList.contains("ks-window-content")) return;
       focused = target;
       inContent = content.contains(target);
+      focusedItem = null;
+      for (let item: HTMLElement | null = target; item && content.contains(item); item = item.parentElement) {
+        if (item.matches('[role="option"], [role="listitem"]') || item.parentElement?.matches('.ks-repeat-content')) {
+          focusedItem = item;
+          break;
+        }
+      }
       focusPath = [];
       for (let ancestor = target.parentElement; ancestor && content.contains(ancestor); ancestor = ancestor.parentElement) {
         focusPath.push({ ancestor, controlIndex: visibleControls(ancestor).indexOf(target) });
       }
       restore = false;
+    };
+    const collectionTarget = (changes: MutationRecord[]): HTMLElement | undefined => {
+      const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"]')) : undefined;
+      if (!collection || !focusedItem || focusedItem.isConnected) return;
+      const group = collection.ancestor;
+      const visible = visibleControls(content);
+      let anchor: Node = group;
+      if (content.contains(group)) {
+        const controls = visibleControls(group);
+        if (controls.length) return controls[Math.max(0, collection.controlIndex)] ?? controls[controls.length - 1];
+      } else {
+        const parent = focusPath.find(({ ancestor }) => content.contains(ancestor))?.ancestor;
+        if (!parent) return;
+        const added = changes.filter((change) => change.target === parent).flatMap((change) => Array.from(change.addedNodes));
+        anchor = added.find((node) => parent.contains(node)) ?? parent;
+      }
+      const addedControl = changes.some((change) => content.contains(change.target)
+        && Array.from(change.addedNodes).some((node) => visible.some((control) => node.contains(control))));
+      if (addedControl) return;
+      // 빈 모음에서는 뒤에 있는 강조 단추보다 입력칸과 앞 조작을 우선한다.
+      const target = visible.find((element) => element.classList.contains("ks-agent-chat-input"))
+        ?? visible.filter((element) => Boolean(element.compareDocumentPosition(anchor) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
+      if (target) return target;
+      const windowContent = content.closest<HTMLElement>(".ks-window-content") ?? content;
+      if (!windowContent.hasAttribute("tabindex")) windowContent.tabIndex = -1;
+      windowContent.classList.add("ks-focus-rescue-empty");
+      windowContent.addEventListener("blur", () => windowContent.classList.remove("ks-focus-rescue-empty"), { once: true });
+      return windowContent;
     };
     const observer = new MutationObserver((changes) => {
       const active = document.activeElement;
@@ -118,34 +154,7 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
       if (!restore || !lost) return;
       // 포인터로 시작한 화면 전환에는 키보드 초점 테두리를 만들지 않는다.
       if (pointer) { restore = false; return; }
-      let target: HTMLElement | undefined;
-      const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"]')) : undefined;
-      const group = collection && content.contains(collection.ancestor) ? collection.ancestor : null;
-      const addedToGroup = group && changes.some((change) => change.target === group && change.addedNodes.length > 0);
-      const addedElsewhere = !group && changes.some((change) => content.contains(change.target) && change.addedNodes.length > 0);
-      if (collection && group && !addedToGroup) {
-        const controls = visibleControls(group);
-        if (controls.length) {
-          target = controls[Math.max(0, collection.controlIndex)] ?? controls[controls.length - 1];
-        } else {
-          const visible = visibleControls(content);
-          target = visible.find((element) => element.classList.contains("ks-agent-chat-input"))
-            ?? visible.filter((element) => Boolean(element.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING)).at(-1);
-          if (!target) {
-            const windowContent = content.closest<HTMLElement>(".ks-window-content") ?? content;
-            if (!windowContent.hasAttribute("tabindex")) windowContent.tabIndex = -1;
-            windowContent.classList.add("ks-focus-rescue-empty");
-            windowContent.addEventListener("blur", () => windowContent.classList.remove("ks-focus-rescue-empty"), { once: true });
-            target = windowContent;
-          }
-        }
-      } else if (collection && !group && !addedElsewhere && collection.ancestor.classList.contains("ks-agent-attachment-list")) {
-        const parent = focusPath.find(({ ancestor }) => content.contains(ancestor));
-        if (parent) {
-          const controls = visibleControls(parent.ancestor);
-          target = controls[Math.max(0, parent.controlIndex)] ?? controls[controls.length - 1];
-        }
-      }
+      let target = collectionTarget(changes);
       const visible = visibleControls(content);
       target ??= visible.find((element) => element.classList.contains("ks-button-emphasis"))
         ?? visible.find((element) => element.classList.contains("ks-agent-chat-input")) ?? visible[0];
