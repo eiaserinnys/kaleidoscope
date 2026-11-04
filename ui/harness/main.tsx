@@ -24,7 +24,7 @@ import htmlReportJson from "../../apps/html-report.json";
 import { htmlReportSample } from "./html-report-sample";
 import workspacePasJson from "../../examples/workspace-pas.json";
 import { dataViewsApp } from "./data-views-app";
-import { pagingApp, pagingSeeds } from "./paging-app";
+import { pagingApp, pagingComparisonApp, pagingSeeds, pagingSplitApp } from "./paging-app";
 import { dataLayoutApp } from "./data-layout-app";
 import earthJson from "../../apps/earth.json";
 import marketJson from "../../apps/market.json";
@@ -82,7 +82,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp];
+const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
@@ -404,7 +404,7 @@ function Harness() {
         remoteEdits.current += 1;
         await fakeTransport.call({ op: "storage.write", window_id: "storage-window", entry: "memo", content: `# 다른 기기의 문서 ${remoteEdits.current}`, expected_revision: result.revision });
       }}>다른 기기에서 수정</button> : null}
-      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "client-chat-test" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test")) ? <FakeFilePanel transport={fakeTransport} /> : null}
+      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "client-chat-test" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test" || previewAppId === "paging-test" || previewAppId === "paging-split-test")) ? <FakeFilePanel transport={fakeTransport} /> : null}
     </main>
   );
 }

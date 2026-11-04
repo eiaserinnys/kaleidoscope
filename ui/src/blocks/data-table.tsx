@@ -148,7 +148,7 @@ export function TableView({ columns: sourceColumns, rows: sourceRows, initialSor
         const row = rows[v.index];
         return <TableRow key={row.key} row={row} index={v.index} start={v.start} active={row.key === selected} focused={roving.focus === v.index} columns={sourceColumns} measure={virtual.measureElement} handlers={handlers} renderCell={renderCell} rowProps={rowProps} activatable={Boolean(onActivate)} />;
       })}</VirtualSurface>}
-      {footer}
     </div>
+    {footer}
   </div>;
 }
