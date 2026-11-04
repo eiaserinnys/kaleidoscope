@@ -7,6 +7,7 @@ vi.mock("../data/window-data", () => ({
   useWindowData: () => runtime,
   useBinding: (_pointer: string, binding: unknown) => ({ status: "ready", value: binding }),
 }));
+vi.mock("../data/window-state", async (importOriginal) => ({ ...(await importOriginal<typeof import("../data/window-state")>()), useWindowVisible: () => true }));
 vi.mock("../components/data-icons", () => ({
   DataIcon: ({ name }: { name: string }) => <svg data-icon-name={name} />,
 }));
