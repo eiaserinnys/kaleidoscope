@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{data::all_ui_bindings, validate::parse_app_definition};
+use kaleidoscope_contract::{data::all_ui_bindings, validate::parse_app_definition, BUTTON_DESCRIPTION_BLOCK_SET_VERSION};
 use serde_json::{json, Value};
 
 fn definition(blocks: u32) -> Value {

@@ -27,8 +27,6 @@
   word-break: keep-all;
 }
 
-.ks-tooltip-content { word-break: normal; }
-
 .ks-markdown-text pre,
 .ks-process-command {
   white-space: pre-wrap;
