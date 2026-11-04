@@ -4,6 +4,13 @@ error_catalog! { ENTRIES;
     APP_STORE_PERMISSION_UNDECLARED(location, permission) { class: InvalidAppDefinition, place: "스토어 사용 권한 선언 검사", cause: "스토어 권한이 선언되지 않았다", message: "앱 정의 {location}: 스토어 권한 {permission}이 선언되지 않았습니다. permissions에 이 권한을 추가하세요.", fix: "permissions에 스토어 권한을 추가하세요" }
     APP_STORE_PERMISSION_MISMATCH(location, permission, module) { class: InvalidAppDefinition, place: "스토어 사용 권한 종류 검사", cause: "참조한 권한이 스토어 권한이 아니다", message: "앱 정의 {location}: 권한 {permission}의 모듈이 {module}입니다. 스토어 권한 ID를 지정하세요.", fix: "스토어 권한 ID를 지정하세요" }
     APP_STORE_RELEASE_INVALID(location, value) { class: InvalidAppDefinition, place: "스토어 설치 판 검사", cause: "설치 판의 리터럴이 양의 정수가 아니다", message: "앱 정의 {location}: 설치 판 {value}은 1 이상의 정수여야 합니다. release 값을 고치세요.", fix: "release를 1 이상의 정수로 고치세요" }
+    APP_RECEIVE_MESSAGE_REQUIRES_VERSION(blocks, client) {
+        class: InvalidAppDefinition,
+        place: "메시지 수신 능력 판 검사",
+        cause: "메시지 수신 능력에 필요한 판이 선언되지 않았다",
+        message: "메시지 수신 능력에 필요한 판이 선언되지 않았습니다. requires.blocks를 {blocks}, client를 {client} 이상으로 고치세요",
+        fix: "메시지 수신에 필요한 블록 세트와 client 판을 선언하세요"
+    }
     APP_ICON_VERSION_INVALID(app_id, asset, version) {
         class: InvalidAppDefinition,
         place: "앱 아이콘 자산 판 검사",

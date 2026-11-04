@@ -1,0 +1,6 @@
+[
+  {"agent": false, "capabilities": [], "expected": null},
+  {"agent": false, "capabilities": ["receive_message"], "expected": "client"},
+  {"agent": true, "capabilities": [], "expected": "conversation"},
+  {"agent": true, "capabilities": ["receive_message"], "expected": "conversation"}
+]

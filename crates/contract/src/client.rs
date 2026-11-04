@@ -283,6 +283,60 @@ pub enum ClientCapability {
     KeepAwake,
     Instructions,
     ContextCapture,
+    /// 다른 창에서 보낸 글을 받는다. 블록 세트 29판과 client 6판 이상이 필요하다.
+    ReceiveMessage,
+}
+
+/// 다른 창에서 받는 글. 첨부나 임의 데이터는 포함하지 않는다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct MessageInput {
+    pub request_id: String,
+    pub text: String,
+}
+
+/// accepted는 접수 완료이며 답변 생성 완료를 뜻하지 않는다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(tag = "status", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum MessageResult {
+    Accepted {},
+    /// reason은 사용자가 준비를 마치는 데 필요한 행동 안내다.
+    NotReady { reason: String },
+}
+
+/// 쉘에서 격리 프레임으로 보내는 메시지.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(tag = "type")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ClientHostMessage {
+    #[serde(rename = "ks-client-message")]
+    Message { #[serde(rename = "requestId")] request_id: String, message: MessageInput },
+}
+
+/// 프레임이 결과 또는 오류 중 하나를 보낸다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum ClientMessageOutcome {
+    Result { result: MessageResult },
+    Error { error: crate::CoreError },
+}
+
+/// 격리 프레임에서 쉘로 보내는 준비와 메시지 결과.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(tag = "type")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ClientFrameMessage {
+    #[serde(rename = "ks-client-message-result")]
+    Result {
+        #[serde(rename = "requestId")]
+        request_id: String,
+        #[serde(flatten)]
+        outcome: ClientMessageOutcome,
+    },
+    #[serde(rename = "ks-client-message-ready")]
+    Ready {},
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]

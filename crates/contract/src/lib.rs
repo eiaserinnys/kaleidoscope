@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 32판, 261105)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 34판, 261105)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -220,6 +220,7 @@ pub mod errors;
 pub mod file_name;
 pub mod jsonata_functions;
 pub mod process;
+pub mod preferences;
 pub mod realtime;
 pub mod registry;
 pub mod size;
@@ -244,7 +245,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 33;
+pub const CONTRACT_VERSION: u32 = 34;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -286,7 +287,11 @@ pub const CONTRACT_VERSION: u32 = 33;
 /// - 26판: 앱 정의의 불변 자산 아이콘.
 /// - 27판: `split.column_below`, `repeat.gap`.
 /// - 28판: `button.description` 도움말 바인딩.
-pub const BLOCK_SET_VERSION: u32 = BUTTON_DESCRIPTION_BLOCK_SET_VERSION;
+/// - 29판: client의 메시지 수신 능력.
+pub const BLOCK_SET_VERSION: u32 = RECEIVE_MESSAGE_BLOCK_SET_VERSION;
+/// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
+pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
+pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
 /// 앱 아이콘 자산 참조의 첫 블록 세트 판.
 pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 /// 분할의 반응형 방향과 반복 간격의 첫 블록 세트 판.
@@ -326,7 +331,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("http", 2),
     ("worker", 1),
     ("profiler", 1),
-    ("client", realtime::REALTIME_CLIENT_VERSION),
+    ("client", RECEIVE_MESSAGE_CLIENT_VERSION),
     ("process", 1),
 ];
 
@@ -553,6 +558,10 @@ pub struct SharedState {
     pub workspaces: Vec<Workspace>,
     pub desktops: Vec<Desktop>,
     pub windows: Vec<AppWindow>,
+    /// None은 아직 서버에서 계정 설정을 받지 않은 상태다.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub preferences: Option<preferences::AccountPreferences>,
 }
 
 /// 이 기기에만 두는 상태.
@@ -4093,6 +4102,12 @@ pub enum PathValue {
 #[serde(tag = "op", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreRequest {
+    /// 계정의 기본 메시지 수신 앱을 바꾼다. None은 기본 앱 묶음의 초기 수신 앱을 뜻한다.
+    #[serde(rename = "shell.preferences.set_default")]
+    ShellPreferencesSetDefault { app_id: Option<String> },
+    /// 새 수신 앱을 기본으로 쓸지 답한다.
+    #[serde(rename = "shell.preferences.answer")]
+    ShellPreferencesAnswer { app_id: String, use_as_default: bool },
     #[serde(rename = "window.control.respond")]
     WindowControlRespond { response: WindowControlResponse },
     #[serde(rename = "window.control.capture")]
@@ -5169,6 +5184,10 @@ pub enum ConversationApplyStatus {
 #[serde(tag = "op")]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreReply {
+    #[serde(rename = "shell.preferences.set_default")]
+    ShellPreferencesSetDefault { preferences: preferences::AccountPreferences },
+    #[serde(rename = "shell.preferences.answer")]
+    ShellPreferencesAnswer { preferences: preferences::AccountPreferences },
     #[serde(rename = "client.http_read")]
     ClientHttpRead { bytes: Vec<u8>, mime: String },
     #[serde(rename = "client.blob_put")]
@@ -6135,7 +6154,7 @@ mod tests {
         });
         let definition = validate::parse_app_definition(&definition.to_string())
             .expect("U6 필드를 사용하는 정의는 유효하다");
-        assert_eq!(CONTRACT_VERSION, 33);
+        assert!(CONTRACT_VERSION >= 33);
         let Block::Tabs {
             header,
             keep_mounted,
@@ -6456,6 +6475,8 @@ mod tests {
              export const SHARE_DEBOUNCE_MS = {};\n\
              /** 쉘에 기본 탑재되는 앱 ID 목록. */\n\
              export const BUILTIN_APP_IDS = [{}] as const;\n\
+             /** 기본 메시지 수신 앱으로 표시된 기본 앱 ID 목록. */\n\
+             export const BUILTIN_DEFAULT_MESSAGE_APP_IDS = [{}] as const;\n\
              /** 단추 아이콘으로 쓸 수 있는 Lucide 아이콘 이름(블록 세트 4판). */\n\
              export const ICON_NAMES = [{}] as const;\n\
              export type IconName = (typeof ICON_NAMES)[number];\n",
@@ -6473,6 +6494,7 @@ mod tests {
             SHARE_TEXT_CUT_MARK,
             SHARE_DEBOUNCE_MS,
             builtin::BUILTIN_IDENTITIES.iter().map(|app| format!("\"{}\"", app.id)).collect::<Vec<_>>().join(", "),
+            builtin::BUILTIN_IDENTITIES.iter().filter(|app| app.default_message_receiver).map(|app| format!("\"{}\"", app.id)).collect::<Vec<_>>().join(", "),
             data::ICON_NAMES
                 .iter()
                 .map(|name| format!("\"{name}\""))

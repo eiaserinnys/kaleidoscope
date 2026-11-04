@@ -3,6 +3,8 @@
 use crate::assets::AssetFormat;
 
 pub struct BuiltinIdentity {
+    /// 기본 메시지 수신 앱의 초기 후보인지 표시한다.
+    pub default_message_receiver: bool,
     pub id: &'static str,
     pub name: &'static str,
     pub version: u32,
@@ -58,6 +60,7 @@ pub const RETIRED_BUILTIN_APP_IDS: &[&str] = &["md-viewer", "slackbot"];
 
 pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "profiler",
         name: "프로파일러",
         version: 3,
@@ -67,6 +70,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "agent",
         name: "에이전트",
         version: 6,
@@ -83,6 +87,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: AGENT_ASSET_KEYS,
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "explorer",
         name: "탐색기",
         version: 3,
@@ -92,6 +97,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "md-editor",
         name: "마크다운 편집기",
         version: 4,
@@ -101,6 +107,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "html-report",
         name: "시안과 리포트",
         version: 2,
@@ -110,6 +117,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "web-browser",
         name: "웹 브라우저",
         version: 1,
@@ -119,6 +127,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "calculator",
         name: "계산기",
         version: 2,
@@ -128,6 +137,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "weather",
         name: "날씨",
         version: 2,
@@ -137,6 +147,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: WEATHER_ASSET_KEYS,
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "market",
         name: "시세와 환율",
         version: 2,
@@ -146,6 +157,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "earth",
         name: "지구 상황판",
         version: 2,
@@ -155,6 +167,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         assets: &[],
     },
     BuiltinIdentity {
+        default_message_receiver: false,
         id: "reader",
         name: "해커뉴스",
         version: 4,
