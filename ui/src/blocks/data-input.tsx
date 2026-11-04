@@ -21,6 +21,8 @@ import { renderBlock } from "../render/render-block";
 import { PreviewContext } from "./preview-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
+const BUTTON_PROGRESS_DELAY_MS = 250;
+const BUTTON_PROGRESS_MIN_MS = 400;
 const fieldPosition = (position: "inline" | "top" | "hidden" | undefined) => position && position !== "inline" ? ` is-label-${position}` : "";
 function bindingText(value: ReturnType<typeof useBinding>): string {
   return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
@@ -145,6 +147,8 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const [showProgress, setShowProgress] = useState(false);
   const busyRef = useRef(false);
   const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressShownAt = useRef<number | null>(null);
+  const mounted = useRef(true);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [copySucceeded, setCopySucceeded] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
@@ -167,25 +171,39 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
   const variant = variantBinding.status === "ready" && typeof variantBinding.value === "string" && ["default", "primary", "danger", "ghost", "chip"].includes(variantBinding.value) ? variantBinding.value : "default";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
-  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); if (progressTimer.current) clearTimeout(progressTimer.current); }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; if (copyTimer.current) clearTimeout(copyTimer.current); if (progressTimer.current) clearTimeout(progressTimer.current); };
+  }, []);
+  useLayoutEffect(() => {
+    if (showProgress) progressShownAt.current = performance.now();
+  }, [showProgress]);
   const run = async (restore: boolean, modifiers?: ReturnType<typeof eventModifiers>) => {
     if (busyRef.current) return;
     busyRef.current = true;
     restoreAfterAction.current = restore;
     setConfirm(false);
     setBusy(true);
-    progressTimer.current = setTimeout(() => { setShowProgress(true); progressTimer.current = null; }, 250);
+    progressShownAt.current = null;
+    progressTimer.current = setTimeout(() => { setShowProgress(true); progressTimer.current = null; }, BUTTON_PROGRESS_DELAY_MS);
     const succeeded = await data.act(`${pointer}/on_click`, null, undefined, modifiers);
+    if (!mounted.current) return;
     if (progressTimer.current) clearTimeout(progressTimer.current);
     progressTimer.current = null;
-    setShowProgress(false);
-    busyRef.current = false;
-    setBusy(false);
-    if (succeeded && copyTextAction(block.on_click)) {
-      setCopySucceeded(true);
-      if (copyTimer.current) clearTimeout(copyTimer.current);
-      copyTimer.current = setTimeout(() => { setCopySucceeded(false); copyTimer.current = null; }, 1500);
-    }
+    const finish = () => {
+      progressTimer.current = null;
+      setShowProgress(false);
+      busyRef.current = false;
+      setBusy(false);
+      if (succeeded && copyTextAction(block.on_click)) {
+        setCopySucceeded(true);
+        if (copyTimer.current) clearTimeout(copyTimer.current);
+        copyTimer.current = setTimeout(() => { setCopySucceeded(false); copyTimer.current = null; }, 1500);
+      }
+    };
+    const remaining = progressShownAt.current === null ? 0 : BUTTON_PROGRESS_MIN_MS - (performance.now() - progressShownAt.current);
+    if (remaining > 0) progressTimer.current = setTimeout(finish, remaining);
+    else finish();
   };
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value) || bindingFailure !== null || labelLoading;
   useLayoutEffect(() => {
@@ -217,7 +235,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     : null;
   const className = `ks-data-button is-${variant}`;
   if (block.preview) return <div ref={setOpener} className={`${className} has-preview`}>
-    <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${busy || unavailable ? " is-disabled" : ""}`} title={previewError ?? undefined}>
+    <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${showProgress || unavailable ? " is-disabled" : ""}`} title={previewError ?? undefined}>
       <div className="ks-data-button-card-content">
         <div className="ks-data-button-card-preview" aria-hidden="true" inert><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
         <div aria-hidden={bindingFailure ? undefined : true} className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}${showProgress ? " is-progress" : ""}`}>

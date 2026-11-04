@@ -46,7 +46,8 @@
 .ks-data-button-card.is-disabled:has(.ks-data-button-card-failure) .ks-data-button-card-preview { opacity: .56; }
 .ks-data-button-failure-item { display: inline-flex; max-width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; gap: var(--ks-space-1); }
 .ks-data-button-failure-item > .ks-data-state-compact { width: 100%; min-width: 0; }
-.ks-data-button:not(.has-preview) > :is(.ks-button, .ks-icon-button)[aria-disabled="true"] { opacity: .56; cursor: default; }
+.ks-data-button:not(.has-preview) > :is(.ks-button, .ks-icon-button)[aria-disabled="true"] { cursor: default; }
+.ks-data-button:not(.has-preview) > :is(.ks-button, .ks-icon-button).is-progress { opacity: .56; }
 
 .ks-data-button > :is(.ks-button, .ks-icon-button).is-progress,
 .ks-data-button-card-label.is-progress { position: relative; }

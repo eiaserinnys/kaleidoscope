@@ -499,8 +499,56 @@ it("단추는 늦은 동작 중 초점을 유지하고 250ms 뒤 진행을 보�
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(control.querySelector(".ks-button-progress")).toBeTruthy();
     await act(async () => { finish(true); });
+    expect(control.querySelector(".ks-button-progress")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
     expect(control.querySelector(".ks-button-progress")).toBeNull();
     expect(document.activeElement).toBe(control);
+  } finally { vi.useRealTimers(); }
+});
+
+it.each(["일반", "아이콘", "카드"])("%s 단추는 짧은 동작은 흐리지 않고 진행 표시는 최소 400ms 유지한다", async (kind) => {
+  vi.useFakeTimers();
+  try {
+    for (const duration of [100, 300, 1000]) {
+      runtime.act.mockImplementationOnce(() => new Promise<boolean>((resolve) => { setTimeout(() => resolve(true), duration); }));
+      const button = { type: "button", label: "시험", on_click: { client: "go" },
+        ...(kind === "아이콘" ? { icon: "check", icon_only: true } : {}),
+        ...(kind === "카드" ? { preview: { type: "canvas", surface: "tile" } } : {}) };
+      const view = render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+      const control = screen.getByRole("button", { name: "시험" }) as HTMLButtonElement;
+      const dimmed = () => kind === "카드" ? !!control.closest(".ks-data-button-card")?.classList.contains("is-disabled") : control.classList.contains("is-progress");
+      const progress = () => !!view.container.querySelector(".ks-button-progress");
+      const check = (busy: boolean, shown: boolean) => {
+        expect(control.getAttribute("aria-busy") === "true").toBe(busy);
+        expect(control.getAttribute("aria-disabled") === "true").toBe(busy);
+        expect(dimmed()).toBe(shown);
+        expect(progress()).toBe(shown);
+      };
+      const callsBefore = runtime.act.mock.calls.length;
+      fireEvent.click(control);
+      check(true, false);
+      await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+      check(duration > 100, false);
+      if (duration > 100) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(149); });
+        check(true, false);
+        await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+        check(true, true);
+        await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+        check(true, true);
+        fireEvent.click(control);
+        expect(runtime.act).toHaveBeenCalledTimes(callsBefore + 1);
+        await act(async () => { await vi.advanceTimersByTimeAsync(349); });
+        check(true, true);
+        await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+        check(duration > 650, duration > 650);
+        if (duration > 650) {
+          await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+          check(false, false);
+        }
+      }
+      view.unmount();
+    }
   } finally { vi.useRealTimers(); }
 });
 
@@ -549,4 +597,32 @@ it("아이콘 단추는 오래 도는 동안 기존 아이콘 대신 진행을 �
     expect(document.activeElement).toBe(control);
     await act(async () => { finish(true); });
   } finally { vi.useRealTimers(); }
+});
+
+it.each([100, 300])("%sms에 닫힌 단추는 남은 진행 타이머를 정리한다", async (unmountAt) => {
+  vi.useFakeTimers();
+  let finish!: (value: boolean) => void;
+  runtime.act.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+  try {
+    const button = { type: "button", label: "실행", on_click: { client: "go" } };
+    const view = render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+    fireEvent.click(screen.getByRole("button", { name: "실행" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(unmountAt); });
+    if (unmountAt > 250) await act(async () => { finish(true); });
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    if (unmountAt < 250) await act(async () => { finish(true); });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally { vi.useRealTimers(); }
+});
+
+it.each([false, true])("앱이 잠근 단추는 미리보기 %s에서도 기본 비활성 모양을 유지한다", (preview) => {
+  const button = { type: "button", label: "잠김", disabled: true, on_click: { client: "go" },
+    ...(preview ? { preview: { type: "canvas", surface: "tile" } } : {}) };
+  render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+  const control = screen.getByRole("button", { name: "잠김" }) as HTMLButtonElement;
+  expect(control.disabled).toBe(true);
+  if (preview) expect(control.closest(".ks-data-button-card")?.classList.contains("is-disabled")).toBe(true);
+  fireEvent.click(control);
+  expect(runtime.act).not.toHaveBeenCalled();
 });
