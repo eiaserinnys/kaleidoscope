@@ -34,9 +34,9 @@ export function HtmlDocumentViewBlock({ block, context }: { block: HtmlBlock; co
   };
   const documentError = model.error && (model.errorSource === "load" || (model.errorSource === "list" && !model.active && model.docs.length === 0));
   const documentContent = model.source ? <iframe ref={model.frame} title="HTML 보기" sandbox="allow-scripts" srcDoc={model.source} />
-    : documentError ? <Notice role="alert" errorId={model.error!.id} actions={[<Button key="retry" onClick={model.errorSource === "load" ? model.retryLoad : model.retryList}>다시 시도</Button>]}>{model.error!.message}</Notice>
-    : model.loaded && !model.active && model.docs.length === 0 ? <EmptyState icon={<FileCode size="empty" />} text="문서가 없습니다" />
-    : <StatusText>불러오는 중</StatusText>;
+    : <div className="ks-html-state">{documentError ? <Notice role="alert" errorId={model.error!.id} actions={[<Button key="retry" onClick={model.errorSource === "load" ? model.retryLoad : model.retryList}>다시 시도</Button>]}>{model.error!.message}</Notice>
+      : model.loaded && !model.active && model.docs.length === 0 ? <EmptyState icon={<FileCode size="empty" />} text="문서가 없습니다" />
+      : <StatusText>불러오는 중</StatusText>}</div>;
   const style = { "--ks-html-side-min": `${SIDE_MIN}px`, "--ks-html-document-min": `${DOCUMENT_MIN}px`, "--ks-html-divider-width": `${DIVIDER_WIDTH}px` } as CSSProperties;
   return <section className="ks-html-view" ref={model.root} style={style} tabIndex={-1} onKeyDown={keyboard} onPointerDown={focusSurface}>
     <HtmlHeader model={model} />
