@@ -2,7 +2,7 @@
   "id": "block-gallery",
   "name": "블록 견본",
   "description": "블록을 탭마다 모아 보인다",
-  "requires": { "blocks": 32, "modules": { "files": 1 } },
+  "requires": { "blocks": 33, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
     { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }
@@ -13,6 +13,7 @@
     "node": null,
     "query": "",
     "memo": "",
+    "choice_input": "사과",
     "lang": "both",
     "compact": false,
     "count": 0,
@@ -193,7 +194,12 @@
             {
               "type": "section",
               "title": "고르기",
-              "child": { "type": "select", "value": { "state": "lang" }, "on_change": { "set_state": "lang" }, "options": ["ko", "en", "both"] }
+              "child": { "type": "select", "value": { "state": "lang" }, "on_change": { "set_state": "lang" }, "options": [{ "value": "ko", "label": "한국어", "description": "한국어로 표시합니다." }, "en", "both"] }
+            },
+            {
+              "type": "section",
+              "title": "자동완성",
+              "child": { "type": "input", "label": "이름", "value": { "state": "choice_input" }, "on_change": { "set_state": "choice_input" }, "options": [{ "value": "사과", "label": "사과", "description": "아삭한 과일입니다." }, { "value": "배", "label": "배", "description": "과즙이 풍부한 과일입니다." }, "귤"] }
             },
             {
               "type": "repeat",

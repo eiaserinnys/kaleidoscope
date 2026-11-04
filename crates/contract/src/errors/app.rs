@@ -13,6 +13,15 @@ error_catalog! { ENTRIES;
         message: "메시지 수신 능력에 필요한 판이 선언되지 않았습니다. requires.blocks를 {blocks}, client를 {client} 이상으로 고치세요",
         fix: "메시지 수신에 필요한 블록 세트와 client 판을 선언하세요"
     }
+    APP_INPUT_OPTIONS_VERSION_LOW(at, required, required_min) { class: InvalidAppDefinition, place: "입력 선택지 블록 판 검사", cause: "선택지를 지원하지 않는 블록 판", message: "{at}의 입력 선택지는 블록 세트 {required}판부터입니다. requires.blocks를 {required_min} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
+    APP_SELECT_DESCRIPTION_VERSION_LOW(at, required, required_min) { class: InvalidAppDefinition, place: "선택지 설명 블록 판 검사", cause: "선택지 설명을 지원하지 않는 블록 판", message: "{at}의 선택지 description은 블록 세트 {required}판부터입니다. requires.blocks를 {required_min} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
+    APP_INPUT_OPTIONS_KIND_INVALID(at) { class: InvalidAppDefinition, place: "입력 선택지 종류 검사", cause: "텍스트나 검색이 아닌 입력에 선택지 선언", message: "{at}의 options는 text와 search 입력에서만 쓸 수 있습니다. kind를 고치거나 options를 빼세요.", fix: "kind를 고치거나 options를 빼세요" }
+    APP_INPUT_OPTIONS_MULTILINE_INVALID(at) { class: InvalidAppDefinition, place: "입력 선택지 줄 수 검사", cause: "여러 줄 입력에 선택지 선언", message: "{at}의 선택지 입력은 한 줄이어야 합니다. multiline을 끄고 rows를 1 이하로 고치세요.", fix: "multiline을 끄고 rows를 1 이하로 고치세요" }
+    APP_INPUT_OPTIONS_ONLY_WITHOUT_OPTIONS(at) { class: InvalidAppDefinition, place: "입력 선택지 전용 설정 검사", cause: "선택지 없이 options_only 선언", message: "{at}에 options_only가 있지만 options가 없습니다. 선택지 바인딩을 더하거나 options_only를 빼세요.", fix: "선택지 바인딩을 더하거나 options_only를 빼세요" }
+    APP_INPUT_OPTIONS_ARRAY_INVALID(at, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "자료가 배열이 아님", message: "{at}/options: 입력 선택지 자료가 배열이 아닙니다. 받은 값: {received}. 앱 정의의 options 자료를 배열로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
+    APP_INPUT_OPTIONS_ITEM_INVALID(at, index, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "항목이 문자열도 객체도 아님", message: "{at}/options: 입력 선택지 {index}번째가 문자열도 객체도 아닙니다. 받은 값: {received}. 앱 정의의 options 항목을 문자열 또는 객체로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
+    APP_INPUT_OPTIONS_KEY_MISSING(at, index, key) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "필수 키 누락", message: "{at}/options: 입력 선택지 {index}번째에 {key} 키가 없습니다. 앱 정의의 options 객체에 이 키를 문자열로 더하세요.", fix: "앱 정의의 options 자료를 고치세요" }
+    APP_INPUT_OPTIONS_KEY_NOT_STRING(at, index, key, received) { class: InvalidAppDefinition, place: "입력 선택지 값 검사", cause: "키 값이 문자열이 아님", message: "{at}/options: 입력 선택지 {index}번째의 {key} 키 값이 문자열이 아닙니다. 받은 값: {received}. 앱 정의의 options 자료에서 해당 키를 문자열로 고치세요.", fix: "앱 정의의 options 자료를 고치세요" }
     APP_ICON_VERSION_INVALID(app_id, asset, version) {
         class: InvalidAppDefinition,
         place: "앱 아이콘 자산 판 검사",

@@ -292,12 +292,15 @@ pub const CONTRACT_VERSION: u32 = 35;
 /// - 30판: `list`의 아이콘 격자 배치.
 /// - 31판: `input.spin` 숫자 스핀 단추.
 /// - 32판: 단추 강조 바인딩과 움직이는 그림 아이콘.
-pub const BLOCK_SET_VERSION: u32 = BUTTON_VARIANT_ICON_BLOCK_SET_VERSION;
+/// - 33판: 입력 선택지와 선택지 설명.
+pub const BLOCK_SET_VERSION: u32 = INPUT_OPTIONS_BLOCK_SET_VERSION;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
 pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
 pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
 /// 숫자 입력의 스핀 단추를 지원하는 첫 블록 세트 판.
 pub const INPUT_SPIN_BLOCK_SET_VERSION: u32 = 31;
+/// 입력 선택지와 선택지 설명의 첫 블록 세트 판.
+pub const INPUT_OPTIONS_BLOCK_SET_VERSION: u32 = 33;
 /// 앱 아이콘 자산 참조의 첫 블록 세트 판.
 pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 /// 분할의 반응형 방향과 반복 간격의 첫 블록 세트 판.
@@ -1887,6 +1890,14 @@ pub enum Block {
     /// (19판) `columns`는 보일 문자 수로 폭을 정하며, 양수여야 하고 지정한 폭보다 줄어들지 않는다.
     /// (31판) `spin`은 숫자 입력에 위아래 단추를 보인다.
     Input {
+        /// (33판) 입력하면서 거를 문자열 선택지 바인딩.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        options: Option<Binding>,
+        /// (33판) 참이면 선택지 값만 확정한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        options_only: Option<bool>,
         /// (25판) 참이면 편집을 막고 글 선택과 복사는 허용한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2600,6 +2611,10 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         spin: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        options: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        options_only: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         read_only: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         min: Option<Binding>,
@@ -3219,6 +3234,8 @@ impl From<RawBlock> for Block {
             },
             RawBlock::Input {
                 spin,
+                options,
+                options_only,
                 read_only,
                 min,
                 max,
@@ -3239,6 +3256,8 @@ impl From<RawBlock> for Block {
                 on_submit,
             } => Block::Input {
                 spin,
+                options,
+                options_only,
                 read_only,
                 min,
                 max,
@@ -3268,6 +3287,8 @@ impl From<RawBlock> for Block {
                 on_submit,
             } => Block::Input {
                 spin: None,
+                options: None,
+                options_only: None,
                 read_only: None,
                 min: None,
                 max: None,

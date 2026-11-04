@@ -73,6 +73,7 @@ export function Select({ items, groups, value, onChange, placeholder = "", segme
     : (items ?? []).map((item, index) => ({
         id: String(index),
         label: optionLabel(item),
+        description: typeof item === "string" ? undefined : item.description,
         checked: equalOption(value, optionValue(item)),
         onSelect: () => { onChange(optionValue(item)); restore(); },
       }));

@@ -373,6 +373,14 @@ copy?: boolean,
  */
 collapsible?: boolean, selected?: StateRef, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", 
 /**
+ * (33판) 입력하면서 거를 문자열 선택지 바인딩.
+ */
+options?: Binding, 
+/**
+ * (33판) 참이면 선택지 값만 확정한다.
+ */
+options_only?: boolean, 
+/**
  * (25판) 참이면 편집을 막고 글 선택과 복사는 허용한다.
  */
 read_only?: Binding, spin?: boolean, min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, label_position?: LabelPosition, style?: SelectStyle, placeholder?: Binding, 
@@ -1137,7 +1145,7 @@ export type SelectGroup = { name: string, options: Array<SelectOption>, };
 /**
  * `select`의 선택지. 문자열만 쓰면 값과 이름이 같다.
  */
-export type SelectOption = string | { value: JsonValue, label: string, };
+export type SelectOption = string | { value: JsonValue, label: string, description?: string, };
 
 export type SelectStyle = "dropdown" | "segmented";
 

@@ -40,6 +40,8 @@ import { previewGridFixtures } from "../e2e/fixtures/preview-grid";
 import { shellDefectFixtures } from "../e2e/fixtures/shell-defects";
 import { stackWhenFillApp } from "../e2e/fixtures/stack-when-fill";
 import { inputSpinApp } from "../e2e/fixtures/input-spin";
+import { inputOptionsApp } from "../e2e/fixtures/input-options-app";
+import { executeWindowAction, readWindowView, registerControlWindow } from "../src/share/window-control";
 import { describeVisible } from "../src/share/visible";
 
 const mdEditor = mdEditorJson as AppDefinition;
@@ -86,7 +88,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp];
+const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
@@ -241,7 +243,7 @@ const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["rea
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
-  data: { sources: { ...pagingSeeds, pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
+  data: { sources: { ...pagingSeeds, pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, slow_options: { value: ["첫째", "둘째"], delayMs: Number(params.get("options-delay")) || 1500 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne,
     ...Object.fromEntries([
       "<rect x='5' y='3' width='14' height='18' rx='2'/><path d='M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15v2M8 18h2M12 18h2'/>",
@@ -353,6 +355,20 @@ function Harness() {
   const pasWindow = snapshot?.shared.windows.find((item) => item.app_id === "workspace-pas" || (coreUrl && snapshot.shared.app_versions.some((version) => version.app_id === item.app_id && version.version === item.app_version && version.definition.agent)));
   const storageWindow = snapshot?.shared.windows.find((item) => item.app_id === "storage-document");
   const clientChatWindow = snapshot?.shared.windows.find((item) => item.app_id === "client-chat-test");
+  const optionsWindow = snapshot?.shared.windows.find((item) => item.app_id === "input-options-fixture");
+  useEffect(() => {
+    if (previewAppId !== "input-options-fixture" || !optionsWindow) return;
+    const root = document.querySelector<HTMLElement>(`[data-window-id="${optionsWindow.id}"]`);
+    if (!root) return;
+    const unregister = registerControlWindow(optionsWindow.id, root, store);
+    Object.assign(window, { inputOptionsHarness: {
+      read: () => readWindowView(optionsWindow.id),
+      act: (viewId: string, action: Parameters<typeof executeWindowAction>[2]) => executeWindowAction(optionsWindow.id, viewId, action, "options-test"),
+      state: () => store.getSnapshot()?.shared.windows.find((item) => item.id === optionsWindow.id)?.state,
+      calls: () => fakeTransport.getCalls().filter((call) => call.op === "data.act"),
+    } });
+    return unregister;
+  }, [optionsWindow?.id]);
 
   return (
     <main className="ks-harness">
@@ -419,7 +435,7 @@ function Harness() {
         remoteEdits.current += 1;
         await fakeTransport.call({ op: "storage.write", window_id: "storage-window", entry: "memo", content: `# 다른 기기의 문서 ${remoteEdits.current}`, expected_revision: result.revision });
       }}>다른 기기에서 수정</button> : null}
-      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "client-chat-test" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test" || previewAppId === "paging-test" || previewAppId === "paging-split-test")) ? <FakeFilePanel transport={fakeTransport} /> : null}
+      {!coreUrl && !(previewOnly && (previewAppId === "agent" || previewAppId === "client-chat-test" || previewAppId === "data-controls" || previewAppId === "block-gallery" || previewAppId === "data-views-test" || previewAppId === "paging-test" || previewAppId === "paging-split-test" || previewAppId === "input-options-fixture")) ? <FakeFilePanel transport={fakeTransport} /> : null}
     </main>
   );
 }

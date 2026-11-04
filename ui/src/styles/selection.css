@@ -29,7 +29,8 @@ textarea,
 .ks-unknown-block,
 .ks-process-command,
 .ks-process-env,
-.ks-metric-subvalue {
+.ks-metric-subvalue,
+.ks-combobox-description {
   user-select: text;
 }
 

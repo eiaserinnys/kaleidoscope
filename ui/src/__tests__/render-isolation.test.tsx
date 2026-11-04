@@ -1033,6 +1033,19 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("다른 창의 선택지 갱신은 입력과 이웃 블록을 다시 그리지 않는다", async () => {
+    const optionsInput: AppDefinition = { ...definition, requires: { blocks: 33, modules: {} }, state: { first: "a", second: "옆 글", choices: ["a", "b"] }, ui: { type: "stack", direction: "column", children: [
+      { type: "input", value: { state: "first" }, on_change: { set_state: "first" }, options: { state: "choices" } },
+      { type: "text", value: { state: "second" } },
+    ] } };
+    const { store } = await setup([optionsInput], { first: "a", second: "옆 글", choices: ["a", "b"] });
+    await setState(store, "window-a", "choices", ["a", "c"]);
+    await settleRenders();
+    expect(countFor("window-b")).toBe(0);
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    store.dispose();
+  });
+
   it("다음 쪽 상태 변화는 다른 창과 형제 블록을 다시 그리지 않는다", async () => {
     const paged: AppDefinition = { ...definition, ui: { type: "stack", direction: "column", children: [
       { type: "text", value: { state: "first" } },
@@ -1533,6 +1546,27 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await store.call({ op: "window.maximize", window_id: "window-a" });
     expect(countFor("window-a", "/ui/children/3")).toBe(0);
     expect(document.body.textContent).toContain("stable");
+    store.dispose();
+  });
+
+  it("선택지가 없는 입력은 창을 최소화하고 복원해도 다시 그리지 않는다", async () => {
+    const plainInput: AppDefinition = { ...definition, state: { first: "내용" }, ui: { type: "input", value: { state: "first" }, on_change: { set_state: "first" } } };
+    const { store } = await setup([plainInput], { first: "내용" });
+    await store.call({ op: "window.minimize", window_id: "window-a" });
+    await store.call({ op: "window.raise", window_id: "window-a" });
+    await settleRenders();
+    expect(countFor("window-a", "/ui")).toBe(0);
+    store.dispose();
+  });
+
+  it("선택지 입력을 연 창을 최소화하면 팝업을 닫는다", async () => {
+    const optionsInput: AppDefinition = { ...definition, requires: { blocks: 33, modules: {} }, state: { first: "a" }, ui: { type: "input", value: { state: "first" }, on_change: { set_state: "first" }, options: ["a", "b"] } };
+    const { store } = await setup([optionsInput], { first: "a" });
+    const root = document.querySelector<HTMLElement>('[data-window-id="window-a"]')!;
+    fireEvent.focus(within(root).getByRole("combobox"));
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    await act(async () => { await store.call({ op: "window.minimize", window_id: "window-a" }); });
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
     store.dispose();
   });
 
