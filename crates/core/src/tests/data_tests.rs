@@ -2,6 +2,33 @@ use super::*;
 use kaleidoscope_contract::data::{BindingValue, SourceStatus};
 
 #[test]
+fn data_action_reply_covers_state_event_sequence() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![connection_definition()], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "connection-app");
+    core.handle(CoreRequest::DataAttach { window_id: window.clone(), dormant: vec![] }).unwrap();
+    let sequences = Arc::new(Mutex::new(Vec::new()));
+    let received = sequences.clone();
+    core.subscribe(Box::new(move |event| {
+        let value = serde_json::to_value(event).unwrap();
+        if value["event"] == "state.changed" {
+            received.lock().unwrap().push(value["sequence"].as_u64());
+        }
+    }));
+    let reply = core.handle(CoreRequest::DataAct {
+        window_id: window, pointer: "/ui/children/2/on_click".into(),
+        event: json!("새 값"), item: Value::Null, modifiers: None,
+    }).unwrap();
+    let reply = serde_json::to_value(reply).unwrap();
+    let event = sequences.lock().unwrap().iter().flatten().copied().max().expect("상태 이벤트 순번");
+    assert!(reply["sequence"].as_u64().unwrap() >= event);
+    let state = serde_json::to_value(core.handle(CoreRequest::StateGet {}).unwrap()).unwrap();
+    assert!(state["sequence"].as_u64().unwrap() >= event);
+}
+
+#[test]
 fn data_action_missing_window_uses_not_found_code() {
     let dir = TempDir::new().unwrap();
     let core = open_core(dir.path(), vec![], &Arc::new(FakeHost::default()));
@@ -1126,7 +1153,7 @@ fn reattach_during_version_notification_uses_new_definition() {
     let target = Arc::downgrade(&core);
     let window_for_listener = window.clone();
     core.subscribe(Box::new(move |event| {
-        if let CoreEvent::StateChanged { snapshot } = event {
+        if let CoreEvent::StateChanged { snapshot, .. } = event {
             if snapshot
                 .shared
                 .windows
@@ -1182,7 +1209,7 @@ fn reattach_during_state_notification_uses_new_state() {
     let target = Arc::downgrade(&core);
     let window_for_listener = window.clone();
     core.subscribe(Box::new(move |event| {
-        if let CoreEvent::StateChanged { snapshot } = event {
+        if let CoreEvent::StateChanged { snapshot, .. } = event {
             if snapshot
                 .shared
                 .windows

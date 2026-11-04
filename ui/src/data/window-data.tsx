@@ -142,6 +142,12 @@ export class WindowData {
   private unsubscribeLink?: () => void;
   private active = false;
   private pending: DataView[] = [];
+  private inputSettlers = new Set<() => Promise<void> | null>();
+  private inputSequence = 0;
+  holdInput = (settle: () => Promise<void> | null) => {
+    this.inputSettlers.add(settle);
+    return () => { this.inputSettlers.delete(settle); };
+  };
   private initialized = false;
   private attached = false;
   private mounts = 0;
@@ -483,8 +489,20 @@ export class WindowData {
     return resolved.status === "ready" ? resolved.value : null;
   }
 
-  act = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope) => {
+  act = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
     try {
+      if (!options?.input) {
+        const pending: Promise<void>[] = [];
+        for (const settle of this.inputSettlers) {
+          try {
+            const result = settle();
+            if (result) pending.push(result);
+          } catch (error) { pending.push(Promise.reject(error)); }
+        }
+        if (pending.length) await Promise.allSettled(pending);
+        const reached = this.store.reached(this.inputSequence);
+        if (reached) await reached;
+      }
       if (scope) item = scope.item;
       const action = this.localAction(pointer);
       if (action) {
@@ -510,7 +528,8 @@ export class WindowData {
         }
       }
       await this.ready;
-      await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
+      const reply = await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
+      if (options?.input) this.inputSequence = Math.max(this.inputSequence, reply.sequence);
       return true;
     } catch (error) { this.setNotice(toCoreError(error)); return false; }
   };
@@ -552,7 +571,7 @@ export function useOptionalWindowData(): WindowData | null {
   return useMemo(() => {
     if (!value || !scope) return value;
     const proxy = Object.create(value) as WindowData;
-    proxy.act = (pointer, event, item, modifiers, localScope) => value.act(pointer, event, item, modifiers, localScope ?? scope);
+    proxy.act = (pointer, event, item, modifiers, localScope, options) => value.act(pointer, event, item, modifiers, localScope ?? scope, options);
     return proxy;
   }, [value, scope]);
 }

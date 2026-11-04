@@ -521,7 +521,7 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
             inner.host.clone(),
             inner.registry.clone(),
         )?;
-        let CoreReply::StateGet { snapshot } = core.handle(CoreRequest::StateGet {})? else {
+        let CoreReply::StateGet { snapshot, .. } = core.handle(CoreRequest::StateGet {})? else {
             return Err(errors::DATA_PROFILER_STATE_REPLY_INVALID());
         };
         let desktop = snapshot

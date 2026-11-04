@@ -36,7 +36,7 @@ pub(super) fn record_startup(app: &AppHandle) {
 
 fn snapshot(core: &Core) -> Result<ShellSnapshot, String> {
     match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => Ok(snapshot),
+        CoreReply::StateGet { snapshot, .. } => Ok(snapshot),
         reply => Err(format!("unexpected state response: {reply:?}")),
     }
 }

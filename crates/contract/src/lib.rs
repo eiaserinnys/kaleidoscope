@@ -140,6 +140,8 @@
 //! # 화면의 상태 저장소
 //! 화면이 보는 상태는 [`ShellSnapshot`] 하나다. 화면은 `state.get` 응답과 `state.changed` 이벤트의
 //! snapshot으로만 저장소를 바꾼다. 명령의 응답은 방금 만든 것의 id를 알 때만 쓴다.
+//! 화면은 응답의 순번으로 그 명령의 결과까지 스냅샷이 왔는지 기다릴 수 있다.
+//! 순번을 받은 응답으로 저장소를 바꾸지는 않는다.
 //! 코어는 공유 상태나 기기 상태를 바꾸는 명령이 성공할 때마다 `state.changed`를 보낸다.
 //! 파일 읽기, 목록, 쓰기는 상태를 바꾸지 않으므로 이벤트가 없다.
 //!
@@ -5125,7 +5127,7 @@ pub enum CoreReply {
     #[serde(rename = "files.save_prompt")]
     FilesSavePrompt { file_id: Option<String> },
     #[serde(rename = "state.get")]
-    StateGet { snapshot: ShellSnapshot },
+    StateGet { snapshot: ShellSnapshot, #[ts(type = "number")] sequence: u64 },
     #[serde(rename = "profiler.report")]
     ProfilerReport {},
     #[serde(rename = "files.pick")]
@@ -5380,7 +5382,7 @@ pub enum CoreReply {
     #[serde(rename = "data.detach")]
     DataDetach {},
     #[serde(rename = "data.act")]
-    DataAct {},
+    DataAct { #[ts(type = "number")] sequence: u64 },
     #[serde(rename = "data.refresh")]
     DataRefresh {},
     #[serde(rename = "data.more")]
@@ -5465,7 +5467,7 @@ pub enum CoreEvent {
     WindowControl { request: WindowControlRequest },
     /// 공유 상태나 기기 상태, 연결 상태가 바뀌었다. 화면은 저장소를 이 snapshot으로 바꾼다.
     #[serde(rename = "state.changed")]
-    StateChanged { snapshot: ShellSnapshot },
+    StateChanged { snapshot: ShellSnapshot, #[ts(type = "number")] sequence: u64 },
     /// 파일 작업이 성공했다. root는 권한 grant의 절대 경로이며 changes는 grant 기준 상대 경로다.
     #[serde(rename = "files.changed")]
     FilesChanged {

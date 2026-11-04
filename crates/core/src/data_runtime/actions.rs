@@ -319,7 +319,7 @@ pub(crate) fn act(
             "",
         );
     }
-    Ok(CoreReply::DataAct {})
+    Ok(CoreReply::DataAct { sequence: inner.state_events.newest() })
 }
 
 fn map_worker_error(error: crate::registry_client::RegistryError, action: &str) -> CoreError {

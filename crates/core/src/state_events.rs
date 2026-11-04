@@ -13,7 +13,7 @@ pub(crate) struct StateEvent {
 impl StateEvent {
     pub(crate) fn into_snapshot(self) -> ShellSnapshot {
         let event = Arc::try_unwrap(self.event).unwrap_or_else(|event| (*event).clone());
-        let CoreEvent::StateChanged { snapshot } = event else {
+        let CoreEvent::StateChanged { snapshot, .. } = event else {
             unreachable!()
         };
         snapshot
@@ -41,10 +41,19 @@ enum PendingEvent {
 impl StateEvents {
     // 반드시 상태 잠금을 잡은 채 호출해 스냅샷 생성 순서를 보존한다.
     pub(crate) fn prepare(&self, snapshot: ShellSnapshot) -> StateEvent {
+        let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
         StateEvent {
-            sequence: self.sequence.fetch_add(1, Ordering::Relaxed) + 1,
-            event: Arc::new(CoreEvent::StateChanged { snapshot }),
+            sequence,
+            event: Arc::new(CoreEvent::StateChanged { snapshot, sequence }),
         }
+    }
+
+    pub(crate) fn sequence(&self) -> u64 {
+        self.sequence.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn newest(&self) -> u64 {
+        self.delivery.lock().unwrap().newest
     }
 
     pub(crate) fn deliver(&self, event: &StateEvent, mut notify: impl FnMut(&CoreEvent)) {

@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ButtonBlock, ColorBlock, InputBlock, SelectBlock, ToggleBlock } from "../blocks/data-input";
 import "../styles/data-input-preview.css";
 
-const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, act: vi.fn().mockResolvedValue(true) }));
+const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined }));
 const previewRender = vi.hoisted(() => vi.fn());
 vi.mock("../render/render-block", () => ({ renderBlock: (...args: unknown[]) => previewRender(...args) }));
 vi.mock("../data/window-data", () => ({

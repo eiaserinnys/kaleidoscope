@@ -83,7 +83,7 @@ fn restart_requires_ready_and_reports_install_failure() {
         "업데이트를 설치하지 못했습니다. 디스크 공간을 확인한 뒤 쉘을 다시 시작하세요. 쉘이 새 판을 다시 받습니다."
     );
     match core.handle(CoreRequest::StateGet {}).unwrap() {
-        CoreReply::StateGet { snapshot } => assert_eq!(
+        CoreReply::StateGet { snapshot, .. } => assert_eq!(
             snapshot.update,
             UpdateStatus::Failed {
                 current_version: "0.0.1".into(),
@@ -102,7 +102,7 @@ fn status_emits_only_when_changed() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let received = events.clone();
     core.subscribe(Box::new(move |event| {
-        if let CoreEvent::StateChanged { snapshot } = event {
+        if let CoreEvent::StateChanged { snapshot, .. } = event {
             received.lock().unwrap().push(snapshot.update.clone());
         }
     }));

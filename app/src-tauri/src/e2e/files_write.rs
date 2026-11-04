@@ -68,7 +68,7 @@ fn core_scenario(
         return Err("files-write test folder must be empty".into());
     }
     let snapshot = match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => snapshot,
+        CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),
     };
     let workspace = snapshot

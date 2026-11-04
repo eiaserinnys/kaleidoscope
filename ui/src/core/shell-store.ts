@@ -11,6 +11,7 @@ export interface ShellStore {
   call: CoreTransport["call"];
   getSnapshot(): ShellSnapshot | null;
   getError(): CoreError | null;
+  reached(sequence: number): Promise<void> | null;
   subscribe(listener: () => void): () => void;
   subscribeEvents(listener: (event: CoreEvent) => void): () => void;
   ready: Promise<void>;
@@ -22,6 +23,12 @@ export interface ShellStore {
 export function createShellStore(transport: CoreTransport): ShellStore {
   let snapshot: ShellSnapshot | null = null;
   let error: CoreError | null = null;
+  let sequence = 0;
+  const waiters = new Set<{ sequence: number; resolve: () => void }>();
+  const advance = (next: number) => {
+    sequence = Math.max(sequence, next);
+    for (const waiter of waiters) if (waiter.sequence <= sequence) waiter.resolve();
+  };
   const listeners = new Set<() => void>();
   const eventListeners = new Set<(event: CoreEvent) => void>();
   const notify = () => {
@@ -32,6 +39,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       snapshot = shareShellSnapshot(snapshot, event.snapshot);
       error = null;
       notify();
+      advance(event.sequence);
     } else {
       for (const listener of eventListeners) listener(event);
     }
@@ -41,10 +49,11 @@ export function createShellStore(transport: CoreTransport): ShellStore {
 
   const ready = transport.call({ op: "state.get" }).then((reply) => {
     if (reply.op !== "state.get") throw SHELL_STATE_REPLY_INVALID();
-    snapshot = shareShellSnapshot(snapshot, reply.snapshot);
+    if (reply.sequence >= sequence) snapshot = shareShellSnapshot(snapshot, reply.snapshot);
     error = null;
     if (!disposed) stopUiTiming = startUiTiming((inputs, frames) => transport.call({ op: "profiler.report", inputs, frames }), isResponding);
     notify();
+    advance(reply.sequence);
   }).catch((reason: unknown) => {
     error = toCoreError(reason);
     notify();
@@ -64,6 +73,14 @@ export function createShellStore(transport: CoreTransport): ShellStore {
     }) as CoreTransport["call"],
     getSnapshot: () => snapshot,
     getError: () => error,
+    reached(target) {
+      if (sequence >= target) return null;
+      return new Promise<void>((resolve) => {
+        const waiter = { sequence: target, resolve: () => { clearTimeout(timer); waiters.delete(waiter); resolve(); } };
+        const timer = setTimeout(waiter.resolve, 1000);
+        waiters.add(waiter);
+      });
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

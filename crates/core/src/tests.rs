@@ -261,7 +261,7 @@ fn seeded_core(data_dir: &Path, host: &Arc<FakeHost>) -> Core {
 
 fn snapshot(core: &Core) -> ShellSnapshot {
     match core.handle(CoreRequest::StateGet {}).unwrap() {
-        CoreReply::StateGet { snapshot } => snapshot,
+        CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => panic!("unexpected reply: {reply:?}"),
     }
 }
@@ -2901,7 +2901,8 @@ fn link_start_pairs_saves_token_privately_and_connects_after_snapshot() {
                     snapshot: ShellSnapshot {
                         link: LinkStatus::Connected { .. },
                         ..
-                    }
+                    },
+                    ..
                 }
             );
             observed.push(event);
@@ -2912,7 +2913,7 @@ fn link_start_pairs_saves_token_privately_and_connects_after_snapshot() {
     }
     assert!(observed.iter().any(|event| matches!(
         event,
-        CoreEvent::StateChanged { snapshot: ShellSnapshot { link: LinkStatus::Pairing { user_code, .. }, .. } }
+        CoreEvent::StateChanged { snapshot: ShellSnapshot { link: LinkStatus::Pairing { user_code, .. }, .. }, .. }
             if user_code == "K7PQ-4XMR"
     )));
     assert!(observed.iter().any(|event| matches!(
@@ -2921,7 +2922,8 @@ fn link_start_pairs_saves_token_privately_and_connects_after_snapshot() {
             snapshot: ShellSnapshot {
                 link: LinkStatus::Connected { .. },
                 ..
-            }
+            },
+            ..
         }
     )));
     assert!(observed.iter().all(|event| {

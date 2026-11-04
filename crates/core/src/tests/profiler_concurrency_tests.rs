@@ -22,7 +22,7 @@ fn state_notification_does_not_restore_older_snapshot_after_share_delete() {
     *client.share_delete_pause.lock().unwrap() = Some(pause);
     let (send, receive) = mpsc::channel();
     core.subscribe(Box::new(move |event| {
-        if let CoreEvent::StateChanged { snapshot } = event {
+        if let CoreEvent::StateChanged { snapshot, .. } = event {
             let _ = send.send(snapshot.clone());
         }
     }));
@@ -65,7 +65,7 @@ fn state_listener_can_make_another_change_in_order() {
     let observed = Arc::new(Mutex::new(Vec::new()));
     let listener_observed = observed.clone();
     core.subscribe(Box::new(move |event| {
-        if let CoreEvent::StateChanged { snapshot } = event {
+        if let CoreEvent::StateChanged { snapshot, .. } = event {
             if let kaleidoscope_contract::UpdateStatus::Idle { current_version } = &snapshot.update
             {
                 listener_observed
@@ -101,7 +101,7 @@ fn published_app_is_visible_before_its_open_request() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let received = events.clone();
     core.subscribe(Box::new(move |event| match event {
-        CoreEvent::StateChanged { snapshot } => {
+        CoreEvent::StateChanged { snapshot, .. } => {
             if snapshot.shared.apps.iter().any(|item| item.id == app.app.id) {
                 received.lock().unwrap().push("상태");
             } else if matches!(&snapshot.update, kaleidoscope_contract::UpdateStatus::Idle { current_version } if current_version == "게시") {

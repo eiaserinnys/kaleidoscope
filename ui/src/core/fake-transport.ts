@@ -62,7 +62,7 @@ export interface FakeTransport extends CoreTransport {
   getWebAttachCount(windowId: string): number;
   /** Test and harness controls; the real core does not expose these methods. */
   setLink(status: LinkStatus): void;
-  emit(event: CoreEvent): void;
+  emit(event: Exclude<CoreEvent, { event: "state.changed" }> | { event: "state.changed"; snapshot: ShellSnapshot; sequence?: number }): void;
   getShareCalls(): Array<{ window_id: string; view: VisibleView }>;
   getCalls(): CoreRequest[];
   failNextStorageWrite(message: string): void;
@@ -121,6 +121,7 @@ function isFakeHttpAddress(value: string): boolean {
 
 export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   let snapshot = clone(seed.snapshot);
+  let sequence = 0;
   const files = new Map<string, FakeFile>();
   const storage = new Map<string, { content: JsonValue; revision: string }>();
   const eventListeners = new Set<(event: CoreEvent) => void>();
@@ -145,13 +146,16 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   }
 
   const emitState = () => {
-    const event: CoreEvent = { event: "state.changed", snapshot: clone(snapshot) };
+    const event: CoreEvent = { event: "state.changed", snapshot: clone(snapshot), sequence: ++sequence };
     for (const listener of eventListeners) listener(event);
   };
 
-  const emit = (event: CoreEvent) => {
-    if (event.event === "state.changed") snapshot = clone(event.snapshot);
-    for (const listener of eventListeners) listener(clone(event));
+  const emit = (event: Exclude<CoreEvent, { event: "state.changed" }> | { event: "state.changed"; snapshot: ShellSnapshot; sequence?: number }) => {
+    if (event.event === "state.changed") {
+      snapshot = clone(event.snapshot);
+      const next = { ...event, sequence: ++sequence };
+      for (const listener of eventListeners) listener(clone(next));
+    } else for (const listener of eventListeners) listener(clone(event));
   };
 
   const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
@@ -335,7 +339,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         shareCalls.push({ window_id: request.window_id, view: clone(request.view) });
         return { op: "share.view" };
       case "state.get":
-        return { op: "state.get", snapshot: clone(snapshot) };
+        return { op: "state.get", snapshot: clone(snapshot), sequence };
       case "data.attach":
         return { op: "data.attach", view: await data.attach(request.window_id) };
       case "data.dormant":
@@ -350,7 +354,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "data.more", started: await data.more(request.window_id, request.source) };
       case "data.act":
         await data.act(request.window_id, request.pointer, request.event ?? null, request.item);
-        return { op: "data.act" };
+        return { op: "data.act", sequence };
       case "data.media": {
         const url = seed.media?.[("asset" in request.media ? request.media.asset : request.media.path)];
         if (!url) return fail("not_found", "미디어를 찾을 수 없습니다");

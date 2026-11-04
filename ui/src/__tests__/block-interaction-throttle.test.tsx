@@ -28,6 +28,7 @@ const runtime = vi.hoisted(() => {
   });
   state.data = {
     windowId: "window-1",
+    holdInput: () => () => undefined,
     act: (...args: [string, unknown]) => state.act(...args),
     store: { call: (...args: unknown[]) => state.storeCall(...args) },
     mediaCache: state.mediaCache,
