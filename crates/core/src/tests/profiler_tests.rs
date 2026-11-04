@@ -82,7 +82,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     .unwrap();
     core.handle(CoreRequest::DataAct {
         window_id: profiler.clone(),
-        pointer: "/ui/children/0/end/0/on_click".into(),
+        pointer: "/ui/children/0/children/0/child/end/0/on_click".into(),
         event: Value::Null,
         item: Value::Null,
         modifiers: None,
@@ -179,7 +179,7 @@ fn profiler_builtin_app_renders_metrics_and_supports_share_view() {
     core.flush_storage().unwrap();
     core.handle(CoreRequest::DataAct {
         window_id: profiler.clone(),
-        pointer: "/ui/children/0/end/2/on_click".into(),
+        pointer: "/ui/children/0/children/0/child/end/2/on_click".into(),
         event: Value::Null,
         item: Value::Null,
         modifiers: None,

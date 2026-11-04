@@ -273,7 +273,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
-        ("profiler", 3),
+        ("profiler", 4),
         ("agent", 6),
         ("explorer", 3),
         ("md-editor", 4),
@@ -281,9 +281,9 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("web-browser", 1),
         ("calculator", 2),
         ("weather", 2),
-        ("market", 2),
-        ("earth", 2),
-        ("reader", 4),
+        ("market", 3),
+        ("earth", 3),
+        ("reader", 5),
     ] {
         assert!(apps
             .iter()
