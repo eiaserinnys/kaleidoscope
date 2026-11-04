@@ -24,6 +24,14 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4) {
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport };
 }
+it.each(["list", "grid"] as const)("%s 목록은 배지와 날짜의 순서를 유지한다", async (layout) => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  setup({ type: "list", ...(layout === "grid" ? { layout } : {}), items: [{ key: "a", title: "항목", meta: "날짜", badges: [{ text: "표식" }] }] });
+  const row = await screen.findByRole("option", { name: "항목" });
+  const text = row.textContent ?? "";
+  expect(text.indexOf("표식") < text.indexOf("날짜")).toBe(layout === "list");
+  vi.unstubAllGlobals();
+});
 it("moves through grouped list entries and selects the focused item", async () => {
   const { calls } = setup({ type: "list", grouped: true, items: [{ title: "묶음", items: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }] }], on_select: { set_state: "choice" } }, { choice: null });
   const first = await screen.findByRole("option", { name: "하나" });

@@ -27,6 +27,7 @@
   --ks-radius-large: calc(var(--ks-radius-window) - var(--ks-space-1));
   --ks-radius-bar: calc(var(--ks-control-height) / 2 + var(--ks-space-1));
   --ks-control-height: 32px;
+  --ks-bar-height: calc(var(--ks-control-height) + 2 * var(--ks-space-2) + var(--ks-line-width));
   --ks-window-titlebar-height: 40px;
   --ks-icon-button-size: 28px;
   --ks-split-handle-size: 16px;

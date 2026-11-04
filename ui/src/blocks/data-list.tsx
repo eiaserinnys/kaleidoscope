@@ -24,7 +24,7 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
   return <button type="button" role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)}>
     {grid ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
-    {typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}<Badges values={item.badges} />
+    {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
 });
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {

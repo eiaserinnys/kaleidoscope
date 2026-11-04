@@ -123,7 +123,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
 }
 
 export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
-  const children = (items: Block[], name: string) => items.map((child, index) => <div className={`ks-data-toolbar-item${child.type === "input" ? " is-input" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/${name}/${index}`)}</div>);
+  const children = (items: Block[], name: string) => items.map((child, index) => <div className={`ks-data-toolbar-item${child.type === "input" ? " is-input" : child.type === "text" ? " is-text" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/${name}/${index}`)}</div>);
   return <div className="ks-data-toolbar"><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
 }
 

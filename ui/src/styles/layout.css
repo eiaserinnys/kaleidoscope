@@ -34,19 +34,21 @@
 .ks-split-handle::after {
   position: absolute;
   top: 0;
-  left: 0;
+  left: 50%;
   width: var(--ks-line-width);
   height: 100%;
   background: var(--ks-color-border);
   content: "";
   pointer-events: none;
+  transform: translateX(-50%);
 }
 
 .ks-split-column .ks-split-handle::after {
-  top: 0;
+  top: 50%;
   left: 0;
   width: 100%;
   height: var(--ks-line-width);
+  transform: translateY(-50%);
 }
 
 .ks-split-handle:hover::after,

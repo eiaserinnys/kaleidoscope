@@ -31,6 +31,8 @@
   white-space: pre-wrap;
 }
 
+.ks-data-toolbar .ks-data-text.is-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .ks-error-id {
   display: inline-block;
   max-width: 100%;

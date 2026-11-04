@@ -10,13 +10,14 @@ type SplitBlockData = Extract<Block, { type: "split" }>;
 function buildTemplate(weights: number[], collapsed: Set<number>): string {
   return weights.flatMap((weight, index) => index === 0
     ? [collapsed.has(index) ? "var(--ks-icon-button-size)" : `minmax(var(--ks-pane-min-size), ${weight}fr)`]
-    : ["var(--ks-line-width)", collapsed.has(index) ? "var(--ks-icon-button-size)" : `minmax(var(--ks-pane-min-size), ${weight}fr)`]).join(" ");
+    : ["var(--ks-split-handle-size)", collapsed.has(index) ? "var(--ks-icon-button-size)" : `minmax(var(--ks-pane-min-size), ${weight}fr)`]).join(" ");
 }
 
 function readSplitSizes(element: HTMLElement) {
   const styles = getComputedStyle(element);
   return {
-    handleSize: Number.parseFloat(styles.getPropertyValue("--ks-line-width")),
+    handleSize: Number.parseFloat(styles.getPropertyValue("--ks-split-handle-size")),
+    keyStep: Number.parseFloat(styles.getPropertyValue("--ks-line-width")),
     minPaneSize: Number.parseFloat(styles.getPropertyValue("--ks-pane-min-size")),
   };
 }
@@ -100,14 +101,14 @@ export function SplitPanes({ direction, sizes, children }: { direction: SplitBlo
     event.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect || !containerRef.current) return;
-    const { handleSize, minPaneSize } = readSplitSizes(containerRef.current);
+    const { handleSize, minPaneSize, keyStep } = readSplitSizes(containerRef.current);
     const dimension = direction === "row" ? rect.width : rect.height;
     const available = dimension - (children.length - 1) * handleSize;
     const pairWeight = weights[index] + weights[index + 1];
     const pairWidth = available * pairWeight / weights.reduce((sum, weight) => sum + weight, 0);
     if (pairWidth < minPaneSize * 2) return;
     const currentLeft = pairWidth * weights[index] / pairWeight;
-    const delta = event.key === increment ? handleSize : -handleSize;
+    const delta = event.key === increment ? keyStep : -keyStep;
     const nextLeft = Math.max(minPaneSize, Math.min(pairWidth - minPaneSize, currentLeft + delta));
     const leftWeight = pairWeight * nextLeft / pairWidth;
     updatePair(index, leftWeight, pairWeight - leftWeight);

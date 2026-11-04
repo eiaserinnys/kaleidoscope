@@ -25,7 +25,7 @@
   display: flex;
   flex: 0 0 auto;
   min-width: 0;
-  min-height: var(--ks-control-height);
+  min-height: var(--ks-bar-height);
   align-items: center;
   justify-content: space-between;
   gap: var(--ks-space-2);
