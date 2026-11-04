@@ -63,9 +63,9 @@
 .ks-data-toolbar-item { min-width: 0; max-width: 100%; }
 .ks-data-toolbar-item:not(.is-input):not(.is-text) { flex: 0 0 auto; }
 .ks-data-toolbar-item.is-text { flex: 0 1 auto; }
-/* 앞쪽 글은 막대 최소 폭을 늘리지 않고 남은 폭에서만 자란다. */
-.ks-data-toolbar-group.is-start > .ks-data-toolbar-item.is-text { width: 0; flex: 1 1 0; max-width: max-content; }
-.ks-data-toolbar-item.is-input { flex: 1 1 auto; min-width: calc(var(--ks-space-6) * 3); }
+/* 글은 최소 폭에 기여하지 않지만 실제 글 너비를 먼저 확보한다. 입력은 최소 폭부터 늘어난다. */
+.ks-data-toolbar-group.is-start > .ks-data-toolbar-item.is-text { width: 0; flex: 0 1 max-content; max-width: max-content; }
+.ks-data-toolbar-item.is-input { flex: 1 0 calc(var(--ks-space-6) * 3); min-width: calc(var(--ks-space-6) * 3); }
 .ks-data-toolbar .ks-data-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; padding-inline: var(--ks-space-3); }
