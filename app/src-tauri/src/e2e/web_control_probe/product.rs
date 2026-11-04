@@ -117,6 +117,13 @@ pub(super) fn phase(
             )
             .map_err(|e| e.to_string())?;
         let (width, height) = png_dimensions(&png)?;
+        let decoded = image::load_from_memory(&png)
+            .map_err(|e| e.to_string())?
+            .to_rgba8();
+        let first = decoded.get_pixel(0, 0);
+        if !decoded.pixels().any(|pixel| pixel != first) {
+            return Err("제품 읽기 그림이 단색임".into());
+        }
         let geometry = observation.geometry.as_ref().ok_or("제품 읽기 크기 없음")?;
         if width != geometry.pixel_width
             || height != geometry.pixel_height

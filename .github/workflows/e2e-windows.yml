@@ -81,6 +81,7 @@ jobs:
                 Write-Host "$phase.$field : $($result.states.$phase.$field.status)"
               }
             }
+            if ($result.product.c_hidden.flicker.status -ne '된다') { throw "숨김 웹뷰 제품 캡처 중 화면 변화: $($result.product.c_hidden.flicker | ConvertTo-Json -Compress -Depth 20)" }
             if ($null -ne $result.states.c_prime_cover) {
               foreach ($field in @('ax', 'click', 'type', 'key', 'focus', 'flicker')) {
                 if ($result.states.c_prime_cover.$field.status -notin @('된다', '안 된다', '측정 실패')) { throw "덮개 실측 결과 누락: $field" }

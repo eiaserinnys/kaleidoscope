@@ -1,6 +1,6 @@
 //! 자식 WebView2의 AX와 입력, 별도 프로세스 포커스를 실제로 측정한다.
 use super::*;
-use crate::web_control::{call as cdp, ProbeCall};
+use crate::web_control::{probe as cdp, ProbeCall};
 use std::io::Read;
 use std::net::TcpListener;
 use std::os::windows::process::CommandExt;
@@ -473,7 +473,13 @@ pub(super) fn scenario(
         return Err("C의 웹뷰가 숨겨지지 않음".into());
     }
     let c = phase(&view, &mut probe, false, "c");
-    let c_product = product::phase(host.as_ref(), &view, &id, &mut probe, false, out, "c");
+    probe.prepare()?;
+    let product_recording = out.join("product-flicker");
+    fs::create_dir_all(&product_recording).map_err(|e| e.to_string())?;
+    let recorder = recorder_start(app, &mut probe, &product_recording)?;
+    let mut c_product = product::phase(host.as_ref(), &view, &id, &mut probe, false, out, "c");
+    thread::sleep(Duration::from_millis(250));
+    c_product["flicker"] = recorder_stop(recorder, &product_recording).unwrap_or_else(failed);
     capture(out, "c-hidden")?;
     let alternative = if needs_fallback(&c) {
         Some(fallback(app, core, out, &id, bounds, &view, &mut probe))
