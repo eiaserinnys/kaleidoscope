@@ -292,7 +292,7 @@ it("잘못된 클라이언트 출력은 원인별 코드와 읽기 쉬운 크기
 
 it("클라이언트가 발행한 행과 선택은 코어 동작 없이 표에 반영된다", async () => {
   const definition: AppDefinition = {
-    id: "client-table", name: "표 시험", requires: { blocks: 23, modules: { assets: 1, client: 1 } }, permissions: [], state: {},
+    id: "client-table", name: "표 시험", requires: { blocks: 24, modules: { assets: 1, client: 1 } }, permissions: [], state: {},
     assets: [{ id: "script", version: 1 }],
     client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: { rows: { default: [] }, columns: { default: [] }, selected: { default: null } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
     ui: { type: "table", rows: { client: "rows" }, columns: { client: "columns" }, selected: { client: "selected" } },

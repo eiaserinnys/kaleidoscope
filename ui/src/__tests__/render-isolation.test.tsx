@@ -1546,7 +1546,7 @@ describe("표 칸 렌더 격리", () => {
     const cellSpy = vi.spyOn(GridCell as unknown as { type: (...args: never[]) => unknown }, "type");
     const rowSpy = vi.spyOn(GridRow as unknown as { type: (...args: never[]) => unknown }, "type");
     const app: AppDefinition = {
-      id: "grid-selection-isolation", name: "선택 격리", requires: { blocks: 23, modules: {} }, permissions: [],
+      id: "grid-selection-isolation", name: "선택 격리", requires: { blocks: 24, modules: {} }, permissions: [],
       state: { chosen: { row: "a", column: "mon" } },
       ui: { type: "table", rows: [
         { key: "a", label: "기획", mon: "회의", tue: "초안" },
@@ -1585,7 +1585,7 @@ describe("표 칸 렌더 격리", () => {
     ];
     const columns: JsonValue[] = [{ field: "label", label: "항목" }, { field: "mon", label: "월요일", format: "content" }, { field: "tue", label: "화요일", format: "content" }];
     const app: AppDefinition = {
-      id: "grid-isolation", name: "일정", requires: { blocks: 23, modules: { assets: 1, client: 1 } }, permissions: [], state: { chosen: null },
+      id: "grid-isolation", name: "일정", requires: { blocks: 24, modules: { assets: 1, client: 1 } }, permissions: [], state: { chosen: null },
       assets: [{ id: "grid-runtime", version: 1 }],
       client: { runtime: "javascript", entry: { id: "grid-runtime", version: 1 }, inputs: {}, outputs: { rows: { default: rows }, columns: { default: columns } }, actions: [], commands: {}, state_keys: [], storage_entries: [] },
       ui: { type: "table", rows: { client: "rows" }, columns: { client: "columns" }, selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" } },

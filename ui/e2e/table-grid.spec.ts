@@ -190,6 +190,30 @@ test("높은 행의 일정표에서 Ctrl+End와 Ctrl+Home 및 End 끝 칸을 드
   }
 });
 
+test("마우스 누름 뒤 Ctrl 이동에는 초점 링을 그리고 다시 누르면 지운다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "일정표", exact: true }).click();
+  const grid = app.getByRole("grid"), first = grid.getByRole("gridcell", { name: "작업 묶음 1, 1일, 빈 칸" });
+  const ring = () => page.evaluate(() => {
+    const style = getComputedStyle(document.activeElement!, "::before");
+    return style.content !== "none" && style.outlineStyle === "dashed" && parseFloat(style.outlineWidth) > 0;
+  });
+  await first.click();
+  expect(await ring()).toBe(false);
+  await capture(page, "r6-pointer-no-ring");
+  for (const [key, label] of [["Control+End", /작업 묶음 60, 12일/], ["Control+Home", /작업 묶음 1, 1일/]] as const) {
+    await page.keyboard.press(key);
+    await expect(grid.getByRole("gridcell", { name: label })).toBeFocused();
+    await expect.poll(ring).toBe(true);
+    await capture(page, `r6-${key.replace("+", "-").toLowerCase()}-ring`);
+  }
+  await first.click();
+  expect(await ring()).toBe(false);
+  await capture(page, "r6-pointer-after-keyboard-no-ring");
+});
+
 test("기존 표 행 선택과 정렬을 유지한다", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=data-views-test");

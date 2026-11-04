@@ -13,7 +13,7 @@ const largeRows = Array.from({ length: 200 }, (_, index) => ({ key: `group-${ind
 export const dataViewsApp: AppDefinition = {
   id: "data-views-test",
   name: "보기 시험",
-  requires: { blocks: 23, modules: { files: 1, connection: 1 } },
+  requires: { blocks: 24, modules: { files: 1, connection: 1 } },
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }, { id: "sample", module: "connection", access: "read", connection: "sample", label: "예제" }],
   sources: { sample: { kind: "request", permission: "sample", path: "/sample" } },
   state: { tab: new URLSearchParams(window.location.search).has("grid-error") ? 13 : new URLSearchParams(window.location.search).has("grid-loading") ? 12 : 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8), schedule_columns: scheduleColumns, schedule_rows: scheduleRows, schedule_choice: null, large_columns: largeColumns, large_rows: largeRows },

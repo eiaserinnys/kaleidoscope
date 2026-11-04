@@ -61,7 +61,7 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
   const dataColumns = useMemo(() => columns.filter((column) => column.field !== rowHeader), [columns, rowHeader]);
   const [focus, setFocus] = useState<Address | null>(() => rows.length && dataColumns.length ? { row: rows[0].key, column: dataColumns[0].field } : null);
   const last = useRef({ row: 0, column: 0 });
-  const pending = useRef<Address | null>(null);
+  const pending = useRef<(Address & { keyboard?: boolean }) | null>(null);
   const rowIndex = Math.max(0, rows.findIndex((row) => row.key === focus?.row));
   const columnIndex = Math.max(0, dataColumns.findIndex((column) => column.field === focus?.column));
   const currentRow = rows.some((row) => row.key === focus?.row) ? rowIndex : Math.min(last.current.row, Math.max(0, rows.length - 1));
@@ -88,7 +88,7 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
     row = Math.max(0, Math.min(rows.length - 1, row)); column = Math.max(0, Math.min(dataColumns.length - 1, column));
     if (!rows[row] || !dataColumns[column]) return;
     const address = { row: rows[row].key, column: dataColumns[column].field };
-    last.current = { row, column }; pending.current = address; setFocus(address);
+    last.current = { row, column }; pending.current = { ...address, keyboard: true }; setFocus(address);
     virtual.scrollToIndex(row, { align: "auto" });
   };
   const reveal = (target: HTMLElement) => {
@@ -112,6 +112,10 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
     const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${row * dataColumns.length + col}"]`);
     if (target) {
       pending.current = null;
+      if (address.keyboard) {
+        scroll.current?.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus");
+        target.setAttribute("data-keyboard-focus", "");
+      }
       target.focus({ preventScroll: true });
       reveal(target);
     }
@@ -139,7 +143,7 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
       event.preventDefault(); move(nextRow, nextColumn);
     },
   };
-  return <div className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
+  return <div className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} onPointerDownCapture={(event) => event.currentTarget.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus")} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">
       <div className="ks-table-header" role="row" aria-rowindex={1}>{columns.map((column, index) => <div role="columnheader" aria-colindex={index + 1} key={column.field} className={column.field === rowHeader ? "ks-grid-corner" : undefined}>{column.label}</div>)}</div>
       {!rows.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((v) => {
