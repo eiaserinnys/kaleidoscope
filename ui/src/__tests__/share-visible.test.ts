@@ -15,6 +15,32 @@ describe("같이 보기 글", () => {
 
 
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
+it("입력값은 라벨에서 빼고 한 번만 보여 준다", () => {
+  document.body.innerHTML = '<div id="root"><label class="ks-field"><span class="ks-field-label" data-ks-share-skip>한국어</span><textarea>번역할 글</textarea></label><label><span data-ks-share-skip>제목</span><textarea>내용</textarea><button>버튼 글</button></label></div>';
+  const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  vi.spyOn(document, "createRange").mockImplementation(() => ({ setStart() {}, setEnd() {}, getClientRects: () => [rect] }) as unknown as Range);
+  const text = describeVisible(document.getElementById("root")!).text;
+  expect(text).toContain("한국어: 번역할 글");
+  expect(text).toContain("제목: 내용");
+  expect(text).not.toContain("한국어번역할 글");
+  expect(text).not.toContain("제목내용버튼 글:");
+});
+
+it("이름 없는 data와 blob 미디어는 생략하고 이름 있는 미디어를 보여 준다", () => {
+  document.body.innerHTML = '<div id="root"><img id="raw"><img id="named" alt="초상"><img id="http"><video id="video"></video><audio id="audio" title="음성"></audio></div>';
+  const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  for (const [id, src] of Object.entries({ raw: "data:image/png;base64,9k=", named: "data:image/png;base64,2Q==", http: "https://example.test/portrait.png", video: "blob:https://example.test/abc", audio: "data:audio/aac;base64,Z" })) {
+    Object.defineProperty(document.getElementById(id)!, "currentSrc", { value: src });
+  }
+  const result = describeVisible(document.getElementById("root")!);
+  expect(result.text).toContain("[이미지: 초상]");
+  expect(result.text).toContain("[이미지: portrait.png]");
+  expect(result.text).toContain("[소리: 음성]");
+  expect(result.text).not.toMatch(/9k=|2Q==|abc|\[영상:|\[이미지: \]/);
+  expect(result.visual).toBe(true);
+});
 it("보이는 블록과 인라인을 줄로 묶고 숨기거나 잘린 글을 뺀다", () => {
   document.body.innerHTML = '<div id="root"><p>첫 <span>문장</span></p><p hidden>숨김</p><p data-ks-share-skip>건너뜀</p><p class="outside">화면 밖</p><p>다음 줄</p></div>';
   const rect = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height, toJSON() {} });

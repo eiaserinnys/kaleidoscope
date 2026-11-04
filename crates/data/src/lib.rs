@@ -32,6 +32,7 @@ pub fn evaluate_page_next(expr: &str, response: &Value, loaded: usize, pages: us
         max_stack_depth: Some(2000),
         ..Default::default()
     });
+    kaleidoscope_contract::jsonata_functions::install_standard_functions(&mut evaluator);
     let result = evaluator.evaluate(&ast, &JValue::from(response.clone())).map_err(|error| error.to_string())?;
     Ok(Value::from(&result))
 }
@@ -637,6 +638,7 @@ impl CompiledApp {
                 ..Default::default()
             },
         );
+        kaleidoscope_contract::jsonata_functions::install_standard_functions(&mut evaluator);
         let result = evaluator
             .evaluate(ast, &JValue::Null)
             .map_err(|err| err.to_string())?;

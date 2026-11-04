@@ -215,6 +215,7 @@ pub mod conversation;
 pub mod data;
 pub mod errors;
 pub mod file_name;
+pub mod jsonata_functions;
 pub mod process;
 pub mod realtime;
 pub mod registry;
@@ -505,6 +506,7 @@ pub fn migrate_window_state(
                 ..Default::default()
             },
         );
+        jsonata_functions::install_standard_functions(&mut evaluator);
         if let Ok(value) = evaluator.evaluate(&ast, &jsonata_core::value::JValue::Null) {
             next.insert(key.clone(), JsonValue::from(&value));
         }
@@ -5979,6 +5981,13 @@ mod tests {
                 .and_then(JsonValue::as_f64),
             Some(0.0)
         );
+    }
+
+    #[test]
+    fn migrate_window_state_encodes_url_components() {
+        let mut definition: AppDefinition = serde_json::from_str(&example("md-editor.json")).unwrap();
+        definition.state_migrate.insert("source".into(), "$encodeUrlComponent('tweet-2117_a.b~c')".into());
+        assert_eq!(migrate_window_state(&definition, &BTreeMap::new()).get("source"), Some(&serde_json::json!("tweet-2117_a.b~c")));
     }
 
     #[test]

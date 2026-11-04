@@ -367,6 +367,21 @@ mod freshness_tests {
     }
 
     #[test]
+    fn request_source_keeps_unreserved_characters_in_encoded_path() {
+        let base = runtime();
+        let mut definition = base.definition.clone();
+        let source = definition.sources.get_mut("item").unwrap();
+        if let SourceDecl::Request { path, .. } = source {
+            *path = serde_json::from_value(json!({"expr": "'/records/' & $encodeUrlComponent($storage.route)"})).unwrap();
+        } else {
+            panic!("요청 원천이 아닙니다");
+        }
+        let mut runtime = Runtime::new(1, definition.clone(), definition.state.clone(), true, false, Default::default());
+        set_route(&mut runtime, "tweet-2117_a.b~c");
+        assert!(matches!(runtime.plan_source("item"), SourcePlan::Request { path, .. } if path == "/records/tweet-2117_a.b~c"));
+    }
+
+    #[test]
     fn storage_replan_restores_cached_request_without_preparing_a_job() {
         let manager = DataRuntimes::default();
         let mut runtime = runtime();

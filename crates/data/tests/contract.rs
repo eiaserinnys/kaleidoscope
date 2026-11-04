@@ -2,7 +2,7 @@ use kaleidoscope_contract::{
     data::{BindingValue, SourceStatus},
     AppDefinition,
 };
-use kaleidoscope_data::{CompiledApp, Env, SourcePlan, Step};
+use kaleidoscope_data::{evaluate_page_next, CompiledApp, Env, SourcePlan, Step};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -94,6 +94,44 @@ fn set_storage_resolves_collection_doc_from_window_state() {
 }
 fn map(value: Value) -> BTreeMap<String, Value> {
     serde_json::from_value(value).unwrap()
+}
+
+#[test]
+fn url_encoding_follows_javascript_in_page_and_source_expressions() {
+    let cases = [
+        ("$encodeUrlComponent('tweet-2117_a.b~c')", "tweet-2117_a.b~c"),
+        ("$encodeUrlComponent(\"a b/c?d=é!'()*\")", "a%20b%2Fc%3Fd%3D%C3%A9!'()*"),
+        ("$encodeUrl('https://x.com/a b?q=1&r=é')", "https://x.com/a%20b?q=1&r=%C3%A9"),
+    ];
+    let actual: Vec<_> = cases.iter().map(|(expression, _)| evaluate_page_next(expression, &Value::Null, 0, 0).unwrap()).collect();
+    let expected: Vec<_> = cases.iter().map(|(_, expected)| json!(expected)).collect();
+    assert_eq!(actual, expected);
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["sources"]["a"]["path"] = json!({"expr": "'/a/' & $encodeUrlComponent('tweet-2117_a.b~c')"});
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    assert!(matches!(app.plan_source("a", &BTreeMap::new()), SourcePlan::Request { path, .. } if path == "/a/tweet-2117_a.b~c"));
+}
+
+#[test]
+fn url_encoding_keeps_existing_argument_behavior() {
+    use jsonata_core::{evaluator::Evaluator, parser, value::JValue};
+    for expression in ["$encodeUrlComponent(null)", "$encodeUrlComponent(42)", "$encodeUrlComponent(missing)", "$encodeUrl(null)", "$encodeUrl(42)", "$encodeUrl(missing)"] {
+        for context in [json!(null), json!("a b"), json!(42)] {
+            let ast = parser::parse(expression).unwrap();
+            let expected = Evaluator::new().evaluate(&ast, &JValue::from(context.clone()))
+                .map(|value| Value::from(&value)).map_err(|error| error.to_string());
+            let actual = evaluate_page_next(expression, &context, 0, 0);
+            assert_eq!(actual, expected, "{expression}, context {context}");
+        }
+    }
+}
+
+#[test]
+fn url_encoding_without_an_argument_reports_what_to_supply() {
+    for name in ["encodeUrlComponent", "encodeUrl"] {
+        let error = evaluate_page_next(&format!("${name}()"), &json!("a b"), 0, 0).unwrap_err();
+        assert!(error.contains(&format!("${name}에 인코딩할 글을 인자로 주세요")), "{error}");
+    }
 }
 
 #[test]
