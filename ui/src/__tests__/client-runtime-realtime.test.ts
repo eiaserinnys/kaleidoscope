@@ -131,18 +131,52 @@ describe("실시간 호스트 브리지", () => {
     expect(calls.filter((request) => request.op === "connection.realtime.ack")).toMatchObject([{ through:1 }]);
   });
 
-  it("열기 중 닫은 소켓은 늦게 열린 즉시 코어에서 닫고 프레임에 보내지 않는다", async () => {
+  it("열기 중 취소를 다섯 번 반복해도 종료 ACK로 슬롯을 비우고 다음 연결을 연다", async () => {
     const { ClientRealtime } = await import("../runtime/client-realtime");
-    const opening = deferred<{ handle:string; protocol:string | null }>();
+    let opening = deferred<{ handle:string; protocol:string | null }>();
     const sent = vi.fn(); const reply = vi.fn(); const calls:any[] = [];
-    const store = { call:vi.fn(async (req:any) => { calls.push(req); if (req.op === "connection.realtime.session") return { session:"session" }; if (req.op === "connection.realtime.open") return opening.promise; return {}; }), bytes:vi.fn() };
+    const slots = new Map<string, number>();
+    const store = {
+      call: vi.fn(async (req:any) => {
+        calls.push(req);
+        if (req.op === "connection.realtime.session") return { session:"session" };
+        if (req.op === "connection.realtime.open") {
+          if (slots.size >= 4) throw { id:"CONN_REALTIME_OPEN_LIMIT", code:"invalid_request", message:"한도", details:[] };
+          return opening.promise;
+        }
+        if (req.op === "connection.realtime.close") slots.set(req.handle, 1);
+        if (req.op === "connection.realtime.ack") {
+          if (req.through === 2) slots.delete(req.handle);
+          else slots.set(req.handle, 2);
+        }
+        return {};
+      }),
+      bytes: vi.fn(async (req:any) => {
+        const sequence = slots.get(req.handle);
+        const meta = new TextEncoder().encode(JSON.stringify({ session:"session", sequence, kind:sequence === 1 ? "text" : sequence === 2 ? "terminal" : "empty", terminal:{ code:1000, reason:"", was_clean:true } }));
+        const packet = new Uint8Array(4 + meta.length);
+        new DataView(packet.buffer).setUint32(0, meta.length); packet.set(meta, 4);
+        return packet.buffer;
+      }),
+    };
     const host = new ClientRealtime(store as never, "window", ["live"], sent, reply);
     await host.start();
-    const pending = host.request("1", "open", { permission:"live", path:"/socket", protocols:[] });
-    await host.request("1", "close", {});
-    opening.resolve({ handle:"late", protocol:null }); await pending;
-    expect(calls.filter((req) => req.op === "connection.realtime.close")).toMatchObject([{ handle:"late" }]);
+    for (let index = 0; index < 5; index++) {
+      opening = deferred();
+      const pending = host.request(String(index), "open", { permission:"live", path:"/socket", protocols:[] });
+      await host.request(String(index), "close", {});
+      const handle = `late-${index}`;
+      slots.set(handle, 0);
+      opening.resolve({ handle, protocol:null }); await pending; await tick();
+      expect(slots.size).toBe(0);
+    }
+    expect(calls.filter((req) => req.op === "connection.realtime.close")).toHaveLength(5);
+    expect(calls.filter((req) => req.op === "connection.realtime.ack")).toHaveLength(10);
     expect(sent).not.toHaveBeenCalled(); expect(reply).not.toHaveBeenCalled();
+    opening = deferred();
+    const next = host.request("next", "open", { permission:"live", path:"/socket", protocols:[] });
+    opening.resolve({ handle:"next", protocol:null }); await next;
+    expect(reply).toHaveBeenCalledWith("next", { handle:"next", protocol:"" });
   });
 });
 

@@ -111,6 +111,8 @@ def main():
     sb._spawn = local_spawn
     browser = None
     sessions = []
+    opened_handles = []
+    acked_handles = set()
     results = {}
     try:
         sb.start()
@@ -125,8 +127,14 @@ def main():
 
             def observe(response):
                 try:
-                    if response.url.endswith("/core") and response.request.post_data_json.get("op") == "connection.realtime.session" and response.ok:
-                        sessions.append(response.json()["session"])
+                    if response.url.endswith("/core") and response.ok:
+                        request = response.request.post_data_json
+                        if request.get("op") == "connection.realtime.session":
+                            sessions.append(response.json()["session"])
+                        elif request.get("op") == "connection.realtime.open":
+                            opened_handles.append(response.json()["handle"])
+                        elif request.get("op") == "connection.realtime.ack":
+                            acked_handles.add(request["handle"])
                 except (AttributeError, ValueError, KeyError):
                     pass
 
@@ -172,6 +180,26 @@ def main():
             app.get_by_role("button", name="종료 확인").click()
             until(lambda: "3002:서버 종료" in app.inner_text(), 10, "서버의 종료 코드와 사유가 전달되지 않음")
             results["server_close"] = "서버가 응답한 3002와 종료 사유 전달"
+            frame = page.frame_locator(".ks-client-frames iframe").locator("body")
+            for index in range(5):
+                before = len(opened_handles)
+                frame.evaluate("""() => {
+                  const Socket = window.kaleidoscope.connection.webSocketConstructor('live');
+                  new Socket('/socket').close();
+                }""")
+                def cancelled():
+                    page.wait_for_timeout(20)
+                    return len(opened_handles) > before and opened_handles[-1] in acked_handles
+                until(cancelled, 5, f"취소 {index + 1}번째 연결의 종료 ACK가 오지 않음")
+            frame.evaluate("""() => {
+              const Socket = window.kaleidoscope.connection.webSocketConstructor('live');
+              window.probeOpened = false;
+              window.probeSocket = new Socket('/socket');
+              window.probeSocket.onopen = () => { window.probeOpened = true; };
+            }""")
+            until(lambda: frame.evaluate("window.probeOpened"), 5, "빠른 취소 다섯 번 뒤 새 연결이 열리지 않음")
+            frame.evaluate("window.probeSocket.close()")
+            results["cancel_slots"] = "CONNECTING 중 빠른 취소 5회 종료 ACK, 다음 open 성공"
             page.screenshot(path=str(OUTPUT / "realtime-local.png"))
             (OUTPUT / "result.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
             print(json.dumps(results), flush=True)

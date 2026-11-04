@@ -5,7 +5,7 @@ import * as errors from "../contract/shell-errors";
 
 type Send = (message: object, transfer?: Transferable[]) => void;
 type Reply = (id: string, result?: unknown, error?: CoreError) => void;
-type Handle = { after: number; reading: boolean; again: boolean; awaiting: number | null; terminal: boolean; writes: Promise<void> };
+type Handle = { after: number; reading: boolean; again: boolean; awaiting: number | null; terminal: boolean; discarded: boolean; writes: Promise<void> };
 
 export class ClientRealtime {
   private session = "";
@@ -37,13 +37,16 @@ export class ClientRealtime {
         const attempt = { cancelled: false }; this.opening.set(requestId, attempt);
         try {
           const result = await this.store.call({ op: "connection.realtime.open", window_id: this.windowId, session: this.session, permission: params.permission, kind: "websocket", path: params.path, protocols: params.protocols });
-          if (attempt.cancelled || this.stopped) {
+          if (this.stopped) {
             this.earlyClosed.delete(result.handle);
             await this.store.call({ op: "connection.realtime.close", window_id: this.windowId, session: this.session, handle: result.handle }).catch(() => undefined);
             return;
           }
-          this.handles.set(result.handle, { after: 0, reading: false, again: false, awaiting: null, terminal: false, writes: Promise.resolve() });
-          this.reply(requestId, { handle: result.handle, protocol: result.protocol ?? "" });
+          this.handles.set(result.handle, { after: 0, reading: false, again: false, awaiting: null, terminal: false, discarded: attempt.cancelled, writes: Promise.resolve() });
+          if (attempt.cancelled) {
+            // 프레임에는 알리지 않지만 종료 패킷의 ACK까지 소유해야 코어 슬롯이 해제된다.
+            await this.store.call({ op: "connection.realtime.close", window_id: this.windowId, session: this.session, handle: result.handle }).catch(() => undefined);
+          } else this.reply(requestId, { handle: result.handle, protocol: result.protocol ?? "" });
           const closed = this.earlyClosed.get(result.handle);
           if (closed) { this.earlyClosed.delete(result.handle); this.closed(closed); }
           else void this.pump(result.handle);
@@ -86,8 +89,10 @@ export class ClientRealtime {
   }
 
   private closed(event: Extract<CoreEvent, { event: "connection.realtime.closed" }>) {
-    if (!this.handles.has(event.handle)) { if (this.opening.size) this.earlyClosed.set(event.handle, event); return; }
+    const state = this.handles.get(event.handle);
+    if (!state) { if (this.opening.size) this.earlyClosed.set(event.handle, event); return; }
     this.handles.delete(event.handle);
+    if (state.discarded) return;
     this.send({ type: "ks-realtime-event", session: this.session, handle: event.handle, event: "close", code: event.code, reason: event.reason, wasClean: false, error: event.error });
   }
 
@@ -104,14 +109,15 @@ export class ClientRealtime {
       const metadata = JSON.parse(new TextDecoder().decode(packet.slice(4, 4 + length)));
       if (metadata.session !== this.session || metadata.kind === "empty") return;
       state.awaiting = metadata.sequence; state.terminal = metadata.kind === "terminal";
-      if (metadata.kind === "terminal") this.send({ type: "ks-realtime-event", session: this.session, handle, sequence: metadata.sequence, event: "close", code: metadata.terminal.code, reason: metadata.terminal.reason, wasClean: metadata.terminal.was_clean, error: metadata.terminal.error });
+      if (state.discarded) await this.delivered(handle, metadata.sequence);
+      else if (metadata.kind === "terminal") this.send({ type: "ks-realtime-event", session: this.session, handle, sequence: metadata.sequence, event: "close", code: metadata.terminal.code, reason: metadata.terminal.reason, wasClean: metadata.terminal.was_clean, error: metadata.terminal.error });
       else if (metadata.kind === "text") this.send({ type: "ks-realtime-event", session: this.session, handle, sequence: metadata.sequence, event: "message", data: new TextDecoder().decode(packet.slice(4 + length)) });
       else { const data = packet.slice(4 + length); this.send({ type: "ks-realtime-event", session: this.session, handle, sequence: metadata.sequence, event: "message", data }, [data]); }
     } catch (error) {
       const problem = toCoreError(error);
       if (this.handles.get(handle) === state && problem.id !== "CONN_REALTIME_HANDLE_MISSING" && problem.id !== "CONN_REALTIME_SESSION_STALE") {
         this.handles.delete(handle);
-        this.send({ type: "ks-realtime-event", session: this.session, handle, event: "close", code: 1006, reason: "", wasClean: false, error: problem });
+        if (!state.discarded) this.send({ type: "ks-realtime-event", session: this.session, handle, event: "close", code: 1006, reason: "", wasClean: false, error: problem });
       }
     } finally {
       state.reading = false;
