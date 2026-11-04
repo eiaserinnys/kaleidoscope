@@ -73,3 +73,19 @@ for (const [name, markup, expected] of [
   const result = await executeWindowAction("one", view.view_id, { kind:"point", x:10, y:10, gesture:"click" }, "req");
   expect(result.error?.id).toBe(expected);
 });
+
+it("프레임 point 응답이 없어도 동작 시작 2초 뒤 보호 문맥을 끝낸다", async () => {
+  const { registerFramePointHandler } = await import("../share/frame-point");
+  const { windowActionActive } = await import("../share/action-context");
+  const { root, view } = setup('<iframe></iframe>');
+  setWindowViewGeometry("one", view.view_id, { css_width:100, css_height:100, pixel_width:100, pixel_height:100 });
+  const remove = registerFramePointHandler(root.querySelector("iframe")!, () => new Promise(() => {}));
+  const pending = executeWindowAction("one", view.view_id, { kind:"point", x:10, y:10, gesture:"click" }, "req");
+  expect(windowActionActive("one")).toBe(true);
+  await new Promise((resolve) => setTimeout(resolve, 2100));
+  expect(windowActionActive("one")).toBe(false);
+  const result = await pending;
+  expect(result.after?.settled).toBe(false);
+  expect(result.applied).toBe(true);
+  remove();
+});

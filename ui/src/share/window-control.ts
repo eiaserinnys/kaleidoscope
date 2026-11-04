@@ -79,7 +79,9 @@ export async function executeWindowAction(windowId: string, viewId: string, acti
   const before_text = describeNumbered(windowId, entry.root, false).text;
   const end = beginWindowAction(windowId);
   let applied = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
+    const run = async (): Promise<CoreError | undefined> => {
     let error: CoreError | undefined;
     if (action.kind === "click" && element) {
       if (!element.matches('button, a[href], input, [role="button"], [role="checkbox"], [role="switch"], [role="radio"], [role="tab"], [role="menuitem"], [role="treeitem"], [role="row"], [role="option"]')) error = unsupported(action.target, action.kind);
@@ -100,11 +102,19 @@ export async function executeWindowAction(windowId: string, viewId: string, acti
       if (action.direction === "up" || action.direction === "down") (target ?? entry.root).scrollTop += amount;
       else (target ?? entry.root).scrollLeft += amount;
       applied = true;
-    } else if (action.kind === "point") { error = await pointElement(entry.root, windowId, entry.geometry, action, requestId); applied = !error; }
-    if (error) return { applied, error, before_text };
-    const settled = await Promise.race([(async () => { if (element && (action.kind === "type" || action.kind === "key")) await flushPending(element); await nextFrame(); await nextFrame(); await waitForWindowActionCalls(windowId); return true; })(), new Promise<false>((resolve) => setTimeout(() => resolve(false), 2000))]);
+    } else if (action.kind === "point") { error = await pointElement(entry.root, windowId, entry.geometry, action, requestId, () => { applied = true; }); }
+    if (error) return error;
+    if (element && (action.kind === "type" || action.kind === "key")) await flushPending(element);
+    await nextFrame(); await nextFrame(); await waitForWindowActionCalls(windowId);
+    };
+    const outcome = await Promise.race([
+      run().then((error) => ({ settled: true, error })),
+      new Promise<{ settled: false; error?: CoreError }>((resolve) => { timeout = setTimeout(() => resolve({ settled: false }), 2000); }),
+    ]);
+    if (outcome.error) return { applied, error: outcome.error, before_text };
+    const settled = outcome.settled;
     const after = readWindowView(windowId); after.settled = settled;
     return { applied, before_text, after };
   } catch (reason) { return { applied, before_text, error: toCoreError(reason) }; }
-  finally { end(); }
+  finally { clearTimeout(timeout); end(); }
 }

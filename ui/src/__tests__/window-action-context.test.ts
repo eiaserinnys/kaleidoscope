@@ -8,7 +8,12 @@ it("실행 대상 창의 허용 확대 호출만 거절하고 취소는 보낸�
   const store = createShellStore({ call, subscribe: () => () => {} } as unknown as CoreTransport);
   await store.ready;
   const finish = beginWindowAction("one");
-  await expect(store.call({ op: "files.pick_folder", window_id: "one", permission: "docs" })).rejects.toMatchObject({ id: "SHELL_WINDOW_CONTROL_CONSENT_BLOCKED" });
+  for (const request of [
+    { op: "files.pick_folder", window_id: "one", permission: "docs" },
+    { op: "files.allow_pc", window_id: "one", permission: "docs" },
+    { op: "connection.login", window_id: "one", permission: "docs" },
+    { op: "process.respond_permission", window_id: "one", request_id: "r", allow: true },
+  ] as const) await expect(store.call(request)).rejects.toMatchObject({ id: "SHELL_WINDOW_CONTROL_CONSENT_BLOCKED" });
   await store.call({ op: "process.respond_permission", window_id: "one", request_id: "r", allow: false });
   await store.call({ op: "files.pick_folder", window_id: "two", permission: "docs" });
   expect(call).toHaveBeenCalledTimes(3);

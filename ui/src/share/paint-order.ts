@@ -28,11 +28,14 @@ export function topPainted(elements: HTMLElement[]): HTMLElement | undefined {
     const ancestors: Element[] = [];
     for (let node: Element | null = element; node; node = node.parentElement) ancestors.unshift(node);
     const result: Layer[] = [];
+    let contextDepth = 0;
     for (const node of ancestors) {
       const style = getComputedStyle(node), context = stacking(style, node);
-      // 보통 블록은 새 쌓임 맥락이 아니다. positioned/floating 그룹은 자기 자식의 순서를 유지한다.
+      // auto positioned/floating 조상은 일반 자식만 묶는다. 자식 맥락은 진짜 부모 맥락에 속한다.
+      if (context) result.length = contextDepth;
       if (node === element || context || phase(style, false) === 5 || phase(style, false) === 3)
         result.push([phase(style, context), context ? Number(style.zIndex) || 0 : 0, order.get(node) ?? 0]);
+      if (context) contextDepth = result.length;
     }
     keys.set(element, result); return result;
   };

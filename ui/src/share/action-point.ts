@@ -6,7 +6,7 @@ import { inConsent, ownedOverlays } from "./overlay-owner";
 import { topPainted } from "./paint-order";
 import { visibleClip } from "./visible";
 
-export async function pointElement(root: HTMLElement, windowId: string, geometry: WindowGeometry | undefined, action: Extract<WindowAction, { kind: "point" }>, requestId: string): Promise<CoreError | undefined> {
+export async function pointElement(root: HTMLElement, windowId: string, geometry: WindowGeometry | undefined, action: Extract<WindowAction, { kind: "point" }>, requestId: string, dispatched: () => void): Promise<CoreError | undefined> {
   if (!geometry) return errors.SHELL_WINDOW_CONTROL_GEOMETRY_CHANGED();
   if (action.x < 0 || action.y < 0 || action.x >= geometry.pixel_width || action.y >= geometry.pixel_height) return errors.SHELL_WINDOW_CONTROL_POINT_OUTSIDE({ x: String(action.x), y: String(action.y) });
   const bounds = root.getBoundingClientRect();
@@ -30,6 +30,7 @@ export async function pointElement(root: HTMLElement, windowId: string, geometry
     const handler = framePointHandler(target);
     if (!handler) return errors.SHELL_WINDOW_CONTROL_ACTION_UNSUPPORTED({ target: "프레임", action: "point" });
     const rect = target.getBoundingClientRect();
+    dispatched();
     await handler(x - rect.left, y - rect.top, action.gesture, requestId);
-  } else pointerClick(target, x, y, action.gesture);
+  } else { dispatched(); pointerClick(target, x, y, action.gesture); }
 }
