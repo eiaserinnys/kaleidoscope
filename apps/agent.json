@@ -363,9 +363,28 @@
                 "client": "show_starting"
               },
               "child": {
-                "type": "progress",
-                "value": null,
-                "max": 1
+                "type": "stack",
+                "direction": "column",
+                "gap": "small",
+                "children": [
+                  {
+                    "type": "progress",
+                    "value": null,
+                    "max": 1
+                  },
+                  {
+                    "type": "when",
+                    "value": {
+                      "client": "show_install_label"
+                    },
+                    "child": {
+                      "type": "text",
+                      "value": {
+                        "client": "install_message"
+                      }
+                    }
+                  }
+                ]
               }
             },
             {
@@ -443,18 +462,6 @@
                     }
                   }
                 ]
-              }
-            },
-            {
-              "type": "when",
-              "value": {
-                "client": "show_install_label"
-              },
-              "child": {
-                "type": "text",
-                "value": {
-                  "client": "install_message"
-                }
               }
             },
             {

@@ -21,6 +21,10 @@ fn builtin_agent_shows_indeterminate_progress_while_starting() {
     let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     let states = value["ui"]["children"][0]["child"]["children"].as_array().unwrap();
     let starting = states.iter().find(|state| state["value"]["client"] == "show_starting").unwrap();
-    assert_eq!(starting["child"]["type"], "progress");
-    assert!(starting["child"]["value"].is_null());
+    let group = &starting["child"];
+    assert_eq!(group["type"], "stack");
+    assert_eq!(group["gap"], "small");
+    assert_eq!(group["children"][0]["type"], "progress");
+    assert!(group["children"][0]["value"].is_null());
+    assert_eq!(group["children"][1]["value"]["client"], "show_install_label");
 }
