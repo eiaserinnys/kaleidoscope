@@ -367,7 +367,11 @@ async fn drive(
                 Some(Ok(WsMessage::Binary(bytes))) => pending = Some(Message::Binary(bytes.to_vec())),
                 Some(Ok(WsMessage::Close(frame))) => {
                     let (code, reason) = frame.map(|f| (u16::from(f.code), f.reason.to_string())).unwrap_or((1000, String::new()));
-                    terminal(&run, code, &reason, true, None); break;
+                    let clean = tokio::select! {
+                        _ = stop.recv() => break,
+                        clean = finish_remote_close(&mut socket) => clean,
+                    };
+                    terminal(&run, code, &reason, clean, None); break;
                 }
                 Some(Ok(_)) => {},
                 Some(Err(tungstenite::Error::Capacity(_))) => { terminal(&run, 1009, "", false, Some(errors::CONN_REALTIME_MESSAGE_TOO_LARGE(&run.info.name))); break; }
@@ -375,6 +379,27 @@ async fn drive(
             }
         }
     }
+}
+
+async fn finish_remote_close(
+    socket: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+) -> bool {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        if socket.flush().await.is_err() {
+            return false;
+        }
+        loop {
+            match socket.next().await {
+                None | Some(Err(tungstenite::Error::ConnectionClosed)) => return true,
+                Some(Err(_)) => return false,
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap_or(false)
 }
 
 async fn close_socket(

@@ -741,3 +741,62 @@ fn 여러_연결을_숨길_때_종료_신호를_함께_보낸다() {
         "종료가 순차 대기했습니다: {elapsed:?}"
     );
 }
+
+#[test]
+fn 원격_정상_종료에_응답하고_받은_메시지_뒤에_종료를_전달한다() {
+    use tokio_tungstenite::tungstenite::{
+        protocol::{frame::coding::CloseCode, CloseFrame},
+        Message as WsMessage,
+    };
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let worker = thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut ws = tokio_tungstenite::tungstenite::accept(socket).unwrap();
+        ws.send(WsMessage::text("마지막 메시지")).unwrap();
+        ws.send(WsMessage::Close(Some(CloseFrame {
+            code: CloseCode::Normal,
+            reason: "완료".into(),
+        })))
+        .unwrap();
+        matches!(
+            ws.read(),
+            Ok(WsMessage::Close(_)) | Err(tokio_tungstenite::tungstenite::Error::ConnectionClosed)
+        )
+    });
+    let (_temp, core, window) = fixture("readwrite", ConnectionKind::Oauth, true, vec![], base);
+    let session = realtime_host::session(&core.inner, &window).unwrap();
+    let opened =
+        realtime_host::open(&core.inner, &window, &session, "live", "/socket", &[]).unwrap();
+    let mut packets = Vec::new();
+    wait_until(|| {
+        if let Some(packet) = realtime_host::read(
+            &core.inner,
+            &window,
+            &session,
+            &opened.handle,
+            packets.len() as u64,
+        )
+        .unwrap()
+        {
+            packets.push(packet);
+        }
+        packets.len() == 2
+    });
+    assert_eq!(packets[0].message, Message::Text("마지막 메시지".into()));
+    assert!(
+        matches!(&packets[1].message, Message::Terminal { code: 1000, reason, clean: true, error: None } if reason == "완료")
+    );
+    assert!(worker.join().unwrap(), "서버가 종료 응답을 받지 못했습니다");
+    realtime_host::ack(&core.inner, &window, &session, &opened.handle, 2).unwrap();
+    assert_eq!(
+        realtime_host::read(&core.inner, &window, &session, &opened.handle, 2)
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("CONN_REALTIME_HANDLE_MISSING")
+    );
+}
