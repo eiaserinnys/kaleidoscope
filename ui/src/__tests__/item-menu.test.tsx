@@ -24,6 +24,36 @@ function setup(ui: Block, state: AppDefinition["state"] = {}) {
 }
 
 const menu = [{ label: "고르기", on_select: { set_state: "choice" } }];
+for (const confirm of [false, true]) {
+  for (const removed of ["나", "라"]) {
+    it(`행 순번 유지: 확인 ${confirm ? "있음" : "없음"}, ${removed} 삭제 뒤 다에 초점과 tabindex를 둔다`, async () => {
+      setup({ type: "list", items: { state: "rows" }, item_menu: [{
+        label: "지우기", ...(confirm ? { confirm: { title: "지울까요?" } } : {}),
+        on_select: [{ set_state: "rows", value: { expr: "[$state.rows[key != $event]]" } }],
+      }] }, { rows: ["가", "나", "다", "라"].map((title) => ({ key: title, title })) });
+      const first = await screen.findByRole("option", { name: "가" });
+      const target = screen.getByRole("option", { name: removed });
+      target.focus();
+      fireEvent.keyDown(target, { key: "F10", shiftKey: true });
+      const focused: EventTarget[] = [];
+      const record = (event: FocusEvent) => { if (event.target) focused.push(event.target); };
+      document.addEventListener("focusin", record);
+      try {
+        fireEvent.click(await screen.findByRole("menuitem", { name: "지우기" }));
+        if (confirm) fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "지우기" }));
+        await waitFor(() => expect(screen.queryByRole("option", { name: removed })).toBeNull());
+        const next = screen.getByRole("option", { name: "다" });
+        await waitFor(() => expect(document.activeElement).toBe(next));
+        expect(next.tabIndex).toBe(0);
+        expect(first.tabIndex).toBe(-1);
+        expect(focused).not.toContain(first);
+      } finally {
+        document.removeEventListener("focusin", record);
+      }
+    });
+  }
+}
+
 for (const mode of ["복구", "사용자 초점", "만료"] as const) {
   it(`늦게 사라지는 행의 관찰: ${mode}`, async () => {
     const write = vi.fn().mockResolvedValue(undefined);
