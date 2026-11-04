@@ -62,6 +62,10 @@ it.each([
   ["세로 rows 여러 줄 입력", { type: "stack", direction: "column", children: [fillText, { ...fillInput, rows: 4 }] }, [1], false],
   ["세로 한 줄 입력", { type: "stack", direction: "column", children: [fillText, fillInput] }, [], false],
   ["가로 한 줄 입력", { type: "stack", direction: "row", children: [fillText, fillInput] }, [1], false],
+  ["가로 마지막 단추", { type: "stack", direction: "row", children: [fillText, fillButton] }, [], false],
+  ["가로 단추 두 개", { type: "stack", direction: "row", children: [fillButton, fillButton] }, [], false],
+  ["가로 조건 단추", { type: "stack", direction: "row", children: [fillText, { type: "when", value: true, child: fillButton }] }, [], false],
+  ["가로 고르기", { type: "stack", direction: "row", children: [fillText, { type: "select", value: { state: "value" }, on_change: { set_state: "value" }, options: ["a"] }] }, [1], false],
   ["명시한 목록", { type: "stack", direction: "column", fill: 0, children: [fillList, fillButton] }, [0], true],
   ["명시한 단추", { type: "stack", direction: "column", fill: 1, children: [fillList, fillButton] }, [1], true],
   ["가운데 배치의 명시 fill", { type: "stack", direction: "column", place: "center", fill: 1, children: [fillList, fillButton] }, [], false],
@@ -88,7 +92,7 @@ it.each([
   expect(element.classList.contains("has-explicit-fill")).toBe(explicit);
   if (_name === "가로 입력과 단추") {
     const row = element.querySelector(".ks-data-stack.is-row")!;
-    expect(Array.from(row.children).map((child) => child.classList.contains("is-fill"))).toEqual([false, true]);
+    expect(Array.from(row.children).map((child) => child.classList.contains("is-fill"))).toEqual([false, false]);
   }
 });
 

@@ -27,10 +27,17 @@ function isFixedHeightControl(block: Block | undefined): boolean {
   return ["button", "select", "toggle", "slider", "color", "toolbar"].includes(block.type);
 }
 
+function isFixedWidthControl(block: Block | undefined): boolean {
+  if (!block) return false;
+  if (block.type === "when" || block.type === "anchor") return isFixedWidthControl(block.child);
+  if (block.type === "stack") return block.place !== "center" && block.children.length > 0 && block.children.every(isFixedWidthControl);
+  return ["button", "toggle", "color"].includes(block.type);
+}
+
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const last = block.children.length - 1;
   const fill = block.place === "center" ? -1 : block.fill ??
-    (block.direction === "column" && isFixedHeightControl(block.children[last]) ? -1 : last);
+    ((block.direction === "column" ? isFixedHeightControl(block.children[last]) : isFixedWidthControl(block.children[last])) ? -1 : last);
   const explicitFill = block.place !== "center" && block.fill !== undefined;
   const direction = block.place === "center" ? "column" : block.direction;
   const align = block.place === "center" || block.align === undefined ? "" : ` align-${block.align}`;
