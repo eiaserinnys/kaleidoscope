@@ -10,6 +10,35 @@ async function capture(page: Page, name: string) {
   await page.screenshot({ path: join(output, `${name}.png`), fullPage: true });
 }
 
+async function changedPixels(page: Page, a: Buffer, b: Buffer) {
+  return page.evaluate(async ([first, second]) => {
+    const load = (data: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = `data:image/png;base64,${data}`;
+    });
+    const [left, right] = await Promise.all([load(first), load(second)]);
+    if (left.width !== right.width || left.height !== right.height) return Number.POSITIVE_INFINITY;
+    const pixels = (image: HTMLImageElement) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      return context.getImageData(0, 0, canvas.width, canvas.height).data;
+    };
+    const one = pixels(left);
+    const two = pixels(right);
+    let changed = 0;
+    for (let index = 0; index < one.length; index += 4) {
+      const diff = Math.max(Math.abs(one[index] - two[index]), Math.abs(one[index + 1] - two[index + 1]), Math.abs(one[index + 2] - two[index + 2]));
+      if (diff > 8) changed += 1;
+    }
+    return changed;
+  }, [a.toString("base64"), b.toString("base64")] as const);
+}
+
 test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=data-views-test");
@@ -323,6 +352,7 @@ test("파일 트리 행의 공통화 전후 모습을 비교한다", async ({ pa
     });
     await capture(page, `file-tree-after-${width}`);
     const after = await screenshotRows();
-    expect(after).toEqual(before);
+    // 펼친 화살표(회전된 SVG)는 두 번 그릴 때 테두리 안티에일리어싱이 최대 2/255 달라 바이트 비교가 흔들린다. Windows 기록기와 같은 기준(8/255 초과 픽셀 16개)을 쓴다.
+    expect(await changedPixels(page, after, before)).toBeLessThanOrEqual(16);
   }
 });
