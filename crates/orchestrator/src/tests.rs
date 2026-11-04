@@ -563,6 +563,21 @@ async fn mcp_http_open_uses_origin_device_and_global_token_uses_last_active_devi
         .unwrap();
     state
         .save_layout(
+            &recent_id,
+            &kaleidoscope_contract::registry::DeviceLayout {
+                workspaces: vec![Workspace {
+                    id: "w".into(),
+                    name: "Work".into(),
+                    created_at: "now".into(),
+                    updated_at: "now".into(),
+                }],
+                active_workspace_id: Some("w".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .save_layout(
             &legacy_id,
             &kaleidoscope_contract::registry::DeviceLayout {
                 workspaces: vec![Workspace {

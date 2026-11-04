@@ -138,6 +138,16 @@ pub(super) fn phase(
             foreground,
         )?;
         let image_observation = observation.clone();
+        let rects = cdp(
+            view,
+            ProbeCall::Evaluate(
+                "document.querySelector('a[href=\"#wrapped\"]').getClientRects().length".into(),
+            ),
+        )?;
+        if rects["result"]["value"] != 2 {
+            return Err(format!("감긴 링크가 두 줄이 아님: {rects}"));
+        }
+        target(&observation, "link", "one two")?;
         if observation.text.contains("Clipped button")
             || observation.text.contains("Covered button")
         {

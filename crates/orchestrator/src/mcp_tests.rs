@@ -203,6 +203,86 @@ async fn open_counts_connected_devices_with_the_requested_workspace() {
 }
 
 #[tokio::test]
+async fn open_and_upload_explain_when_workspace_is_not_active_on_connected_shells() {
+    let state = AppState::in_memory("secret");
+    let workspaces: Vec<kaleidoscope_contract::Workspace> = serde_json::from_value(json!([
+        {"id":"w","name":"작업 이름","created_at":"t","updated_at":"t"},
+        {"id":"other","name":"다른 작업","created_at":"t","updated_at":"t"}
+    ]))
+    .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: workspaces.clone(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    for id in ["a", "b"] {
+        state.lock_db().unwrap().execute("INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,(SELECT account_id FROM mcp_principal WHERE id=1),?1,'now')", [id]).unwrap();
+    }
+    let _a = state
+        .stream_with_registry(
+            "a".into(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let _b = state
+        .stream_with_registry(
+            "b".into(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    for id in ["a", "b"] {
+        state
+            .save_layout(
+                id,
+                &DeviceLayout {
+                    workspaces: workspaces.clone(),
+                    active_workspace_id: Some("other".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+    }
+    let server = McpServer::new(state);
+    let app: Value =
+        serde_json::from_str(&test_definition(include_str!("fixtures/editor-app.json"))).unwrap();
+    let value = |result: CallToolResult| {
+        let json = serde_json::to_value(result).unwrap();
+        serde_json::from_str::<Value>(json["content"][0]["text"].as_str().unwrap()).unwrap()
+    };
+    let uploaded = value(
+        server
+            .upload_app(Parameters(UploadArgs {
+                asset_uploads: None,
+                definition: app,
+                open: true,
+                workspace_id: Some("w".into()),
+            }))
+            .await
+            .unwrap(),
+    );
+    let opened = value(
+        server
+            .open_app(Parameters(AppIdArgs {
+                app_id: uploaded["app_id"].as_str().unwrap().into(),
+                workspace_id: Some("w".into()),
+            }))
+            .await
+            .unwrap(),
+    );
+    for result in [uploaded, opened] {
+        assert_eq!(result["open_sent_to"], 0);
+        assert_eq!(result["open_reason"], "workspace_not_active");
+        assert_eq!(result["note"], "연결된 쉘 가운데 「작업 이름」 작업을 지금 화면에 띄운 쉘이 없어 창은 열리지 않았습니다. 쉘에서 그 작업으로 옮긴 뒤 다시 띄우십시오");
+    }
+}
+
+#[tokio::test]
 async fn app_open_and_opening_upload_are_scoped_away_from_other_accounts_legacy_shells() {
     let state = AppState::in_memory("secret");
     let owner_account = state.mcp_account_id().unwrap();

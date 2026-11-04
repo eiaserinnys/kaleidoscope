@@ -396,6 +396,16 @@ async fn latest_sync_device_gets_open_while_legacy_targeting_remains() {
         .unwrap();
     state
         .save_layout(
+            "latest",
+            &DeviceLayout {
+                workspaces: vec![workspace("w", "작업")],
+                active_workspace_id: Some("w".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .save_layout(
             "legacy",
             &DeviceLayout {
                 workspaces: vec![workspace("w", "작업")],
@@ -452,6 +462,69 @@ async fn latest_sync_device_gets_open_while_legacy_targeting_remains() {
     assert!(
         matches!(legacy, DeviceEvent::AppPublished { open: true, workspace_id: Some(id), .. } if id == "w")
     );
+}
+
+#[tokio::test]
+async fn open_target_prefers_the_device_displaying_the_requested_workspace() {
+    let state = AppState::in_memory("secret");
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                workspaces: vec![workspace("w", "작업"), workspace("other", "다른 작업")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    for (id, active) in [("a", "w"), ("b", "other")] {
+        insert_device(&state, id, id);
+        state
+            .save_layout(
+                id,
+                &DeviceLayout {
+                    workspaces: vec![workspace("w", "작업"), workspace("other", "다른 작업")],
+                    active_workspace_id: Some(active.into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+    }
+    let _a = state
+        .stream_with_registry(
+            "a".into(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let _b = state
+        .stream_with_registry(
+            "b".into(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    state.lock_db().unwrap().execute("UPDATE devices SET last_active_at=CASE id WHEN 'a' THEN '2026-10-29' ELSE '2026-10-30' END", []).unwrap();
+    let requires = serde_json::from_str::<kaleidoscope_contract::AppDefinition>(LEGACY_APP)
+        .unwrap()
+        .requires;
+    let target = state
+        .choose_open_target(Some("w"), None, &requires, &[])
+        .unwrap();
+    assert_eq!(target.as_ref().map(|target| target.id.as_str()), Some("a"));
+    state
+        .save_layout(
+            "a",
+            &DeviceLayout {
+                workspaces: vec![workspace("w", "작업"), workspace("other", "다른 작업")],
+                active_workspace_id: Some("other".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(state
+        .choose_open_target(Some("w"), None, &requires, &[])
+        .unwrap()
+        .is_none());
 }
 
 #[test]
@@ -581,6 +654,16 @@ async fn app_version_moves_saved_windows_before_sending_open() {
                 workspaces: vec![workspace("w", "작업")],
                 desktops: vec![desktop("d", "w")],
                 windows: vec![saved],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .save_layout(
+            "sync",
+            &DeviceLayout {
+                workspaces: vec![workspace("w", "작업")],
+                active_workspace_id: Some("w".into()),
                 ..Default::default()
             },
         )

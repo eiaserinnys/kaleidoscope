@@ -8,7 +8,7 @@ const visible = eval(`(${match[1]})`);
 global.window = { innerWidth: 100, innerHeight: 100 };
 global.getComputedStyle = e => e.style || {overflowX:'visible', overflowY:'visible'};
 const clip = { parentElement:null, style:{overflowX:'hidden',overflowY:'hidden'}, getBoundingClientRect:()=>({left:0,top:0,right:50,bottom:14}) };
-const target = {parentElement:clip, contains:e=>e===target, getBoundingClientRect:()=>({left:0,top:0,right:40,bottom:30})};
+const target = {parentElement:clip, contains:e=>e===target, getBoundingClientRect:()=>({left:0,top:0,right:40,bottom:30}), getClientRects:()=>[]};
 global.document = { elementFromPoint:(x,y)=> y < 14 ? target : null };
 const point = visible.call(target);
 assert(point && point.y >= 0 && point.y < 14, 'partially clipped target must use the visible portion');
@@ -19,10 +19,15 @@ document.elementFromPoint = ()=>({});
 assert.strictEqual(visible.call(target), null, 'covered target must be omitted');
 const host = {parentElement:clip, style:{overflowX:'visible',overflowY:'visible'}, getBoundingClientRect:()=>({left:0,top:0,right:40,bottom:14})};
 const root = {host, elementFromPoint:()=>shadowButton};
-const shadowButton = {parentElement:null, getRootNode:()=>root, contains:e=>e===shadowButton, getBoundingClientRect:()=>({left:0,top:0,right:40,bottom:30})};
+const shadowButton = {parentElement:null, getRootNode:()=>root, contains:e=>e===shadowButton, getBoundingClientRect:()=>({left:0,top:0,right:40,bottom:30}), getClientRects:()=>[]};
 host.getRootNode = ()=>document;
 document.elementFromPoint = ()=>host;
 assert(visible.call(shadowButton), 'visible shadow button must be reachable through its host');
 shadowButton.getBoundingClientRect = ()=>({left:0,top:40,right:40,bottom:70});
 assert.strictEqual(visible.call(shadowButton), null, 'clipping outside the shadow host must apply');
-console.log('5 visible-point cases passed');
+const wrapped = {parentElement:null, contains:e=>e===wrapped,
+  getBoundingClientRect:()=>({left:0,top:0,right:100,bottom:40}),
+  getClientRects:()=>[{left:85,top:0,right:100,bottom:20},{left:0,top:20,right:15,bottom:40}]};
+document.elementFromPoint = (x,y)=> (y < 20 && x >= 85) || (y >= 20 && x <= 15) ? wrapped : null;
+assert(visible.call(wrapped), 'a wrapped inline link must use a visible fragment');
+console.log('6 visible-point cases passed');

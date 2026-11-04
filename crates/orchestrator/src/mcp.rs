@@ -148,6 +148,23 @@ fn effective_workspace_id(explicit: Option<String>, principal: &McpPrincipal) ->
     explicit.or_else(|| principal.workspace_id.clone())
 }
 
+fn add_workspace_not_active_note(state: &AppState, value: &mut Value, workspace_id: &str) {
+    let name = state
+        .lock_db()
+        .ok()
+        .and_then(|db| {
+            db.query_row(
+                "SELECT json_extract(data, '$.name') FROM workspaces WHERE id=?1",
+                [workspace_id],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+        })
+        .unwrap_or_else(|| workspace_id.to_owned());
+    value["open_reason"] = json!("workspace_not_active");
+    value["note"] = json!(format!("연결된 쉘 가운데 「{name}」 작업을 지금 화면에 띄운 쉘이 없어 창은 열리지 않았습니다. 쉘에서 그 작업으로 옮긴 뒤 다시 띄우십시오"));
+}
+
 #[path = "mcp_app_storage_tools.rs"]
 pub(super) mod app_storage_tools;
 #[path = "mcp_server_handler.rs"]
@@ -241,6 +258,14 @@ impl McpServer {
                     } else {
                         json!("연결된 쉘이 없어 창은 열리지 않았습니다")
                     };
+                }
+                if let Some(workspace_id) = args.workspace_id.as_deref().filter(|workspace_id| {
+                    args.open
+                        && sent == 0
+                        && principal.device_id.is_none()
+                        && self.state.connected_count_for(Some(workspace_id)) > 0
+                }) {
+                    add_workspace_not_active_note(&self.state, &mut value, workspace_id);
                 }
                 add_unsupported_device_note(
                     &mut value,
@@ -566,6 +591,13 @@ impl McpServer {
                 {
                     value["note"] =
                         json!("그 작업을 가진 쉘이 연결돼 있지 않아 창은 열리지 않았습니다");
+                }
+                if let Some(workspace_id) = args.workspace_id.as_deref().filter(|workspace_id| {
+                    sent == 0
+                        && principal.device_id.is_none()
+                        && self.state.connected_count_for(Some(workspace_id)) > 0
+                }) {
+                    add_workspace_not_active_note(&self.state, &mut value, workspace_id);
                 }
                 add_unsupported_device_note(
                     &mut value,
