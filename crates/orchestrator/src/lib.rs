@@ -131,6 +131,8 @@ struct Inner {
     events: broadcast::Sender<Broadcast>,
     connections: Mutex<HashMap<String, usize>>,
     shares: Mutex<share::ShareStore>,
+    window_control: Mutex<window_control::ControlState>,
+    window_control_versions: Mutex<HashMap<String, Vec<u32>>>,
     device_support: Mutex<HashMap<String, Option<Supported>>>,
     layout_sync_devices: Mutex<HashSet<String>>,
     storage_devices: Mutex<HashSet<String>>,
@@ -222,6 +224,8 @@ impl AppState {
             events,
             connections: Mutex::new(HashMap::new()),
             shares: Mutex::new(share::ShareStore::default()),
+            window_control: Mutex::new(window_control::ControlState::default()),
+            window_control_versions: Mutex::new(HashMap::new()),
             device_support: Mutex::new(HashMap::new()),
             layout_sync_devices: Mutex::new(HashSet::new()),
             storage_devices: Mutex::new(HashSet::new()),
@@ -675,6 +679,10 @@ impl AppState {
             changed
         };
         self.refresh_device_workspaces()?;
+        if changed > 0 {
+            self.delete_device_shared_views(id);
+            self.window_control_device_disconnected(id);
+        }
         Ok(changed > 0)
     }
 }
@@ -707,6 +715,9 @@ mod preview;
 mod publish;
 mod share;
 mod storage;
+mod window_control;
+#[cfg(test)]
+mod window_control_tests;
 pub mod worker;
 mod worker_bridge;
 mod worker_http;

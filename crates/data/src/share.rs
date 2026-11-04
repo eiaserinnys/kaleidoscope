@@ -4,6 +4,29 @@ use serde::{Deserialize, Serialize};
 use similar::TextDiff;
 use std::collections::BTreeMap;
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum TextChange {
+    Unchanged,
+    Full(String),
+    Diff(String),
+}
+
+/// 앞뒤 한 줄의 문맥을 포함한 차분이 전체보다 길면 전체를 돌려준다.
+pub fn text_change(before: &str, after: &str) -> TextChange {
+    if before == after {
+        return TextChange::Unchanged;
+    }
+    let diff = TextDiff::from_lines(before, after)
+        .unified_diff()
+        .context_radius(1)
+        .to_string();
+    if diff.len() > after.len() {
+        TextChange::Full(after.to_string())
+    } else {
+        TextChange::Diff(diff)
+    }
+}
+
 const INTRO: &str = "디렉터가 kaleidoscope 쉘에서 「같이 보기」로 켠 창에 지금 보이는 내용입니다. 쉘이 디렉터의 말 뒤에 붙였고 디렉터가 쓴 글이 아닙니다. 지난번 말 뒤로 달라진 것만 담았습니다. 지금 모습 전체는 MCP get_shared_view로 읽을 수 있습니다. 이미지나 웹 화면이 보이는 창은 모습이 바뀌었을 때 「같이 보기 - 앱 이름.png」 첨부로 함께 옵니다.";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,18 +87,11 @@ pub fn build_share_block(
         );
         let (status, content) = match sent.get(&view.window_id) {
             None => ("새로 같이 봄", Some(view.text.clone())),
-            Some(old) if old.text == view.text => ("그대로", None),
-            Some(old) => {
-                let diff = TextDiff::from_lines(&old.text, &view.text)
-                    .unified_diff()
-                    .context_radius(1)
-                    .to_string();
-                if diff.len() > view.text.len() {
-                    ("바뀜(전체)", Some(view.text.clone()))
-                } else {
-                    ("바뀜", Some(diff))
-                }
-            }
+            Some(old) => match text_change(&old.text, &view.text) {
+                TextChange::Unchanged => ("그대로", None),
+                TextChange::Full(text) => ("바뀜(전체)", Some(text)),
+                TextChange::Diff(text) => ("바뀜", Some(text)),
+            },
         };
         let short = view.window_id.get(..8).unwrap_or(&view.window_id);
         entries.push((
@@ -118,6 +134,40 @@ pub fn build_share_block(
 mod tests {
     use super::{build_share_block, strip_legacy_share_block, SentView, View};
     use std::collections::BTreeMap;
+
+    #[test]
+    fn 공용_차분은_변경_없음과_전체와_차분을_구분한다() {
+        use super::{text_change, TextChange};
+        assert_eq!(text_change("같음", "같음"), TextChange::Unchanged);
+        assert_eq!(text_change("전", "후"), TextChange::Full("후".into()));
+        let before = "하나\n둘\n셋\n넷\n다섯\n여섯\n일곱\n";
+        let after = "하나\n둘\n셋\n변경\n다섯\n여섯\n일곱\n";
+        assert!(matches!(text_change(before, after), TextChange::Diff(_)));
+        let old = SentView {
+            app_name: "앱".into(),
+            text: before.into(),
+        };
+        let view = View {
+            window_id: "window-1234".into(),
+            app_name: "앱".into(),
+            text: after.into(),
+        };
+        let mut sent = BTreeMap::new();
+        sent.insert(view.window_id.clone(), old);
+        let (block, _) = build_share_block(&[view], &sent).unwrap();
+        let previous_diff = similar::TextDiff::from_lines(before, after)
+            .unified_diff()
+            .context_radius(1)
+            .to_string();
+        let expected = format!(
+            "{}\n{}\n\n## 앱 (창 window-1): 바뀜\n{}\n{}",
+            super::SHARE_BLOCK_START,
+            super::INTRO,
+            previous_diff,
+            super::SHARE_BLOCK_END
+        );
+        assert_eq!(block, expected);
+    }
 
     #[test]
     fn only_generated_share_blocks_are_removed() {
