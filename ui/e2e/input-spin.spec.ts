@@ -7,7 +7,7 @@ test("숫자 입력 화면 비교", async ({ page }) => {
   const phase = process.env.KS_SPIN_CAPTURE_PHASE ?? "after";
   const measurements: Record<string, unknown> = {};
   if (output) mkdirSync(output, { recursive: true });
-  for (const [width, theme] of [[1200, "light"], [360, "dark"]] as const) {
+  for (const [width, theme] of [[1200, "light"], [1200, "dark"], [360, "dark"]] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/?preview=input-spin-test");
@@ -29,9 +29,15 @@ test("숫자 입력 화면 비교", async ({ page }) => {
       const field = node.getBoundingClientRect();
       const buttons = node.parentElement!.querySelectorAll<HTMLButtonElement>(".ks-number-spin button");
       const up = buttons[0].getBoundingClientRect(), down = buttons[1].getBoundingClientRect();
-      return { top: up.top - field.top, bottom: field.bottom - down.bottom, end: field.right - up.right };
+      const centers = [...buttons].map((button) => {
+        const rect = button.getBoundingClientRect();
+        const icon = button.querySelector("svg")!.getBoundingClientRect();
+        return (icon.top + icon.bottom - rect.top - rect.bottom) / 2;
+      });
+      return { top: up.top - field.top, bottom: field.bottom - down.bottom, end: field.right - up.right, centers };
     });
-    for (const inset of Object.values(geometry)) expect(inset).toBeCloseTo(2, 1);
+    for (const inset of [geometry.top, geometry.bottom, geometry.end]) expect(inset).toBeCloseTo(2, 1);
+    for (const offset of geometry.centers) expect(Math.abs(offset)).toBeLessThanOrEqual(0.5);
     if (output) await app.screenshot({ path: join(output, `hover-down-${width}-${theme}.png`) });
     await page.mouse.down();
     if (output) await app.screenshot({ path: join(output, `pressed-down-${width}-${theme}.png`) });
@@ -52,6 +58,29 @@ test("숫자 입력 화면 비교", async ({ page }) => {
     await expect(app.getByRole("spinbutton", { name: "빈 값" })).toBeFocused();
   }
   if (output) writeFileSync(join(output, `${phase}-metrics.json`), JSON.stringify(measurements, null, 2));
+});
+
+test("소수점 뒤에 멈췄다가 이어 치고 지워도 숫자 초안이 유지된다", async ({ page }) => {
+  await page.goto("/?preview=input-spin-test");
+  const app = page.getByTestId("app-window-input-spin-test");
+  const field = app.getByRole("spinbutton", { name: "빈 값" });
+  await field.focus();
+  await page.keyboard.type("1.");
+  await page.waitForTimeout(700);
+  await expect(field).toHaveValue("1.");
+  const output = process.env.KS_SPIN_CAPTURE_DIR;
+  if (output) await app.screenshot({ path: join(output, "typing-decimal.png") });
+  await page.keyboard.type("5");
+  await page.waitForTimeout(700);
+  await expect(field).toHaveValue("1.5");
+  await field.fill("150");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(700);
+  await page.keyboard.type("7");
+  await expect(field).toHaveValue("17");
+  if (output) writeFileSync(join(output, "typing-results.json"), JSON.stringify({ decimal: "1.5", backspace: await field.inputValue() }, null, 2));
 });
 
 test("누르고 놓은 스핀은 마지막 값만 보내고 바로 누른 동작은 새 값을 쓴다", async ({ page }) => {

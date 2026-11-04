@@ -19,17 +19,13 @@ function bindingText(value: ReturnType<typeof useBinding>): string {
   return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
 }
 
-<<<<<<< HEAD
 function fitTextarea(element: HTMLTextAreaElement) {
   if (element.clientWidth === 0) return;
   element.style.height = "auto";
   element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`;
 }
 
-export function InputBlock({ block, pointer }: Props<"input">) {
-=======
 export function InputBlock({ block, context, pointer }: Props<"input">) {
->>>>>>> da80d74c (숫자 입력에 스핀 조작을 추가한다)
   const data = useWindowData();
   const multiline = block.kind !== "number" && isMultilineInput(block);
   const visible = useWindowVisible(context);
@@ -129,16 +125,24 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [block.rows, multiline]);
-  const { sendDraft, markChanged, commit, cancel, endSpin } = useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin });
+  const { sendDraft, markChanged, commit, cancel, endSpin } = useInputDraft({ block, pointer, data, readOnly, initialDraft, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin });
   sendDraftRef.current = sendDraft;
   afterSpin.current = () => { if (!spinning.current && !focusedRef.current && !edited.current) finish(false); };
   const latestDraft = useRef(draft);
   latestDraft.current = draft;
+  const normalizeNumberDraft = () => {
+    if (block.kind !== "number" || readOnly) return;
+    const normalized = toEventValue(latestDraft.current);
+    if (typeof normalized === "number") {
+      const next = inputDraft(normalized, block.kind, block.format);
+      if (next !== latestDraft.current) { latestDraft.current = next; change(next); }
+    }
+  };
   const setNumber = (number: number, held = false) => {
     const normalized = toEventValue(String(number));
     if (typeof normalized !== "number") return false;
     const next = inputDraft(normalized, block.kind, block.format);
-    if (Number(latestDraft.current) === normalized && latestDraft.current.trim() !== "") return false;
+    if (latestDraft.current === next) return false;
     holding.current = true;
     latestDraft.current = next;
     markChanged(next, held ? "hold" : "debounce");
@@ -147,8 +151,8 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const increment = (direction: 1 | -1, multiplier = 1, held = false) => {
     if (readOnly) return false;
     if (held) { spinning.current = true; holding.current = true; }
-    const raw = latestDraft.current.trim();
-    const currentNumber = raw && Number.isFinite(Number(raw)) ? Number(raw) : 0;
+    const normalized = toEventValue(latestDraft.current);
+    const currentNumber = typeof normalized === "number" ? normalized : 0;
     const changed = setNumber(steppedNumber(currentNumber, step ?? 1, direction * multiplier), held);
     const next = Number(latestDraft.current);
     return changed && (direction === 1 ? maximum === null || next < maximum : minimum === null || next > minimum);
@@ -169,6 +173,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
       return;
     }
     if (event.key !== "Enter" || event.nativeEvent.isComposing || composing.current || (multiline && !event.ctrlKey)) return;
+    normalizeNumberDraft();
     if (block.commit === "submit" || block.on_submit) { event.preventDefault(); commit(draft); }
     if (block.on_submit) {
       const submitted = mark();
@@ -179,6 +184,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     onFocus: () => { setFocused(true); focusedRef.current = true; holding.current = !readOnly; }, onBlur: () => {
       setFocused(false);
       focusedRef.current = false;
+      normalizeNumberDraft();
       if (spinButtons.current?.end()) return;
       if (spinPending.current && edited.current) { endSpin(); return; }
       if ((block.commit ?? "debounce") !== "submit") commit(draft);

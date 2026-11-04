@@ -1,6 +1,5 @@
 import { useCallback, type RefObject } from "react";
 import type { Block } from "../contract/contract";
-import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { useWindowData } from "../data/window-data";
 import { registerPendingFlush } from "../share/pending-flush";
 
@@ -15,9 +14,9 @@ export function inputDraft(value: unknown, kind: string | undefined, format: Ext
 
 type Input = Extract<Block, { type: "input" }>;
 type Ref<T> = RefObject<T>;
-export function useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin }: {
+export function useInputDraft({ block, pointer, data, readOnly, initialDraft, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin }: {
   block: Input; pointer: string; data: ReturnType<typeof useWindowData>; readOnly: boolean; initialDraft: string;
-  toEventValue: (value: string) => JsonValue; change: (value: string) => void; finish: (sync?: boolean) => void;
+  change: (value: string) => void; finish: (sync?: boolean) => void;
   send: (value: string, coalesce?: boolean) => Promise<void>; prepare: Ref<() => void>;
   timer: Ref<ReturnType<typeof setTimeout> | null>; timerValue: Ref<string>; unregisterFlush: Ref<(() => void) | null>;
   inputElement: Ref<HTMLInputElement | null>; textarea: Ref<HTMLTextAreaElement | null>; edited: Ref<boolean>; spinPending: Ref<boolean>; afterSpin: Ref<() => void>;
@@ -29,12 +28,9 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
     const wasSpin = spinPending.current;
     edited.current = false;
     spinPending.current = false;
-    const normalized = toEventValue(value);
-    const formatted = typeof normalized === "number" ? inputDraft(normalized, block.kind, block.format) : value;
-    if (formatted !== value) change(formatted);
     const sent = send(value, false);
     return wasSpin ? sent.finally(() => afterSpin.current()) : sent;
-  }, [block.kind, block.format, change, send, toEventValue]);
+  }, [send]);
   prepare.current = () => { if (edited.current && (timer.current || spinPending.current)) void sendDraft(timerValue.current); };
   const markChanged = (value: string, mode: "normal" | "debounce" | "hold" = "normal") => {
     if (readOnly) return;

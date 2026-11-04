@@ -4,6 +4,47 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ButtonBlock, ColorBlock, InputBlock, SelectBlock, ToggleBlock } from "../blocks/data-input";
 import "../styles/data-input-preview.css";
 
+it.each([undefined, { kind: "decimal", digits: 2 }])("전송 성공 뒤에도 입력 중 소수점과 자릿수를 보존한다: %j", async (format) => {
+  vi.useFakeTimers();
+  try {
+    runtime.values = { value: null };
+    const input = { type: "input", kind: "number", value: { client: "value" }, format, on_change: { client: "change" } };
+    const draw = () => <InputBlock block={input as never} context={{} as never} pointer="/input" />;
+    const view = render(draw());
+    const field = screen.getByRole("spinbutton") as HTMLInputElement;
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: "1." } });
+    await act(async () => { vi.advanceTimersByTime(700); });
+    expect(runtime.act).toHaveBeenLastCalledWith("/input/on_change", 1, undefined, undefined, undefined, { input: true });
+    runtime.values.value = 1;
+    view.rerender(draw());
+    expect(field.value).toBe("1.");
+    fireEvent.change(field, { target: { value: field.value + "5" } });
+    await act(async () => { vi.advanceTimersByTime(700); });
+    runtime.values.value = 1.5;
+    view.rerender(draw());
+    expect(field.value).toBe("1.5");
+    fireEvent.blur(field);
+    expect(field.value).toBe(format ? "1.50" : "1.5");
+  } finally { vi.useRealTimers(); }
+});
+
+it("숫자 초안은 Enter와 증감에서 서식을 확정한다", async () => {
+  vi.useFakeTimers();
+  try {
+    const input = { type: "input", kind: "number", value: null, format: { kind: "decimal", digits: 2 }, on_change: { client: "change" } };
+    render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+    const field = screen.getByRole("spinbutton") as HTMLInputElement;
+    fireEvent.focus(field);
+    fireEvent.change(field, { target: { value: "1.5" } });
+    await act(async () => { vi.advanceTimersByTime(700); });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(field.value).toBe("1.50");
+    fireEvent.keyDown(field, { key: "ArrowUp" });
+    expect(field.value).toBe("2.50");
+  } finally { vi.useRealTimers(); }
+});
+
 it("숫자 입력은 기본 단추 없이 키로 범위를 지켜 증감한다", () => {
   vi.useFakeTimers();
   try {
