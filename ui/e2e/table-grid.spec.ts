@@ -154,5 +154,21 @@ test("잘못된 내용 칸과 정상 칸을 함께 표시한다", async ({ page 
   const app = page.getByTestId("app-window-data-views-test");
   await expect(app.getByText("SHELL_TABLE_CELL_CONTENT_INVALID")).toBeVisible();
   await expect(app.getByText("정상 일정")).toBeVisible();
-  await capture(page, "20261104-1700-table-error");
+  const error = app.getByRole("alert");
+  const layout = await error.evaluate((element) => {
+    const cell = element.closest('[role="gridcell"]')!.getBoundingClientRect();
+    const code = element.querySelector(".ks-error-id")!.getBoundingClientRect();
+    return { wraps: getComputedStyle(element).whiteSpace, codeInside: code.right <= cell.right && code.bottom <= cell.bottom };
+  });
+  expect(layout.wraps).toBe("normal");
+  expect(layout.codeInside).toBe(true);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await error.evaluate((element) => {
+    const range = document.createRange(); range.selectNodeContents(element);
+    window.getSelection()!.removeAllRanges(); window.getSelection()!.addRange(range);
+  });
+  await page.keyboard.press("Control+C");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("SHELL_TABLE_CELL_CONTENT_INVALID");
+  await page.evaluate(() => window.getSelection()!.removeAllRanges());
+  await capture(page, "20261104-1740-table-error-after");
 });
