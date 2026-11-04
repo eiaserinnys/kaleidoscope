@@ -180,7 +180,7 @@ cargo run -p kaleidoscope-devbridge -- --data-dir ./dev-data --port 1421
 pnpm --dir app dev
 ```
 
-Open `http://localhost:1420/?core=http://127.0.0.1:1421`. The bridge starts its own built-in server, as the desktop shell does, and accepts only the UI origin `http://localhost:1420`. To try a separate orchestrator, start one as in Get started and connect to it from the server menu. The browser shell has no native webviews or updater. Native dialogs are replaced by environment variables on the bridge:
+Open `http://localhost:1420/?core=http://127.0.0.1:1421`. The bridge starts its own built-in server, as the desktop shell does, and accepts only the UI origin `http://localhost:1420`. To try a separate orchestrator, start one as in Get started and connect to it from the server section of the settings. The browser shell has no native webviews or updater. Native dialogs are replaced by environment variables on the bridge:
 
 | Variable | Effect |
 | --- | --- |
