@@ -461,10 +461,26 @@
     }
   },
   {
+    "id": "standalone-textarea",
+    "name": "여러 줄 입력",
+    "requires": {
+      "blocks": 33,
+      "modules": {}
+    },
+    "permissions": [],
+    "state": {},
+    "ui": {
+      "type": "input",
+      "multiline": true,
+      "value": "",
+      "on_change": []
+    }
+  },
+  {
     "id": "stack-action-tail",
     "name": "결정 줄",
     "requires": {
-      "blocks": 36,
+      "blocks": 37,
       "modules": {}
     },
     "permissions": [],

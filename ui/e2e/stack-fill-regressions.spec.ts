@@ -16,6 +16,10 @@ test("내용 높이 쌓기와 가로 쌓기 및 대화상자의 입력은 계속
   expect((await note.boundingBox())!.height).toBeGreaterThan(100);
   await note.fill(Array(9).fill("한 줄").join("\n"));
   expect(await note.evaluate(e => e.scrollHeight - e.clientHeight)).toBeGreaterThan(0);
+  await page.goto("/?preview=standalone-textarea");
+  const standalone = page.getByTestId("app-window-standalone-textarea").getByRole("textbox");
+  await standalone.fill(five);
+  expect((await standalone.boundingBox())!.height).toBeGreaterThan(100);
 });
 
 test("좁은 탭의 옆 이름표는 properties와 함께 위로 옮겨 칸 폭을 지킨다", async ({ page }) => {

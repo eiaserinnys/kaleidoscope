@@ -27,7 +27,7 @@ function bindingText(value: ReturnType<typeof useBinding>): string {
 }
 
 function fitTextarea(element: HTMLTextAreaElement) {
-  if (getComputedStyle(element).getPropertyValue("--ks-fill-textarea-height").trim() === "100%") {
+  if (getComputedStyle(element).getPropertyValue("--ks-textarea-fill").trim() === "100%") {
     element.style.height = "";
     return;
   }

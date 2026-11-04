@@ -152,7 +152,7 @@
 .ks-data-text.is-meta { font-size: var(--ks-type-meta); color: var(--ks-color-muted); }
 .ks-data-text.is-interactive { width: fit-content; max-width: 100%; border: 0; padding: 0; background: transparent; color: inherit; font-family: inherit; font-weight: inherit; line-height: inherit; text-align: start; cursor: pointer; }
 .ks-data-text.is-interactive:focus-visible { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-focus-offset); }
-.ks-data-input { position: relative; width: 100%; min-width: 0; }
+.ks-data-input { --ks-textarea-fill: auto; position: relative; width: 100%; min-width: 0; }
 .ks-data-section-child > .ks-data-input:not(.ks-data-tab-panel *),
 .ks-data-stack-item > .ks-data-input:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); margin-block: var(--ks-space-1) var(--ks-space-2); }
 .ks-data-stack-item > .ks-data-input:not(.ks-data-tab-panel *) { margin-block: 0; }
@@ -166,7 +166,7 @@
 .ks-data-stack-item.is-fill > .ks-input-field > .ks-data-input:has(> textarea),
 .ks-data-stack-item.is-fill > .ks-data-input:has(> textarea) { height: var(--ks-fill-textarea-height); min-height: 0; }
 .ks-data-stack-item.is-fill > .ks-data-input > textarea,
-.ks-data-stack-item.is-fill > .ks-input-field > .ks-data-input > textarea { height: var(--ks-fill-textarea-height); min-height: calc(var(--ks-control-height) + (var(--ks-input-rows) - 1) * var(--ks-type-body) * var(--ks-line-body)); max-height: var(--ks-fill-textarea-max); }
+.ks-data-stack-item.is-fill > .ks-input-field > .ks-data-input > textarea { --ks-textarea-fill: var(--ks-fill-textarea-height); height: var(--ks-textarea-fill); min-height: calc(var(--ks-control-height) + (var(--ks-input-rows) - 1) * var(--ks-type-body) * var(--ks-line-body)); max-height: var(--ks-fill-textarea-max); }
 .ks-field, .ks-color-control { display: inline-flex; align-items: center; gap: var(--ks-space-2); min-height: var(--ks-control-height); color: var(--ks-color-text); font-size: var(--ks-type-body); }
 :is(.ks-properties, .ks-data-tab-panel) { --ks-field-label-width: calc(var(--ks-space-6) * 4); }
 .ks-data-tab-panel .ks-field { display: grid; width: 100%; grid-template-columns: var(--ks-field-label-width) minmax(0, 1fr) auto; }
