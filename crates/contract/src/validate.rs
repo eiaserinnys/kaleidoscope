@@ -50,14 +50,14 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         || value
             .pointer("/settings/ui")
             .is_some_and(uses_block_set_19_fields);
-    let uses_new_block_set_20_fields = value
-        .get("ui")
-        .is_some_and(uses_block_set_20_fields)
+    let uses_new_block_set_20_fields = value.get("ui").is_some_and(uses_block_set_20_fields)
         || value
             .pointer("/settings/ui")
             .is_some_and(uses_block_set_20_fields);
     let uses_block_set_21 = value.get("ui").is_some_and(uses_block_set_21_fields)
-        || value.pointer("/settings/ui").is_some_and(uses_block_set_21_fields);
+        || value
+            .pointer("/settings/ui")
+            .is_some_and(uses_block_set_21_fields);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
@@ -83,6 +83,7 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
 
     let validation = validate(&definition);
     let missing_when_condition = validation.missing_when_condition;
+    let missing_webhook_token_secret = validation.missing_webhook_token_secret;
     let mut details = validation.details;
     if uses_new_definition_fields && definition.requires.blocks < 15 {
         details.push(
@@ -147,6 +148,8 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if details.is_empty() {
         Ok(definition)
+    } else if missing_webhook_token_secret {
+        Err(crate::errors::APP_DEFINITION_WEBHOOK_TOKEN_SECRET_REQUIRED().and_details(details))
     } else if missing_when_condition {
         Err(crate::errors::APP_DEFINITION_WHEN_CONDITION_MISSING().and_details(details))
     } else {
@@ -391,8 +394,10 @@ fn uses_block_set_20_fields(value: &Value) -> bool {
                     .get("grid")
                     .and_then(Value::as_object)
                     .is_some_and(|grid| grid.contains_key("item_width")))
-                || (matches!(object.get("type").and_then(Value::as_str), Some("list" | "table" | "tree" | "feed" | "thread"))
-                    && object.contains_key("item_menu"))
+                || (matches!(
+                    object.get("type").and_then(Value::as_str),
+                    Some("list" | "table" | "tree" | "feed" | "thread")
+                ) && object.contains_key("item_menu"))
                 || object.values().any(uses_block_set_20_fields)
         }
         Value::Array(values) => values.iter().any(uses_block_set_20_fields),
@@ -403,9 +408,12 @@ fn uses_block_set_20_fields(value: &Value) -> bool {
 fn uses_block_set_21_fields(value: &Value) -> bool {
     match value {
         Value::Object(object) => {
-            (matches!(object.get("type").and_then(Value::as_str), Some("input" | "select" | "slider" | "color"))
-                && object.contains_key("label_position"))
-                || (object.get("type").and_then(Value::as_str) == Some("slider") && object.contains_key("show_value"))
+            (matches!(
+                object.get("type").and_then(Value::as_str),
+                Some("input" | "select" | "slider" | "color")
+            ) && object.contains_key("label_position"))
+                || (object.get("type").and_then(Value::as_str) == Some("slider")
+                    && object.contains_key("show_value"))
                 || object.values().any(uses_block_set_21_fields)
         }
         Value::Array(values) => values.iter().any(uses_block_set_21_fields),
@@ -430,11 +438,13 @@ fn uses_message_item_key(ui: &Value) -> bool {
 struct ValidationResult {
     details: Vec<String>,
     missing_when_condition: bool,
+    missing_webhook_token_secret: bool,
 }
 
 fn validate(definition: &AppDefinition) -> ValidationResult {
     let mut details = Vec::new();
     let mut missing_when_condition = false;
+    let mut missing_webhook_token_secret = false;
     if !valid_id(&definition.id) {
         details.push(format!("앱 id가 올바르지 않습니다: {}", definition.id));
     }
@@ -599,7 +609,7 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
     }
 
     validate_v14_definition(definition, &mut details);
-    validate_worker(definition, &mut details);
+    validate_worker(definition, &mut details, &mut missing_webhook_token_secret);
     validate_sources(definition, &mut details);
     validate_client(definition, &mut details);
 
@@ -713,6 +723,7 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
     ValidationResult {
         details,
         missing_when_condition,
+        missing_webhook_token_secret,
     }
 }
 
@@ -789,16 +800,32 @@ fn validate_client(definition: &AppDefinition, details: &mut Vec<String>) {
     };
     validate_module_version("client", 1, definition, details, "/client");
     if let Some(permissions) = &client.realtime_permissions {
-        use crate::realtime::{REALTIME_BLOCK_SET_VERSION, REALTIME_CLIENT_VERSION, REALTIME_CONNECTION_VERSION};
-        validate_module_version("client", REALTIME_CLIENT_VERSION, definition, details, "/client/realtime_permissions");
-        validate_module_version("connection", REALTIME_CONNECTION_VERSION, definition, details, "/client/realtime_permissions");
+        use crate::realtime::{
+            REALTIME_BLOCK_SET_VERSION, REALTIME_CLIENT_VERSION, REALTIME_CONNECTION_VERSION,
+        };
+        validate_module_version(
+            "client",
+            REALTIME_CLIENT_VERSION,
+            definition,
+            details,
+            "/client/realtime_permissions",
+        );
+        validate_module_version(
+            "connection",
+            REALTIME_CONNECTION_VERSION,
+            definition,
+            details,
+            "/client/realtime_permissions",
+        );
         if definition.requires.blocks < REALTIME_BLOCK_SET_VERSION {
             details.push(format!("/client/realtime_permissions: 블록 세트 {REALTIME_BLOCK_SET_VERSION}판이 필요합니다"));
         }
         let mut seen = HashSet::new();
         for permission in permissions {
             if !seen.insert(permission) {
-                details.push(format!("/client/realtime_permissions: 중복 권한 {permission}"));
+                details.push(format!(
+                    "/client/realtime_permissions: 중복 권한 {permission}"
+                ));
             }
             match definition.permissions.iter().find(|item| item.id() == permission) {
                 Some(crate::PermissionDecl::Connection { access: crate::FileAccess::Readwrite, .. }) => {},
@@ -948,11 +975,16 @@ fn validate_ui_binding(
     ) {
         let menu_confirm_body = at.strip_suffix("/confirm/body").is_some_and(|entry| {
             entry.rsplit_once('/').is_some_and(|(menu, index)| {
-                menu.ends_with("/item_menu") && !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit())
+                menu.ends_with("/item_menu")
+                    && !index.is_empty()
+                    && index.bytes().all(|byte| byte.is_ascii_digit())
             })
         });
         if matches!(binding, Binding::Item(_) | Binding::ParentItem(_))
-            && (menu_confirm_body || at.strip_suffix("/copy_text").is_some_and(is_item_menu_action))
+            && (menu_confirm_body
+                || at
+                    .strip_suffix("/copy_text")
+                    .is_some_and(is_item_menu_action))
         {
             return;
         }
@@ -1063,7 +1095,11 @@ fn validate_control_binding(
     }
 }
 
-fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
+fn validate_worker(
+    definition: &AppDefinition,
+    details: &mut Vec<String>,
+    missing_webhook_token_secret: &mut bool,
+) {
     use crate::worker::*;
     if definition.worker.is_some() || data::ui_uses_worker_action(definition) {
         validate_module_version("worker", 1, definition, details, "/worker");
@@ -1113,10 +1149,15 @@ fn validate_worker(definition: &AppDefinition, details: &mut Vec<String>) {
                 details.push("/worker/webhook/enabled_entry: 기본값이 false인 불리언 json 저장 항목이어야 합니다".into());
             }
         }
-        if let Some(id) = &webhook.token_secret {
-            if id.is_empty() || !worker.secrets.iter().any(|secret| secret.id == *id) {
-                details.push("/worker/webhook/token_secret: 선언된 시크릿이어야 합니다".into());
-            }
+        if webhook.token_secret.trim().is_empty() {
+            *missing_webhook_token_secret = true;
+            details.push("/worker/webhook/token_secret: 호출 토큰을 담을 워커 시크릿을 반드시 지정해야 합니다".into());
+        } else if !worker
+            .secrets
+            .iter()
+            .any(|secret| secret.id == webhook.token_secret)
+        {
+            details.push("/worker/webhook/token_secret: 선언된 시크릿이어야 합니다".into());
         }
     }
     let mut targets = HashSet::new();
@@ -1201,7 +1242,9 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
             ));
         }
         match source {
-            SourceDecl::Request { path, query, page, .. } => {
+            SourceDecl::Request {
+                path, query, page, ..
+            } => {
                 if let Some(page) = page {
                     if definition.requires.blocks < 22 {
                         details.push(format!("{at}/page: 쪽 넘김은 블록 세트 22판이라 requires.blocks가 22 이상이어야 합니다"));
@@ -1209,13 +1252,20 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
                     if page.param.is_empty() {
                         details.push(format!("{at}/page/param: 다음 쪽 query 키를 입력하세요"));
                     } else if query.contains_key(&page.param) {
-                        details.push(format!("{at}/page/param: query에 이미 있는 키입니다: {}", page.param));
+                        details.push(format!(
+                            "{at}/page/param: query에 이미 있는 키입니다: {}",
+                            page.param
+                        ));
                     }
                     if !page.items.is_empty() && page.items.split('.').any(str::is_empty) {
-                        details.push(format!("{at}/page/items: 점으로 이은 경로에 빈 부분을 둘 수 없습니다"));
+                        details.push(format!(
+                            "{at}/page/items: 점으로 이은 경로에 빈 부분을 둘 수 없습니다"
+                        ));
                     }
                     if let Err(reason) = parse_expr(&page.next) {
-                        details.push(format!("{at}/page/next: 올바른 JSONata 식을 입력하세요. 원인: {reason}"));
+                        details.push(format!(
+                            "{at}/page/next: 올바른 JSONata 식을 입력하세요. 원인: {reason}"
+                        ));
                     }
                 }
                 validate_binding_shape(path, definition, details, &format!("{at}/path"));
@@ -2901,28 +2951,42 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 crate::TableColumns::Bound(_) => None,
             };
             let cell = *selection == crate::TableSelection::Cell;
-            let uses_grid = static_columns.is_none() || cell || row_header.is_some()
-                || static_columns.is_some_and(|columns| columns.iter().any(|column| column.format == crate::CellFormat::Content || column.max_lines.is_some()));
+            let uses_grid = static_columns.is_none()
+                || cell
+                || row_header.is_some()
+                || static_columns.is_some_and(|columns| {
+                    columns.iter().any(|column| {
+                        column.format == crate::CellFormat::Content || column.max_lines.is_some()
+                    })
+                });
             if uses_grid && definition.requires.blocks < crate::TABLE_GRID_BLOCK_SET_VERSION {
                 let version = crate::TABLE_GRID_BLOCK_SET_VERSION;
-                details.push(format!("{at}: table의 동적 열과 칸 격자는 블록 세트 {version}판 이상이 필요합니다"));
+                details.push(format!(
+                    "{at}: table의 동적 열과 칸 격자는 블록 세트 {version}판 이상이 필요합니다"
+                ));
             }
             if cell && (selected.is_none() || on_select.is_none()) {
-                details.push(format!("{at}: table 칸 선택에는 selected와 on_select가 필요합니다"));
+                details.push(format!(
+                    "{at}: table 칸 선택에는 selected와 on_select가 필요합니다"
+                ));
             }
             if !cell && row_header.is_some() {
-                details.push(format!("{at}: table의 row_header는 칸 선택에서만 쓸 수 있습니다"));
+                details.push(format!(
+                    "{at}: table의 row_header는 칸 선택에서만 쓸 수 있습니다"
+                ));
             }
             if cell && sort.is_some() {
                 details.push(format!("{at}: table 칸 선택에는 sort를 쓸 수 없습니다"));
             }
             if definition.requires.blocks < 9
-                && static_columns.is_some_and(|columns| columns.iter().any(|c| {
-                    matches!(
-                        c.format,
-                        crate::CellFormat::Delta | crate::CellFormat::Sparkline
-                    )
-                }))
+                && static_columns.is_some_and(|columns| {
+                    columns.iter().any(|c| {
+                        matches!(
+                            c.format,
+                            crate::CellFormat::Delta | crate::CellFormat::Sparkline
+                        )
+                    })
+                })
             {
                 details.push(format!("{at}: table의 delta, sparkline 열 형식은 블록 세트 9판이라 requires.blocks가 9 이상이어야 합니다"));
             }
@@ -2937,21 +3001,38 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                         column.field
                     ));
                 }
-                if column.max_lines.is_some_and(|lines| !(1..=3).contains(&lines) || column.format != crate::CellFormat::Content) {
-                    details.push(format!("{at}: table 열 {}의 max_lines는 content에서 1부터 3까지입니다", column.field));
+                if column.max_lines.is_some_and(|lines| {
+                    !(1..=3).contains(&lines) || column.format != crate::CellFormat::Content
+                }) {
+                    details.push(format!(
+                        "{at}: table 열 {}의 max_lines는 content에서 1부터 3까지입니다",
+                        column.field
+                    ));
                 }
             }
             if let (Some(columns), Some(header)) = (static_columns, row_header) {
-                if !columns.first().is_some_and(|column| column.field == *header && column.format == crate::CellFormat::Text) {
-                    details.push(format!("{at}: table의 row_header는 첫 text 열이어야 합니다: {header}"));
+                if !columns.first().is_some_and(|column| {
+                    column.field == *header && column.format == crate::CellFormat::Text
+                }) {
+                    details.push(format!(
+                        "{at}: table의 row_header는 첫 text 열이어야 합니다: {header}"
+                    ));
                 }
                 if cell && columns.len() < 2 {
-                    details.push(format!("{at}: table 칸 선택에는 데이터 열이 하나 이상 필요합니다"));
+                    details.push(format!(
+                        "{at}: table 칸 선택에는 데이터 열이 하나 이상 필요합니다"
+                    ));
                 }
             }
             let initial = match columns {
-                crate::TableColumns::Bound(Binding::State(reference)) => definition.state.get(&reference.state),
-                crate::TableColumns::Bound(Binding::Client(reference)) => definition.client.as_ref().and_then(|client| client.outputs.get(&reference.client)).map(|output| &output.default),
+                crate::TableColumns::Bound(Binding::State(reference)) => {
+                    definition.state.get(&reference.state)
+                }
+                crate::TableColumns::Bound(Binding::Client(reference)) => definition
+                    .client
+                    .as_ref()
+                    .and_then(|client| client.outputs.get(&reference.client))
+                    .map(|output| &output.default),
                 _ => None,
             };
             if let Some(initial) = initial.filter(|value| !value.is_null()) {
@@ -2965,14 +3046,23 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                             let mut initial_fields = HashSet::new();
                             for column in &columns {
                                 if !initial_fields.insert(&column.field) {
-                                    details.push(format!("{at}/columns: table 열의 field가 겹칩니다: {}", column.field));
+                                    details.push(format!(
+                                        "{at}/columns: table 열의 field가 겹칩니다: {}",
+                                        column.field
+                                    ));
                                 }
-                                if column.max_lines.is_some_and(|lines| !(1..=3).contains(&lines) || column.format != crate::CellFormat::Content) {
+                                if column.max_lines.is_some_and(|lines| {
+                                    !(1..=3).contains(&lines)
+                                        || column.format != crate::CellFormat::Content
+                                }) {
                                     details.push(format!("{at}/columns: table 열 {}의 max_lines는 content에서 1부터 3까지입니다", column.field));
                                 }
                             }
                             if let Some(header) = row_header {
-                                if !columns.first().is_some_and(|column| column.field == *header && column.format == crate::CellFormat::Text) {
+                                if !columns.first().is_some_and(|column| {
+                                    column.field == *header
+                                        && column.format == crate::CellFormat::Text
+                                }) {
                                     details.push(format!("{at}/columns: table의 row_header는 첫 text 열이어야 합니다: {header}"));
                                 }
                                 if cell && columns.len() < 2 {
@@ -2980,7 +3070,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                                 }
                             }
                         }
-                        Err(_) => details.push(format!("{at}/columns: table 열의 초기값이 열 형식과 다릅니다")),
+                        Err(_) => details.push(format!(
+                            "{at}/columns: table 열의 초기값이 열 형식과 다릅니다"
+                        )),
                     }
                 }
             }
@@ -3013,7 +3105,10 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             if let Some(read_only) = read_only {
                 validate_control_binding(read_only, definition, details, at);
                 if definition.requires.blocks < crate::INPUT_READ_ONLY_BLOCK_SET_VERSION {
-                    details.push(format!("{at}: input.read_only는 blocks {} 이상이 필요합니다", crate::INPUT_READ_ONLY_BLOCK_SET_VERSION));
+                    details.push(format!(
+                        "{at}: input.read_only는 blocks {} 이상이 필요합니다",
+                        crate::INPUT_READ_ONLY_BLOCK_SET_VERSION
+                    ));
                 }
             }
             if label.is_some() && definition.requires.blocks < 12 {

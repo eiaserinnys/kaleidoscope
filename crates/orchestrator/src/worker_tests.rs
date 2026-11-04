@@ -251,15 +251,18 @@ else:
     print(json.dumps({'set_storage': {'counter': 73}}))"#;
     let (state, account) = setup(code);
     let mut app: Value = serde_json::from_str(&definition(code)).unwrap();
-    app["worker"]["webhook"] = json!({});
+    app["worker"]["webhook"] = json!({"token_secret":"token"});
     state
         .publish_app(&app.to_string(), "test", false, None)
+        .unwrap();
+    state
+        .set_app_secret(&account, "worker-test", "token", "test-token")
         .unwrap();
     let response = router(state.clone())
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/webhooks/worker-test")
+                .uri("/api/webhooks/worker-test/test-token")
                 .header("content-type", "application/json")
                 .body(Body::from(r#"{"challenge":"hello"}"#))
                 .unwrap(),
@@ -297,9 +300,12 @@ else:
     print(json.dumps({'result': 'done'}))"#;
     let (state, account) = setup(code);
     let mut app: Value = serde_json::from_str(&definition(code)).unwrap();
-    app["worker"]["webhook"] = json!({});
+    app["worker"]["webhook"] = json!({"token_secret":"token"});
     state
         .publish_app(&app.to_string(), "test", false, None)
+        .unwrap();
+    state
+        .set_app_secret(&account, "worker-test", "token", "test-token")
         .unwrap();
     let running_state = state.clone();
     let running_account = account.clone();
@@ -332,7 +338,7 @@ else:
         router(state).oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/webhooks/worker-test")
+                .uri("/api/webhooks/worker-test/test-token")
                 .body(Body::from("{}"))
                 .unwrap(),
         ),
@@ -430,106 +436,60 @@ async fn inter_app_calls_enforce_declarations_and_return_storage() {
 }
 
 #[tokio::test]
-async fn builtin_webhook_and_test_action_reach_agent_and_service() {
-    use axum::extract::{Path, State};
+async fn worker_builtin_webhook_and_test_action_reach_agent_and_service() {
     use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
-    use std::sync::{Arc, Mutex};
-
-    async fn mock(
-        State(messages): State<Arc<Mutex<Vec<Value>>>>,
-        Path(method): Path<String>,
-        Json(body): Json<Value>,
-    ) -> Json<Value> {
-        if method == "chat.postMessage" {
-            messages.lock().unwrap().push(body);
-        }
-        if method == "conversations.list" {
-            return Json(json!({"ok":true,"channels":[{"id":"DTEST","is_im":true}]}));
-        }
-        if method == "conversations.history" {
-            return Json(
-                json!({"ok":true,"messages":[{"type":"message","user":"U1","ts":"1.0","text":"안녕"}]}),
-            );
-        }
-        Json(json!({"ok":true,"team":"team","user":"bot","user_id":"UBOT"}))
-    }
-    let messages = Arc::new(Mutex::new(Vec::new()));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let mock_router = Router::new()
-        .route("/{method}", post(mock))
-        .with_state(messages.clone());
-    let server = tokio::spawn(async move { axum::serve(listener, mock_router).await.unwrap() });
     let dir = tempfile::tempdir().unwrap();
-    let state = AppState::open(&dir.path().join("test.db"), "token".into()).unwrap();
+    let state = AppState::open(dir.path().join("test.db"), "token".into()).unwrap();
     let account = state.mcp_account_id().unwrap();
-    let mut specs = Vec::new();
-    for (id, version) in [("agent", 3), ("slackbot", 2)] {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../apps")
-            .join(format!("{id}.json"));
-        let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
-        specs.push(BuiltinRuntimeSpec {
-            app_id: id.into(),
-            version,
-            storage: app.storage,
-            worker: app.worker,
-        });
-    }
-    state.register_builtin_specs(&specs).unwrap();
-    let agent = json!([{"id":"mock", "name":"시험", "command":"python3", "args":["-c", "print('시험 답변')", "{prompt}"], "env":{}}]);
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/agent.json");
+    let agent = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
     state
-        .write_app_storage(&account, "agent", "agents", None, agent, None)
+        .register_builtin_specs(&[BuiltinRuntimeSpec {
+            app_id: agent.id,
+            version: 5,
+            storage: agent.storage,
+            worker: agent.worker,
+        }])
+        .unwrap();
+    state.write_app_storage(&account, "agent", "agents", None,
+        json!([{"id":"mock","name":"시험","command":"python3","args":["-c","print('시험 답변')","{prompt}"],"env":{}}]), None).unwrap();
+    let code = r#"import sys, json
+from kaleidoscope_worker import call_app
+v = json.load(sys.stdin)
+if v['trigger']['kind'] == 'webhook':
+    print(json.dumps({'http_response': {'status': 202, 'body': {'ok': True}}, 'defer': {'action': 'run', 'args': {'prompt': v['trigger']['body']['prompt']}}}))
+else:
+    answer = call_app('agent', 'ask', {'prompt': v['trigger']['args']['prompt']})
+    print(json.dumps({'set_storage': {'reply': answer['reply']}}))"#;
+    let mut app: Value = serde_json::from_str(&definition(code)).unwrap();
+    app["storage"]["entries"].as_array_mut().unwrap().push(json!({"id":"reply", "key":"reply", "kind":"json", "schema":{"type":"string"}, "default":"", "label":"응답", "presentation":"hidden"}));
+    app["worker"]["webhook"] = json!({"token_secret":"token"});
+    app["worker"]["calls"] = json!(["agent"]);
+    state
+        .publish_app(&app.to_string(), "test", false, None)
         .unwrap();
     state
-        .write_app_storage(&account, "slackbot", "enabled", None, json!(true), None)
+        .set_app_secret(&account, "worker-test", "token", "webhook-test")
         .unwrap();
-    state
-        .write_app_storage(
-            &account,
-            "slackbot",
-            "api_base_url",
-            None,
-            json!(format!("http://{address}")),
-            None,
-        )
-        .unwrap();
-    state
-        .write_app_storage(
-            &account,
-            "slackbot",
-            "test_channel",
-            None,
-            json!("DTEST"),
-            None,
-        )
-        .unwrap();
-    state
-        .set_app_secret(&account, "slackbot", "webhook_token", "webhook-test")
-        .unwrap();
-    state
-        .set_app_secret(&account, "slackbot", "slack_bot_token", "bot-test")
-        .unwrap();
-    let event = json!({"type":"event_callback","event_id":"event-one","event":{"type":"message","channel":"DTEST","user":"U1","ts":"1.0","text":"안녕"}});
     let response = router(state.clone())
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/webhooks/slackbot/webhook-test")
+                .uri("/api/webhooks/worker-test/webhook-test")
                 .header("content-type", "application/json")
-                .body(Body::from(event.to_string()))
+                .body(Body::from(r#"{"prompt":"안녕"}"#))
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let value = state
-                .read_app_storage(&account, "slackbot", "logs", None)
+                .read_app_storage(&account, "worker-test", "reply", None)
                 .unwrap()
                 .content;
-            if value.as_array().unwrap().len() == 1 {
+            if value == json!("시험 답변") {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -537,312 +497,19 @@ async fn builtin_webhook_and_test_action_reach_agent_and_service() {
     })
     .await
     .unwrap();
-    assert_eq!(messages.lock().unwrap()[0]["text"], "시험 답변");
-    state
-        .invoke_worker(
-            &account,
-            "slackbot",
-            WorkerInvokeRequest {
-                action: "poll_now".into(),
-                workspace_id: None,
-                args: None,
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(messages.lock().unwrap().len(), 1);
-    state
-        .invoke_worker(
-            &account,
-            "slackbot",
-            WorkerInvokeRequest {
-                action: "send_test".into(),
-                workspace_id: None,
-                args: None,
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(messages.lock().unwrap().len(), 2);
-    let logs = state
-        .read_app_storage(&account, "slackbot", "logs", None)
-        .unwrap()
-        .content;
-    assert_eq!(logs.as_array().unwrap().len(), 2);
-    assert_eq!(
-        state
-            .read_app_storage(&account, "slackbot", "status", None)
-            .unwrap()
-            .content["total_replies"],
-        2
-    );
-    server.abort();
 }
 
 #[tokio::test]
-async fn worker_slackbot_poll_isolates_failures_and_parses_allowed_channels() {
-    use axum::extract::{Path, State};
-    use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
-    use std::sync::{Arc, Mutex};
-
-    async fn mock(
-        State(visited): State<Arc<Mutex<Vec<String>>>>,
-        Path(method): Path<String>,
-        Json(body): Json<Value>,
-    ) -> Json<Value> {
-        match method.as_str() {
-            "conversations.list" => Json(json!({"ok":true,"channels":[
-                {"id":"CBAD","is_member":true},
-                {"id":"DGOOD","is_im":true},
-                {"id":"CEXPLICIT","is_member":false},
-                {"id":"CUNJOINED","is_member":false},
-                {"id":"DOUT","is_im":true}
-            ]})),
-            "conversations.history" => {
-                let channel = body["channel"].as_str().unwrap();
-                visited.lock().unwrap().push(channel.into());
-                match channel {
-                    "CBAD" => Json(json!({"ok":false,"error":"not_in_channel"})),
-                    "DGOOD" => Json(json!({"ok":true,"messages":[
-                        {"type":"message","user":"U1","ts":"2.0","text":"두 번째"}
-                    ]})),
-                    "CEXPLICIT" => Json(json!({"ok":true,"messages":[
-                        {"type":"message","user":"U1","ts":"3.0","text":"<@UBOT> 세 번째"}
-                    ]})),
-                    _ => Json(json!({"ok":true,"messages":[]})),
-                }
-            }
-            "auth.test" => Json(json!({"ok":true,"team":"team","user":"bot","user_id":"UBOT"})),
-            _ => Json(json!({"ok":true})),
-        }
-    }
-
-    let visited = Arc::new(Mutex::new(Vec::new()));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let mock_router = Router::new()
-        .route("/{method}", post(mock))
-        .with_state(visited.clone());
-    let server = tokio::spawn(async move { axum::serve(listener, mock_router).await.unwrap() });
-    let dir = tempfile::tempdir().unwrap();
-    let state = AppState::open(&dir.path().join("test.db"), "token".into()).unwrap();
-    let account = state.mcp_account_id().unwrap();
-    let specs = ["agent", "slackbot"]
-        .into_iter()
-        .map(|id| {
-            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../../apps")
-                .join(format!("{id}.json"));
-            let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
-            BuiltinRuntimeSpec {
-                app_id: id.into(),
-                version: if id == "agent" { 3 } else { 2 },
-                storage: app.storage,
-                worker: app.worker,
-            }
-        })
-        .collect::<Vec<_>>();
-    state.register_builtin_specs(&specs).unwrap();
-    let agent = json!([{"id":"mock","name":"시험","command":"python3","args":["-c","print('응답')","{prompt}"],"env":{}}]);
-    state
-        .write_app_storage(&account, "agent", "agents", None, agent, None)
-        .unwrap();
-    state
-        .write_app_storage(
-            &account,
-            "slackbot",
-            "api_base_url",
-            None,
-            json!(format!("http://{address}")),
-            None,
-        )
-        .unwrap();
-    state
-        .write_app_storage(
-            &account,
-            "slackbot",
-            "allowed_channels",
-            None,
-            json!("CBAD\tDGOOD, CEXPLICIT"),
-            None,
-        )
-        .unwrap();
-    state
-        .set_app_secret(&account, "slackbot", "slack_bot_token", "bot-test")
-        .unwrap();
-
-    let reply = state
-        .invoke_worker(
-            &account,
-            "slackbot",
-            WorkerInvokeRequest {
-                action: "handle_event".into(),
-                args: Some(
-                    json!({"event":{"channel":"DGOOD","user":"U1","ts":"1.0","text":"첫 번째"}}),
-                ),
-                workspace_id: None,
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(reply.result["reply"], "응답");
-
-    let poll = || WorkerInvokeRequest {
-        action: "poll_now".into(),
-        args: None,
-        workspace_id: None,
-    };
-    state
-        .invoke_worker(&account, "slackbot", poll())
-        .await
-        .unwrap();
-    assert_eq!(*visited.lock().unwrap(), vec!["CBAD", "DGOOD", "CEXPLICIT"]);
-    let status = state
-        .read_app_storage(&account, "slackbot", "status", None)
-        .unwrap()
-        .content;
-    assert_eq!(status["last_error"], "not_in_channel");
-    assert_eq!(status["total_replies"], 3);
-    let poll_path = dir
-        .path()
-        .join("worker-state")
-        .join(super::app_storage::bucket_id(&account, "slackbot"))
-        .join("slackbot/poll_state.json");
-    let poll_state: Value = serde_json::from_slice(&std::fs::read(poll_path).unwrap()).unwrap();
-    assert_eq!(poll_state["DGOOD"], "2.0");
-    assert_eq!(poll_state["CEXPLICIT"], "3.0");
-
-    let revision = state
-        .read_app_storage(&account, "slackbot", "allowed_channels", None)
-        .unwrap()
-        .revision;
-    state
-        .write_app_storage(
-            &account,
-            "slackbot",
-            "allowed_channels",
-            None,
-            json!(""),
-            revision,
-        )
-        .unwrap();
-    visited.lock().unwrap().clear();
-    state
-        .invoke_worker(&account, "slackbot", poll())
-        .await
-        .unwrap();
-    assert_eq!(*visited.lock().unwrap(), vec!["CBAD", "DGOOD", "DOUT"]);
-    server.abort();
-}
-
-#[tokio::test]
-async fn worker_slackbot_stops_polling_until_retry_after_after_http_429() {
-    use axum::{
-        extract::{Path, State},
-        http::{header, StatusCode},
-        response::IntoResponse,
-        routing::post,
-        Json, Router,
-    };
-    use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    };
-
-    async fn rate_limited(
-        State(calls): State<Arc<AtomicUsize>>,
-        Path(_method): Path<String>,
-    ) -> axum::response::Response {
-        calls.fetch_add(1, Ordering::SeqCst);
-        (
-            StatusCode::TOO_MANY_REQUESTS,
-            [(header::RETRY_AFTER, "120")],
-            Json(json!({"ok": false, "error": "ratelimited"})),
-        )
-            .into_response()
-    }
-
-    let calls = Arc::new(AtomicUsize::new(0));
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let address = listener.local_addr().unwrap();
-    let mock_router = Router::new()
-        .route("/{method}", post(rate_limited))
-        .with_state(calls.clone());
-    let server = tokio::spawn(async move { axum::serve(listener, mock_router).await.unwrap() });
-    let dir = tempfile::tempdir().unwrap();
-    let state = AppState::open(&dir.path().join("test.db"), "token".into()).unwrap();
-    let account = state.mcp_account_id().unwrap();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/slackbot.json");
-    let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
-    state
-        .register_builtin_specs(&[BuiltinRuntimeSpec {
-            app_id: "slackbot".into(),
-            version: 2,
-            storage: app.storage,
-            worker: app.worker,
-        }])
-        .unwrap();
-    state
-        .write_app_storage(
-            &account,
-            "slackbot",
-            "api_base_url",
-            None,
-            json!(format!("http://{address}")),
-            None,
-        )
-        .unwrap();
-    let mut status = state
-        .read_app_storage(&account, "slackbot", "status", None)
-        .unwrap()
-        .content;
-    status["bot_user_id"] = json!("UBOT");
-    state
-        .write_app_storage(&account, "slackbot", "status", None, status, None)
-        .unwrap();
-    state
-        .set_app_secret(&account, "slackbot", "slack_bot_token", "bot-test")
-        .unwrap();
-
-    let poll = || WorkerInvokeRequest {
-        action: "poll_now".into(),
-        args: None,
-        workspace_id: None,
-    };
-    state
-        .invoke_worker(&account, "slackbot", poll())
-        .await
-        .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-
-    let poll_path = dir
-        .path()
-        .join("worker-state")
-        .join(super::app_storage::bucket_id(&account, "slackbot"))
-        .join("slackbot/poll_state.json");
-    let poll_state: Value = serde_json::from_slice(&std::fs::read(&poll_path).unwrap()).unwrap();
-    assert!(poll_state["retry_at"].as_i64().unwrap() > chrono::Utc::now().timestamp() + 60);
-
-    state
-        .invoke_worker(&account, "slackbot", poll())
-        .await
-        .unwrap();
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-    server.abort();
-}
-
-#[tokio::test]
-async fn builtin_runtime_registration_requires_device_and_valid_declarations() {
+async fn worker_builtin_runtime_registration_requires_device_and_valid_declarations() {
     use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
     let state = AppState::in_memory("test");
     let account = state.mcp_account_id().unwrap();
     state.lock_db().unwrap().execute("INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,?2,?3,'now')", params!["d",account,sha256_hex(b"device-token")]).unwrap();
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/slackbot.json");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/agent.json");
     let app = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
     let spec = BuiltinRuntimeSpec {
         app_id: app.id,
-        version: 2,
+        version: 5,
         storage: app.storage,
         worker: app.worker,
     };
@@ -892,7 +559,7 @@ async fn builtin_runtime_registration_requires_device_and_valid_declarations() {
         StatusCode::FORBIDDEN
     );
     let mut invalid = body;
-    invalid[0]["worker"]["calls"] = json!(["slackbot"]);
+    invalid[0]["worker"]["calls"] = json!(["agent"]);
     assert_eq!(
         router(state.clone())
             .oneshot(request("device-token", invalid))
@@ -901,7 +568,71 @@ async fn builtin_runtime_registration_requires_device_and_valid_declarations() {
             .status(),
         StatusCode::BAD_REQUEST
     );
-    assert!(state.worker_definition("slackbot").is_ok());
+    assert!(state.worker_definition("agent").is_ok());
+}
+
+#[tokio::test]
+async fn worker_retired_builtin_registration_is_ignored() {
+    let state = AppState::in_memory("test");
+    let account = state.mcp_account_id().unwrap();
+    state.lock_db().unwrap().execute("INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,?2,?3,'now')", params!["d", account, sha256_hex(b"device-token")]).unwrap();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/agent.json");
+    let agent = parse_app_definition(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let specs = json!([
+        {"app_id":"agent","version":5,"storage":agent.storage,"worker":agent.worker},
+        {"app_id":"slackbot","version":2,"worker":{"runtime":"python3","code":""}}
+    ]);
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "INSERT INTO builtin_app_specs(app_id,version,updated_at) VALUES('slackbot',2,'now')",
+            [],
+        )
+        .unwrap();
+    assert!(
+        super::builtin_specs::load_definition(&state.lock_db().unwrap(), "slackbot")
+            .unwrap()
+            .is_none()
+    );
+    let response = router(state.clone())
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/device/builtin-specs")
+                .header("authorization", "Bearer device-token")
+                .header("content-type", "application/json")
+                .body(Body::from(specs.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let db = state.lock_db().unwrap();
+    let ids: Vec<String> = db
+        .prepare("SELECT app_id FROM builtin_app_specs ORDER BY app_id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(ids, ["agent"]);
+    drop(db);
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/device/builtin-specs")
+                .header("authorization", "Bearer device-token")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"[{"app_id":"unknown-app","version":1}]"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, error) = webhook_error(response).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(error.id.as_deref(), Some("APP_BUILTIN_SPEC_APP_ID_INVALID"));
 }
 
 #[tokio::test]
