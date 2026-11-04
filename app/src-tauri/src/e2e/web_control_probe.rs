@@ -1,7 +1,7 @@
 //! 자식 WebView2의 AX와 입력, 별도 프로세스 포커스를 실제로 측정한다.
 use super::*;
 use crate::web_control::{call as cdp, ProbeCall};
-use std::io::{Read, Write as _};
+use std::io::Read;
 use std::net::TcpListener;
 use std::os::windows::process::CommandExt;
 use std::process::{Child, Command, Stdio};
@@ -364,7 +364,7 @@ pub(super) fn scenario(
     thread::sleep(Duration::from_secs(2));
     let url = serve_fixture()?;
     let shell = match call(core, CoreRequest::StateGet {})? {
-        CoreReply::StateGet { snapshot } => snapshot,
+        CoreReply::StateGet { snapshot, .. } => snapshot,
         other => return Err(format!("상태 응답: {other:?}")),
     };
     let workspace = shell

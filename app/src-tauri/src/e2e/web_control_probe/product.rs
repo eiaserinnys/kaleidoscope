@@ -39,6 +39,10 @@ fn request(
     probe: &mut FocusProbe<'_>,
     foreground: bool,
 ) -> Result<WindowObservation, String> {
+    let previous = match &operation {
+        WindowControlOperation::Act { view_id, .. } => Some(view_id.clone()),
+        WindowControlOperation::Read { .. } => None,
+    };
     let (result, focus) = with_focus(probe, foreground, || {
         host.control(id, &operation).map_err(|error| error.message)
     });
@@ -46,7 +50,14 @@ fn request(
         return Err(format!("다른 프로그램의 포커스가 바뀜: {focus}"));
     }
     match result? {
-        WindowControlResult::Ok { value } => Ok(value.after),
+        WindowControlResult::Ok { value } => {
+            if let Some(previous) = previous {
+                if value.before_text.is_none() || value.after.view_id == previous {
+                    return Err("조작 전 글 또는 새 읽기 판이 없음".into());
+                }
+            }
+            Ok(value.after)
+        }
         WindowControlResult::Error { error, applied } => {
             Err(format!("{} (applied={applied})", error.message))
         }
@@ -182,7 +193,7 @@ pub(super) fn phase(
             foreground,
         )?;
         let scroll = target(&observation, "button", "Scroll target")?;
-        let _ = act(
+        let after_observation = act(
             host,
             id,
             &observation,
@@ -195,6 +206,24 @@ pub(super) fn phase(
             probe,
             foreground,
         )?;
+        let after_png = STANDARD
+            .decode(
+                after_observation
+                    .image_base64
+                    .as_deref()
+                    .ok_or("조작 후 PNG 없음")?,
+            )
+            .map_err(|e| e.to_string())?;
+        let after_size = png_dimensions(&after_png)?;
+        let after_geometry = after_observation
+            .geometry
+            .as_ref()
+            .ok_or("조작 후 PNG 크기 없음")?;
+        if after_size != (after_geometry.pixel_width, after_geometry.pixel_height)
+            || after_size.0.max(after_size.1) > 1600
+        {
+            return Err("조작 후 PNG 크기 불일치".into());
+        }
         let after = observe(view)?;
         let count = |value: &Value, field: &str| -> Result<u64, String> {
             value[field]
