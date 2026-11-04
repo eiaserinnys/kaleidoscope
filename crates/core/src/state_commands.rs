@@ -533,9 +533,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                     .iter_mut()
                     .find(|desktop| desktop.id == desktop_id)
                 {
-                    let old_sharing = desktop.sharing.clone();
                     let old_context = desktop.last_sent_context.clone();
-                    desktop.sharing.retain(|id| id != &window_id);
                     for contexts in desktop.last_sent_context.values_mut() {
                         if let Some(context) = contexts.get_mut(&window_id) {
                             context.visual_hash = None;
@@ -549,7 +547,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                     desktop
                         .last_sent_context
                         .retain(|_, contexts| !contexts.is_empty());
-                    if desktop.sharing != old_sharing || desktop.last_sent_context != old_context {
+                    if desktop.last_sent_context != old_context {
                         desktop.updated_at = timestamp();
                     }
                 }

@@ -240,7 +240,7 @@ async fn registry_six_stream_sends_layout_snapshot_after_other_snapshots() {
 }
 
 #[tokio::test]
-async fn desktop_share_context_changes_reach_post_event_and_another_device_snapshot() {
+async fn legacy_layout_sharing_never_populates_shared_views() {
     use http_body_util::BodyExt;
 
     let state = AppState::in_memory("secret");
@@ -319,7 +319,7 @@ async fn desktop_share_context_changes_reach_post_event_and_another_device_snaps
 
     let changed = next_sse_event(&mut first_stream).await;
     assert_eq!(changed["event"], "layout.changed");
-    assert_eq!(changed["changes"]["desktops"][0]["sharing"][0], "win");
+    assert!(state.shared_views("w").unwrap().is_empty());
     assert_eq!(
         changed["changes"]["desktops"][0]["last_sent_context"]["thread"]["win"]["text"],
         "마지막 글"
@@ -351,7 +351,7 @@ async fn desktop_share_context_changes_reach_post_event_and_another_device_snaps
     );
     let snapshot = next_sse_event(&mut second_stream).await;
     assert_eq!(snapshot["event"], "layout.snapshot");
-    assert_eq!(snapshot["desktops"][0]["sharing"][0], "win");
+    assert!(state.shared_views("w").unwrap().is_empty());
     assert_eq!(
         snapshot["desktops"][0]["last_sent_context"]["thread"]["win"]["visual_hash"],
         "image-hash"

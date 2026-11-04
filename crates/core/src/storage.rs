@@ -109,6 +109,9 @@ pub(crate) fn load_shared(data_dir: &Path) -> Result<SharedState, CoreError> {
         }
     }
     repair_windows_for_skipped_versions(&mut file.shared, &skipped_versions);
+    for desktop in &mut file.shared.desktops {
+        desktop.sharing.clear();
+    }
     Ok(file.shared)
 }
 

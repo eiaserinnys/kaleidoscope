@@ -352,7 +352,6 @@ impl Core {
             update: UpdateStatus::Unavailable {},
         };
         layout_apply::reconcile(&mut state);
-        state.share.active_shares = share::shared_window_ids(&state.shared);
         let before_builtin = state.shared.clone();
         app_commands::ensure_builtin(&mut state);
         if let Some(file) = &link_file {
@@ -1189,7 +1188,7 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         device: state.device.clone(),
         supported: supported(),
         link: state.link.clone(),
-        sharing: share::shared_window_order(&state.shared),
+        sharing: share::shared_window_order(state),
         update: state.update.clone(),
     }
 }
