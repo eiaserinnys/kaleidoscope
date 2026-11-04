@@ -263,6 +263,40 @@ pub(crate) fn get(
             .cloned()
             .ok_or_else(|| errors::MEDIA_LOAD_PERMISSION_NOT_DECLARED(&media.permission))?
     };
+    if matches!(&module, PermissionDecl::Store { .. }) {
+        let (server, key) = crate::store::media_key(media)?;
+        let variant = format!("{key}|{:?}", max_px);
+        if let Some(entry) = inner.media_cache.get(&variant) {
+            return Ok(as_data(&entry));
+        }
+        let original_key = format!("{key}|original");
+        let original = if let Some(entry) = inner.media_cache.get(&original_key) {
+            entry
+        } else {
+            let client = crate::store::StoreClient::new(server.as_str())?;
+            let (bytes, mime) =
+                crate::store::read_media(&client, &media.path).map_err(|e| e.error)?;
+            let (width, height) = dimensions(&bytes, &mime);
+            let entry = Entry {
+                bytes: Arc::new(bytes),
+                mime,
+                width,
+                height,
+                used: Instant::now(),
+            };
+            inner.media_cache.put(original_key, entry.clone());
+            entry
+        };
+        let result = if let Some(max) = max_px {
+            shrink(&original, max, &target)?
+        } else {
+            original.clone()
+        };
+        if !Arc::ptr_eq(&original.bytes, &result.bytes) {
+            inner.media_cache.put(variant, result.clone());
+        }
+        return Ok(as_data(&result));
+    }
     let (key, source) = match module {
         PermissionDecl::Files { .. } => {
             let state = inner.state.lock().unwrap();

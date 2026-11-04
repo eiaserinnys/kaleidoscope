@@ -36,6 +36,9 @@ mod shell_preferences;
 mod state_commands;
 mod state_events;
 mod startup_readiness;
+// 원천과 설치 동작은 다음 PR에서 연결한다.
+#[allow(dead_code)]
+mod store;
 mod storage;
 mod sync_state;
 mod web;

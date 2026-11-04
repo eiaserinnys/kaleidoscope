@@ -12,8 +12,28 @@ use kaleidoscope_contract::{
 pub struct PublicResponse {
     pub status: u16,
     pub rate_limit: Option<kaleidoscope_contract::registry::RateLimitHint>,
+    pub retry_after: Option<String>,
     pub mime: String,
     pub bytes: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub enum PublicHttpError {
+    InvalidAddress,
+    PrivateAddress,
+    Transport(String),
+    TooLarge,
+}
+
+impl std::fmt::Display for PublicHttpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidAddress => write!(f, "허용하지 않은 공개 HTTPS 주소 또는 경로입니다"),
+            Self::PrivateAddress => write!(f, "공개 주소가 아닌 DNS 결과입니다"),
+            Self::Transport(reason) => write!(f, "{reason}"),
+            Self::TooLarge => write!(f, "응답이 너무 큽니다"),
+        }
+    }
 }
 
 fn client_builder() -> reqwest::blocking::ClientBuilder {
@@ -61,40 +81,124 @@ pub fn get(
     query: &BTreeMap<String, String>,
     limit: u64,
 ) -> Result<PublicResponse, String> {
-    if !valid_https_origin(base_url) || !allowed_public_http_path(paths, path) {
-        return Err("허용하지 않은 공개 HTTPS 주소 또는 경로입니다".into());
+    get_typed(base_url, paths, path, query, limit).map_err(|error| error.to_string())
+}
+
+pub fn get_typed(
+    base_url: &str,
+    paths: &[String],
+    path: &str,
+    query: &BTreeMap<String, String>,
+    limit: u64,
+) -> Result<PublicResponse, PublicHttpError> {
+    get_with(
+        base_url,
+        paths,
+        path,
+        query,
+        limit,
+        |host| {
+            if let Ok(ip) = host
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .parse::<IpAddr>()
+            {
+                return Ok(vec![std::net::SocketAddr::new(ip, 443)]);
+            }
+            (host, 443)
+                .to_socket_addrs()
+                .map(|items| items.collect())
+                .map_err(|error| error.to_string())
+        },
+        |host, addresses, address, query, limit| {
+            let client = client_builder()
+                .no_proxy()
+                .resolve_to_addrs(host, addresses)
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(data::CONNECTION_TIMEOUT_SECS))
+                .build()
+                .map_err(|error| PublicHttpError::Transport(error.to_string()))?;
+            let response = client
+                .get(address)
+                .query(query)
+                .send()
+                .map_err(|error| PublicHttpError::Transport(error.without_url().to_string()))?;
+            read_response(response, limit)
+        },
+    )
+}
+
+/// 전송과 DNS 해석을 분리하되 동일한 주소·공인 IP 검사를 적용한다.
+pub fn get_with<R, T>(
+    base_url: &str,
+    paths: &[String],
+    path: &str,
+    query: &BTreeMap<String, String>,
+    limit: u64,
+    resolve: R,
+    transport: T,
+) -> Result<PublicResponse, PublicHttpError>
+where
+    R: FnOnce(&str) -> Result<Vec<std::net::SocketAddr>, String>,
+    T: FnOnce(
+        &str,
+        &[std::net::SocketAddr],
+        &str,
+        &BTreeMap<String, String>,
+        u64,
+    ) -> Result<PublicResponse, PublicHttpError>,
+{
+    let parsed = url::Url::parse(base_url).map_err(|_| PublicHttpError::InvalidAddress)?;
+    let valid_ip_origin = match parsed.host() {
+        Some(url::Host::Ipv4(ip)) => {
+            if !is_public_ip(ip.into()) {
+                return Err(PublicHttpError::PrivateAddress);
+            }
+            true
+        }
+        Some(url::Host::Ipv6(ip)) => {
+            if !is_public_ip(ip.into()) {
+                return Err(PublicHttpError::PrivateAddress);
+            }
+            true
+        }
+        _ => false,
+    } && parsed.scheme() == "https"
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.port().is_none()
+        && parsed.path() == "/"
+        && parsed.query().is_none()
+        && parsed.fragment().is_none()
+        && !base_url.chars().any(char::is_whitespace)
+        && base_url.split_once("://").is_some_and(|(_, rest)| {
+            let authority = rest.split('/').next().unwrap_or("");
+            !authority.contains('@') && rest.find('/').is_none_or(|i| &rest[i..] == "/")
+        });
+    if !(valid_https_origin(base_url) || valid_ip_origin) || !allowed_public_http_path(paths, path)
+    {
+        return Err(PublicHttpError::InvalidAddress);
     }
-    let url = url::Url::parse(base_url).map_err(|error| error.to_string())?;
-    let host = url.host_str().ok_or("호스트가 없습니다")?;
-    let addresses: Vec<_> = (host, 443)
-        .to_socket_addrs()
-        .map_err(|error| error.to_string())?
-        .collect();
+    let host = parsed.host_str().ok_or(PublicHttpError::InvalidAddress)?;
+    let addresses = resolve(host).map_err(PublicHttpError::Transport)?;
     if addresses.is_empty() || addresses.iter().any(|address| !is_public_ip(address.ip())) {
-        return Err("공개 주소가 아닌 DNS 결과입니다".into());
+        return Err(PublicHttpError::PrivateAddress);
     }
-    let client = client_builder()
-        .no_proxy()
-        .resolve_to_addrs(host, &addresses)
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(data::CONNECTION_TIMEOUT_SECS))
-        .build()
-        .map_err(|error| error.to_string())?;
     let address = format!("{}{}", base_url.trim_end_matches('/'), path);
-    let response = client
-        .get(address)
-        .query(query)
-        .send()
-        .map_err(|error| error.without_url().to_string())?;
-    read_response(response, limit)
+    transport(host, &addresses, &address, query, limit)
 }
 
 fn read_response(
     mut response: reqwest::blocking::Response,
     limit: u64,
-) -> Result<PublicResponse, String> {
+) -> Result<PublicResponse, PublicHttpError> {
     let status = response.status().as_u16();
     let rate_limit = crate::rate_limit::rate_limit(status, response.headers());
+    let retry_after = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
     let mime = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -105,13 +209,14 @@ fn read_response(
     (&mut response)
         .take(limit + 1)
         .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| PublicHttpError::Transport(error.to_string()))?;
     if bytes.len() as u64 > limit {
-        return Err("응답이 너무 큽니다".into());
+        return Err(PublicHttpError::TooLarge);
     }
     Ok(PublicResponse {
         status,
         rate_limit,
+        retry_after,
         mime,
         bytes,
     })
