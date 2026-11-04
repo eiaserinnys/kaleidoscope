@@ -3,7 +3,7 @@
   "name": "슬랙봇",
   "description": "슬랙 웹훅과 폴링으로 대화를 받아 에이전트 앱에 연결합니다.",
   "requires": {
-    "blocks": 9,
+    "blocks": 20,
     "modules": {
       "storage": 2,
       "worker": 1
@@ -358,6 +358,7 @@
       },
       {
         "type": "table",
+        "item_menu": [{ "label": "로그 ID 복사", "on_select": { "copy_text": { "item": "key" } } }],
         "rows": {
           "expr": "$map($storage.logs, function($l) { {\"key\": $l.id, \"time\": $contains($l.time, \"T\") ? $substring($l.time, 11, 5) : $l.time, \"prompt\": $l.prompt, \"status\": $l.status} })"
         },
