@@ -112,11 +112,11 @@ fn message_bridge_round_trips_requests_results_and_readiness() {
 #[test]
 fn marked_builtin_receiver_is_unique_and_receives_messages() {
     let marked: Vec<_> = BUILTIN_IDENTITIES.iter().filter(|app| app.default_message_receiver).collect();
-    assert!(marked.len() <= 1);
+    assert_eq!(marked.len(), 1);
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps");
     for identity in marked {
         let json = std::fs::read_to_string(root.join(format!("{}.json", identity.id))).unwrap();
         let app = parse_app_definition(&json).unwrap();
-        assert!(message_receiver(&app).is_some(), "{}", identity.id);
+        assert_eq!(message_receiver(&app), Some(MessageReceiver::Client), "{}", identity.id);
     }
 }

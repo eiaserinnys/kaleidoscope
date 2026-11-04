@@ -14,6 +14,7 @@ async function fixture({ platform = "Windows", known = true, result = 0, cancel 
   const views: any[] = [], starts: any[] = [], ready: Function[] = [];
   let agentStarts = 0, installerRead = false;
   let releasePermission: (result: any) => void = () => {};
+  let receive: Function = () => {};
   const permission = new Promise((resolve) => { releasePermission = resolve; });
   const process = {
     onReady(fn: Function) { ready.push(fn); return () => {}; }, onServicesChanged() {}, attach: async () => null,
@@ -37,18 +38,19 @@ async function fixture({ platform = "Windows", known = true, result = 0, cancel 
     blobs: { open: async () => null }, host: {}, context: {}, chat: { publish() {} },
     getStorage: async (id: string) => id === "programs" ? (known ? programs : {}) : [agent],
     getState: () => null, setState() {}, onStorageChange: (id: string, fn: Function) => stores.set(id, fn),
-    onLifecycle() {}, handle: (name: string, fn: Function) => handlers.set(name, fn), publish: (view: any) => views.push(view),
+    onLifecycle() {}, onMessage: (fn: Function) => { receive = fn; }, handle: (name: string, fn: Function) => handlers.set(name, fn), publish: (view: any) => views.push(view),
   };
   new AppClient(client as any, []);
   stores.get("programs")?.(known ? programs : {});
   stores.get("agents")!([agent]);
   await handlers.get("pick_folder")!({});
-  return { handlers, views, starts, releasePermission, get view() { return views.at(-1); }, get agentStarts() { return agentStarts; } };
+  return { handlers, views, starts, releasePermission, receive: (message: any) => receive(message), get view() { return views.at(-1); }, get agentStarts() { return agentStarts; } };
 }
 
 test("등록된 명령은 Windows에서 설치 단추를 보이고 다른 플랫폼은 주소를 안내한다", async () => {
   let f = await fixture();
   assert.equal(f.view.show_install, true);
+  assert.deepEqual(await f.receive({ request_id: "one", text: "안녕" }), { status: "not_ready", reason: "에이전트 창에서 프로그램 설치를 마친 뒤 다시 보내세요" });
   assert.equal(f.view.install_label, "시험 프로그램 설치");
   f = await fixture({ platform: "Linux" });
   assert.equal(f.view.show_install, false);

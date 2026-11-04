@@ -13,7 +13,7 @@ test("여러 에이전트는 가운데 선택을 거쳐 폴더를 고르고, 실
     blobs: { open: async () => null }, host: {}, context: {}, chat: { publish() {} },
     getStorage: async () => { reads++; return []; },
     getState: () => null, setState() {}, onStorageChange: (_entry: string, fn: any) => { storage = fn; }, onLifecycle: (fn: any) => { lifecycle = fn; },
-    handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
+    onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
   };
   new AppClient(client as any, []);
   await lifecycle({ phase: "ready" });
@@ -44,7 +44,7 @@ test("에이전트가 하나일 때 폴더 grant 알림과 선택 결과가 겹�
     blobs: { open: async () => null }, host: {}, context: {}, chat: { publish() {} },
     getStorage: async () => [{ id: "a", name: "A", command: "a", args: [], env: {} }],
     getState: () => null, setState() {}, onStorageChange: (_entry: string, fn: any) => { storage = fn; }, onLifecycle: (fn: any) => { lifecycle = fn; },
-    handle: (name: string, fn: any) => handlers.set(name, fn), publish() {},
+    onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish() {},
   };
   new AppClient(client as any, []);
   await lifecycle({ phase: "ready" });
@@ -66,7 +66,7 @@ test("초기 저장소 오류는 가운데에 보이고 다시 읽기에 실패�
     getState: () => null, setState() {},
     onStorageChange: (_entry: string, _fn: any, onError: any) => { storageError = onError; },
     onLifecycle: (fn: any) => { lifecycle = fn; },
-    handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
+    onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
   };
   new AppClient(client as any, []);
   await lifecycle({ phase: "ready" });

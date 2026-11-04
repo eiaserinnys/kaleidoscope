@@ -118,6 +118,17 @@
     "license": "MIT",
     "byte_size": 37051,
     "created_at": "2026-11-04T00:00:00Z",
-    "path": "agent/client.js"
+    "path": "agent/client-v3.js"
+  },
+  {
+    "id": "builtin-agent-client",
+    "version": 4,
+    "format": "javascript",
+    "sha256": "eb24838b9ea1eea2196ebcee38b29c68d00f163a7ae4d1b63ef7e69d51e15f20",
+    "source": "apps/agent-client",
+    "license": "MIT",
+    "byte_size": 38265,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "agent/client-v4.js"
   }
 ]
