@@ -336,7 +336,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
         </div>
         <div className="ks-dates-axis" style={{ left: metrics.left, width: totalWidth }}>
           <div className="ks-dates-months">{periods.map((month) => <div className="ks-dates-month" key={month.day} style={{ left: x(month.day), width: (month.end - month.day) * pxDay }}><PeriodLabel width={(month.end - month.day) * pxDay} left={metrics.left}>{scale === "month" ? formatYear.format(date(month.day)) : formatMonth.format(date(month.day))}</PeriodLabel></div>)}</div>
-          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <PeriodLabel key={month.day} width={(month.end - month.day) * pxDay} left={x(month.day)} tick>{monthOnly.format(date(month.day))}</PeriodLabel>) : dates.map((day) => <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width: pxDay * (scale === "week" ? 7 : 1) }}>{scale === "day" ? dayText(day) : formatDate.format(date(day))}</span>)}</div>
+          <div className="ks-dates-ticks">{scale === "month" ? months.filter((month) => month.end >= from && month.day <= to).map((month) => <PeriodLabel key={month.day} width={(month.end - month.day) * pxDay} left={x(month.day)} tick>{monthOnly.format(date(month.day))}</PeriodLabel>) : dates.filter((day) => tracks.length > 0 || (x(day) >= offset.x && x(day) + pxDay * (scale === "week" ? 7 : 1) <= offset.x + lineWidth)).map((day) => <span key={day} className={offDays.has(day) ? "is-off" : [0, 6].includes(date(day).getUTCDay()) ? "is-weekend" : undefined} style={{ left: x(day), width: pxDay * (scale === "week" ? 7 : 1) }}>{scale === "day" ? dayText(day) : formatDate.format(date(day))}</span>)}</div>
           <DateMarkers markers={markers} today={block.today !== false ? today : null} start={range.start} pxDay={pxDay} width={totalWidth} gap={metrics.gap} />
         </div>
       </div>
@@ -347,7 +347,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
           {markers.filter((marker) => marker.day >= from && marker.day <= to).map((marker) => <span className="is-marker" key={marker.id} style={{ left: x(marker.day + 0.5) }} />)}
           {block.today !== false && today >= from && today <= to && <span className="is-today" style={{ left: x(today + 0.5) }} />}
         </div>
-        {!tracks.length && <div className="ks-dates-empty" style={{ left: metrics.left + offset.x, width: lineWidth, height: Math.max(metrics.row, metrics.height - metrics.header) }}><NoItems /></div>}
+        {!tracks.length && <><div className="ks-dates-track-header" style={{ width: metrics.left, pointerEvents: "none" }} aria-hidden="true" /><div className="ks-dates-empty" style={{ left: metrics.left + offset.x, width: lineWidth, height: Math.max(metrics.row, metrics.height - metrics.header) }}><NoItems /></div></>}
         {tracks.filter((track) => track.first < rows.end && track.first + track.rows.length > rows.start).map((track) => <div className="ks-dates-track" key={track.id} style={{ top: track.first * metrics.row, height: track.rows.length * metrics.row, width: metrics.left + totalWidth }}>
           <div className="ks-dates-track-header" style={{ width: metrics.left }} onPointerDown={(event) => event.stopPropagation()}><div className="ks-dates-track-name" style={{ top: metrics.header }}>
             {track.image && <MediaThumbnail media={track.image} size={32} />}<span className="ks-list-content"><span className="ks-list-title">{track.label}</span></span>{track.meta && <span className="ks-view-meta">{track.meta}</span>}
@@ -383,7 +383,7 @@ const DateBar = memo(function DateBar({ item, track, pxDay, scrollLeft, rangeSta
       observer?.observe(element);
       return () => observer?.disconnect();
     }, [item.label, item.start === null]);
-    if (item.start === null || item.end === null) return <button type="button" className={`ks-dates-undated${selected ? " is-selected" : ""}`} key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
+    if (item.start === null || item.end === null) return <button type="button" className={`ks-dates-undated is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}`} key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
     const start = preview?.id === item.id ? dateToDay(preview.start)! : item.start, end = preview?.id === item.id ? dateToDay(preview.end)! : item.end;
     const outside = lanes === "each" && nameSize.width > Math.max(0, (end - start + 1) * pxDay - nameSize.padding);
     const labelOffset = outside ? 0 : Math.max(0, Math.min((end - start + 1) * pxDay, scrollLeft - (start - rangeStart) * pxDay));
