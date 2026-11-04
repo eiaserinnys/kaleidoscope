@@ -8,6 +8,7 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
+import profiler from "../../../apps/profiler.json";
 
 beforeEach(mockVirtualLayout);
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -122,6 +123,27 @@ it("메뉴 copy_text는 우클릭한 행의 항목 값을 쓴다", async () => {
   fireEvent.click(await screen.findByRole("menuitem", { name: "주소 복사" }));
   await waitFor(() => expect(write).toHaveBeenCalledWith("two"));
 });
+
+const profilerTabs = profiler.ui.children[2].tabs!;
+const builtinTables = [
+  { name: "대상", block: profilerTabs[1].child.children![1].children![1], field: "target", label: "대상 복사" },
+  { name: "느린 구간", block: profilerTabs[3].child, field: "target", label: "대상 복사" },
+  { name: "느린 식", block: profilerTabs[4].child, field: "expr", label: "식 복사" },
+  { name: "최근 구간", block: profilerTabs[5].child, field: "target", label: "대상 복사" },
+];
+
+for (const { name, block, field, label } of builtinTables) {
+  it(`기본 앱 ${name} 표 메뉴는 우클릭한 행의 값을 복사한다`, async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: write } });
+    const table = block as unknown as Extract<Block, { type: "table" }>;
+    setup({ ...table, rows: [{ key: "first", [field]: "첫 값" }, { key: "second", [field]: "둘째 값" }] });
+    const rows = await screen.findAllByRole("row");
+    fireEvent.contextMenu(rows[2]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: label }));
+    await waitFor(() => expect(write).toHaveBeenCalledWith("둘째 값"));
+  });
+}
 
 it("피드 중첩 답글 메뉴는 답글의 항목을 전달한다", async () => {
   const calls = setup({ type: "feed", entries: [{ key: "parent", body: "원글", children: [{ key: "reply", body: "답글" }] }], item_menu: menu });

@@ -256,7 +256,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
-        ("profiler", 2),
+        ("profiler", 3),
         ("agent", 4),
         ("slackbot", 2),
         ("explorer", 3),

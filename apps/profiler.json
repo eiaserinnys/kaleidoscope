@@ -3,7 +3,7 @@
   "name": "프로파일러",
   "description": "코어 응답 시간과 계산 통계",
   "requires": {
-    "blocks": 9,
+    "blocks": 20,
     "modules": {
       "profiler": 1
     }
@@ -248,6 +248,7 @@
                       "rows": {
                         "expr": "$data.profile.targets"
                       },
+                      "item_menu": [{ "label": "대상 복사", "on_select": { "copy_text": { "item": "target" } } }],
                       "columns": [
                         { "label": "대상", "field": "target", "width": "fill", "format": "text" },
                         { "label": "호출", "field": "calls", "width": "narrow", "format": "number" },
@@ -316,6 +317,7 @@
               "rows": {
                 "expr": "$data.profile.slowest_spans"
               },
+              "item_menu": [{ "label": "대상 복사", "on_select": { "copy_text": { "item": "target" } } }],
               "columns": [
                 {
                   "label": "구간",
@@ -363,6 +365,7 @@
               "rows": {
                 "expr": "$data.profile.slowest_bindings"
               },
+              "item_menu": [{ "label": "식 복사", "on_select": { "copy_text": { "item": "expr" } } }],
               "columns": [
                 {
                   "label": "앱",
@@ -410,6 +413,7 @@
               "rows": {
                 "expr": "$data.profile.recent_spans"
               },
+              "item_menu": [{ "label": "대상 복사", "on_select": { "copy_text": { "item": "target" } } }],
               "columns": [
                 {
                   "label": "구간",
