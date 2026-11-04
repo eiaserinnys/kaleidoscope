@@ -67,7 +67,8 @@ fn current_contract_versions_include_realtime() {
     assert!(supported.blocks >= kaleidoscope_contract::LIST_ICONS_BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::INPUT_READ_ONLY_BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::INPUT_SPIN_BLOCK_SET_VERSION);
-    assert_eq!(supported.blocks, kaleidoscope_contract::INPUT_OPTIONS_BLOCK_SET_VERSION);
+    assert!(supported.blocks >= kaleidoscope_contract::INPUT_OPTIONS_BLOCK_SET_VERSION);
+    assert_eq!(supported.blocks, kaleidoscope_contract::TIMELINE_DATES_BLOCK_SET_VERSION);
     assert!(supported.blocks >= kaleidoscope_contract::realtime::REALTIME_BLOCK_SET_VERSION);
     assert_eq!(supported.modules.get("client"), Some(&kaleidoscope_contract::RECEIVE_MESSAGE_CLIENT_VERSION));
 }

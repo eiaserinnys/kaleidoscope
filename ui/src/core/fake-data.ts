@@ -34,6 +34,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   if ("item_menu" in block) block.item_menu?.forEach((_, index) => add(`item_menu/${index}/on_select`));
   switch (block.type) {
     case "button_grid": add("on_press"); break;
+    case "timeline": for (const field of ["on_select", "on_edit", "on_viewport"] as const) add(field, block[field] !== undefined); break;
     case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;
     case "folder": add("on_select", block.on_select !== undefined); break;
     case "map": case "chart": case "list": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
@@ -71,6 +72,9 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "metrics": add("items", block.items); break;
     case "button_grid": add("buttons", block.buttons); break;
     case "chart": add("series", block.series); break;
+    case "timeline":
+      for (const name of ["duration", "position", "tracks", "markers", "ticks", "selection", "snap", "viewport", "off_days"] as const) add(name, block[name]);
+      break;
     case "map": add("points", block.points); break;
   }
   return slots.concat(childBlocks(block, pointer).flatMap(([path, child]) => expressionSlots(child, path)));

@@ -1482,6 +1482,38 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("날짜 시간축 스크롤은 다른 창을 다시 그리거나 코어를 부르지 않는다", async () => {
+    const timeline = { type: "timeline" as const, scale: "dates" as const, today: false,
+      tracks: [{ id: "track", items: [{ id: "item", label: "구간", start: "2026-11-01", end: "2026-11-07" }] }] };
+    const app: AppDefinition = { id: "dates-isolation", name: "날짜 격리", requires: { blocks: 34, modules: {} },
+      permissions: [], state: {}, ui: timeline };
+    const snapshot = testSnapshot([app], {});
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    await store.ready;
+    const otherWindowRender = vi.fn(), timelineRender = vi.fn();
+    const first = snapshot.shared.windows[0], second = snapshot.shared.windows[1];
+    const context = { store, window: first, definition: app };
+    function OtherWindow() { otherWindowRender(); return <span>다른 창</span>; }
+    const view = render(<>
+      <WindowDataProvider store={store} windowId={first.id} definition={app}>
+        <Profiler id="dates" onRender={timelineRender}><TimelineBlock block={timeline} pointer="/ui" context={context} /></Profiler>
+      </WindowDataProvider>
+      <WindowDataProvider store={store} windowId={second.id} definition={app}><OtherWindow /></WindowDataProvider>
+    </>);
+    const scroll = view.container.querySelector(".ks-dates-scroll") as HTMLElement;
+    expect(scroll).not.toBeNull();
+    await settleRenders();
+    const beforeOther = otherWindowRender.mock.calls.length, beforeTimeline = timelineRender.mock.calls.length;
+    const beforeCalls = transport.getCalls().length;
+    scroll.scrollTop = 50; fireEvent.scroll(scroll);
+    await settleRenders();
+    expect(timelineRender.mock.calls.length).toBeGreaterThan(beforeTimeline);
+    expect(otherWindowRender).toHaveBeenCalledTimes(beforeOther);
+    expect(transport.getCalls().slice(beforeCalls)).toEqual([]);
+    store.dispose();
+  });
+
   it("timeline 확대 단추는 코어를 부르지 않고 형제 블록을 다시 그리지 않는다", async () => {
     const timeline = {
       type: "timeline" as const, duration: 100, position: 0, tracks: [],

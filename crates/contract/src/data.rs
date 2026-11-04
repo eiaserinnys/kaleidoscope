@@ -1663,6 +1663,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::Timeline {
+            off_days,
             duration,
             position,
             tracks,
@@ -1683,14 +1684,19 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             if let Some(action) = on_viewport {
                 act!("on_viewport", action);
             }
-            bind!("duration", duration);
-            bind!("position", position);
+            if let Some(value) = duration {
+                bind!("duration", value);
+            }
+            if let Some(value) = position {
+                bind!("position", value);
+            }
             bind!("tracks", tracks);
             for (name, value) in [
                 ("markers", markers),
                 ("ticks", ticks),
                 ("selection", selection),
                 ("snap", snap),
+                ("off_days", off_days),
             ] {
                 if let Some(value) = value {
                     bind!(name, value);

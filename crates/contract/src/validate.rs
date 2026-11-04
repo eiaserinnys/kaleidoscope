@@ -186,6 +186,16 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
         ));
     }
 
+    let mut timeline_error = None;
+    data::walk_definition_blocks(&definition, &mut |pointer, block| {
+        if timeline_error.is_none() {
+            timeline_error = validate_timeline_contract(pointer, block, definition.requires.blocks);
+        }
+    });
+    if let Some(error) = timeline_error {
+        return Err(error);
+    }
+
     let validation = validate(&definition);
     let missing_when_condition = validation.missing_when_condition;
     let missing_webhook_token_secret = validation.missing_webhook_token_secret;
@@ -313,6 +323,141 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
         }
     }
     Ok(())
+}
+
+fn valid_calendar_date(value: &Value) -> bool {
+    let Some(text) = value.as_str() else { return false };
+    let bytes = text.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-'
+        || bytes.iter().enumerate().any(|(i, b)| i != 4 && i != 7 && !b.is_ascii_digit())
+    {
+        return false;
+    }
+    let year: u32 = text[..4].parse().unwrap_or(0);
+    let month: u32 = text[5..7].parse().unwrap_or(0);
+    let day: u32 = text[8..].parse().unwrap_or(0);
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => 0,
+    };
+    year > 0 && day > 0 && day <= days
+}
+
+fn display_optional<T: serde::Serialize>(value: &Option<T>) -> Option<String> {
+    value.as_ref().map(|value| serde_json::to_string(value).expect("시간축 필드 직렬화"))
+}
+
+fn validate_timeline_contract(path: &str, block: &Block, version: u32) -> Option<CoreError> {
+    use crate::{TimelineLanes, TimelineScale};
+    let Block::Timeline {
+        scale, lanes, today, off_days, duration, position, tracks, markers, ticks, snap,
+        on_seek, viewport, ..
+    } = block else { return None };
+    let dates = matches!(scale, Some(TimelineScale::Dates));
+    let literal_tracks = match tracks { Binding::Literal(value) => value.as_array(), _ => None };
+    let new_track_fields = literal_tracks.is_some_and(|tracks| tracks.iter().any(|track| {
+        track.get("meta").is_some() || track.get("image").is_some()
+            || track.get("items").and_then(Value::as_array).is_some_and(|items| items.iter().any(|item| item.get("muted").is_some()))
+    }));
+    if version < crate::TIMELINE_DATES_BLOCK_SET_VERSION
+        && (scale.is_some() || lanes.is_some() || today.is_some() || off_days.is_some() || new_track_fields)
+    {
+        return Some(crate::errors::APP_TIMELINE_VERSION_REQUIRED(path, version, crate::TIMELINE_DATES_BLOCK_SET_VERSION));
+    }
+    if dates {
+        for (field, value) in [
+            ("duration", display_optional(duration)), ("position", display_optional(position)), ("on_seek", display_optional(on_seek)),
+            ("ticks", display_optional(ticks)), ("snap", display_optional(snap)),
+        ] {
+            if let Some(value) = value {
+                return Some(crate::errors::APP_TIMELINE_DATES_FIELD_FORBIDDEN(path, field, value));
+            }
+        }
+    } else {
+        for (field, present) in [("duration", duration.is_some()), ("position", position.is_some())] {
+            if !present { return Some(crate::errors::APP_TIMELINE_FIELD_REQUIRED(path, field)); }
+        }
+        for (field, value) in [
+            ("today", display_optional(today)), ("off_days", display_optional(off_days)),
+            ("lanes", lanes.filter(|value| *value != TimelineLanes::Single).map(|value| format!("{value:?}"))),
+        ] {
+            if let Some(value) = value {
+                return Some(crate::errors::APP_TIMELINE_SECONDS_FIELD_FORBIDDEN(path, field, value));
+            }
+        }
+    }
+    if let Some(tracks) = literal_tracks {
+        for track in tracks {
+            if dates && track.get("waveform").is_some_and(|v| !v.is_null()) {
+                return Some(crate::errors::APP_TIMELINE_DATES_FIELD_FORBIDDEN(path, "waveform", track["waveform"].to_string()));
+            }
+            if let Some(items) = track.get("items").and_then(Value::as_array) {
+                for item in items {
+                    let id = item.get("id").and_then(Value::as_str).unwrap_or("");
+                    let start = item.get("start").filter(|value| !value.is_null());
+                    let end = item.get("end").filter(|value| !value.is_null());
+                    if dates {
+                        if start.is_some() != end.is_some() {
+                            return Some(crate::errors::APP_TIMELINE_ITEM_DATE_PAIR_INCOMPLETE(path, id, if start.is_none() { "start" } else { "end" }));
+                        }
+                        for (field, value) in [("start", start), ("end", end)] {
+                            if let Some(value) = value {
+                                if !valid_calendar_date(value) {
+                                    return Some(crate::errors::APP_TIMELINE_ITEM_DATE_INVALID(path, field, value));
+                                }
+                            }
+                        }
+                        if let (Some(start), Some(end)) = (start, end) {
+                            if start.as_str() > end.as_str() {
+                                return Some(crate::errors::APP_TIMELINE_ITEM_DATE_REVERSED(path, id, start, end));
+                            }
+                        }
+                    } else if start.and_then(Value::as_f64).is_none() || end.and_then(Value::as_f64).is_none() {
+                        return Some(crate::errors::APP_TIMELINE_ITEM_SECONDS_INVALID(path, id, start.unwrap_or(&Value::Null), end.unwrap_or(&Value::Null)));
+                    }
+                }
+            }
+        }
+    }
+    if let Some(Binding::Literal(value)) = markers {
+        if let Some(markers) = value.as_array() {
+            for marker in markers {
+                let time = marker.get("time").unwrap_or(&Value::Null);
+                if dates && !valid_calendar_date(time) {
+                    return Some(crate::errors::APP_TIMELINE_MARKER_DATE_INVALID(path, time));
+                }
+                if !dates && time.as_f64().is_none() {
+                    return Some(crate::errors::APP_TIMELINE_MARKER_SECONDS_INVALID(path, time));
+                }
+            }
+        }
+    }
+    if dates {
+        if let Some(Binding::Literal(value)) = off_days {
+            match value.as_array() {
+                Some(days) => for day in days {
+                    if !valid_calendar_date(day) { return Some(crate::errors::APP_TIMELINE_OFF_DAY_INVALID(path, day)); }
+                },
+                None => return Some(crate::errors::APP_TIMELINE_OFF_DAY_INVALID(path, value)),
+            }
+        }
+        if let Some(Binding::Literal(value)) = viewport {
+            for field in ["start", "end"] {
+                let date = value.get(field).unwrap_or(&Value::Null);
+                if !valid_calendar_date(date) {
+                    return Some(crate::errors::APP_TIMELINE_VIEWPORT_DATE_INVALID(path, field, date));
+                }
+            }
+            if value["start"].as_str() > value["end"].as_str() {
+                return Some(crate::errors::APP_TIMELINE_VIEWPORT_DATE_REVERSED(path, &value["start"], &value["end"]));
+            }
+        }
+    }
+    None
 }
 
 fn removed_local_agent_error(value: &Value) -> Option<CoreError> {
@@ -2444,7 +2589,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             markers,
             ..
         } => {
-            if let Binding::Literal(value) = duration {
+            if let Some(Binding::Literal(value)) = duration {
                 if value
                     .as_f64()
                     .is_none_or(|number| !number.is_finite() || number < 0.0)
@@ -2479,12 +2624,15 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                                 details.push(format!("{at}: 트랙 id가 비었거나 중복됩니다"));
                             }
                             for item in track.items {
+                                let invalid_seconds = match (&item.start, &item.end) {
+                                    (Some(crate::client::TimelineTime::Seconds(start)), Some(crate::client::TimelineTime::Seconds(end))) => {
+                                        !start.is_finite() || !end.is_finite() || *start < 0.0 || start > end
+                                    }
+                                    _ => false,
+                                };
                                 if item.id.is_empty()
                                     || !ids.insert(item.id)
-                                    || !item.start.is_finite()
-                                    || !item.end.is_finite()
-                                    || item.start < 0.0
-                                    || item.start > item.end
+                                    || invalid_seconds
                                 {
                                     details.push(format!(
                                         "{at}: 구간 id 또는 시간이 올바르지 않습니다"
@@ -2500,10 +2648,10 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 match serde_json::from_value::<Vec<crate::client::TimelineMarker>>(value.clone()) {
                     Ok(markers) => {
                         for marker in markers {
+                            let invalid_seconds = matches!(marker.time, crate::client::TimelineTime::Seconds(time) if !time.is_finite() || time < 0.0);
                             if marker.id.is_empty()
                                 || !ids.insert(marker.id)
-                                || !marker.time.is_finite()
-                                || marker.time < 0.0
+                                || invalid_seconds
                             {
                                 details
                                     .push(format!("{at}: 마커 id 또는 시간이 올바르지 않습니다"));

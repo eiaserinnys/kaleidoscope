@@ -1,0 +1,44 @@
+.ks-timeline-dates { flex: 1 1 auto; height: 100%; }
+.ks-timeline-dates .ks-dates-scroll { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; cursor: grab; }
+.ks-timeline-dates .ks-dates-scroll.is-panning { cursor: grabbing; }
+.ks-timeline-dates .ks-dates-measure { position: absolute; visibility: hidden; pointer-events: none; white-space: nowrap; font-size: var(--ks-type-meta); }
+.ks-timeline-dates .ks-dates-row-measure { height: calc(var(--ks-control-height) * 1.25); }
+.ks-timeline-dates .ks-dates-header { position: sticky; top: 0; z-index: 5; height: calc(var(--ks-control-height) * 3); background: var(--ks-color-surface-solid); }
+.ks-timeline-dates .ks-dates-corner { position: sticky; z-index: 7; left: 0; display: flex; align-items: center; gap: var(--ks-space-1); box-sizing: border-box; width: clamp(calc(var(--ks-space-6) * 4), 28cqw, calc(var(--ks-space-6) * 7)); height: 100%; padding-inline: var(--ks-space-3); background: var(--ks-color-surface-solid); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-timeline-dates .ks-dates-corner .ks-icon-button { flex: 0 0 auto; }
+.ks-timeline-dates .ks-dates-axis { position: absolute; top: 0; height: 100%; overflow: clip; font-size: var(--ks-type-meta); }
+.ks-timeline-dates .ks-dates-months, .ks-timeline-dates .ks-dates-ticks, .ks-timeline-dates .ks-dates-markers { position: relative; height: var(--ks-control-height); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-timeline-dates .ks-dates-month { position: absolute; top: 0; bottom: 0; overflow: clip; }
+.ks-timeline-dates .ks-dates-month > span { position: sticky; display: inline-flex; align-items: center; height: 100%; padding-inline: var(--ks-space-1); white-space: nowrap; }
+.ks-timeline-dates .ks-dates-ticks > span, .ks-timeline-dates .ks-dates-markers > span { position: absolute; display: flex; align-items: center; justify-content: center; height: 100%; overflow: hidden; white-space: nowrap; }
+.ks-timeline-dates .ks-dates-ticks .is-weekend { color: var(--ks-color-muted); }
+.ks-timeline-dates .ks-dates-ticks .is-off { color: var(--ks-color-danger); }
+.ks-timeline-dates .ks-dates-markers > span { top: 50%; transform: translateY(-50%); width: max-content; max-width: 100%; height: auto; padding: var(--ks-space-1); background: var(--ks-color-surface-raised); border-radius: var(--ks-radius-small); }
+.ks-timeline-dates .ks-dates-markers > .is-today { color: var(--ks-color-accent); }
+.ks-timeline-dates .ks-dates-body { position: relative; }
+.ks-timeline-dates .ks-dates-background { position: absolute; top: 0; bottom: 0; pointer-events: none; }
+.ks-timeline-dates .ks-dates-background > span { position: absolute; top: 0; bottom: 0; }
+.ks-timeline-dates .ks-dates-background .is-off { background: var(--ks-color-hover); }
+.ks-timeline-dates .ks-dates-background .is-week, .ks-timeline-dates .ks-dates-background .is-month { border-left: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-timeline-dates .ks-dates-background .is-marker { border-left: var(--ks-line-width) dashed var(--ks-color-border); }
+.ks-timeline-dates .ks-dates-background .is-today { width: var(--ks-line-width); background: var(--ks-color-accent); }
+.ks-timeline-dates .ks-dates-track { position: absolute; left: 0; border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-timeline-dates .ks-dates-track-header { position: sticky; z-index: 4; left: 0; height: 100%; background: var(--ks-color-surface-solid); }
+.ks-timeline-dates .ks-dates-track-name { position: sticky; display: flex; align-items: center; box-sizing: border-box; gap: var(--ks-space-3); height: calc(var(--ks-control-height) * 1.25); min-width: 0; padding-inline: var(--ks-space-3); }
+.ks-timeline-dates .ks-dates-track-name .ks-list-content { flex: 1 1 auto; min-width: 0; }
+.ks-timeline-dates .ks-dates-track-name .ks-list-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-timeline-dates .ks-dates-track-name > .ks-view-meta { flex: 0 0 auto; }
+.ks-timeline-dates .ks-dates-track-rows { position: absolute; top: 0; bottom: 0; overflow: clip; }
+.ks-timeline-dates .ks-dates-row { position: absolute; left: 0; right: 0; border-bottom: var(--ks-line-width) dashed var(--ks-color-border); }
+.ks-timeline-dates .ks-dates-row:last-child { border-bottom: 0; }
+.ks-timeline-dates .ks-dates-row .ks-timeline-label { text-overflow: ellipsis; }
+.ks-timeline-dates .ks-dates-row .ks-timeline-item.is-each { overflow: visible; }
+.ks-timeline-dates .ks-dates-name-measure { position: absolute; visibility: hidden; width: max-content; font-size: var(--ks-type-meta); white-space: nowrap; pointer-events: none; }
+.ks-timeline-dates .ks-dates-period-text { flex: 0 0 auto; width: max-content; white-space: nowrap; }
+.ks-timeline-dates .ks-dates-row .ks-timeline-label.is-outside { position: absolute; left: calc(100% + var(--ks-space-1) + var(--ks-line-width)); top: 0; bottom: 0; display: flex; align-items: center; width: max-content; max-width: none; padding: 0; overflow: visible; color: var(--ks-color-text); }
+.ks-timeline-dates .ks-timeline-item.is-muted .ks-timeline-label.is-outside { color: var(--ks-color-muted); }
+.ks-timeline-dates .ks-dates-row .ks-timeline-item.is-muted { opacity: .56; }
+.ks-timeline-dates .ks-dates-undated { position: sticky; left: calc(clamp(calc(var(--ks-space-6) * 4), 28cqw, calc(var(--ks-space-6) * 7)) + var(--ks-space-1)); margin-left: var(--ks-space-1); margin-top: var(--ks-space-1); font-size: var(--ks-type-meta); top: var(--ks-space-1); display: inline-flex; align-items: center; gap: var(--ks-space-1); max-width: calc(100% - var(--ks-space-3)); height: calc(100% - var(--ks-space-2)); padding-inline: var(--ks-space-2); overflow: hidden; border: var(--ks-line-width) dashed var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); color: inherit; white-space: nowrap; text-overflow: ellipsis; }
+.ks-timeline-dates .ks-dates-undated > span { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
+.ks-timeline-dates .ks-dates-empty { position: absolute; display: grid; place-items: center; }
+.ks-timeline-dates .ks-dates-undated.is-selected { border-color: var(--ks-color-accent); border-style: solid; }
