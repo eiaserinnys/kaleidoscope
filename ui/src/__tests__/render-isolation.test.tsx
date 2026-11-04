@@ -1513,6 +1513,15 @@ describe("실제 Shell의 블록 렌더 격리", () => {
 });
 
 describe("shareStructure 참조 보존", () => {
+  it("같은 계정 설정은 참조를 유지하고 바뀐 설정은 교체한다", () => {
+    const previous = testSnapshot();
+    previous.shared.preferences = { revision: 1, default_message_app_id: "agent", asked_message_app_ids: ["explorer"] };
+    const next = structuredClone(previous);
+    expect(shareShellSnapshot(previous, next).shared.preferences).toBe(previous.shared.preferences);
+    next.shared.preferences!.revision = 2;
+    expect(shareShellSnapshot(previous, next).shared.preferences).not.toBe(previous.shared.preferences);
+  });
+
   it("불변 앱 판은 내용을 비교하지 않고 이전 객체를 유지하며 새 판은 새 객체를 쓴다", () => {
     const previous = testSnapshot();
     const oldVersion = previous.shared.app_versions[0];

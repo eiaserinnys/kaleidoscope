@@ -715,6 +715,7 @@ mod layout_changes;
 mod layouts;
 mod mcp;
 mod pairing;
+mod preferences;
 mod preview;
 mod publish;
 mod share;
@@ -756,3 +757,6 @@ mod worker_tests;
 
 #[cfg(test)]
 mod transfer_tests;
+
+#[cfg(test)]
+mod preferences_tests;

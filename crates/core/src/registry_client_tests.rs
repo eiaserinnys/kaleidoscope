@@ -4,6 +4,24 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 #[test]
+fn preferences_post_preserves_server_error_body() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let expected = kaleidoscope_contract::errors::SERVER_PREFERENCES_APP_NOT_FOUND();
+    let body = serde_json::to_string(&expected).unwrap();
+    let worker = std::thread::spawn(move || {
+        let (mut connection, _) = listener.accept().unwrap();
+        let mut bytes = [0; 4096];
+        let n = connection.read(&mut bytes).unwrap();
+        assert!(String::from_utf8_lossy(&bytes[..n]).starts_with("POST /api/device/preferences/default "));
+        write!(connection, "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+    });
+    let result = HttpRegistryClient::new().post_preferences(&format!("http://{address}"), "token", "default", &serde_json::json!({"app_id":"missing"}));
+    assert!(matches!(result, Err(RegistryError::Validation(error)) if error == expected));
+    worker.join().unwrap();
+}
+
+#[test]
 fn raw_app_value_url_preserves_key_segments_without_empty_segment() {
     let url = raw_app_value_item_url("http://127.0.0.1:1234/", "agent", "settings/agents").unwrap();
     assert_eq!(

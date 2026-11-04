@@ -113,7 +113,8 @@ export function shareShellSnapshot(previous: ShellSnapshot | null, next: ShellSn
     versions.every((item, index) => item === previous.shared.app_versions[index])
     ? previous.shared.app_versions
     : versions;
-  const shared = shareObjectStructure(previous.shared, next.shared, { app_versions: appVersions });
+  const preferences = shareStructure(previous.shared.preferences, next.shared.preferences);
+  const shared = shareObjectStructure(previous.shared, next.shared, { app_versions: appVersions, preferences });
   return shareObjectStructure(previous, next, { shared });
 }
 
