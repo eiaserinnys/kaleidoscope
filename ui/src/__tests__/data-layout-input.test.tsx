@@ -24,11 +24,11 @@ it("도구 막대 텍스트 항목은 줄어들 수 있는 항목으로 표시�
   expect(screen.getByRole("button", { name: "실행" }).closest(".ks-data-toolbar-item")?.classList.contains("is-text")).toBe(false);
 });
 
-it.each(["row", "column"] as const)("%s 분할은 손잡이 폭을 격자 트랙에 예약한다", (direction) => {
+it.each(["row", "column"] as const)("%s 분할은 구분선 폭을 격자 트랙에 둔다", (direction) => {
   const view = render(<SplitPanes direction={direction} children={[<span key="a">하나</span>, <span key="b">둘</span>]} />);
   const split = view.container.querySelector(".ks-split") as HTMLElement;
   const template = direction === "row" ? split.style.gridTemplateColumns : split.style.gridTemplateRows;
-  expect(template).toContain("var(--ks-split-handle-size)");
+  expect(template).toContain("var(--ks-line-width)");
 });
 
 it("stack.align maps cross-axis alignment and center placement keeps precedence", () => {

@@ -24,10 +24,15 @@
   touch-action: none;
 }
 
+.ks-split-row > .ks-split-handle {
+  margin-inline-start: calc((var(--ks-line-width) - var(--ks-split-handle-size)) / 2);
+}
+
 .ks-split-column .ks-split-handle {
   width: 100%;
   height: var(--ks-split-handle-size);
   align-self: start;
+  margin-block-start: calc((var(--ks-line-width) - var(--ks-split-handle-size)) / 2);
   cursor: row-resize;
 }
 
