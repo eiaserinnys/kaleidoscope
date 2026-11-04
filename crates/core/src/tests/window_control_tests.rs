@@ -166,6 +166,11 @@ fn window_control_capture_and_response_keep_pas_cache_and_metadata() {
     .unwrap();
     assert_eq!(core.inner.isolated_captures.lock().unwrap().len(), 1);
     emit(&core, request(&window, "capture", "2099-01-01T00:00:00Z"));
+    assert!(matches!(
+        core.handle(CoreRequest::ShareFreeze {}).unwrap(),
+        CoreReply::ShareFreeze { frozen: true }
+    ));
+    assert!(core.inner.isolated_captures.lock().unwrap().is_empty());
     let capture = core
         .handle(CoreRequest::WindowControlCapture {
             request_id: "capture".into(),
@@ -196,6 +201,8 @@ fn window_control_capture_and_response_keep_pas_cache_and_metadata() {
         1600
     );
     assert_eq!(core.inner.isolated_captures.lock().unwrap().len(), 1);
+    core.handle(CoreRequest::ShareUnfreeze {}).unwrap();
+    assert_eq!(core.inner.isolated_captures.lock().unwrap().len(), 1);
     let response = serde_json::from_value(json!({"request_id":"capture", "window_id":window, "result":{"status":"ok", "value":{"after":{
         "view_id":"v", "app_name":"", "window_title":"", "text":"내용", "settled":true, "image_base64":image_base64, "geometry":geometry
     }}}})).unwrap();
@@ -212,6 +219,34 @@ fn window_control_capture_and_response_keep_pas_cache_and_metadata() {
         Some(image_base64.as_str())
     );
     assert_eq!(value.after.geometry, Some(geometry));
+
+    core.handle(CoreRequest::ShareFreeze {}).unwrap();
+    core.handle(CoreRequest::ShareCapture {
+        window_id: window.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::ShareUnfreeze {}).unwrap();
+    assert!(core
+        .inner
+        .window_control
+        .saved_isolated
+        .lock()
+        .unwrap()
+        .is_empty());
+    assert_eq!(core.inner.isolated_captures.lock().unwrap().len(), 1);
+
+    core.handle(CoreRequest::ShareFreeze {}).unwrap();
+    let (workspace, _) = active_ids(&core);
+    crate::share::capture_for_send(&core.inner, &workspace, "test", 0, 0);
+    core.handle(CoreRequest::ShareUnfreeze {}).unwrap();
+    assert!(core
+        .inner
+        .window_control
+        .saved_isolated
+        .lock()
+        .unwrap()
+        .is_empty());
+    assert!(core.inner.isolated_captures.lock().unwrap().is_empty());
 }
 
 #[test]

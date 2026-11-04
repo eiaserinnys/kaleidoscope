@@ -12,6 +12,7 @@ use kaleidoscope_contract::{
 #[derive(Default)]
 pub(crate) struct WindowControlRuntime {
     pending: Mutex<HashMap<String, Pending>>,
+    pub(crate) saved_isolated: Mutex<HashMap<String, share::IsolatedCapture>>,
 }
 
 #[derive(Clone)]
