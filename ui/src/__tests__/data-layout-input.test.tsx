@@ -65,6 +65,12 @@ it.each([
   ["명시한 목록", { type: "stack", direction: "column", fill: 0, children: [fillList, fillButton] }, [0], true],
   ["명시한 단추", { type: "stack", direction: "column", fill: 1, children: [fillList, fillButton] }, [1], true],
   ["가운데 배치의 명시 fill", { type: "stack", direction: "column", place: "center", fill: 1, children: [fillList, fillButton] }, [], false],
+  ["가로 단추 줄", { type: "stack", direction: "column", children: [fillText, fillList, { type: "stack", direction: "row", children: [fillButton, fillButton] }] }, [], false],
+  ["조건 단추", { type: "stack", direction: "column", children: [fillText, fillList, { type: "when", value: true, child: fillButton }] }, [], false],
+  ["앵커 단추", { type: "stack", direction: "column", children: [fillText, fillList, { type: "anchor", id: "confirm", child: fillButton }] }, [], false],
+  ["가로 입력과 단추", { type: "stack", direction: "column", children: [fillToolbar, { type: "stack", direction: "row", children: [fillInput, fillButton] }] }, [], false],
+  ["조건 목록", { type: "stack", direction: "column", children: [fillToolbar, { type: "when", value: true, child: fillList }] }, [1], false],
+  ["가로 단추와 목록", { type: "stack", direction: "column", children: [fillText, { type: "stack", direction: "row", children: [fillButton, fillList] }] }, [1], false],
   ...([
     { type: "select", value: { state: "value" }, on_change: { set_state: "value" }, options: ["a"] },
     { type: "toggle", value: { state: "value" }, on_change: { set_state: "value" }, label: "켜기" },
@@ -80,6 +86,10 @@ it.each([
   const element = view.container.querySelector(".ks-data-stack")!;
   expect(Array.from(element.children).flatMap((child, index) => child.classList.contains("is-fill") ? [index] : [])).toEqual(expected);
   expect(element.classList.contains("has-explicit-fill")).toBe(explicit);
+  if (_name === "가로 입력과 단추") {
+    const row = element.querySelector(".ks-data-stack.is-row")!;
+    expect(Array.from(row.children).map((child) => child.classList.contains("is-fill"))).toEqual([false, true]);
+  }
 });
 
 function setup(rows?: number) {

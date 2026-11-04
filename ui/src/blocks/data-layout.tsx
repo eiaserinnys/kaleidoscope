@@ -20,8 +20,11 @@ export function isMultilineInput(block: Extract<Block, { type: "input" }>): bool
 }
 
 function isFixedHeightControl(block: Block | undefined): boolean {
-  return block !== undefined && (block.type === "input" ? !isMultilineInput(block) :
-    ["button", "select", "toggle", "slider", "color", "toolbar"].includes(block.type));
+  if (!block) return false;
+  if (block.type === "input") return !isMultilineInput(block);
+  if (block.type === "when" || block.type === "anchor") return isFixedHeightControl(block.child);
+  if (block.type === "stack") return block.place !== "center" && block.children.length > 0 && block.children.every(isFixedHeightControl);
+  return ["button", "select", "toggle", "slider", "color", "toolbar"].includes(block.type);
 }
 
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
