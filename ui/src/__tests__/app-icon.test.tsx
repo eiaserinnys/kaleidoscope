@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { svgUsesCurrentColor } from "../components/app-icon";
+import { AppIcon, svgUsesCurrentColor } from "../components/app-icon";
 
 describe("앱 아이콘 SVG 표시 방식", () => {
   it.each([
@@ -39,6 +39,37 @@ if (!globalThis.ResizeObserver) {
 afterEach(cleanup);
 
 describe("쉘 앱 아이콘", () => {
+  it("창은 최신 앱 판 대신 자기 판의 아이콘을 요청한다", async () => {
+    const snapshot = makeTestSnapshot({ definitions: [{ ...mdViewerDefinition, icon: { asset: "old-logo", version: 1 } }] });
+    const version = snapshot.shared.app_versions[0];
+    snapshot.shared.app_versions.push({ ...version, version: 2, definition: { ...version.definition, icon: { asset: "new-logo", version: 1 } } });
+    snapshot.shared.apps[0].current_version = 2;
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const original = transport.call.bind(transport);
+    const calls = vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) =>
+      request.op === "app.icon" ? Promise.resolve({ op: "app.icon", media: { mime: "image/png", data_base64: request.app_version === 1 ? "AQ==" : "Ag==", width: null, height: null } }) : original(request)) as typeof transport.call);
+    const store = createShellStore(transport);
+    render(<AppIcon store={store} appId={version.app_id} appVersion={1} size="chrome" />);
+    await waitFor(() => expect(document.querySelector("img.ks-app-icon")?.getAttribute("src")).toBe("data:image/png;base64,AQ=="));
+    expect(calls.mock.calls.filter(([request]) => request.op === "app.icon")).toEqual([[{ op: "app.icon", app_id: version.app_id, app_version: 1 }]]);
+    store.dispose();
+  });
+  it("서버 전환과 연결 해제는 Promise 캐시를 비우고 오프라인 전환은 보존한다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.link = { state: "connected", mode: "remote", server_url: "https://first.test", device_name: "PC" };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    await store.ready;
+    store.iconCache.set("logo", Promise.resolve(null));
+    transport.emit({ event: "state.changed", snapshot: { ...snapshot, link: { ...snapshot.link, state: "offline", reason: null } } });
+    expect(store.iconCache.size).toBe(1);
+    transport.emit({ event: "state.changed", snapshot: { ...snapshot, link: { ...snapshot.link, server_url: "https://second.test" } } });
+    expect(store.iconCache.size).toBe(0);
+    store.iconCache.set("logo", Promise.resolve(null));
+    transport.emit({ event: "state.changed", snapshot: { ...snapshot, link: { state: "unlinked" } } });
+    expect(store.iconCache.size).toBe(0);
+    store.dispose();
+  });
   it("닫힌 런처는 요청하지 않고 같은 자산 요청을 창과 합치며 서버별로 나눈다", async () => {
     const app = { ...mdViewerDefinition, icon: { asset: "logo", version: 1 } };
     const snapshot = makeTestSnapshot({ definitions: [app] });

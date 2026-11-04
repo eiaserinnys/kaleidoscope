@@ -83,6 +83,15 @@ const definitions = ([mdEditorJson, htmlReportJson, webBrowserJson, explorerJson
   const asset = definition.id === "web-browser" ? "sample-mono" : "sample-color";
   return { ...definition, name: definition.id === "web-browser" ? "긴 제목을 가진 웹 브라우저와 자료 탐색 작업" : definition.name, icon: { asset, version: 1 }, assets: [...(definition.assets ?? []), { id: asset, version: 1 }] };
 });
+if (iconScenario) {
+  const explorer = definitions.find((definition) => definition.id === "explorer")!;
+  explorer.assets = [{ id: "sample-mono", version: 1 }, { id: "sample-color", version: 1 }];
+  explorer.requires = { blocks: 30, modules: { assets: 1 } };
+  explorer.ui = { type: "list", layout: "icons", items: definitions.map((definition) => ({
+    key: definition.id, title: definition.name,
+    ...(definition.icon ? { image: { asset: definition.icon.asset } } : {}),
+  })) };
+}
 const apps: App[] = definitions.map((definition) => ({
   id: definition.id,
   name: definition.name,
@@ -211,7 +220,7 @@ const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 1
 const transport: FakeTransport = createFakeTransport({
   snapshot,
   media: iconScenario ? {
-    "sample-mono": `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9" stroke-width="2"/><path d="M3 12h18M12 3v18" stroke-width="2"/></svg>')}`,
+    "sample-mono": `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>')}`,
     "sample-color": `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="15" rx="3" fill="#e38932"/><path d="M3 8h18" stroke="#6b360f" stroke-width="2"/></svg>')}`,
   } : undefined,
   conversation: shareScenario ? { thread: { id: "test-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "test", label: "Test" }, created_at: timestamp, archived: false }, items: [], models: [{ id: "test", label: "Test", available: true }] } : undefined,
