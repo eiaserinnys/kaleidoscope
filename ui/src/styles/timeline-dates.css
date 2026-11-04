@@ -27,7 +27,7 @@
 .ks-timeline-dates .ks-dates-track-name { position: sticky; display: flex; align-items: center; box-sizing: border-box; gap: var(--ks-space-3); height: calc(var(--ks-control-height) * 1.25); min-width: 0; padding-inline: var(--ks-space-3); }
 .ks-timeline-dates .ks-dates-track-name .ks-list-content { flex: 1 1 auto; min-width: 0; }
 .ks-timeline-dates .ks-dates-track-name .ks-list-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ks-timeline-dates .ks-dates-track-name > .ks-view-meta { flex: 0 0 auto; }
+.ks-timeline-dates .ks-dates-track-name > .ks-view-meta { flex: 0 1000 auto; min-width: 0; }
 .ks-timeline-dates .ks-dates-track-rows { position: absolute; top: 0; bottom: 0; overflow: clip; }
 .ks-timeline-dates .ks-dates-row { position: absolute; left: 0; right: 0; border-bottom: var(--ks-line-width) dashed var(--ks-color-border); }
 .ks-timeline-dates .ks-dates-row:last-child { border-bottom: 0; }
