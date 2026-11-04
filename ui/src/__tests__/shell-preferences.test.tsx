@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
 import { directionParticle } from "../../../app/src/shell/message-app-prompt";
-import type { AppDefinition, CoreRequest } from "../contract/contract";
+import type { AppDefinition, CoreRequest, LinkStatus } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { makeTestSeed } from "./fixtures";
@@ -77,6 +77,30 @@ describe("쉘 기본 에이전트 설정", () => {
     expect(screen.getByRole("button", { name: "기본 에이전트" }).closest('[aria-busy="true"]')).toBeTruthy();
     store.dispose();
   });
+
+  it.each([
+    [{ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" }, "서버 연결 승인을 기다리는 중입니다"],
+    [{ state: "revoked", server_url: "https://remote.example" }, "서버가 이 PC의 연결을 거부했습니다. 서버 연결을 다시 설정하세요"],
+    [{ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "내 PC", reason: null }, "서버에 다시 연결하면 바꿀 수 있습니다"],
+  ] as Array<[LinkStatus, string]>)("서버 상태에 맞는 잠금 까닭을 고르기에 연결한다", async (link, reason) => {
+    const { transport, store } = setup(); await store.ready;
+    act(() => transport.setLink(link));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
+    const select = screen.getByRole("button", { name: "기본 에이전트" }) as HTMLButtonElement;
+    expect(select.disabled).toBe(true);
+    expect(document.getElementById(select.getAttribute("aria-describedby")!)?.textContent).toBe(reason);
+    store.dispose();
+  });
+
+  it("받을 수 있는 앱이 없을 때 이유를 보인다", async () => {
+    const { transport, store } = setup(); await store.ready;
+    const current = store.getSnapshot()!;
+    act(() => transport.emit({ event: "state.changed", snapshot: { ...current, shared: { ...current.shared, apps: [] } } }));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
+    expect(screen.getByText("메시지를 받을 수 있는 앱이 없습니다")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "기본 에이전트" }) as HTMLButtonElement).disabled).toBe(true);
+    store.dispose();
+  });
 });
 
 describe("새 메시지 앱 질문", () => {
@@ -148,6 +172,27 @@ describe("새 메시지 앱 질문", () => {
     expect(spy.mock.calls.filter(([request]) => request.op === "shell.preferences.answer")).toHaveLength(1);
     await act(async () => release());
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    store.dispose();
+  });
+
+  it("첫 답의 상태가 응답보다 먼저 도착해도 다음 질문의 안전한 선택에 초점을 둔다", async () => {
+    const { transport, store } = setup([]); await store.ready;
+    const original = transport.call.bind(transport);
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(transport, "call").mockImplementation((async (request: CoreRequest) => {
+      const result = await original(request as never);
+      if (request.op === "shell.preferences.answer") await waiting;
+      return result;
+    }) as typeof transport.call);
+    const first = await screen.findByRole("dialog", { name: "기본 에이전트를 시안과 리포트로 바꿀까요?" });
+    fireEvent.click(within(first).getByRole("button", { name: "그대로 두기" }));
+    const second = await screen.findByRole("dialog", { name: "기본 에이전트를 작업 PAS로 바꿀까요?" });
+    const cancel = within(second).getByRole("button", { name: "그대로 두기" }) as HTMLButtonElement;
+    expect(cancel.disabled).toBe(true);
+    await act(async () => release());
+    await waitFor(() => expect(cancel.disabled).toBe(false));
+    expect(document.activeElement).toBe(cancel);
     store.dispose();
   });
 

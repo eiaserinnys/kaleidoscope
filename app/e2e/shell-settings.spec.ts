@@ -139,3 +139,23 @@ test("새 앱 질문이 데스크톱과 열린 설정 위에서 답을 받는다
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("button", { name: "기본 에이전트" })).toContainText("작업 PAS");
 });
+
+test("새 앱 질문 저장 중과 실패 후 재시도", async ({ page }) => {
+  test.setTimeout(60_000);
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 600 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto(`${base}&link=connected&prompt&slow-preferences`);
+    let dialog = page.getByRole("dialog", { name: "기본 에이전트를 작업 PAS로 바꿀까요?" });
+    await dialog.getByRole("button", { name: "바꾸기" }).click();
+    await expect(dialog.getByRole("status", { name: "저장 중" })).toBeVisible();
+    await page.screenshot({ path: `${captures}/question-saving-${viewport.width}.png` });
+    await expect(dialog).toHaveCount(0);
+    await page.goto(`${base}&link=connected&prompt&fail-answer`);
+    dialog = page.getByRole("dialog", { name: "기본 에이전트를 작업 PAS로 바꿀까요?" });
+    await dialog.getByRole("button", { name: "바꾸기" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("서버에 연결되어 있지 않아");
+    await page.screenshot({ path: `${captures}/question-error-${viewport.width}.png` });
+    await dialog.getByRole("button", { name: "그대로 두기" }).click();
+    await expect(dialog).toHaveCount(0);
+  }
+});

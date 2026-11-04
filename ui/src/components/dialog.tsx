@@ -13,6 +13,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   const restore = useRef(true);
   const busyRef = useRef(busy);
   busyRef.current = busy;
+  const wasBusy = useRef(busy);
   const onKey = (event: Pick<KeyboardEvent, "key" | "shiftKey" | "preventDefault" | "stopPropagation">) => {
     const native = event as KeyboardEvent;
     const owner = windowId ?? ownerOf(host);
@@ -59,6 +60,13 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const owner = windowId ?? ownerOf(host);
     if (windowModal && active && (!owner || !preserveWindowActionFocus(owner))) root.current?.focus({ preventScroll: true });
   }, [windowModal, active]);
+  useLayoutEffect(() => {
+    const finished = wasBusy.current && !busy;
+    wasBusy.current = busy;
+    if (finished && !windowModal && !root.current?.contains(document.activeElement)) {
+      root.current?.querySelector<HTMLElement>(showCancel ? ".ks-dialog-actions > button" : ".ks-dialog-confirm button")?.focus();
+    }
+  }, [busy, showCancel, windowModal]);
   const heading = <div className="ks-dialog-title" id={titleId} title={windowModal ? title : undefined}>{title}</div>;
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
   return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay} onMouseDown={(event) => { if (!busy && !windowModal && event.target === event.currentTarget) onCancel(); }}>

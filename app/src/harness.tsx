@@ -249,8 +249,9 @@ const transport: FakeTransport = createFakeTransport({
   ]) : requestedAppWindow === "html-report" ? [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }] : undefined,
   files,
 });
-if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsPreview && (harnessParams.has("slow-link") || harnessParams.has("slow-preferences")))) {
+if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsPreview && (harnessParams.has("slow-link") || harnessParams.has("slow-preferences") || harnessParams.has("fail-answer")))) {
   const call = transport.call.bind(transport);
+  let failAnswer = harnessParams.has("fail-answer");
   transport.call = (async (request: CoreRequest) => {
     if (pcAllowErrorScenario && request.op === "files.allow_pc") {
       return Promise.reject({ id: "FILE_ACCESS_PERMISSION_UNDECLARED", code: "permission_denied", message: "허용할 수 없습니다", details: [] });
@@ -258,6 +259,10 @@ if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsP
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
     if (shellSettingsPreview && harnessParams.has("slow-link") && request.op === "link.sync_local_to_remote") await new Promise((resolve) => setTimeout(resolve, 2000));
     if (shellSettingsPreview && harnessParams.has("slow-preferences") && (request.op === "shell.preferences.set_default" || request.op === "shell.preferences.answer")) await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (shellSettingsPreview && request.op === "shell.preferences.answer" && failAnswer) {
+      failAnswer = false;
+      return Promise.reject({ id: "SERVER_PREFERENCES_NOT_CONNECTED", code: "server", message: "서버에 연결되어 있지 않아 기본 에이전트를 바꾸지 못했습니다. 서버에 연결한 뒤 다시 시도하세요.", details: [] });
+    }
     return call(request);
   }) as typeof transport.call;
 }
