@@ -1,6 +1,10 @@
 // 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
+export const SHELL_MESSAGE_RECEIVER_START_TIMEOUT = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_RECEIVER_START_TIMEOUT", code: "unavailable", message: `${args.app}의 메시지 수신이 준비되지 않았습니다. 열린 앱의 상태를 확인한 뒤 다시 보내세요.`, details: [] });
+export const SHELL_MESSAGE_RECEIVER_CLOSED = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_RECEIVER_CLOSED", code: "not_found", message: `${args.app}의 받는 창이 종료되어 보내기를 끝내지 못했습니다. 창을 다시 열고 받은 내용을 확인하세요.`, details: [] });
+export const SHELL_MESSAGE_RECEIVE_REPLY_TIMEOUT = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_RECEIVE_REPLY_TIMEOUT", code: "unavailable", message: `${args.app}의 접수 응답을 받지 못했습니다. 중복해서 보내기 전에 받는 창을 확인하세요.`, details: [] });
+export const SHELL_MESSAGE_RECEIVE_RESULT_INVALID = (args: { app: string }): CoreError => ({ id: "SHELL_MESSAGE_RECEIVE_RESULT_INVALID", code: "invalid_request", message: `${args.app}이 잘못된 접수 결과를 보냈습니다. 앱의 메시지 수신 코드를 고쳐 주세요.`, details: [] });
 export const SHELL_REALTIME_URL_INVALID = (args: { path: string }): CoreError => ({ id: "SHELL_REALTIME_URL_INVALID", code: "invalid_request", message: `실시간 연결 경로 ${args.path}를 쓸 수 없습니다. /로 시작하는 연결 아래 경로를 써 주세요.`, details: [] });
 export const SHELL_REALTIME_SEND_TYPE_INVALID = (): CoreError => ({ id: "SHELL_REALTIME_SEND_TYPE_INVALID", code: "invalid_request", message: `이 실시간 연결은 문자열과 바이트만 보낼 수 있습니다. 앱의 send 값을 고쳐 주세요.`, details: [] });
 export const SHELL_REALTIME_SEND_CONNECTING = (): CoreError => ({ id: "SHELL_REALTIME_SEND_CONNECTING", code: "invalid_request", message: `연결이 아직 열리지 않았습니다. 앱에서 open 이벤트 뒤에 보내도록 고쳐 주세요.`, details: [] });

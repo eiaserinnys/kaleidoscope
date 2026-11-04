@@ -1,4 +1,4 @@
-import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientLifecycle, EventModifiers, PickFilesSpec, SaveFileSpec } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientLifecycle, EventModifiers, MessageInput, MessageResult, PickFilesSpec, SaveFileSpec } from "../contract/contract";
 import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { ClientChatEnvelope } from "../data/client-chat";
@@ -21,6 +21,66 @@ type Client = NonNullable<AppDefinition["client"]>;
 const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
 const runtimes = new WeakMap<ShellStore, Map<string, ClientRuntime>>();
 
+type RuntimeWaiter = (windowId: string, closed: boolean) => void;
+const runtimeWaiters = new WeakMap<ShellStore, Set<RuntimeWaiter>>();
+
+function notifyRuntime(store: ShellStore, windowId: string, closed = false) {
+  runtimeWaiters.get(store)?.forEach((waiter) => waiter(windowId, closed));
+}
+
+function serverIdentity(snapshot: ReturnType<ShellStore["getSnapshot"]>) {
+  const link = snapshot?.link;
+  return link && "server_url" in link ? link.server_url : null;
+}
+
+export function deliverClientMessage(store: ShellStore, windowId: string, message: MessageInput): Promise<MessageResult> {
+  const initial = store.getSnapshot();
+  const target = initial?.shared.windows.find((item) => item.id === windowId);
+  const app = initial?.shared.app_versions.find((item) => item.app_id === target?.app_id && item.version === target.app_version)?.definition.name ?? target?.app_id ?? "앱";
+  const server = serverIdentity(initial);
+  const mode = initial?.link && "mode" in initial.link ? initial.link.mode : null;
+  return new Promise((resolve, reject) => {
+    let runtime: ClientRuntime | undefined;
+    let sent = false;
+    let cancelReply: (() => void) | undefined;
+    let timer: ReturnType<typeof setTimeout>;
+    const waiters = runtimeWaiters.get(store) ?? new Set<RuntimeWaiter>();
+    runtimeWaiters.set(store, waiters);
+    const cleanup = () => { clearTimeout(timer); unsubscribe(); waiters.delete(checkRuntime); cancelReply?.(); };
+    const fail = (error: unknown) => { cleanup(); reject(error); };
+    const closed = () => fail(shellErrors.SHELL_MESSAGE_RECEIVER_CLOSED({ app }));
+    const checkSnapshot = () => {
+      const snapshot = store.getSnapshot();
+      const currentMode = snapshot?.link && "mode" in snapshot.link ? snapshot.link.mode : null;
+      if (!snapshot?.shared.windows.some((item) => item.id === windowId) || serverIdentity(snapshot) !== server || (mode && currentMode && mode !== currentMode)) closed();
+    };
+    const checkRuntime: RuntimeWaiter = (changedWindow, stopped) => {
+      if (changedWindow !== windowId) return;
+      if (stopped) { closed(); return; }
+      const current = runtimes.get(store)?.get(windowId);
+      if (runtime && runtime !== current) { closed(); return; }
+      runtime = current;
+      if (!sent && runtime?.messageReady()) {
+        sent = true;
+        clearTimeout(timer);
+        timer = setTimeout(() => fail(shellErrors.SHELL_MESSAGE_RECEIVE_REPLY_TIMEOUT({ app })), CLIENT_PING_TIMEOUT_SECS * 1000);
+        cancelReply = runtime.sendMessage(message, (result, error) => {
+          if (error !== undefined) {
+            fail(isCoreError(error) ? error : shellErrors.SHELL_MESSAGE_RECEIVE_RESULT_INVALID({ app }));
+          } else if (result && typeof result === "object" && ((result as MessageResult).status === "accepted" || ((result as MessageResult).status === "not_ready" && typeof (result as { reason?: unknown }).reason === "string"))) {
+            cleanup(); resolve(result as MessageResult);
+          } else fail(shellErrors.SHELL_MESSAGE_RECEIVE_RESULT_INVALID({ app }));
+        });
+      }
+    };
+    const unsubscribe = store.subscribe(checkSnapshot);
+    waiters.add(checkRuntime);
+    timer = setTimeout(() => fail(shellErrors.SHELL_MESSAGE_RECEIVER_START_TIMEOUT({ app })), CLIENT_PING_TIMEOUT_SECS * 1000);
+    if (!target) closed();
+    else checkRuntime(windowId, false);
+  });
+}
+
 export async function clientShare(store: ShellStore, windowId: string, visual: boolean): Promise<{ text: string; image?: string } | null> {
   return runtimes.get(store)?.get(windowId)?.share(visual) ?? null;
 }
@@ -31,6 +91,8 @@ export class ClientRuntime {
   private stopped = false;
   private loaded = false;
   private ready = false;
+  private receiverReady = false;
+  private messageReplies = new Map<string, (result: unknown, error: unknown) => void>();
   private lastPong = 0;
   private ping?: ReturnType<typeof setInterval>;
   private pingVisible = false;
@@ -99,6 +161,7 @@ export class ClientRuntime {
       let windows = runtimes.get(this.store);
       if (!windows) { windows = new Map(); runtimes.set(this.store, windows); }
       windows.set(this.data.windowId, this);
+      notifyRuntime(this.store, this.data.windowId);
       window.addEventListener("message", this.receive);
       this.unsubscribeStorage = this.store.subscribeEvents((event) => {
         this.realtime?.event(event);
@@ -124,6 +187,15 @@ export class ClientRuntime {
       window.addEventListener("blur", this.scheduleLifecycle);
       document.addEventListener("visibilitychange", this.onDocumentVisibilityChange);
     } catch (error) { if (!this.stopped) this.data.failClient(toCoreError(error)); }
+  }
+
+  messageReady() { return this.ready && this.receiverReady && !this.stopped; }
+
+  sendMessage(message: MessageInput, finish: (result: unknown, error: unknown) => void) {
+    const requestId = crypto.randomUUID();
+    this.messageReplies.set(requestId, finish);
+    this.send({ type: "ks-client-message", token: this.token, requestId, message });
+    return () => { this.messageReplies.delete(requestId); };
   }
 
   private syncPingVisibility = () => {
@@ -353,7 +425,14 @@ export class ClientRuntime {
     const message = event.data;
     // 인증된 프레임의 모든 메시지는 프레임이 동작 중이라는 증거다.
     this.lastPong = Date.now();
-    if (message.type === "ks-sandbox-ready") { this.ready = true; this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
+    if (message.type === "ks-sandbox-ready") { this.ready = true; notifyRuntime(this.store, this.data.windowId); this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
+    else if (message.type === "ks-client-message-ready" && this.client.capabilities?.includes("receive_message")) {
+      this.receiverReady = true; notifyRuntime(this.store, this.data.windowId);
+    }
+    else if (message.type === "ks-client-message-result" && this.client.capabilities?.includes("receive_message") && typeof message.requestId === "string") {
+      const finish = this.messageReplies.get(message.requestId);
+      if (finish) { this.messageReplies.delete(message.requestId); finish(message.result, message.error); }
+    }
     else if (message.type === "ks-client-pong") return;
     else if (message.type === "ks-sandbox-storage-applied" && this.client.storage_entries.includes(message.entry) && this.pendingRevisions[message.entry] === message.revision) {
       this.revisions[message.entry] = message.revision; delete this.pendingRevisions[message.entry];
@@ -575,6 +654,8 @@ export class ClientRuntime {
 
   private async dispose() {
     this.stopped = true;
+    notifyRuntime(this.store, this.data.windowId, true);
+    this.messageReplies.clear();
     const windows = runtimes.get(this.store);
     if (windows?.get(this.data.windowId) === this) windows.delete(this.data.windowId);
     for (const finish of this.snapshots.values()) finish("");
