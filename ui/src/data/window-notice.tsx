@@ -26,6 +26,10 @@ export function WindowNotice() {
       return source.state === "failed" ? source.id : undefined;
     })
     .find((id) => id !== undefined);
+  const firstFailed = sources[failed[0]];
+  const sourceMessage = firstFailed?.state === "failed"
+    ? `${failed.length > 1 ? `화면 ${failed.length}곳이 이전에 받은 내용을 보이고 있습니다.` : "이전에 받은 내용을 보이고 있습니다."} ${firstFailed.message}`
+    : "";
   if (!message && (!failed.length || dismissed)) return null;
   const close = () => { if (message) data.setNotice(null); else setDismissed(true); };
   const closeButton = <IconButton key="close" aria-label="닫기" onClick={close}><X size="inline" /></IconButton>;
@@ -33,7 +37,7 @@ export function WindowNotice() {
     ? clientFailed ? [<Button key="restart" onClick={() => { void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
     : [<Button key="retry" onClick={() => { void data.refresh(failed); }}>다시 받기</Button>, closeButton];
   if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} />;
-  return <Notice role="alert" errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? `다시 받지 못했습니다: ${failed.join(", ")}`}</Notice>;
+  return <Notice role="alert" errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
 }
 
 const STATUS_NOTICE_DURATION_MS = 5000;

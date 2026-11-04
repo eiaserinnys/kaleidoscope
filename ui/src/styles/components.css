@@ -61,6 +61,21 @@
   padding: 0;
 }
 
+.ks-data-state:not(.ks-image-view *) {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: safe center;
+  justify-content: safe center;
+  padding: var(--ks-space-3);
+}
+
+.ks-data-state:not(.ks-image-view *) > .ks-empty-state {
+  height: auto;
+}
+
 .ks-empty-state {
   display: flex;
   width: 100%;

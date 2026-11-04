@@ -520,6 +520,78 @@ fn response(status: u16, body: Value) -> kaleidoscope_contract::registry::Connec
         data_base64: None,
     }
 }
+
+#[test]
+fn source_http_errors_show_target_and_status_specific_guidance() {
+    use crate::connections::RequestError;
+    use kaleidoscope_contract::{data::SourceFormat, registry::ConnectionKind};
+    use kaleidoscope_data::SourcePlan;
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = open_core_with_client(temp.path(), vec![connection_definition()], &host, client.clone());
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "connection-app");
+    mark_connected(&core);
+    *core.inner.connections.lock().unwrap() = vec![info(ConnectionKind::Relay)];
+    let plan = SourcePlan::Request { permission: "api".into(), path: "/old".into(), query: BTreeMap::new() };
+    for (status, id) in [(404, "DATA_SOURCE_RESPONSE_NOT_FOUND"), (401, "DATA_SOURCE_RESPONSE_DENIED"), (403, "DATA_SOURCE_RESPONSE_DENIED"), (500, "DATA_SOURCE_RESPONSE_SERVER_ERROR"), (422, "DATA_SOURCE_RESPONSE_STATUS_FAILED")] {
+        client.connection_replies.lock().unwrap().insert("/old".into(), response(status, json!({"error":"서버 사유"})));
+        let Err(RequestError::Core(error)) = crate::data_sources::fetch_named(&core.inner, &window, "items", &plan, SourceFormat::Json) else { panic!("원천 오류가 필요함"); };
+        assert_eq!(error.id.as_deref(), Some(id));
+        assert!(error.message.contains("연결 example"), "{}", error.message);
+        assert!(!error.message.contains("이 칸의"), "{}", error.message);
+        assert!(!error.message.contains("items") && !error.message.contains("/old"), "{}", error.message);
+        assert!(error.details.iter().any(|d| d.contains("items")) && error.details.iter().any(|d| d.contains("/old")));
+        if status == 500 || status == 422 { assert!(error.message.ends_with("원인: 서버 사유"), "{}", error.message); }
+    }
+}
+
+#[test]
+fn call_http_error_includes_server_reason() {
+    let error = crate::connections::response_error(&response(500, json!({"error":"value out of range"})), "연결 example");
+    assert!(error.message.ends_with("원인: value out of range"), "{}", error.message);
+    assert!(error.details.iter().any(|detail| detail.contains("HTTP 500")));
+}
+
+#[test]
+fn public_http_error_target_uses_label_or_host() {
+    let definition = json!({
+        "id":"public-target", "name":"공개 자료", "requires":{"blocks":4,"modules":{"http":1}},
+        "permissions":[
+            {"module":"http","id":"named","label":"공개 뉴스","base_url":"https://example.test","paths":["/items"]},
+            {"module":"http","id":"unnamed","label":"","base_url":"https://example.test","paths":["/items"]}
+        ],
+        "state":{}, "ui":{"type":"text","value":"시험"}
+    }).to_string();
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![definition], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "public-target");
+    assert_eq!(crate::data_sources::request_target(&core.inner, &window, "named").as_deref(), Some("공개 뉴스"));
+    assert_eq!(crate::data_sources::request_target(&core.inner, &window, "unnamed"), None);
+    assert_eq!(crate::data_sources::request_host(&core.inner, &window, "unnamed").as_deref(), Some("example.test"));
+}
+
+#[test]
+fn server_reason_prefers_json_fields_and_limits_text() {
+    let cases = [
+        (json!({"error":"첫째", "message":"둘째"}), "첫째"),
+        (json!({"error":{"message":"셋째"}, "message":"둘째"}), "둘째"),
+        (json!({"error":{"message":"셋째"}}), "셋째"),
+        (json!({"other":true}), "서버가 사유를 보내지 않았습니다"),
+    ];
+    for (body, expected) in cases {
+        assert_eq!(crate::connections::response_reason(&response(500, body)), expected);
+    }
+    let mut text_reply = response(500, Value::Null);
+    text_reply.json = None;
+    text_reply.text = Some(format!("  {}\n끝  ", "가".repeat(300)));
+    assert_eq!(crate::connections::response_reason(&text_reply), format!("{}…", "가".repeat(300)));
+    text_reply.text = Some(" 앞\r\n뒤 ".into());
+    assert_eq!(crate::connections::response_reason(&text_reply), "앞 뒤");
+}
 fn wait_until(mut predicate: impl FnMut() -> bool) {
     let end = Instant::now() + Duration::from_secs(5);
     while Instant::now() < end {
@@ -616,6 +688,8 @@ fn late_source_results_are_discarded_and_calls_are_ordered() {
         err.id.as_deref(),
         Some("CONN_REQUEST_SERVER_RESPONSE_FAILED")
     );
+    assert!(err.message.contains("원인: failure"), "{}", err.message);
+    assert!(err.message.contains("연결 example의 서버"), "{}", err.message);
     assert!(err.details.iter().any(|detail| detail.contains("HTTP 500")));
     assert_eq!(
         snapshot(&core)
@@ -885,7 +959,7 @@ fn failed_relay_has_retry_and_read_permission_rejects_post() {
     while Instant::now() < deadline {
         if let Ok(CoreEvent::DataUpdate { view, .. }) = rx.recv_timeout(Duration::from_millis(100))
         {
-            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{id,retry,..}) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_STATUS_FAILED") && retry == &vec!["items".to_owned()])
+            if matches!(view.values.get("/ui/children/0/items"),Some(BindingValue::Failed{id,retry,..}) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_SERVER_ERROR") && retry == &vec!["items".to_owned()])
             {
                 failed = true;
                 break;
@@ -1042,8 +1116,8 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
                     id,
                     message,
                     ..
-                }) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_STATUS_FAILED")
-                    && message == "원천 items: 서버가 성공 응답을 보내지 않아 읽지 못했습니다. 다시 받기를 누르고, 계속되면 앱 정의의 주소를 확인하세요. 경로: /old"
+                }) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_SERVER_ERROR")
+                    && message == "연결 example의 서버에 오류가 나서 자료를 받지 못했습니다. 잠시 뒤 다시 받기를 누르세요. 원인: failure"
             ) {
                 assert!(!view.values.contains_key("/ui/children/0/items"));
                 failed = true;

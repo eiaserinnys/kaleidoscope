@@ -70,13 +70,32 @@ it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () 
   const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
   render(<WindowNotice />);
   tick(10000);
-  expect(screen.getByRole("alert").textContent).toContain("feed");
+  expect(screen.getByRole("alert").textContent).toContain("이전에 받은 내용을 보이고 있습니다. 읽기 실패");
+  expect(screen.getByRole("alert").textContent).not.toContain("feed");
+  expect(screen.getByRole("alert").textContent).toContain("SOURCE_READ_FAILED");
   fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
   expect(refresh).toHaveBeenCalledWith(["feed"]);
   fireEvent.click(screen.getByRole("button", { name: "닫기" }));
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
+it("원천이 여러 곳에서 실패하면 첫 오류와 나머지 수만 보인다", () => {
+  cleanup();
+  vi.spyOn(data, "getSources").mockReturnValue({
+    first: { state: "failed", has_value: true, message: "첫 오류", id: "FIRST_ERROR" },
+    second: { state: "failed", has_value: true, message: "둘째 오류", id: "SECOND_ERROR" },
+    third: { state: "failed", has_value: true, message: "셋째 오류", id: "THIRD_ERROR" },
+  } as never);
+  const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
+  render(<WindowNotice />);
+  const text = screen.getByRole("alert").textContent ?? "";
+  expect(text).toContain("화면 3곳이 이전에 받은 내용을 보이고 있습니다. 첫 오류");
+  expect(text).not.toContain("(외");
+  expect(text).not.toContain("first");
+  expect(text).toContain("FIRST_ERROR");
+  fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
+  expect(refresh).toHaveBeenCalledWith(["first", "second", "third"]);
+});
 
 it("정보 알림의 만료가 뒤에 온 오류를 지우지 않는다", () => {
   act(() => data.setStatus("작업 완료"));
@@ -98,10 +117,10 @@ it("정보 알림이 사라진 뒤 원천 실패와 다시 받기는 남는다",
   cleanup();
   vi.spyOn(data, "getSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
   render(<WindowNotice />);
-  expect(screen.getByRole("alert").textContent).toContain("feed");
+  expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
   act(() => data.setStatus("처리했습니다"));
   expect(screen.getByRole("status").textContent).toContain("처리했습니다");
   tick(5000);
-  expect(screen.getByRole("alert").textContent).toContain("feed");
+  expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
   expect(screen.getByRole("button", { name: "다시 받기" })).toBeTruthy();
 });

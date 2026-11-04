@@ -4,6 +4,7 @@ body {
   user-select: none;
 }
 
+.ks-notice-message,
 input,
 textarea,
 [contenteditable],
@@ -19,7 +20,6 @@ textarea,
 .ks-properties dd,
 .ks-feed-entry,
 .ks-metric-value,
-.ks-notice-message,
 .ks-error-id,
 .ks-html-comment-text,
 .ks-html-reply p,
