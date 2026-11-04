@@ -7,6 +7,7 @@ import { Button } from "../components/primitives";
 import { BindingFailureNotice } from "../components/data-state";
 import { registerTourShortcuts } from "../runtime/shortcuts";
 import { getAnchorElement, subscribeAnchor } from "./anchor-registry";
+import { nearestScrollable, revealIn } from "./scroll-nearest";
 
 export type TourBlockData = Extract<Block, { type: "tour" }>;
 export type TourCloseResult = "completed" | "skipped";
@@ -76,7 +77,17 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
     }
     if (outside && lastScrollTarget.current !== target) {
       lastScrollTarget.current = target;
-      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      if (target instanceof HTMLElement) {
+        for (const horizontal of [false, true]) {
+          let parent = target.parentElement;
+          while (parent) {
+            const scroller = nearestScrollable(parent, horizontal);
+            if (!scroller) break;
+            revealIn(target, scroller, horizontal);
+            parent = scroller.parentElement;
+          }
+        }
+      }
       targetRect = target.getBoundingClientRect();
     } else if (!outside) {
       lastScrollTarget.current = null;
@@ -91,9 +102,15 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
     const rawTop = side === "below"
       ? targetRect.bottom - overlayRect.top + gap
       : targetRect.top - overlayRect.top - gap - cardRect.height;
+    const frame = host.parentElement?.getBoundingClientRect() ?? host.getBoundingClientRect();
+    const fit = (value: number, overlaySize: number, cardSize: number, start: number, end: number) => {
+      const lower = Math.max(0, start);
+      const upper = Math.min(overlaySize - cardSize, end - cardSize);
+      return lower <= upper ? Math.max(lower, Math.min(value, upper)) : Math.max(start, Math.min(value, end - cardSize));
+    };
     const next: TourPlacement = {
-      left: Math.max(0, Math.min(targetRect.left - overlayRect.left, overlayElement.clientWidth - cardRect.width)),
-      top: Math.max(0, Math.min(rawTop, overlayElement.clientHeight - cardRect.height)),
+      left: fit(targetRect.left - overlayRect.left, overlayElement.clientWidth, cardRect.width, frame.left - overlayRect.left, frame.right - overlayRect.left),
+      top: fit(rawTop, overlayElement.clientHeight, cardRect.height, frame.top - overlayRect.top, frame.bottom - overlayRect.top),
       targetLeft: targetRect.left - overlayRect.left,
       targetTop: targetRect.top - overlayRect.top,
       targetWidth: targetRect.width,

@@ -34,6 +34,13 @@ impl Host for DevHost {
         env::var_os("KALEIDOSCOPE_DEV_PICK").map(PathBuf::from)
     }
 
+    fn pick_files(&self, _: &[kaleidoscope_contract::data::FileAccept], multiple: bool) -> Option<Vec<PathBuf>> {
+        let raw = env::var("KALEIDOSCOPE_DEV_PICK_FILES").ok()?;
+        let mut paths: Vec<PathBuf> = serde_json::from_str(&raw).ok()?;
+        if !multiple { paths.truncate(1); }
+        if paths.is_empty() { None } else { Some(paths) }
+    }
+
     fn pick_save_file(&self, _: &str, _: &str) -> Option<PathBuf> {
         env::var_os("KALEIDOSCOPE_DEV_PICK_SAVE_FILE").map(PathBuf::from)
     }
@@ -71,6 +78,15 @@ impl Host for DevHost {
 #[cfg(test)]
 mod host_tests {
     use super::{DevHost, Host};
+
+    #[test]
+    fn devbridge_picks_the_configured_files() {
+        std::env::set_var("KALEIDOSCOPE_DEV_PICK_FILES", r#"["/tmp/sample-a.txt","/tmp/sample-b.txt"]"#);
+        let paths = DevHost.pick_files(&[], true).unwrap();
+        assert_eq!(paths, ["/tmp/sample-a.txt", "/tmp/sample-b.txt"].map(std::path::PathBuf::from));
+        assert_eq!(DevHost.pick_files(&[], false).unwrap().len(), 1);
+        std::env::remove_var("KALEIDOSCOPE_DEV_PICK_FILES");
+    }
 
     #[test]
     fn devbridge_does_not_open_oauth_urls() {

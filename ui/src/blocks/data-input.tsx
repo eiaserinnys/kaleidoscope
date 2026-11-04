@@ -21,6 +21,7 @@ import { PreviewContext } from "./preview-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const uninitializedFocus = Symbol("uninitialized focus");
+const fieldPosition = (position: "inline" | "top" | "hidden" | undefined) => position && position !== "inline" ? ` is-label-${position}` : "";
 const identityJson = <T extends JsonValue>(value: T): JsonValue => value;
 function bindingText(value: ReturnType<typeof useBinding>): string {
   return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
@@ -126,7 +127,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     else if (block.on_submit) event.preventDefault();
     if (block.on_submit) void data.act(`${pointer}/on_submit`, toEventValue(draft));
   };
-  const props = { className: "ks-text-input", placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: draft,
+  const props = { className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: draft,
     onFocus: () => { setFocused(true); holding.current = true; }, onBlur: () => {
       setFocused(false);
       if ((block.commit ?? "debounce") !== "submit") commit(draft);
@@ -153,7 +154,7 @@ export function InputBlock({ block, pointer }: Props<"input">) {
     />}
     {block.kind === "search" && draft ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" onClick={() => { markChanged(""); sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
-  return hasLabel ? <><label className="ks-field ks-input-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{input}</label><BindingFailureNotice value={label} /></> : input;
+  return hasLabel ? <><label className={`ks-field ks-input-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}{input}</label><BindingFailureNotice value={label} /></> : input;
 }
 
 function decimalDigits(digits: number): number { return Math.max(0, Math.min(20, Math.trunc(digits))); }
@@ -244,13 +245,13 @@ function SliderControl({ block, pointer, current }: {
   const hasLabel = block.label != null;
   const labelText = hasLabel ? bindingText(label) : "";
   const { draft, change, finish, holding } = useLocalDraft(current, pointer);
-  return <><label className="ks-field ks-slider-field">
-    {hasLabel ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
+  return <><label className={`ks-field ks-slider-field${fieldPosition(block.label_position)}${block.show_value === false ? " is-value-hidden" : ""}`}>
+    {hasLabel && block.label_position !== "hidden" ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
     <input type="range" className="ks-slider" aria-label={labelText || bindingName(block.value, "슬라이더")} min={block.min} max={block.max} step={block.step ?? 1} value={draft}
       onPointerDown={() => { holding.current = true; }} onPointerUp={() => finish()} onPointerCancel={() => finish()} onBlur={() => finish()}
       onKeyDown={() => { holding.current = true; }} onKeyUp={() => finish()}
       onChange={(event) => { const next = Number(event.currentTarget.value); change(next); if (event.nativeEvent.type === "change") finish(); }} />
-    <span className="ks-slider-value" data-ks-share-skip="">{draft}</span>
+    {block.show_value !== false ? <span className="ks-slider-value" data-ks-share-skip="">{draft}</span> : null}
   </label><BindingFailureNotice value={label} /></>;
 }
 
@@ -264,8 +265,8 @@ export function ColorBlock({ block, pointer }: Props<"color">) {
   const current = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : "#000000";
   const unavailable = disabled.status !== "ready" || Boolean(disabled.value);
   const { draft: color, change, finish, holding } = useLocalDraft(current, pointer);
-  return <><label className={`ks-field ks-color-field${unavailable ? " is-disabled" : ""}`}>
-    {hasLabel ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
+  return <><label className={`ks-field ks-color-field${fieldPosition(block.label_position)}${unavailable ? " is-disabled" : ""}`}>
+    {hasLabel && block.label_position !== "hidden" ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}
     <span className="ks-color-control"><input className="ks-color-input" type="color" aria-label={labelText || bindingName(block.value, "색상")} value={color} disabled={unavailable}
       onPointerDown={() => { holding.current = true; }} onPointerUp={() => finish()} onPointerCancel={() => finish()} onBlur={() => finish()} onKeyDown={() => { holding.current = true; }} onKeyUp={() => finish()}
       onChange={(event) => { change(event.currentTarget.value.toLowerCase()); if (event.nativeEvent.type === "change") finish(); }} /><span className="ks-color-code" data-ks-share-skip="">{color}</span></span>
@@ -291,7 +292,7 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
   });
   const props = { value: value.status === "ready" ? value.value : null, placeholder: placeholderText, segmented: block.style === "segmented", label: labelText, disabled: disabled.status !== "ready" || Boolean(disabled.value), onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
   const select = hasGroups ? <Select {...props} groups={groups} /> : <Select {...props} items={entries.filter(validOption)} />;
-  return hasLabel ? <><label className="ks-field ks-select-field"><span className="ks-field-label" data-ks-share-skip="">{labelText}</span>{select}</label><BindingFailureNotice value={label} /></> : select;
+  return hasLabel ? <><label className={`ks-field ks-select-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}{select}</label><BindingFailureNotice value={label} /></> : select;
 }
 
 export function ToggleBlock({ block, pointer }: Props<"toggle">) {

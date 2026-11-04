@@ -260,7 +260,7 @@ max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: 
 /**
  * (19판) 참이면 표준 로딩 표현을 보인다.
  */
-loading?: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
+loading?: Binding, aspect_ratio?: Binding, fit?: CanvasFit, description?: Binding, on_pointer?: Actions, } | { "type": "timeline", viewport?: Binding, on_viewport?: Actions, controls?: boolean, duration: Binding, position: Binding, tracks: Binding, markers?: Binding, ticks?: Binding, selection?: Binding, snap?: Binding, read_only?: boolean, on_seek?: Actions, on_select?: Actions, on_edit?: Actions, } | { "type": "sandbox", asset?: string, file?: FileRef, document?: DocumentRef, value?: Binding, title?: string, height?: number, state_keys?: Array<string>, storage_entries?: Array<string>, } | { "type": "slider", value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, show_value?: boolean, min: number, max: number, step?: number, } | { "type": "color", value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, disabled?: Binding, } | { "type": "split", direction: SplitDirection, 
 /**
  * 자식마다의 상대 크기. 없으면 똑같이 나눈다.
  */
@@ -342,7 +342,7 @@ copy?: boolean,
 /**
  * (블록 세트 10판) 대댓글과 긴 항목의 접기·펴기를 켠다.
  */
-collapsible?: boolean, selected?: StateRef, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, style?: SelectStyle, placeholder?: Binding, 
+collapsible?: boolean, selected?: StateRef, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "text", on_click?: Actions, on_double_click?: Actions, value: Binding, format?: DisplayTextFormat, style?: TextStyle, } | { "type": "input", min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, label_position?: LabelPosition, style?: SelectStyle, placeholder?: Binding, 
 /**
  * (18판) 참이면 이 고르기를 사용할 수 없다.
  */
@@ -822,6 +822,11 @@ export type ItemRef = { item: string, };
 export type JsonValueType = "object" | "array" | "string" | "number" | "integer" | "boolean" | "null";
 
 export type KeypadButton = { key: string, label: string, sublabel?: string, icon?: string, variant?: ButtonVariant, span?: number, disabled?: boolean, shortcut?: string, };
+
+/**
+ * 컨트롤의 이름표 위치. 생략하면 인라인이다.
+ */
+export type LabelPosition = "inline" | "top" | "hidden";
 
 export type LifecyclePhase = "ready" | "change" | "closing";
 

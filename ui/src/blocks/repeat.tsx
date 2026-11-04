@@ -8,6 +8,7 @@ import { shareStructure } from "../core/shell-store";
 import { renderBlock } from "../render/render-block";
 import type { BlockContext } from "./block-context";
 import { asArray, DEFAULT_VIRTUAL_ROW_ESTIMATE, isObject, useVirtualRows } from "./data-view-common";
+import { nearestScrollable, revealIn } from "./scroll-nearest";
 
 type Repeat = Extract<Block, { type: "repeat" }>;
 type Entry = { item: JsonValue; key: string | number; index: { current: number } };
@@ -125,9 +126,16 @@ function RepeatReady({ block, context, pointer, entries, parent, follow }: {
   const followIndex = entries.findIndex((entry) => entry.key === follow);
   useEffect(() => {
     if (followIndex < 0 || Date.now() < pauseUntil.current) return;
+    const root = scroll.current;
+    if (!root) return;
+    const scroller = nearestScrollable(root, horizontal);
+    if (!scroller) return;
     if (block.virtual) virtual.scrollToIndex(Math.floor(followIndex / rowSize), { align: "auto" });
-    else (scroll.current?.querySelector(":scope > .ks-repeat-content")?.children[followIndex] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [followIndex, follow, block.virtual, rowSize, virtual, resume]);
+    else {
+      const row = root.querySelector(":scope > .ks-repeat-content")?.children[followIndex] as HTMLElement | undefined;
+      if (row) revealIn(row, scroller, horizontal);
+    }
+  }, [followIndex, follow, block.virtual, rowSize, virtual, resume, horizontal]);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const pause = () => {
     const ms = block.follow_pause_ms ?? 2500;

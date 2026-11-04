@@ -160,12 +160,12 @@ it("새 viewport 기능을 쓰는 6분 시간축은 겹침 완화 눈금을 쓴�
 
 it("트랙이 늦게 도착하거나 다시 로딩돼도 실제 눈금을 측정하고 간격이 바뀔 때만 다시 그린다", () => {
   let width = 220;
-  const observers: { callback: ResizeObserverCallback; target: Element | null }[] = [];
+  const observers: { callback: ResizeObserverCallback; targets: Set<Element> }[] = [];
   class TestResizeObserver {
-    record: { callback: ResizeObserverCallback; target: Element | null };
-    constructor(callback: ResizeObserverCallback) { this.record = { callback, target: null }; observers.push(this.record); }
-    observe(target: Element) { this.record.target = target; }
-    disconnect() { this.record.target = null; }
+    record: { callback: ResizeObserverCallback; targets: Set<Element> };
+    constructor(callback: ResizeObserverCallback) { this.record = { callback, targets: new Set() }; observers.push(this.record); }
+    observe(target: Element) { this.record.targets.add(target); }
+    disconnect() { this.record.targets.clear(); }
   }
   vi.stubGlobal("ResizeObserver", TestResizeObserver);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
@@ -180,7 +180,7 @@ it("트랙이 늦게 도착하거나 다시 로딩돼도 실제 눈금을 측정
   const labels = () => Array.from(view.container.querySelectorAll(".ks-timeline-ruler > span"), (element) => element.textContent);
   const resize = (nextWidth: number) => {
     width = nextWidth;
-    const observer = observers.find((entry) => entry.target === view.container.querySelector(".ks-timeline-scroll"));
+    const observer = observers.find((entry) => entry.targets.has(view.container.querySelector(".ks-timeline-scroll")!));
     expect(observer).toBeDefined();
     act(() => observer!.callback([], {} as ResizeObserver));
   };
@@ -197,7 +197,7 @@ it("트랙이 늦게 도착하거나 다시 로딩돼도 실제 눈금을 측정
   const previousScroller = view.container.querySelector(".ks-timeline-scroll");
   runtime.loadingTracks = true;
   view.rerender(timeline());
-  expect(observers.some((observer) => observer.target === previousScroller)).toBe(false);
+  expect(observers.some((observer) => previousScroller && observer.targets.has(previousScroller))).toBe(false);
   width = 220;
   runtime.loadingTracks = false;
   view.rerender(timeline());

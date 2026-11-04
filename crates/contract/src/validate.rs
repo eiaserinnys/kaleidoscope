@@ -56,6 +56,8 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
         || value
             .pointer("/settings/ui")
             .is_some_and(uses_block_set_20_fields);
+    let uses_block_set_21 = value.get("ui").is_some_and(uses_block_set_21_fields)
+        || value.pointer("/settings/ui").is_some_and(uses_block_set_21_fields);
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
 
@@ -123,6 +125,9 @@ fn parse_definition(definition_json: &str, cached: bool) -> Result<AppDefinition
     }
     if uses_new_block_set_20_fields && definition.requires.blocks < 20 {
         details.push("repeat.grid.item_width와 item_menu는 블록 세트 20판이라 requires.blocks가 20 이상이어야 합니다".into());
+    }
+    if uses_block_set_21 && definition.requires.blocks < 21 {
+        details.push("input, select, slider, color의 label_position과 slider.show_value는 블록 세트 21판이 필요합니다".into());
     }
     if uses_device_storage_scope {
         validate_module_version(
@@ -391,6 +396,19 @@ fn uses_block_set_20_fields(value: &Value) -> bool {
                 || object.values().any(uses_block_set_20_fields)
         }
         Value::Array(values) => values.iter().any(uses_block_set_20_fields),
+        _ => false,
+    }
+}
+
+fn uses_block_set_21_fields(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            (matches!(object.get("type").and_then(Value::as_str), Some("input" | "select" | "slider" | "color"))
+                && object.contains_key("label_position"))
+                || (object.get("type").and_then(Value::as_str) == Some("slider") && object.contains_key("show_value"))
+                || object.values().any(uses_block_set_21_fields)
+        }
+        Value::Array(values) => values.iter().any(uses_block_set_21_fields),
         _ => false,
     }
 }

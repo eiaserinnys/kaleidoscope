@@ -1,0 +1,21 @@
+{
+  "id": "field-layout-sample",
+  "name": "견본 설정",
+  "requires": { "blocks": 21, "modules": {} },
+  "permissions": [],
+  "state": { "title": "봄", "choice": "낮", "options": ["낮", "밤"], "level": 40, "color": "#596ac4" },
+  "ui": {
+    "type": "tabs",
+    "tabs": [{
+      "label": "설정",
+      "child": {
+        "type": "stack", "direction": "column", "gap": "medium", "children": [
+          { "type": "input", "label": "이름", "label_position": "top", "value": { "state": "title" }, "on_change": { "set_state": "title" } },
+          { "type": "select", "label": "시간", "label_position": "top", "value": { "state": "choice" }, "options": { "state": "options" }, "on_change": { "set_state": "choice" } },
+          { "type": "slider", "label": "밝기", "label_position": "hidden", "show_value": false, "value": { "state": "level" }, "min": 0, "max": 100, "on_change": { "set_state": "level" } },
+          { "type": "color", "label": "색", "label_position": "top", "value": { "state": "color" }, "on_change": { "set_state": "color" } }
+        ]
+      }
+    }]
+  }
+}

@@ -15,6 +15,7 @@ import {
 import "@kaleidoscope/ui/styles.css";
 import "./harness.css";
 import galleryJson from "../../examples/block-gallery.json";
+import fieldLayoutJson from "../../examples/field-layout.json";
 import sampleOne from "./assets/landscape.png";
 import sampleTwo from "./assets/shapes.png";
 import sampleTone from "./assets/tone.wav";
@@ -34,6 +35,7 @@ import { exposeDocsHarness, galleryForDocs } from "./docs-media-test";
 import { makeLongConversation } from "./chat-long-history";
 import { blockSet18Fixtures } from "../e2e/fixtures/blocks-18";
 import { previewGridFixtures } from "../e2e/fixtures/preview-grid";
+import { shellDefectFixtures } from "../e2e/fixtures/shell-defects";
 
 const mdEditor = mdEditorJson as AppDefinition;
 installShellDragGuard();
@@ -79,7 +81,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, shellSelectionApp];
+const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},

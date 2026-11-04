@@ -1244,6 +1244,25 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("숨긴 이름표 슬라이더의 값 변화는 다른 창과 형제를 다시 그리지 않는다", async () => {
+    const app: AppDefinition = {
+      id: "field-isolation", name: "입력 격리", requires: { blocks: 21, modules: {} }, permissions: [],
+      state: { value: 20, other: "고정" },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "slider", label: "밝기", label_position: "hidden", show_value: false, value: { state: "value" }, on_change: { set_state: "value" }, min: 0, max: 100 },
+        { type: "text", value: { state: "other" } },
+      ] },
+    };
+    const { store } = await setup([app], { value: 20, other: "고정" });
+    await waitFor(() => expect(screen.getAllByRole("slider", { name: "밝기" })).toHaveLength(2));
+    calls.length = 0;
+    await setState(store, "window-a", "value", 45);
+    await settleRenders();
+    expect(countFor("window-b")).toBe(0);
+    expect(countFor("window-a", "/ui/children/1")).toBe(0);
+    store.dispose();
+  });
+
   it("timeline 확대 단추는 코어를 부르지 않고 형제 블록을 다시 그리지 않는다", async () => {
     const timeline = {
       type: "timeline" as const, duration: 100, position: 0, tracks: [],
