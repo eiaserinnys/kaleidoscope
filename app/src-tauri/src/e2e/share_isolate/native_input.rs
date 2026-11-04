@@ -56,7 +56,7 @@ pub(crate) fn drag(
     Ok(())
 }
 
-pub(super) fn click(x: i32, y: i32) -> Result<(), String> {
+pub(crate) fn click(x: i32, y: i32) -> Result<(), String> {
     unsafe {
         SetCursorPos(x, y).map_err(|error| error.to_string())?;
         let click = [
