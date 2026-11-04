@@ -73,3 +73,31 @@ test("좌표와 편집기, 허용 차단, 프레임 응답 완료를 실제 Chro
   await page.evaluate(()=>(window as any).controlHarness.clearConsent());
   await page.screenshot({path:"test-results/window-control-surfaces.png"});
 });
+
+test("실제 격리 프레임에서 좌표 클릭과 더블클릭이 동작한다", async ({ page }) => {
+  await page.goto("/window-control.html?frames");
+  const sandbox = page.frameLocator('iframe[title="실제 샌드박스"]');
+  await expect(sandbox.locator("#counter")).toHaveText("횟수 0");
+  const point = async (selector: string, gesture: "click" | "double_click") => {
+    const frame = page.locator("[data-window-id] iframe");
+    const child = page.frameLocator("[data-window-id] iframe").locator(selector);
+    const box = await child.boundingBox(), root = await page.locator('[data-window-id="sandbox-frame"], [data-window-id="html-frame"]').boundingBox();
+    if (!box || !root) throw new Error("프레임 대상의 좌표가 없습니다");
+    await expect(frame).toBeVisible();
+    return page.evaluate(({ x, y, gesture }) => (window as any).controlHarness.framePoint(x, y, gesture), { x: box.x + box.width / 2 - root.x, y: box.y + box.height / 2 - root.y, gesture });
+  };
+  let result = await point("#counter", "click");
+  expect(result.applied).toBe(true); expect(result.after.settled).toBe(true); expect(result.after.text).toContain("횟수 1");
+  result = await point("#counter", "double_click");
+  expect(result.after.settled).toBe(true); expect(result.after.text).toContain("횟수 3");
+  result = await point("#label", "click");
+  await expect(sandbox.locator("#check")).toBeChecked(); expect(result.after.text).toContain("켜짐");
+  await point("summary", "click"); await expect(sandbox.locator("details")).toHaveAttribute("open", "");
+  await page.evaluate(() => (window as any).controlHarness.chooseFrame("html"));
+  const html = page.frameLocator('iframe[title="실제 HTML"]');
+  await expect(html.locator("#target")).toHaveText("편집할 글");
+  await page.locator('iframe[title="실제 HTML"]').evaluate((frame: HTMLIFrameElement) => frame.contentWindow!.postMessage({ type: "ks-html-mode", mode: "select" }, "*"));
+  result = await point("#target", "double_click");
+  expect(result.applied).toBe(true); expect(result.after.settled).toBe(true);
+  await expect(html.locator("#target")).toHaveAttribute("contenteditable", "plaintext-only");
+});

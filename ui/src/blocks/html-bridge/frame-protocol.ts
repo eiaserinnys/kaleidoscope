@@ -22,6 +22,7 @@ export interface FrameSelection {
 }
 export interface FrameComment { id: string; anchor: HtmlAnchor; number: number; sameRevision: boolean; resolved: boolean; active: boolean }
 export type FrameToParent =
+  | { type: "ks-html-point-done"; requestId: string }
   | { type: "ks-html-ready" }
   | { type: "ks-html-visible-text"; text: string }
   | { type: "ks-html-context-menu"; requestId: number; x: number; y: number; text: string; editable: boolean; readOnly: boolean; password: boolean }
@@ -31,6 +32,7 @@ export type FrameToParent =
   | { type: "ks-html-key"; key: string; shift: boolean; alt: boolean; ctrl: boolean }
   | { type: "ks-html-text-edit"; n: number; before: string; after: string };
 export type ParentToFrame =
+  | { type: "ks-html-point"; requestId: string; x: number; y: number; gesture: "click" | "double_click" }
   | { type: "ks-html-context-command"; requestId: number; action: "delete" | "insertText" | "selectAll"; text?: string }
   | { type: "ks-html-mode"; mode: "select" | "view" }
   | { type: "ks-html-lock"; locked: boolean }

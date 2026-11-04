@@ -6,7 +6,7 @@ import { openFrameContextMenu } from "../../components/context-menu";
 import { toCoreError } from "../../core/core-transport";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../../data/window-state";
 import type { BlockContext } from "../block-context";
-import { htmlViewSource, htmlViewTokens, sanitizeFragment } from "../html-view-frame";
+import { htmlViewSource, htmlViewTokens, sanitizeFragment, useHtmlFramePoint } from "../html-view-frame";
 import { applyEdit, findNumber, invertEdit, numberElements, serializeOriginal, type HtmlEdit } from "../html-bridge/edit";
 import type { AnchorStatus, FrameSelection, FrameToParent, ParentToFrame } from "../html-bridge/frame-protocol";
 import { emptyThread, readThread, writeThreadChange } from "./storage";
@@ -48,6 +48,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const [undo, setUndo] = useState<HtmlEdit[][]>([]); const [redo, setRedo] = useState<HtmlEdit[][]>([]);
   const [pendingChange, setPendingChange] = useState<{ name: string; rev: number } | null>(null);
   const frame = useRef<HTMLIFrameElement>(null); const root = useRef<HTMLElement>(null);
+  useHtmlFramePoint(frame, source || null);
   const work = useRef<Document | null>(null); const cache = useRef(new Map<string, string>());
   const readSequence = useRef(0); const latestRef = useRef<{ name: string; rev: number } | null>(null);
   const selectors = useRef(new Map<number, string>()); const undoRef = useRef(undo); undoRef.current = undo;

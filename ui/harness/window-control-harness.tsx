@@ -80,4 +80,31 @@ function Harness() {
     </div>
   </div>;
 }
-createRoot(document.getElementById("root")!).render(<Harness />);
+
+const sandboxFixture: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 11, modules: {} }, permissions: [], ui: { type: "sandbox", title: "실제 샌드박스", value: `<button id="counter">횟수 0</button><input id="check" type="checkbox"><label for="check" id="label">체크</label><details><summary>펼치기</summary>내용</details><script>let n=0;document.querySelector('#counter').addEventListener('click',()=>{document.querySelector('#counter').textContent='횟수 '+(++n)});document.querySelector('#check').addEventListener('change',()=>{document.querySelector('#label').textContent=document.querySelector('#check').checked?'켜짐':'꺼짐'})</script>` } };
+const htmlFixture: AppDefinition = { ...mdViewerDefinition, name: "실제 HTML", requires: { blocks: 11, modules: {} }, permissions: [], ui: { type: "html_view", value: '<p data-ks-n="1" id="target">편집할 글</p>' } };
+const sandboxStore = createShellStore(createFakeTransport(makeTestSeed({ definitions: [sandboxFixture] })));
+const htmlStore = createShellStore(createFakeTransport(makeTestSeed({ definitions: [htmlFixture] })));
+
+function FrameFixture({ id, fixtureStore }: { id: string; fixtureStore: typeof store }) {
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = root.current!;
+    const unregister = registerControlWindow(id, element, fixtureStore);
+    const api = (window as any).controlHarness;
+    api.framePoint = async (x: number, y: number, gesture: "click" | "double_click") => {
+      const view = readWindowView(id), rect = element.getBoundingClientRect();
+      setWindowViewGeometry(id, view.view_id, { css_width: rect.width, css_height: rect.height, pixel_width: rect.width, pixel_height: rect.height });
+      return executeWindowAction(id, view.view_id, { kind: "point", x, y, gesture }, `${id}-point`);
+    };
+    return unregister;
+  }, [id, fixtureStore]);
+  return <div ref={root} data-window-id={id} style={{ width: 500, height: 300 }}><AppWindowContent store={fixtureStore} windowId="viewer-window" /></div>;
+}
+
+function FramesHarness() {
+  const [kind, setKind] = useState<"sandbox" | "html">("sandbox");
+  (window as any).controlHarness.chooseFrame = setKind;
+  return kind === "sandbox" ? <FrameFixture key={kind} id="sandbox-frame" fixtureStore={sandboxStore} /> : <FrameFixture key={kind} id="html-frame" fixtureStore={htmlStore} />;
+}
+createRoot(document.getElementById("root")!).render(location.search === "?frames" ? <FramesHarness /> : <Harness />);
