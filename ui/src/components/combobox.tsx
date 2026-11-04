@@ -46,7 +46,8 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   const position = useAnchoredOverlay(popupVisible ? anchor : null, surface, { offsetToken: "--ks-space-2", alignEndOnOverflow: true });
   const layout = useComboboxLayout(open ? anchor : null, options, loading);
   const optionKey = useCallback((index: number) => filtered[index].index, [filtered]);
-  const { scroll, virtual } = useVirtualRows(filtered.length, DEFAULT_VIRTUAL_ROW_ESTIMATE, undefined, false, optionKey);
+  const [listInset] = useState(() => typeof document === "undefined" ? 0 : Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-space-1")) || 0);
+  const { scroll, virtual } = useVirtualRows(filtered.length, DEFAULT_VIRTUAL_ROW_ESTIMATE, undefined, false, optionKey, undefined, undefined, { start: 0, end: listInset * 2 });
   const index = active === null ? -1 : filtered.findIndex((option) => option.index === active);
   keepRovingRow(virtual, index);
   const rows = virtual.getVirtualItems();

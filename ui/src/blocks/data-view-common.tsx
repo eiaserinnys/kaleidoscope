@@ -28,7 +28,7 @@ export function dateText(value: unknown) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
 }
 type RowKeys = readonly (readonly (string | number)[])[];
-export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false, getItemKey?: (index: number) => string | number, viewport?: { element: HTMLDivElement; margin: number } | null, rowKeys?: RowKeys) {
+export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false, getItemKey?: (index: number) => string | number, viewport?: { element: HTMLDivElement; margin: number } | null, rowKeys?: RowKeys, scrollPadding?: { start: number; end: number }) {
   const local = useRef<HTMLDivElement>(null);
   const scroll = supplied ?? local;
   const position = useRef(0);
@@ -51,6 +51,8 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
   const virtual = useVirtualizer({
     count, getScrollElement: () => viewport?.element ?? scroll.current, estimateSize: () => estimate, overscan: 4, horizontal, getItemKey,
     scrollMargin: viewport?.margin ?? 0,
+    scrollPaddingStart: scrollPadding?.start ?? 0,
+    scrollPaddingEnd: scrollPadding?.end ?? 0,
     initialRect: { width: 800, height: 480 },
     // display:none은 행의 실제 크기가 아니다. 숨김 중의 0을 캐시하면
     // 다시 그리지 않은 앞쪽 행들이 계속 높이 0으로 남는다.
