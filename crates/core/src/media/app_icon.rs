@@ -22,4 +22,3 @@ pub(crate) fn get(inner: &Arc<Inner>, app_id: &str, app_version: u32) -> Result<
     };
     get_asset(inner, &icon.asset, icon.version, None).map(Some)
 }
-
