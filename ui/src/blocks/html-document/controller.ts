@@ -10,6 +10,7 @@ import { htmlViewSource, htmlViewTokens, sanitizeFragment, useHtmlFramePoint } f
 import { applyEdit, findNumber, invertEdit, numberElements, serializeOriginal, type HtmlEdit } from "../html-bridge/edit";
 import type { AnchorStatus, FrameSelection, FrameToParent, ParentToFrame } from "../html-bridge/frame-protocol";
 import { emptyThread, readThread, writeThreadChange } from "./storage";
+import { THREE_COLUMN_MIN } from "./metrics";
 import * as shellErrors from "../../contract/shell-errors";
 import { anchorRevision, anchorRevisionFor, listRevisions, type Comment, type Thread, type ThreadChange } from "./thread";
 
@@ -39,8 +40,9 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   const [pendingRevision, setPendingRevision] = useState<PendingRevision | null>(null);
   const [sending, setSending] = useState(false);
   const [sentReviews, setSentReviews] = useState<Record<string, Record<string, string>>>({});
-  const [mode, setMode] = useState<"select" | "view">("select");
+  const [mode, setMode] = useState<"select" | "view">("view");
   const [narrow, setNarrow] = useState(false);
+  const [compact, setCompact] = useState(false);
   const [wideFace, setWideFace] = useState<HtmlFace>("comments");
   const [narrowFace, setNarrowFace] = useState<HtmlFace>(null);
   const [activeComment, setActiveComment] = useState<string | null>(null);
@@ -66,7 +68,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
   useEffect(() => {
     const element = root.current;
     if (!element || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([item]) => { if (item.contentRect.width > 0) setNarrow(item.contentRect.width <= 560); });
+    const observer = new ResizeObserver(([item]) => { if (item.contentRect.width > 0) { setNarrow(item.contentRect.width <= 560); setCompact(item.contentRect.width < THREE_COLUMN_MIN); } });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
@@ -104,6 +106,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     } catch (reason) { setFailure({ value: toCoreError(reason), source: "list" }); }
     finally { setLoaded(true); }
   }, [entry, store, windowId]);
+  const retryList = useCallback(() => { setFailure(null); setLoaded(false); void refreshList(); }, [refreshList]);
   const refreshThread = useCallback(async (name: string) => {
     try {
       const result = await readThread(store, windowId, entry, name);
@@ -307,7 +310,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     }
   }, [record, redoEdit, selection, send, undoEdit]);
   const openComment = useCallback((id: string) => {
-    setActiveComment(id); setFace("comments");
+    setMode("select"); setActiveComment(id); setFace("comments");
     send({ type: "ks-html-focus-comment", id });
     requestAnimationFrame(() => {
       const card = [...(root.current?.querySelectorAll<HTMLElement>(".ks-html-comment") ?? [])].find((item) => item.id === `ks-html-comment-${id}`);
@@ -427,5 +430,5 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     catch (reason) { setFailure({ value: toCoreError(reason), source: "send" }); }
     finally { setSending(false); }
   }, [active, agentWindow, hasUnsentReview, reviewComments, sending, share, store]);
-  return { active, docs, latest, thread, comments, selection, results, source, error: failure?.value ?? null, saveFailed: failure?.source === "save", loaded, saving: saving || savingRevision, locked, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
+  return { active, docs, latest, thread, comments, selection, results, source, error: failure?.value ?? null, errorSource: failure?.source, retryList, retryLoad: () => setStorageReadRetry((value) => value + 1), saveFailed: failure?.source === "save", loaded, saving: saving || savingRevision, locked, sending, sentReview, hasUnsentReview, reviewComments, mode, setMode, face, setFace, narrow, compact, activeComment, setActiveComment, openComment, propertyGroups, setPropertyGroups, frame, root, dirty, undo, redo, edits, pendingChange, setPendingChange, choose, confirmChange, keyAction, record, previewStyle, editStyle, editText, undoEdit, redoEdit, addComment, writeChange, saveRevision, send, share, sendAgent, agentWindow };
 }

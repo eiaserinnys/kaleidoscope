@@ -80,8 +80,16 @@ it("문서 머리 줄에서 고르기와 레일 면을 아이콘으로 바꾼다
     return base.call(request as never);
   };
   render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
-  expect((await screen.findByRole("button", { name: "고르기" })).getAttribute("aria-pressed")).toBe("true");
-  expect(screen.getByRole("button", { name: "속성" })).toBeTruthy();
+  expect((await screen.findByRole("button", { name: "보기" })).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.queryByRole("button", { name: "속성" })).toBeNull();
+  const frame = await screen.findByTitle("HTML 보기");
+  await userEvent.click(screen.getByRole("button", { name: "고르기" }));
+  expect(screen.queryByText("요소를 고르세요")).toBeNull();
+  expect(screen.getByText("요소나 글을 고르세요")).toBeTruthy();
+  expect(screen.getAllByRole("separator")).toHaveLength(2);
+  await userEvent.click(screen.getByRole("button", { name: "보기" }));
+  await userEvent.click(screen.getByRole("button", { name: "고르기" }));
+  expect(screen.getByTitle("HTML 보기")).toBe(frame);
   expect(screen.queryByRole("button", { name: "요소 다듬기" })).toBeNull();
   expect(screen.queryByRole("button", { name: /에이전트에게 보내기/ })).toBeNull();
 });
@@ -167,7 +175,7 @@ it("최신 리비전을 따라간 창은 다시 열 때도 최신을 본다", as
   };
   const store = createShellStore({ ...base, call: call as CoreTransport["call"] });
   render(<AppWindowContent store={store} windowId="viewer-window" />);
-  expect((await screen.findByRole("button", { name: "리비전" })).textContent).toContain("v1");
+  await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1"));
   await act(async () => {
     files.set("시안/r2.html", "<h1>둘째 판</h1>");
     base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/r2.html", kind: "md", revision: "r2", exists: true } } } });
@@ -177,6 +185,7 @@ it("최신 리비전을 따라간 창은 다시 열 때도 최신을 본다", as
 });
 
 it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보낸다", async () => {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, right: 300, bottom: 200, x: 0, y: 0, width: 300, height: 200, toJSON() {} });
   const agent = { id: "agent", name: "채팅", requires: { blocks: 1, modules: {} }, permissions: [], state: {}, agent: {}, ui: { type: "text", text: "" } } as unknown as AppDefinition;
   const seed = makeTestSeed({ definitions: [definition as AppDefinition, agent] });
@@ -204,10 +213,16 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   const iframe = await screen.findByTitle("HTML 보기") as HTMLIFrameElement;
   const post = vi.spyOn(iframe.contentWindow!, "postMessage");
   const anchor = testAnchor;
+  await userEvent.click(screen.getByRole("button", { name: "고르기" }));
   act(() => window.dispatchEvent(new MessageEvent("message", { source: iframe.contentWindow, data: { type: "ks-html-select", selection: { n: 4, anchor, styles: {} } } })));
   const user = userEvent.setup();
   await user.type(await screen.findByRole("textbox", { name: "커멘트" }), "색을 바꿔 주세요{Enter}");
   expect(await screen.findByText("색을 바꿔 주세요")).toBeTruthy();
+  const commentId = JSON.parse(files.get("시안/thread.json")!.content).comments[0].id;
+  await user.click(screen.getByRole("button", { name: "보기" }));
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: iframe.contentWindow, data: { type: "ks-html-select-comment", id: commentId } })));
+  expect(screen.getByRole("button", { name: "고르기" }).getAttribute("aria-pressed")).toBe("true");
+  expect(container.querySelector(".ks-html-comment.is-active")).toBeTruthy();
   const validThread = files.get("시안/thread.json")!;
   await act(async () => {
     files.set("시안/thread.json", { ...validThread, content: '{"comments":"잘못된 구조"}' });
@@ -220,7 +235,6 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
     base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/thread.json", kind: "md", revision: validThread.revision, exists: true } } } });
   });
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-  await user.click(screen.getByRole("button", { name: "속성" }));
   await user.clear(screen.getByRole("textbox", { name: "배경" }));
   await user.type(screen.getByRole("textbox", { name: "배경" }), "red{Enter}");
   const root = container.querySelector<HTMLElement>(".ks-html-view")!;
@@ -251,7 +265,6 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   const dialog = await screen.findByRole("dialog");
   await user.click(within(dialog).getByRole("button", { name: "취소" }));
   expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1");
-  await user.click(screen.getByRole("button", { name: "커멘트 1건" }));
   await user.click(screen.getByRole("button", { name: "에이전트에게 보내기 1" }));
   await waitFor(() => expect(sent).toHaveLength(1));
   const request = sent[0]; if (request.op !== "conversation.send") throw new Error("전송 명령 누락");
@@ -279,4 +292,126 @@ it("문서 커멘트를 저장하고 같은 작업의 에이전트 창으로 보
   expect(savedThread.revisions["3"].edits).toHaveLength(1);
   expect(savedThread.comments.find((item: { comment: string }) => item.comment === "글자를 키워 주세요").anchor_rev).toBe(0);
   expect(htmlWrites).toBe(1);
+});
+
+it("문서 목록과 HTML을 기다리는 동안 문서 칸과 머리 줄을 유지한다", async () => {
+  const base = createFakeTransport(makeTestSeed({ definitions: [definition as AppDefinition] }));
+  let releaseList!: () => void; let releaseHtml!: () => void;
+  const listGate = new Promise<void>((resolve) => { releaseList = resolve; });
+  const htmlGate = new Promise<void>((resolve) => { releaseHtml = resolve; });
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") { await listGate; return { op: "storage.list", result: { items: [{ doc: "시안/r1.html" }] } }; }
+    if (request.op === "storage.get") { await htmlGate; return { op: "storage.get", result: { content: "<p>문서</p>", revision: "r1" } }; }
+    return base.call(request as never);
+  };
+  const { container } = render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+  await screen.findByRole("button", { name: "보기" });
+  const document = container.querySelector(".ks-html-document");
+  expect(document?.textContent).toContain("불러오는 중");
+  expect(screen.getByRole("button", { name: "보기" })).toBeTruthy();
+  await act(async () => { releaseList(); });
+  await waitFor(() => expect(screen.getByRole("button", { name: "리비전" }).textContent).toContain("v1"));
+  expect(container.querySelector(".ks-html-document")).toBe(document);
+  expect(document?.textContent).toContain("불러오는 중");
+  await act(async () => { releaseHtml(); });
+  await screen.findByTitle("HTML 보기");
+  expect(container.querySelector(".ks-html-document")).toBe(document);
+});
+
+
+it("문서가 없거나 목록을 읽지 못해도 머리와 문서 칸을 유지한다", async () => {
+  for (const failing of [false, true]) {
+    const base = createFakeTransport(makeTestSeed({ definitions: [definition as AppDefinition] }));
+    let attempts = 0;
+    const call = async (request: CoreRequest) => {
+      if (request.op === "storage.list") {
+        if (failing && attempts++ === 0) throw { code: "io", id: "TEST_LIST_ERROR", message: "목록 읽기 오류", details: [] };
+        return { op: "storage.list", result: { items: [] } };
+      }
+      return base.call(request as never);
+    };
+    const { container, unmount } = render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+    const message = await screen.findByText(failing ? "목록 읽기 오류" : "문서가 없습니다");
+    expect(screen.getByRole("button", { name: "보기" })).toBeTruthy();
+    expect(container.querySelector(".ks-html-document")?.contains(message)).toBe(true);
+    if (failing) { await userEvent.click(screen.getByRole("button", { name: "다시 시도" })); expect(await screen.findByText("문서가 없습니다")).toBeTruthy(); }
+    unmount();
+  }
+});
+
+it("리비전 읽기 오류는 문서 칸에서 다시 시도해 복구한다", async () => {
+  const base = createFakeTransport(makeTestSeed({ definitions: [definition as AppDefinition] }));
+  let attempts = 0;
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { items: [{ doc: "시안/r1.html" }] } };
+    if (request.op === "storage.get" && request.doc === "시안/r1.html") {
+      if (++attempts === 1) throw { code: "io", id: "TEST_HTML_ERROR", message: "리비전 읽기 오류", details: [] };
+      return { op: "storage.get", result: { content: "<p>복구된 문서</p>", revision: "r1" } };
+    }
+    return base.call(request as never);
+  };
+  const { container } = render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+  const error = await screen.findByText("리비전 읽기 오류");
+  const document = container.querySelector(".ks-html-document")!;
+  expect(document.contains(error)).toBe(true);
+  expect(document.textContent).not.toContain("불러오는 중");
+  await userEvent.click(within(document as HTMLElement).getByRole("button", { name: "다시 시도" }));
+  const frame = await screen.findByTitle("HTML 보기") as HTMLIFrameElement;
+  expect(frame.srcdoc).toContain("복구된 문서");
+  expect(attempts).toBe(2);
+});
+
+it("창 폭 관찰로 세 칸 문턱을 전환하고 좁은 속성 안내와 글 선택 안내를 표시한다", async () => {
+  let notifyWidth = (_width: number) => {};
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(element: Element) {
+      if (element.classList.contains("ks-html-view")) notifyWidth = (width) => this.callback([{ contentRect: { width } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+    }
+    unobserve() {}
+    disconnect() {}
+  });
+  const base = createFakeTransport(makeTestSeed({ definitions: [definition as AppDefinition] }));
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") return { op: "storage.list", result: { items: [{ doc: "시안/r1.html" }] } };
+    if (request.op === "storage.get") return { op: "storage.get", result: { content: "<h1>제목</h1>", revision: "r1" } };
+    return base.call(request as never);
+  };
+  render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+  const frame = await screen.findByTitle("HTML 보기") as HTMLIFrameElement;
+  act(() => notifyWidth(842));
+  await userEvent.click(screen.getByRole("button", { name: "고르기" }));
+  expect(screen.getAllByRole("separator")).toHaveLength(2);
+  expect(screen.queryByText("요소를 고르세요")).toBeNull();
+  act(() => notifyWidth(841));
+  expect(screen.queryByRole("separator")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "속성" }));
+  expect(screen.getByText("요소를 고르세요")).toBeTruthy();
+  act(() => notifyWidth(1000));
+  expect(screen.getByTitle("HTML 보기")).toBe(frame);
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-select", selection: { n: 1, anchor: { ...testAnchor, kind: "text", quote: { exact: "제목", prefix: "", suffix: "" } }, styles: {} } } })));
+  expect(screen.getByText("요소를 누르면 속성을 고칠 수 있습니다")).toBeTruthy();
+  expect(screen.queryByText("고른 글에는 속성이 없습니다. 요소를 누르면 고칠 수 있습니다")).toBeNull();
+  vi.unstubAllGlobals();
+});
+
+it("열린 문서의 목록 갱신 오류를 재시도해도 프레임을 유지한다", async () => {
+  const base = createFakeTransport(makeTestSeed({ definitions: [definition as AppDefinition] }));
+  let failList = false;
+  const call = async (request: CoreRequest) => {
+    if (request.op === "storage.list") {
+      if (failList) { failList = false; throw { code: "io", id: "TEST_LIST_ERROR", message: "목록 갱신 오류", details: [] }; }
+      return { op: "storage.list", result: { items: [{ doc: "시안/r1.html" }] } };
+    }
+    if (request.op === "storage.get") return { op: "storage.get", result: { content: "<p>기존 문서</p>", revision: "r1" } };
+    return base.call(request as never);
+  };
+  render(<AppWindowContent store={createShellStore({ ...base, call: call as CoreTransport["call"] })} windowId="viewer-window" />);
+  const frame = await screen.findByTitle("HTML 보기");
+  failList = true;
+  act(() => base.emit({ event: "storage.update", window_id: "viewer-window", update: { kind: "changed", changed: { bucket_id: "bucket", item: { entry_id: "drafts", key: "drafts/시안/r2.html", kind: "md", revision: "r2", exists: true } } } }));
+  const error = await screen.findByText("목록 갱신 오류");
+  await userEvent.click(within(error.closest('[role="alert"]') as HTMLElement).getByRole("button", { name: "다시 시도" }));
+  await waitFor(() => expect(screen.queryByText("목록 갱신 오류")).toBeNull());
+  expect(screen.getByTitle("HTML 보기")).toBe(frame);
 });
