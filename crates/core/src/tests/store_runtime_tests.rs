@@ -15,7 +15,7 @@ fn store_caller() -> (TempDir, Arc<Core>, Arc<FakeRegistryClient>, String) {
 }
 
 fn install_example(core: Arc<Core>, window: String) -> thread::JoinHandle<Result<bool, CoreError>> {
-    thread::spawn(move || crate::store::install::install(&core.inner, &window, "catalog", json!("https://example.com/appstore"), json!("example"), json!(3)))
+    thread::spawn(move || crate::store::install::install(&core.inner, &window, "catalog", json!("https://EXAMPLE.com:443/appstore/"), json!("example"), json!(3)))
 }
 
 fn switch_cache(core: &Core) {
@@ -29,7 +29,7 @@ fn switch_cache(core: &Core) {
 fn store_install_response_from_previous_server_does_not_change_current_cache() {
     let (_temp, core, registry, window) = store_caller();
     let (consent_tx, consent_rx) = mpsc::channel();
-    core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, .. } = event { consent_tx.send((request_id.clone(), digest.clone())).unwrap(); }));
+    core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, store_url, .. } = event { assert_eq!(store_url, "https://example.com/appstore"); consent_tx.send((request_id.clone(), digest.clone())).unwrap(); }));
     let (ready_tx, ready_rx) = mpsc::channel();
     let (resume_tx, resume_rx) = mpsc::channel();
     *registry.store_install_pause.lock().unwrap() = Some((ready_tx, resume_rx));
@@ -82,7 +82,7 @@ fn store_consent_registration_after_shutdown_cancels_immediately() {
     core.shutdown();
     let (tx, rx) = mpsc::channel();
     let waiter = core.clone();
-    thread::spawn(move || { let _ = tx.send(crate::installation_consent::wait(&waiter.inner, &window, "store-caller", 1, 3, "digest", &definition)); });
+    thread::spawn(move || { let _ = tx.send(crate::installation_consent::wait(&waiter.inner, &window, "store-caller", 1, 3, "https://example.com/appstore", "digest", &definition)); });
     assert!(!rx.recv_timeout(Duration::from_secs(2)).expect("종료 후 동의 등록이 대기했습니다").unwrap());
 }
 
@@ -133,7 +133,7 @@ fn closing_the_window_cancels_pending_consent() {
     let waiter = core.clone();
     let wait_window = window.clone();
     let app: kaleidoscope_contract::AppDefinition = serde_json::from_str(&definition).unwrap();
-    let task = thread::spawn(move || crate::installation_consent::wait(&waiter.inner, &wait_window, "consent-fixture", 1, 1, "digest", &app));
+    let task = thread::spawn(move || crate::installation_consent::wait(&waiter.inner, &wait_window, "consent-fixture", 1, 1, "https://example.com/appstore", "digest", &app));
     let id = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     let error = core.handle(CoreRequest::AppRespondInstallPermission { window_id: "other".into(), request_id: id.clone(), digest:"digest".into(), allow:true }).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("STORECLIENT_INSTALL_WINDOW_MISMATCH"));

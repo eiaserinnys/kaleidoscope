@@ -59,8 +59,11 @@ fn store_example_roundtrips_and_is_valid_with_store_support() {
 }
 
 #[test]
-fn current_shell_rejects_store_as_unsupported() {
-    let error = parse_app_definition(&definition().to_string()).unwrap_err();
+fn current_shell_supports_store_one_but_rejects_newer_versions() {
+    parse_app_definition(&definition().to_string()).unwrap();
+    let mut newer = definition();
+    newer["requires"]["modules"]["store"] = json!(2);
+    let error = parse_app_definition(&newer.to_string()).unwrap_err();
     assert_eq!(
         error.id.as_deref(),
         Some("APP_DEFINITION_REQUIRES_NEWER_SHELL")

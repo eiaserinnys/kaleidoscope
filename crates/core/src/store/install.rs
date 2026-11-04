@@ -69,7 +69,7 @@ pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server
     let same_origin = current.as_ref().and_then(|app| app.origin.as_ref())
         .is_some_and(|origin| origin.store_url == client.server.as_str() && origin.store_app_id == id);
     let needs_consent = !same_origin || previous.as_ref().is_none_or(|old| scope(old) != scope(&prepared.definition));
-    if needs_consent && !crate::installation_consent::wait(inner, window, &caller, caller_version, release, &prepared.digest, &prepared.definition)? { return Ok(false); }
+    if needs_consent && !crate::installation_consent::wait(inner, window, &caller, caller_version, release, client.server.as_str(), &prepared.digest, &prepared.definition)? { return Ok(false); }
     if needs_consent && !crate::link::is_current(inner, generation) { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
     let (current_caller, current_version, _, current_generation) = context(inner, window, permission, true).map_err(|error| {
         if needs_consent && !crate::link::is_current(inner, generation) { errors::STORECLIENT_INSTALL_CONTEXT_CHANGED() } else { error }

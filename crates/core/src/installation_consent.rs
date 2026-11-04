@@ -14,7 +14,7 @@ struct Pending {
 #[derive(Default)]
 pub(crate) struct Consents { pending: Mutex<HashMap<String, Pending>> }
 
-pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, release: u32, digest: &str, definition: &AppDefinition) -> Result<bool, CoreError> {
+pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, release: u32, store_url: &str, digest: &str, definition: &AppDefinition) -> Result<bool, CoreError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (reply, receiver) = mpsc::sync_channel(1);
     {
@@ -30,7 +30,7 @@ pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, re
     }
     inner.emit(&CoreEvent::AppInstallPermission {
         window_id: window.into(), request_id, app_name: definition.name.clone(), release,
-        digest: digest.into(), definition: definition.clone(),
+        store_url: store_url.into(), digest: digest.into(), definition: definition.clone(),
     });
     Ok(receiver.recv().unwrap_or(false))
 }
