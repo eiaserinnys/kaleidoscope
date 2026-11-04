@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "reac
 import {
   Button,
   ContextMenuHost,
+  SHELL_DESKTOP_DELETE_UNSAVED,
   SHELL_WINDOW_CLOSE_UNSAVED,
+  SHELL_WORKSPACE_DELETE_UNSAVED,
   SHELL_UPDATE_RESTART_UNSAVED,
   BUILTIN_APP_IDS,
   ChevronDown,
@@ -17,6 +19,7 @@ import {
   UpdateReady,
   flushEditors,
   flushSandboxes,
+  flushWindowEditors,
   toCoreError,
   useShellSelector,
   useWindowControlHost,
@@ -67,9 +70,25 @@ export function Shell({ store }: { store: ShellStore }) {
 
   const runCommand = useCallback(async (request: CoreRequest): Promise<CoreReply | undefined> => {
     try {
-      if (request.op === "window.close" && !await flushSandboxes(request.window_id)) {
-        setNotice(SHELL_WINDOW_CLOSE_UNSAVED());
-        return undefined;
+      let windowIds: string[] | null = null;
+      let unsaved: CoreError | null = null;
+      if (request.op === "window.close") {
+        windowIds = [request.window_id];
+        unsaved = SHELL_WINDOW_CLOSE_UNSAVED();
+      } else if (request.op === "desktop.delete" || request.op === "workspace.delete") {
+        const current = store.getSnapshot();
+        const desktops = request.op === "desktop.delete"
+          ? [request.desktop_id]
+          : (current?.shared.desktops ?? []).filter((desktop) => desktop.workspace_id === request.workspace_id).map((desktop) => desktop.id);
+        windowIds = (current?.shared.windows ?? []).filter((window) => desktops.includes(window.desktop_id)).map((window) => window.id);
+        unsaved = request.op === "desktop.delete" ? SHELL_DESKTOP_DELETE_UNSAVED() : SHELL_WORKSPACE_DELETE_UNSAVED();
+      }
+      if (windowIds && unsaved) {
+        const [editorsSaved, ...sandboxesSaved] = await Promise.all([flushWindowEditors(windowIds), ...windowIds.map((id) => flushSandboxes(id))]);
+        if (!editorsSaved || !sandboxesSaved.every(Boolean)) {
+          setNotice(unsaved);
+          return undefined;
+        }
       }
       const reply = await store.call(request as never) as CoreReply;
       return reply;

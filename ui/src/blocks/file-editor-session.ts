@@ -19,6 +19,7 @@ export interface FileEditorSnapshot {
 }
 
 export interface EditorTarget {
+  readonly windowId?: string;
   read(path: string): Promise<{ text: string; revision: string | null }>;
   write(path: string, text: string, revision: string | null): Promise<string>;
   readonly allowsMissingRevision: boolean;
@@ -28,6 +29,7 @@ export interface EditorTarget {
 
 export function createFileEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, permission: string): EditorTarget {
   return {
+    windowId,
     allowsMissingRevision: false,
     conflictMessage: "디스크에서 바뀌었습니다",
     async read(path) {
@@ -43,6 +45,7 @@ export function createFileEditorTarget(transport: Pick<CoreTransport, "call">, w
 
 export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, entry: string, collection = false): EditorTarget {
   return {
+    windowId,
     allowsMissingRevision: true,
     conflictMessage: "다른 곳에서 바뀌었습니다",
     async read(path) {
@@ -85,6 +88,12 @@ export async function flushEditors(address?: EditorAddress): Promise<boolean> {
   return results.every(Boolean);
 }
 
+export async function flushWindowEditors(windowIds: Iterable<string>): Promise<boolean> {
+  const selected = new Set(windowIds);
+  const results = await Promise.all([...activeSessions].filter((session) => session.windowId !== undefined && selected.has(session.windowId)).map((session) => session.saveNow()));
+  return results.every(Boolean);
+}
+
 export function editorRevision(address: EditorAddress): string | null | undefined {
   const path = address.kind === "file" ? address.path : address.doc;
   const session = [...activeSessions].find((item) => item.matches(address) && item.getSnapshot().path === path);
@@ -123,6 +132,10 @@ export class FileEditorSession {
 
   get conflictMessage(): string {
     return this.target.conflictMessage;
+  }
+
+  get windowId(): string | undefined {
+    return this.target.windowId;
   }
 
   setResource(resource: EditorResource | null) { this.resource = resource; }
