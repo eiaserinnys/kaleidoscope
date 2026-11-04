@@ -43,6 +43,20 @@ error_catalog! { ENTRIES;
         message: "저장하지 못한 내용이 있어 창을 닫지 않았습니다. 내용을 저장한 뒤 다시 닫으세요.",
         fix: "내용을 저장한 뒤 다시 닫으세요"
     }
+    SHELL_DESKTOP_DELETE_UNSAVED() {
+        class: Io,
+        place: "데스크톱 삭제 전 저장",
+        cause: "열린 창의 저장을 마치지 못했다",
+        message: "저장하지 못한 내용이 있어 데스크톱을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.",
+        fix: "내용을 저장한 뒤 다시 지우세요"
+    }
+    SHELL_WORKSPACE_DELETE_UNSAVED() {
+        class: Io,
+        place: "작업 삭제 전 저장",
+        cause: "열린 창의 저장을 마치지 못했다",
+        message: "저장하지 못한 내용이 있어 작업을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.",
+        fix: "내용을 저장한 뒤 다시 지우세요"
+    }
     SHELL_UPDATE_RESTART_UNSAVED() {
         class: Io,
         place: "업데이트 재시작 전 저장",
