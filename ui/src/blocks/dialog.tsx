@@ -8,6 +8,22 @@ import { renderBlock } from "../render/render-block";
 
 export type DialogBlockData = Extract<Block, { type: "dialog" }>;
 
+function hasPicker(block: Block): boolean {
+  switch (block.type) {
+    case "table": return true;
+    case "list": return block.layout === "grid";
+    case "stack": case "split": return block.children.some(hasPicker);
+    case "tabs": return block.tabs.some((tab) => hasPicker(tab.child));
+    case "toolbar": return [...block.start, ...(block.end ?? [])].some(hasPicker);
+    case "section": return hasPicker(block.child) || (block.actions ?? []).some(hasPicker);
+    case "when": case "anchor": return hasPicker(block.child);
+    case "repeat": return hasPicker(block.template);
+    case "chat": return block.footer ? hasPicker(block.footer) : false;
+    case "button": return block.preview ? hasPicker(block.preview) : false;
+    default: return false;
+  }
+}
+
 export function DialogBlock({ block, context, pointer }: { block: DialogBlockData; context: BlockContext; pointer: string }) {
   const data = useWindowData();
   const open = useBinding(`${pointer}/open`, block.open);
@@ -58,6 +74,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   return <div ref={root} style={{ display: "contents" }}>
     {isOpen && host ? <Dialog
       host={host}
+      overlayClassName={hasPicker(block.child) ? "is-picker" : ""}
       title={titleText}
       body={<>{renderBlock(block.child, context, childPointer)}<BindingFailureNotice value={title} /><BindingFailureNotice value={closeLabel} /><BindingFailureNotice value={cancelLabel} /></>}
       ok={closeText}

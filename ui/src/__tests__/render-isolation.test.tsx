@@ -724,8 +724,6 @@ describe("실제 Shell의 블록 렌더 격리", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "닫기" }));
     expect(transport.getCalls().some((call) => call.op === "data.act" && call.pointer === "/ui/children/1/on_close")).toBe(true);
-    // FakeData does not execute dialog.on_close; the local-core scenario covers the actual close action.
-    await setState(store, "window-a", "open", false);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "회의 안건" })).toBeNull());
     fireEvent.keyDown(document.body, { code: "KeyR", key: "r" });
     await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.act" && call.pointer === "/shortcuts/0/action")).toHaveLength(1));
@@ -743,10 +741,14 @@ describe("실제 Shell의 블록 렌더 격리", () => {
 
   it("확인 대화상자는 취소와 확인 동작을 나누고 Escape는 닫기 동작을 부른다", async () => {
     const { store, transport } = await setup([dialogFooterDefinition({ onConfirm: true, cancelLabel: true })], { open: true, confirmed: false });
-    const dialog = (await screen.findAllByRole("dialog", { name: "변경 확인" }))[0];
+    const windowA = within(document.querySelector<HTMLElement>('[data-window-id="window-a"]')!);
+    const dialog = await windowA.findByRole("dialog", { name: "변경 확인" });
     expect(within(dialog).getAllByRole("button")).toHaveLength(2);
     await userEvent.click(within(dialog).getByRole("button", { name: "취소" }));
-    await userEvent.click(within(dialog).getByRole("button", { name: "확인" }));
+    await waitFor(() => expect(windowA.queryByRole("dialog", { name: "변경 확인" })).toBeNull());
+    await setState(store, "window-a", "open", true);
+    const reopened = await windowA.findByRole("dialog", { name: "변경 확인" });
+    await userEvent.click(within(reopened).getByRole("button", { name: "확인" }));
     fireEvent.keyDown(document, { key: "Escape" });
     const actions = transport.getCalls().filter((call) => call.op === "data.act").map((call) => call.pointer);
     expect(actions).toContain("/ui/on_close");

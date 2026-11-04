@@ -13,6 +13,8 @@
   overflow: hidden;
 }
 
+.ks-split-pane:has(> .ks-data-state) { overflow-y: auto; }
+
 .ks-split-handle {
   position: relative;
   z-index: 1;

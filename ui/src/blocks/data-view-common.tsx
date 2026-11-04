@@ -16,7 +16,23 @@ export function groups<T>(value: unknown, grouped: boolean, valid: (item: unknow
 export function asBadges(value: unknown): BadgeValue[] { return asArray(value).filter(isBadge); }
 export function Badges({ values }: { values: unknown }) {
   const badges = asBadges(values);
-  return badges.length ? <span className="ks-view-badges">{badges.map((badge: BadgeValue, i: number) => <Badge key={i} value={badge} />)}</span> : null;
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const group = ref.current;
+    if (!group?.parentElement?.classList.contains("ks-list-row")) return;
+    const update = () => {
+      const bounds = group.getBoundingClientRect();
+      for (const badge of group.children) {
+        const rect = badge.getBoundingClientRect();
+        (badge as HTMLElement).style.visibility = rect.left >= bounds.left && rect.right <= bounds.right + 0.5 ? "" : "hidden";
+      }
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(group);
+    update();
+    return () => observer.disconnect();
+  }, [values]);
+  return badges.length ? <span ref={ref} className="ks-view-badges">{badges.map((badge: BadgeValue, i: number) => <Badge key={i} value={badge} />)}</span> : null;
 }
 export function GroupHeading({ title, meta }: { title: string; meta?: string }) {
   return <div className="ks-view-group"><strong>{title}</strong>{meta && <span>{meta}</span>}</div>;

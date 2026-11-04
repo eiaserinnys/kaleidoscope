@@ -23,6 +23,7 @@ function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
     case "toolbar": return [...block.start.map((child, index): [string, Block] => [`${pointer}/start/${index}`, child]), ...(block.end ?? []).map((child, index): [string, Block] => [`${pointer}/end/${index}`, child])];
     case "section": return [...(block.actions ?? []).map((child, index): [string, Block] => [`${pointer}/actions/${index}`, child]), [`${pointer}/child`, block.child]];
     case "when": return [[`${pointer}/child`, block.child]];
+    case "dialog": return [[`${pointer}/child`, block.child]];
     default: return [];
   }
 }
@@ -40,6 +41,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
     case "text": add("on_click", block.on_click !== undefined); add("on_double_click", block.on_double_click !== undefined); break;
     case "select": case "toggle": case "slider": case "color": add("on_change"); break;
     case "button": add("on_click"); break;
+    case "dialog": add("on_close"); add("on_confirm", block.on_confirm !== undefined); break;
     case "notice": (block.actions ?? []).forEach((_, index) => add(`actions/${index}/on_click`)); break;
   }
   for (const [childPointer, child] of childBlocks(block, pointer)) {
