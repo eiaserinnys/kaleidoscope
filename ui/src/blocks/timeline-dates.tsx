@@ -84,7 +84,7 @@ export function TimelineDatesBlock({ block, pointer, context }: { block: DatesBl
 }
 
 type ReadyProps = { block: DatesBlock; pointer: string; context: BlockContext; tracksValue: unknown; markerValue: unknown; daysValue: unknown; selectionValue: unknown; viewportValue: unknown; locale?: string };
-function DatesReady({ block, pointer, context, tracksValue, markerValue, daysValue, selectionValue, viewportValue, locale }: ReadyProps) {
+function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selectionValue, viewportValue, locale }: ReadyProps) {
   const data = useWindowData();
   const root = useRef<HTMLDivElement>(null), scroll = useRef<HTMLDivElement>(null), corner = useRef<HTMLDivElement>(null), rowMeasure = useRef<HTMLDivElement>(null);
   const dayMeasure = useRef<HTMLSpanElement>(null), weekMeasure = useRef<HTMLSpanElement>(null), monthMeasure = useRef<HTMLSpanElement>(null);
@@ -324,7 +324,7 @@ function DatesReady({ block, pointer, context, tracksValue, markerValue, daysVal
         </div>
         {!tracks.length && <div className="ks-dates-empty" style={{ left: metrics.left }}><NoItems /></div>}
         {tracks.filter((track) => track.first < rows.end && track.first + track.rows.length > rows.start).map((track) => <div className="ks-dates-track" key={track.id} style={{ top: track.first * metrics.row, height: track.rows.length * metrics.row, width: metrics.left + totalWidth }}>
-          <div className="ks-dates-track-header" style={{ width: metrics.left, top: metrics.header }} onPointerDown={(event) => event.stopPropagation()}><div className="ks-dates-track-name">
+          <div className="ks-dates-track-header" style={{ width: metrics.left }} onPointerDown={(event) => event.stopPropagation()}><div className="ks-dates-track-name" style={{ top: metrics.header }}>
             {track.image && <MediaThumbnail media={track.image} size={32} />}<span className="ks-list-content"><span className="ks-list-title">{track.label}</span></span>{track.meta && <span className="ks-view-meta">{track.meta}</span>}
           </div></div>
           <div className="ks-dates-track-rows" style={{ left: metrics.left, width: totalWidth }}>{track.rows.map((row, index) => {
@@ -339,17 +339,19 @@ function DatesReady({ block, pointer, context, tracksValue, markerValue, daysVal
 
 type Handlers = { begin: (event: PointerEvent<HTMLElement>, track: Track, item: Item, kind: Edit["kind"]) => void; move: (event: PointerEvent<HTMLElement>) => void; finish: (event: PointerEvent<HTMLElement>, phase: "commit" | "cancel") => void; keyItem: (event: KeyboardEvent<HTMLElement>, track: Track, item: Item) => void; select: (id: string) => void };
 const DateRow = memo(function DateRow({ row, track, top, height, from, to, pxDay, rangeStart, selected, preview, lanes, formatDate, handlers, readOnly }: { row: Item[]; track: Track; top: number; height: number; from: number; to: number; pxDay: number; rangeStart: number; selected: unknown[]; preview: Edit | null; lanes: "single" | "pack" | "each"; formatDate: Intl.DateTimeFormat; handlers: React.RefObject<Handlers>; readOnly: boolean }) {
-  return <div className="ks-dates-row" style={{ top, height }}>{visibleItems(row, from, to).map((item) => {
+  return <div className="ks-dates-row" style={{ top, height }}>{visibleItems(row, from, to).map((item) => <DateBar key={item.id} item={item} track={track} pxDay={pxDay} rangeStart={rangeStart} selected={selected.includes(item.id)} preview={preview?.id === item.id ? preview : null} lanes={lanes} formatDate={formatDate} handlers={handlers} readOnly={readOnly} />)}</div>;
+});
+
+const DateBar = memo(function DateBar({ item, track, pxDay, rangeStart, selected, preview, lanes, formatDate, handlers, readOnly }: { item: Item; track: Track; pxDay: number; rangeStart: number; selected: boolean; preview: Edit | null; lanes: "single" | "pack" | "each"; formatDate: Intl.DateTimeFormat; handlers: React.RefObject<Handlers>; readOnly: boolean }) {
     if (item.start === null || item.end === null) return <button type="button" className="ks-dates-undated" key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
     const start = preview?.id === item.id ? dateToDay(preview.start)! : item.start, end = preview?.id === item.id ? dateToDay(preview.end)! : item.end;
     const name = `${item.label}, ${formatDate.format(new Date(start * 86_400_000))} – ${formatDate.format(new Date(end * 86_400_000))}`;
     const canEdit = !track.locked && !readOnly;
     const onPointerDown = (event: PointerEvent<HTMLElement>, kind: Edit["kind"]) => handlers.current.begin(event, track, item, kind);
-    return <div role="button" tabIndex={0} aria-label={name} title={name} key={item.id} className={`ks-timeline-item is-${item.tone}${item.muted ? " is-muted" : ""}${selected.includes(item.id) ? " is-selected" : ""}${canEdit && item.movable ? "" : " is-fixed"}${lanes === "each" ? " is-each" : ""}`}
+    return <div role="button" tabIndex={0} aria-label={name} title={name} key={item.id} className={`ks-timeline-item is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}${canEdit && item.movable ? "" : " is-fixed"}${lanes === "each" ? " is-each" : ""}`}
       style={{ left: (start - rangeStart) * pxDay, width: (end - start + 1) * pxDay }} onKeyDown={(event) => handlers.current.keyItem(event, track, item)} onPointerDown={(event) => onPointerDown(event, "move")} onPointerMove={(event) => handlers.current.move(event)} onPointerUp={(event) => handlers.current.finish(event, "commit")} onPointerCancel={(event) => handlers.current.finish(event, "cancel")}>
       {canEdit && (item.resizable || item.resizeStartOnly) && <span className="ks-timeline-handle is-start" onPointerDown={(event) => onPointerDown(event, "resize_start")} />}
       <span className="ks-timeline-label">{item.label}</span>
       {canEdit && item.resizable && !item.resizeStartOnly && <span className="ks-timeline-handle is-end" onPointerDown={(event) => onPointerDown(event, "resize_end")} />}
     </div>;
-  })}</div>;
 });

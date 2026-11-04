@@ -7,16 +7,29 @@ async function capture(page: Page, name: string) {
   if (directory) { mkdirSync(directory, { recursive: true }); await page.screenshot({ path: join(directory, `${name}.png`) }); }
 }
 
+async function chooseSchedule(page: Page, app: ReturnType<Page["getByTestId"]>) {
+  const tab = app.getByRole("tab", { name: "일정" });
+  if (await tab.isVisible()) await tab.click();
+  else {
+    await app.getByRole("button", { name: "탭 더 보기" }).click();
+    await page.getByRole("menuitem", { name: "일정", exact: true }).click();
+  }
+}
+
 for (const width of [1200, 360]) {
   test(`날짜 일정표 ${width} 폭의 눈금과 고정 머리`, async ({ page }) => {
     await page.setViewportSize({ width, height: 600 });
     await page.goto("/?preview=block-gallery");
     const app = page.getByTestId("app-window-block-gallery");
-    await app.getByRole("tab", { name: "일정" }).click();
+    await chooseSchedule(page, app);
     const timeline = app.locator(".ks-timeline-dates");
     await expect(timeline).toBeVisible();
     await expect(timeline.locator(".ks-timeline-item").first()).toBeVisible();
     await expect(timeline).toHaveAttribute("data-scale", "day");
+    const firstTrack = timeline.locator(".ks-dates-track").first();
+    const trackBox = await firstTrack.boundingBox();
+    const headerBox = await firstTrack.locator(".ks-dates-track-header").boundingBox();
+    expect(Math.abs(trackBox!.height - headerBox!.height)).toBeLessThanOrEqual(1);
     await capture(page, `dates-${width}-day`);
     for (let i = 0; i < 12 && await timeline.getAttribute("data-scale") === "day"; i++) await app.getByRole("button", { name: "축소" }).click();
     await expect(timeline).toHaveAttribute("data-scale", "week");
@@ -41,7 +54,7 @@ test("응답을 기다릴 때 일정표의 로딩 상태를 표시한다", async
   await page.setViewportSize({ width: 1200, height: 600 });
   await page.goto("/?preview=block-gallery");
   const app = page.getByTestId("app-window-block-gallery");
-  await app.getByRole("tab", { name: "일정" }).click();
+  await chooseSchedule(page, app);
   await expect(app.locator(".ks-timeline-dates")).toBeVisible();
   await page.evaluate(async () => {
     const harness = (window as any).__ksHarness;
@@ -54,8 +67,8 @@ test("응답을 기다릴 때 일정표의 로딩 상태를 표시한다", async
     version.definition.sources.sample = { kind: "request", permission: "slow", path: "/sample" };
     version.definition.permissions.push({ module: "http", id: "slow", label: "자료", base_url: "https://example.com", paths: ["/sample"] });
     version.version += 1;
-    const window = snapshot.shared.windows.find((item: any) => item.app_id === "block-gallery");
-    window.app_version = version.version; window.state = { ...window.state, tab: 4, schedule_tracks: tracks };
+    const appWindow = snapshot.shared.windows.find((item: any) => item.app_id === "block-gallery");
+    appWindow.app_version = version.version; appWindow.state = { ...appWindow.state, tab: version.definition.ui.tabs.findIndex((item: any) => item.label === "일정"), schedule_tracks: tracks };
     harness.emit({ event: "state.changed", snapshot });
   });
   await expect(app.getByRole("status")).toBeVisible();
