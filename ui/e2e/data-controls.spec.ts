@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const output = process.env.KS_DATA_CAPTURE_DIR;
@@ -152,6 +152,8 @@ test("도구막대는 세 폭에서 겹치거나 넘치거나 글자를 줄바�
 test("넘친 목록에서 삭제 확인을 열고 닫아도 창 스크롤이 유지된다", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.goto("/?preview=data-controls");
+  const shellCss = readFileSync(new URL("../../app/src/shell.css", import.meta.url), "utf8");
+  await page.addStyleTag({ content: shellCss.match(/\.ks-window-content\s*\{[^}]*\}/)![0] });
   await page.addStyleTag({ content: `.ks-harness-apps.is-preview .ks-harness-window { width: 520px; height: 560px; }` });
   await page.evaluate(async () => {
     const harness = (window as any).__ksHarness;
@@ -175,9 +177,13 @@ test("넘친 목록에서 삭제 확인을 열고 닫아도 창 스크롤이 유
     harness.emit({ event: "state.changed", snapshot });
   });
   const app = page.getByTestId("app-window-data-controls");
+  const frame = app.locator(".ks-harness-window-content");
+  await frame.evaluate((node) => node.classList.add("ks-window-content"));
+  const body = app.locator(".ks-data-window-body");
   await app.getByRole("option", { name: "01 항목", exact: true }).focus();
   for (let index = 0; index < 19; index += 1) await page.keyboard.press("ArrowDown");
   await expect(app.getByRole("option", { name: "20 항목", exact: true })).toBeFocused();
+  expect(await body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
   await app.evaluate((node) => {
     (window as any).__scrollPositions = [node, ...node.querySelectorAll("*")].map((element) => [element, element.scrollTop]);
   });
@@ -206,4 +212,12 @@ test("넘친 목록에서 삭제 확인을 열고 닫아도 창 스크롤이 유
   await page.keyboard.press("Enter");
   await expect(app.getByRole("option", { name: "21 항목", exact: true })).toBeFocused();
   await scrollsUnchanged();
+  // 마지막 fill 칸의 접힘은 별도 카드에서 수정한다.
+  const lastButton = app.getByRole("button", { name: "되돌리기", exact: true });
+  await app.getByRole("option", { name: "40 항목", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(app.getByRole("button", { name: "올리기", exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(lastButton).toBeFocused();
+  expect(await frame.evaluate((node) => node.scrollTop)).toBe(0);
 });
