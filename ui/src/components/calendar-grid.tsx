@@ -43,7 +43,7 @@ export function CalendarGrid({ value, min, max, locale, anchor, onChoose }: Prop
     if (event.key === "PageDown") nextValue = event.shiftKey ? addYears(active, 1) : addMonths(active, 1);
     if (nextValue) { event.preventDefault(); move(nextValue); }
   };
-  const cells = Array.from({ length: Math.ceil((offset + days) / 7) * 7 }, (_, index) => {
+  const cells = Array.from({ length: 42 }, (_, index) => {
     const day = index - offset + 1;
     if (day < 1 || day > days) return <div role="gridcell" key={index} />;
     const valueAt = `${first.slice(0, 8)}${String(day).padStart(2, "0")}`;

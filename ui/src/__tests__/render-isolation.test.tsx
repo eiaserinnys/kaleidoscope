@@ -1047,7 +1047,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
   });
 
   it("다른 창의 날짜 변경은 날짜 입력과 이웃 글을 다시 그리지 않는다", async () => {
-    const dateInput: AppDefinition = { ...definition, requires: { blocks: 33, modules: {} }, state: { first: "2026-11-20", second: "옆 글" }, ui: { type: "stack", direction: "column", children: [
+    const dateInput: AppDefinition = { ...definition, requires: { blocks: 35, modules: {} }, state: { first: "2026-11-20", second: "옆 글" }, ui: { type: "stack", direction: "column", children: [
       { type: "input", kind: "date", value: { state: "first" }, on_change: { set_state: "first" } },
       { type: "text", value: { state: "second" } },
     ] } };

@@ -12,6 +12,7 @@ export function DatePicker({ inputProps, inputRef, value, min, max, locale, labe
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLInputElement | null>(null);
   const surface = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLSpanElement>(null);
   const position = useAnchoredOverlay(anchor, surface, { observe: true, offsetToken: "--ks-space-2" });
   const close = (restore: boolean) => {
     setAnchor(null);
@@ -27,7 +28,7 @@ export function DatePicker({ inputProps, inputRef, value, min, max, locale, labe
       if (!(target instanceof Node)) return;
       const targetOwner = target instanceof Element ? ownerOf(target) : undefined;
       if (!event.isTrusted && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
-      if (!surface.current?.contains(target) && target !== anchor) { onEditingEnd(); close(false); }
+      if (!surface.current?.contains(target) && !trigger.current?.contains(target) && target !== anchor) { onEditingEnd(); close(false); }
     };
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
@@ -35,7 +36,7 @@ export function DatePicker({ inputProps, inputRef, value, min, max, locale, labe
   const show = () => { if (!inputProps.readOnly) setAnchor(inputRef.current); };
   return <>
     <input {...inputProps} ref={inputRef} type="text" onBlur={(event) => { if (!surface.current?.contains(event.relatedTarget as Node | null)) inputProps.onBlur?.(event); }} onKeyDown={(event) => { if (event.altKey && event.key === "ArrowDown" && !inputProps.readOnly) { event.preventDefault(); show(); return; } inputProps.onKeyDown?.(event); }} />
-    <span className="ks-data-input-clear"><IconButton aria-label="날짜 선택" title="" aria-haspopup="dialog" aria-expanded={Boolean(anchor)} aria-controls={anchor ? id : undefined} disabled={inputProps.readOnly} onPointerDown={(event) => event.preventDefault()} onClick={show}><DataIcon name="calendar" size="inline" /></IconButton></span>
+    <span ref={trigger} className="ks-data-input-clear"><IconButton aria-label="날짜 선택" title="" aria-haspopup="dialog" aria-expanded={Boolean(anchor)} aria-controls={anchor ? id : undefined} disabled={inputProps.readOnly} onPointerDown={(event) => event.preventDefault()} onClick={() => anchor ? close(true) : show()}><DataIcon name="calendar" size="inline" /></IconButton></span>
     {anchor && createPortal(<div id={id} ref={surface} data-ks-overlay className="ks-anchored-overlay ks-calendar-popup" role="dialog" aria-modal="true" aria-label={label || "날짜 선택"} style={position} onKeyDown={(event) => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); return; }
       if (event.key !== "Tab") return;

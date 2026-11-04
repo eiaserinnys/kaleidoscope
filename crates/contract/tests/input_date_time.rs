@@ -16,26 +16,26 @@ fn error_id(block: Value, version: u32) -> String {
 #[test]
 fn date_time_version_and_literal_validation() {
     assert_eq!(
-        error_id(input("date"), 32),
+        error_id(input("date"), 34),
         "APP_INPUT_DATE_TIME_VERSION_LOW"
     );
-    assert!(parse_app_definition(&definition(input("time"), 33)).is_ok());
+    assert!(parse_app_definition(&definition(input("time"), 35)).is_ok());
     let mut date = input("date");
     date["multiline"] = json!(true);
-    assert_eq!(error_id(date, 33), "APP_INPUT_DATE_MULTILINE_INVALID");
+    assert_eq!(error_id(date, 35), "APP_INPUT_DATE_MULTILINE_INVALID");
     let mut time = input("time");
     time["rows"] = json!(2);
-    assert_eq!(error_id(time, 33), "APP_INPUT_TIME_MULTILINE_INVALID");
+    assert_eq!(error_id(time, 35), "APP_INPUT_TIME_MULTILINE_INVALID");
     let mut date = input("date");
     date["step"] = json!(1);
-    assert_eq!(error_id(date, 33), "APP_INPUT_DATE_STEP_UNSUPPORTED");
+    assert_eq!(error_id(date, 35), "APP_INPUT_DATE_STEP_UNSUPPORTED");
     let mut date = input("date");
     date["min"] = json!("2023-02-29");
-    assert_eq!(error_id(date, 33), "APP_INPUT_DATE_BOUND_INVALID");
+    assert_eq!(error_id(date, 35), "APP_INPUT_DATE_BOUND_INVALID");
     let mut time = input("time");
     time["max"] = json!("24:00");
-    assert_eq!(error_id(time, 33), "APP_INPUT_TIME_BOUND_INVALID");
+    assert_eq!(error_id(time, 35), "APP_INPUT_TIME_BOUND_INVALID");
     let mut time = input("time");
     time["step"] = json!(0);
-    assert_eq!(error_id(time, 33), "APP_INPUT_TIME_STEP_INVALID");
+    assert_eq!(error_id(time, 35), "APP_INPUT_TIME_STEP_INVALID");
 }

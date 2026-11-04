@@ -2,7 +2,7 @@
   "id": "block-gallery",
   "name": "블록 견본",
   "description": "블록을 탭마다 모아 보인다",
-  "requires": { "blocks": 34, "modules": { "files": 1 } },
+  "requires": { "blocks": 35, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
     { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }
@@ -209,7 +209,7 @@
             },
             {
               "type": "section", "title": "날짜와 시간",
-              "child": { "type": "stack", "direction": "column", "children": [
+              "child": { "type": "stack", "direction": "column", "gap": "small", "children": [
                 { "type": "input", "kind": "date", "label": "날짜", "value": { "state": "date" }, "on_change": { "set_state": "date" } },
                 { "type": "input", "kind": "date", "label": "빈 날짜", "value": { "state": "empty_date" }, "on_change": { "set_state": "empty_date" } },
                 { "type": "input", "kind": "date", "label": "범위 날짜", "min": "2026-11-10", "max": "2026-11-25", "value": { "state": "bounded_date" }, "on_change": { "set_state": "bounded_date" } },

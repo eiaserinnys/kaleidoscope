@@ -71,6 +71,23 @@ test("같이 보기 창 조작으로 달력과 날짜를 누른다", async ({ pa
   await expect.poll(() => page.evaluate(() => (window as any).inputDateTimeHarness.state().date)).toBe("2026-11-22");
 });
 
+test("범위 원천을 기다려도 아래 칸이 움직이지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?preview=input-date-time-fixture&bounds-delay=6000");
+  const app = page.getByTestId("app-window-input-date-time-fixture");
+  const input = app.getByRole("textbox", { name: "연결 범위" });
+  const field = app.locator(".ks-data-stack-item").filter({ has: input });
+  const below = app.getByRole("textbox", { name: "아래 칸" });
+  await expect(input).toBeVisible();
+  await expect(field.getByRole("status")).toHaveCount(0);
+  const before = await below.boundingBox();
+  await input.focus(); await input.press("Alt+ArrowDown");
+  const day = page.getByRole("dialog", { name: "연결 범위" }).getByRole("button", { name: "2026년 11월 18일" });
+  await expect(day).toBeEnabled();
+  await expect(day).toBeDisabled({ timeout: 12000 });
+  expect((await below.boundingBox())!.y).toBe(before!.y);
+});
+
 test("날짜 단추와 입력칸의 정렬을 넓은 창과 좁은 창에서 잰다", async ({ page }) => {
   const metrics: Record<string, unknown> = {};
   for (const width of [1200, 360]) {

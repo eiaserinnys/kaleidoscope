@@ -200,7 +200,7 @@ it.each([
   ["시간 직접 입력", "time", "type", "15:30"],
   ["시간 목록 선택", "time", "choose", "16:00"],
 ] as const)("%s 뒤 단추는 입력 응답과 상태를 기다린다", async (_name, kind, mode, nextValue) => {
-  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 33, modules: {} },
+  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 35, modules: {} },
     state: { draft: kind === "date" ? "2026-11-20" : "14:00", saved: "" },
     ui: { type: "stack", direction: "column", children: [
       { type: "input", kind, label: "값", value: { state: "draft" }, on_change: { set_state: "draft" } },
