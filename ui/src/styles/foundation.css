@@ -187,6 +187,10 @@ button {
   background: transparent;
 }
 
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 *::-webkit-scrollbar-button {
   display: none;
 }

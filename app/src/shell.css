@@ -423,7 +423,7 @@
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
-  overflow: hidden;
+  overflow: clip;
   background: var(--ks-material-window-body);
 }
 
