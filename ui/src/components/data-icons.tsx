@@ -1,6 +1,7 @@
 import { ArrowDown as ArrowDownIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon, ArrowUp as ArrowUpIcon, ArrowUpDown as ArrowUpDownIcon, Bell as BellIcon, Bookmark as BookmarkIcon, Calendar as CalendarIcon, Check as CheckIcon, ChevronDown as ChevronDownIcon, ChevronLeft as ChevronLeftIcon, ChevronRight as ChevronRightIcon, ChevronUp as ChevronUpIcon, CircleAlert as CircleAlertIcon, CircleCheck as CircleCheckIcon, CircleX as CircleXIcon, ClipboardCopy as ClipboardCopyIcon, Clock as ClockIcon, Copy as CopyIcon, Download as DownloadIcon, Ellipsis as EllipsisIcon, ExternalLink as ExternalLinkIcon, Eye as EyeIcon, EyeOff as EyeOffIcon, File as FileIcon, FileText as FileTextIcon, Filter as FilterIcon, Folder as FolderIcon, FolderOpen as FolderOpenIcon, Heart as HeartIcon, History as HistoryIcon, House as HouseIcon, Image as ImageIcon, Info as InfoIcon, Link as LinkIcon, ListFilter as ListFilterIcon, ListTree as ListTreeIcon, Lock as LockIcon, LockOpen as LockOpenIcon, LogIn as LogInIcon, LogOut as LogOutIcon, Maximize2 as Maximize2Icon, MessageSquare as MessageSquareIcon, Minimize2 as Minimize2Icon, Minus as MinusIcon, Music as MusicIcon, Pause as PauseIcon, Pencil as PencilIcon, Play as PlayIcon, Plus as PlusIcon, RefreshCw as RefreshCwIcon, RotateCcw as RotateCcwIcon, Save as SaveIcon, Search as SearchIcon, Send as SendIcon, Settings as SettingsIcon, Share as ShareIcon, SkipBack as SkipBackIcon, SkipForward as SkipForwardIcon, Square as SquareIcon, Star as StarIcon, Tag as TagIcon, Trash2 as Trash2Icon, TriangleAlert as TriangleAlertIcon, Upload as UploadIcon, User as UserIcon, Users as UsersIcon, Video as VideoIcon, X as XIcon, ZoomIn as ZoomInIcon, ZoomOut as ZoomOutIcon, type LucideIcon } from "lucide-react";
 import { ICON_SIZE, type IconSize } from "./icons";
 import { Power, Volume2, VolumeX } from "lucide-react";
+import { Film, ImagePlay, Sticker } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
   "volume-2": Volume2,
@@ -31,6 +32,7 @@ const icons: Record<string, LucideIcon> = {
   "eye-off": EyeOffIcon,
   "file": FileIcon,
   "file-text": FileTextIcon,
+  "film": Film,
   "filter": FilterIcon,
   "folder": FolderIcon,
   "folder-open": FolderOpenIcon,
@@ -38,6 +40,7 @@ const icons: Record<string, LucideIcon> = {
   "history": HistoryIcon,
   "house": HouseIcon,
   "image": ImageIcon,
+  "image-play": ImagePlay,
   "info": InfoIcon,
   "link": LinkIcon,
   "list-filter": ListFilterIcon,
@@ -67,6 +70,7 @@ const icons: Record<string, LucideIcon> = {
   "skip-forward": SkipForwardIcon,
   "square": SquareIcon,
   "star": StarIcon,
+  "sticker": Sticker,
   "tag": TagIcon,
   "trash-2": Trash2Icon,
   "triangle-alert": TriangleAlertIcon,

@@ -373,6 +373,27 @@ error_catalog! { ENTRIES;
         message: "ui.type=agent_session 블록은 제거되었습니다. process 모듈과 chat.client를 쓰는 chat 블록으로 정의하세요.",
         fix: "agent_session을 chat.client 모드의 chat 블록으로 바꾸세요"
     }
+    APP_BUTTON_VARIANT_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "단추 강조 바인딩 판 검사",
+        cause: "단추 강조 바인딩을 지원하지 않는 블록 세트 판이다",
+        message: "{pointer}의 button.variant 바인딩은 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 올리세요.",
+        fix: "앱 정의의 requires.blocks를 {version} 이상으로 올리세요"
+    }
+    APP_BUTTON_ICON_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "단추 아이콘 판 검사",
+        cause: "단추 아이콘을 지원하지 않는 블록 세트 판이다",
+        message: "{pointer}의 button.icon은 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 올리세요.",
+        fix: "앱 정의의 requires.blocks를 {version} 이상으로 올리세요"
+    }
+    APP_BUTTON_GRID_ICON_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "단추 격자 아이콘 판 검사",
+        cause: "단추 격자 아이콘을 지원하지 않는 블록 세트 판이다",
+        message: "{pointer}의 button_grid.buttons 아이콘은 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 올리세요.",
+        fix: "앱 정의의 requires.blocks를 {version} 이상으로 올리세요"
+    }
     APP_IMPORT_SERVER_NOT_CONNECTED() {
         class: Server,
         place: "쉘의 앱 가져오기",

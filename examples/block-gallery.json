@@ -2,7 +2,7 @@
   "id": "block-gallery",
   "name": "블록 견본",
   "description": "블록을 탭마다 모아 보인다",
-  "requires": { "blocks": 31, "modules": { "files": 1 } },
+  "requires": { "blocks": 32, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
     { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }
@@ -169,7 +169,7 @@
             {
               "type": "toolbar",
               "start": [
-                { "type": "button", "label": "하나 더", "description": "횟수를 하나 늘립니다.", "icon": "plus", "variant": "primary", "on_click": [{ "set_state": "count", "value": { "expr": "$state.count + 1" } }] },
+                { "type": "button", "label": "하나 더", "description": "횟수를 하나 늘립니다.", "icon": "plus", "variant": { "expr": "$state.count > 0 ? 'primary' : 'default'" }, "on_click": [{ "set_state": "count", "value": { "expr": "$state.count + 1" } }] },
                 { "type": "button", "label": "되돌리기", "description": "횟수를 처음으로 돌립니다.", "icon": "rotate-ccw", "icon_only": true, "on_click": [{ "set_state": "count", "value": 0 }], "disabled": { "expr": "$state.count = 0" } },
                 { "type": "text", "style": "meta", "value": { "expr": "$string($state.count) & '번'" } }
               ],
