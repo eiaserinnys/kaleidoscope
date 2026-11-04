@@ -99,8 +99,9 @@ jobs:
 
           $published = Invoke-RestMethod -Uri "$publicBase/latest.json?run=${{ github.run_id }}"
           if ($published.version -ne $version) { throw '공개 업데이트 매니페스트의 판이 다릅니다' }
-          $head = Invoke-WebRequest -Method Head -Uri "$publicBase/kaleidoscope_x64-setup.exe?run=${{ github.run_id }}"
-          if ([long]$head.Headers.'Content-Length' -ne (Get-Item $installerPath).Length) { throw '공개 설치본의 크기가 다릅니다' }
+          $downloaded = Join-Path $env:RUNNER_TEMP 'published-setup.exe'
+          Invoke-WebRequest -Uri "$publicBase/kaleidoscope_x64-setup.exe?run=${{ github.run_id }}" -OutFile $downloaded
+          if ((Get-FileHash -Algorithm SHA256 $downloaded).Hash -ne (Get-FileHash -Algorithm SHA256 $installerPath).Hash) { throw '공개 설치본이 올린 파일과 다릅니다' }
 
       - name: Capture Windows shell smoke screen
         shell: pwsh
