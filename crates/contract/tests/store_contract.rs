@@ -128,6 +128,7 @@ fn store_budget_is_grouped_by_permission_and_counts_only_refresh() {
     let budget = data::call_budget(&parsed);
     assert_eq!(budget.len(), 1);
     assert_eq!(budget[0].host, "store:catalog");
+    assert_eq!(budget[0].default_per_minute, 1.0);
     assert_eq!(budget[0].all_per_minute, 3.0);
     value["sources"]["catalog"]
         .as_object_mut()
