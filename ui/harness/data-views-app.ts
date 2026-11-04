@@ -3,6 +3,8 @@ import type { AppDefinition } from "../src/contract/contract";
 const entries = Array.from({ length: 35 }, (_, index) => ({ key: String(index), name: "기록", body: `내용 ${index + 1}` }));
 const items = Array.from({ length: 1000 }, (_, index) => ({ key: String(index), title: `항목 ${index + 1}`, url: `https://example.com/${index + 1}` }));
 const grid = Array.from({ length: 24 }, (_, index) => ({ key: String(index), title: `그림 ${index + 1}`, image: { permission: "media", path: index % 2 ? "shapes.png" : "landscape.png" } }));
+const iconNames = ["계산기 플러스", "날씨 보드", "해커뉴스 읽기", "시세와 환율", "2026 마일스톤", "EB 치트 커맨더", "JIZURA", "주사위 쟁반", "바둑판", "끝말잇기", "뽀모도로", "로그 보기"];
+const icons = iconNames.map((title, index) => ({ key: String(index), title, image: { permission: "media", path: `tile-${index % 4}.svg` }, url: `https://example.com/${index}` }));
 const rows = Array.from({ length: 70 }, (_, index) => ({ key: String(index), name: `행 ${index + 1}`, status: "길게 표시되는 진행 상태 배지", a: index, b: index + 1, c: index + 2, d: index + 3, e: index + 4 }));
 const surfaceCards = Array.from({ length: 240 }, (_, index) => ({ key: String(index), surface: `sample-${index}`, title: `견본 ${index + 1}`, aspect: index === 0 ? 9 / 16 : 1.6 }));
 const scheduleColumns = [{ field: "label", label: "담당" }, ...Array.from({ length: 12 }, (_, index) => ({ field: `period_${index}`, label: `${index + 1}일`, width: "wide" as const, format: "content" as const }))];
@@ -13,7 +15,7 @@ const largeRows = Array.from({ length: 200 }, (_, index) => ({ key: `group-${ind
 export const dataViewsApp: AppDefinition = {
   id: "data-views-test",
   name: "보기 시험",
-  requires: { blocks: 24, modules: { files: 1, connection: 1 } },
+  requires: { blocks: 26, modules: { files: 1, connection: 1 } },
   permissions: [{ id: "media", module: "files", access: "read", label: "그림" }, { id: "sample", module: "connection", access: "read", connection: "sample", label: "예제" }],
   sources: { sample: { kind: "request", permission: "sample", path: "/sample" } },
   state: { tab: new URLSearchParams(window.location.search).has("grid-error") ? 13 : new URLSearchParams(window.location.search).has("grid-loading") ? 12 : 0, choice: null, feed: entries, cards_open: false, delete_rows: items.slice(0, 8), schedule_columns: scheduleColumns, schedule_rows: scheduleRows, schedule_choice: null, large_columns: largeColumns, large_rows: largeRows },
@@ -70,5 +72,7 @@ export const dataViewsApp: AppDefinition = {
     { label: "탐색기 확인", child: { type: "explorer", root: { permission: "media" } } },
     { label: "열 불러오기", child: { type: "table", rows: [{ key: "a", label: "첫 항목" }], columns: { expr: '$data.sample.message ? [{"field":"label","label":"이름"}] : []' } } },
     { label: "칸 오류", child: { type: "table", rows: [{ key: "a", label: "제작", day: ["잘못된 내용"], next: { title: "정상 일정" } }], columns: [{ field: "label", label: "항목" }, { field: "day", label: "첫째 날", format: "content" }, { field: "next", label: "둘째 날", format: "content" }], selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
+    { label: "아이콘 시험", child: { type: "list", layout: "icons", items: icons, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }] } },
+    { label: "빈 아이콘", child: { type: "list", layout: "icons", items: [] } },
   ] },
 };

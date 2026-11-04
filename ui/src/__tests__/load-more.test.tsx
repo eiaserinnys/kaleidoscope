@@ -10,9 +10,22 @@ vi.mock("../components/data-state", () => ({ DataState: ({ value, onRetry }: { v
 function Harness({ more, count, visible, data }: { more?: BindingMore; count: number; visible: boolean; data: WindowData }) {
   return useLoadMore(more, count, count - 1, data, visible);
 }
+function IconHarness({ more, items, data }: { more?: BindingMore; items: number; data: WindowData }) {
+  return useLoadMore(more, 1, 0, data, true, undefined, items);
+}
 const state = (status: BindingMore["state"], retry = false): BindingMore => ({ source: "items", state: status, retry });
 
 describe("다음 쪽 바닥 줄", () => {
+  it.each(["grid", "icons"])("%s의 같은 격자 행에 항목이 추가돼도 다음 쪽을 계속 받는다", async () => {
+    const request = vi.fn().mockResolvedValue(true);
+    const data = { more: request } as unknown as WindowData;
+    const { rerender } = render(<IconHarness more={state("ready")} items={1} data={data} />);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    rerender(<IconHarness more={state("loading")} items={1} data={data} />);
+    rerender(<IconHarness more={state("ready")} items={2} data={data} />);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("button", { name: "더 보기" })).toBeNull();
+  });
   it("같은 행 수에서 자동 호출을 반복하지 않고 새 행이 없으면 더 보기를 제공한다", async () => {
     const request = vi.fn().mockResolvedValue(true);
     const data = { more: request } as unknown as WindowData;

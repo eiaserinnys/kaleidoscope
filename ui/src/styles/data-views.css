@@ -57,6 +57,18 @@
 .ks-media-thumbnail.is-asset { background: transparent; border-radius: 0; }
 .ks-media-thumbnail.is-asset img { object-fit: contain; }
 .ks-list-grid-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--ks-pane-min-size), 1fr)); gap: var(--ks-space-3); padding: 0 var(--ks-space-3) var(--ks-space-3); }
+.ks-list.is-icons { padding: var(--ks-space-2); }
+.ks-icon-tile .ks-media-thumbnail { background: transparent; border-radius: 0; }
+.ks-icon-tile .ks-media-thumbnail img { object-fit: contain; }
+.ks-list-icon-row { padding-block-end: var(--ks-space-1); }
+.ks-list.is-icons > .ks-load-more { padding: 0; }
+.ks-icon-skeleton-grid { width: 100%; }
+.ks-icon-tile-skeleton { pointer-events: none; }
+.ks-icon-tile-skeleton i { display: block; background: var(--ks-color-hover); border-radius: var(--ks-radius-small); }
+.ks-icon-skeleton-icon { width: var(--ks-space-6); height: var(--ks-space-6); }
+.ks-icon-skeleton-name { display: flex; width: 100%; flex-direction: column; gap: var(--ks-space-1); }
+.ks-icon-skeleton-name i { width: 100%; height: calc(var(--ks-type-body) * var(--ks-line-body) - var(--ks-space-1)); }
+.ks-icon-skeleton-name i:last-child { width: 70%; align-self: center; }
 .ks-list-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); min-width: 0; border: var(--ks-focus-width) solid transparent; border-radius: var(--ks-radius-small); padding: 0; background: transparent; cursor: pointer; color: inherit; font: inherit; text-align: start; }
 .ks-list-card.is-selected { border-color: var(--ks-color-accent); }
 .ks-list-card:hover { background: var(--ks-color-hover); }

@@ -5,13 +5,15 @@ const items = (start: number) => Array.from({ length: 30 }, (_, offset) => ({ ke
 const stories = (start: number) => Array.from({ length: 30 }, (_, offset) => ({ objectID: String(start + offset), title: `시험 이야기 ${start + offset}`, author: "작성자", points: start + offset, num_comments: 2 }));
 
 export const pagingApp: AppDefinition = {
-  id: "paging-test", name: "쪽 넘김 시험", requires: { blocks: 22, modules: { connection: 1 } },
+  id: "paging-test", name: "쪽 넘김 시험", requires: { blocks: 26, modules: { connection: 1 } },
   permissions: [{ module: "connection", id: "api", connection: "example", label: "API", access: "read" }, { module: "connection", id: "alternate", connection: "example", label: "다른 연결", access: "read" }],
   state: { tab: 0 },
   sources: {
     list_items: { kind: "request", permission: "api", path: "/items", page: { param: "cursor", next: "next", items: "items" } },
     table_rows: { kind: "request", permission: "alternate", path: "/rows", page: { param: "cursor", next: "next", items: "items" } },
     horizontal_rows: { kind: "request", permission: "api", path: "/horizontal", page: { param: "cursor", next: "next", items: "items" } },
+    grid_items: { kind: "request", permission: "api", path: "/grid", page: { param: "cursor", next: "next", items: "items" } },
+    icon_items: { kind: "request", permission: "api", path: "/icons", page: { param: "cursor", next: "next", items: "items" } },
   },
   ui: { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [
     { label: "목록", child: { type: "stack", direction: "column", children: [
@@ -26,6 +28,8 @@ export const pagingApp: AppDefinition = {
     { label: "가로 폭 시험", child: { type: "table", rows: { expr: "$data.table_rows.items" }, columns: [{ field: "name", label: "이름", width: "wide" }, { field: "title", label: "제목", width: "wide" }] } },
     { label: "피드 시험", child: { type: "feed", entries: { expr: "$data.list_items.items" } } },
     { label: "격자 반복", child: { type: "repeat", layout: "grid", virtual: true, key: "key", items: { expr: "$data.list_items.items" }, template: { type: "text", value: { item: "title" } } } },
+    { label: "격자 목록", child: { type: "list", layout: "grid", items: { expr: "$data.grid_items.items" } } },
+    { label: "아이콘 목록", child: { type: "list", layout: "icons", items: { expr: "$data.icon_items.items" } } },
   ] },
 };
 
@@ -50,6 +54,11 @@ export const pagingSplitApp: AppDefinition = {
 };
 
 export const pagingSeeds: Record<string, FakeSourceSeed> = {
+  ...Object.fromEntries(["grid_items", "icon_items"].map((source) => [source, { pages: [
+    { value: { items: [{ key: "1", title: "첫 칸" }], next: "2" }, delayMs: source === "icon_items" ? 1200 : 0 },
+    { value: { items: [{ key: "2", title: "둘째 칸" }], next: "3" }, delayMs: 1200 },
+    { value: { items: [{ key: "3", title: "셋째 칸" }], next: null }, delayMs: 500 },
+  ] }])),
   stories: { pages: [
     { value: { hits: stories(1), page: 0, nbPages: 2 } },
     { value: { hits: stories(31), page: 1, nbPages: 2 }, delayMs: 600 },

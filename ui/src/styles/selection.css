@@ -49,6 +49,7 @@ summary,
 .ks-settings-custom .ks-data-text.is-meta,
 .ks-settings-custom .ks-data-stack.is-row > .ks-data-stack-item > .ks-data-text,
 .ks-image-frame img,
+.ks-icon-tile-name,
 .ks-data-toolbar .ks-data-text,
 .ks-data-toolbar .ks-data-text * {
   user-select: none;

@@ -40,6 +40,66 @@ async function changedPixels(page: Page, a: Buffer, b: Buffer) {
   }, [a.toString("base64"), b.toString("base64")] as const);
 }
 
+test("아이콘 목록과 탐색기가 같은 칸을 쓰고 방향키와 메뉴가 동작한다", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await app.getByRole("tab", { name: "아이콘 시험" }).click();
+  const list = app.getByRole("listbox", { name: "목록" });
+  const first = list.getByRole("option", { name: "계산기 플러스" });
+  await expect(first).toBeVisible();
+  await expect(first.locator("img")).toBeVisible();
+  const metrics: Record<string, unknown> = {};
+  for (const [width, expected] of [[360, 3], [1000, 9]] as const) {
+    await list.evaluate((element, value) => { element.style.width = `${value}px`; }, width);
+    const row = list.locator(".ks-list-icon-row").first();
+    await expect.poll(() => row.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(expected);
+    const boxes = await row.locator(".ks-icon-tile").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+    metrics[width] = boxes;
+    await first.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(list.getByRole("option").nth(expected)).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(list.getByRole("option").nth(expected)).toHaveAttribute("aria-selected", "true");
+    await capture(page, `icons-${width}`);
+  }
+  await first.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "주소 복사" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("https://example.com/0");
+  await list.evaluate((element) => { element.style.width = ""; });
+  for (const width of [360, 1000]) {
+    await page.setViewportSize({ width, height: 900 });
+    await capture(page, `icons-viewport-${width}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await app.getByRole("tab", { name: "빈 아이콘" }).click();
+  await expect(app.getByText("없음", { exact: true })).toBeVisible();
+  await capture(page, "icons-empty");
+  await app.getByRole("tab", { name: "탐색기 확인" }).click();
+  await app.getByRole("button", { name: "그림 고르기" }).click();
+  await app.getByRole("button", { name: "아이콘 보기" }).click();
+  const explorer = app.getByRole("listbox", { name: "폴더 내용" });
+  await expect(explorer.getByRole("option").first()).toBeVisible();
+  const { execFileSync } = await import("node:child_process");
+  const originalCss = execFileSync("git", ["show", "d38c4fb:ui/src/styles/blocks.css"], { encoding: "utf8" });
+  const start = originalCss.indexOf(".ks-explorer-icons {");
+  const end = originalCss.indexOf(".ks-explorer-detail-name {", start);
+  const oldTiles = originalCss.slice(start, end).replaceAll(".ks-explorer-icon-name", ".ks-icon-tile-name").replaceAll(".ks-explorer-icon", ".ks-icon-tile").replaceAll(".ks-icon-tiles", ".ks-explorer-icons");
+  for (const width of [360, 1000]) {
+    await explorer.evaluate((element, value) => { element.style.width = `${value}px`; }, width);
+    await expect(explorer.locator(".ks-icon-tile").first()).toBeVisible();
+    const old = await page.addStyleTag({ content: `${oldTiles}\n.ks-icon-tile-name { word-break: normal; }` });
+    await capture(page, `explorer-before-${width}`);
+    await old.evaluate((element) => element.remove());
+    await capture(page, `explorer-icons-${width}`);
+  }
+  await app.getByRole("button", { name: "자세히 보기" }).click();
+  await expect(app.getByRole("table", { name: "폴더 내용" }).getByText("README.md")).toBeVisible();
+  await capture(page, "explorer-details");
+  if (output) writeFileSync(join(output, "icons-metrics.json"), JSON.stringify(metrics, null, 2));
+});
+
 test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=data-views-test");

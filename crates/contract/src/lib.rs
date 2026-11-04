@@ -288,7 +288,8 @@ pub const CONTRACT_VERSION: u32 = 34;
 /// - 27판: `split.column_below`, `repeat.gap`.
 /// - 28판: `button.description` 도움말 바인딩.
 /// - 29판: client의 메시지 수신 능력.
-pub const BLOCK_SET_VERSION: u32 = RECEIVE_MESSAGE_BLOCK_SET_VERSION;
+/// - 30판: `list`의 아이콘 격자 배치.
+pub const BLOCK_SET_VERSION: u32 = LIST_ICONS_BLOCK_SET_VERSION;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
 pub const RECEIVE_MESSAGE_BLOCK_SET_VERSION: u32 = 29;
 pub const RECEIVE_MESSAGE_CLIENT_VERSION: u32 = 6;
@@ -298,6 +299,8 @@ pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 pub const LAYOUT_FIELDS_BLOCK_SET_VERSION: u32 = 27;
 /// button.description을 처음 지원한 블록 세트 판.
 pub const BUTTON_DESCRIPTION_BLOCK_SET_VERSION: u32 = 28;
+/// 목록 아이콘 배치의 첫 블록 세트 판.
+pub const LIST_ICONS_BLOCK_SET_VERSION: u32 = 30;
 /// 입력 읽기 전용 바인딩의 첫 블록 세트 판.
 pub const INPUT_READ_ONLY_BLOCK_SET_VERSION: u32 = 25;
 /// 동적 표 열과 칸 격자의 첫 블록 세트 판.
@@ -3673,6 +3676,8 @@ pub enum ListLayout {
     Rows,
     /// 그림 칸의 격자.
     Grid,
+    /// 작은 아이콘과 이름의 격자.
+    Icons,
 }
 
 /// 표의 열 배열 또는 열 값을 내는 바인딩.
