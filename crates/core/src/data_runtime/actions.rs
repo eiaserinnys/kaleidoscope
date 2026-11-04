@@ -299,7 +299,10 @@ pub(crate) fn act(
                     }
                 })?;
                 if !(200..300).contains(&reply.status) {
-                    return Err(connections::response_error(&reply, &permission));
+                    let target = crate::data_sources::request_target(inner, window_id, &permission)
+                        .or_else(|| crate::data_sources::request_host(inner, window_id, &permission))
+                        .unwrap_or_else(|| "서버".into());
+                    return Err(connections::response_error(&reply, &target));
                 }
                 super::connection_changed(inner, &permission);
             }

@@ -258,12 +258,12 @@ error_catalog! { ENTRIES;
         message: "연결 {connection}의 응답이 허용 크기 {limit}보다 커서 읽지 못했습니다. 앱 정의의 요청 범위를 줄이세요.",
         fix: "앱 정의의 요청 범위를 줄이세요"
     }
-    CONN_REQUEST_SERVER_RESPONSE_FAILED(permission) {
+    CONN_REQUEST_SERVER_RESPONSE_FAILED(target, reason) {
         class: Server,
         place: "연결 요청 응답 확인",
         cause: "원격 서버가 요청을 실패로 응답했다",
-        message: "연결 권한 {permission}: 연결된 서버가 실패 응답을 보냈습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
-        fix: "list_connections로 연결 설정을 확인하세요"
+        message: "{target}의 서버가 요청을 실패로 응답했습니다. 원인을 보고 고칠 수 없으면 에이전트에게 이 오류 코드를 전하세요. 원인: {reason}",
+        fix: "원인을 보고 고칠 수 없으면 에이전트에게 이 오류 코드를 전하세요"
     }
     CONN_REQUEST_RELAY_METHOD_INVALID(connection) {
         class: InvalidRequest,

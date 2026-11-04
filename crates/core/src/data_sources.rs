@@ -133,9 +133,17 @@ pub(crate) fn fetch_named(
                 });
             }
             if !(200..300).contains(&response.status) {
-                let mut error = errors::DATA_SOURCE_RESPONSE_STATUS_FAILED(source, path);
-                let mut details = vec![format!("HTTP 상태: {}", response.status)];
-                if let Some(host) = request_host(inner, window, permission) {
+                let host = request_host(inner, window, permission);
+                let target = request_target(inner, window, permission).unwrap_or_else(|| host.clone().unwrap_or_else(|| "서버".into()));
+                let reason = connections::response_reason(&response);
+                let mut error = match response.status {
+                    404 => errors::DATA_SOURCE_RESPONSE_NOT_FOUND(&target),
+                    401 | 403 => errors::DATA_SOURCE_RESPONSE_DENIED(&target),
+                    500..=599 => errors::DATA_SOURCE_RESPONSE_SERVER_ERROR(&target, &reason),
+                    _ => errors::DATA_SOURCE_RESPONSE_STATUS_FAILED(&target, &reason),
+                };
+                let mut details = vec![format!("HTTP 상태: {}", response.status), format!("원천: {source}"), format!("경로: {path}")];
+                if let Some(host) = host {
                     details.push(format!("호스트: {host}"));
                 }
                 error.details = details;
@@ -157,7 +165,19 @@ pub(crate) fn fetch_named(
     }
 }
 
-fn request_host(inner: &Inner, window_id: &str, permission: &str) -> Option<String> {
+pub(crate) fn request_target(inner: &Inner, window_id: &str, permission: &str) -> Option<String> {
+    let state = inner.state.lock().unwrap();
+    let window = state.shared.windows.iter().find(|window| window.id == window_id)?;
+    let definition = crate::app_commands::definition_for(&state.shared, &window.app_id, window.app_version)?;
+    match definition.permissions.iter().find(|declaration| declaration.id() == permission)? {
+        kaleidoscope_contract::PermissionDecl::Connection { connection, .. } => Some(format!("연결 {connection}")),
+        kaleidoscope_contract::PermissionDecl::Http { label, .. }
+        | kaleidoscope_contract::PermissionDecl::Profiler { label, .. } if !label.trim().is_empty() => Some(label.clone()),
+        _ => None,
+    }
+}
+
+pub(crate) fn request_host(inner: &Inner, window_id: &str, permission: &str) -> Option<String> {
     let (base_url, connection_name) = {
         let state = inner.state.lock().unwrap();
         let window = state

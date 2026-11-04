@@ -466,10 +466,24 @@ fn oauth_request(
     Ok(reply)
 }
 
-pub(crate) fn response_error(reply: &ConnectionReply, permission: &str) -> CoreError {
-    let mut error = errors::CONN_REQUEST_SERVER_RESPONSE_FAILED(permission);
+pub(crate) fn response_error(reply: &ConnectionReply, target: &str) -> CoreError {
+    let mut error = errors::CONN_REQUEST_SERVER_RESPONSE_FAILED(target, response_reason(reply));
     error.details = vec![format!("HTTP {}", reply.status)];
     error
+}
+
+pub(crate) fn response_reason(reply: &ConnectionReply) -> String {
+    let reason = match reply.json.as_ref() {
+        Some(json) => json.get("error").and_then(|value| value.as_str())
+            .or_else(|| json.get("message").and_then(|value| value.as_str()))
+            .or_else(|| json.get("error").and_then(|value| value.get("message")).and_then(|value| value.as_str())),
+        None => reply.text.as_deref().map(str::trim),
+    }.filter(|value| !value.is_empty()).unwrap_or("서버가 사유를 보내지 않았습니다");
+    let line = reason.lines().collect::<Vec<_>>().join(" ");
+    let mut chars = line.chars();
+    let mut result: String = chars.by_ref().take(300).collect();
+    if chars.next().is_some() { result.push('…'); }
+    result
 }
 
 #[cfg(test)]

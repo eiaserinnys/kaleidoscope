@@ -490,10 +490,19 @@ export class WindowData {
     return resolved.status === "ready" ? resolved.value : null;
   }
 
+  private actionLabel(pointer: string, scope?: ItemScope): string | null {
+    const parent = pointer.slice(0, pointer.lastIndexOf("/"));
+    const definition = this.definitionAt(parent);
+    if (!definition || typeof definition !== "object" || !("label" in definition)) return null;
+    const label = this.localBinding(`${parent}/label`, (definition as { label: Binding }).label, scope);
+    return typeof label === "string" && label ? label : null;
+  }
+
   act = (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) =>
     trackWindowAction(this.windowId, this.actInternal(pointer, event, item, modifiers, scope, options));
 
   private actInternal = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
+    const label = this.actionLabel(pointer, scope);
     try {
       if (!options?.input) {
         const pending: Promise<void>[] = [];
@@ -535,7 +544,11 @@ export class WindowData {
       const reply = await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
       if (options?.input) this.inputSequence = Math.max(this.inputSequence, reply.sequence);
       return true;
-    } catch (error) { this.setNotice(toCoreError(error)); return false; }
+    } catch (error) {
+      const problem = toCoreError(error);
+      this.setNotice(label ? { ...problem, message: `${label}: ${problem.message}` } : problem);
+      return false;
+    }
   };
   refresh = async (sources: string[]) => {
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }

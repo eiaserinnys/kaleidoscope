@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Binding } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
-import { useWindowData, WindowDataProvider } from "../data/window-data";
+import { useWindowData, WindowData, WindowDataProvider } from "../data/window-data";
 import { makeTestSeed } from "./fixtures";
 
 const originalClipboard = navigator.clipboard;
@@ -29,10 +29,11 @@ function setup(binding: Binding = { expr: "$state.target" }, appFields: Record<s
     const data = useWindowData();
     const [result, setResult] = useState("");
     const noticeId = useSyncExternalStore(data.subscribeNotice, data.getNoticeId);
+    const notice = useSyncExternalStore(data.subscribeNotice, data.getNotice);
     const scope = { item: { url: "https://example.com/item" }, parent_item: { url: "https://example.com/parent" }, key: "row", index: 0, instance: {} };
     return <><button onClick={async () => setResult(String(await data.act("/ui/on_click", null)))}>실행</button>
       <button onClick={async () => setResult(String(await data.act("/ui/on_click", null, undefined, undefined, scope)))}>항목 실행</button>
-      <output data-testid="result">{result}</output><output data-testid="notice">{noticeId ?? ""}</output></>;
+      <output data-testid="result">{result}</output><output data-testid="notice">{noticeId ?? ""}</output><output data-testid="notice-text">{notice ?? ""}</output></>;
   }
   render(<WindowDataProvider store={store} windowId="viewer-window" definition={definition}><Harness /></WindowDataProvider>);
   return { transport, store };
@@ -78,6 +79,36 @@ it("빈 글은 SHELL_COPY_TEXT_EMPTY로 알린다", async () => {
   await userEvent.click(screen.getByRole("button", { name: "실행" }));
   expect(screen.getByTestId("result").textContent).toBe("false");
   expect(screen.getByTestId("notice").textContent).toBe("SHELL_COPY_TEXT_EMPTY");
+  expect(screen.getByTestId("notice-text").textContent).toMatch(/^복사: /);
+  store.dispose();
+});
+
+it("행 메뉴 이름은 알림에 넣고 이름 없는 단축키는 생략한다", async () => {
+  const definition = {
+    id: "md-viewer", name: "시험", requires: { blocks: 18, modules: {} }, permissions: [], state: {},
+    shortcuts: [{ code: "KeyR", modifiers: [], action: { copy_text: "" } }],
+    ui: { type: "list", items: [], item_menu: [{ label: "번역", on_select: { copy_text: "" } }] },
+  } as unknown as AppDefinition;
+  const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  const data = new WindowData(store, "viewer-window", definition);
+  await data.act("/ui/item_menu/0/on_select", null);
+  expect(data.getNotice()).toMatch(/^번역: /);
+  expect(data.getNoticeId()).toBe("SHELL_COPY_TEXT_EMPTY");
+  await data.act("/shortcuts/0/action", null);
+  expect(data.getNotice()).toMatch(/^복사할 글이 없습니다/);
+  store.dispose();
+});
+
+it("동작 알림은 번역된 단추 이름을 사용한다", async () => {
+  const definition = {
+    id: "md-viewer", name: "시험", requires: { blocks: 18, modules: {} }, permissions: [],
+    state: { language: "ko" }, locale: { state: "language" }, messages: { ko: { translate: "번역" } },
+    ui: { type: "button", label: { message: "translate" }, on_click: { copy_text: "" } },
+  } as unknown as AppDefinition;
+  const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  const data = new WindowData(store, "viewer-window", definition);
+  await data.act("/ui/on_click", null);
+  expect(data.getNotice()).toMatch(/^번역: /);
   store.dispose();
 });
 
