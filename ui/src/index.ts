@@ -68,5 +68,7 @@ export type {
   Workspace,
 } from "./contract/contract";
 export { prepareShareForSend, useShareView } from "./share/share-view";
+export { describeNumbered, resolveNumbered, forgetNumbered } from "./share/numbered";
+export type { ResolveResult } from "./share/numbered";
 export { installShellDragGuard } from "./shell-drag-guard";
 export * from "./contract/shell-errors";

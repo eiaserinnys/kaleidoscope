@@ -181,9 +181,14 @@ pub(super) fn scenario(
         &format!("return !!document.querySelector('{consent} .ks-dialog-confirm button');"),
         "agent process consent",
     )?;
-    if ui::evaluate(app, &format!("const button=document.querySelector('{consent} .ks-dialog-confirm button');if(!button)return false;button.click();return true;"))? != json!(true) {
-        return Err("could not allow the agent process".into());
-    }
+    let bounds = ui::evaluate(app, &format!("const button=document.querySelector('{consent} .ks-dialog-confirm button');const r=button.getBoundingClientRect();return {{x:r.left+r.width/2,y:r.top+r.height/2}};"))?;
+    let window = app.get_window("main").ok_or("main window not found")?;
+    window.set_focus().map_err(|error| error.to_string())?;
+    let position = window.inner_position().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let x = position.x + (bounds["x"].as_f64().ok_or("consent x missing")? * scale).round() as i32;
+    let y = position.y + (bounds["y"].as_f64().ok_or("consent y missing")? * scale).round() as i32;
+    native_input::click(x, y)?;
     record(
         log,
         "agent.permission",

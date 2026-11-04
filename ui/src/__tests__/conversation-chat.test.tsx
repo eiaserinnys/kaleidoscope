@@ -304,7 +304,7 @@ describe("대화 제공자 화면", () => {
     await act(async () => { finishOld(get(null)); });
     expect(screen.getByRole("textbox", { name: "메시지" })).toBeTruthy();
   });
-  it("로그인 필요와 스트림 인증 오류 뒤 로그인하고 다시 조회한다", async () => {
+  it("로그인 필요 표면은 합성 로그인 누름을 막는다", async () => {
     let logged = false;
     const state = setup(async (request) => {
       if (request.op === "conversation.get") { if (!logged) throw error("login_required"); return get(); }
@@ -312,12 +312,8 @@ describe("대화 제공자 화면", () => {
       throw new Error(request.op);
     });
     fireEvent.click(await screen.findByRole("button", { name: "로그인" }));
-    await screen.findByText("기록");
-    state.emit({ event: "conversation.error", thread_id: "thread-1", error: { id: "CONV_STREAM_LOGIN_REQUIRED", code: "login_required", message: "대화 제공자에 다시 로그인해야 합니다.", details: [] } });
-    expect(screen.queryByText("CONV_STREAM_LOGIN_REQUIRED")).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "로그인" }));
-    await screen.findByText("기록");
-    expect(state.call).toHaveBeenCalledWith({ op: "connection.login", window_id: state.window.id, permission: "login" });
+    expect(state.call.mock.calls.some(([request]) => request.op === "connection.login")).toBe(false);
+    expect(screen.getByRole("button", { name: "로그인" }).hasAttribute("data-ks-user-consent")).toBe(true);
   });
   it("묶음 충돌에서 시작과 입력을 숨긴다", async () => {
     setup(async () => { throw error("binding_conflict"); });

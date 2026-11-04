@@ -20,7 +20,7 @@ const folderApp: AppDefinition = {
 };
 const failed = { status: "failed" as const, id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "이 기기에서 폴더를 골라야 합니다", retry: ["pictures"] };
 
-it("폴더를 고르지 않은 폴더 원천은 폴더 선택을 보이고, 고르면 그 원천을 다시 받는다", async () => {
+it("폴더를 고르지 않은 원천의 합성 폴더 선택을 막는다", async () => {
   const seed = makeTestSeed({ definitions: [folderApp] });
   const transport = createFakeTransport(seed);
   const original = transport.call.bind(transport);
@@ -34,8 +34,8 @@ it("폴더를 고르지 않은 폴더 원천은 폴더 선택을 보이고, 고�
   const pick = await screen.findByRole("button", { name: "폴더 선택" });
   expect(screen.queryByRole("button", { name: "다시 받기" })).toBeNull();
   fireEvent.click(pick);
-  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "files.pick_folder", window_id: "viewer-window", permission: "media" })));
-  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.refresh", window_id: "viewer-window", sources: ["pictures"] })));
+  expect(pick.hasAttribute("data-ks-user-consent")).toBe(true);
+  expect(calls.mock.calls.some(([request]) => request.op === "files.pick_folder")).toBe(false);
 });
 
 it("폴더를 이미 고른 원천의 실패는 지금처럼 다시 받기를 보인다", async () => {

@@ -79,7 +79,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const props = { src: current?.url, onError: () => { if (current) playbackError(); }, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
   return <div className={`ks-media-player${video ? " is-video" : ""}`}>
     {video ? <video ref={(el) => { element.current = el; }} {...props} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
-    {error ? <Notice role="alert" errorId={(folder.error ?? error).id} actions={error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && src && "permission" in src ? [<Button key="pick" onClick={() => folder.pick(src.permission, () => setAttempt((value) => value + 1))}>폴더 선택</Button>] : undefined}>{(folder.error ?? error).message}</Notice> : null}
+    {error ? <Notice role="alert" errorId={(folder.error ?? error).id} actions={error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && src && "permission" in src ? [<Button key="pick" data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(src.permission, () => setAttempt((value) => value + 1)); }}>폴더 선택</Button>] : undefined}>{(folder.error ?? error).message}</Notice> : null}
     <div className="ks-media-controls-container">
       <div className="ks-media-controls" onKeyDown={onKeyDown}>
         <div className="ks-media-main">

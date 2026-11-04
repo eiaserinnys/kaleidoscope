@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
@@ -31,6 +31,9 @@ describe("file_tree block", () => {
 
     const pickFolder = await screen.findByRole("button", { name: "문서 폴더 고르기" });
     fireEvent.click(pickFolder);
+    expect(call.mock.calls.some(([request]) => request.op === "files.pick_folder")).toBe(false);
+    expect(pickFolder.hasAttribute("data-ks-user-consent")).toBe(true);
+    await act(async () => { await transport.call({ op: "files.pick_folder", window_id: "editor-window", permission: "docs" }); });
 
     expect(call).toHaveBeenCalledWith({
       op: "files.pick_folder",

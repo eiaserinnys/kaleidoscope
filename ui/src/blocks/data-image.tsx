@@ -85,7 +85,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const layoutKey = JSON.stringify([key, size.width, size.height, failure?.id, failure?.message]);
   const short = size.width < 258 || (size.width < 300 && size.height < 200) || overflowKey === layoutKey;
   const chooseFolder = result.status === "failed" && result.error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && media && "permission" in media;
-  const action = chooseFolder ? <Button onClick={() => folder.pick(media.permission, result.retry)}>폴더 선택</Button> : <Button onClick={result.retry}>다시 받기</Button>;
+  const action = chooseFolder ? <Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(media.permission, result.retry); }}>폴더 선택</Button> : <Button onClick={result.retry}>다시 받기</Button>;
   useLayoutEffect(() => {
     if (!failure || short || !host.current) return;
     const bounds = host.current.getBoundingClientRect();

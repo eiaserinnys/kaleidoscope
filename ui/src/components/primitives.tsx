@@ -15,6 +15,7 @@ export interface ButtonProps {
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
   "aria-disabled"?: boolean;
+  "data-ks-user-consent"?: boolean;
 }
 
 export function Button({
@@ -31,6 +32,7 @@ export function Button({
   "aria-invalid": invalid,
   "aria-describedby": describedBy,
   "aria-disabled": ariaDisabled,
+  "data-ks-user-consent": userConsent,
 }: ButtonProps) {
   return (
     <button
@@ -42,6 +44,7 @@ export function Button({
       aria-invalid={invalid}
       aria-describedby={describedBy}
       aria-disabled={ariaDisabled}
+      data-ks-user-consent={userConsent || undefined}
       onClick={onClick}
       type={type}
       title={title}
@@ -61,14 +64,16 @@ export interface IconButtonProps {
   tone?: "share";
   className?: string;
   "aria-disabled"?: boolean;
+  "data-ks-user-consent"?: boolean;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, "aria-disabled": ariaDisabled }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, "aria-disabled": ariaDisabled, "data-ks-user-consent": userConsent }: IconButtonProps) {
   return (
     <button
       aria-label={label}
       aria-pressed={pressed}
       aria-disabled={ariaDisabled}
+      data-ks-user-consent={userConsent || undefined}
       className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
       onClick={onClick}

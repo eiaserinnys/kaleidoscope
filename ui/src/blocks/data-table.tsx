@@ -58,6 +58,7 @@ function formattedCell(value: JsonValue | undefined, column: Column): ReactNode 
   return undefined;
 }
 const numericColumn = (column: Column) => column.format === "number" || column.format === "date" || column.format === "delta";
+const readOnlyRowProps = () => ({ "data-ks-share-readonly": "true" });
 export function TableBlock({ block, context, pointer }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/rows`, block.rows);
   if (value.status !== "ready") return <DataState value={value} />;
@@ -71,7 +72,7 @@ function TableReady({ block, context, pointer, value, more }: { block: Extract<B
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
   const visible = useWindowVisible(context);
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
-  return <><TableView columns={block.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} more={more} data={data} visible={visible} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from(anchor.querySelectorAll('[role="cell"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
+  return <><TableView columns={block.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from(anchor.querySelectorAll('[role="cell"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
 }
 
 export interface TableViewProps {
@@ -99,7 +100,7 @@ type TableHandlers = {
   context: (event: React.MouseEvent<HTMLElement>, row: Row) => void;
 };
 const TableRow = memo(function TableRow({ row, index, start, active, focused, columns, measure, handlers, renderCell, rowProps, activatable }: { row: Row; index: number; start: number; active: boolean; focused: boolean; columns: Column[]; measure: (node: Element | null) => void; handlers: React.RefObject<TableHandlers>; renderCell?: TableViewProps["renderCell"]; rowProps?: TableViewProps["rowProps"]; activatable: boolean }) {
-  return <div {...rowProps?.(row)} role="row" aria-rowindex={index + 1} aria-selected={active} data-focus-index={index} data-index={index} tabIndex={focused ? 0 : -1} ref={measure} className={`ks-row ks-table-row${active ? " is-selected" : ""}${activatable ? " is-activatable" : ""}`} style={{ position: "absolute", top: 0, transform: `translateY(${start}px)` }} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, row)} onClick={() => handlers.current.choose(row)} onDoubleClick={(event) => handlers.current.activate(row, event.currentTarget)} onContextMenu={(event) => handlers.current.context(event, row)}>
+  return <div {...rowProps?.(row)} role="row" aria-rowindex={index + 1} aria-selected={active} data-row-key={row.key} data-focus-index={index} data-index={index} tabIndex={focused ? 0 : -1} ref={measure} className={`ks-row ks-table-row${active ? " is-selected" : ""}${activatable ? " is-activatable" : ""}`} style={{ position: "absolute", top: 0, transform: `translateY(${start}px)` }} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, row)} onClick={() => handlers.current.choose(row)} onDoubleClick={(event) => handlers.current.activate(row, event.currentTarget)} onContextMenu={(event) => handlers.current.context(event, row)}>
     {columns.map((column) => { const raw = row[column.field]; const text = cellValue(raw, column); const content = renderCell?.(row, column); return <span role="cell" key={column.field} title={text} className={`ks-table-cell${numericColumn(column) ? " is-numeric" : ""}`}>{content === undefined ? column.format === "badge" && isBadge(raw) ? <Badge value={raw} /> : formattedCell(raw, column) ?? text : content}</span>; })}
   </div>;
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { registerOverlay } from "../share/overlay-owner";
 import type { Block, TourStep } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useWindowData } from "../data/window-data";
@@ -60,6 +61,9 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
   const card = useRef<HTMLDivElement>(null);
   const lastScrollTarget = useRef<Element | null>(null);
   const [placement, setPlacement] = useState<TourPlacement | null>(null);
+  useLayoutEffect(() => {
+    if (overlay.current && target) return registerOverlay(overlay.current, context.window.id, target);
+  }, [isOpen, target, context.window.id]);
 
   const reposition = useCallback(() => {
     const overlayElement = overlay.current;

@@ -20,8 +20,8 @@ type ListHandlers = {
   choose: (item: ListItem) => void;
   menu: (event: React.MouseEvent<HTMLElement>, item: ListItem) => void;
 };
-const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, handlers }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; handlers: React.RefObject<ListHandlers> }) {
-  return <button type="button" role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)}>
+const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, handlers, readOnly }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean }) {
+  return <button type="button" role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)}>
     {grid ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}<Badges values={item.badges} />
@@ -87,7 +87,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       return <div className={grid && entry.kind === "items" ? "ks-list-grid-row" : undefined} key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
         {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.items.map((item, n) => {
           const index = entry.start + n; const active = item.key === selected;
-          return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} handlers={handlers} key={item.key} />;
+          return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} handlers={handlers} readOnly={!block.on_select && !block.item_menu?.length} key={item.key} />;
         })}
       </div>;
     })}</VirtualSurface>}

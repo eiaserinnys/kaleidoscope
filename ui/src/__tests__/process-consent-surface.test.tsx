@@ -9,6 +9,13 @@ import { makeTestSnapshot } from "./fixtures";
 if (!window.PointerEvent) Object.defineProperty(window, "PointerEvent", { configurable: true, value: window.MouseEvent });
 afterEach(() => cleanup());
 
+it("합성 클릭으로 프로그램 실행을 허용하지 않는다", () => {
+  const { call, emit } = setup(); emit();
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "허용" }));
+  expect(call).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog").closest("[data-ks-user-consent]")).not.toBeNull();
+});
+
 function setup(top = "editor-window") {
   let snapshot = makeTestSnapshot();
   snapshot.shared.windows = snapshot.shared.windows.map((window) => ({ ...window, z: window.id === top ? 2 : 1 }));
@@ -100,15 +107,15 @@ it("스크롤 본문은 키보드로 진입하고 명령과 환경이 설명에 
   expect(document.activeElement).toBe(scroll);
 });
 
-it.each([true, false])("응답 %s 뒤 요청 전 포커스로 돌아간다", (allow) => {
+it("취소 뒤 요청 전 포커스로 돌아간다", () => {
   const { a, call, emit } = setup();
   const previous = screen.getByRole("button", { name: "실행 A" }); previous.focus(); emit();
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: allow ? "허용" : "취소" }));
-  expect(call).toHaveBeenCalledWith({ op: "process.respond_permission", window_id: a.id, request_id: "request", allow });
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+  expect(call).toHaveBeenCalledWith({ op: "process.respond_permission", window_id: a.id, request_id: "request", allow: false });
   expect(document.activeElement).toBe(previous);
 });
 
-it.each([true, false])("뒤 창에서 뜬 표면에 응답 %s 뒤 같은 창 내용에 머문다", async (allow) => {
+it("뒤 창에서 뜬 표면을 취소한 뒤 같은 창 내용에 머문다", async () => {
   const user = userEvent.setup();
   const { a, call, change, emit } = setup("viewer-window");
   const other = screen.getByLabelText("입력 B");
@@ -119,8 +126,8 @@ it.each([true, false])("뒤 창에서 뜬 표면에 응답 %s 뒤 같은 창 내
   const frame = screen.getByTestId("app-window-md-editor");
   await user.click(frame.querySelector<HTMLElement>(".ks-window-consent-overlay")!);
   change((snapshot) => ({ ...snapshot, shared: { ...snapshot.shared, windows: snapshot.shared.windows.map((window) => window.id === a.id ? { ...window, z: 3 } : window) } }));
-  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: allow ? "허용" : "취소" }));
-  expect(call).toHaveBeenCalledWith({ op: "process.respond_permission", window_id: a.id, request_id: "request", allow });
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+  expect(call).toHaveBeenCalledWith({ op: "process.respond_permission", window_id: a.id, request_id: "request", allow: false });
   expect(document.activeElement).toBe(frame.querySelector(".ks-window-content"));
   await user.keyboard("뒤로 보내지 않을 글");
   expect((other as HTMLInputElement).value).toBe("앞 창 입력");
