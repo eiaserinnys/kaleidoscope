@@ -83,6 +83,35 @@ impl Drop for NotesFixture {
     }
 }
 
+fn allow_pc_with_native_input(app: &AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let window = app.get_window("main").ok_or("main window not found")?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        let bounds = evaluate(
+            app,
+            r#"
+          const root=document.querySelector('[data-testid="app-window-explorer"]');
+          const button=[...root.querySelectorAll('button')].find(b=>b.textContent.trim()==='이 PC의 파일 읽기 허용');
+          const rect=button.getBoundingClientRect();
+          return {x:rect.left+rect.width/2,y:rect.top+rect.height/2};
+        "#,
+        )?;
+        let position = window.inner_position().map_err(|error| error.to_string())?;
+        let scale = window.scale_factor().map_err(|error| error.to_string())?;
+        let x = position.x
+            + (bounds["x"].as_f64().ok_or("PC consent x missing")? * scale).round() as i32;
+        let y = position.y
+            + (bounds["y"].as_f64().ok_or("PC consent y missing")? * scale).round() as i32;
+        super::share_isolate::native_input::click(x, y)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Err("PC access E2E requires native Windows input".into())
+    }
+}
+
 pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), String> {
     let fixture = NotesFixture::create()?;
     let snap = snapshot(core)?;
@@ -258,6 +287,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         },
     )?;
 
+    let browser_place = web_place_mark();
     let explorer_id = open(
         core,
         &desktop,
@@ -271,19 +301,12 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     )?;
     wait_dom(
         app,
-        "return !!document.querySelector('[data-testid=\"app-window-explorer\"]');",
+        "return !![...(document.querySelector('[data-testid=\"app-window-explorer\"]')?.querySelectorAll('button') ?? [])].find(b=>b.textContent.trim()==='이 PC의 파일 읽기 허용');",
         "explorer window",
     )?;
+    wait_web_hidden(&browser_id, browser_place)?;
     let start = request_mark();
-    action(
-        app,
-        r#"
-      const root=document.querySelector('[data-testid="app-window-explorer"]');
-      const button=[...root.querySelectorAll('button')].find(b=>b.textContent.trim()==='이 PC의 파일 읽기 허용');
-      if(!button)return false; button.click(); return true;
-    "#,
-        "allow PC access",
-    )?;
+    allow_pc_with_native_input(app)?;
     require_request(
         log,
         start,

@@ -1,5 +1,6 @@
 import { useLayoutEffect, type RefObject } from "react";
 import { SHARE_TEXT_CUT_MARK, SHARE_TEXT_MAX_BYTES } from "../contract/limits";
+import { inConsent } from "./overlay-owner";
 
 type Description = { text: string; visual: boolean; image_base64?: string; continue?: boolean };
 const describers = new WeakMap<HTMLElement, () => Description>();
@@ -48,7 +49,7 @@ const roles: Record<string, { label: string; selector: string; unit: string }> =
   feed: { label: "흐름", selector: 'article', unit: "개" },
 };
 
-export function describeVisible(root: HTMLElement): { text: string; visual: boolean; image_base64?: string } {
+export function describeVisible(root: HTMLElement, numbered = false): { text: string; visual: boolean; image_base64?: string } {
   const rootClip = visibleClip(root);
   let output = "";
   let visual = false;
@@ -84,7 +85,7 @@ export function describeVisible(root: HTMLElement): { text: string; visual: bool
       }
       return;
     }
-    if (!(node instanceof HTMLElement) || node.hidden || node.getAttribute("aria-hidden") === "true" || node.hasAttribute("data-ks-share-skip")) return;
+    if (!(node instanceof HTMLElement) || node.hidden || node.getAttribute("aria-hidden") === "true" || node.hasAttribute("data-ks-share-skip") || (numbered && (node.hasAttribute("inert") || inConsent(node)))) return;
     const style = getComputedStyle(node);
     if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return;
     const rect = node.getBoundingClientRect();
@@ -122,7 +123,7 @@ export function describeVisible(root: HTMLElement): { text: string; visual: bool
       if ((node instanceof HTMLInputElement && node.type === "checkbox") || role === "checkbox" || role === "switch") {
         const checked = node instanceof HTMLInputElement ? node.checked : node.getAttribute("aria-checked") === "true";
         append(`${checked ? "[x]" : "[ ]"} ${label || node.textContent || ""}`);
-      } else if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement) append(`${label}: ${node.value}`);
+      } else if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement) append(`${label}: ${numbered && node instanceof HTMLInputElement && node.type === "password" ? "••••" : node.value}`);
     } else if (node instanceof HTMLImageElement) {
       append(`[이미지: ${node.alt || node.currentSrc.split("/").pop() || ""}]`);
       if (rect.width > 24 || rect.height > 24) visual = true;

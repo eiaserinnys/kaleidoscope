@@ -52,7 +52,7 @@ export function DataState({ value, compact = false, layout, loginFailure, onRetr
   if (ungranted !== undefined && value.status === "failed" && value.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN") {
     const retry = value.retry;
     return <div className={compact ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
-      <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : "폴더를 선택해 주세요"} action={<Button onClick={() => pick(ungranted, () => void data.refresh(retry))}>폴더 선택</Button>} />
+      <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : "폴더를 선택해 주세요"} action={<Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) pick(ungranted, () => void data.refresh(retry)); }}>폴더 선택</Button>} />
     </div>;
   }
   const failureText = loginError ? <>{loginError.message}{loginError.id ? <> <ErrorId id={loginError.id} /></> : null}</> : value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : loginFailure ? <>{loginFailure.message}{loginFailure.id ? <> <ErrorId id={loginFailure.id} /></> : null}</> : "로그인이 필요합니다";
@@ -60,7 +60,7 @@ export function DataState({ value, compact = false, layout, loginFailure, onRetr
     <EmptyState icon={<DataIcon name={isLogin ? "log-in" : "triangle-alert"} size={compact ? "inline" : "empty"} />}
       text={failureText}
       action={isLogin
-        ? <Button onClick={() => { setLoginError(null); void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).then(() => onLogin?.()).catch((reason: unknown) => setLoginError(toCoreError(reason))); }}>로그인</Button>
+        ? <Button data-ks-user-consent onClick={(event) => { if (!event.nativeEvent.isTrusted) return; setLoginError(null); void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).then(() => onLogin?.()).catch((reason: unknown) => setLoginError(toCoreError(reason))); }}>로그인</Button>
         : onRetry ? <Button onClick={onRetry}>다시 받기</Button> : value.retry.length ? <Button onClick={() => { void data.refresh(value.retry); }}>다시 받기</Button> : undefined} />
   </div>;
 }

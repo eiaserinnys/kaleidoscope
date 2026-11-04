@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, openContextMenu, useShareView, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
+import { IconButton, Maximize2, Minus, Minimize2, ScreenShare, Settings, X, forgetNumbered, openContextMenu, useShareView, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, usableWindowArea } from "./window-geometry";
 import { ProcessConsent } from "./process-consent";
 import { windowMenuEntries } from "./window-menu";
@@ -53,6 +53,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   const isMaximized = Boolean(appWindow.maximized);
   const isMinimized = Boolean(appWindow.minimized);
   useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen, store });
+  useEffect(() => () => forgetNumbered(appWindow.id), [appWindow.id]);
   const titleRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const previewRef = useRef<Rect | null>(null);

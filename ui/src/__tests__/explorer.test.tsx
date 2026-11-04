@@ -69,6 +69,13 @@ function setup({ legacy = false, folder = "", view = "icons", files, scope = "fo
 }
 
 describe("explorer block", () => {
+  it("합성 클릭으로 PC 읽기를 허용하지 않는다", async () => {
+    const { calls } = setup({ scope: "pc" });
+    const button = await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" });
+    fireEvent.click(button);
+    expect(calls.mock.calls.some(([request]) => request.op === "files.allow_pc")).toBe(false);
+    expect(button.hasAttribute("data-ks-user-consent")).toBe(true);
+  });
   it("asks for PC access before showing the two panes, then displays known folders and drives", async () => {
     const { calls, transport } = setup({ scope: "pc" });
     expect(await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" })).toBeTruthy();
@@ -77,7 +84,7 @@ describe("explorer block", () => {
     await expect(transport.call({ op: "files.list", window_id: "viewer-window", permission: "pc", dir: "" }))
       .rejects.toMatchObject({ code: "not_granted" });
 
-    fireEvent.click(screen.getByRole("button", { name: "이 PC의 파일 읽기 허용" }));
+    await act(async () => { await transport.call({ op: "files.allow_pc", window_id: "viewer-window", permission: "pc" }); });
 
     const tree = await screen.findByRole("tree", { name: "폴더 목록" });
     expect(await within(tree).findByRole("treeitem", { name: /문서/ })).toBeTruthy();
@@ -87,23 +94,22 @@ describe("explorer block", () => {
     expect(screen.queryByRole("button", { name: "폴더 바꾸기" })).toBeNull();
   });
 
-  it("keeps the PC access screen and shows the core error below the action when access fails", async () => {
+  it("합성 누름은 실패 응답을 요청하지 않고 허용 화면을 유지한다", async () => {
     const { calls, originalCall } = setup({ scope: "pc" });
     calls.mockImplementation((request) => request.op === "files.allow_pc"
       ? Promise.reject({ id: "FILE_PC_ACCESS_NOT_GRANTED", code: "not_granted", message: "허용할 수 없습니다", details: [] })
       : originalCall(request));
     fireEvent.click(await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" }));
 
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("허용할 수 없습니다");
-    expect(alert.textContent).toContain("FILE_PC_ACCESS_NOT_GRANTED");
+    expect(calls.mock.calls.some(([request]) => request.op === "files.allow_pc")).toBe(false);
     expect(screen.queryByRole("tree", { name: "폴더 목록" })).toBeNull();
     expect(screen.getByRole("button", { name: "이 PC의 파일 읽기 허용" })).toBeTruthy();
   });
 
   it("uses virtual PC roots in the breadcrumb and returns from a known folder to This PC", async () => {
-    setup({ scope: "pc" });
-    fireEvent.click(await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" }));
+    const { transport } = setup({ scope: "pc" });
+    await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" });
+    await act(async () => { await transport.call({ op: "files.allow_pc", window_id: "viewer-window", permission: "pc" }); });
     const tree = await screen.findByRole("tree", { name: "폴더 목록" });
     fireEvent.click(await within(tree).findByRole("treeitem", { name: "문서" }));
     fireEvent.click(await within(tree).findByRole("treeitem", { name: "notes" }));
@@ -124,7 +130,8 @@ describe("explorer block", () => {
 
   it("labels PC root entries in details and opens a virtual path in the declared app", async () => {
     const { calls, transport } = setup({ scope: "pc" });
-    fireEvent.click(await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" }));
+    await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" });
+    await act(async () => { await transport.call({ op: "files.allow_pc", window_id: "viewer-window", permission: "pc" }); });
     const documents = await screen.findByRole("option", { name: "문서" });
     const downloads = screen.getByRole("option", { name: "다운로드" });
     const drive = await screen.findByRole("option", { name: "로컬 디스크 (C:)" });

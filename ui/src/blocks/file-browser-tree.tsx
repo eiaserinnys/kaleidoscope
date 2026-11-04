@@ -603,7 +603,7 @@ export function FileBrowserTree({
         <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span>
       ) : !hasRoot ? (
         <div className="ks-file-tree-ungranted">
-          <Button onClick={pickFolder}>{permissionLabel} 고르기</Button>
+          <Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) void pickFolder(); }}>{permissionLabel} 고르기</Button>
           {actionError ? <FolderTreeError error={actionError} /> : null}
         </div>
       ) : (
@@ -611,7 +611,7 @@ export function FileBrowserTree({
           {header ? <FolderTreeHeader label={rootName}>
             {showHeaderCreate
               ? <IconButton aria-label={createLabel} onClick={(event) => actionsEnabled ? void actions.beginCreateFile("", focusController.current, event.currentTarget) : void beginCreate()}><FilePlus /></IconButton> : null}
-            {!collection && scope === "folder" ? <IconButton aria-label="폴더 바꾸기" onClick={pickFolder}><FolderOpen /></IconButton> : null}
+            {!collection && scope === "folder" ? <IconButton data-ks-user-consent aria-label="폴더 바꾸기" onClick={(event) => { if (event.nativeEvent.isTrusted) void pickFolder(); }}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader> : null}
           <TreeView

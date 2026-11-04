@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import type { ConversationUpload, ConversationAttachment } from "../contract/contract";
 import { File as FileIcon, X } from "../components/icons";
 import { IconButton } from "../components/primitives";
@@ -112,6 +113,8 @@ export function ImagePreview({ preview, onClose }: { preview: Preview; onClose: 
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current!;
+    const owner = ownerOf(preview.trigger);
+    const unregister = owner ? registerOverlay(dialog, owner, preview.trigger) : undefined;
     const changed = Array.from(document.body.children).filter((child) => child !== dialog && !child.hasAttribute("inert"));
     changed.forEach((child) => child.setAttribute("inert", ""));
     closeRef.current?.querySelector("button")?.focus();
@@ -127,6 +130,7 @@ export function ImagePreview({ preview, onClose }: { preview: Preview; onClose: 
     };
     document.addEventListener("keydown", onKey);
     return () => {
+      unregister?.();
       document.removeEventListener("keydown", onKey);
       changed.forEach((child) => child.removeAttribute("inert"));
       preview.trigger.focus();

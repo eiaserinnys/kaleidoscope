@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ownerOf, registerOverlay } from "../share/overlay-owner";
 
 export interface MenuItem {
   type?: "item";
@@ -42,6 +43,8 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
   useLayoutEffect(() => {
     const rect = anchor.getBoundingClientRect();
     const menu = menuRef.current;
+    const owner = ownerOf(anchor);
+    const unregister = menu && owner ? registerOverlay(menu, owner, anchor) : undefined;
     const menuWidth = menu?.getBoundingClientRect().width ?? 0;
     const viewportInset = menu
       ? Number.parseFloat(getComputedStyle(menu).getPropertyValue("--ks-space-3")) || 0
@@ -98,6 +101,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
+      unregister?.();
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };

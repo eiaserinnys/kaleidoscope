@@ -18,7 +18,7 @@ function setup(block: Block) {
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it("미디어의 폴더 미선택 오류에서 폴더를 고르면 다시 받는다", async () => {
+it("미디어의 폴더 미선택 오류에서 합성 선택을 막는다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { permission: "docs", path: "file.wav" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
@@ -31,12 +31,14 @@ it("미디어의 폴더 미선택 오류에서 폴더를 고르면 다시 받는
     return original(request as never);
   });
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  fireEvent.click(await screen.findByRole("button", { name: "폴더 선택" }));
-  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "files.pick_folder", permission: "docs" })));
-  await waitFor(() => expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(false));
+  const button = await screen.findByRole("button", { name: "폴더 선택" });
+  fireEvent.click(button);
+  expect(button.hasAttribute("data-ks-user-consent")).toBe(true);
+  expect(calls.mock.calls.some(([request]) => request.op === "files.pick_folder")).toBe(false);
+  expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(true);
 });
 
-it("폴더 선택이 실패한 뒤 다른 미디어를 열면 새 오류를 보인다", async () => {
+it("폴더 미선택 뒤 다른 미디어를 열면 새 오류를 보인다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { expr: "$state.track" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
@@ -52,7 +54,7 @@ it("폴더 선택이 실패한 뒤 다른 미디어를 열면 새 오류를 보�
   await screen.findByRole("button", { name: "재생" });
   send("first.wav");
   fireEvent.click(await screen.findByRole("button", { name: "폴더 선택" }));
-  await screen.findByText("FILE_PICK_FAILED");
+  expect(screen.queryByText("FILE_PICK_FAILED")).toBeNull();
   send("second.wav");
   await screen.findByText("MEDIA_LOAD_NOT_FOUND");
   expect(screen.queryByText("FILE_PICK_FAILED")).toBeNull();
@@ -233,7 +235,7 @@ it("확대를 선언한 미리보기 이미지도 그림만 표시한다", async
   expect(view.container.querySelector(".ks-image-view")?.hasAttribute("tabindex")).toBe(false);
 });
 
-it("이미지 폴더 미선택 오류는 넓은 칸과 작은 칸에서 폴더를 고른 뒤 다시 받는다", async () => {
+it("이미지 폴더 미선택 오류는 넓은 칸과 작은 칸에서 합성 선택을 막는다", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   for (const width of [500, 200]) {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width, height: 400 } as DOMRect);
@@ -247,9 +249,11 @@ it("이미지 폴더 미선택 오류는 넓은 칸과 작은 칸에서 폴더�
       return original(request as never);
     });
     const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-    fireEvent.click(await screen.findByRole("button", { name: "폴더 선택" }));
-    await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
-    expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "files.pick_folder", permission: "docs" }));
+    const button = await screen.findByRole("button", { name: "폴더 선택" });
+    fireEvent.click(button);
+    expect(button.hasAttribute("data-ks-user-consent")).toBe(true);
+    expect(view.container.querySelector(".ks-image-frame img")).toBeNull();
+    expect(calls.mock.calls.some(([request]) => request.op === "files.pick_folder")).toBe(false);
     view.unmount();
     vi.restoreAllMocks();
   }
