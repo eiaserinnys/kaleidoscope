@@ -154,26 +154,29 @@ fn current_target(
         .cloned()
 }
 const VISIBLE_POINT_JS: &str = r#"function() {
-    const box = this.getBoundingClientRect();
-    let left = Math.max(0, box.left), top = Math.max(0, box.top);
-    let right = Math.min(window.innerWidth, box.right), bottom = Math.min(window.innerHeight, box.bottom);
+    let clipLeft = 0, clipTop = 0, clipRight = window.innerWidth, clipBottom = window.innerHeight;
     const ancestor = element => element.parentElement || element.getRootNode?.().host || null;
     for (let parent = ancestor(this); parent; parent = ancestor(parent)) {
         const style = getComputedStyle(parent), rect = parent.getBoundingClientRect();
-        if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) { left = Math.max(left, rect.left); right = Math.min(right, rect.right); }
-        if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) { top = Math.max(top, rect.top); bottom = Math.min(bottom, rect.bottom); }
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) { clipLeft = Math.max(clipLeft, rect.left); clipRight = Math.min(clipRight, rect.right); }
+        if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) { clipTop = Math.max(clipTop, rect.top); clipBottom = Math.min(clipBottom, rect.bottom); }
     }
-    if (right - left <= 0.5 || bottom - top <= 0.5) return null;
-    for (const [fx, fy] of [[0.5,0.5],[0.2,0.2],[0.8,0.2],[0.2,0.8],[0.8,0.8]]) {
-        const x = left + (right-left)*fx, y = top + (bottom-top)*fy;
-        let hit = document.elementFromPoint(x,y);
-        const roots = [];
-        for (let root = this.getRootNode?.(); root?.host; root = root.host.getRootNode?.()) roots.push(root);
-        for (const root of roots.reverse()) {
-            if (hit !== root.host) break;
-            hit = root.elementFromPoint(x,y);
+    const rects = this.getClientRects();
+    for (const box of rects.length ? rects : [this.getBoundingClientRect()]) {
+        const left = Math.max(clipLeft, box.left), top = Math.max(clipTop, box.top);
+        const right = Math.min(clipRight, box.right), bottom = Math.min(clipBottom, box.bottom);
+        if (right - left <= 0.5 || bottom - top <= 0.5) continue;
+        for (const [fx, fy] of [[0.5,0.5],[0.2,0.2],[0.8,0.2],[0.2,0.8],[0.8,0.8]]) {
+            const x = left + (right-left)*fx, y = top + (bottom-top)*fy;
+            let hit = document.elementFromPoint(x,y);
+            const roots = [];
+            for (let root = this.getRootNode?.(); root?.host; root = root.host.getRootNode?.()) roots.push(root);
+            for (const root of roots.reverse()) {
+                if (hit !== root.host) break;
+                hit = root.elementFromPoint(x,y);
+            }
+            if (hit === this || this.contains(hit)) return {x,y};
         }
-        if (hit === this || this.contains(hit)) return {x,y};
     }
     return null;
 }"#;
