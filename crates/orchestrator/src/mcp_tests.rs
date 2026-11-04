@@ -3,6 +3,17 @@ use kaleidoscope_contract::registry::DeviceLayout;
 
 const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
 
+#[test]
+fn window_control_tools_are_exposed() {
+    let names: Vec<_> = McpServer::tool_router()
+        .list_all()
+        .into_iter()
+        .map(|tool| tool.name.to_string())
+        .collect();
+    assert!(names.iter().any(|name| name == "read_window"));
+    assert!(names.iter().any(|name| name == "act_window"));
+}
+
 #[tokio::test]
 async fn delete_app_closes_windows_and_resurrection_republishes() {
     let state = AppState::in_memory("secret");

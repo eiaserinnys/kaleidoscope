@@ -1,4 +1,5 @@
 use super::*;
+use kaleidoscope_contract::{ActWindowArgs, ReadWindowArgs};
 
 pub(super) fn call_budget_warnings(definition: &AppDefinition) -> Vec<String> {
     kaleidoscope_contract::data::call_budget(definition)
@@ -127,12 +128,11 @@ impl McpServer {
 }
 
 use rmcp::{
-    ErrorData,
     handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, ContentBlock},
     service::{RequestContext, RoleServer},
-    tool, tool_router,
+    tool, tool_router, ErrorData,
 };
 
 fn request_principal(context: &RequestContext<RoleServer>) -> McpPrincipal {
@@ -668,6 +668,59 @@ impl McpServer {
             Err(error) => json_error(error),
         })
     }
+
+    #[cfg(test)]
+    pub(super) async fn read_window(
+        &self,
+        Parameters(args): Parameters<ReadWindowArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(window_control_result(
+            self.state.read_window(McpPrincipal::default(), args).await,
+        ))
+    }
+
+    #[tool(
+        name = "read_window",
+        description = "같이 보기로 켠 창 하나를 번호 붙은 글과 선택적 격리 그림으로 읽습니다. 조작 전에 먼저 호출해 view_id와 요소 번호를 얻습니다."
+    )]
+    async fn tool_read_window(
+        &self,
+        Parameters(args): Parameters<ReadWindowArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(window_control_result(
+            self.state
+                .read_window(request_principal(&context), args)
+                .await,
+        ))
+    }
+
+    #[cfg(test)]
+    pub(super) async fn act_window(
+        &self,
+        Parameters(args): Parameters<ActWindowArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(window_control_result(
+            self.state.act_window(McpPrincipal::default(), args).await,
+        ))
+    }
+
+    #[tool(
+        name = "act_window",
+        description = "read_window에서 얻은 view_id와 번호 또는 좌표로 같이 보기 창을 조작하고 바뀐 내용을 돌려받습니다."
+    )]
+    async fn tool_act_window(
+        &self,
+        Parameters(args): Parameters<ActWindowArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(window_control_result(
+            self.state
+                .act_window(request_principal(&context), args)
+                .await,
+        ))
+    }
+
     #[tool(description = "현재 작업과 창 개수를 나열합니다.")]
     async fn list_workspaces(&self) -> Result<CallToolResult, ErrorData> {
         Ok(match self.state.list_workspaces() {
@@ -839,6 +892,31 @@ impl McpServer {
 
 pub(super) fn json_result(value: Value) -> CallToolResult {
     CallToolResult::success(vec![ContentBlock::text(value.to_string())])
+}
+fn window_control_result(
+    result: Result<super::window_control::ControlOutput, super::window_control::ControlError>,
+) -> CallToolResult {
+    match result {
+        Ok(super::window_control::ControlOutput {
+            output,
+            image_base64,
+        }) => {
+            let mut content = vec![ContentBlock::text(serde_json::to_string(&output).unwrap())];
+            if let Some(data) = image_base64 {
+                content.push(ContentBlock::image(data, "image/png"));
+            }
+            CallToolResult::success(content)
+        }
+        Err(super::window_control::ControlError { mut error, applied }) => {
+            if let Some(applied) = applied {
+                let detail = format!("applied: {applied}");
+                if !error.details.contains(&detail) {
+                    error.details.push(detail);
+                }
+            }
+            json_error(error)
+        }
+    }
 }
 pub(super) fn json_error(error: CoreError) -> CallToolResult {
     super::log_core_error(&error, "mcp");
