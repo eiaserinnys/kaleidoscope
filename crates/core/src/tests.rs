@@ -273,7 +273,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
         ("profiler", 3),
-        ("agent", 5),
+        ("agent", 6),
         ("explorer", 3),
         ("md-editor", 4),
         ("html-report", 2),
@@ -523,7 +523,7 @@ fn builtin_agent_reads_defaults_before_linking() {
         .shared
         .app_versions
         .iter()
-        .find(|version| version.app_id == "agent" && version.version == 5)
+        .find(|version| version.app_id == "agent" && version.version == 6)
         .unwrap()
         .definition;
     assert_eq!(definition.requires.blocks, 19);
@@ -534,7 +534,7 @@ fn builtin_agent_reads_defaults_before_linking() {
             .unwrap()
             .process_permissions
             .as_deref(),
-        Some(["run".to_owned()].as_slice())
+        Some(["run".to_owned(), "install".to_owned()].as_slice())
     );
 }
 

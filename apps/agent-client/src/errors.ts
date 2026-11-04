@@ -17,6 +17,12 @@ const messages = {
   AGENT_START_HANDLE_MISSING: "에이전트 실행 결과에 프로세스 식별자가 없습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
   AGENT_START_CWD_MISSING: "에이전트 실행 결과에 작업 폴더 경로가 없습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
   AGENT_PROCESS_HANDLE_MISSING: "실행 중인 에이전트 프로세스가 없습니다. 다시 시도하세요.",
+  AGENT_INSTALL_UNSUPPORTED_PLATFORM: (agent: string, name: string, url: string) => `${agent}에 필요한 ${name}이(가) 이 기기에 없습니다. 창에서 설치는 Windows에서만 되니 ${url}에서 받아 설치한 뒤 다시 시도하세요.`,
+  AGENT_INSTALL_WINGET_NOT_FOUND: (name: string, url: string) => `Windows 패키지 관리자 winget이 없어 ${name}을(를) 설치하지 못했습니다. ${url}에서 받아 설치한 뒤 다시 시도하세요.`,
+  AGENT_INSTALL_COMMAND_STILL_MISSING: (name: string, command: string) => `${name}을(를) 설치했지만 프로그램 ${command}을(를) 찾지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`,
+  AGENT_INSTALL_BLOCKED_BY_POLICY: (name: string, url: string) => `조직의 정책이 설치를 막아 ${name}을(를) 설치하지 못했습니다. 관리자에게 문의하거나 ${url}에서 설치 방법을 확인하세요.`,
+  AGENT_INSTALL_CANCELLED_BY_USER: (name: string, url: string) => `설치가 취소되어 ${name}을(를) 설치하지 못했습니다. 다시 시도하거나 ${url}에서 받아 설치하세요.`,
+  AGENT_INSTALL_FAILED: (name: string, url: string, _hex: string, output: string) => `${name}을(를) 설치하지 못했습니다. 다시 시도하거나 ${url}에서 받아 설치하세요. 원인: ${output}`,
   AGENT_PROCESS_EXITED: (name: string) => `에이전트 ${name} 프로그램이 종료되어 대화를 이어갈 수 없습니다. 다시 시도하세요.`,
   AGENT_ATTACHMENT_READ_NOT_FOUND: (name: string) => `기록된 에이전트 첨부 ${name}을 이 기기에서 찾지 못했습니다. 필요하면 파일을 다시 첨부하세요.`,
 } as const;
@@ -25,9 +31,9 @@ const notFound = new Set<keyof typeof messages>([
   "AGENT_RECORD_PAGE_NOT_FOUND", "AGENT_RECONNECT_STREAM_NOT_FOUND", "AGENT_RECONNECT_PARTIAL_NOT_FOUND", "AGENT_ATTACHMENT_READ_NOT_FOUND",
 ]);
 
-export function agentError(id: keyof typeof messages, detail = ""): Error & { id: string; code: string; details: string[] } {
+export function agentError(id: keyof typeof messages, detail = "", ...details: string[]): Error & { id: string; code: string; details: string[] } {
   const value = messages[id];
-  const message = typeof value === "function" ? value(detail) : value;
+  const message = typeof value === "function" ? (value as (...args: string[]) => string)(detail, ...details) : value;
   const code = notFound.has(id) ? "not_found" : id === "AGENT_PROCESS_EXITED" ? "local_agent_failed" : "invalid_request";
-  return Object.assign(new Error(message), { id, code, details: [] });
+  return Object.assign(new Error(message), { id, code, details: id === "AGENT_INSTALL_FAILED" ? [`winget 종료 코드: ${details[1]}`] : [] });
 }

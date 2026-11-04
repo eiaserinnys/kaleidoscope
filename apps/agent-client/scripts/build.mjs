@@ -18,7 +18,7 @@ const bundle = await build({ entryPoints: [resolve(root, "src/index.ts")], bundl
 const bytes = bundle.outputFiles[0].contents;
 const hash = createHash("sha256").update(bytes).digest("hex");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-const entry = { id: "builtin-agent-client", version: 2, format: "javascript", sha256: hash, source: "apps/agent-client", license: "MIT", byte_size: bytes.length, created_at: "2026-11-04T00:00:00Z", path: "agent/client.js" };
+const entry = { id: "builtin-agent-client", version: 3, format: "javascript", sha256: hash, source: "apps/agent-client", license: "MIT", byte_size: bytes.length, created_at: "2026-11-04T00:00:00Z", path: "agent/client.js" };
 const index = manifest.findIndex((item) => item.id === entry.id && item.version === entry.version);
 if (check) {
   const saved = await readFile(target);
