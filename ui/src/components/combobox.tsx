@@ -1,11 +1,11 @@
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type InputHTMLAttributes, type RefObject } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type InputHTMLAttributes, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { keepRovingRow, useVirtualRows, VirtualSurface, DEFAULT_VIRTUAL_ROW_ESTIMATE } from "../blocks/data-view-common";
 import { filterInputOptions, type InputOption } from "../blocks/input-options";
 import { ownerOf } from "../share/overlay-owner";
 import { windowActionActive } from "../share/action-context";
 import { registerSelectOptions } from "../share/select-options";
-import { useAnchoredOverlay } from "./anchored-overlay";
+import { computeAnchoredPosition, useAnchoredOverlay } from "./anchored-overlay";
 
 type Props = {
   inputProps: InputHTMLAttributes<HTMLInputElement>;
@@ -13,12 +13,13 @@ type Props = {
   options: InputOption[];
   ready: boolean;
   visible: boolean;
+  optionsOnly?: boolean;
   onChoose: (value: string) => void;
   onCommit: () => boolean;
   onEditingEnd: () => void;
 };
 
-export function Combobox({ inputProps, inputRef, options, ready, visible, onChoose, onCommit, onEditingEnd }: Props) {
+export function Combobox({ inputProps, inputRef, options, ready, visible, optionsOnly = false, onChoose, onCommit, onEditingEnd }: Props) {
   const id = useId();
   const listId = `${id}-list`;
   const descriptionId = `${id}-description`;
@@ -37,7 +38,9 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, onChoo
   const shown = open ? filtered : options;
   const surface = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<HTMLInputElement | null>(null);
-  const position = useAnchoredOverlay(open ? anchor : null, surface, { observe: true });
+  const popupVisible = open && (optionsOnly || filtered.length > 0);
+  const position = useAnchoredOverlay(popupVisible ? anchor : null, surface, { offsetToken: "--ks-space-2", alignEndOnOverflow: true });
+  const layout = useComboboxLayout(open ? anchor : null, options.some((option) => Boolean(option.description)));
   const optionKey = useCallback((index: number) => filtered[index].index, [filtered]);
   const { scroll, virtual } = useVirtualRows(filtered.length, DEFAULT_VIRTUAL_ROW_ESTIMATE, undefined, false, optionKey);
   const index = active === null ? -1 : filtered.findIndex((option) => option.index === active);
@@ -80,13 +83,13 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, onChoo
     setActive(filtered[next]?.index ?? null); if (filtered[next]) virtual.scrollToIndex(next, { align: "auto" });
   };
   return <>
-    <input {...inputProps} ref={inputRef} role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={open ? listId : undefined} aria-activedescendant={open ? activeId : undefined}
+    <input {...inputProps} ref={inputRef} role="combobox" aria-autocomplete="list" aria-expanded={popupVisible} aria-controls={popupVisible ? listId : undefined} aria-activedescendant={popupVisible ? activeId : undefined}
       onFocus={(event) => { inputProps.onFocus?.(event); show(); }}
       onClick={(event) => { inputProps.onClick?.(event); if (!open) show(); }}
       onBlur={(event) => { if (!surface.current?.contains(event.relatedTarget as Node | null)) { inputProps.onBlur?.(event); setOpen(false); } }}
-      onChange={(event) => { inputProps.onChange?.(event); if (ready && !inputProps.readOnly) { setAnchor(inputRef.current); setQuery(event.currentTarget.value); setActive(null); setOpen(true); } }}
+      onChange={(event) => { inputProps.onChange?.(event); if (ready && !inputProps.readOnly) { setAnchor(inputRef.current); const value = event.currentTarget.value; if (!composing.current || filterInputOptions(options, value).length) setQuery(value); setActive(null); setOpen(true); } }}
       onCompositionStart={(event) => { composing.current = true; inputProps.onCompositionStart?.(event); }}
-      onCompositionEnd={(event) => { composing.current = false; inputProps.onCompositionEnd?.(event); }}
+      onCompositionEnd={(event) => { composing.current = false; inputProps.onCompositionEnd?.(event); if (ready && !inputProps.readOnly) { setQuery(event.currentTarget.value); setActive(null); } }}
       onKeyDown={(event) => {
         if (composing.current || event.nativeEvent.isComposing || inputProps.readOnly) { inputProps.onKeyDown?.(event); return; }
         if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); return; }
@@ -98,7 +101,7 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, onChoo
         if (event.key === "Tab") { onCommit(); setOpen(false); }
         inputProps.onKeyDown?.(event);
       }} />
-    {open && anchor && createPortal(<div ref={surface} data-ks-overlay className="ks-anchored-overlay ks-combobox-popup" style={position} onBlur={(event) => {
+    {popupVisible && anchor && createPortal(<div ref={surface} data-ks-overlay className={`ks-anchored-overlay ks-combobox-popup${layout?.far ? " is-far" : ""}${layout?.above ? " is-above" : ""}`} style={{ ...position, ...layout?.style, ...(!layout ? { visibility: "hidden" } : {}) }} onBlur={(event) => {
       if (event.relatedTarget === anchor || surface.current?.contains(event.relatedTarget as Node | null)) return;
       onCommit(); onEditingEnd(); setOpen(false);
     }}>
@@ -108,9 +111,47 @@ export function Combobox({ inputProps, inputRef, options, ready, visible, onChoo
           return <OptionRow key={option.index} option={option} id={`${id}-option-${option.index}`} top={row.start} selected={text === option.value} active={option.index === active} size={filtered.length} position={row.index + 1} descriptionId={descriptionId} measure={virtual.measureElement} onActive={setActive} onChoose={choose} />;
         })}</VirtualSurface> : <div className="ks-combobox-empty">일치 없음</div>}
       </div>
-      {options.some((option) => option.description) && <div className="ks-combobox-description" id={descriptionId} tabIndex={-1}>{activeOption?.description}</div>}
+      {activeOption?.description && <><div className="ks-combobox-separator" /><div className="ks-combobox-description" id={descriptionId} tabIndex={-1}>{activeOption.description}</div></>}
     </div>, document.body)}
   </>;
+}
+
+type ComboboxLayout = { far: boolean; above: boolean; style: CSSProperties };
+
+function useComboboxLayout(anchor: HTMLElement | null, hasDescriptions: boolean): ComboboxLayout | null {
+  const [layout, setLayout] = useState<ComboboxLayout | null>(null);
+  const descriptions = useRef(hasDescriptions);
+  descriptions.current = hasDescriptions;
+  useLayoutEffect(() => {
+    if (!anchor) { setLayout(null); return; }
+    const measure = () => {
+      const rect = anchor.getBoundingClientRect();
+      const css = getComputedStyle(anchor);
+      const token = (name: string) => Number.parseFloat(css.getPropertyValue(name)) || 0;
+      const inset = token("--ks-space-3");
+      const offset = token("--ks-space-2");
+      const pane = token("--ks-pane-min-size");
+      const line = token("--ks-line-width");
+      const width = Math.min(Math.max(rect.width, pane), Math.max(window.innerWidth - 2 * inset, 0));
+      const position = computeAnchoredPosition({ rect, width, height: 0, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, inset, offset, alignEndOnOverflow: true });
+      const far = position.left + width + line + 2 * pane > window.innerWidth - inset;
+      const required = 2 * pane + (far && descriptions.current ? pane + line : 0);
+      const below = window.innerHeight - inset - rect.bottom - offset;
+      const aboveSpace = rect.top - inset - offset;
+      const above = below < required && aboveSpace > below;
+      setLayout({ far, above, style: {
+        left: position.left,
+        top: above ? undefined : rect.bottom + offset,
+        bottom: above ? window.innerHeight - rect.top + offset : undefined,
+        maxHeight: Math.max(above ? aboveSpace : below, 0),
+        "--ks-combobox-list-width": `${width}px`,
+      } as CSSProperties });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [anchor]);
+  return layout;
 }
 
 const OptionRow = memo(function OptionRow({ option, id, top, selected, active, size, position, descriptionId, measure, onActive, onChoose }: { option: InputOption; id: string; top: number; selected: boolean; active: boolean; size: number; position: number; descriptionId: string; measure: (node: Element | null) => void; onActive: (index: number) => void; onChoose: (option: InputOption) => void }) {

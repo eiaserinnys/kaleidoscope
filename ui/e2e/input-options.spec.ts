@@ -24,6 +24,15 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     await input.focus();
     await expect(page.getByRole("listbox")).toBeVisible();
     expect(await page.getByRole("option").count()).toBeLessThan(100);
+    const initialBox = await page.locator(".ks-combobox-list").boundingBox();
+    await input.press("ArrowUp");
+    await expect(page.locator(".ks-combobox-description")).toHaveCount(0);
+    await expect(page.locator(".ks-combobox-separator")).toHaveCount(0);
+    expect(await page.locator(".ks-combobox-list").boundingBox()).toMatchObject({ x: initialBox!.x, width: initialBox!.width });
+    await input.press("ArrowDown");
+    await page.locator(".ks-combobox-option").first().hover();
+    await input.press("ArrowDown");
+    expect(await page.locator(".ks-combobox-option").evaluateAll((rows) => rows.filter((row) => getComputedStyle(row).backgroundImage !== "none").length)).toBe(1);
     if (output) await page.screenshot({ path: join(output, `전체-${width}-${theme}.png`) });
     const before = await page.evaluate(() => (window as any).inputOptionsHarness.calls().length);
     await input.fill("zom");
@@ -39,9 +48,12 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
       const list = document.querySelector(".ks-combobox-list")!.getBoundingClientRect();
       const description = document.querySelector(".ks-combobox-description")!.getBoundingClientRect();
       const input = document.querySelector<HTMLInputElement>('[role="combobox"]')!.getBoundingClientRect();
-      return { list: { x: list.x, y: list.y, right: list.right, bottom: list.bottom }, description: { x: description.x, y: description.y, right: description.right, bottom: description.bottom }, input: { x: input.x, right: input.right } };
+      const popup = document.querySelector(".ks-combobox-popup")!.getBoundingClientRect();
+      return { list: { x: list.x, y: list.y, width: list.width, right: list.right, bottom: list.bottom }, description: { x: description.x, y: description.y, width: description.width, right: description.right, bottom: description.bottom }, input: { x: input.x, width: input.width, right: input.right }, popup: { x: popup.x, y: popup.y, bottom: popup.bottom } };
     });
     expect(width === 360 ? layout.description.y >= layout.list.bottom : layout.description.x >= layout.list.right).toBe(true);
+    expect(Math.abs(layout.popup.x - layout.input.x)).toBeLessThan(1);
+    expect(Math.abs(layout.list.width - layout.input.width)).toBeLessThan(1);
     metrics[`${width}-${theme}`] = layout;
     if (output) await page.screenshot({ path: join(output, `검색-설명-${width}-${theme}.png`) });
     await input.press("Enter");
@@ -57,6 +69,7 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     const free = app.getByRole("combobox", { name: "자유 입력" });
     const callsBeforeFree = await page.evaluate(() => (window as any).inputOptionsHarness.calls().length);
     await free.fill("임의의 이름");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
     expect(await page.evaluate(() => (window as any).inputOptionsHarness.calls().length)).toBe(callsBeforeFree);
     await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.calls().length)).toBe(callsBeforeFree + 1);
     await free.blur();
@@ -71,4 +84,44 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.state().saved)).toBe("entry-503");
   }
   if (output) writeFileSync(join(output, "metrics.json"), JSON.stringify(metrics, null, 2));
+});
+
+test("화면 아래에서 연 목록은 거른 뒤에도 입력 바로 위에 붙어 있다", async ({ page }) => {
+  const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
+  const metrics: Record<string, unknown> = {};
+  for (const [width, height, theme] of [[1200, 470, "light"], [360, 540, "dark"]] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.setViewportSize({ width, height });
+    await page.goto("/?preview=block-gallery");
+    await page.getByTestId("app-window-block-gallery").getByRole("tab", { name: "입력" }).click();
+    const input = page.getByRole("combobox", { name: "이름" });
+    await input.scrollIntoViewIfNeeded();
+    await input.focus();
+    const popup = page.locator(".ks-combobox-popup");
+    await expect(popup).toBeVisible();
+    const before = { input: (await input.boundingBox())!, popup: (await popup.boundingBox())! };
+    expect(before.popup.y + before.popup.height).toBeLessThan(before.input.y);
+    await input.fill("배");
+    await expect(page.getByRole("option", { name: "배" })).toBeVisible();
+    const after = { input: (await input.boundingBox())!, popup: (await popup.boundingBox())! };
+    expect(Math.abs((before.popup.y + before.popup.height) - (after.popup.y + after.popup.height))).toBeLessThan(1);
+    expect(Math.abs(after.popup.x - after.input.x)).toBeLessThan(1);
+    const gap = await input.evaluate((element) => Number.parseFloat(getComputedStyle(element).getPropertyValue("--ks-space-2")));
+    expect(Math.abs(after.input.y - (after.popup.y + after.popup.height) - gap)).toBeLessThan(1);
+    metrics[`${width}x${height}-${theme}`] = { before, after };
+    if (output) await page.screenshot({ path: join(output, `아래쪽-${width}x${height}-${theme}.png`) });
+  }
+  if (output) writeFileSync(join(output, "bottom-metrics.json"), JSON.stringify(metrics, null, 2));
+});
+
+test("원천 선택지를 기다리는 화면과 잘못된 선택지 오류를 볼 수 있다", async ({ page }) => {
+  const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/?preview=input-options-fixture&options-delay=10000");
+  const app = page.getByTestId("app-window-input-options-fixture");
+  const loadingField = app.locator(".ks-data-stack-item").filter({ has: page.getByRole("combobox", { name: "연결 선택지" }) });
+  await expect(loadingField.getByRole("status", { name: "불러오는 중" })).toBeVisible();
+  await expect(app.getByText("SHELL_INPUT_OPTIONS_VALUE_INVALID")).toBeVisible();
+  if (output) await page.screenshot({ path: join(output, "원천-불러오는중.png") });
 });

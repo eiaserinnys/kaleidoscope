@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type CSSProperties, type KeyboardEvent } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { BlockContext } from "./block-context";
@@ -32,7 +32,6 @@ function fitTextarea(element: HTMLTextAreaElement) {
 export function InputBlock({ block, context, pointer }: Props<"input">) {
   const data = useWindowData();
   const multiline = block.kind !== "number" && isMultilineInput(block);
-  const visible = useWindowVisible(context);
   const inputId = useId();
   const bound = useBinding(`${pointer}/value`, block.value);
   const optionsBinding = useBinding(`${pointer}/options`, block.options ?? null);
@@ -207,7 +206,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const input = <div className={`ks-data-input${block.kind === "search" ? " is-search" : ""}${block.kind === "number" ? " is-number" : ""}${block.spin ? " has-spin" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}${block.columns !== undefined ? " has-columns" : ""}`}
     style={block.columns !== undefined ? { "--ks-input-columns": `${block.columns}ch` } as CSSProperties : undefined}>
     {block.kind === "search" ? <span className="ks-data-input-search"><DataIcon name="search" size="inline" /></span> : null}
-    {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : block.options !== undefined ? <Combobox visible={visible} inputProps={{ ...props, type: "text" }} inputRef={inputElement} options={normalizedOptions?.ok ? normalizedOptions.options : []} ready={normalizedOptions?.ok === true} onChoose={choose} onCommit={() => commit(draft)} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : <input {...props}
+    {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : block.options !== undefined ? <WindowCombobox context={context} optionsOnly={optionsOnly} inputProps={{ ...props, type: "text" }} inputRef={inputElement} options={normalizedOptions?.ok ? normalizedOptions.options : []} ready={normalizedOptions?.ok === true} onChoose={choose} onCommit={() => commit(draft)} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : <input {...props}
       ref={inputElement}
       type="text"
       inputMode={block.kind === "number" ? "decimal" : undefined}
@@ -219,11 +218,21 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
       aria-valuemax={block.kind === "number" ? maximum ?? undefined : undefined}
       aria-valuenow={block.kind === "number" ? numericValue : undefined}
     />}
-    {block.kind === "number" && block.spin ? <SpinButtons ref={spinButtons} increment={(direction, held) => increment(direction, 1, held)} onEnd={() => { spinning.current = false; endSpin(); if (!spinPending.current && !edited.current && !focusedRef.current) finish(); }} atMin={minimum !== null && numericValue !== undefined && numericValue <= minimum} atMax={maximum !== null && numericValue !== undefined && numericValue >= maximum} readOnly={readOnly} visible={visible} /> : null}
+    {block.kind === "number" && block.spin ? <WindowSpinButtons context={context} ref={spinButtons} increment={(direction, held) => increment(direction, 1, held)} onEnd={() => { spinning.current = false; endSpin(); if (!spinPending.current && !edited.current && !focusedRef.current) finish(); }} atMin={minimum !== null && numericValue !== undefined && numericValue <= minimum} atMax={maximum !== null && numericValue !== undefined && numericValue >= maximum} readOnly={readOnly} /> : null}
     {block.kind === "search" && (readOnly ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={readOnly} onClick={() => { markChanged(""); if (optionsOnly) commit(""); else sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
   const optionsError = normalizedOptions && !normalizedOptions.ok ? shellErrors.SHELL_INPUT_OPTIONS_VALUE_INVALID({ index: String(normalizedOptions.index) }) : null;
   return <>{hasLabel ? <><div className={`ks-field ks-input-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <label htmlFor={inputId} className="ks-field-label" data-ks-share-skip="">{labelText}</label> : null}{input}</div><BindingFailureNotice value={label} /></> : input}{block.options !== undefined && optionsBinding.status !== "ready" ? <DataState value={optionsBinding} compact /> : null}{block.options !== undefined && optionsError ? <Notice role="alert" errorId={optionsError.id}>{optionsError.message}</Notice> : null}</>;
+}
+
+function WindowCombobox({ context, ...props }: Omit<ComponentProps<typeof Combobox>, "visible"> & { context: BlockContext }) {
+  const visible = useWindowVisible(context);
+  return <Combobox {...props} visible={visible} />;
+}
+
+function WindowSpinButtons({ context, ...props }: Omit<ComponentProps<typeof SpinButtons>, "visible"> & { context: BlockContext }) {
+  const visible = useWindowVisible(context);
+  return <SpinButtons {...props} visible={visible} />;
 }
 
 function useNumericBinding(pointer: string, binding: Extract<Block, { type: "input" }>['min']): number | null {

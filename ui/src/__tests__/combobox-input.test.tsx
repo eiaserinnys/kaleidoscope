@@ -10,7 +10,7 @@ import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 function setup(optionsOnly = false) {
-  const choices = Array.from({ length: 504 }, (_, index) => ({ value: `value-${index}`, label: index === 503 ? "Zombie 마지막" : `항목 ${index}`, description: `설명 ${index}` }));
+  const choices = Array.from({ length: 504 }, (_, index) => ({ value: `value-${index}`, label: index === 503 ? "Zombie 마지막" : `항목 ${index}`, ...(index === 0 ? {} : { description: `설명 ${index}` }) }));
   const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 32, modules: {} }, state: { draft: "value-1", saved: "" }, ui: { type: "stack", direction: "column", children: [
     { type: "input", placeholder: "선택", value: { state: "draft" }, options: choices, options_only: optionsOnly, on_change: { set_state: "draft" } },
     { type: "button", label: "확인", on_click: [{ set_state: "saved", value: { expr: "$state.draft" } }] },
@@ -96,6 +96,44 @@ it("한글 조합 중 Enter와 방향키는 선택하지 않고 Escape는 목록
   fireEvent.compositionEnd(input);
   fireEvent.keyDown(input, { key: "Escape" });
   expect(input.getAttribute("aria-expanded")).toBe("false");
+});
+
+it("조합 중 일치하는 항목이 없으면 기존 목록을 유지하고 조합 완료 후 거른다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  expect(screen.getByText("항목 1")).toBeTruthy();
+  expect(screen.getAllByRole("option")[0].getAttribute("aria-setsize")).toBe("504");
+  fireEvent.compositionStart(input);
+  fireEvent.change(input, { target: { value: "ㅎ" } });
+  expect(screen.getByText("항목 1")).toBeTruthy();
+  fireEvent.change(input, { target: { value: "하" } });
+  expect(screen.getByText("항목 1")).toBeTruthy();
+  fireEvent.change(input, { target: { value: "항" } });
+  fireEvent.compositionEnd(input, { data: "항" });
+  expect(screen.getByText("항목 1")).toBeTruthy();
+  expect(screen.getAllByRole("option")[0].getAttribute("aria-setsize")).toBe("503");
+});
+
+it.each([false, true])("불일치 시 목록 전용 %s에 맞는 팝업을 보인다", async (optionsOnly) => {
+  setup(optionsOnly);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "선택지에 없는 이름" } });
+  if (optionsOnly) expect(screen.getByText("일치 없음")).toBeTruthy();
+  else expect(screen.queryByRole("listbox")).toBeNull();
+  fireEvent.change(input, { target: { value: "zom" } });
+  expect(screen.getByText("Zombie 마지막")).toBeTruthy();
+});
+
+it("활성 선택지에 설명이 없으면 설명 칸과 구분선을 숨긴다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  expect(document.querySelector(".ks-combobox-description")).toBeTruthy();
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(document.querySelector(".ks-combobox-description")).toBeNull();
+  expect(document.querySelector(".ks-combobox-separator")).toBeNull();
 });
 
 it("자유 입력은 한글 조합을 마치기 전에는 지연 시간이 지나도 보내지 않는다", async () => {
