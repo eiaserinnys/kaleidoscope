@@ -157,7 +157,8 @@ const VISIBLE_POINT_JS: &str = r#"function() {
     const box = this.getBoundingClientRect();
     let left = Math.max(0, box.left), top = Math.max(0, box.top);
     let right = Math.min(window.innerWidth, box.right), bottom = Math.min(window.innerHeight, box.bottom);
-    for (let parent = this.parentElement; parent; parent = parent.parentElement) {
+    const ancestor = element => element.parentElement || element.getRootNode?.().host || null;
+    for (let parent = ancestor(this); parent; parent = ancestor(parent)) {
         const style = getComputedStyle(parent), rect = parent.getBoundingClientRect();
         if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) { left = Math.max(left, rect.left); right = Math.min(right, rect.right); }
         if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) { top = Math.max(top, rect.top); bottom = Math.min(bottom, rect.bottom); }
@@ -165,7 +166,13 @@ const VISIBLE_POINT_JS: &str = r#"function() {
     if (right - left <= 0.5 || bottom - top <= 0.5) return null;
     for (const [fx, fy] of [[0.5,0.5],[0.2,0.2],[0.8,0.2],[0.2,0.8],[0.8,0.8]]) {
         const x = left + (right-left)*fx, y = top + (bottom-top)*fy;
-        const hit = document.elementFromPoint(x,y);
+        let hit = document.elementFromPoint(x,y);
+        const roots = [];
+        for (let root = this.getRootNode?.(); root?.host; root = root.host.getRootNode?.()) roots.push(root);
+        for (const root of roots.reverse()) {
+            if (hit !== root.host) break;
+            hit = root.elementFromPoint(x,y);
+        }
         if (hit === this || this.contains(hit)) return {x,y};
     }
     return null;

@@ -17,4 +17,12 @@ assert.strictEqual(visible.call(target), null, 'fully clipped target must be omi
 target.getBoundingClientRect = ()=>({left:0,top:0,right:40,bottom:30});
 document.elementFromPoint = ()=>({});
 assert.strictEqual(visible.call(target), null, 'covered target must be omitted');
-console.log('3 visible-point cases passed');
+const host = {parentElement:clip, style:{overflowX:'visible',overflowY:'visible'}, getBoundingClientRect:()=>({left:0,top:0,right:40,bottom:14})};
+const root = {host, elementFromPoint:()=>shadowButton};
+const shadowButton = {parentElement:null, getRootNode:()=>root, contains:e=>e===shadowButton, getBoundingClientRect:()=>({left:0,top:0,right:40,bottom:30})};
+host.getRootNode = ()=>document;
+document.elementFromPoint = ()=>host;
+assert(visible.call(shadowButton), 'visible shadow button must be reachable through its host');
+shadowButton.getBoundingClientRect = ()=>({left:0,top:40,right:40,bottom:70});
+assert.strictEqual(visible.call(shadowButton), null, 'clipping outside the shadow host must apply');
+console.log('5 visible-point cases passed');

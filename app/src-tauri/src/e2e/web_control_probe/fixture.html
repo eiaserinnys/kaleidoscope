@@ -10,6 +10,8 @@
 <p id="inputs">input-count 0</p>
 <p id="keys">enter-count 0</p>
 <p id="partials">partial-count 0</p>
+<p id="shadows">shadow-count 0</p>
+<div id="shadow-host"></div>
 <div style="height: 14px; overflow: hidden"><button id="partial">Partial button</button></div>
 <div style="height: 14px; overflow: hidden"><button style="margin-top: 60px">Clipped button</button></div>
 <div style="position: relative; width: 140px"><button>Covered button</button><div style="position: absolute; inset: 0; background: white"></div></div>
@@ -17,6 +19,10 @@
 <script>
 let clicks = 0, inputs = 0, keys = 0;
 let partials = 0;
+let shadows = 0;
+const shadowRoot = document.querySelector('#shadow-host').attachShadow({mode: 'open'});
+shadowRoot.innerHTML = '<button>Shadow button</button>';
+shadowRoot.querySelector('button').addEventListener('click', () => { document.querySelector('#shadows').textContent = `shadow-count ${++shadows}`; });
 document.querySelector('#partial').addEventListener('click', () => { document.querySelector('#partials').textContent = `partial-count ${++partials}`; });
 document.querySelector('#button').addEventListener('click', () => { document.querySelector('#clicks').textContent = `click-count ${++clicks}`; });
 document.querySelector('#input').addEventListener('input', () => { document.querySelector('#inputs').textContent = `input-count ${++inputs}`; });

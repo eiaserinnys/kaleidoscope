@@ -7,7 +7,7 @@ use kaleidoscope_core::WebHost;
 
 fn observe(view: &Webview) -> Result<Value, String> {
     let result = cdp(view, ProbeCall::Evaluate(
-        "({clicks:document.querySelector('#clicks').textContent, partials:document.querySelector('#partials').textContent, input:document.querySelector('#input').value, keys:document.querySelector('#keys').textContent, choice:document.querySelector('#choice').value, scroll:document.querySelector('#scroll').scrollTop})".into(),
+        "({clicks:document.querySelector('#clicks').textContent, partials:document.querySelector('#partials').textContent, shadows:document.querySelector('#shadows').textContent, input:document.querySelector('#input').value, keys:document.querySelector('#keys').textContent, choice:document.querySelector('#choice').value, scroll:document.querySelector('#scroll').scrollTop})".into(),
     ))?;
     Ok(result["result"]["value"].clone())
 }
@@ -216,6 +216,19 @@ pub(super) fn phase(
             probe,
             foreground,
         )?;
+        let shadow = target(&observation, "button", "Shadow button")?;
+        observation = act(
+            host,
+            id,
+            &observation,
+            WindowAction::Click {
+                target: shadow,
+                gesture: None,
+            },
+            false,
+            probe,
+            foreground,
+        )?;
         let png = STANDARD
             .decode(
                 image_observation
@@ -352,6 +365,7 @@ pub(super) fn phase(
         };
         if count(&after, "clicks")? != count(&before, "clicks")? + 1
             || count(&after, "partials")? != count(&before, "partials")? + 1
+            || count(&after, "shadows")? != count(&before, "shadows")? + 1
             || after["input"] != "replace+append"
             || after["choice"] != "two"
             || count(&after, "keys")? != count(&before, "keys")? + 1
