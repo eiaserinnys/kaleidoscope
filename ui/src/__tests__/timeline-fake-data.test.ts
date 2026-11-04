@@ -20,7 +20,7 @@ it("시험 코어가 시간축의 모든 식 바인딩 값을 전달한다", asy
 });
 
 it("시험 코어가 시간축 선택·편집·범위 동작을 전달한다", async () => {
-  const definition: AppDefinition = { id: "timeline-actions", name: "시간축", requires: { blocks: 33, modules: {} }, permissions: [], state: { selected: null, edited: null, viewed: null },
+  const definition: AppDefinition = { id: "timeline-actions", name: "시간축", requires: { blocks: 34, modules: {} }, permissions: [], state: { selected: null, edited: null, viewed: null },
     ui: { type: "timeline", scale: "dates", tracks: [], on_select: { set_state: "selected" }, on_edit: { set_state: "edited" }, on_viewport: { set_state: "viewed" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   await transport.call({ op: "data.attach", window_id: "viewer-window" });
