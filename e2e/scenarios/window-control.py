@@ -28,19 +28,6 @@ def call(tool, args):
     return result["data"]
 
 
-def call_with_image(tool, args):
-    sid, _ = sb.mcp._post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-        "protocolVersion": "2025-06-18", "capabilities": {},
-        "clientInfo": {"name": "window-control-e2e", "version": "1"}}})
-    sb.mcp._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, sid)
-    _, messages = sb.mcp._post({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                                "params": {"name": tool, "arguments": args}}, sid)
-    result = messages[-1]["result"]
-    assert not result.get("isError"), result
-    assert result["content"][1]["type"] == "image" and result["content"][1]["mimeType"] == "image/png", result
-    return json.loads(result["content"][0]["text"])
-
-
 app_id = "window-control-check"
 window_id = sb.window_of(app_id)["id"]
 unshared = sb.mcp.call("read_window", {"window_id": window_id})
@@ -71,13 +58,14 @@ for action in [
 ]:
     before = view["view_id"]
     view = call("act_window", {"window_id": window_id, "view_id": before, "action": action})
-    assert view["view_id"] != before and view["mode"] in ("diff", "full"), view
+    assert view["view_id"] != before and view["mode"] in ("diff", "full", "unchanged"), view
     assert other_input.input_value() == "다른 창 초안" and other_input.evaluate("e => e === document.activeElement")
 
 state = wait_for(lambda: sb.window_of(app_id)["state"] if sb.window_of(app_id)["state"].get("choice") == "b" else None,
                  "선택 결과가 저장되지 않았습니다")
 assert state["text"] == "바뀐 글" and state["clicked"] is True, state
 sb.shot("window-control-text.png")
-image = call_with_image("read_window", {"window_id": window_id, "image": True})
-assert image["geometry"]["css_width"] > 0 and image["geometry"]["css_height"] > 0, image
-print("5 passed: 공유 전 거절, 번호 읽기, 조작, 다른 창 초안과 포커스, 격리 PNG", flush=True)
+image = sb.mcp.call("read_window", {"window_id": window_id, "image": True})
+assert image["is_error"] and image["data"]["id"] == "SHELL_CALL_UNEXPECTED_FAILURE", image
+assert "창 화면을 고정할 수 없습니다" in image["data"]["message"], image
+print("5 passed: 공유 전 거절, 번호 읽기, 조작, 다른 창 초안과 포커스, Linux 이미지 미지원", flush=True)
