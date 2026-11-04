@@ -1,4 +1,14 @@
 error_catalog! { ENTRIES;
+    MCP_WINDOW_CONTROL_TARGET_UNAVAILABLE(window) { class: NotFound, place: "창 제어 대상 조회", cause: "공유 대상 창이 없다", message: "{window} 창의 같이 보기 내용을 찾지 못했습니다. 창의 같이 보기를 켜고 다시 읽으세요.", fix: "창의 같이 보기를 켜고 다시 읽으세요" }
+    MCP_WINDOW_CONTROL_DEVICE_OFFLINE(device) { class: Unavailable, place: "창 제어 기기 연결", cause: "기기 스트림이 종료됐다", message: "{device} 기기와 연결이 끊겨 창을 조작하지 못했습니다. 쉘을 연결한 뒤 다시 읽으세요.", fix: "쉘을 연결한 뒤 다시 읽으세요" }
+    MCP_WINDOW_CONTROL_DEVICE_VERSION_UNSUPPORTED(device) { class: Unavailable, place: "창 제어 기기 판 확인", cause: "기기의 쉘이 창 제어를 지원하지 않는다", message: "{device} 기기의 쉘은 창 조작을 지원하지 않습니다. 쉘을 업데이트하세요.", fix: "쉘을 업데이트하세요" }
+    MCP_WINDOW_CONTROL_VIEW_UNKNOWN(window) { class: NotFound, place: "창 제어 읽기 판 조회", cause: "서버가 읽기 판을 찾지 못했다", message: "{window} 창의 읽기 판이 만료됐습니다. read_window로 다시 읽으세요.", fix: "read_window로 다시 읽으세요" }
+    MCP_WINDOW_CONTROL_BUSY(window) { class: Conflict, place: "창 제어 동시 요청", cause: "같은 창의 앞 요청이 진행 중이다", message: "{window} 창의 앞 동작이 진행 중입니다. 결과를 받은 뒤 요청하세요.", fix: "앞 요청의 결과를 받은 뒤 요청하세요" }
+    MCP_WINDOW_CONTROL_TIMEOUT(window) { class: Unavailable, place: "창 제어 기기 응답 대기", cause: "응답 대기 시간이 지났다", message: "{window} 창의 기기 응답을 시간 안에 받지 못했습니다. 동작 결과를 다시 읽어 확인한 뒤 다음 요청을 보내세요.", fix: "동작 결과를 다시 읽어 확인하세요" }
+    MCP_WINDOW_CONTROL_REPLY_OWNER_MISMATCH() { class: PermissionDenied, place: "창 제어 응답 소유자 확인", cause: "응답 기기나 창이 요청과 다르다", message: "이 창 제어 요청을 받은 기기와 창의 응답이 아닙니다. 요청 대상 기기에서 응답하세요.", fix: "요청 대상 기기와 창에서 응답하세요" }
+    MCP_WINDOW_CONTROL_REPLY_EXPIRED() { class: NotFound, place: "창 제어 응답 대기 조회", cause: "요청을 찾지 못했거나 대기가 끝났다", message: "이 창 제어 요청의 대기가 끝났습니다. 새 요청 결과만 보내세요.", fix: "새 요청 결과만 보내세요" }
+    MCP_WINDOW_CONTROL_REPLY_BODY_INVALID() { class: InvalidRequest, place: "창 제어 응답 본문 검사", cause: "응답을 계약 형식으로 읽지 못했다", message: "창 제어 응답 형식이 맞지 않습니다. 기기의 응답 계약을 확인하세요.", fix: "기기의 응답 계약을 확인하세요" }
+    MCP_WINDOW_CONTROL_REPLY_TOO_LARGE(limit) { class: InvalidRequest, place: "창 제어 응답 크기 검사", cause: "응답이 허용 크기를 넘었다", message: "창 제어 응답이 허용 크기 {limit}를 넘었습니다. 화면 글과 PNG 크기를 줄이세요.", fix: "화면 글과 PNG 크기를 줄이세요" }
     MCP_UPLOAD_APP_SERIALIZE_FAILED() {
         class: Server,
         place: "upload_app 입력 준비",
