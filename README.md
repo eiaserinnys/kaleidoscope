@@ -25,7 +25,7 @@ Ask an agent for a tool. It uploads a JSON app definition through MCP, and kalei
 ## How it fits together
 
 ```mermaid
-flowchart LR
+flowchart TB
     Agent[AI agent / MCP client] -->|MCP: apps, windows, storage| Server[Orchestrator<br/>Rust + axum + SQLite]
     Server <-->|Registry and layout sync| Core[Rust core<br/>permissions and data]
     Core <-->|Commands and snapshots| UI[Desktop shell<br/>Tauri 2 + React]
