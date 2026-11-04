@@ -1,13 +1,9 @@
 @import "pretendard/dist/web/variable/pretendardvariable.css";
 @import "@fontsource-variable/dm-sans";
-@import "@fontsource/instrument-serif/400.css";
-@import "@fontsource/instrument-serif/400-italic.css";
-@import "@fontsource-variable/noto-serif-kr";
 
 :root {
   --ks-font-hangul: "Pretendard Variable";
   --ks-font-family: "DM Sans Variable", var(--ks-font-hangul), "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
-  --ks-font-display: "Instrument Serif", "Noto Serif KR Variable", "Noto Serif KR", serif;
   --ks-font-label: var(--ks-font-family);
   --ks-font-code: "Cascadia Mono", Consolas, monospace;
 
@@ -26,10 +22,10 @@
   --ks-space-4: 16px;
   --ks-space-5: 24px;
   --ks-space-6: 32px;
-  --ks-radius-small: 7px;
-  --ks-radius-large: 12px;
   --ks-radius-window: 16px;
-  --ks-radius-bar: 20px;
+  --ks-radius-small: calc(var(--ks-radius-window) - var(--ks-space-2));
+  --ks-radius-large: calc(var(--ks-radius-window) - var(--ks-space-1));
+  --ks-radius-bar: calc(var(--ks-control-height) / 2 + var(--ks-space-1));
   --ks-control-height: 32px;
   --ks-window-titlebar-height: 40px;
   --ks-icon-button-size: 28px;
@@ -57,7 +53,8 @@
   --ks-letter-label: 0.06em;
 
   color-scheme: light;
-  --ks-color-share: #4a6d43;
+  --ks-color-share: #5f3dc4;
+  --ks-color-positive: #4a6d43;
   --ks-color-warning: #a66a00;
   --ks-color-background: #e4dde3;
   --ks-color-surface: rgb(255 255 255 / 36%);
@@ -96,7 +93,8 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --ks-color-share: #9fc394;
+    --ks-color-share: #b394ff;
+    --ks-color-positive: #9fc394;
     --ks-color-warning: #f2c66d;
     --ks-color-background: #1d1822;
     --ks-color-surface: rgb(255 255 255 / 7%);

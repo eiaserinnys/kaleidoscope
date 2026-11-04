@@ -201,7 +201,7 @@
   background: var(--ks-material-popover);
   box-shadow: var(--ks-shadow-popover);
   color: var(--ks-color-text);
-  padding: var(--ks-space-1) 0;
+  padding: var(--ks-space-1);
   backdrop-filter: blur(var(--ks-blur-popover));
 }
 
@@ -217,6 +217,7 @@
   justify-content: space-between;
   gap: var(--ks-space-3);
   border: 0;
+  border-radius: calc(var(--ks-radius-large) - var(--ks-space-1));
   background: transparent;
   color: var(--ks-color-text);
   cursor: pointer;
@@ -306,6 +307,7 @@
 
 .ks-menu-separator {
   height: var(--ks-line-width);
+  border-radius: calc(var(--ks-radius-large) - var(--ks-space-1));
   background: var(--ks-color-border);
   margin: var(--ks-space-1) var(--ks-space-3);
 }
