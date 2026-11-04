@@ -41,7 +41,12 @@ test("채움이 최소에 닿아도 결정 줄을 남기고 위 내용만 스크
   expect(result.bottom).toBeLessThanOrEqual(result.pane);
   const last=app.getByLabel("첨부 이름").last();
   await last.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(last).toBeFocused();
   const boxes=await Promise.all([last.boundingBox(),button.boundingBox()]);
   expect(boxes[0]!.y+boxes[0]!.height).toBeLessThanOrEqual(boxes[1]!.y);
+  await page.keyboard.press("Tab");
+  await expect(button).toBeFocused();
   await app.screenshot({path:info.outputPath("action-tail.png")});
 });
