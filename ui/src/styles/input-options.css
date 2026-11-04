@@ -44,7 +44,8 @@
   width: var(--ks-combobox-list-width);
   min-height: 0;
   max-height: var(--ks-pane-min-size);
+  padding-inline: calc(var(--ks-space-1) + var(--ks-space-3));
 }
 
-.ks-combobox-skeleton { gap: 0; }
-.ks-combobox-skeleton i { box-sizing: border-box; height: max(var(--ks-control-height), calc(var(--ks-type-body) * var(--ks-line-body) + 2 * var(--ks-space-2))); border-block: var(--ks-space-2) solid transparent; background-clip: padding-box; }
+.ks-combobox-skeleton { box-sizing: border-box; gap: 0; padding-inline: var(--ks-space-3); }
+.ks-combobox-skeleton i { margin-block: calc((max(var(--ks-control-height), calc(var(--ks-type-body) * var(--ks-line-body) + 2 * var(--ks-space-2))) - var(--ks-type-body)) / 2); }
