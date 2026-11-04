@@ -41,7 +41,7 @@ function setup(holdNewEvent = false) {
 it("스핀 직후 단추는 입력 요청과 응답과 상태 반영을 기다려 새 숫자를 읽는다", async () => {
   vi.stubGlobal("PointerEvent", MouseEvent);
   const definition: AppDefinition = {
-    ...mdEditorDefinition, requires: { blocks: 29, modules: {} }, state: { amount: 2, saved: 0 },
+    ...mdEditorDefinition, requires: { blocks: 30, modules: {} }, state: { amount: 2, saved: 0 },
     ui: { type: "stack", direction: "column", children: [
       { type: "input", kind: "number", spin: true, label: "수량", value: { state: "amount" }, on_change: { set_state: "amount" } },
       { type: "button", label: "저장", on_click: [{ set_state: "saved", value: { expr: "$state.amount" } }] },

@@ -1,7 +1,7 @@
 import type { AppDefinition } from "../../src/contract/contract";
 
 export const inputSpinApp = {
-  id: "input-spin-test", name: "숫자 입력", requires: { blocks: 29, modules: {} }, permissions: [],
+  id: "input-spin-test", name: "숫자 입력", requires: { blocks: 30, modules: {} }, permissions: [],
   state: { amount: 2, saved: 0, blank: null, limit: 5, locked: 3, rows: [{ label: "수량", value: 12, step: 2 }] },
   ui: { type: "stack", direction: "column", gap: "medium", children: [
     { type: "input", kind: "number", label: "금액", value: { state: "amount" }, min: 0, max: 50, step: 1, on_change: { set_state: "amount" } },

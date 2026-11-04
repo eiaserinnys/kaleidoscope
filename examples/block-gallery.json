@@ -2,7 +2,7 @@
   "id": "block-gallery",
   "name": "블록 견본",
   "description": "블록을 탭마다 모아 보인다",
-  "requires": { "blocks": 29, "modules": { "files": 1 } },
+  "requires": { "blocks": 30, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
     { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }

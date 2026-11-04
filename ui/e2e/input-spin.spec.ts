@@ -22,6 +22,7 @@ test("숫자 입력 화면 비교", async ({ page }) => {
     await expect(down).toHaveAttribute("tabindex", "-1");
     await expect(up).toHaveAttribute("title", "");
     await expect(down).toHaveAttribute("title", "");
+    if (output) await app.screenshot({ path: join(output, `idle-${width}-${theme}.png`) });
     await down.hover();
     await page.waitForTimeout(600);
     await expect(page.getByRole("tooltip")).toHaveCount(0);
