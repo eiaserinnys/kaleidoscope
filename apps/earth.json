@@ -230,7 +230,7 @@
                   "start": [
                     {
                       "type": "select",
-                      "style": "segmented",
+                      "style": "dropdown",
                       "value": {
                         "state": "feed"
                       },
