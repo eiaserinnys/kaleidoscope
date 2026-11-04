@@ -14,6 +14,40 @@ vi.mock("../data/window-data", () => ({
 }));
 afterEach(() => { cleanup(); runtime.values = {}; runtime.loading = false; runtime.act.mockClear(); previewRender.mockClear(); });
 
+it("자동 높이는 테두리를 더하고 폭이 바뀔 때 다시 재며 고정 행에는 적용하지 않는다", () => {
+  let notify!: ResizeObserverCallback;
+  const disconnect = vi.fn();
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: ResizeObserverCallback) { notify = callback; }
+    observe() {}
+    disconnect = disconnect;
+  });
+  const scroll = vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockReturnValue(74);
+  const width = vi.spyOn(HTMLTextAreaElement.prototype, "clientWidth", "get").mockReturnValue(300);
+  const client = vi.spyOn(HTMLTextAreaElement.prototype, "clientHeight", "get").mockReturnValue(51);
+  const offset = vi.spyOn(HTMLTextAreaElement.prototype, "offsetHeight", "get").mockReturnValue(53);
+  try {
+    const input = { type: "input", multiline: true, value: "내용" };
+    const view = render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+    const field = screen.getByRole("textbox") as HTMLTextAreaElement;
+    expect(field.style.height).toBe("76px");
+    scroll.mockReturnValue(95);
+    act(() => notify([{ target: field, contentRect: { width: 300 } } as unknown as ResizeObserverEntry], {} as ResizeObserver));
+    expect(field.style.height).toBe("97px");
+    scroll.mockReturnValue(116);
+    act(() => notify([{ target: field, contentRect: { width: 300 } } as unknown as ResizeObserverEntry], {} as ResizeObserver));
+    expect(field.style.height).toBe("97px");
+    act(() => notify([{ target: field, contentRect: { width: 0 } } as unknown as ResizeObserverEntry], {} as ResizeObserver));
+    expect(field.style.height).toBe("97px");
+    view.unmount();
+    expect(disconnect).toHaveBeenCalled();
+    render(<InputBlock block={{ ...input, rows: 3 } as never} context={{} as never} pointer="/fixed" />);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).style.height).toBe("");
+  } finally {
+    cleanup(); scroll.mockRestore(); width.mockRestore(); client.mockRestore(); offset.mockRestore(); vi.unstubAllGlobals();
+  }
+});
+
 it("단추 이름을 불러오는 동안 한 줄 대기 표시를 보이고 누름을 막는다", () => {
   runtime.loading = true;
   const button = { type: "button", label: { client: "label" }, on_click: { client: "go" } };

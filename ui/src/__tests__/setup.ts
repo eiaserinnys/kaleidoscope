@@ -1,5 +1,21 @@
 import "../styles/foundation.css";
 
+if (typeof ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    private readonly targets = new Set<Element>();
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      this.targets.add(target);
+      this.callback([...this.targets].map((observed) => ({
+        target: observed,
+        contentRect: { width: 960, height: observed.hasAttribute("data-tree-row") ? 32 : 552 },
+      } as ResizeObserverEntry)), this);
+    }
+    unobserve(target: Element) { this.targets.delete(target); }
+    disconnect() { this.targets.clear(); }
+  };
+}
+
 if (typeof document !== "undefined") {
   document.documentElement.style.setProperty("--ks-control-height", "32px");
   const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");

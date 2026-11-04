@@ -3,6 +3,23 @@ import type { AppDefinition } from "../../src/contract/contract";
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
 export const shellDefectFixtures = [
+  { ...base, requires: { blocks: 21, modules: {} }, id: "input-autogrow-fixture", name: "여러 줄 입력", state: { text: "", fixed: "" }, ui: { type: "tabs", tabs: [
+    { label: "입력", child: { type: "stack", direction: "column", gap: "small", children: [
+      { type: "input", label: "한국어", multiline: true, value: { state: "text" }, on_change: { set_state: "text" } },
+      { type: "input", label: "고정", multiline: true, rows: 3, value: { state: "fixed" }, on_change: { set_state: "fixed" } },
+    ] } },
+  ] } },
+  { ...base, requires: { blocks: 21, modules: {} }, id: "input-inset-fixture", name: "입력 정렬", state: { first: "", second: "", nested: "", search: "", open: false }, ui: { type: "stack", direction: "column", children: [
+    { type: "section", title: "기준 제목", child: { type: "stack", direction: "column", gap: "small", children: [
+      { type: "input", placeholder: "첫 입력", value: { state: "first" }, on_change: { set_state: "first" } },
+      { type: "input", placeholder: "둘째 입력", value: { state: "second" }, on_change: { set_state: "second" } },
+      { type: "stack", direction: "column", children: [{ type: "input", placeholder: "중첩 입력", value: { state: "nested" }, on_change: { set_state: "nested" } }] },
+    ] } },
+    { type: "button", label: "찾기 열기", on_click: [{ set_state: "open", value: true }] },
+    { type: "dialog", title: "찾기", open: { state: "open" }, on_close: [{ set_state: "open", value: false }], child: { type: "stack", direction: "column", children: [
+      { type: "input", kind: "search", placeholder: "찾기 입력", value: { state: "search" }, on_change: { set_state: "search" } },
+    ] } },
+  ] } },
   { ...base, id: "stacked-list-fixture", name: "쌓인 목록", state: { first: "", second: "" }, ui: { type: "split", direction: "row", column_below: 700, children: [
     { type: "list", items: Array.from({ length: 100 }, (_, i) => ({ key: String(i), title: `첫 목록 ${i + 1}` })) },
     { type: "list", items: Array.from({ length: 100 }, (_, i) => ({ key: String(i), title: `둘째 목록 ${i + 1}` })) },

@@ -177,10 +177,12 @@
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-input:not(.ks-data-tab-panel *) { width: 100%; margin-inline: 0; }
 .ks-data-input .ks-text-input { display: block; font-family: inherit; }
 .ks-data-input .ks-text-input[readonly] { color: var(--ks-color-muted); }
-.ks-data-input textarea { padding-block: calc((var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)) / 2); max-height: calc(var(--ks-type-body) * var(--ks-line-body) * 8 + var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)); resize: none; overflow-y: auto; }
+.ks-data-input textarea { padding-block: calc((var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)) / 2); max-height: calc(var(--ks-type-body) * var(--ks-line-body) * 8 + var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body) + 2 * var(--ks-line-width)); resize: none; overflow-y: auto; }
 .ks-data-input.has-rows textarea { max-height: none; }
 .ks-field, .ks-color-control { display: inline-flex; align-items: center; gap: var(--ks-space-2); min-height: var(--ks-control-height); color: var(--ks-color-text); font-size: var(--ks-type-body); }
 .ks-data-tab-panel .ks-field { display: grid; width: 100%; grid-template-columns: calc(var(--ks-space-6) * 2) minmax(0, 1fr) auto; }
+.ks-input-field:not(.is-label-top):not(.is-label-hidden):has(> .ks-data-input > textarea) { align-items: start; }
+.ks-input-field:not(.is-label-top):not(.is-label-hidden):has(> .ks-data-input > textarea) > .ks-field-label { margin-block-start: calc(var(--ks-line-width) + (var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)) / 2); }
 .ks-data-tab-panel .ks-slider-field { grid-template-columns: calc(var(--ks-space-6) * 2) minmax(0, 1fr) minmax(var(--ks-space-6), auto); }
 .ks-data-tab-panel .ks-select-field > .ks-button, .ks-data-tab-panel .ks-input-field > .ks-data-input, .ks-data-tab-panel .ks-color-control { grid-column: 2 / 4; width: 100%; }
 .ks-field.is-label-top { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); }

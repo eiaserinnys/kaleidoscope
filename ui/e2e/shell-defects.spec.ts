@@ -7,6 +7,67 @@ async function capture(page: import("@playwright/test").Page, name: string) {
   if (directory) { mkdirSync(directory, { recursive: true }); await page.screenshot({ path: join(directory, `${name}.png`) }); }
 }
 
+test("여러 줄 입력은 여덟 줄까지 스크롤 없이 자라고 폭에 맞춰 다시 잰다", async ({ page }) => {
+  await page.setViewportSize({ width: 1049, height: 900 });
+  await page.goto("/?preview=input-autogrow-fixture");
+  const app = page.getByTestId("app-window-input-autogrow-fixture");
+  const field = app.getByRole("textbox", { name: "한국어" });
+  const fixed = app.getByRole("textbox", { name: "고정" });
+  const heights = () => field.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+  for (const lines of [1, 3, 8]) {
+    await field.fill(Array(lines).fill("한 줄").join("\n"));
+    await expect.poll(async () => { const h = await heights(); return h.scroll - h.client; }).toBe(0);
+  }
+  await field.fill(Array(9).fill("한 줄").join("\n"));
+  await expect.poll(async () => { const h = await heights(); return h.scroll - h.client; }).toBeGreaterThan(0);
+  const fixedHeight = (await fixed.boundingBox())!.height;
+  await fixed.fill(Array(6).fill("한 줄").join("\n"));
+  expect((await fixed.boundingBox())!.height).toBe(fixedHeight);
+  await field.fill("자동 높이의 긴 문장이 창 크기에 맞추어 줄바꿈됩니다. ".repeat(3));
+  for (const width of [1049, 640, 520, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(async () => { const h = await heights(); return h.scroll - h.client; }).toBe(0);
+    const alignment = await field.evaluate((el) => {
+      const input = el.getBoundingClientRect();
+      const label = el.closest(".ks-field")!.querySelector(".ks-field-label")!.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      const firstLineCenter = input.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop) + parseFloat(style.lineHeight) / 2;
+      return Math.abs(label.top + label.height / 2 - firstLineCenter);
+    });
+    expect(alignment).toBeLessThanOrEqual(1);
+    await capture(page, `autogrow-${width}`);
+  }
+});
+
+test("중첩 입력과 대화상자 입력은 같은 안쪽 선과 쌓기 간격을 쓴다", async ({ page }) => {
+  for (const width of [1049, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/?preview=input-inset-fixture");
+    const app = page.getByTestId("app-window-input-inset-fixture");
+    const section = app.locator(".ks-data-section");
+    const title = await section.locator(".ks-data-section-title").boundingBox();
+    const inputs = await Promise.all(["첫 입력", "둘째 입력", "중첩 입력"].map((name) => section.getByPlaceholder(name).boundingBox()));
+    for (const box of inputs) {
+      expect(Math.abs(box!.x - title!.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(box!.x + box!.width - (inputs[0]!.x + inputs[0]!.width))).toBeLessThanOrEqual(1);
+    }
+    const gaps = [inputs[1]!.y - inputs[0]!.y - inputs[0]!.height, inputs[2]!.y - inputs[1]!.y - inputs[1]!.height];
+    expect(Math.abs(gaps[0] - gaps[1])).toBeLessThanOrEqual(1);
+    expect(gaps[0]).toBe(8);
+    await capture(page, `input-inset-${width}`);
+    await app.getByRole("button", { name: "찾기 열기" }).click();
+    const dialog = app.getByRole("dialog");
+    const [heading, input, close] = await Promise.all([
+      dialog.locator(".ks-dialog-title").boundingBox(),
+      dialog.getByPlaceholder("찾기 입력").boundingBox(),
+      dialog.getByRole("button", { name: "닫기" }).boundingBox(),
+    ]);
+    expect(Math.abs(heading!.x - input!.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(input!.x + input!.width - (close!.x + close!.width))).toBeLessThanOrEqual(1);
+    await capture(page, `input-dialog-${width}`);
+  }
+});
+
 test("따라갈 목록이 넘치면 목록만 움직인다", async ({ page }) => {
   await page.setViewportSize({ width: 880, height: 600 });
   await page.goto("/?preview=follow-fixture");

@@ -18,6 +18,12 @@ function bindingText(value: ReturnType<typeof useBinding>): string {
   return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
 }
 
+function fitTextarea(element: HTMLTextAreaElement) {
+  if (element.clientWidth === 0) return;
+  element.style.height = "auto";
+  element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`;
+}
+
 export function InputBlock({ block, pointer }: Props<"input">) {
   const data = useWindowData();
   const multiline = isMultilineInput(block);
@@ -90,9 +96,21 @@ export function InputBlock({ block, pointer }: Props<"input">) {
   }, [data, focus]);
   useLayoutEffect(() => {
     if (!textarea.current || (block.rows ?? 0) >= 2) return;
-    textarea.current.style.height = "auto";
-    textarea.current.style.height = `${textarea.current.scrollHeight}px`;
-  }, [draft, block.rows]);
+    fitTextarea(textarea.current);
+  }, [draft, block.rows, multiline]);
+  useLayoutEffect(() => {
+    const element = textarea.current;
+    if (!element || (block.rows ?? 0) >= 2) return;
+    let width = 0;
+    const observer = new ResizeObserver((entries) => {
+      const nextWidth = entries[0].contentRect.width;
+      if (nextWidth === width) return;
+      width = nextWidth;
+      if (width > 0) fitTextarea(element);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [block.rows, multiline]);
   const { sendDraft, markChanged, commit, cancel } = useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited });
   const keyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (readOnly) return;
