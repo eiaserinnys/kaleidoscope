@@ -501,6 +501,8 @@ pub enum Actions {
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
     Many(Vec<Action>),
+    #[serde(deserialize_with = "deserialize_open_url")]
+    OpenUrl(OpenUrlAction),
     // CopyText는 맨 끝에 둔다. Binding이 어떤 값이든 받아 앞에 두면 길이 1 배열을 순서 필드로 읽는다.
     CopyText(CopyTextAction),
 }
@@ -590,6 +592,22 @@ pub struct SaveFileAction {
 #[ts(export, export_to = "contract.ts")]
 pub struct CopyTextAction {
     pub copy_text: Binding,
+}
+
+/// 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct OpenUrlAction {
+    pub open_url: Binding,
+}
+
+fn deserialize_open_url<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<OpenUrlAction, D::Error> {
+    let value = JsonValue::deserialize(deserializer)?;
+    if !value.is_object() {
+        return Err(serde::de::Error::custom("open_url은 단독 객체여야 합니다"));
+    }
+    serde_json::from_value(value).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -1092,6 +1110,12 @@ pub struct FeedEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub image: Option<MediaRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<FeedMedia>>")]
+    pub media: Vec<FeedMedia>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub link: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub meta: Option<String>,
@@ -1112,6 +1136,23 @@ pub struct FeedEntry {
     #[ts(optional, as = "Option<Vec<FeedEntry>>")]
     pub children: Vec<FeedEntry>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct FeedMedia {
+    pub image: MediaRef,
+    #[serde(default)]
+    #[ts(optional, as = "Option<FeedMediaKind>")]
+    pub kind: FeedMediaKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub alt: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum FeedMediaKind { #[default] Image, Video, Animation }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(untagged)]
@@ -1332,6 +1373,7 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
                 format!("{pointer}/save_file/suggested_name"),
             )),
             Actions::CopyText(copy) => Some((&copy.copy_text, format!("{pointer}/copy_text"))),
+            Actions::OpenUrl(open) => Some((&open.open_url, format!("{pointer}/open_url"))),
             Actions::Many(list) if list.len() == 1 => match &list[0] {
                 Action::SaveFile(save) => Some((
                     &save.save_file.suggested_name,
@@ -1351,6 +1393,13 @@ pub fn ui_bindings(definition: &AppDefinition) -> Vec<(String, &Binding)> {
                     | Binding::Message(_)
             ) {
                 out.push((pointer, binding));
+            }
+        }
+    }
+    for (index, shortcut) in definition.shortcuts.iter().flatten().enumerate() {
+        if let Actions::OpenUrl(open) = &shortcut.action {
+            if !matches!(open.open_url, Binding::Client(_) | Binding::Item(_) | Binding::ParentItem(_) | Binding::Message(_)) {
+                out.push((format!("/shortcuts/{index}/action/open_url"), &open.open_url));
             }
         }
     }
@@ -1423,6 +1472,7 @@ pub fn local_actions(actions: &Actions) -> bool {
         Actions::Client(_)
         | Actions::PickFiles(_)
         | Actions::SaveFile(_)
+        | Actions::OpenUrl(_)
         | Actions::CopyText(_) => true,
         Actions::Many(list) => list.iter().any(|action| {
             matches!(
@@ -1777,6 +1827,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             items,
             selected,
             on_select,
+            on_remove,
             ..
         } => {
             bind!("items", items);
@@ -1785,6 +1836,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
+            }
+            if let Some(on_remove) = on_remove {
+                act!("on_remove", on_remove);
             }
         }
         Block::Tree {

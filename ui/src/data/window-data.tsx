@@ -11,6 +11,7 @@ import { useBlockRenderProbe } from "../render/render-probe";
 import { isWindowVisible, useWindowStateValue } from "./window-state";
 import { itemPath, useItemScope, type ItemScope } from "./item-scope";
 import { trackWindowAction } from "../share/action-context";
+import { checkAppLink } from "./app-link";
 
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
@@ -539,6 +540,14 @@ export class WindowData {
           }
           return true;
         }
+      }
+      const openUrl = this.definitionAt(pointer);
+      if (openUrl && typeof openUrl === "object" && !Array.isArray(openUrl) && "open_url" in openUrl) {
+        const raw = this.localBinding(`${pointer}/open_url`, openUrl.open_url as Binding, scope);
+        if (typeof raw !== "string") throw shellErrors.SHELL_OPEN_URL_NOT_TEXT();
+        if (raw.length === 0) throw shellErrors.SHELL_OPEN_URL_EMPTY();
+        await this.store.call({ op: "external.open", window_id: this.windowId, url: checkAppLink(raw) });
+        return true;
       }
       await this.ready;
       const reply = await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });

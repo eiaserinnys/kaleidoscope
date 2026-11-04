@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Block, ListItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { DataState } from "../components/data-state";
@@ -13,16 +13,20 @@ import type { BindingMore } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
 import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
+import { IconButton } from "../components/primitives";
+import { X } from "../components/icons";
+import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
 
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "items"; items: ListItem[]; start: number };
 type ListHandlers = {
   focus: (index: number) => void;
   keyDown: (event: React.KeyboardEvent<HTMLElement>, index: number, item: ListItem) => void;
-  choose: (item: ListItem) => void;
+  choose: (item: ListItem, trigger: HTMLElement) => void;
+  remove: (item: ListItem) => void;
   menu: (event: React.MouseEvent<HTMLElement>, item: ListItem) => void;
 };
-const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, icons, handlers, readOnly }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; icons: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean }) {
+const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, icons, handlers, readOnly, removable }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; icons: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean; removable: boolean }) {
   const ref = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     const row = ref.current;
@@ -55,14 +59,14 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
     update();
     return () => observer.disconnect();
   }, [item, grid, icons]);
-  if (icons) return <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : <LayoutGrid size="tile" />} selected={active}
+  const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : <LayoutGrid size="tile" />} selected={active}
     role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
-    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)} />;
-  return <button ref={ref} type="button" role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={() => handlers.current.choose(item)} onContextMenu={(event) => handlers.current.menu(event, item)}>
+    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role="option" aria-setsize={length} aria-posinset={index + 1} aria-selected={active} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)}>
     {grid ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
+  return removable ? <div className={`ks-list-item${grid || icons ? " is-grid" : ""}`}>{row}<IconButton aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
 });
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/items`, block.items);
@@ -76,6 +80,8 @@ function IconListLoading() {
 }
 function ListReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const data = useWindowData();
+  const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
   const menu = useItemMenu(block.item_menu, pointer);
   const grouped = useMemo(() => groups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
   const items = useMemo(() => grouped.flatMap((group) => group.items), [grouped]);
@@ -116,8 +122,9 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const handlers = useRef<ListHandlers>(null!);
   handlers.current = {
     focus: roving.setFocus,
-    keyDown: (event, index, item) => roving.keyDown(event, index, () => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); }, activeColumns),
-    choose: (item) => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); },
+    keyDown: (event, index, item) => { const trigger = event.currentTarget; roving.keyDown(event, index, () => handlers.current.choose(item, trigger), activeColumns); },
+    choose: (item, trigger) => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); else if (isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger }); },
+    remove: (item) => { if (block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
     menu: (event, item) => { if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },
   };
   const virtualRows = virtual.getVirtualItems();
@@ -133,10 +140,10 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       return <div className={entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
         {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.items.map((item, n) => {
           const index = entry.start + n; const active = item.key === selected;
-          return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} icons={icons} handlers={handlers} readOnly={!block.on_select && !block.item_menu?.length} key={item.key} />;
+          return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} icons={icons} handlers={handlers} readOnly={!block.on_select && !block.on_remove && !isMedia(item.image) && !block.item_menu?.length} removable={Boolean(block.on_remove)} key={item.key} />;
         })}
       </div>;
     })}</VirtualSurface>}
     {footer}
-  </div>{menu.dialog}</>;
+  </div>{menu.dialog}{preview && <MediaPreview request={preview} onClose={closePreview} />}</>;
 }

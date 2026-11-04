@@ -441,6 +441,7 @@ impl CompiledApp {
             Actions::Client(_)
             | Actions::PickFiles(_)
             | Actions::SaveFile(_)
+            | Actions::OpenUrl(_)
             | Actions::CopyText(_) => 0,
         })
     }

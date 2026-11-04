@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BindingMore, Block, FeedEntry } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { validColor } from "../components/badge";
@@ -13,6 +13,11 @@ import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
 import { useWindowStateValue, useWindowVisible } from "../data/window-state";
 import { useLoadMore } from "./load-more";
+import { Badge } from "../components/badge";
+import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
+import { toCoreError } from "../core/core-transport";
+import { checkAppLink } from "../data/app-link";
+import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
 
 function asFeedEntry(value: unknown): FeedEntry | null {
   if (!isObject(value) || typeof value.key !== "string" || !(typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")))) return null;
@@ -63,18 +68,42 @@ type FeedHandlers = {
 };
 const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, focused, selectable, copy, columns, format, collapsible, handlers }: { item: FlattenedFeedItem; index: number; count: number; collapsed: boolean; active: boolean; focused: boolean; selectable: boolean; copy: boolean; columns: boolean; format: string | undefined; collapsible: boolean; feedback: string; handlers: React.RefObject<FeedHandlers> }) {
   const entry = item.entry;
+  const data = useWindowData();
+  const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
+  const openLink = () => {
+    try {
+      void data.store.call({ op: "external.open", window_id: data.windowId, url: checkAppLink(entry.link!) })
+        .catch((error: unknown) => data.setNotice(toCoreError(error)));
+    } catch (error) { data.setNotice(toCoreError(error)); }
+  };
+  const meta = typeof entry.meta === "string" && (typeof entry.link === "string"
+    ? <a className="ks-view-meta ks-feed-link" href={entry.link}
+      onClick={(event) => { event.preventDefault(); event.stopPropagation(); openLink(); }}
+      onAuxClick={(event) => { event.preventDefault(); event.stopPropagation(); if (event.button === 1) openLink(); }}
+      onContextMenu={(event) => openContextMenu(event, [
+        { id: "link-open", label: "링크 열기", onSelect: openLink },
+        { id: "link-copy", label: "링크 주소 복사", onSelect: () => { void writeMenuClipboard(entry.link!, "링크 주소 복사"); } },
+      ])}>{entry.meta}</a>
+    : <span className="ks-view-meta">{entry.meta}</span>);
   const canCollapse = collapsible || item.replyCount > 0;
   const collapseLabel = collapsed ? item.replyCount ? `답글 ${item.replyCount}개 펴기` : "본문 펴기" : item.replyCount ? `답글 ${item.replyCount}개 접기` : "접기";
-  return <article aria-setsize={count} aria-posinset={index + 1} className={`ks-feed-entry${item.depth > 0 ? " ks-feed-entry-nested" : ""}${collapsed ? " is-collapsed" : ""}${active ? " is-selected" : ""}${selectable ? " is-selectable" : ""}`} aria-current={active ? "true" : undefined} data-depth={item.depth} style={{ "--ks-feed-depth": Math.min(item.depth, 6) } as React.CSSProperties} data-focus-index={index} tabIndex={focused ? 0 : -1} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => { if (event.target === event.currentTarget) handlers.current.keyDown(event, index, entry); }} onClick={() => handlers.current.choose(entry)} onContextMenu={(event) => handlers.current.menu(event, entry)}>
+  return <><article aria-setsize={count} aria-posinset={index + 1} className={`ks-feed-entry${item.depth > 0 ? " ks-feed-entry-nested" : ""}${collapsed ? " is-collapsed" : ""}${active ? " is-selected" : ""}${selectable ? " is-selectable" : ""}`} aria-current={active ? "true" : undefined} data-depth={item.depth} style={{ "--ks-feed-depth": Math.min(item.depth, 6) } as React.CSSProperties} data-focus-index={index} tabIndex={focused ? 0 : -1} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => { if (event.target === event.currentTarget) handlers.current.keyDown(event, index, entry); }} onClick={() => handlers.current.choose(entry)} onContextMenu={(event) => handlers.current.menu(event, entry)}>
     {isMedia(entry.image) && <MediaThumbnail media={entry.image} size={24} className="ks-feed-avatar" />}
     <div className="ks-feed-content"><div className={`ks-feed-header${copy || canCollapse ? " is-copy" : ""}`}>
       <div className="ks-feed-ident"><div className="ks-feed-name-line">{typeof entry.name === "string" && <strong style={validColor(entry.color) ? { color: entry.color } : undefined}>{entry.name}</strong>}<Badges values={entry.badges} />{(collapsed || item.replyCount > 0) && <Badges values={[collapsed ? item.replyCount > 0 ? `답글 ${item.replyCount}개 접힘` : "접힘" : `답글 ${item.replyCount}`]} />}</div>
-        {typeof entry.meta === "string" && (copy ? <span className="ks-feed-meta-copy"><span className="ks-view-meta">{entry.meta}</span>{!collapsed && handlers.current.copy(JSON.stringify([entry.key, "meta"]), entry.meta)}</span> : <span className="ks-view-meta">{entry.meta}</span>)}</div>
+        {meta && (copy ? <span className="ks-feed-meta-copy">{meta}{!collapsed && handlers.current.copy(JSON.stringify([entry.key, "meta"]), entry.meta!)}</span> : meta)}</div>
       <div className="ks-feed-head-actions">{canCollapse && <IconButton className="ks-feed-collapse-btn" aria-label={collapseLabel} title={collapseLabel} onClick={(event) => { event.stopPropagation(); handlers.current.toggle(entry.key); }}><DataIcon name={collapsed ? "chevron-right" : "chevron-down"} /></IconButton>}</div>
     </div>
     {!collapsed && <div className={`ks-feed-body tone-${entry.tone ?? "default"}${columns ? " is-columns" : ""}`}>{(typeof entry.body === "string" ? [entry.body] : entry.body).map((line, part) => copy ? <div className="ks-feed-copy-cell" key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}{handlers.current.copy(JSON.stringify([entry.key, "body", part]), line)}</div> : <div key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}</div>)}</div>}
+    {!collapsed && entry.media?.length ? <div className="ks-feed-media">{entry.media.map((media, index) => isMedia(media.image) &&
+      <button type="button" key={index} className="ks-feed-media-item" aria-label={media.alt || `그림 ${index + 1}`}
+        onClick={(event) => { event.stopPropagation(); setPreview({ media: media.image, name: media.alt || `그림 ${index + 1}`, trigger: event.currentTarget }); }}>
+        <MediaThumbnail media={media.image} size={96} />
+        {media.kind === "video" || media.kind === "animation" ? <Badge value={media.kind === "video" ? "영상" : "GIF"} /> : null}
+      </button>)}</div> : null}
     </div>
-  </article>;
+  </article>{preview && <MediaPreview request={preview} onClose={closePreview} />}</>;
 });
 export function FeedBlock({ block, context, pointer }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/entries`, block.entries);

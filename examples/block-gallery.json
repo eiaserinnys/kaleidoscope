@@ -10,6 +10,7 @@
   "state": {
     "tab": 0,
     "item": "b",
+    "removed": [],
     "node": null,
     "query": "",
     "memo": "",
@@ -63,7 +64,8 @@
                   "grouped": true,
                   "selected": { "state": "item" },
                   "on_select": { "set_state": "item" },
-                  "items": { "expr": "( $q := $lowercase($state.query); $all := [{\"key\": \"a\", \"title\": \"첫 화면 다듬기\", \"subtitle\": \"화면\", \"meta\": \"10-28\", \"color\": \"#7a6bd1\", \"badges\": [{\"text\": \"완료\", \"color\": \"#2f7d4f\"}]}, {\"key\": \"b\", \"title\": \"연결 설계\", \"subtitle\": \"서버\", \"meta\": \"10-29\", \"color\": \"#d08a3c\", \"badges\": [{\"text\": \"진행\", \"color\": \"#315da8\"}]}, {\"key\": \"c\", \"title\": \"블록 견본\", \"subtitle\": \"화면\", \"meta\": \"10-30\", \"badges\": [\"새로\"]}, {\"key\": \"d\", \"title\": \"설치본 내기\", \"subtitle\": \"릴리스\", \"meta\": \"10-31\"}][$contains($lowercase(title), $q)]; [{\"title\": \"화면\", \"meta\": $string($count($all[subtitle = \"화면\"])), \"items\": [$all[subtitle = \"화면\"]]}, {\"title\": \"그 밖\", \"meta\": $string($count($all[subtitle != \"화면\"])), \"items\": [$all[subtitle != \"화면\"]]}][$count(items) > 0] )" }
+                  "on_remove": [{ "set_state": "removed", "value": { "expr": "$append($state.removed, [$event])" } }],
+                  "items": { "expr": "( $q := $lowercase($state.query); $all := [{\"key\": \"a\", \"title\": \"첫 화면 다듬기\", \"subtitle\": \"화면\", \"meta\": \"10-28\", \"color\": \"#7a6bd1\", \"badges\": [{\"text\": \"완료\", \"color\": \"#2f7d4f\"}]}, {\"key\": \"b\", \"title\": \"연결 설계\", \"subtitle\": \"서버\", \"meta\": \"10-29\", \"color\": \"#d08a3c\", \"badges\": [{\"text\": \"진행\", \"color\": \"#315da8\"}]}, {\"key\": \"c\", \"title\": \"블록 견본\", \"subtitle\": \"화면\", \"meta\": \"10-30\", \"badges\": [\"새로\"]}, {\"key\": \"d\", \"title\": \"설치본 내기\", \"subtitle\": \"릴리스\", \"meta\": \"10-31\"}][$contains($lowercase(title), $q) and $not(key in $state.removed)]; [{\"title\": \"화면\", \"meta\": $string($count($all[subtitle = \"화면\"])), \"items\": [$all[subtitle = \"화면\"]]}, {\"title\": \"그 밖\", \"meta\": $string($count($all[subtitle != \"화면\"])), \"items\": [$all[subtitle != \"화면\"]]}][$count(items) > 0] )" }
                 }
               ]
             },
@@ -142,7 +144,7 @@
                 {
                   "type": "feed",
                   "grouped": true,
-                  "entries": { "expr": "( $lines := [{\"key\": \"1\", \"name\": \"서소영\", \"color\": \"#7a6bd1\", \"ko\": \"먼저 짚고 넘어가겠습니다.\\n순서가 조금 다릅니다.\", \"en\": \"Let me point one thing out.\\nThe order is a little off.\"}, {\"key\": \"2\", \"name\": \"디렉터\", \"color\": \"#d08a3c\", \"ko\": \"그래, 고쳐 줘.\", \"en\": \"Sure, fix it.\"}]; $pick := function($l) { $state.lang = 'ko' ? [$l.ko] : $state.lang = 'en' ? [$l.en] : [$l.ko, $l.en] }; [{\"title\": \"대화\", \"meta\": $string($count($lines)), \"items\": [$lines.{\"key\": key, \"name\": name, \"color\": color, \"body\": $pick($)}]}, {\"title\": \"알림\", \"items\": [{\"key\": \"n\", \"body\": \"흐름 블록은 줄바꿈을 지킨다.\", \"tone\": \"muted\"}]}] )" }
+                  "entries": { "expr": "( $lines := [{\"key\": \"1\", \"name\": \"서소영\", \"color\": \"#7a6bd1\", \"ko\": \"먼저 짚고 넘어가겠습니다.\\n순서가 조금 다릅니다.\", \"en\": \"Let me point one thing out.\\nThe order is a little off.\"}, {\"key\": \"2\", \"name\": \"디렉터\", \"color\": \"#d08a3c\", \"ko\": \"그래, 고쳐 줘.\", \"en\": \"Sure, fix it.\"}]; $pick := function($l) { $state.lang = 'ko' ? [$l.ko] : $state.lang = 'en' ? [$l.en] : [$l.ko, $l.en] }; [{\"title\": \"대화\", \"meta\": $string($count($lines)), \"items\": [$lines.{\"key\": key, \"name\": name, \"color\": color, \"meta\": \"원본\", \"link\": \"https://example.com\", \"media\": ($photo := $state.picture; $photo ? [{\"image\": {\"permission\": \"media\", \"path\": $photo}, \"alt\": \"사진\"}] : []), \"body\": $pick($)}]}, {\"title\": \"알림\", \"items\": [{\"key\": \"n\", \"body\": \"흐름 블록은 줄바꿈을 지킨다.\", \"tone\": \"muted\"}]}] )" }
                 }
               ]
             },

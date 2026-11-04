@@ -1,5 +1,5 @@
 import jsonata from "jsonata";
-import type { Action, Actions, AppDefinition, AppWindow, Binding, BindingMore, BindingValue, Block, DataView, SourceStatus } from "../contract/contract";
+import type { Actions, AppDefinition, AppWindow, Binding, BindingMore, BindingValue, Block, DataView, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 
 export interface FakePageSeed { value?: JsonValue; error?: string; id?: string; delayMs?: number }
@@ -37,7 +37,8 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
     case "timeline": for (const field of ["on_select", "on_edit", "on_viewport"] as const) add(field, block[field] !== undefined); break;
     case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;
     case "folder": add("on_select", block.on_select !== undefined); break;
-    case "map": case "chart": case "list": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
+    case "list": add("on_select", block.on_select !== undefined); add("on_remove", block.on_remove !== undefined); break;
+    case "map": case "chart": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
     case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); add("on_cancel", block.on_cancel !== undefined); break;
     case "text": add("on_click", block.on_click !== undefined); add("on_double_click", block.on_double_click !== undefined); break;
     case "select": case "toggle": case "slider": case "color": add("on_change"); break;
@@ -224,7 +225,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       if (!actionSlots(context.definition.ui).has(pointer)) throw { code: "invalid_request", message: "명령을 처리할 수 없습니다.", details: [] };
       const actions = pointerValue(context.definition, pointer) as Actions | undefined;
       if (!actions) throw { code: "not_found", message: "동작을 찾을 수 없습니다", details: [] };
-      const list: Action[] = Array.isArray(actions) ? actions : [actions];
+      const list = Array.isArray(actions) ? actions : [actions];
       for (const action of list) {
         if ("set_state" in action) {
           const value = "value" in action && action.value !== undefined ? await evaluate(action.value, context, event, item) : event;

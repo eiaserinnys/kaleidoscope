@@ -295,7 +295,6 @@ pub const CONTRACT_VERSION: u32 = 36;
 /// - 33판: 입력 선택지와 선택지 설명.
 /// - 34판: timeline 날짜 눈금과 줄 배치.
 /// - 35판: 날짜와 시간 입력.
-pub const BLOCK_SET_VERSION: u32 = INPUT_DATE_TIME_BLOCK_SET_VERSION;
 /// 날짜와 시간 입력의 첫 블록 세트 판.
 pub const INPUT_DATE_TIME_BLOCK_SET_VERSION: u32 = 35;
 /// 메시지 수신 능력을 처음 지원하는 블록 세트와 client 모듈 판.
@@ -307,6 +306,9 @@ pub const INPUT_SPIN_BLOCK_SET_VERSION: u32 = 31;
 pub const INPUT_OPTIONS_BLOCK_SET_VERSION: u32 = 33;
 /// timeline 날짜 눈금의 첫 블록 세트 판.
 pub const TIMELINE_DATES_BLOCK_SET_VERSION: u32 = 34;
+/// - 30판: 목록 빼기와 주소 열기 동작.
+pub const BLOCK_SET_VERSION: u32 = LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION;
+pub const LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION: u32 = 30;
 /// 앱 아이콘 자산 참조의 첫 블록 세트 판.
 pub const APP_ICON_BLOCK_SET_VERSION: u32 = 26;
 /// 분할의 반응형 방향과 반복 간격의 첫 블록 세트 판.
@@ -1827,6 +1829,9 @@ pub enum Block {
         on_select: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        on_remove: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
@@ -2577,6 +2582,8 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_remove: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
@@ -3224,6 +3231,7 @@ impl From<RawBlock> for Block {
                 grouped,
                 selected,
                 on_select,
+                on_remove,
                 item_menu,
             } => Block::List {
                 items,
@@ -3231,6 +3239,7 @@ impl From<RawBlock> for Block {
                 grouped,
                 selected,
                 on_select,
+                on_remove,
                 item_menu,
             },
             RawBlock::Table {
