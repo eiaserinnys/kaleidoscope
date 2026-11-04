@@ -37,6 +37,7 @@
 .ks-view-group strong { font-family: var(--ks-font-label); font-weight: 600; letter-spacing: var(--ks-letter-label); text-transform: uppercase; }
 .ks-view-sticky { position: sticky; top: 0; z-index: 2; height: 0; }
 .ks-view-sticky .ks-view-group {
+  padding-block: var(--ks-space-2);
   background: var(--ks-material-popover);
   backdrop-filter: blur(var(--ks-blur-popover));
 }
@@ -44,9 +45,8 @@
   padding-inline: var(--ks-space-2);
   border-radius: var(--ks-radius-small);
 }
-.ks-list-row .ks-list-content { flex: 1 1 auto; }
-.ks-list-row > .ks-view-meta { flex: 0 100 auto; min-width: 0; }
-.ks-list-row > .ks-view-badges { flex: 0 10000 auto; overflow: hidden; }
+.ks-list-row .ks-list-content { flex: 1 1 0; min-width: min(100%, 6.5em); }
+.ks-list-row > .ks-view-meta, .ks-list-row > .ks-view-badges { flex: none; }
 .ks-data-tree .ks-row > .ks-view-meta, .ks-data-tree .ks-row > .ks-view-badges { flex: 0 0 auto; }
 .ks-list-row > .ks-view-meta { font-variant-numeric: tabular-nums; }
 .ks-list-row > .ks-view-badges { flex-wrap: nowrap; }

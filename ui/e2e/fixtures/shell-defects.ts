@@ -3,6 +3,7 @@ import type { AppDefinition } from "../../src/contract/contract";
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
 export const shellDefectFixtures = [
+  { ...base, id: "list-row-fit-940", name: "목록 줄 축소", state: {}, ui: { type: "list", grouped: true, items: [{ title: "묶음", items: Array.from({ length: 20 }, (_, i) => ({ key: String(i), title: `@작성자_${i}`, subtitle: "말줄임으로 표시할 아주 긴 부제입니다. ".repeat(8), color: "#804080", meta: "11/03", badges: ["고치는 중"] })) }] } },
   ...(["grid", "icons"] as const).map((layout) => ({ ...base, requires: { blocks: 30, modules: {} }, id: `layout-940-${layout}`, name: "그림 목록", state: {}, ui: { type: "tabs", tabs: [
     { label: "그림", child: { type: "stack", direction: "column", children: [
       { type: "input", label: "찾기", label_position: "top", value: "", on_change: [] },
