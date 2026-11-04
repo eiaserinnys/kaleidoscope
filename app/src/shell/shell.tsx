@@ -19,6 +19,7 @@ import {
   flushSandboxes,
   toCoreError,
   useShellSelector,
+  useWindowControlHost,
   type CoreError,
   type CoreReply,
   type CoreRequest,
@@ -39,6 +40,7 @@ type OpenMenu =
   | { kind: "link"; anchor: HTMLElement };
 
 export function Shell({ store }: { store: ShellStore }) {
+  useWindowControlHost(store);
   const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);

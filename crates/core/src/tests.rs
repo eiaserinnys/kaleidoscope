@@ -1744,6 +1744,7 @@ fn expect_error(result: Result<CoreReply, CoreError>, code: ErrorCode) -> CoreEr
 
 #[derive(Default)]
 struct FakeRegistryClient {
+    control_responses: Mutex<Vec<kaleidoscope_contract::WindowControlResponse>>,
     raw_values_enabled: std::sync::atomic::AtomicBool,
     legacy_storage_not_found: std::sync::atomic::AtomicBool,
     storage_value: Mutex<Option<(Value, String)>>,
@@ -1773,6 +1774,15 @@ struct FakeRegistryClient {
 }
 
 impl RegistryClient for FakeRegistryClient {
+    fn post_window_control_response(
+        &self,
+        _: &str,
+        _: &str,
+        response: &kaleidoscope_contract::WindowControlResponse,
+    ) -> Result<(), RegistryError> {
+        self.control_responses.lock().unwrap().push(response.clone());
+        Ok(())
+    }
     fn values_get(
         &self,
         _: &str,

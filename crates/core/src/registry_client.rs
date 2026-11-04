@@ -66,6 +66,12 @@ pub(crate) struct AssetDownload {
 }
 
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn post_window_control_response(
+        &self,
+        server_url: &str,
+        token: &str,
+        response: &kaleidoscope_contract::WindowControlResponse,
+    ) -> Result<(), RegistryError>;
     fn invoke_worker(
         &self,
         _url: &str,
@@ -397,6 +403,28 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn post_window_control_response(
+        &self,
+        server_url: &str,
+        token: &str,
+        response: &kaleidoscope_contract::WindowControlResponse,
+    ) -> Result<(), RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!(
+                "{server_url}{}/{}",
+                kaleidoscope_contract::registry::DEVICE_WINDOW_CONTROL_PATH,
+                response.request_id
+            ))
+            .bearer_auth(token)
+            .json(response)
+            .send()
+            .map_err(request_failure)?;
+        let host = response_host(&response);
+        let status = response.status();
+        let body = response.bytes().unwrap_or_default();
+        check_status(status, &body, &host)
+    }
     fn invoke_worker(
         &self,
         url: &str,
