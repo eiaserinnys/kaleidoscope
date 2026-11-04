@@ -28,7 +28,7 @@ export function WindowNotice() {
     .find((id) => id !== undefined);
   const firstFailed = sources[failed[0]];
   const sourceMessage = firstFailed?.state === "failed"
-    ? `새로 받지 못해 이전에 받은 내용을 보이고 있습니다. ${firstFailed.message}${failed.length > 1 ? ` (외 ${failed.length - 1}곳)` : ""}`
+    ? `${failed.length > 1 ? `화면 ${failed.length}곳이 이전에 받은 내용을 보이고 있습니다.` : "이전에 받은 내용을 보이고 있습니다."} ${firstFailed.message}`
     : "";
   if (!message && (!failed.length || dismissed)) return null;
   const close = () => { if (message) data.setNotice(null); else setDismissed(true); };

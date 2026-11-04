@@ -7,7 +7,7 @@ const stories = (start: number) => Array.from({ length: 30 }, (_, offset) => ({ 
 export const pagingApp: AppDefinition = {
   id: "paging-test", name: "쪽 넘김 시험", requires: { blocks: 30, modules: { connection: 1 } },
   permissions: [{ module: "connection", id: "api", connection: "example", label: "API", access: "read" }, { module: "connection", id: "alternate", connection: "example", label: "다른 연결", access: "read" }],
-  state: { tab: 0 },
+  state: { tab: 0, query: "" },
   sources: {
     list_items: { kind: "request", permission: "api", path: "/items", page: { param: "cursor", next: "next", items: "items" } },
     table_rows: { kind: "request", permission: "alternate", path: "/rows", page: { param: "cursor", next: "next", items: "items" } },
@@ -30,6 +30,14 @@ export const pagingApp: AppDefinition = {
     { label: "격자 반복", child: { type: "repeat", layout: "grid", virtual: true, key: "key", items: { expr: "$data.list_items.items" }, template: { type: "text", value: { item: "title" } } } },
     { label: "격자 목록", child: { type: "list", layout: "grid", items: { expr: "$data.grid_items.items" } } },
     { label: "아이콘 목록", child: { type: "list", layout: "icons", items: { expr: "$data.icon_items.items" } } },
+    { label: "탭 상태", child: { type: "stack", direction: "column", children: [
+      { type: "input", kind: "search", value: { state: "query" }, on_change: { set_state: "query" }, placeholder: "찾기" },
+      { type: "list", items: { expr: "$data.list_items.items" } },
+    ] } },
+    { label: "구역 상태", child: { type: "section", title: "자료", child: { type: "stack", direction: "column", children: [
+      { type: "input", kind: "search", value: { state: "query" }, on_change: { set_state: "query" }, placeholder: "찾기" },
+      { type: "list", items: { expr: "$data.list_items.items" } },
+    ] } } },
   ] },
 };
 

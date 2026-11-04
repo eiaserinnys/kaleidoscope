@@ -496,6 +496,7 @@ fn source_http_errors_show_target_and_status_specific_guidance() {
         let Err(RequestError::Core(error)) = crate::data_sources::fetch_named(&core.inner, &window, "items", &plan, SourceFormat::Json) else { panic!("원천 오류가 필요함"); };
         assert_eq!(error.id.as_deref(), Some(id));
         assert!(error.message.contains("연결 example"), "{}", error.message);
+        assert!(!error.message.contains("이 칸의"), "{}", error.message);
         assert!(!error.message.contains("items") && !error.message.contains("/old"), "{}", error.message);
         assert!(error.details.iter().any(|d| d.contains("items")) && error.details.iter().any(|d| d.contains("/old")));
         if status == 500 || status == 422 { assert!(error.message.ends_with("원인: 서버 사유"), "{}", error.message); }
@@ -1072,7 +1073,7 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
                     message,
                     ..
                 }) if id.as_deref() == Some("DATA_SOURCE_RESPONSE_SERVER_ERROR")
-                    && message == "연결 example의 서버에 오류가 나서 이 칸의 자료를 받지 못했습니다. 잠시 뒤 다시 받기를 누르세요. 원인: failure"
+                    && message == "연결 example의 서버에 오류가 나서 자료를 받지 못했습니다. 잠시 뒤 다시 받기를 누르세요. 원인: failure"
             ) {
                 assert!(!view.values.contains_key("/ui/children/0/items"));
                 failed = true;

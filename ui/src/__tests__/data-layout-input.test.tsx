@@ -300,13 +300,13 @@ it("shows action failures and stale source failures with retry and dismissal", a
   const { transport, spy } = setup();
   await screen.findByPlaceholderText("입력");
   act(() => transport.emit({ event: "data.update", window_id: "editor-window", view: { sources: { file: { state: "failed", message: "오류", has_value: true } }, values: {} } }));
-  expect(screen.getByText("새로 받지 못해 이전에 받은 내용을 보이고 있습니다. 오류")).toBeTruthy();
+  expect(screen.getByText("이전에 받은 내용을 보이고 있습니다. 오류")).toBeTruthy();
   await userEvent.click(screen.getByRole("button", { name: "다시 받기" }));
   expect(spy).toHaveBeenCalledWith({ op: "data.refresh", window_id: "editor-window", sources: ["file"] });
   await userEvent.click(screen.getByRole("button", { name: "닫기" }));
-  expect(screen.queryByText("새로 받지 못해 이전에 받은 내용을 보이고 있습니다. 오류")).toBeNull();
+  expect(screen.queryByText("이전에 받은 내용을 보이고 있습니다. 오류")).toBeNull();
   act(() => transport.emit({ event: "data.update", window_id: "editor-window", view: { sources: { file: { state: "failed", message: "다시 오류", has_value: true } }, values: {} } }));
-  expect(await screen.findByText("새로 받지 못해 이전에 받은 내용을 보이고 있습니다. 다시 오류")).toBeTruthy();
+  expect(await screen.findByText("이전에 받은 내용을 보이고 있습니다. 다시 오류")).toBeTruthy();
 });
 
 it("keeps a blurred draft while its change is pending, then follows a later external state change", async () => {

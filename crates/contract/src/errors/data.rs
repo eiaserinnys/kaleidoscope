@@ -206,28 +206,28 @@ error_catalog! { ENTRIES;
         class: Server,
         place: "데이터 원천 응답 확인",
         cause: "서버가 요청한 자료를 찾지 못했다",
-        message: "{target}의 서버가 이 칸의 자료를 찾지 못했습니다. 앱 정의의 원천 주소를 확인하세요.",
+        message: "{target}의 서버가 자료를 찾지 못했습니다. 앱 정의의 원천 주소를 확인하세요.",
         fix: "앱 정의의 원천 주소를 확인하세요"
     }
     DATA_SOURCE_RESPONSE_DENIED(target) {
         class: Server,
         place: "데이터 원천 응답 확인",
         cause: "서버가 자료 읽기를 거부했다",
-        message: "{target}의 서버가 이 칸의 자료를 읽을 권한이 없다고 응답했습니다. 연결 설정이나 로그인을 확인하세요.",
+        message: "{target}의 서버가 자료를 읽을 권한이 없다고 응답했습니다. 연결 설정이나 로그인을 확인하세요.",
         fix: "연결 설정이나 로그인을 확인하세요"
     }
     DATA_SOURCE_RESPONSE_SERVER_ERROR(target, reason) {
         class: Server,
         place: "데이터 원천 응답 확인",
         cause: "원천 서버에 오류가 발생했다",
-        message: "{target}의 서버에 오류가 나서 이 칸의 자료를 받지 못했습니다. 잠시 뒤 다시 받기를 누르세요. 원인: {reason}",
+        message: "{target}의 서버에 오류가 나서 자료를 받지 못했습니다. 잠시 뒤 다시 받기를 누르세요. 원인: {reason}",
         fix: "잠시 뒤 다시 받기를 누르세요"
     }
     DATA_SOURCE_RESPONSE_STATUS_FAILED(target, reason) {
         class: Server,
         place: "데이터 원천 응답 확인",
         cause: "원천 서버가 성공이 아닌 HTTP 상태를 응답했다",
-        message: "{target}의 서버가 성공 응답을 보내지 않아 이 칸의 자료를 받지 못했습니다. 다시 받기를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요. 원인: {reason}",
+        message: "{target}의 서버가 성공 응답을 보내지 않아 자료를 받지 못했습니다. 다시 받기를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요. 원인: {reason}",
         fix: "다시 받기를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요"
     }
     DATA_BINDING_EXPR_FAILED(pointer, reason) {
