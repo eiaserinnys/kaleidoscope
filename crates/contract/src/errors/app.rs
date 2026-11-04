@@ -39,6 +39,20 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}, 아이콘 자산 {asset} {version}판: SVG, PNG 또는 WebP 아이콘은 블록 세트 {required}판 이상이 필요합니다. requires.blocks를 고치세요.",
         fix: "requires.blocks를 필요한 판 이상으로 지정하세요"
     }
+    APP_INPUT_SPIN_VERSION_LOW(at, required, required_min) {
+        class: InvalidAppDefinition,
+        place: "숫자 스핀 블록 판 확인",
+        cause: "스핀을 지원하지 않는 블록 세트 판이다",
+        message: "{at}의 input.spin은 블록 세트 {required}판부터입니다. requires.blocks를 {required_min} 이상으로 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
+    APP_INPUT_SPIN_KIND_INVALID(at) {
+        class: InvalidAppDefinition,
+        place: "숫자 스핀 입력 종류 확인",
+        cause: "숫자 입력이 아닌 곳에 spin을 지정했다",
+        message: "{at}의 spin은 숫자 입력에서만 쓸 수 있습니다. kind를 number로 바꾸거나 spin을 빼세요.",
+        fix: "kind를 number로 바꾸거나 spin을 빼세요"
+    }
     APP_BUTTON_DESCRIPTION_VERSION_LOW(at, required, required_min) {
         class: InvalidAppDefinition,
         place: "단추 설명 블록 판 확인",

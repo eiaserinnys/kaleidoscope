@@ -12,10 +12,11 @@ import type { AppDefinition } from "../src/contract/contract";
 import "../src/styles/index.css";
 import "../../app/src/shell.css";
 
-const definition: AppDefinition = { ...mdViewerDefinition, id: "control-fixture", requires: { blocks: 4, modules: {} }, permissions: [], state: { text: "기존", selected: "하나", enabled: false, tab: "0", clicked: null, submitted: null }, ui: {
+const definition: AppDefinition = { ...mdViewerDefinition, id: "control-fixture", requires: { blocks: 31, modules: {} }, permissions: [], state: { text: "기존", selected: "하나", enabled: false, tab: "0", clicked: null, submitted: null, number: 2 }, ui: {
   type: "stack", direction: "column", children: [
     { type: "button", label: "실행", on_click: { set_state: "clicked" } },
     { type: "input", label: "대상 입력", value: { state: "text" }, on_change: { set_state: "text" }, on_submit: { set_state: "submitted" } },
+    { type: "input", kind: "number", spin: true, label: "숫자 입력", value: { state: "number" }, on_change: { set_state: "number" } },
     { type: "select", label: "종류", value: { state: "selected" }, options: ["하나", "둘"], on_change: { set_state: "selected" } },
     { type: "toggle", label: "표시", value: { state: "enabled" }, on_change: { set_state: "enabled" } },
     { type: "tabs", selected: { state: "tab" }, on_change: { set_state: "tab" }, tabs: [{ label: "첫 탭", child: { type: "text", value: "첫 내용" } }, { label: "둘째 탭", child: { type: "text", value: "둘째 내용" } }] },

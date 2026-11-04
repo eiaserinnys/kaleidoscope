@@ -6,7 +6,7 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function setup(holdNewEvent = false) {
   const definition: AppDefinition = {
@@ -37,6 +37,59 @@ function setup(holdNewEvent = false) {
   render(<AppWindowContent store={store} windowId="editor-window" />);
   return { store, spy, originalCall, eventHeld: () => eventHeld, releaseEvent: () => releaseEvent() };
 }
+
+it("스핀 직후 단추는 입력 요청과 응답과 상태 반영을 기다려 새 숫자를 읽는다", async () => {
+  vi.stubGlobal("PointerEvent", MouseEvent);
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 31, modules: {} }, state: { amount: 2, saved: 0 },
+    ui: { type: "stack", direction: "column", children: [
+      { type: "input", kind: "number", spin: true, label: "수량", value: { state: "amount" }, on_change: { set_state: "amount" } },
+      { type: "button", label: "저장", on_click: [{ set_state: "saved", value: { expr: "$state.amount" } }] },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { ...definition.state };
+  const transport = createFakeTransport(seed);
+  const subscribe = transport.subscribe.bind(transport);
+  let releaseEvent = () => {};
+  let eventHeld = false;
+  transport.subscribe = (listener) => subscribe((event) => {
+    if (event.event === "state.changed" && event.snapshot.shared.windows[0].state.amount === 3 && !eventHeld) {
+      eventHeld = true; releaseEvent = () => listener(event);
+    } else listener(event);
+  });
+  const originalCall = transport.call.bind(transport);
+  const spy = vi.spyOn(transport, "call");
+  let releaseCall!: () => void;
+  let releaseReply!: () => void;
+  const pendingCall = new Promise<void>((resolve) => { releaseCall = resolve; });
+  const pendingReply = new Promise<void>((resolve) => { releaseReply = resolve; });
+  spy.mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.pointer.endsWith("/on_change") && request.event === 3) {
+      await pendingCall;
+      const reply = await originalCall(request);
+      await pendingReply;
+      return reply;
+    }
+    return originalCall(request);
+  });
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="editor-window" />);
+  const up = await screen.findByRole("button", { name: "늘리기" });
+  fireEvent.pointerDown(up, { button: 0 });
+  fireEvent.click(screen.getByRole("button", { name: "저장" }));
+  const clicked = () => spy.mock.calls.some(([request]) => request.op === "data.act" && request.pointer.endsWith("/on_click"));
+  await waitFor(() => expect(spy.mock.calls.some(([request]) => request.op === "data.act" && request.event === 3)).toBe(true));
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseCall(); await pendingCall; });
+  await waitFor(() => expect(eventHeld).toBe(true));
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseReply(); await pendingReply; });
+  expect(clicked()).toBe(false);
+  await act(async () => { releaseEvent(); });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.saved).toBe(3));
+  fireEvent.pointerUp(up);
+});
 
 it("제출 뒤 새 입력을 바로 추가하면 새 값이 전달된다", async () => {
   const { store, spy, originalCall, eventHeld, releaseEvent } = setup(true);
