@@ -340,6 +340,20 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         return { op: "share.view" };
       case "state.get":
         return { op: "state.get", snapshot: clone(snapshot), sequence };
+      case "shell.preferences.set_default":
+      case "shell.preferences.answer": {
+        if (snapshot.link.state !== "connected" || !snapshot.shared.preferences) return fail("server", "서버에 연결되어 있지 않습니다", [], "SERVER_PREFERENCES_NOT_CONNECTED");
+        const old = snapshot.shared.preferences;
+        const preferences = {
+          revision: old.revision + 1,
+          default_message_app_id: request.op === "shell.preferences.set_default" ? request.app_id : request.use_as_default ? request.app_id : old.default_message_app_id,
+          asked_message_app_ids: request.op === "shell.preferences.answer" && !old.asked_message_app_ids.includes(request.app_id)
+            ? [...old.asked_message_app_ids, request.app_id] : old.asked_message_app_ids,
+        };
+        snapshot = { ...snapshot, shared: { ...snapshot.shared, preferences } };
+        emitState();
+        return { op: request.op, preferences };
+      }
       case "data.attach":
         return { op: "data.attach", view: await data.attach(request.window_id) };
       case "data.dormant":

@@ -23,6 +23,7 @@ import { grantFor, makeTestSeed, makeTestSnapshot } from "./fixtures";
 import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 import { useDefaultMessageApp } from "../shell/message-target";
+import { useMessageSnapshot } from "../../../app/src/shell/use-message-snapshot";
 
 const rowRenders = vi.hoisted(() => new Map<string, number>());
 const tileRenders = vi.hoisted(() => new Map<string, number>());
@@ -400,6 +401,34 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("계정 설정은 다른 창을 다시 그리지 않고 창 상태는 닫힌 설정과 질문의 구독을 갱신하지 않는다", async () => {
+    const snapshot = testSnapshot([definition]);
+    snapshot.link = { state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "내 PC" };
+    snapshot.shared.preferences = { revision: 1, default_message_app_id: null, asked_message_app_ids: [] };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    let renders = 0;
+    function Observer() { useMessageSnapshot(store); renders += 1; return null; }
+    render(<><Shell store={store} /><Observer /></>);
+    await store.ready;
+    await waitFor(() => expect(document.querySelector('[data-window-id="window-b"]')).not.toBeNull());
+    await settleRenders();
+    const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
+    if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    else fallbackProbe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
+    calls.length = 0;
+    const current = store.getSnapshot()!;
+    act(() => transport.emit({ event: "state.changed", snapshot: { ...current, shared: { ...current.shared, preferences: { revision: 2, default_message_app_id: null, asked_message_app_ids: ["other"] } } } }));
+    await settleRenders();
+    expect(countFor("window-a")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    const beforeWindowChange = renders;
+    await setState(store, "window-a", "first", "변경");
+    await settleRenders();
+    expect(renders).toBe(beforeWindowChange);
+    store.dispose();
+  });
+
   it("앱 아이콘 수신은 다른 창과 블록을 다시 그리지 않는다", async () => {
     const withIcon = { ...definition, icon: { asset: "logo", version: 1 } };
     const snapshot = testSnapshot([withIcon]);

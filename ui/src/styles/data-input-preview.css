@@ -49,11 +49,5 @@
 .ks-data-button:not(.has-preview) > :is(.ks-button, .ks-icon-button)[aria-disabled="true"] { cursor: default; }
 .ks-data-button:not(.has-preview) > :is(.ks-button, .ks-icon-button).is-progress { opacity: .56; }
 
-.ks-data-button > :is(.ks-button, .ks-icon-button).is-progress,
 .ks-data-button-card-label.is-progress { position: relative; }
-.ks-data-button > :is(.ks-button, .ks-icon-button).is-progress > :not(.ks-button-progress),
 .ks-data-button-card-label.is-progress > :not(.ks-button-progress) { visibility: hidden; }
-.ks-button-progress { position: absolute; inset: 0; display: grid; place-items: center; }
-.ks-button-progress svg { animation: ks-button-spin 1s linear infinite; }
-@keyframes ks-button-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .ks-button-progress svg { animation: none; } }

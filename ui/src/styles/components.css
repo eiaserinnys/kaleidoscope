@@ -61,6 +61,13 @@
   padding: 0;
 }
 
+.ks-button.is-progress, .ks-icon-button.is-progress { position: relative; }
+.ks-button.is-progress > :not(.ks-button-progress), .ks-icon-button.is-progress > :not(.ks-button-progress) { visibility: hidden; }
+.ks-button-progress { position: absolute; inset: 0; display: grid; place-items: center; }
+.ks-button-progress svg { animation: ks-button-spin 1s linear infinite; }
+@keyframes ks-button-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ks-button-progress svg { animation: none; } }
+
 .ks-data-state:not(.ks-image-view *) {
   display: flex;
   box-sizing: border-box;

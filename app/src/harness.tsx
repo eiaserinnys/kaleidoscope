@@ -11,7 +11,7 @@ import {
 } from "@kaleidoscope/ui";
 import { Shell } from "./shell/shell";
 import { describeVisible } from "../../ui/src/share/visible";
-import type { App, AppDefinition, AppVersion, AppWindow, LinkStatus, ShellSnapshot } from "../../ui/src/contract/contract";
+import type { AccountPreferences, App, AppDefinition, AppVersion, AppWindow, LinkStatus, ShellSnapshot } from "../../ui/src/contract/contract";
 import "@kaleidoscope/ui/styles.css";
 import "./index.css";
 import "./shell.css";
@@ -36,6 +36,7 @@ declare global {
       getShareCalls: () => Array<{ window_id: string; view: import("../../ui/src/contract/contract").VisibleView }>;
       getCalls: () => CoreRequest[];
       describeVisible: (root: HTMLElement) => { text: string; visual: boolean };
+      setPreferences: (preferences: AccountPreferences | null) => void;
     };
   }
 }
@@ -47,6 +48,7 @@ const harnessParams = new URLSearchParams(window.location.search);
 const longFolderScenario = harnessParams.has("long-folder");
 const pcAllowErrorScenario = harnessParams.has("pc-allow-error");
 const settingsPreview = harnessParams.get("preview") === "app-settings";
+const shellSettingsPreview = harnessParams.get("preview") === "shell-settings";
 const settingsSample = harnessParams.get("app") === "sample" || harnessParams.get("app") === "empty-group";
 const requestedAppWindow = ["agent", "calculator", "html-report", "explorer"].includes(harnessParams.get("window") ?? "") ? harnessParams.get("window")! : null;
 const shareScenario = new URLSearchParams(window.location.search).get("share");
@@ -147,27 +149,28 @@ const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop
   });
 
 function linkStatus(state: string | null): LinkStatus {
+  const serverUrl = shellSettingsPreview ? "https://eiaserinnys.me/kaleidoscope" : "https://kaleidoscope.example";
   switch (state) {
     case "embedded-offline": return { state: "offline", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC", reason: null };
     case "embedded": return { state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" };
     case "pairing": return {
       state: "pairing",
-      server_url: "https://kaleidoscope.example",
+      server_url: serverUrl,
       user_code: "123456",
       expires_at: "2026-10-29T00:10:00Z",
     };
     case "connected": return {
       state: "connected", mode: "remote",
-      server_url: "https://kaleidoscope.example",
+      server_url: serverUrl,
       device_name: "Office PC",
     };
     case "offline": return {
       state: "offline", mode: "remote",
-      server_url: "https://kaleidoscope.example",
+      server_url: serverUrl,
       device_name: "Office PC",
       reason: { id: "CONN_EVENTS_SEND_FAILED", code: "server", message: "서버 응답 없음", details: [] },
     };
-    case "revoked": return { state: "revoked", server_url: "https://kaleidoscope.example" };
+    case "revoked": return { state: "revoked", server_url: serverUrl };
     default: return { state: "unlinked" };
   }
 }
@@ -205,6 +208,12 @@ if (harnessParams.has("empty-workspace")) {
 if (harnessParams.has("transfer-skips")) {
   snapshot.last_transfer = { imported: 3, skipped: ["app:sample-a", "value:sample-a/settings"] };
 }
+if (shellSettingsPreview) {
+  snapshot.shared.preferences = harnessParams.get("prefs") === "waiting" ? null : {
+    revision: 1, default_message_app_id: "agent",
+    asked_message_app_ids: harnessParams.has("prompt") ? [] : ["workspace-pas"],
+  };
+}
 
 const files = shareScenario === "editor" ? { "README.md": Array.from({ length: 120 }, (_, i) => `줄 ${i + 1}`).join("\n") } : bottomMenuScenario
   ? Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`documents/z${String(index).padStart(2, "0")}.md`, `# File ${index}`]))
@@ -240,13 +249,20 @@ const transport: FakeTransport = createFakeTransport({
   ]) : requestedAppWindow === "html-report" ? [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }] : undefined,
   files,
 });
-if (harnessParams.has("reset-review") || pcAllowErrorScenario) {
+if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsPreview && (harnessParams.has("slow-link") || harnessParams.has("slow-preferences") || harnessParams.has("fail-answer")))) {
   const call = transport.call.bind(transport);
+  let failAnswer = harnessParams.has("fail-answer");
   transport.call = (async (request: CoreRequest) => {
     if (pcAllowErrorScenario && request.op === "files.allow_pc") {
       return Promise.reject({ id: "FILE_ACCESS_PERMISSION_UNDECLARED", code: "permission_denied", message: "허용할 수 없습니다", details: [] });
     }
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
+    if (shellSettingsPreview && harnessParams.has("slow-link") && request.op === "link.sync_local_to_remote") await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (shellSettingsPreview && harnessParams.has("slow-preferences") && (request.op === "shell.preferences.set_default" || request.op === "shell.preferences.answer")) await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (shellSettingsPreview && request.op === "shell.preferences.answer" && failAnswer) {
+      failAnswer = false;
+      return Promise.reject({ id: "SERVER_PREFERENCES_NOT_CONNECTED", code: "server", message: "서버에 연결되어 있지 않아 기본 에이전트를 바꾸지 못했습니다. 서버에 연결한 뒤 다시 시도하세요.", details: [] });
+    }
     return call(request);
   }) as typeof transport.call;
 }
@@ -258,7 +274,14 @@ window.__kaleidoscopeHarness = {
   getShareCalls: transport.getShareCalls,
   getCalls: transport.getCalls,
   describeVisible,
+  setPreferences(preferences) {
+    const current = store.getSnapshot();
+    if (current) transport.emit({ event: "state.changed", snapshot: { ...current, shared: { ...current.shared, preferences } } });
+  },
 };
+if (shellSettingsPreview && harnessParams.get("prefs") === "waiting") {
+  setTimeout(() => window.__kaleidoscopeHarness?.setPreferences({ revision: 1, default_message_app_id: "agent", asked_message_app_ids: ["workspace-pas"] }), 6000);
+}
 
 function FakeWebViewLayer({ fakeTransport }: { fakeTransport: FakeTransport }) {
   const [views, setViews] = useState<FakeWebViewSnapshot[]>(() => fakeTransport.getWebViews());
