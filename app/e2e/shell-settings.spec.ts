@@ -68,6 +68,17 @@ test("최소 창에서 연결 상태와 결과를 확인한다", async ({ page }
     expect(Math.round((await win.boundingBox())!.width)).toBe(360);
     expect(await win.locator(".ks-shell-settings").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     await page.screenshot({ path: `${captures}/narrow-${state}.png` });
+    const firstLine = await win.locator(".ks-settings-row").first().evaluate((row) => {
+      const label = row.querySelector(".ks-settings-row-label")!;
+      const center = (rect: DOMRect) => (rect.top + rect.bottom) / 2;
+      const text = [...label.children].find((element) => element.tagName === "SPAN" && element.classList.length === 0)!;
+      const range = document.createRange(); range.selectNodeContents(text);
+      const marks = [label.querySelector(".shell-server-dot"), label.querySelector("button"), row.querySelector(".ks-settings-row-control > button")]
+        .filter((element): element is Element => element !== null).map((element) => center(element.getBoundingClientRect()));
+      return { line: center(range.getClientRects()[0]), marks, code: label.querySelector(".ks-pairing-code")?.getClientRects().length ?? 1 };
+    });
+    for (const mark of firstLine.marks) expect(Math.abs(mark - firstLine.line)).toBeLessThanOrEqual(1);
+    expect(firstLine.code).toBe(1);
     if (state === "pairing") {
       await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => undefined } }));
       await win.getByRole("button", { name: "코드 복사" }).click();
