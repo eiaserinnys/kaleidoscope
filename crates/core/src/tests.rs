@@ -287,7 +287,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("web-browser", 3),
         ("calculator", 4),
         ("weather", 4),
-        ("store", 2),
+        ("store", 3),
     ] {
         assert!(apps
             .iter()

@@ -81,7 +81,7 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
 
     if let Some(badge) = &definition.badge {
         if definition.requires.blocks < crate::APP_BADGE_BLOCK_SET_VERSION {
-            return Err(crate::errors::APP_BADGE_VERSION_LOW(crate::APP_BADGE_BLOCK_SET_VERSION));
+            return Err(crate::errors::APP_BADGE_VERSION_LOW(crate::APP_BADGE_BLOCK_SET_VERSION, crate::APP_BADGE_BLOCK_SET_VERSION));
         }
         if let crate::AppBadge::Expr(expr) = badge {
             use jsonata_core::parser::{Lexer, Token};

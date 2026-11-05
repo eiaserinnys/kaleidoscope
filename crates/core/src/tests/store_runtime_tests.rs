@@ -2,6 +2,71 @@ use super::*;
 use sha2::{Digest, Sha256};
 
 #[test]
+fn latest_poll_groups_origins_and_obeys_schedule_without_windows() {
+    struct Observed {
+        calls: Arc<Mutex<Vec<String>>>,
+        bytes: Vec<u8>,
+    }
+    impl crate::store::fetch::Transport for Observed {
+        fn get(&self, origin: &str, _: &[String], _: &str, _: u64) -> Result<kaleidoscope_data::public_http::PublicResponse, kaleidoscope_data::public_http::PublicHttpError> {
+            self.calls.lock().unwrap().push(origin.to_owned());
+            Ok(kaleidoscope_data::public_http::PublicResponse {
+                status: 200, headers: BTreeMap::new(), rate_limit: None, retry_after: None,
+                mime: "application/json".into(), bytes: self.bytes.clone(),
+            })
+        }
+    }
+    let (_temp, core, _, window) = store_caller();
+    core.handle(CoreRequest::WindowClose { window_id: window }).unwrap();
+    let (fixture, _, _) = crate::store::tests::fixture();
+    let bytes = fixture.files.lock().unwrap()["/appstore/index.json"].2.clone();
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    *core.inner.store_transport.lock().unwrap() = Some(Arc::new(Observed { calls: calls.clone(), bytes }));
+    let now = Instant::now() + Duration::from_secs(11);
+    crate::store_latest::tick_at(&core.inner, now);
+    assert!(calls.lock().unwrap().is_empty(), "출처 앱 없이는 호출하지 않는다");
+    let add = |id: &str, url: &str| {
+        let definition = json!({"id":id,"name":"시험","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"시험"}}).to_string();
+        let mut app = registry_app(1, &definition);
+        app.app.origin = Some(kaleidoscope_contract::store::StoreOrigin {
+            store_url: url.into(), store_app_id: "example".into(), release: 1, digest: "digest".into(),
+        });
+        crate::app_commands::import_registry(&mut core.inner.state.lock().unwrap(), app);
+    };
+    add("one", "https://example.com/appstore/");
+    add("two", "https://EXAMPLE.com:443/appstore");
+    crate::store_latest::tick_at(&core.inner, Instant::now());
+    assert!(calls.lock().unwrap().is_empty(), "기동 후 10초를 기다린다");
+    for _ in 0..3 { crate::store_latest::tick_at(&core.inner, now); }
+    wait_until(|| core.inner.state.lock().unwrap().store_latest.len() == 1);
+    assert_eq!(calls.lock().unwrap().len(), 1, "같은 주소는 한 번만 읽는다");
+    crate::store_latest::tick_at(&core.inner, now);
+    assert_eq!(calls.lock().unwrap().len(), 1, "1시간 안에는 다시 읽지 않는다");
+    add("three", "https://second.example/appstore");
+    crate::store_latest::tick_at(&core.inner, now);
+    wait_until(|| core.inner.state.lock().unwrap().store_latest.len() == 2);
+    assert_eq!(calls.lock().unwrap().len(), 2, "새 주소는 바로 읽는다");
+}
+
+#[test]
+fn badge_zero_and_non_integer_are_omitted_and_index_source_records_latest() {
+    let (_temp, core, _, window) = store_caller();
+    for (id, badge) in [("zero", json!(0)), ("fraction", json!({"expr":"1.5"})), ("positive", json!(2))] {
+        let definition = json!({"id":id,"name":"시험","badge":badge,"requires":{"blocks":39,"modules":{}},"permissions":[],"ui":{"type":"text","value":"시험"}}).to_string();
+        crate::app_commands::import_registry(&mut core.inner.state.lock().unwrap(), registry_app(1, &definition));
+    }
+    crate::app_badges::refresh(&core.inner);
+    let badges = core.inner.state.lock().unwrap().app_badges.clone();
+    assert!(!badges.contains_key("zero"));
+    assert!(!badges.contains_key("fraction"));
+    assert_eq!(badges.get("positive"), Some(&2));
+    crate::data_sources::fetch(&core.inner, &window,
+        &kaleidoscope_data::SourcePlan::StoreIndex { permission: "catalog".into(), server: "https://example.com/appstore".into() },
+        kaleidoscope_contract::data::SourceFormat::Json).unwrap();
+    assert_eq!(core.inner.state.lock().unwrap().store_latest["https://example.com/appstore"]["example"].release, 3);
+}
+
+#[test]
 fn latest_index_updates_apps_and_badge_without_an_open_store_window() {
     let (_temp, core, _registry, window) = store_caller();
     let app = json!({"id":"example","name":"시험 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"시험"}}).to_string();

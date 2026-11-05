@@ -42,12 +42,15 @@ pub(crate) fn record(inner: &Arc<Inner>, index: &StoreIndexValue) {
 }
 
 pub(crate) fn tick(inner: &Arc<Inner>) {
-    if inner.store_latest.started.elapsed() < Duration::from_secs(STORE_LATEST_FIRST_CHECK_DELAY_SECS) { return; }
+    tick_at(inner, Instant::now());
+}
+
+pub(crate) fn tick_at(inner: &Arc<Inner>, now: Instant) {
+    if now.duration_since(inner.store_latest.started) < Duration::from_secs(STORE_LATEST_FIRST_CHECK_DELAY_SECS) { return; }
     let urls: HashSet<String> = inner.state.lock().unwrap().shared.apps.iter()
         .filter_map(|app| app.origin.as_ref())
         .filter_map(|origin| crate::store::StoreUrl::parse(&origin.store_url).ok().map(|url| url.as_str().to_owned()))
         .collect();
-    let now = Instant::now();
     let mut schedule = inner.store_latest.data.lock().unwrap();
     let due: Vec<_> = urls.into_iter().filter(|url| {
         !schedule.inflight.contains(url) && schedule.attempted.get(url).is_none_or(|at| now.duration_since(*at) >= Duration::from_secs(STORE_LATEST_CHECK_INTERVAL_SECS))
@@ -60,16 +63,19 @@ pub(crate) fn tick(inner: &Arc<Inner>) {
             let Some(inner) = target.upgrade() else { return };
             let gate = gate(&inner, &url);
             let _guard = gate.lock().unwrap();
-            let now = Instant::now();
             let should_fetch = inner.store_latest.data.lock().unwrap().attempted.get(&url)
                 .is_none_or(|at| now.duration_since(*at) >= Duration::from_secs(STORE_LATEST_CHECK_INTERVAL_SECS));
             if should_fetch {
-                let result = crate::store::client(&inner, &url).map_err(|error| error).and_then(|client| client.index("catalog").map_err(|failure| failure.error));
+                let result = crate::store::client(&inner, &url).and_then(|client| client.index("").map_err(|failure| failure.error));
                 match result {
                     Ok(index) => record(&inner, &index),
                     Err(error) => {
                         inner.store_latest.data.lock().unwrap().attempted.insert(url.clone(), Instant::now());
-                        eprintln!("스토어 최신 판을 확인하지 못했습니다: code={} {}", error.id.as_deref().unwrap_or("STORECLIENT_URL_COMPONENT_INVALID"), error.message);
+                        if let Some(code) = error.id.as_deref() {
+                            eprintln!("스토어 최신 판을 확인하지 못했습니다: code={code} {}", error.message);
+                        } else {
+                            eprintln!("스토어 최신 판을 확인하지 못했습니다: {}", error.message);
+                        }
                     }
                 }
             }
