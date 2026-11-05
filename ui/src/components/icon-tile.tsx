@@ -12,7 +12,7 @@ type IconTileProps = Omit<ComponentPropsWithRef<"button">, "children"> & {
 export function IconTile({ icon, name, selected, badge = 0, className = "", ...props }: IconTileProps) {
   const label = props["aria-label"] ?? name;
   return <button type="button" {...props} aria-label={badge >= 1 ? `${label}, 알림 ${badge}개` : props["aria-label"]} className={`ks-icon-tile${selected ? " is-selected" : ""} ${className}`}>
-    <span className="ks-icon-tile-icon">{icon}<CountBadge count={badge} /></span><span className="ks-icon-tile-name">{name}</span>
+    <span className="ks-icon-tile-icon ks-badge-anchor">{icon}<CountBadge count={badge} /></span><span className="ks-icon-tile-name">{name}</span>
   </button>;
 }
 

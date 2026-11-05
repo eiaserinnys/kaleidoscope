@@ -28,7 +28,7 @@ export function Badge({ value, tooltip = false }: { value: BadgeValue; tooltip?:
   return tooltip ? <Tooltip content={text}>{badge}</Tooltip> : badge;
 }
 
-export function CountBadge({ count }: { count: number }) {
+export function CountBadge({ count, dot = false }: { count: number; dot?: boolean }) {
   if (count < 1) return null;
-  return <span className="ks-badge is-count" aria-hidden="true">{count >= 100 ? "99+" : count}</span>;
+  return <span className={`ks-badge is-count${dot ? " is-dot" : ""}`} aria-hidden="true">{dot ? null : count >= 100 ? "99+" : count}</span>;
 }

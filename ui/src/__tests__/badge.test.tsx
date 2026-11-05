@@ -46,3 +46,17 @@ it("타일 접근 이름에 알림 수를 더한다", () => {
   render(<IconTile name="앱" aria-label="별도 이름" icon={<i />} badge={2} />);
   expect(screen.getByRole("button", { name: "별도 이름, 알림 2개" })).toBeTruthy();
 });
+
+it("점 배지는 1 미만이면 숨기고 알림 수와 관계없이 글자 없이 보인다", () => {
+  const { container, rerender } = render(<CountBadge count={0} dot />);
+  expect(container.querySelector(".is-dot")).toBeNull();
+  rerender(<CountBadge count={-1} dot />);
+  expect(container.querySelector(".is-dot")).toBeNull();
+  for (const count of [1, 12, 150]) {
+    rerender(<CountBadge count={count} dot />);
+    const dot = container.querySelector(".ks-badge.is-count.is-dot");
+    expect(dot).not.toBeNull();
+    expect(dot?.textContent).toBe("");
+    expect(dot?.getAttribute("aria-hidden")).toBe("true");
+  }
+});

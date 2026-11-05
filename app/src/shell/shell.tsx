@@ -48,7 +48,7 @@ type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
 function AppLauncherButton({ store, expanded, onClick }: { store: ShellStore; expanded: boolean; onClick: (anchor: HTMLElement) => void }) {
   const count = useShellSelector(store, (snapshot) => Object.values(snapshot?.app_badges ?? {}).reduce((sum, value) => sum + value, 0));
   return <IconButton className="ks-app-launcher-button" aria-label={count ? `앱 열기, 알림 ${count}개` : "앱 열기"} aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onClick(event.currentTarget)} title="앱 열기">
-    <LayoutGrid /><CountBadge count={count} />
+    <span className="ks-badge-anchor"><LayoutGrid /><CountBadge count={count} dot /></span>
   </IconButton>;
 }
 
