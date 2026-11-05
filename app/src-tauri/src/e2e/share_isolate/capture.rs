@@ -212,6 +212,7 @@ pub(super) fn send_prompt(
         position.x + (input["x"].as_f64().ok_or("agent input x missing")? * scale).round() as i32;
     let y =
         position.y + (input["y"].as_f64().ok_or("agent input y missing")? * scale).round() as i32;
+    native_target::wait_shell_at(x, y)?;
     native_input::click(x, y)?;
     let focused = ui::wait_dom(app, &format!(
         "const input=document.querySelector('{selector} textarea[aria-label=\\\"메시지\\\"]');return !!input && document.hasFocus() && document.activeElement===input;"

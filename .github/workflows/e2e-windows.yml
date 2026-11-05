@@ -53,6 +53,14 @@ jobs:
         with:
           path: target/release/kaleidoscope-app.exe
           key: ${{ steps.executable-cache.outputs.cache-primary-key }}
+      - name: 러너 창 내리기
+        shell: pwsh
+        run: |
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep -Seconds 1
+          Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object {
+            Write-Host "$($_.ProcessName): $($_.MainWindowTitle)"
+          }
       - name: 웹 화면 DevTools 실측 데이터 초기화
         shell: pwsh
         run: ./app/e2e-windows/reset-app-data.ps1

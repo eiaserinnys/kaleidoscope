@@ -83,7 +83,7 @@ impl Drop for NotesFixture {
     }
 }
 
-fn allow_pc_with_native_input(app: &AppHandle) -> Result<(), String> {
+fn allow_pc_with_native_input(app: &AppHandle, log: &mut File) -> Result<(), String> {
     #[cfg(windows)]
     {
         let window = app.get_window("main").ok_or("main window not found")?;
@@ -103,11 +103,13 @@ fn allow_pc_with_native_input(app: &AppHandle) -> Result<(), String> {
             + (bounds["x"].as_f64().ok_or("PC consent x missing")? * scale).round() as i32;
         let y = position.y
             + (bounds["y"].as_f64().ok_or("PC consent y missing")? * scale).round() as i32;
+        let target = super::native_target::wait_shell_at(x, y)?;
+        record(log, "ui.pc_access.target", target)?;
         super::share_isolate::native_input::click(x, y)
     }
     #[cfg(not(windows))]
     {
-        let _ = app;
+        let _ = (app, log);
         Err("PC access E2E requires native Windows input".into())
     }
 }
@@ -306,7 +308,7 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     )?;
     wait_web_hidden(&browser_id, browser_place)?;
     let start = request_mark();
-    allow_pc_with_native_input(app)?;
+    allow_pc_with_native_input(app, log)?;
     require_request(
         log,
         start,
