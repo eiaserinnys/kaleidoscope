@@ -165,7 +165,6 @@ fn main() {
                     .and_then(|blocks| {
                         blocks
                             .iter()
-                            .rev()
                             .find_map(|b| b.get("text").and_then(Value::as_str))
                     })
                     .unwrap_or("");

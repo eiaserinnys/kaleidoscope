@@ -276,7 +276,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
         ("profiler", 5),
-        ("agent", 8),
+        ("agent", 9),
         ("explorer", 4),
         ("md-editor", 5),
         ("html-report", 3),
@@ -614,7 +614,7 @@ fn builtin_agent_reads_defaults_before_linking() {
         .shared
         .app_versions
         .iter()
-        .find(|version| version.app_id == "agent" && version.version == 8)
+        .find(|version| version.app_id == "agent" && version.version == 9)
         .unwrap()
         .definition;
     assert_eq!(definition.requires.blocks, 29);
