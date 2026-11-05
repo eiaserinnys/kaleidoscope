@@ -9,9 +9,12 @@
 .ks-code-view .cm-line { padding-inline: var(--ks-space-2); }
 .ks-code-view .cm-gutterElement { padding-inline: var(--ks-space-2); }
 .ks-image-view { position: relative; display: grid; width: 100%; height: auto; aspect-ratio: var(--ks-image-ratio, 16 / 9); max-height: min(calc(var(--ks-pane-min-size) * 3), var(--ks-image-natural-height, calc(var(--ks-pane-min-size) * 3))); min-width: 0; min-height: 0; overflow: hidden; place-items: center; background: var(--ks-color-surface-raised); color: var(--ks-color-muted); }
-:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-image-view,
-:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-anchor > .ks-image-view,
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel) > .ks-image-view,
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel) > .ks-anchor > .ks-image-view,
 :where(.ks-split-pane, .ks-data-tab-panel) > .ks-data-section > .ks-data-section-child > .ks-image-view { height: 100%; aspect-ratio: auto; max-height: none; }
+.ks-data-stack-item.is-fill > .ks-image-view,
+.ks-data-stack-item.is-fill > .ks-anchor > .ks-image-view { height: var(--ks-fill-textarea-height); max-height: var(--ks-fill-media-max, min(calc(var(--ks-pane-min-size) * 3), var(--ks-image-natural-height, calc(var(--ks-pane-min-size) * 3)))); }
+.ks-image-view.is-failed:not(.ks-data-button-card-preview > .ks-image-view) { aspect-ratio: auto; }
 .ks-image-view.is-zoomable { touch-action: none; }
 .ks-image-view:focus-visible { outline: none; }
 .ks-image-view:focus-visible::after { content: ""; position: absolute; inset: 0; border: var(--ks-focus-width) solid var(--ks-color-focus); border-radius: inherit; pointer-events: none; z-index: 1; }
@@ -23,12 +26,16 @@
 .ks-image-controls { position: absolute; right: var(--ks-space-3); bottom: var(--ks-space-3); display: flex; border-radius: var(--ks-radius-small); background: var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
 .ks-media-player { display: flex; width: 100%; height: auto; min-width: 0; min-height: 0; flex-direction: column; justify-content: flex-end; background: var(--ks-color-surface); }
 .ks-media-player video { width: 100%; height: auto; flex: none; aspect-ratio: var(--ks-media-ratio, 16 / 9); max-height: calc(var(--ks-pane-min-size) * 3); object-fit: contain; background: var(--ks-color-surface-raised); }
-:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-media-player,
-:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-anchor > .ks-media-player,
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel) > .ks-media-player,
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel) > .ks-anchor > .ks-media-player,
 :where(.ks-split-pane, .ks-data-tab-panel) > .ks-data-section > .ks-data-section-child > .ks-media-player { height: 100%; }
-:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-media-player video,
-:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel, .ks-data-stack-item.is-fill) > .ks-anchor > .ks-media-player video,
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel) > .ks-media-player video,
+:where(.ks-data-window-body, .ks-split-pane, .ks-data-tab-panel) > .ks-anchor > .ks-media-player video,
 :where(.ks-split-pane, .ks-data-tab-panel) > .ks-data-section > .ks-data-section-child > .ks-media-player video { flex: 1 1 auto; min-height: 0; aspect-ratio: auto; max-height: none; }
+.ks-data-stack-item.is-fill > .ks-media-player,
+.ks-data-stack-item.is-fill > .ks-anchor > .ks-media-player { height: var(--ks-fill-textarea-height); }
+.ks-data-stack-item.is-fill > .ks-media-player video,
+.ks-data-stack-item.is-fill > .ks-anchor > .ks-media-player video { flex: 1 1 auto; min-height: 0; max-height: var(--ks-fill-media-max, calc(var(--ks-pane-min-size) * 3)); }
 .ks-media-controls-container { width: 100%; flex: none; container-type: inline-size; }
 .ks-media-controls { display: flex; min-width: 0; min-height: var(--ks-control-height); align-items: center; gap: var(--ks-space-2); padding-inline: var(--ks-space-3); }
 .ks-media-main, .ks-media-secondary { display: flex; min-width: 0; min-height: var(--ks-control-height); align-items: center; gap: var(--ks-space-2); }

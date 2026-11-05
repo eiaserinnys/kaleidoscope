@@ -56,6 +56,28 @@ it("영상 메타데이터의 원본 비율을 상자에 전달한다", async ()
   expect(Number(host.style.getPropertyValue("--ks-media-ratio"))).toBeCloseTo(9 / 16);
 });
 
+it("확대 그림은 수정자 없는 휠은 스크롤에 남기고 Ctrl 휠로 확대한다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400, left: 0, top: 0 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", zoom: true, src: { permission: "media", path: "image.png" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 160, height: 90 } }) as never : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view")!;
+  const frame = view.container.querySelector<HTMLElement>(".ks-image-frame")!;
+  const normal = new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true });
+  fireEvent(host, normal);
+  expect(normal.defaultPrevented).toBe(false);
+  expect(frame.style.transform).toContain("scale(1)");
+  const modified = new WheelEvent("wheel", { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true });
+  fireEvent(host, modified);
+  expect(modified.defaultPrevented).toBe(true);
+  await waitFor(() => expect(view.container.querySelector<HTMLElement>(".ks-image-frame")?.style.transform).toContain("scale(1.25)"));
+});
+
 it("미디어의 폴더 미선택 오류에서 합성 선택을 막는다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { permission: "docs", path: "file.wav" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
@@ -230,9 +252,11 @@ it("이미지 요청 실패를 알리고 다시 받으면 성공한다", async (
     : original(request as never));
   const result = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   expect(await screen.findByText("이미지 원본을 읽지 못했습니다")).toBeTruthy();
+  expect(result.container.querySelector(".ks-image-view")?.classList.contains("is-failed")).toBe(true);
   expect(screen.getByText("SHELL_CALL_UNEXPECTED_FAILURE")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
   await waitFor(() => expect(result.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  expect(result.container.querySelector(".ks-image-view")?.classList.contains("is-failed")).toBe(false);
   expect(calls).toBe(2);
 });
 
