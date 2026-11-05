@@ -112,7 +112,8 @@ jobs:
               $starts = @(Get-ChildItem $env:TEMP -File -Filter 'kaleidoscope-e2e-start-*.json' -ErrorAction SilentlyContinue | ForEach-Object {
                 @{ path = $_.FullName; contents = (Get-Content -Raw $_.FullName -ErrorAction SilentlyContinue) }
               })
-              $installed = if ($exe -and (Test-Path $exe)) { (Get-Item $exe).VersionInfo.ProductVersion } else { $null }
+              # 대기 중 실행 파일을 읽으면 설치기의 쓰기를 막아 대화상자에서 멈출 수 있다.
+              $installed = if ($phase -ne 'update-wait' -and $exe -and (Test-Path $exe)) { (Get-Item $exe).VersionInfo.ProductVersion } else { $null }
               $entry = @{ phase = $phase; at = (Get-Date).ToString('o'); installed_exe = $exe; installed_version = $installed; processes = $processes; temp_installers = $installers; startup_records = $starts }
               $json = $entry | ConvertTo-Json -Depth 6 -Compress
               Add-Content -Encoding utf8 (Join-Path $out 'diagnostics.jsonl') $json
@@ -172,6 +173,9 @@ jobs:
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.2') { throw 'B 설치 판 불일치' }
           } finally {
             Write-Diagnostics 'final'
+            try {
+              & ./.github/scripts/write-visible-windows.ps1 -OutFile (Join-Path $out 'windows-final.json')
+            } catch { Write-Warning "창 목록 수집 실패: $_" }
             try {
               $roots = @($env:RUNNER_TEMP, $env:GITHUB_WORKSPACE, $env:APPDATA, $env:LOCALAPPDATA) | Select-Object -Unique
               $eventPaths = @(foreach ($root in $roots) {
