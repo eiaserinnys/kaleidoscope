@@ -196,10 +196,10 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         default_message_receiver: false,
         id: "store",
         name: "앱스토어",
-        version: 2,
+        version: 3,
         updated_at: "2026-11-05T03:14:31Z",
-        blocks: 37,
-        modules: &[("assets", 1), ("storage", 2), ("store", 1)],
+        blocks: crate::APP_BADGE_BLOCK_SET_VERSION,
+        modules: &[("assets", 1), ("storage", 2), ("store", 2)],
         assets: &[("builtin-icon-store", 2)],
     },
 ];

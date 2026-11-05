@@ -1,15 +1,18 @@
 import { useEffect, useState, type ComponentPropsWithRef, type ReactNode, type RefObject } from "react";
 import { ICON_SIZE } from "./icons";
+import { CountBadge } from "./badge";
 
 type IconTileProps = Omit<ComponentPropsWithRef<"button">, "children"> & {
   icon: ReactNode;
   name: string;
   selected?: boolean;
+  badge?: number;
 };
 
-export function IconTile({ icon, name, selected, className = "", ...props }: IconTileProps) {
-  return <button type="button" {...props} className={`ks-icon-tile${selected ? " is-selected" : ""} ${className}`}>
-    {icon}<span className="ks-icon-tile-name">{name}</span>
+export function IconTile({ icon, name, selected, badge = 0, className = "", ...props }: IconTileProps) {
+  const label = props["aria-label"] ?? name;
+  return <button type="button" {...props} aria-label={badge >= 1 ? `${label}, 알림 ${badge}개` : props["aria-label"]} className={`ks-icon-tile${selected ? " is-selected" : ""} ${className}`}>
+    <span className="ks-icon-tile-icon">{icon}<CountBadge count={badge} /></span><span className="ks-icon-tile-name">{name}</span>
   </button>;
 }
 

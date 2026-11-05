@@ -31,6 +31,19 @@ fn supported() -> Supported {
 }
 
 #[test]
+fn badge_requires_current_blocks_and_only_apps_context() {
+    let mut value = definition();
+    value["requires"]["blocks"] = json!(39);
+    value["badge"] = json!({"expr":"$count($apps[latest.compatible = true])"});
+    parse_app_definition(&value.to_string()).unwrap();
+    value["badge"] = json!({"expr":"$state.selected_app"});
+    assert_eq!(parse_app_definition(&value.to_string()).unwrap_err().id.as_deref(), Some("APP_BADGE_VARIABLE_FORBIDDEN"));
+    value["badge"] = json!(1);
+    value["requires"]["blocks"] = json!(38);
+    assert_eq!(parse_app_definition(&value.to_string()).unwrap_err().id.as_deref(), Some("APP_BADGE_VERSION_LOW"));
+}
+
+#[test]
 fn store_example_roundtrips_and_is_valid_with_store_support() {
     let value = definition();
     let parsed = parse_app_definition_with_supported(&value.to_string(), &supported()).unwrap();
@@ -59,10 +72,12 @@ fn store_example_roundtrips_and_is_valid_with_store_support() {
 }
 
 #[test]
-fn current_shell_supports_store_one_but_rejects_newer_versions() {
+fn current_shell_supports_store_two_but_rejects_newer_versions() {
     parse_app_definition(&definition().to_string()).unwrap();
     let mut newer = definition();
     newer["requires"]["modules"]["store"] = json!(2);
+    parse_app_definition(&newer.to_string()).unwrap();
+    newer["requires"]["modules"]["store"] = json!(3);
     let error = parse_app_definition(&newer.to_string()).unwrap_err();
     assert_eq!(
         error.id.as_deref(),

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   AppIcon, BUILTIN_APP_IDS, EmptyState, GroupHeading, IconTile, LayoutGrid,
@@ -46,7 +46,7 @@ export function AppLauncher({ store, anchor, spacing, onClose, onSelect }: {
       onClose();
       setTimeout(() => {
         if (document.activeElement && document.activeElement !== document.body) return;
-        const target = anchor.isConnected ? anchor : document.querySelector<HTMLElement>('.ks-shell-bar button[aria-label="앱 열기"]');
+        const target = anchor.isConnected ? anchor : document.querySelector<HTMLElement>('.ks-shell-bar button[aria-label^="앱 열기"]');
         if (target) focusRescued(target, { preventScroll: true });
       }, 0);
     };
@@ -117,9 +117,8 @@ export function AppLauncher({ store, anchor, spacing, onClose, onSelect }: {
       return <div role="group" aria-label={group.name} key={group.name}>
         <GroupHeading title={group.name} />
         <div className="ks-icon-grid" ref={groupIndex === 0 ? grid : undefined}>
-          {group.apps.map((app, index) => <IconTile
-            icon={<AppIcon store={store} appId={app.id} appVersion={app.current_version} size="tile" placeholder="skeleton" />}
-            key={app.id} name={app.name} tabIndex={start + index === focusedIndex ? 0 : -1}
+          {group.apps.map((app, index) => <LauncherTile
+            store={store} app={app} key={app.id} tabIndex={start + index === focusedIndex ? 0 : -1}
             onFocus={() => setFocusedId(app.id)}
             onClick={() => { closeAndFocus(); onSelect(app.id); }}
             ref={(element) => { tiles.current[start + index] = element; }}
@@ -129,6 +128,14 @@ export function AppLauncher({ store, anchor, spacing, onClose, onSelect }: {
     }) : <EmptyState icon={<LayoutGrid size="empty" />} text="앱 없음" />}
   </div>, document.body);
 }
+
+const LauncherTile = memo(function LauncherTile({ store, app, ...props }: {
+  store: ShellStore;
+  app: NonNullable<ReturnType<ShellStore["getSnapshot"]>>["shared"]["apps"][number];
+} & Omit<React.ComponentProps<typeof IconTile>, "icon" | "name" | "badge">) {
+  const badge = useShellSelector(store, (snapshot) => snapshot?.app_badges?.[app.id] ?? 0);
+  return <IconTile {...props} name={app.name} badge={badge} icon={<AppIcon store={store} appId={app.id} appVersion={app.current_version} size="tile" placeholder="skeleton" />} />;
+});
 
 function availableSpace(anchor: HTMLElement, spacing: LauncherSpacing) {
   const rect = anchor.getBoundingClientRect();

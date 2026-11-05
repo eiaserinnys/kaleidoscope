@@ -1,6 +1,25 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+#[test]
+fn latest_index_updates_apps_and_badge_without_an_open_store_window() {
+    let (_temp, core, _registry, window) = store_caller();
+    let app = json!({"id":"example","name":"시험 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"시험"}}).to_string();
+    let mut installed = registry_app(1, &app);
+    installed.app.origin = Some(kaleidoscope_contract::store::StoreOrigin { store_url:"https://example.com/appstore".into(), store_app_id:"example".into(), release:1, digest:"digest".into() });
+    installed.app.installed_version = Some(1);
+    crate::app_commands::import_registry(&mut core.inner.state.lock().unwrap(), installed);
+    let index = crate::store::client(&core.inner, "https://example.com/appstore").unwrap().index("catalog").unwrap();
+    crate::store_latest::record(&core.inner, &index);
+    let state = core.inner.state.lock().unwrap();
+    let def = crate::app_commands::definition_for(&state.shared, "store-caller", 1).unwrap();
+    let apps = crate::data_runtime::apps_for(&state, &def).unwrap();
+    assert_eq!(apps.iter().find(|app| app.id == "example").unwrap().latest.as_ref().unwrap().release, 3);
+    assert_eq!(state.app_badges.get("store"), Some(&1));
+    drop(state);
+    core.handle(CoreRequest::WindowClose { window_id: window }).unwrap();
+}
+
 fn store_caller() -> (TempDir, Arc<Core>, Arc<FakeRegistryClient>, String) {
     let temp = TempDir::new().unwrap();
     let definition = json!({"id":"store-caller","name":"스토어 호출자","requires":{"blocks":4,"modules":{"store":1}},

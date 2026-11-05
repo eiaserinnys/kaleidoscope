@@ -1188,6 +1188,10 @@ pub(crate) fn apps_for(state: &crate::CoreState, definition: &AppDefinition) -> 
         name: app.name.clone(),
         version: app.current_version,
         origin: app.origin.clone(),
+        latest: app.origin.as_ref().and_then(|origin| {
+            let url = crate::store::StoreUrl::parse(&origin.store_url).ok()?;
+            state.store_latest.get(url.as_str())?.get(&origin.store_app_id).cloned()
+        }),
         installed_version: app.installed_version,
         modified: app.origin.is_some() && app.installed_version != Some(app.current_version),
         icon: app_commands::definition_for(&state.shared, &app.id, app.current_version).and_then(|def| def.icon),
@@ -1196,6 +1200,7 @@ pub(crate) fn apps_for(state: &crate::CoreState, definition: &AppDefinition) -> 
 
 /// 앱 목록 변화만 전달하며 목록을 쓰지 않는 식은 다시 계산하지 않는다.
 pub(crate) fn apps_changed(inner: &Arc<Inner>) {
+    crate::app_badges::refresh(inner);
     let state = inner.state.lock().unwrap();
     let mut windows = inner.data_runtimes.windows.lock().unwrap();
     for (id, runtime) in windows.iter_mut() {
@@ -1593,6 +1598,7 @@ pub(crate) fn start_timer(inner: Weak<Inner>) {
             return;
         };
         run_due(&inner, None);
+        crate::store_latest::tick(&inner);
     });
 }
 

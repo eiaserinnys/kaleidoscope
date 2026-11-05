@@ -1,4 +1,6 @@
 error_catalog! { ENTRIES;
+    APP_BADGE_VERSION_LOW(required) { class: InvalidAppDefinition, place: "앱 배지 판 검사", cause: "배지를 지원하지 않는 블록 판", message: "앱 정의의 badge는 블록 세트 {required}판부터입니다. requires.blocks를 {required} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
+    APP_BADGE_VARIABLE_FORBIDDEN(variable) { class: InvalidAppDefinition, place: "앱 배지 식 변수 검사", cause: "창이나 원천에 의존하는 변수", message: "앱 정의의 badge 식에서 {variable} 변수를 읽을 수 없습니다. $apps만 사용하도록 식을 고치세요.", fix: "badge 식에서 해당 변수를 제거하세요" }
     APP_ICON_APP_NOT_INSTALLED(app_id) { class: NotFound, place: "쉘 앱 아이콘의 앱 조회", cause: "앱이 이 기기에 없다", message: "앱 ID {app_id}: 이 기기에 설치되어 있지 않아 아이콘을 불러오지 못했습니다. 앱을 다시 설치하세요.", fix: "앱을 다시 설치하세요" }
     APP_ICON_APP_VERSION_NOT_FOUND(app_id, version) { class: NotFound, place: "쉘 앱 아이콘의 앱 판 조회", cause: "요청한 앱 판의 정의가 없다", message: "앱 ID {app_id}, {version}판: 이 기기에 해당 앱 정의가 없어 아이콘을 불러오지 못했습니다. 앱을 다시 설치하세요.", fix: "앱을 다시 설치하세요" }
     APP_STORE_MODULE_REQUIRED(app) { class: InvalidAppDefinition, place: "스토어 모듈 선언 검사", cause: "스토어를 쓰는 앱이 모듈 1판을 요구하지 않았다", message: "앱 ID {app}: 스토어를 사용하려면 requires.modules.store를 1 이상으로 선언하세요.", fix: "requires.modules.store를 1 이상으로 선언하세요" }

@@ -56,7 +56,7 @@ mod tests;
 #[cfg(test)]
 mod update_tests;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -185,6 +185,8 @@ pub struct CoreConfig {
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct CoreState {
+    pub(crate) store_latest: BTreeMap<String, BTreeMap<String, kaleidoscope_contract::store::StoreLatest>>,
+    pub(crate) app_badges: BTreeMap<String, u32>,
     pub(crate) last_transfer: Option<kaleidoscope_contract::transfer::TransferResult>,
     pub(crate) transfer_error: Option<String>,
     pub(crate) embedded_available: bool,
@@ -197,6 +199,8 @@ pub(crate) struct CoreState {
 }
 
 pub(crate) struct Inner {
+    pub(crate) store_latest: store_latest::Runtime,
+    pub(crate) app_badges: Mutex<app_badges::Runtime>,
     pub(crate) embedded_server: Option<EmbeddedServerInfo>,
     pub(crate) data_dir: PathBuf,
     pub(crate) state: Mutex<CoreState>,
@@ -381,6 +385,8 @@ impl Core {
             }
         });
         let mut state = CoreState {
+            store_latest: BTreeMap::new(),
+            app_badges: BTreeMap::new(),
             last_transfer: None,
             transfer_error: None,
             embedded_available: config.embedded_server.is_some(),
@@ -425,6 +431,8 @@ impl Core {
             .collect::<HashSet<_>>();
 
         let inner = Arc::new(Inner {
+            store_latest: store_latest::Runtime::default(),
+            app_badges: Mutex::new(app_badges::Runtime::default()),
             media_streams: media::stream::Streams::new(config.media_origin),
             embedded_server: config.embedded_server,
             data_dir: config.data_dir,
@@ -491,6 +499,7 @@ impl Core {
             "초기 앱과 창 준비",
         );
         let core = Core { inner, owner: true };
+        app_badges::refresh(&core.inner);
         data_runtime::start_timer(Arc::downgrade(&core.inner));
         if core
             .inner
@@ -1276,6 +1285,7 @@ pub(crate) fn supported() -> kaleidoscope_contract::Supported {
 
 pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
     ShellSnapshot {
+        app_badges: state.app_badges.clone(),
         last_transfer: state.last_transfer.clone(),
         transfer_error: state.transfer_error.clone(),
         embedded_available: state.embedded_available,
@@ -1289,3 +1299,5 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
 }
 
 mod server_switch;
+mod store_latest;
+mod app_badges;

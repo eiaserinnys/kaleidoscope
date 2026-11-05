@@ -28,6 +28,13 @@ pub struct StoreOrigin {
     pub digest: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreLatest {
+    pub release: u32,
+    pub compatible: bool,
+}
+
 /// 식 변수 $apps의 각 항목. 출처 없는 앱의 관련 값은 null이다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
@@ -36,6 +43,7 @@ pub struct InstalledAppValue {
     pub name: String,
     pub version: u32,
     pub origin: Option<StoreOrigin>,
+    pub latest: Option<StoreLatest>,
     pub installed_version: Option<u32>,
     pub modified: bool,
     pub icon: Option<AppIconRef>,
