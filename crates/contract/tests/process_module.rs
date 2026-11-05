@@ -62,3 +62,32 @@ fn process_hash_is_stable() {
         "3a28a5f291ad35656879ede03b191574fef6d577e32c1e43921ea6885275559a"
     );
 }
+
+#[test]
+fn command_permission_requires_process_two_and_valid_command() {
+    let mut app = definition();
+    app["permissions"][0]["command"] = json!("python3");
+    assert!(parse_app_definition(&app.to_string()).is_err());
+    app["requires"]["modules"]["process"] = json!(2);
+    assert!(parse_app_definition(&app.to_string()).is_ok());
+    for invalid in ["", " python3", "python3 ", "py\nthon"] {
+        app["permissions"][0]["command"] = json!(invalid);
+        assert!(parse_app_definition(&app.to_string()).is_err(), "{invalid:?}");
+    }
+    app["permissions"][0]["command"] = json!("x".repeat(261));
+    assert!(parse_app_definition(&app.to_string()).is_err());
+}
+
+#[test]
+fn command_hash_ignores_name_and_args_but_keeps_environment_and_scope() {
+    use kaleidoscope_contract::process::{command_grant_hash, spec_hash, ProcessSpec};
+    let spec = ProcessSpec { name: "첫 이름".into(), command: "tool".into(), args: vec!["one".into()], env: Default::default() };
+    let hash = command_grant_hash(&spec);
+    assert_ne!(hash, spec_hash(&spec));
+    let mut changed = spec.clone();
+    changed.name = "둘째 이름".into();
+    changed.args = vec!["two".into()];
+    assert_eq!(hash, command_grant_hash(&changed));
+    changed.env.insert("PATH".into(), "/other".into());
+    assert_ne!(hash, command_grant_hash(&changed));
+}

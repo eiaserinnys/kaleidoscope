@@ -343,6 +343,8 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// - `client` 3판: 로컬 process 실행 권한.
 /// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능, 앱 정의에서 선언한 폴더 권한의 선택과 grant 변경 알림,
 ///   창 범위 기기 저장소와 프로그램 파일 주소.
+/// - `process` 1판: 로컬 프로그램 실행, 명세마다 허용.
+/// - `process` 2판: 1판 + 권한의 `command`, 프로그램마다 한 번 허용.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 3),
     ("agent", 3),
@@ -354,7 +356,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("worker", 1),
     ("profiler", 1),
     ("client", RECEIVE_MESSAGE_CLIENT_VERSION),
-    ("process", 1),
+    ("process", 2),
     ("store", 1),
 ];
 
@@ -1163,7 +1165,14 @@ pub enum PermissionDecl {
         paths: Vec<String>,
     },
     /// 이 기기에서 사용자가 허용한 프로그램을 실행한다.
-    Process { id: String, label: String },
+    Process {
+        id: String,
+        label: String,
+        /// (모듈 process 2판) 이 권한으로 실행할 프로그램. 선언하면 이 기기에서 허용을 (앱, 권한, 프로그램, 환경 변수)마다 한 번 받고 인자는 앱이 실행마다 정한다. 실행 명세의 command는 이 값과 정확히 같아야 한다. 없으면 실행 명세(이름, 프로그램, 인자, 환경 변수)마다 허용을 묻는다(1판의 뜻).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        command: Option<String>,
+    },
     /// 이 기기에서 코어 성능 기록을 조회하고 측정한다.
     Profiler { id: String, label: String },
     /// 앱스토어에서 목록 읽기와 앱 설치·삭제.
@@ -5765,6 +5774,7 @@ pub enum CoreEvent {
         window_id: String,
         request_id: String,
         spec: process::ProcessSpec,
+        scope: process::ProcessGrantScope,
     },
     #[serde(rename = "connection.realtime.ready")]
     RealtimeReady { window_id: String, session: String, handle: String },

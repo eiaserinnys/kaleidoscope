@@ -135,6 +135,7 @@ pub(super) fn scenario(
             window_id,
             request_id,
             spec,
+            ..
         } = event
         {
             if window_id == &permission_window_id {

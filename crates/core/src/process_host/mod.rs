@@ -4,7 +4,7 @@ mod relay;
 use crate::{app_commands, client_blobs, files, Inner};
 use kaleidoscope_contract::{
     errors,
-    process::{spec_hash, ProcessAccess, ProcessSnapshot, ProcessStartResult},
+    process::{command_grant_hash, spec_hash, ProcessAccess, ProcessGrantScope, ProcessSnapshot, ProcessStartResult},
     CoreError, CoreEvent, CoreReply, CoreRequest, PermissionDecl, LinkStatus,
 };
 use std::{
@@ -51,7 +51,7 @@ fn context(
     permission: &str,
     cwd_permission: &str,
     tools: bool,
-) -> Result<(String, std::path::PathBuf, String), CoreError> {
+) -> Result<(String, std::path::PathBuf, String, Option<String>), CoreError> {
     let state = inner.state.lock().unwrap();
     let item = state
         .shared
@@ -71,13 +71,14 @@ fn context(
     if tools && (definition.requires.blocks < 18 || definition.requires.modules.get("client").copied().unwrap_or(0) < 4) {
         return Err(errors::PROCESS_START_SERVICE_VERSION_REQUIRED());
     }
-    if !definition
+    let command = definition
         .permissions
         .iter()
-        .any(|decl| matches!(decl, PermissionDecl::Process { id, .. } if id == permission))
-    {
-        return Err(errors::PROCESS_START_PERMISSION_UNDECLARED(permission));
-    }
+        .find_map(|decl| match decl {
+            PermissionDecl::Process { id, command, .. } if id == permission => Some(command.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| errors::PROCESS_START_PERMISSION_UNDECLARED(permission))?;
     if !definition
         .client
         .as_ref()
@@ -94,6 +95,7 @@ fn context(
         item.app_id.clone(),
         files::granted_root(&state, window, cwd_permission, false)?,
         workspace,
+        command,
     ))
 }
 
@@ -147,7 +149,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 return Err(errors::PROCESS_START_SERVICE_UNKNOWN(service));
             }
             let tools = services.iter().any(|service| service == "tools");
-            let (app_id, _, _) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
+            let (app_id, _, _, command) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
+            if let Some(declared) = &command {
+                if spec.command != *declared {
+                    return Err(errors::PROCESS_START_COMMAND_MISMATCH(&permission, declared, &spec.command));
+                }
+            }
             if let Some(p) = by_key(inner, &window_id, &key) {
                 if p.state.lock().unwrap().exit.is_none() {
                     return Ok(CoreReply::ProcessStart {
@@ -159,7 +166,11 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     });
                 }
             }
-            let hash = spec_hash(&spec);
+            let (hash, scope) = if command.is_some() {
+                (command_grant_hash(&spec), ProcessGrantScope::Command)
+            } else {
+                (spec_hash(&spec), ProcessGrantScope::Spec)
+            };
             let allowed = inner
                 .state
                 .lock()
@@ -187,6 +198,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     window_id: window_id.clone(),
                     request_id,
                     spec: spec.clone(),
+                    scope,
                 });
                 if !rx
                     .recv()
@@ -199,7 +211,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     });
                 }
                 let _guard = inner.processes.start.lock().unwrap();
-                let (current_app, _, _) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
+                let (current_app, _, _, _) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
                 if current_app != app_id {
                     return Err(errors::PROCESS_START_APP_CHANGED());
                 }
@@ -216,7 +228,12 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 }
             }
             let _guard = inner.processes.start.lock().unwrap();
-            let (_, cwd, workspace) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
+            let (_, cwd, workspace, command) = context(inner, &window_id, &permission, &cwd_permission, tools)?;
+            if let Some(declared) = &command {
+                if spec.command != *declared {
+                    return Err(errors::PROCESS_START_COMMAND_MISMATCH(&permission, declared, &spec.command));
+                }
+            }
             if let Some(p) = by_key(inner, &window_id, &key) {
                 if p.state.lock().unwrap().exit.is_none() {
                     return Ok(CoreReply::ProcessStart {
