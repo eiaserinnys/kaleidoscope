@@ -98,6 +98,8 @@ export class AgentSession {
       this.cwd = process.cwd;
       this.tools = process.services.tools ?? null;
       this.state = (process.checkpoint as State | null) ?? { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
+      this.sessionsLoading = Object.values(this.state.pending).some((request) => request.kind === "list");
+      this.listWanted = !this.sessionsLoading;
       this.checkpointKeys = [this.state.streamKey, this.state.partialKey].filter((key): key is string => !!key);
       if (this.state.streamKey) {
         const bytes = await this.host.blobs.read(this.state.streamKey);
@@ -112,10 +114,7 @@ export class AgentSession {
       if (this.state.initialized && this.state.capabilities.http && this.state.servicesUsed !== this.tools) this.state.restartPending = true;
       this.publish();
       await this.drain();
-      if (this.state.phase === "ready" && !Object.values(this.state.pending).some((request) => request.kind === "list")) {
-        this.listWanted = true;
-        await this.refreshList();
-      }
+      await this.refreshList();
       if (this.state.phase !== "failed") await this.pump();
       return true;
     });

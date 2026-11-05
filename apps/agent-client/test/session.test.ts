@@ -592,6 +592,19 @@ test("이미 준비된 세션에 붙으면 목록을 받는다", async () => {
   assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, count + 1);
 });
 
+test("목록을 받는 중 다시 붙으면 진행 표시를 유지하고 중복 요청하지 않는다", async () => {
+  const f = fixture();
+  const first = new AgentSession(f.host as any);
+  await first.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { sessionCapabilities: { list: {} } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "first" } });
+  const count = f.writes.filter((entry) => entry.method === "session/list").length;
+  const resumed = new AgentSession(f.host as any);
+  await resumed.attach();
+  assert.equal(f.snapshots.at(-1).sessionsLoading, true);
+  assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, count);
+});
+
 test("목록을 기다리는 동안 대화를 보내고 첫 응답 뒤에 목록을 다시 받는다", async () => {
   const f = fixture();
   const session = new AgentSession(f.host as any);
