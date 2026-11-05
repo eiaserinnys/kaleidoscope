@@ -535,39 +535,131 @@
                     "child": {
                       "type": "stack",
                       "direction": "column",
-                      "gap": "small",
-                      "fill": [5],
+                      "gap": "none",
+                      "fill": [
+                        0,
+                        1
+                      ],
                       "children": [
                         {
                           "type": "when",
                           "value": {
-                            "client": "history_unsupported"
+                            "client": "history_no_items"
                           },
                           "child": {
-                            "type": "notice",
-                            "kind": "info",
-                            "message": "이 에이전트는 지난 세션 목록을 주지 않습니다"
-                          }
-                        },
-                        {
-                          "type": "when",
-                          "value": {
-                            "client": "history_list_error"
-                          },
-                          "child": {
-                            "type": "notice",
-                            "kind": "error",
-                            "message": {
-                              "client": "history_error_message"
-                            },
-                            "error_id": {
-                              "client": "history_error_id"
-                            },
-                            "actions": [
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "fill": [
+                              0,
+                              1,
+                              2,
+                              4
+                            ],
+                            "children": [
                               {
-                                "label": "다시 받기",
-                                "on_click": {
-                                  "client": "open_history"
+                                "type": "when",
+                                "value": {
+                                  "client": "history_unsupported"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "info",
+                                      "message": "이 에이전트는 지난 세션 목록을 주지 않습니다"
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_list_error"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "error",
+                                      "message": {
+                                        "client": "history_error_message"
+                                      },
+                                      "error_id": {
+                                        "client": "history_error_id"
+                                      },
+                                      "actions": [
+                                        {
+                                          "label": "다시 받기",
+                                          "on_click": {
+                                            "client": "open_history"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_other_error"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "error",
+                                      "message": {
+                                        "client": "history_error_message"
+                                      },
+                                      "error_id": {
+                                        "client": "history_error_id"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_loading"
+                                },
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "loading",
+                                  "message": ""
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_empty"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "info",
+                                      "message": "이 폴더의 지난 세션이 없습니다"
+                                    }
+                                  ]
                                 }
                               }
                             ]
@@ -576,57 +668,67 @@
                         {
                           "type": "when",
                           "value": {
-                            "client": "history_other_error"
-                          },
-                          "child": {
-                            "type": "notice",
-                            "kind": "error",
-                            "message": {
-                              "client": "history_error_message"
-                            },
-                            "error_id": {
-                              "client": "history_error_id"
-                            }
-                          }
-                        },
-                        {
-                          "type": "when",
-                          "value": {
-                            "client": "history_loading"
-                          },
-                          "child": {
-                            "type": "notice",
-                            "kind": "loading",
-                            "message": ""
-                          }
-                        },
-                        {
-                          "type": "when",
-                          "value": {
-                            "client": "history_empty"
-                          },
-                          "child": {
-                            "type": "notice",
-                            "kind": "info",
-                            "message": "이 폴더의 지난 세션이 없습니다"
-                          }
-                        },
-                        {
-                          "type": "when",
-                          "value": {
                             "client": "history_has_items"
                           },
                           "child": {
-                            "type": "list",
-                            "items": {
-                              "client": "history_items"
-                            },
-                            "selected": {
-                              "client": "history_selected"
-                            },
-                            "on_select": {
-                              "client": "select_session"
-                            }
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "fill": 2,
+                            "children": [
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_list_error"
+                                },
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "error",
+                                  "message": {
+                                    "client": "history_error_message"
+                                  },
+                                  "error_id": {
+                                    "client": "history_error_id"
+                                  },
+                                  "actions": [
+                                    {
+                                      "label": "다시 받기",
+                                      "on_click": {
+                                        "client": "open_history"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_other_error"
+                                },
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "error",
+                                  "message": {
+                                    "client": "history_error_message"
+                                  },
+                                  "error_id": {
+                                    "client": "history_error_id"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "list",
+                                "items": {
+                                  "client": "history_items"
+                                },
+                                "selected": {
+                                  "client": "history_selected"
+                                },
+                                "on_select": {
+                                  "client": "select_session"
+                                }
+                              }
+                            ]
                           }
                         }
                       ]
@@ -1057,6 +1159,9 @@
       },
       "history_has_items": {
         "default": false
+      },
+      "history_no_items": {
+        "default": true
       },
       "history_has_error": {
         "default": false

@@ -370,6 +370,22 @@ test("지난 세션은 모든 쪽을 받고 폴더를 정확히 거른 뒤 최�
   assert.equal(JSON.stringify(f.getCheckpoint()).includes("newer"), false);
 });
 
+test("목록 갱신 중과 실패 뒤에는 기존 행을 유지하고 성공하면 결과로 교체한다", async () => {
+  const { f, session } = await readyWithHistory();
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "old", cwd: "/work" }] } });
+  await session.listSessions();
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["old"]);
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "new", cwd: "/work" }], nextCursor: "next" } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["old"]);
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "목록 오류" } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["old"]);
+  assert.equal(f.snapshots.at(-1).sessionError.id, "AGENT_SESSION_LIST_FAILED");
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "new", cwd: "/work" }] } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["new"]);
+});
+
 test("고른 세션의 리플레이를 메시지별로 모아 성공 후에 기록과 세션을 바꾼다", async () => {
   const { f, session } = await readyWithHistory();
   await session.loadSession("chosen");
@@ -483,6 +499,20 @@ test("첫 지침은 사용자 글과 같이 보기 뒤에 표지로 감싸 보�
   assert.equal(prompt[0].text, "사용자 말");
   assert.equal(prompt[1].text, "같이 보기");
   assert.match(prompt.at(-1).text, /^<kaleidoscope-app-guide>\n안내문\n.*\n<\/kaleidoscope-app-guide>$/);
+});
+
+test("MCP HTTP 도구가 연결된 새 세션의 첫 말에는 지침이나 연결 문구를 넣지 않는다", async () => {
+  const f = fixture();
+  let guides = 0;
+  f.host.instructions = async () => { guides++; return "안내문"; };
+  const session = new AgentSession(f.host as any);
+  await session.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { mcpCapabilities: { http: true } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "s" } });
+  await session.send({ id: "q", text: "사용자 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(f.writes.at(-1).params.prompt, [{ type: "text", text: "사용자 말" }]);
+  assert.equal(guides, 0);
 });
 
 for (const hasGuide of [true, false]) {

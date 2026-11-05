@@ -53,6 +53,8 @@ export class AgentSession {
   private tasks: Promise<unknown> = Promise.resolve();
   private checkpointKeys: string[] = [];
   private sessions: SessionInfo[] = [];
+  private pendingSessions: SessionInfo[] = [];
+  private listHadItems = false;
   private sessionsLoading = false;
   private listError: State["sessionError"] = null;
   private listWanted = false;
@@ -169,6 +171,7 @@ export class AgentSession {
     this.cwd = result.cwd;
     this.after = 0;
     this.tools = result.services?.tools ?? null;
+    this.sessions = [];
     await this.history.bind(JSON.stringify({ name, command, args, env: Object.fromEntries(Object.entries(env).sort()) }), this.cwd);
     this.state = { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId, queue: this.state.queue };
     this.publish();
@@ -247,7 +250,8 @@ export class AgentSession {
   private async refreshList(): Promise<void> {
     if (!this.listWanted || !this.handle || !this.state.capabilities.list || this.state.phase !== "ready" || Object.values(this.state.pending).some((request) => request.kind === "list" || request.kind === "switch" || request.kind === "new_user")) return;
     this.listWanted = false;
-    this.sessions = [];
+    this.pendingSessions = [];
+    this.listHadItems = this.sessions.length > 0;
     this.sessionsLoading = true;
     this.listError = null;
     this.state = { ...this.state, sessionError: null };
@@ -368,9 +372,10 @@ export class AgentSession {
             this.listError = { id: error.id, message: error.message };
             this.sessionsLoading = false;
           } else {
-            this.sessions = [...this.sessions, ...(message.result?.sessions ?? []).filter((entry) => entry.cwd === this.cwd)]
+            this.pendingSessions = [...this.pendingSessions, ...(message.result?.sessions ?? []).filter((entry) => entry.cwd === this.cwd)]
               .sort((a, b) => (Date.parse(b.updatedAt ?? "") || 0) - (Date.parse(a.updatedAt ?? "") || 0));
             this.sessionsLoading = !!message.result?.nextCursor;
+            if (!this.listHadItems || !this.sessionsLoading) this.sessions = this.pendingSessions;
             if (message.result?.nextCursor) await this.request("list", "session/list", { cwd: this.cwd, cursor: message.result.nextCursor });
           }
           this.publish();
@@ -474,7 +479,7 @@ export class AgentSession {
         content.push({ type: "resource_link", name: attachment.name, mimeType: attachment.mime, uri: await this.host.process.file_uri(key) });
       }
     }
-    if (!this.state.guideSent) {
+    if (!this.state.guideSent && !(this.state.capabilities.http && this.tools)) {
       const guide = await this.host.instructions();
       const tools = this.state.capabilities.http && this.tools ? "MCP 도구가 연결되어 있습니다." : "현재 MCP 도구를 사용할 수 없습니다.";
       content.push({ type: "text", text: `<${GUIDE_TAG}>\n${guide}\n${tools}\n</${GUIDE_TAG}>` });

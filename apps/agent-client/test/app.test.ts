@@ -100,9 +100,14 @@ test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 
   assert.equal(views.at(-1).history_description, "이 에이전트는 지난 세션 목록을 주지 않습니다");
   assert.equal(views.at(-1).history_unsupported, true);
   assert.equal(views.at(-1).history_empty, false);
+  assert.equal(views.at(-1).history_no_items, true);
   (app as any).receive({ ...(app as any).view, canListSessions: true });
   assert.equal(views.at(-1).history_disabled, false);
   assert.equal(views.at(-1).history_description, null);
+  (app as any).receive({ ...(app as any).view, sessions: [{ sessionId: "old", cwd: "/work" }], sessionsLoading: true });
+  assert.equal(views.at(-1).history_loading, false);
+  assert.equal(views.at(-1).history_has_items, true);
+  assert.equal(views.at(-1).history_no_items, false);
   (app as any).receive({ ...(app as any).view, configuring: true });
   assert.equal(views.at(-1).history_disabled, true);
   assert.equal(views.at(-1).session_buttons_busy, true);
