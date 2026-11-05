@@ -432,17 +432,15 @@ fn windows_process_diagnostics(
 #[cfg(windows)]
 #[test]
 fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+
     let temp = TempDir::new().unwrap();
     let work = temp.path().join("한글 작업 폴더");
     fs::create_dir(&work).unwrap();
     fs::write(
         work.join("child.cmd"),
         include_str!("fixtures/process/child.cmd").replace('\n', "\r\n"),
-    )
-    .unwrap();
-    fs::write(
-        work.join("worker.ps1"),
-        include_str!("fixtures/process/worker.ps1"),
     )
     .unwrap();
     let host = Arc::new(FakeHost::default());
@@ -471,7 +469,10 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
         name: "시험".into(),
         command: work.join("child.cmd").to_string_lossy().into_owned(),
         args: vec![],
-        env: BTreeMap::new(),
+        env: BTreeMap::from([(
+            "KS_DESCENDANT_EXE".into(),
+            std::env::current_exe().unwrap().to_string_lossy().into_owned(),
+        )]),
     };
     let owner = core.clone();
     let start_window = window.clone();
@@ -505,19 +506,21 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
     let spawn_returned = started.elapsed();
     assert!(!cwd.starts_with(r"\\?\"), "시작 응답의 작업 폴더: {cwd}");
     assert_eq!(fs::canonicalize(&cwd).unwrap(), fs::canonicalize(&work).unwrap());
-    // 이 시험은 멈춤이 자손까지 끝내는지를 본다. CI 러너에서 PowerShell 첫 기동이
-    // 30초를 넘긴 일이 있어(cmd_started 뒤 worker_started 없음) 기동 대기는 넉넉히 둔다.
-    let deadline = Instant::now() + Duration::from_secs(120);
+    // 자손은 이 시험 실행 파일 자신이다. PowerShell 5.1 첫 기동은 C:에서 수십 MB를 읽어,
+    // 러너의 StorSvc가 기동 약 11분 뒤 C:를 훑는 동안 2분을 넘긴 일이 있다(카드 #1031).
+    let deadline = Instant::now() + Duration::from_secs(30);
     while !work.join("child.pid").exists() {
         assert!(Instant::now() < deadline, "자손 시작 시간 초과\n{}", windows_process_diagnostics(&core, &window, &handle, &work, requested_at, started, spawn_returned));
         thread::sleep(Duration::from_millis(50));
     }
     let diagnostics = windows_process_diagnostics(&core, &window, &handle, &work, requested_at, started, spawn_returned);
     eprintln!("자손 확인 진단:\n{diagnostics}");
-    let pid = fs::read_to_string(work.join("child.pid")).unwrap();
+    let pid: u32 = fs::read_to_string(work.join("child.pid")).unwrap().trim().parse().unwrap();
+    let process_handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, pid) };
+    assert!(!process_handle.is_null(), "자손 프로세스 핸들을 열 수 없습니다: {pid}, {}\n{diagnostics}", std::io::Error::last_os_error());
     let cwd = fs::read_to_string(work.join("cwd.txt")).unwrap();
     assert_eq!(
-        fs::canonicalize(cwd.trim_start_matches('\u{feff}')).unwrap(),
+        fs::canonicalize(cwd).unwrap(),
         fs::canonicalize(&work).unwrap()
     );
     core.handle(CoreRequest::ProcessStop {
@@ -525,21 +528,23 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
         handle,
     })
     .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(15);
-    loop {
-        let output = std::process::Command::new("tasklist.exe")
-            .args(["/FI", &format!("PID eq {}", pid.trim()), "/NH"])
-            .output()
-            .unwrap();
-        if !String::from_utf8_lossy(&output.stdout).contains(pid.trim()) {
-            break;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "자손 프로세스가 남았습니다: {pid}\n{diagnostics}"
-        );
-        thread::sleep(Duration::from_millis(100));
-    }
+    let wait_result = unsafe { WaitForSingleObject(process_handle, 15_000) };
+    unsafe { CloseHandle(process_handle) };
+    assert_eq!(wait_result, WAIT_OBJECT_0, "자손 프로세스가 남았습니다: {pid}\n{diagnostics}");
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore = "windows_process_cmd_terminates_descendants_in_unicode_cwd가 child.cmd를 거쳐 자손으로 띄운다"]
+fn windows_descendant_worker() {
+    if std::env::var_os("KS_DESCENDANT_WORKER").is_none() { return; }
+    // child.pid가 보이면 cwd.txt와 PID를 함께 읽을 수 있게 한다.
+    let cwd = std::env::current_dir().unwrap();
+    fs::write("cwd.txt", cwd.to_string_lossy().as_bytes()).unwrap();
+    fs::write("child.pid.tmp", std::process::id().to_string()).unwrap();
+    fs::rename("child.pid.tmp", "child.pid").unwrap();
+    println!("worker_started pid={}", std::process::id());
+    thread::sleep(Duration::from_secs(120));
 }
 
 #[cfg(unix)]
