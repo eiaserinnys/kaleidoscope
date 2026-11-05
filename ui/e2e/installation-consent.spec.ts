@@ -1,7 +1,30 @@
 import { expect, test } from "@playwright/test";
-import { writeFileSync } from "node:fs";
 
 test.use({ deviceScaleFactor: 2 });
+
+test("호스트 사이는 호스트와 그 경로 사이보다 넓다", async ({ page }) => {
+  await page.goto("/installation-consent.html");
+  await page.evaluate(async () => {
+    await (window as any).installationHarness.ready;
+    (window as any).installationHarness.show("light", { permissions: [
+      { module: "http", id: "first", label: "자료", base_url: "https://first.example.org", paths: ["/articles", "/images"] },
+      { module: "http", id: "second", label: "그림", base_url: "https://second.example.org", paths: ["/pictures"] },
+    ] });
+  });
+  const details = page.getByRole("dialog").locator("details");
+  await details.locator("summary").click();
+  const gaps = await details.evaluate((node) => {
+    const values = Array.from(node.querySelectorAll(".ks-consent-value"));
+    const first = values.find((el) => el.textContent === "first.example.org")!;
+    const second = values.find((el) => el.textContent === "second.example.org")!;
+    const paths = first.nextElementSibling!.querySelectorAll("li");
+    return {
+      inside: paths[0].getBoundingClientRect().top - first.getBoundingClientRect().bottom,
+      between: second.getBoundingClientRect().top - paths[paths.length - 1].getBoundingClientRect().bottom,
+    };
+  });
+  expect(gaps.between).toBeGreaterThan(gaps.inside);
+});
 
 test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
   for (const [width, theme] of [[1000, "light"], [360, "dark"], [1000, "dark"], [360, "light"]] as const) {
@@ -12,95 +35,44 @@ test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "취소" })).toBeFocused();
-    await expect(dialog).toContainText("https://apps.example.org/store");
-    await expect(dialog).toContainText("서버 실행 코드");
-    await expect(dialog.getByText("프로그램 실행", { exact: true })).toBeVisible();
-    await expect(dialog).toContainText(theme === "light" ? "이 PC의 내장 서버에서 Python 코드를 실행합니다." : "server.example.org 서버에서 Python 코드를 실행합니다.");
-    await expect(dialog).toContainText("기준 주소: https://archive.example.org");
-    await expect(dialog).toContainText("허용 경로: /articles, /images");
-    await expect(dialog).toContainText("모음: threads");
-    await expect(dialog).toContainText("research/ 아래, 창별, 파일당 512 MiB");
-    await expect(dialog).toContainText("research-client 1판");
-    await expect(dialog).toContainText("1시간마다, settings로 켜고 끔");
-    await expect(dialog).toContainText("archive-token (자료 연결 토큰)");
-    await expect(dialog).not.toContainText("입력:");
-    await expect(dialog).not.toContainText("출력:");
-    await expect(dialog).not.toContainText("창 상태:");
+    await expect(dialog).toContainText("apps.example.org");
+    await expect(dialog).toContainText("이 PC에서 프로그램을 실행합니다");
+    await expect(dialog).toContainText(theme === "light" ? "이 PC에서 앱의 Python 코드를 실행합니다" : "server.example.org 서버에서 앱의 Python 코드를 실행합니다");
+    await expect(dialog).toContainText("인터넷에서 자료를 받아옵니다");
+    await expect(dialog).toContainText("archive.example.org");
+    await expect(dialog).toContainText("1시간마다 스스로 실행됩니다");
+    for (const hidden of ["settings", "research-client", "archive-token", "threads", "입력:", "출력:", "창 상태:"]) await expect(dialog).not.toContainText(hidden);
+    const details = dialog.locator("details").filter({ hasText: "자세히" });
+    await expect(details).not.toHaveAttribute("open", "");
+    await expect(details.locator(".ks-install-paths")).toBeHidden();
     const alignment = await dialog.evaluate((node) => {
       const title = node.querySelector(".ks-dialog-title")!.getBoundingClientRect();
       const body = node.querySelector(".ks-dialog-body")!.getBoundingClientRect();
       const scroll = node.querySelector(".ks-dialog-scroll")!;
-      const warning = node.querySelector<HTMLElement>(".ks-install-warning")!;
-      const rect = warning.getBoundingClientRect();
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d")!;
-      context.fillStyle = getComputedStyle(warning).color;
-      context.fillRect(0, 0, 1, 1);
-      const colorRgb = Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3);
-      return { titleLeft: title.left, bodyLeft: body.left, scrollWidth: scroll.scrollWidth, clientWidth: scroll.clientWidth,
-        color: getComputedStyle(warning).color, colorRgb, backgroundSample: { x: Math.floor(rect.left - 3), y: Math.floor(rect.top + rect.height / 2) } };
+      return { titleLeft: title.left, bodyLeft: body.left, scrollWidth: scroll.scrollWidth, clientWidth: scroll.clientWidth };
     });
     console.log(`installation-${width}-${theme}: ${JSON.stringify(alignment)}`);
     expect(Math.abs(alignment.titleLeft - alignment.bodyLeft)).toBeLessThanOrEqual(1);
     expect(alignment.scrollWidth).toBeLessThanOrEqual(alignment.clientWidth);
     expect(await dialog.getByText("자료 수집", { exact: true }).evaluate((node) => getComputedStyle(node).userSelect)).toBe("text");
-    await page.screenshot({ path: `test-results/installation-consent-heavy-${width}-${theme}.png` });
-    const scroll = dialog.locator(".ks-dialog-scroll");
-    expect(await scroll.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
-    const storage = dialog.locator("section").filter({ hasText: "자료 수집 설정" }).first();
-    const fixedLabel = storage.locator(".ks-consent-label").first();
-    const value = storage.getByText("자료 수집 설정", { exact: true });
-    await fixedLabel.scrollIntoViewIfNeeded();
+    const sentence = dialog.getByText("인터넷에서 자료를 받아옵니다", { exact: true });
+    const target = dialog.getByText("archive.example.org", { exact: true });
+    expect(await sentence.evaluate((node) => getComputedStyle(node).userSelect)).toBe("none");
+    expect(await target.evaluate((node) => getComputedStyle(node).userSelect)).toBe("text");
+    await sentence.scrollIntoViewIfNeeded();
     await page.evaluate(() => getSelection()?.removeAllRanges());
-    await fixedLabel.dblclick();
+    await sentence.dblclick();
     expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
-    await value.dblclick();
-    expect(await page.evaluate(() => getSelection()?.toString())).toMatch(/자료|수집|설정/);
-    await page.evaluate(() => getSelection()?.removeAllRanges());
-    const drag = async (locator: typeof value) => {
-      const rect = await locator.boundingBox();
-      if (!rect) throw new Error("선택 대상이 보이지 않습니다.");
-      await page.mouse.move(rect.x + 1, rect.y + rect.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(rect.x + rect.width - 1, rect.y + rect.height / 2, { steps: 8 });
-      await page.mouse.up();
-      return page.evaluate(() => getSelection()?.toString() ?? "");
-    };
-    expect(await drag(fixedLabel)).toBe("");
-    expect(await drag(value)).toContain("자료 수집");
-    await storage.getByText("기본값과 스키마").click();
-    const spacing = await storage.locator("details").evaluate((details) => {
-      const summary = details.querySelector("summary")!.getBoundingClientRect();
-      const pre = details.querySelector("pre")!.getBoundingClientRect();
-      const next = details.closest("section")!.nextElementSibling!.getBoundingClientRect();
-      return { above: pre.top - summary.bottom, below: next.top - pre.bottom };
-    });
-    expect(spacing.above).toBe(4);
-    expect(spacing.below).toBe(8);
-    writeFileSync(`test-results/installation-consent-metrics-${width}-${theme}.json`, JSON.stringify({ alignment, spacing }));
-    await page.screenshot({ path: `test-results/installation-consent-storage-${width}-${theme}.png` });
-    await storage.getByText("기본값과 스키마").click();
+    await target.dblclick();
+    expect(await page.evaluate(() => getSelection()?.toString())).toMatch(/archive|example|org/);
+    await details.locator("summary").click();
+    await expect(details.locator(".ks-install-paths")).toBeVisible();
+    await expect(details.locator(".ks-install-path").first()).toHaveText("/articles");
+    expect(await details.locator(".ks-install-path").first().evaluate((node) => getComputedStyle(node).userSelect)).toBe("text");
+    await details.locator("summary").click();
     await dialog.getByText("코드 보기").click();
     await expect(dialog.getByText("def run(action, data):", { exact: false })).toBeVisible();
     await page.screenshot({ path: `test-results/installation-consent-details-${width}-${theme}.png` });
-    const template = dialog.locator("details").filter({ hasText: "제목 양식" });
-    await template.locator("summary").click();
-    const templateCode = template.locator("pre.ks-process-command");
-    await templateCode.scrollIntoViewIfNeeded();
-    await expect(templateCode).toBeVisible();
-    await expect(templateCode).toContainText("자료 정리");
-    for (const label of ["처음 지시", "지시"]) await dialog.getByText(label, { exact: true }).click();
-    const gaps = await template.evaluate((node) => {
-      const result = [];
-      for (let item: Element | null = node; item?.tagName === "DETAILS"; item = item.nextElementSibling) {
-        const pre = item.querySelector("pre")!.getBoundingClientRect();
-        const summary = item.querySelector("summary")!.getBoundingClientRect();
-        result.push({ inside: pre.top - summary.bottom, after: item.nextElementSibling!.getBoundingClientRect().top - pre.bottom });
-      }
-      return result;
-    });
-    expect(gaps).toEqual(Array.from({ length: 3 }, () => ({ inside: 4, after: 8 })));
-    await page.screenshot({ path: `test-results/installation-consent-template-${width}-${theme}.png` });
   }
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "허용하고 설치" }).evaluate((button: HTMLButtonElement) => button.click());
@@ -115,15 +87,14 @@ test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme });
     await page.goto("/installation-consent.html");
     await page.evaluate(async () => { await (window as any).installationHarness.ready; (window as any).installationHarness.show("light"); });
-    await expect(page.getByRole("dialog")).toContainText("선언된 권한이 없습니다");
+    await expect(page.getByRole("dialog")).toContainText("이 앱은 창 안에서만 동작합니다");
     await page.screenshot({ path: `test-results/installation-consent-light-${width}-${theme}.png` });
     await page.keyboard.press("Escape");
     expect(await page.evaluate(() => (window as any).installationHarness.answers[0].allow)).toBe(false);
   }
 });
 
-
-test("값 전체를 끌어 복사해도 구분자와 줄바꿈이 유지되고 이름표는 선택되지 않는다", async ({ page, context }) => {
+test("사이트와 상세 코드를 끌어 복사할 수 있다", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.setViewportSize({ width: 1000, height: 780 });
   await page.goto("/installation-consent.html");
@@ -138,35 +109,103 @@ test("값 전체를 끌어 복사해도 구분자와 줄바꿈이 유지되고 �
       while (walker.nextNode()) if (walker.currentNode.textContent?.length) texts.push(walker.currentNode as Text);
       const point = (text: Text, end: boolean) => {
         const range = document.createRange();
-        range.setStart(text, end ? text.length : 0);
-        range.collapse(true);
+        range.setStart(text, end ? text.length : 0); range.collapse(true);
         const rect = range.getBoundingClientRect();
         return { x: rect.x, y: rect.y + rect.height / 2 };
       };
       return [point(texts[0], false), point(texts[texts.length - 1], true)];
     });
-    await page.mouse.move(start.x + 0.1, start.y);
-    await page.mouse.down();
-    await page.mouse.move(end.x - 0.1, end.y, { steps: 15 });
-    await page.mouse.up();
+    await page.mouse.move(start.x + 0.1, start.y); await page.mouse.down();
+    await page.mouse.move(end.x - 0.1, end.y, { steps: 15 }); await page.mouse.up();
     await page.keyboard.press("Control+c");
     return page.evaluate(() => navigator.clipboard.readText());
   };
-  expect(await copy(dialog.locator(".ks-dialog-body > div").first())).toBe("자료 수집 · 3판\nhttps://apps.example.org/store");
-  const field = (name: string) => dialog.locator(".ks-consent-label").filter({ hasText: name }).locator("..").locator(":scope > .ks-consent-value");
-  expect(await copy(field("허용 경로"))).toBe("/articles, /images, /public/long-path-for-research-materials");
-  expect(await copy(field("기기 저장"))).toBe("research/ 아래, 창별, 파일당 512 MiB");
+  const sentence = dialog.getByText("인터넷에서 자료를 받아옵니다", { exact: true });
+  await sentence.scrollIntoViewIfNeeded();
+  await page.evaluate(() => getSelection()?.removeAllRanges());
+  const rect = (await sentence.boundingBox())!;
+  await page.mouse.move(rect.x + 1, rect.y + rect.height / 2); await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width - 1, rect.y + rect.height / 2, { steps: 8 }); await page.mouse.up();
+  expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
+  expect(await copy(dialog.getByText("archive.example.org", { exact: true }))).toBe("archive.example.org");
+  await dialog.getByText("자세히", { exact: true }).click();
+  expect(await copy(dialog.locator("details[open] .ks-install-path").last())).toBe("/public/long-path-for-research-materials");
+  await dialog.getByText("자세히", { exact: true }).click();
   await dialog.getByText("코드 보기", { exact: true }).click();
   expect(await copy(dialog.locator("details[open] pre"))).toBe("def run(action, data):\n    return {'status': 'ready'}");
-  await dialog.getByRole("button", { name: "취소" }).click();
-  await page.evaluate(() => (window as any).installationHarness.show("heavy", { storage: { entries: [{
-    id: "options", key: "options", kind: "json", label: "고르기 설정", presentation: "settings", default: "", schema: {}, choices: { expr: "$source.options" },
-  }] } }));
-  const nestedLabel = dialog.locator(".ks-consent-value .ks-consent-label");
-  await nestedLabel.scrollIntoViewIfNeeded();
-  await page.evaluate(() => getSelection()?.removeAllRanges());
-  await nestedLabel.dblclick();
-  expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
-  expect(await nestedLabel.evaluate((node) => getComputedStyle(node).userSelect)).toBe("none");
-  await expect(field("선택지")).toHaveText("식: $source.options");
+});
+
+test("긴 사이트 이름과 프로그램도 좁은 창에서 잘리지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto("/installation-consent.html");
+  const host = `${"long".repeat(14)}.example.org`;
+  const command = `${"long-program-name-".repeat(8)}tool`;
+  await page.evaluate(async ({ host, command }) => {
+    await (window as any).installationHarness.ready;
+    (window as any).installationHarness.show("light", { permissions: [
+      { module: "http", id: "web", label: "자료", base_url: `https://${host}`, paths: ["/path"] },
+      { module: "process", id: "run", label: "변환", command },
+    ] });
+  }, { host, command });
+  const dialog = page.getByRole("dialog");
+  const sizes = await dialog.evaluate((node) => {
+    const scroll = node.querySelector(".ks-dialog-scroll")!;
+    const body = node.querySelector(".ks-dialog-body")!.getBoundingClientRect();
+    const targets = Array.from(node.querySelectorAll(".ks-install-rows .ks-consent-value"), (item) => item.getBoundingClientRect());
+    return { scrollWidth: scroll.scrollWidth, clientWidth: scroll.clientWidth, bodyLeft: body.left, bodyRight: body.right, targets: targets.map(({ left, right }) => ({ left, right })) };
+  });
+  expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth);
+  expect(sizes.targets).toHaveLength(2);
+  for (const target of sizes.targets) {
+    expect(target.left).toBeGreaterThanOrEqual(sizes.bodyLeft);
+    expect(target.right).toBeLessThanOrEqual(sizes.bodyRight);
+  }
+  await expect(dialog.getByText(command, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(host, { exact: true })).toBeVisible();
+});
+
+test("경고와 일반 권한의 내용이 한 선에 맞는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 780 });
+  await page.goto("/installation-consent.html?link=embedded");
+  await page.evaluate(async () => { await (window as any).installationHarness.ready; (window as any).installationHarness.show("heavy"); });
+  const positions = await page.getByRole("dialog").evaluate((node) => {
+    const groups = node.querySelectorAll(".ks-install-group");
+    const x = (element: Element | null) => element!.getBoundingClientRect().left;
+    return {
+      processText: x(groups[0].querySelector(".ks-install-sentence > span")),
+      processRow: x(groups[0].querySelector(".ks-install-rows li")),
+      processNote: x(groups[0].querySelector(".ks-install-content > .ks-install-meta")),
+      workerText: x(groups[1].querySelector(".ks-install-sentence > span")),
+      workerNote: x(groups[1].querySelector(".ks-install-content > .ks-install-meta")),
+      workerSummary: x(groups[1].querySelector("summary")),
+      normalRow: x(groups[2].querySelector(".ks-install-rows li")),
+    };
+  });
+  console.log("installation-alignment:", JSON.stringify(positions));
+  expect(Math.max(...Object.values(positions)) - Math.min(...Object.values(positions))).toBeLessThanOrEqual(1);
+});
+
+test("열두 경로를 펼쳐도 요약은 제자리에 있어 같은 곳을 눌러 접는다", async ({ page }) => {
+  for (const width of [1000, 360]) {
+    await page.setViewportSize({ width, height: 780 });
+    await page.goto("/installation-consent.html");
+    await page.evaluate(async () => {
+      await (window as any).installationHarness.ready;
+      (window as any).installationHarness.show("light", { permissions: [{ module: "http", id: "web", label: "자료", base_url: "https://example.org", paths: Array.from({ length: 12 }, (_, i) => `/자료/경로-${i}`) }] });
+    });
+    const dialog = page.getByRole("dialog");
+    const details = dialog.locator("details");
+    const summary = details.locator("summary");
+    const before = (await summary.boundingBox())!;
+    const point = { x: before.x + before.width / 2, y: before.y + before.height / 2 };
+    await page.mouse.click(point.x, point.y);
+    await expect(details).toHaveAttribute("open", "");
+    const after = (await summary.boundingBox())!;
+    console.log(`installation-summary-${width}:`, JSON.stringify({ before: before.y, after: after.y }));
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    await expect(details.locator(".ks-install-path")).toHaveCount(12);
+    await expect(details.locator(".ks-install-paths")).not.toContainText("https://");
+    await page.mouse.click(point.x, point.y);
+    await expect(details).not.toHaveAttribute("open", "");
+  }
 });

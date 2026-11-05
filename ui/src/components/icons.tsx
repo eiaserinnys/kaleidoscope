@@ -49,6 +49,7 @@ import {
   Ellipsis as EllipsisIcon,
   Copy as CopyIcon,
   Trash2 as Trash2Icon,
+  TriangleAlert as TriangleAlertIcon,
   Save as SaveIcon,
   SlidersHorizontal as SlidersHorizontalIcon,
   AlignLeft as AlignLeftIcon,
@@ -143,6 +144,7 @@ export const EyeOff = (props: IconProps) => renderIcon(EyeOffIcon, props);
 export const Check = (props: IconProps) => renderIcon(CheckIcon, props);
 export const Ellipsis = (props: IconProps) => renderIcon(EllipsisIcon, props);
 export const Copy = (props: IconProps) => renderIcon(CopyIcon, props);
+export const TriangleAlert = (props: IconProps) => renderIcon(TriangleAlertIcon, props);
 export const Trash2 = (props: IconProps) => renderIcon(Trash2Icon, props);
 export const Save = (props: IconProps) => renderIcon(SaveIcon, props);
 export const SlidersHorizontal = (props: IconProps) => renderIcon(SlidersHorizontalIcon, props);

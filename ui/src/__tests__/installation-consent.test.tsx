@@ -44,30 +44,17 @@ async function setup() {
   return { appWindow, call, store, emit, change };
 }
 
-it("설치 선언 전체와 출처를 읽고 접힌 상세를 열 수 있다", async () => {
+it("창 밖에 닿는 권한과 출처를 읽고 상세를 열 수 있다", async () => {
   const { emit, store } = await setup(); emit();
   const dialog = screen.getByRole("dialog");
-  for (const value of ["자료 수집", "3", "https://store.example.org/apps", "문서", "내 PC", "팀 계정", "team-api", "https://example.org", "/one", "/two", "프로그램 실행", "성능", "스토어", "환경 설정", "prefs", "client", "web", "run", "drafts", "sync", "api-key", "writer"]) {
+  for (const value of ["자료 수집", "3판", "store.example.org", "문서", "내 PC", "팀 계정", "team-api", "example.org", "이 PC에서 프로그램을 실행합니다", "성능", "스토어", "연결한 서버에서 앱의 Python 코드를 실행합니다", "1분마다 스스로 실행됩니다"]) {
     expect(dialog.textContent).toContain(value);
   }
-  expect(dialog.textContent).toContain("print('hello')");
-  expect(dialog.textContent).toContain("기준 주소: https://example.org");
-  expect(dialog.textContent).toContain("허용 경로: /one, /two");
-  expect(dialog.textContent).toContain("모음: threads");
-  expect(dialog.textContent).toContain("drafts 아래, 창별, 파일당 512 MiB");
-  expect(dialog.textContent).toContain("client 1판");
-  expect(dialog.textContent).toContain("1분마다, prefs로 켜고 끔");
-  expect(dialog.textContent).toContain("지연 최대 30초");
-  expect(dialog.textContent).toContain("prefs로 켜고 끔, 토큰 비밀값 webhook-token");
-  expect(dialog.textContent).toContain("api-key (접근 키)");
-  expect(dialog.textContent).not.toContain("입력:");
-  expect(dialog.textContent).not.toContain("출력:");
-  expect(dialog.textContent).not.toContain("창 상태:");
-  expect(dialog.textContent).not.toContain("문서 · docs");
-  expect(within(dialog).getByText("제목 양식").closest("details")?.querySelector("pre")?.classList.contains("ks-process-command")).toBe(true);
-  expect(within(dialog).getByText("제목 양식").classList.contains("ks-install-meta")).toBe(true);
-  expect(within(dialog).getByText("시작 자산:").parentElement?.classList.contains("ks-install-meta")).toBe(true);
-  expect(within(dialog).getByText("HTTPS 권한:").parentElement?.classList.contains("ks-install-meta")).toBe(false);
+  for (const value of ["prefs", "drafts", "api-key", "writer", "입력:", "출력:", "창 상태:", "https://store.example.org/apps"]) expect(dialog.textContent).not.toContain(value);
+  const details = within(dialog).getByText("자세히").closest("details")!;
+  expect(details.open).toBe(false);
+  expect(Array.from(details.querySelectorAll(".ks-install-path"), (item) => item.textContent)).toEqual(["/one", "/two"]);
+  expect(within(dialog).getByText("코드 보기").closest("details")?.querySelector("pre")?.textContent).toBe("print('hello')");
   expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "취소" }));
   store.dispose();
 });
@@ -75,7 +62,7 @@ it("설치 선언 전체와 출처를 읽고 접힌 상세를 열 수 있다", a
 it("프로그램 권한에 실행 파일이 있으면 설치 전에 함께 표시한다", async () => {
   const { emit, store } = await setup();
   emit({ ...definition, permissions: [{ module: "process", id: "run", label: "변환", command: "python3" }] } as AppDefinition);
-  expect(screen.getByRole("dialog").textContent).toContain("프로그램 실행 · python3");
+  expect(screen.getByRole("dialog").textContent).toContain("python3");
   store.dispose();
 });
 
@@ -83,7 +70,7 @@ it("빈 선언을 표시하고 합성 허용은 거부하며 취소는 같은 di
   const { appWindow, call, emit, store } = await setup();
   emit({ ...definition, permissions: [], storage: undefined, client: undefined, worker: undefined, agent: undefined });
   const dialog = screen.getByRole("dialog");
-  expect(dialog.textContent).toContain("선언된 권한이 없습니다");
+  expect(dialog.textContent).toContain("이 앱은 창 안에서만 동작합니다");
   fireEvent.click(within(dialog).getByRole("button", { name: "허용하고 설치" }));
   expect(call).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole("button", { name: "취소" }));
@@ -138,11 +125,11 @@ it.each(["제거", "앱 교체"])("창 %s 시 대기 중인 설치 요청을 모
 });
 
 it.each([
-  [{ state: "connected", mode: "embedded", server_url: "http://localhost:1", device_name: "기기" }, "이 PC의 내장 서버에서 Python 코드를 실행합니다."],
-  [{ state: "offline", mode: "embedded", server_url: "http://localhost:1", device_name: "기기", reason: null }, "이 PC의 내장 서버에서 Python 코드를 실행합니다."],
-  [{ state: "connected", mode: "remote", server_url: "https://server.example.org/path", device_name: "기기" }, "server.example.org 서버에서 Python 코드를 실행합니다."],
-  [{ state: "offline", mode: "remote", server_url: "https://server.example.org/path", device_name: "기기", reason: null }, "server.example.org 서버에서 Python 코드를 실행합니다."],
-  [{ state: "unlinked" }, "연결한 서버에서 Python 코드를 실행합니다."],
+  [{ state: "connected", mode: "embedded", server_url: "http://localhost:1", device_name: "기기" }, "이 PC에서 앱의 Python 코드를 실행합니다"],
+  [{ state: "offline", mode: "embedded", server_url: "http://localhost:1", device_name: "기기", reason: null }, "이 PC에서 앱의 Python 코드를 실행합니다"],
+  [{ state: "connected", mode: "remote", server_url: "https://server.example.org/path", device_name: "기기" }, "server.example.org 서버에서 앱의 Python 코드를 실행합니다"],
+  [{ state: "offline", mode: "remote", server_url: "https://server.example.org/path", device_name: "기기", reason: null }, "server.example.org 서버에서 앱의 Python 코드를 실행합니다"],
+  [{ state: "unlinked" }, "연결한 서버에서 앱의 Python 코드를 실행합니다"],
 ] as const)("연결 상태에 맞는 서버 실행 위치를 표시한다", async (link, message) => {
   const { change, emit, store } = await setup();
   change((snapshot) => ({ ...snapshot, link }));
