@@ -44,7 +44,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: target/release/kaleidoscope-app.exe
-          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'ui/e2e/fixtures/realtime/**', 'pnpm-lock.yaml', 'examples/**') }}
+          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'ui/e2e/fixtures/realtime/**', 'pnpm-lock.yaml', 'examples/**', 'apps/**') }}
       - if: steps.executable-cache.outputs.cache-hit != 'true'
         run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol,e2e
       - name: 실행 파일 캐시 저장

@@ -502,189 +502,491 @@
           "type": "stack",
           "direction": "column",
           "gap": "none",
-          "fill": 1,
+          "fill": 0,
           "children": [
             {
-              "type": "toolbar",
-              "start": [
-                {
-                  "type": "button",
-                  "icon": "plus",
-                  "icon_only": true,
-                  "label": "새 세션",
-                  "disabled": {
-                    "client": "session_buttons_busy"
+              "type": "when",
+              "min_width": 640,
+              "child": {
+                "type": "split",
+                "direction": "row",
+                "sizes": [
+                  28,
+                  72
+                ],
+                "children": [
+                  {
+                    "type": "section",
+                    "title": "세션",
+                    "actions": [
+                      {
+                        "type": "button",
+                        "icon": "plus",
+                        "icon_only": true,
+                        "label": "새 세션",
+                        "disabled": {
+                          "client": "session_buttons_busy"
+                        },
+                        "on_click": {
+                          "client": "new_session"
+                        }
+                      }
+                    ],
+                    "child": {
+                      "type": "stack",
+                      "direction": "column",
+                      "gap": "none",
+                      "fill": [
+                        0,
+                        1
+                      ],
+                      "children": [
+                        {
+                          "type": "when",
+                          "value": {
+                            "client": "history_no_items"
+                          },
+                          "child": {
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "fill": [
+                              0,
+                              1,
+                              2,
+                              4
+                            ],
+                            "children": [
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_unsupported"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "info",
+                                      "message": "이 에이전트는 지난 세션 목록을 주지 않습니다"
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_list_error"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "error",
+                                      "message": {
+                                        "client": "history_error_message"
+                                      },
+                                      "error_id": {
+                                        "client": "history_error_id"
+                                      },
+                                      "actions": [
+                                        {
+                                          "label": "다시 받기",
+                                          "on_click": {
+                                            "client": "open_history"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_other_error"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "error",
+                                      "message": {
+                                        "client": "history_error_message"
+                                      },
+                                      "error_id": {
+                                        "client": "history_error_id"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_loading"
+                                },
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "loading",
+                                  "message": ""
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_empty"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "column",
+                                  "gap": "none",
+                                  "place": "center",
+                                  "children": [
+                                    {
+                                      "type": "notice",
+                                      "kind": "info",
+                                      "message": "이 폴더의 지난 세션이 없습니다"
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "type": "when",
+                          "value": {
+                            "client": "history_has_items"
+                          },
+                          "child": {
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "fill": 2,
+                            "children": [
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_list_error"
+                                },
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "error",
+                                  "message": {
+                                    "client": "history_error_message"
+                                  },
+                                  "error_id": {
+                                    "client": "history_error_id"
+                                  },
+                                  "actions": [
+                                    {
+                                      "label": "다시 받기",
+                                      "on_click": {
+                                        "client": "open_history"
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_other_error"
+                                },
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "error",
+                                  "message": {
+                                    "client": "history_error_message"
+                                  },
+                                  "error_id": {
+                                    "client": "history_error_id"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "list",
+                                "items": {
+                                  "client": "history_items"
+                                },
+                                "selected": {
+                                  "client": "history_selected"
+                                },
+                                "on_select": {
+                                  "client": "select_session"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
                   },
-                  "on_click": {
-                    "client": "new_session"
+                  {
+                    "type": "stack",
+                    "direction": "column",
+                    "gap": "none",
+                    "fill": 0,
+                    "children": [
+                      {
+                        "type": "chat",
+                        "loading": {
+                          "client": "session_switching"
+                        },
+                        "client": {
+                          "channel": "conversation",
+                          "on_send": "send",
+                          "on_cancel": "cancel",
+                          "on_attachment": "attachment"
+                        },
+                        "footer": {
+                          "type": "repeat",
+                          "items": {
+                            "client": "permissions"
+                          },
+                          "key": "id",
+                          "template": {
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "children": [
+                              {
+                                "type": "text",
+                                "value": {
+                                  "item": "title"
+                                }
+                              },
+                              {
+                                "type": "repeat",
+                                "items": {
+                                  "item": "options"
+                                },
+                                "key": "id",
+                                "template": {
+                                  "type": "button",
+                                  "label": {
+                                    "item": "label"
+                                  },
+                                  "on_click": {
+                                    "client": "answer"
+                                  }
+                                },
+                                "layout": "row"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
                   }
-                },
-                {
-                  "type": "button",
-                  "icon": "history",
-                  "icon_only": true,
-                  "label": "지난 세션",
-                  "description": {
-                    "client": "history_description"
-                  },
-                  "disabled": {
-                    "client": "history_disabled"
-                  },
-                  "on_click": {
-                    "client": "open_history"
-                  }
-                }
-              ]
+                ]
+              }
             },
             {
-              "type": "stack",
-              "direction": "column",
-              "gap": "none",
-              "fill": 0,
-              "children": [
-                {
-                  "type": "chat",
-                  "loading": {
-                    "client": "session_switching"
+              "type": "when",
+              "max_width": 639,
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "none",
+                "fill": 1,
+                "children": [
+                  {
+                    "type": "toolbar",
+                    "start": [
+                      {
+                        "type": "button",
+                        "icon": "plus",
+                        "icon_only": true,
+                        "label": "새 세션",
+                        "disabled": {
+                          "client": "session_buttons_busy"
+                        },
+                        "on_click": {
+                          "client": "new_session"
+                        }
+                      },
+                      {
+                        "type": "button",
+                        "icon": "history",
+                        "icon_only": true,
+                        "label": "지난 세션",
+                        "description": {
+                          "client": "history_description"
+                        },
+                        "disabled": {
+                          "client": "history_disabled"
+                        },
+                        "on_click": {
+                          "client": "open_history"
+                        }
+                      }
+                    ]
                   },
-                  "client": {
-                    "channel": "conversation",
-                    "on_send": "send",
-                    "on_cancel": "cancel",
-                    "on_attachment": "attachment"
+                  {
+                    "type": "stack",
+                    "direction": "column",
+                    "gap": "none",
+                    "fill": 0,
+                    "children": [
+                      {
+                        "type": "chat",
+                        "loading": {
+                          "client": "session_switching"
+                        },
+                        "client": {
+                          "channel": "conversation",
+                          "on_send": "send",
+                          "on_cancel": "cancel",
+                          "on_attachment": "attachment"
+                        },
+                        "footer": {
+                          "type": "repeat",
+                          "items": {
+                            "client": "permissions"
+                          },
+                          "key": "id",
+                          "template": {
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "children": [
+                              {
+                                "type": "text",
+                                "value": {
+                                  "item": "title"
+                                }
+                              },
+                              {
+                                "type": "repeat",
+                                "items": {
+                                  "item": "options"
+                                },
+                                "key": "id",
+                                "template": {
+                                  "type": "button",
+                                  "label": {
+                                    "item": "label"
+                                  },
+                                  "on_click": {
+                                    "client": "answer"
+                                  }
+                                },
+                                "layout": "row"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
                   },
-                  "footer": {
-                    "type": "repeat",
-                    "items": {
-                      "client": "permissions"
+                  {
+                    "type": "dialog",
+                    "open": {
+                      "client": "history_open"
                     },
-                    "key": "id",
-                    "template": {
+                    "title": "이어 갈 세션 고르기",
+                    "on_close": {
+                      "client": "close_history"
+                    },
+                    "child": {
                       "type": "stack",
                       "direction": "column",
                       "gap": "small",
                       "children": [
                         {
-                          "type": "text",
+                          "type": "when",
                           "value": {
-                            "item": "title"
+                            "client": "history_list_error"
+                          },
+                          "child": {
+                            "type": "notice",
+                            "kind": "error",
+                            "message": {
+                              "client": "history_error_message"
+                            },
+                            "error_id": {
+                              "client": "history_error_id"
+                            },
+                            "actions": [
+                              {
+                                "label": "다시 받기",
+                                "on_click": {
+                                  "client": "open_history"
+                                }
+                              }
+                            ]
                           }
                         },
                         {
-                          "type": "repeat",
-                          "items": {
-                            "item": "options"
+                          "type": "when",
+                          "value": {
+                            "client": "history_other_error"
                           },
-                          "key": "id",
-                          "template": {
-                            "type": "button",
-                            "label": {
-                              "item": "label"
+                          "child": {
+                            "type": "notice",
+                            "kind": "error",
+                            "message": {
+                              "client": "history_error_message"
                             },
-                            "on_click": {
-                              "client": "answer"
+                            "error_id": {
+                              "client": "history_error_id"
                             }
-                          },
-                          "layout": "row"
-                        }
-                      ]
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "type": "dialog",
-              "open": {
-                "client": "history_open"
-              },
-              "title": "이어 갈 세션 고르기",
-              "on_close": {
-                "client": "close_history"
-              },
-              "child": {
-                "type": "stack",
-                "direction": "column",
-                "gap": "small",
-                "children": [
-                  {
-                    "type": "when",
-                    "value": {
-                      "client": "history_list_error"
-                    },
-                    "child": {
-                      "type": "notice",
-                      "kind": "error",
-                      "message": {
-                        "client": "history_error_message"
-                      },
-                      "error_id": {
-                        "client": "history_error_id"
-                      },
-                      "actions": [
+                          }
+                        },
                         {
-                          "label": "다시 받기",
-                          "on_click": {
-                            "client": "open_history"
+                          "type": "when",
+                          "value": {
+                            "client": "history_loading"
+                          },
+                          "child": {
+                            "type": "notice",
+                            "kind": "loading",
+                            "message": ""
+                          }
+                        },
+                        {
+                          "type": "when",
+                          "value": {
+                            "client": "history_empty"
+                          },
+                          "child": {
+                            "type": "notice",
+                            "kind": "info",
+                            "message": "이 폴더의 지난 세션이 없습니다"
+                          }
+                        },
+                        {
+                          "type": "when",
+                          "value": {
+                            "client": "history_has_items"
+                          },
+                          "child": {
+                            "type": "list",
+                            "items": {
+                              "client": "history_items"
+                            },
+                            "selected": {
+                              "client": "history_selected"
+                            },
+                            "on_select": {
+                              "client": "select_session"
+                            }
                           }
                         }
                       ]
-                    }
-                  },
-                  {
-                    "type": "when",
-                    "value": {
-                      "client": "history_other_error"
-                    },
-                    "child": {
-                      "type": "notice",
-                      "kind": "error",
-                      "message": {
-                        "client": "history_error_message"
-                      },
-                      "error_id": {
-                        "client": "history_error_id"
-                      }
-                    }
-                  },
-                  {
-                    "type": "when",
-                    "value": {
-                      "client": "history_loading"
-                    },
-                    "child": {
-                      "type": "notice",
-                      "kind": "loading",
-                      "message": ""
-                    }
-                  },
-                  {
-                    "type": "when",
-                    "value": {
-                      "client": "history_empty"
-                    },
-                    "child": {
-                      "type": "notice",
-                      "kind": "info",
-                      "message": "이 폴더의 지난 세션이 없습니다"
-                    }
-                  },
-                  {
-                    "type": "when",
-                    "value": {
-                      "client": "history_has_items"
-                    },
-                    "child": {
-                      "type": "list",
-                      "items": {
-                        "client": "history_items"
-                      },
-                      "selected": {
-                        "client": "history_selected"
-                      },
-                      "on_select": {
-                        "client": "select_session"
-                      }
                     }
                   }
                 ]
@@ -709,14 +1011,14 @@
     { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
-      "version": 5
+      "version": 6
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 5
+      "version": 6
     },
     "inputs": {},
     "outputs": {
@@ -849,11 +1151,17 @@
       "history_loading": {
         "default": false
       },
+      "history_unsupported": {
+        "default": false
+      },
       "history_empty": {
         "default": false
       },
       "history_has_items": {
         "default": false
+      },
+      "history_no_items": {
+        "default": true
       },
       "history_has_error": {
         "default": false

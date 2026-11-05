@@ -108,6 +108,7 @@ export class AppClient {
   }
 
   private switchSession(id: string | null): Promise<void> {
+    if (!this.view || this.view.busy || this.view.switching || this.view.configuring || this.switchRequested) return Promise.resolve();
     this.historyOpen = false;
     this.switchRequested = id ? "load" : "new";
     this.update();
@@ -442,9 +443,10 @@ export class AppClient {
       history_disabled: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested || !this.view?.canListSessions),
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
       history_items: (this.view?.sessions ?? []).map((session) => ({ key: session.sessionId, title: cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt) })),
-      history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading,
-      history_empty: !!this.view && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,
-      history_has_items: !!this.view?.sessions.length, history_has_error: !!this.view?.sessionError,
+      history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading && !this.view.sessions.length,
+      history_unsupported: !!this.view && !this.view.canListSessions,
+      history_empty: !!this.view && this.view.canListSessions && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,
+      history_has_items: !!this.view?.sessions.length, history_no_items: !this.view?.sessions.length, history_has_error: !!this.view?.sessionError,
       history_list_error: this.view?.sessionError?.id === "AGENT_SESSION_LIST_FAILED", history_other_error: !!this.view?.sessionError && this.view.sessionError.id !== "AGENT_SESSION_LIST_FAILED",
       history_error_message: this.view?.sessionError?.message ?? "", history_error_id: this.view?.sessionError?.id ?? null,
       permissions: this.view?.permissions ?? [], auth_methods: this.view?.authMethods ?? [],
