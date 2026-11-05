@@ -77,7 +77,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
     },
   };
 }
-const get = (value: ConversationThread | null = thread, profile = "profile-a"): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
+const get = (value: ConversationThread | null = thread, profile = "profile-a"): Extract<CoreReply, { op: "conversation.get" }> => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
 const error = (code: CoreError["code"]): CoreError => code === "binding_conflict"
   ? { id: "CONV_CONTEXT_SAVED_BINDING_MISMATCH", code, message: "workspace: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.", details: [] }
   : code === "login_required"

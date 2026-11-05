@@ -212,6 +212,7 @@ pub mod transfer;
 pub const APP_AUTHORING_GUIDE: &str = include_str!("app_guide.txt");
 
 pub mod store;
+pub mod app_comments;
 pub mod app_storage;
 pub mod assets;
 pub mod builtin;
@@ -248,7 +249,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 37;
+pub const CONTRACT_VERSION: u32 = 38;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -601,6 +602,9 @@ pub struct SharedState {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub preferences: Option<preferences::AccountPreferences>,
+    /// 앱별 커멘트 개수와 변경 순번. 본문은 명령 응답으로만 받는다.
+    #[serde(default)]
+    pub app_comments: BTreeMap<String, app_comments::AppCommentAppMeta>,
 }
 
 /// 이 기기에만 두는 상태.
@@ -4304,6 +4308,31 @@ pub enum PathValue {
 #[serde(tag = "op", deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreRequest {
+    #[serde(rename = "comment.list")]
+    CommentList {
+        app_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        cursor: Option<String>,
+    },
+    #[serde(rename = "comment.get")]
+    CommentGet { app_id: String, id: String },
+    #[serde(rename = "comment.create")]
+    CommentCreate { app_id: String, request: app_comments::AppCommentCreateRequest },
+    #[serde(rename = "comment.reply")]
+    CommentReply { app_id: String, id: String, request: app_comments::AppCommentReplyRequest },
+    #[serde(rename = "comment.resolve")]
+    CommentResolve { app_id: String, id: String, request: app_comments::AppCommentResolveRequest },
+    #[serde(rename = "comment.delete")]
+    CommentDelete { app_id: String, id: String },
+    #[serde(rename = "comment.mark_sent")]
+    CommentMarkSent { app_id: String, ids: Vec<String> },
+    #[serde(rename = "comment.mark_read")]
+    CommentMarkRead { app_id: String, id: String },
+    #[serde(rename = "comment.image")]
+    CommentImage { app_id: String, id: String },
+    #[serde(rename = "comment.capture")]
+    CommentCapture { window_id: String, target_rect: app_comments::AppCommentRect },
     /// 계정의 기본 메시지 수신 앱을 바꾼다. None은 기본 앱 묶음의 초기 수신 앱을 뜻한다.
     #[serde(rename = "shell.preferences.set_default")]
     ShellPreferencesSetDefault { app_id: Option<String> },
@@ -5407,6 +5436,33 @@ pub enum ConversationApplyStatus {
 #[serde(tag = "op")]
 #[ts(export, export_to = "contract.ts")]
 pub enum CoreReply {
+    #[serde(rename = "comment.list")]
+    CommentList {
+        items: Vec<app_comments::AppCommentSummary>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        next_cursor: Option<String>,
+        #[ts(type = "number")]
+        app_revision: u64,
+    },
+    #[serde(rename = "comment.get")]
+    CommentGet { thread: app_comments::AppCommentThread },
+    #[serde(rename = "comment.create")]
+    CommentCreate { thread: app_comments::AppCommentThread, meta: app_comments::AppCommentAppMeta },
+    #[serde(rename = "comment.reply")]
+    CommentReply { reply: app_comments::AppCommentReply, meta: app_comments::AppCommentAppMeta },
+    #[serde(rename = "comment.resolve")]
+    CommentResolve { thread: app_comments::AppCommentThread, meta: app_comments::AppCommentAppMeta },
+    #[serde(rename = "comment.delete")]
+    CommentDelete { meta: app_comments::AppCommentAppMeta },
+    #[serde(rename = "comment.mark_sent")]
+    CommentMarkSent { meta: app_comments::AppCommentAppMeta },
+    #[serde(rename = "comment.mark_read")]
+    CommentMarkRead { meta: app_comments::AppCommentAppMeta },
+    #[serde(rename = "comment.image")]
+    CommentImage { image: app_comments::AppCommentImage },
+    #[serde(rename = "comment.capture")]
+    CommentCapture { image: app_comments::AppCommentImage },
     #[serde(rename = "shell.preferences.set_default")]
     ShellPreferencesSetDefault { preferences: preferences::AccountPreferences },
     #[serde(rename = "shell.preferences.answer")]

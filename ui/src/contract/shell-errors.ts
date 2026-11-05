@@ -1,6 +1,8 @@
 // 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
+export const SHELL_COMMENT_TARGET_CHANGED = (): CoreError => ({ id: "SHELL_COMMENT_TARGET_CHANGED", code: "conflict", message: `고른 뒤 앱 화면의 판이 바뀌었습니다. 내용은 남겨 두었습니다. 자리를 다시 골라 주세요.`, details: [] });
+export const SHELL_COMMENT_SEND_TEXT_TOO_LONG = (args: { limit: string }): CoreError => ({ id: "SHELL_COMMENT_SEND_TEXT_TOO_LONG", code: "invalid_request", message: `보내려는 커멘트 안내가 ${args.limit}를 넘습니다. 보낼 커멘트를 줄여 주세요.`, details: [] });
 export const SHELL_CLIENT_HTTP_REQUEST_TRANSPORT_UNAVAILABLE = (): CoreError => ({ id: "SHELL_CLIENT_HTTP_REQUEST_TRANSPORT_UNAVAILABLE", code: "io", message: `이 쉘에서는 앱 HTTP 요청을 보낼 수 없습니다. 쉘을 업데이트하세요.`, details: [] });
 export const SHELL_CLIENT_HTTP_REQUEST_INPUT_INVALID = (): CoreError => ({ id: "SHELL_CLIENT_HTTP_REQUEST_INPUT_INVALID", code: "invalid_request", message: `HTTP 요청 값의 형식이 올바르지 않습니다. 앱 코드의 permission, method, path, query, headers와 body를 확인하세요.`, details: [] });
 export const SHELL_BLOCK_RENDER_FAILED = (args: { block: string; reason: string }): CoreError => ({ id: "SHELL_BLOCK_RENDER_FAILED", code: "invalid_request", message: `${args.block} 블록을 그리지 못했습니다. 앱 정의에서 이 블록의 값과 필드를 확인하세요. 원인: ${args.reason}`, details: [] });
