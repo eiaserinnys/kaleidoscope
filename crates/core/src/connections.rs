@@ -200,7 +200,7 @@ pub(crate) fn request(
                             error.details = vec![format!("HTTP 404; host={host}")];
                             RequestError::Core(error)
                         }
-                        crate::registry_client::RegistryError::Failure { stage, detail } => {
+                        crate::registry_client::RegistryError::Failure { stage, detail, .. } => {
                             let mut error = match stage {
                                 crate::registry_client::FailureStage::Send => {
                                     errors::CONN_REQUEST_RELAY_UNREACHABLE(&connection, &host)

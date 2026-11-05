@@ -22,47 +22,51 @@ pub fn router(state: AppState) -> Router {
     );
     let mcp = Router::new()
         .route_service("/mcp", service)
-        .layer(DefaultBodyLimit::max(48 * 1024 * 1024))
+        .layer(body_limit(48 * 1024 * 1024))
         .route_layer(middleware::from_fn_with_state(state.clone(), mcp_auth));
     let device = Router::new()
         .route(
             "/builtin-specs",
-            post(super::builtin_specs::device_register)
-                .layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
+            post(super::builtin_specs::device_register).layer(body_limit(4 * 1024 * 1024)),
         )
         .route(
             "/transfer",
             get(super::transfer::export)
                 .post(super::transfer::import)
-                .layer(DefaultBodyLimit::max(
+                .layer(body_limit(
                     kaleidoscope_contract::transfer::TRANSFER_MAX_BYTES,
                 )),
         )
-        .route("/apps", post(device_upload))
+        .route(
+            "/apps",
+            post(device_upload).layer(body_limit(2 * 1024 * 1024)),
+        )
         .route(
             "/app-installs",
-            post(super::registry_install::device_install)
-                .layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
+            post(super::registry_install::device_install).layer(body_limit(32 * 1024 * 1024)),
         )
         .route(
             "/apps/{app_id}",
-            axum::routing::delete(super::app_delete::device_delete),
+            axum::routing::delete(super::app_delete::device_delete)
+                .layer(body_limit(2 * 1024 * 1024)),
         )
         .route(
             "/apps/{app_id}/worker",
-            post(super::worker_http::device_invoke),
+            post(super::worker_http::device_invoke).layer(body_limit(2 * 1024 * 1024)),
         )
         .route("/assets/{id}/{version}", get(super::assets::device_get))
         .route(
             "/app-values/{app_id}",
-            get(super::app_values::list).post(super::app_values::move_collection_http),
+            get(super::app_values::list)
+                .post(super::app_values::move_collection_http)
+                .layer(body_limit(2 * 1024 * 1024)),
         )
         .route(
             "/app-values/{app_id}/{*key}",
             get(super::app_values::read)
                 .put(super::app_values::write)
                 .delete(super::app_values::reset)
-                .layer(DefaultBodyLimit::max(
+                .layer(body_limit(
                     kaleidoscope_contract::app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
                 )),
         )
@@ -75,7 +79,7 @@ pub fn router(state: AppState) -> Router {
             get(super::app_storage_http::device_read)
                 .put(super::app_storage_http::device_write)
                 .delete(super::app_storage_http::device_reset)
-                .layer(DefaultBodyLimit::max(
+                .layer(body_limit(
                     kaleidoscope_contract::app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
                 )),
         )
@@ -88,39 +92,47 @@ pub fn router(state: AppState) -> Router {
             get(super::app_storage_http::device_collection_read)
                 .put(super::app_storage_http::device_collection_write)
                 .delete(super::app_storage_http::device_collection_reset)
-                .layer(DefaultBodyLimit::max(
+                .layer(body_limit(
                     kaleidoscope_contract::app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,
                 )),
         )
         .route(
             "/app-storage/{app_id}/collections/{entry_id}/move",
-            post(super::app_storage_http::device_collection_move),
+            post(super::app_storage_http::device_collection_move)
+                .layer(body_limit(2 * 1024 * 1024)),
         )
         .route("/events", get(device_events))
         .route("/preferences", get(super::preferences::get_preferences))
         .route(
             "/preferences/default",
-            post(super::preferences::set_default),
+            post(super::preferences::set_default).layer(body_limit(2 * 1024 * 1024)),
         )
-        .route("/preferences/answer", post(super::preferences::answer))
+        .route(
+            "/preferences/answer",
+            post(super::preferences::answer).layer(body_limit(2 * 1024 * 1024)),
+        )
         .route(
             "/window-control/{request_id}",
             post(super::window_control::device_reply).layer(DefaultBodyLimit::disable()),
         )
-        .route("/layout", axum::routing::put(super::layouts::put_layout))
+        .route(
+            "/layout",
+            axum::routing::put(super::layouts::put_layout).layer(body_limit(2 * 1024 * 1024)),
+        )
         .route(
             "/layout/changes",
-            post(super::layouts::post_layout_changes).layer(DefaultBodyLimit::max(
-                registry::LAYOUT_CHANGES_BODY_MAX_BYTES,
-            )),
+            post(super::layouts::post_layout_changes)
+                .layer(body_limit(registry::LAYOUT_CHANGES_BODY_MAX_BYTES)),
         )
         .route(
             "/shares/{window_id}",
-            axum::routing::put(super::share::put_share).delete(super::share::delete_share),
+            axum::routing::put(super::share::put_share)
+                .delete(super::share::delete_share)
+                .layer(body_limit(2 * 1024 * 1024)),
         )
         .route(
             "/connections/{name}/request",
-            post(super::connection_relay::device_request).layer(DefaultBodyLimit::max(
+            post(super::connection_relay::device_request).layer(body_limit(
                 super::connection_relay::connection_request_body_limit(),
             )),
         )
@@ -129,14 +141,20 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .route(
             "/api/webhooks/{app_id}",
-            post(super::worker_webhook::webhook).layer(DefaultBodyLimit::max(256 * 1024)),
+            post(super::worker_webhook::webhook).layer(body_limit(256 * 1024)),
         )
         .route(
             "/api/webhooks/{app_id}/{token}",
-            post(super::worker_webhook::webhook_token).layer(DefaultBodyLimit::max(256 * 1024)),
+            post(super::worker_webhook::webhook_token).layer(body_limit(256 * 1024)),
         )
-        .route(registry::PAIR_START_PATH, post(pair_start))
-        .route(registry::PAIR_POLL_PATH, post(pair_poll))
+        .route(
+            registry::PAIR_START_PATH,
+            post(pair_start).layer(body_limit(2 * 1024 * 1024)),
+        )
+        .route(
+            registry::PAIR_POLL_PATH,
+            post(pair_poll).layer(body_limit(2 * 1024 * 1024)),
+        )
         .route(registry::HEALTH_PATH, get(health))
         .nest("/api/device", device)
         .with_state(state);
@@ -324,4 +342,55 @@ async fn device_events(State(state): State<AppState>, headers: HeaderMap) -> Res
 }
 fn device_auth_error() -> CoreError {
     kaleidoscope_contract::errors::SERVER_HTTP_DEVICE_AUTH_REJECTED()
+}
+
+type BodyLimitFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send>>;
+type BodyLimitHandler = fn(State<usize>, Request, Next) -> BodyLimitFuture;
+
+// 한도 설정과 사전 검사를 함께 붙여 경로마다 다른 거절 처리가 생기지 않게 한다.
+fn body_limit(
+    limit: usize,
+) -> (
+    DefaultBodyLimit,
+    axum::middleware::FromFnLayer<BodyLimitHandler, usize, (State<usize>, Request)>,
+) {
+    (
+        DefaultBodyLimit::max(limit),
+        middleware::from_fn_with_state(limit, check_body_limit as BodyLimitHandler),
+    )
+}
+
+fn check_body_limit(State(limit): State<usize>, request: Request, next: Next) -> BodyLimitFuture {
+    Box::pin(async move {
+        let (parts, body) = request.into_parts();
+        match axum::body::to_bytes(body, limit).await {
+            Ok(bytes) => {
+                next.run(Request::from_parts(parts, axum::body::Body::from(bytes)))
+                    .await
+            }
+            Err(error) => {
+                use std::error::Error;
+                if error
+                    .source()
+                    .is_some_and(|source| source.is::<http_body_util::LengthLimitError>())
+                {
+                    error_response(
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        kaleidoscope_contract::errors::SERVER_HTTP_BODY_TOO_LARGE(
+                            &kaleidoscope_contract::size::format_byte_limit(limit as u64),
+                        ),
+                    )
+                } else {
+                    // 크기와 무관한 읽기 실패는 기존 추출기의 경로별 오류 처리로 넘긴다.
+                    let stream =
+                        futures::stream::once(async move { Err::<axum::body::Bytes, _>(error) });
+                    next.run(Request::from_parts(
+                        parts,
+                        axum::body::Body::from_stream(stream),
+                    ))
+                    .await
+                }
+            }
+        }
+    })
 }

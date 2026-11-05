@@ -1256,3 +1256,20 @@ async fn workspace_layout_is_reported_with_ordered_windows_and_folders() {
 
 #[path = "device_sync_tests.rs"]
 mod device_sync_tests;
+
+#[tokio::test]
+async fn oversized_http_bodies_report_registered_path_limit() {
+    let state = AppState::in_memory("secret");
+    let (_, token) = make_device(&state);
+    for (path, limit) in [("/api/device/apps", 2 * 1024 * 1024), ("/api/device/app-installs", 32 * 1024 * 1024), ("/api/device/layout/changes", registry::LAYOUT_CHANGES_BODY_MAX_BYTES), ("/api/device/connections/fixture/request", super::connection_relay::connection_request_body_limit()), ("/api/device/preferences/default", 2 * 1024 * 1024), ("/api/device/shares/fixture", 2 * 1024 * 1024)] {
+        let method = if path.contains("/shares/") { "PUT" } else { "POST" };
+        let mut req = request(method, path, Some(&token), Body::from(vec![b' '; limit + 1]));
+        req.headers_mut().insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+        let response = router(state.clone()).oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let bytes = to_bytes(response.into_body(), 8192).await.unwrap();
+        let error: CoreError = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.id.as_deref(), Some("SERVER_HTTP_BODY_TOO_LARGE"));
+        assert!(error.message.contains(&kaleidoscope_contract::size::format_byte_limit(limit as u64)));
+    }
+}

@@ -29,9 +29,14 @@ fn context(inner: &Inner, window: &str, permission: &str, install: bool) -> Resu
     Ok((win.app_id.clone(), win.app_version, link, inner.generation.load(Ordering::SeqCst)))
 }
 
-fn registry_error(error: RegistryError, install: bool) -> CoreError {
+pub(crate) fn registry_error(error: RegistryError, install: bool, app_id: &str) -> CoreError {
     match error {
         RegistryError::Validation(error) => error,
+        RegistryError::Failure { http: Some(http), .. } if install && http.status == 413 => {
+            let size = kaleidoscope_contract::size::format_byte_limit(http.request_bytes as u64);
+            errors::STORECLIENT_INSTALL_REQUEST_TOO_LARGE(app_id, &size)
+                .and_details(vec![format!("HTTP {}; host={}", http.status, http.host)])
+        },
         other => {
             let reason = match other {
                 RegistryError::Unauthorized => "인증이 만료되었습니다".to_string(),
@@ -86,7 +91,7 @@ pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server
     let result = inner.registry.install_store_app(&link.server_url, &link.token, &request);
     let (applied, event) = registry_events::apply_registry_change(inner, |state| {
         if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
-        let result = result.map_err(|error| registry_error(error, true))?;
+        let result = result.map_err(|error| registry_error(error, true, id))?;
         app_commands::import_registry(state, result.app);
         Ok(())
     })?;
@@ -108,7 +113,7 @@ pub(crate) fn remove(inner: &Arc<Inner>, window: &str, permission: &str, id: Val
     let result = inner.registry.remove_store_app(&link.server_url, &link.token, id, &DeviceRemoveRequest { expected_current_version: version });
     let (applied, event) = registry_events::apply_registry_change(inner, |state| {
         if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
-        result.map_err(|error| registry_error(error, false))?;
+        result.map_err(|error| registry_error(error, false, id))?;
         app_commands::remove_registry_app(state, id);
         Ok(())
     })?;

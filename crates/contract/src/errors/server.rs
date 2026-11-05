@@ -1,4 +1,9 @@
 error_catalog! { ENTRIES;
+    SERVER_HTTP_BODY_TOO_LARGE(limit) {
+        class: InvalidRequest, place: "서버 HTTP 본문 읽기", cause: "경로의 요청 본문 한도를 넘었다",
+        message: "요청 본문이 이 경로의 서버 한도 {limit}를 넘었습니다. 요청 크기를 줄여 다시 시도하세요. 큰 요청이 필요하면 서버의 해당 경로 한도를 늘리세요.", fix: "요청 크기를 줄여 다시 시도하세요"
+    }
+
     SERVER_PREFERENCES_BODY_INVALID() {
         class: InvalidRequest,
         place: "쉘 설정 요청",

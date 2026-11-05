@@ -148,7 +148,7 @@ fn get_asset(inner: &Arc<Inner>, asset: &str, version: u32, max_px: Option<u32>)
             .registry
             .asset_get(&link.server_url, &link.token, asset, version)
             .map_err(|failure| match failure {
-                crate::registry_client::RegistryError::Failure { stage, detail } => {
+                crate::registry_client::RegistryError::Failure { stage, detail, .. } => {
                     let error = match stage {
                         crate::registry_client::FailureStage::Send => {
                             errors::MEDIA_LOAD_ASSET_DOWNLOAD_SEND_FAILED(asset)

@@ -72,7 +72,7 @@ pub(crate) fn start(
                     error.details = vec![format!("HTTP 404; host={host}")];
                     error
                 }
-                RegistryError::Failure { stage, detail } => {
+                RegistryError::Failure { stage, detail, .. } => {
                     let mut error = match stage {
                         crate::registry_client::FailureStage::Send => {
                             errors::CONN_LINK_START_UNREACHABLE(host)
@@ -224,7 +224,7 @@ pub(crate) fn import_app(
                 Err(RegistryError::NotFound) => {
                     return Err(errors::CONN_LINK_IMPORT_NOT_FOUND(&host));
                 }
-                Err(RegistryError::Failure { stage, detail }) => {
+                Err(RegistryError::Failure { stage, detail, .. }) => {
                     let mut error = match stage {
                         crate::registry_client::FailureStage::Send => {
                             errors::CONN_LINK_IMPORT_UNREACHABLE(&host)
@@ -561,7 +561,7 @@ fn emit_state(inner: &Arc<Inner>) {
 
 fn registry_failure(error: RegistryError, token: &str) -> CoreError {
     match error {
-        RegistryError::Failure { stage, detail } => {
+        RegistryError::Failure { stage, detail, .. } => {
             let error = match stage {
                 FailureStage::Send => errors::CONN_EVENTS_SEND_FAILED(),
                 FailureStage::Status => errors::CONN_EVENTS_STATUS_FAILED(),

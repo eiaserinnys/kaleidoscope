@@ -40,7 +40,14 @@ pub(crate) enum RegistryError {
     Unauthorized,
     NotFound,
     Validation(CoreError),
-    Failure { stage: FailureStage, detail: String },
+    Failure { stage: FailureStage, detail: String, http: Option<HttpFailure> },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct HttpFailure {
+    pub(crate) status: u16,
+    pub(crate) request_bytes: usize,
+    pub(crate) host: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +62,7 @@ impl RegistryError {
         Self::Failure {
             stage,
             detail: detail.into(),
+            http: None,
         }
     }
 }
@@ -436,8 +444,7 @@ impl RegistryClient for HttpRegistryClient {
             ))
             .bearer_auth(token)
             .json(body)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         let status = response.status();
         let host = response_host(&response);
         if status.is_success() {
@@ -465,8 +472,7 @@ impl RegistryClient for HttpRegistryClient {
             ))
             .bearer_auth(token)
             .json(response)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         let host = response_host(&response);
         let status = response.status();
         let body = response.bytes().unwrap_or_default();
@@ -485,8 +491,7 @@ impl RegistryClient for HttpRegistryClient {
             .bearer_auth(token)
             .timeout(Duration::from_secs(65))
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn values_list(
@@ -502,8 +507,7 @@ impl RegistryClient for HttpRegistryClient {
                 url.trim_end_matches('/')
             ))
             .bearer_auth(token)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         if response.status().as_u16() == 404 {
             return Err(RegistryError::NotFound);
         }
@@ -528,7 +532,7 @@ impl RegistryClient for HttpRegistryClient {
         if let Some(workspace) = workspace {
             request = request.query(&[("workspace_id", workspace)]);
         }
-        let response = request.send().map_err(request_failure)?;
+        let response = request.send_registry()?;
         if response.status().as_u16() == 404 {
             return Err(RegistryError::NotFound);
         }
@@ -549,7 +553,7 @@ impl RegistryClient for HttpRegistryClient {
         if let Some(workspace) = workspace {
             request = request.query(&[("workspace_id", workspace)]);
         }
-        let response = request.send().map_err(request_failure)?;
+        let response = request.send_registry()?;
         if response.status().as_u16() == 404 {
             return Err(RegistryError::NotFound);
         }
@@ -571,7 +575,7 @@ impl RegistryClient for HttpRegistryClient {
         if let Some(workspace) = workspace {
             builder = builder.query(&[("workspace_id", workspace)]);
         }
-        let response = builder.json(request).send().map_err(request_failure)?;
+        let response = builder.json(request).send_registry()?;
         if response.status().as_u16() == 404 {
             return Err(RegistryError::NotFound);
         }
@@ -595,7 +599,7 @@ impl RegistryClient for HttpRegistryClient {
         if let Some(workspace) = workspace {
             builder = builder.query(&[("workspace_id", workspace)]);
         }
-        let response = builder.json(request).send().map_err(request_failure)?;
+        let response = builder.json(request).send_registry()?;
         storage_success_json(response)
     }
     fn values_get(
@@ -609,8 +613,7 @@ impl RegistryClient for HttpRegistryClient {
             .requests()?
             .get(raw_app_value_item_url(url, app, key)?)
             .bearer_auth(token)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         if response.status().as_u16() == 404 {
             return Err(RegistryError::NotFound);
         }
@@ -629,8 +632,7 @@ impl RegistryClient for HttpRegistryClient {
             .put(raw_app_value_item_url(url, app, key)?)
             .bearer_auth(token)
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         if response.status().as_u16() == 404 {
             return Err(RegistryError::NotFound);
         }
@@ -649,8 +651,7 @@ impl RegistryClient for HttpRegistryClient {
             .delete(raw_app_value_item_url(url, app, key)?)
             .bearer_auth(token)
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         if response.status().as_u16() == 404 {
             return Err(RegistryError::NotFound);
         }
@@ -675,8 +676,7 @@ impl RegistryClient for HttpRegistryClient {
             .requests()?
             .get(address)
             .bearer_auth(token)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         if !response.status().is_success() {
             return Err(RegistryError::failure(
                 FailureStage::Status,
@@ -740,8 +740,7 @@ impl RegistryClient for HttpRegistryClient {
             .get(format!("{url}{path}"))
             .bearer_auth(token)
             .query(&[("workspace_id", workspace)])
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_get(
@@ -758,8 +757,7 @@ impl RegistryClient for HttpRegistryClient {
             .get(format!("{url}{path}"))
             .bearer_auth(token)
             .query(&[("workspace_id", workspace)])
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_write(
@@ -778,8 +776,7 @@ impl RegistryClient for HttpRegistryClient {
             .bearer_auth(token)
             .query(&[("workspace_id", workspace)])
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_reset(
@@ -798,8 +795,7 @@ impl RegistryClient for HttpRegistryClient {
             .bearer_auth(token)
             .query(&[("workspace_id", workspace)])
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_collection_list(
@@ -817,8 +813,7 @@ impl RegistryClient for HttpRegistryClient {
             ))
             .bearer_auth(token)
             .query(&[("workspace_id", workspace)])
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_document_get(
@@ -837,8 +832,7 @@ impl RegistryClient for HttpRegistryClient {
             ))
             .bearer_auth(token)
             .query(&[("workspace_id", workspace), ("doc", doc)])
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_document_write(
@@ -859,8 +853,7 @@ impl RegistryClient for HttpRegistryClient {
             .bearer_auth(token)
             .query(&[("workspace_id", workspace), ("doc", doc)])
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_document_reset(
@@ -881,8 +874,7 @@ impl RegistryClient for HttpRegistryClient {
             .bearer_auth(token)
             .query(&[("workspace_id", workspace), ("doc", doc)])
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn storage_document_move(
@@ -902,8 +894,7 @@ impl RegistryClient for HttpRegistryClient {
             .bearer_auth(token)
             .query(&[("workspace_id", workspace)])
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         storage_success_json(response)
     }
     fn push_layout_changes(
@@ -917,8 +908,7 @@ impl RegistryClient for HttpRegistryClient {
             .post(format!("{server_url}{DEVICE_LAYOUT_CHANGES_PATH}"))
             .bearer_auth(token)
             .json(changes)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         let status = response.status();
         if status.as_u16() == 404 {
             return Err(status_failure(status, &response_host(&response)));
@@ -928,7 +918,7 @@ impl RegistryClient for HttpRegistryClient {
 
     fn install_store_app(&self, server_url: &str, token: &str, request: &kaleidoscope_contract::store::DeviceInstallRequest) -> Result<kaleidoscope_contract::store::DeviceInstallReply, RegistryError> {
         let response = self.requests()?.post(format!("{server_url}/api/device/app-installs"))
-            .bearer_auth(token).json(request).send().map_err(request_failure)?;
+            .bearer_auth(token).json(request).send_registry()?;
         store_success_json(response)
     }
 
@@ -936,7 +926,7 @@ impl RegistryClient for HttpRegistryClient {
         let mut url = reqwest::Url::parse(&format!("{server_url}{DEVICE_APPS_PATH}/"))
             .map_err(|e| RegistryError::failure(FailureStage::Send, e.to_string()))?;
         url.path_segments_mut().map_err(|_| RegistryError::failure(FailureStage::Send, "앱 삭제 주소를 만들 수 없습니다"))?.pop_if_empty().push(id);
-        let response = self.requests()?.delete(url).bearer_auth(token).json(request).send().map_err(request_failure)?;
+        let response = self.requests()?.delete(url).bearer_auth(token).json(request).send_registry()?;
         if response.status().is_success() { return Ok(()); }
         store_failure(response)
     }
@@ -958,8 +948,7 @@ impl RegistryClient for HttpRegistryClient {
                 kaleidoscope_contract::data::CONNECTION_TIMEOUT_SECS,
             ))
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         success_json(response)
     }
     fn pair_start(
@@ -971,8 +960,7 @@ impl RegistryClient for HttpRegistryClient {
             .requests()?
             .post(format!("{server_url}{PAIR_START_PATH}"))
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         success_json(response)
     }
 
@@ -985,8 +973,7 @@ impl RegistryClient for HttpRegistryClient {
             .requests()?
             .post(format!("{server_url}{PAIR_POLL_PATH}"))
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         success_json(response)
     }
 
@@ -1001,8 +988,7 @@ impl RegistryClient for HttpRegistryClient {
             .post(format!("{server_url}{DEVICE_APPS_PATH}"))
             .bearer_auth(token)
             .json(request)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         success_json(response)
     }
 
@@ -1017,8 +1003,7 @@ impl RegistryClient for HttpRegistryClient {
             .put(format!("{server_url}{DEVICE_LAYOUT_PATH}"))
             .bearer_auth(token)
             .json(layout)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         let status = response.status();
         if !status.is_success() {
             let host = response_host(&response);
@@ -1040,8 +1025,7 @@ impl RegistryClient for HttpRegistryClient {
             .put(format!("{server_url}{DEVICE_SHARES_PATH}/{window_id}"))
             .bearer_auth(token)
             .json(share)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         let host = response_host(&response);
         let status = response.status();
         let body = response.bytes().unwrap_or_default();
@@ -1058,8 +1042,7 @@ impl RegistryClient for HttpRegistryClient {
             .requests()?
             .delete(format!("{server_url}{DEVICE_SHARES_PATH}/{window_id}"))
             .bearer_auth(token)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         let host = response_host(&response);
         let status = response.status();
         let body = response.bytes().unwrap_or_default();
@@ -1080,8 +1063,7 @@ impl RegistryClient for HttpRegistryClient {
             ))
             .bearer_auth(token)
             .json(&crate::builtin::builtin_runtime_specs())
-            .send()
-            .map_err(request_failure)
+            .send_registry()
             .map_err(registration_failure)?;
         if registration.status().as_u16() == 403 {
             eprintln!("기본 앱 실행 선언은 서버의 주 계정 기기에서만 등록할 수 있습니다.");
@@ -1100,8 +1082,7 @@ impl RegistryClient for HttpRegistryClient {
                 serde_json::to_string(&crate::supported()).expect("supported 직렬화"),
             )
             .bearer_auth(token)
-            .send()
-            .map_err(request_failure)?;
+            .send_registry()?;
         let host = response_host(&response);
         check_status(response.status(), &[], &host)?;
         Ok(Box::new(BufReader::new(response)))
@@ -1204,7 +1185,7 @@ fn check_status(status: reqwest::StatusCode, body: &[u8], host: &str) -> Result<
 
 fn registration_failure(error: RegistryError) -> RegistryError {
     match error {
-        RegistryError::Failure { stage, detail } => {
+        RegistryError::Failure { stage, detail, .. } => {
             let error = match stage {
                 FailureStage::Send => errors::CONN_BUILTIN_REGISTER_SEND_FAILED(),
                 FailureStage::Status => errors::CONN_BUILTIN_REGISTER_STATUS_FAILED(),
@@ -1307,3 +1288,38 @@ mod tests {
 #[cfg(test)]
 #[path = "registry_client_tests.rs"]
 mod version_tests;
+
+// 직렬화한 바로 그 본문을 보내고, 프록시의 평문 413과 서버의 등록 오류를 구분한다.
+pub(crate) trait SendRegistry {
+    fn send_registry(self) -> Result<reqwest::blocking::Response, RegistryError>;
+}
+impl SendRegistry for reqwest::blocking::RequestBuilder {
+    fn send_registry(self) -> Result<reqwest::blocking::Response, RegistryError> {
+        let (client, request) = self.build_split();
+        let request = request.map_err(request_failure)?;
+        let request_bytes = request
+            .body()
+            .and_then(|body| body.as_bytes())
+            .map_or(0, |bytes| bytes.len());
+        let response = client.execute(request).map_err(request_failure)?;
+        if response.status() != reqwest::StatusCode::PAYLOAD_TOO_LARGE {
+            return Ok(response);
+        }
+        let host = response_host(&response);
+        let body = response.bytes().map_err(response_read_failure)?;
+        if let Ok(mut error) = serde_json::from_slice::<CoreError>(&body) {
+            error.details.push(format!("HTTP 413; host={host}"));
+            return Err(RegistryError::Validation(error));
+        }
+        let size = kaleidoscope_contract::size::format_byte_limit(request_bytes as u64);
+        Err(RegistryError::Failure {
+            stage: FailureStage::Status,
+            detail: format!("요청 {size}가 서버 한도를 넘었습니다(HTTP 413); host={host}"),
+            http: Some(HttpFailure {
+                status: 413,
+                request_bytes,
+                host,
+            }),
+        })
+    }
+}

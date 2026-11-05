@@ -200,7 +200,7 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
                         error.details = vec![format!("HTTP 404; host={host}")];
                         error
                     }
-                    crate::registry_client::RegistryError::Failure { stage, detail } => {
+                    crate::registry_client::RegistryError::Failure { stage, detail, .. } => {
                         let mut error = match stage {
                             crate::registry_client::FailureStage::Send => {
                                 errors::SERVER_SYNC_LAYOUT_UNREACHABLE(&host)
@@ -267,21 +267,26 @@ pub(crate) fn sync(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
     let bundle: TransferBundle = response
         .json()
         .map_err(|detail| transfer_response_error(detail, &response_host, response_status))?;
+    use crate::registry_client::{RegistryError, SendRegistry};
     let response = client
         .post(format!("{}{TRANSFER_PATH}", remote.server_url))
         .bearer_auth(&remote.token)
         .json(&bundle)
-        .send()
-        .map_err(|detail| {
-            let host = remote
-                .server_url
-                .parse::<reqwest::Url>()
-                .ok()
+        .send_registry()
+        .map_err(|failure| {
+            let host = remote.server_url.parse::<reqwest::Url>().ok()
                 .and_then(|url| url.host_str().map(str::to_owned))
                 .unwrap_or_else(|| "알 수 없는 서버".into());
-            let mut error = errors::SERVER_SYNC_UNREACHABLE(&host);
-            error.details = vec![format!("{}; host={host}", detail.without_url())];
-            error
+            match failure {
+                RegistryError::Validation(error) => error,
+                RegistryError::Failure { stage, detail, .. } => {
+                    let error = if stage == crate::registry_client::FailureStage::Status {
+                        errors::SERVER_SYNC_REJECTED(&host)
+                    } else { errors::SERVER_SYNC_UNREACHABLE(&host) };
+                    error.and_details(vec![detail])
+                }
+                _ => unreachable!("전송 계층은 인증과 경로 오류를 HTTP 응답으로 반환한다"),
+            }
         })?;
     let response_host = response
         .url()

@@ -66,7 +66,7 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         .post_preferences(&file.server_url, &file.token, operation, &body)
         .map_err(|error| match error {
             RegistryError::Validation(error) => error,
-            RegistryError::Failure { stage, detail } => {
+            RegistryError::Failure { stage, detail, .. } => {
                 let error = match stage {
                     FailureStage::Send => errors::SERVER_PREFERENCES_REQUEST_SEND_FAILED(),
                     FailureStage::Status => errors::SERVER_PREFERENCES_RESPONSE_STATUS_FAILED(),
