@@ -102,6 +102,30 @@ fn install_example(core: Arc<Core>, window: String) -> thread::JoinHandle<Result
     thread::spawn(move || crate::store::install::install(&core.inner, &window, "catalog", json!("https://EXAMPLE.com:443/appstore/"), json!("example"), json!(3)))
 }
 
+#[test]
+fn store_install_transmits_connections_from_the_approved_manifest() {
+    let (_temp, core, registry, window) = store_caller();
+    let (mock, _, _) = crate::store::tests::fixture();
+    let expected = json!([{"name":"fixture","kind":"oauth","base_url":"https://example.com","paths":["/api/"],"writable":false,"description":"시험"}]);
+    let path = "/appstore/apps/example/3/manifest.json";
+    {
+        let mut files = mock.files.lock().unwrap();
+        let mut manifest: Value = serde_json::from_slice(&files[path].2).unwrap();
+        manifest["connections"] = expected.clone();
+        files.get_mut(path).unwrap().2 = manifest.to_string().into_bytes();
+    }
+    *core.inner.store_transport.lock().unwrap() = Some(Arc::new(mock));
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, .. } = event { tx.send((request_id.clone(), digest.clone())).unwrap(); }));
+    let task = install_example(core.clone(), window.clone());
+    let (request_id, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { window_id:window, request_id, digest: digest.clone(), allow:true }).unwrap();
+    assert!(task.join().unwrap().unwrap());
+    let requests = registry.store_requests.lock().unwrap();
+    assert_eq!(requests[0].connections.as_ref(), Some(&expected));
+    assert_eq!(format!("{:x}", Sha256::digest(base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &requests[0].manifest_base64).unwrap())), digest);
+}
+
 fn switch_cache(core: &Core) {
     let definition = json!({"id":"example","name":"새 서버 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"새 서버"}}).to_string();
     let mut state = core.inner.state.lock().unwrap();
@@ -324,6 +348,7 @@ fn store_source_and_consent_install_update_modified_and_remove() {
     let concurrent = kaleidoscope_contract::store::DeviceInstallRequest {
         definition_json: prepared.definition_json,
         asset_uploads: prepared.assets,
+        connections: prepared.connections,
         manifest_base64: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, prepared.manifest),
         approved_digest: prepared.digest.clone(),
         origin: kaleidoscope_contract::store::StoreOrigin { store_url: "https://example.com/appstore".into(), store_app_id: "example".into(), release: 3, digest: prepared.digest },

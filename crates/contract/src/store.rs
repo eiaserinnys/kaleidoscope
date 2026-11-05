@@ -102,14 +102,43 @@ pub struct StoreRelease {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct StoreConnection {
+    pub name: String,
+    pub kind: StoreConnectionKind,
+    pub base_url: String,
+    pub issuer: Option<String>,
+    pub resource: Option<String>,
+    pub scopes: Option<String>,
+    pub paths: Vec<String>,
+    pub writable: bool,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StoreConnectionKind {
+    Oauth,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeviceInstallRequest {
     pub definition_json: String,
     pub asset_uploads: Vec<AssetUpload>,
     pub manifest_base64: String,
     pub approved_digest: String,
     pub origin: StoreOrigin,
+    /// 구형 매니페스트와 구형 쉘에는 이 필드가 없다. 형식 검사는 서버가 오류 코드와 함께 수행한다.
+    #[serde(default, deserialize_with = "present_connections", skip_serializing_if = "Option::is_none")]
+    pub connections: Option<serde_json::Value>,
     #[serde(deserialize_with = "required_expected_version")]
     pub expected_current_version: Option<NonZeroU32>,
+}
+fn present_connections<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    serde_json::Value::deserialize(deserializer).map(Some)
 }
 fn required_expected_version<'de, D>(deserializer: D) -> Result<Option<NonZeroU32>, D::Error>
 where

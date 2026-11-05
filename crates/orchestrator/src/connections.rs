@@ -257,7 +257,7 @@ impl AppState {
             .map(|records| records.into_iter().map(|record| record.info).collect())
     }
 
-    fn broadcast_connections(&self) -> Result<(), CoreError> {
+    pub(super) fn broadcast_connections(&self) -> Result<(), CoreError> {
         self.send_event(DeviceEvent::ConnectionsSnapshot {
             connections: self.connection_snapshot()?,
         });
@@ -302,7 +302,7 @@ impl AppState {
     }
 }
 
-fn validate_registration(input: &ConnectionRegistration) -> Result<(), CoreError> {
+pub(super) fn validate_registration(input: &ConnectionRegistration) -> Result<(), CoreError> {
     if !valid_connection_name(&input.name) {
         return Err(errors::CONN_SETTING_NAME_INVALID());
     }

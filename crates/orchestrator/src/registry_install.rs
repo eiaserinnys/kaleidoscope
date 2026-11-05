@@ -3,9 +3,9 @@ use super::*;
 use axum::extract::Extension;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
-    errors,
+    errors, PermissionDecl,
     store::{
-        DeviceInstallReply, DeviceInstallRequest, StoreOrigin, STORE_APP_JSON_MAX_BYTES,
+        DeviceInstallReply, DeviceInstallRequest, StoreConnection, StoreOrigin, STORE_APP_JSON_MAX_BYTES,
         STORE_ASSETS_MAX_BYTES, STORE_MANIFEST_MAX_BYTES,
     },
 };
@@ -20,6 +20,49 @@ pub(super) struct InstallGuard {
     pub origin: StoreOrigin,
     pub expected: Option<u32>,
     pub account: String,
+    pub connections: Vec<StoreConnection>,
+}
+
+fn store_connections(request: &DeviceInstallRequest) -> Result<Vec<StoreConnection>, CoreError> {
+    let Some(raw) = &request.connections else { return Ok(Vec::new()); };
+    let id = &request.origin.store_app_id;
+    let manifest_bytes = STANDARD.decode(&request.manifest_base64).map_err(|_| errors::REGISTRYINSTALL_MANIFEST_ENCODING_INVALID(id))?;
+    let manifest: Value = serde_json::from_slice(&manifest_bytes).map_err(|_| errors::REGISTRYINSTALL_MANIFEST_INVALID(id))?;
+    if manifest.get("connections") != Some(raw) { return Err(errors::REGISTRYINSTALL_CONNECTION_MISMATCH(id)); }
+    let connections: Vec<StoreConnection> = serde_json::from_value(raw.clone())
+        .map_err(|e| errors::REGISTRYINSTALL_CONNECTION_FORMAT_INVALID(id, &e.to_string()))?;
+    let definition = parse_app_definition(&request.definition_json)?;
+    let required: std::collections::HashSet<_> = definition.permissions.iter().filter_map(|p| match p {
+        PermissionDecl::Connection { connection, .. } => Some(connection.as_str()), _ => None
+    }).collect();
+    let mut names = std::collections::HashSet::new();
+    for c in &connections {
+        if !required.contains(c.name.as_str()) || !names.insert(c.name.as_str()) {
+            return Err(errors::REGISTRYINSTALL_CONNECTION_NAMES_MISMATCH(id));
+        }
+        let registration = super::connections::ConnectionRegistration {
+            name:c.name.clone(), kind:registry::ConnectionKind::Oauth, base_url:c.base_url.clone(),
+            description:Some(c.description.clone()), writable:Some(c.writable), paths:Some(c.paths.clone()),
+            headers:None, issuer:c.issuer.clone(), scopes:c.scopes.clone(), resource:c.resource.clone(),
+        };
+        super::connections::validate_registration(&registration)
+            .map_err(|e| errors::REGISTRYINSTALL_CONNECTION_INVALID(id, &c.name, &e.message))?;
+    }
+    if names != required { return Err(errors::REGISTRYINSTALL_CONNECTION_NAMES_MISMATCH(id)); }
+    Ok(connections)
+}
+
+pub(super) fn insert_connections(tx: &rusqlite::Transaction<'_>, guard: &InstallGuard, app_id: &str) -> Result<bool, CoreError> {
+    let mut changed = false;
+    for c in &guard.connections {
+        let paths = serde_json::to_string(&c.paths).map_err(|_| errors::REGISTRYINSTALL_CONNECTION_FORMAT_INVALID(app_id, "경로를 기록할 수 없습니다"))?;
+        let inserted = tx.execute(
+            "INSERT OR IGNORE INTO connections(account_id,name,kind,base_url,writable,paths,headers,issuer,scopes,resource,description,updated_at) VALUES(?1,?2,'oauth',?3,?4,?5,'{}',?6,?7,?8,?9,?10)",
+            params![guard.account,c.name,c.base_url.trim_end_matches('/'),c.writable,paths,c.issuer,c.scopes,c.resource,c.description,timestamp()],
+        ).map_err(|e| db_error_with(e, errors::REGISTRYINSTALL_CONNECTION_DATABASE_FAILED(app_id, &c.name)))?;
+        changed |= inserted > 0;
+    }
+    Ok(changed)
 }
 
 pub(super) fn registry_owner_account(
@@ -213,10 +256,12 @@ pub(super) async fn device_install(
     };
     let result = (|| {
         validate_bundle(&request)?;
+        let connections = store_connections(&request)?;
         let guard = InstallGuard {
             origin: request.origin,
             expected: request.expected_current_version.map(|v| v.get()),
             account,
+            connections,
         };
         let (app, unchanged, _) = state.publish_install(
             &request.definition_json,

@@ -143,11 +143,16 @@ impl AppState {
                 created_by,
                 guard.as_ref(),
             )?;
+            let connections_changed = match guard.as_ref() {
+                Some(guard) => super::registry_install::insert_connections(&tx, guard, &definition.id)?,
+                None => false,
+            };
             let app = published_app(&tx, &definition, guard.is_some())?;
             tx.commit()
                 .map_err(|error| publish_database_error(error, &definition.id, guard.is_some()))?;
-            (app, unchanged, migrated_windows, revived, origin_changed)
+            (app, unchanged, migrated_windows, revived, origin_changed, connections_changed)
         };
+        if result.5 { self.broadcast_connections()?; }
         if !result.1 || result.3 || result.4 {
             let defer_open = open_requested && !result.2.is_empty();
             let event = DeviceEvent::AppPublished {

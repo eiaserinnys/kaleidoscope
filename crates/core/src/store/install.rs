@@ -83,6 +83,7 @@ pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server
     let request = DeviceInstallRequest {
         definition_json: prepared.definition_json,
         asset_uploads: prepared.assets,
+        connections: prepared.connections,
         manifest_base64: STANDARD.encode(prepared.manifest),
         approved_digest: prepared.digest.clone(),
         origin: StoreOrigin { store_url: client.server.as_str().into(), store_app_id: id.into(), release, digest: prepared.digest },

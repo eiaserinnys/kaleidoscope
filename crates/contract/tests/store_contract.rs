@@ -217,6 +217,18 @@ fn consent_and_install_wire_roundtrip_and_legacy_app_omits_origin() {
 }
 
 #[test]
+fn store_connection_contract_rejects_secret_fields_and_relay() {
+    use kaleidoscope_contract::store::StoreConnection;
+    let oauth = json!({"name":"fixture","kind":"oauth","base_url":"https://example.com","paths":["/api/"],"writable":false,"description":"시험"});
+    let parsed: StoreConnection = serde_json::from_value(oauth.clone()).unwrap();
+    assert_eq!(parsed.name, "fixture");
+    let mut relay = oauth.clone(); relay["kind"] = json!("relay");
+    assert!(serde_json::from_value::<StoreConnection>(relay).is_err());
+    let mut secret = oauth; secret["headers"] = json!({"Authorization":"secret"});
+    assert!(serde_json::from_value::<StoreConnection>(secret).is_err());
+}
+
+#[test]
 fn store_index_does_not_allow_app_id() {
     let mut value = definition();
     value["sources"]["catalog"]["id"] = json!("example");

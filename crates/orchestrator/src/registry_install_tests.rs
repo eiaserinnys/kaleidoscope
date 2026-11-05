@@ -27,6 +27,75 @@ fn bundle(id: &str, release: u32, name: &str, expected: Option<u32>) -> Value {
         "approved_digest":digest,"origin":{"store_url":"https://store.example","store_app_id":id,"release":release,"digest":digest},"expected_current_version":expected})
 }
 
+fn connection_bundle(id: &str, connections: Value) -> Value {
+    let mut request = bundle(id, 1, "연결 앱", None);
+    let mut definition: Value = serde_json::from_str(request["definition_json"].as_str().unwrap()).unwrap();
+    definition["requires"]["modules"]["connection"] = json!(1);
+    definition["permissions"] = json!([{"module":"connection","id":"api","connection":"fixture","access":"read","label":"연결"}]);
+    let raw = definition.to_string();
+    let bytes = STANDARD.decode(request["manifest_base64"].as_str().unwrap()).unwrap();
+    let mut manifest: Value = serde_json::from_slice(&bytes).unwrap();
+    manifest["requires"] = definition["requires"].clone();
+    manifest["permissions"] = definition["permissions"].clone();
+    manifest["connections"] = connections.clone();
+    manifest["files"][format!("apps/{id}/1/app.json")] = json!({"sha256":sha256_hex(raw.as_bytes()),"bytes":raw.len()});
+    let manifest = manifest.to_string();
+    let digest = sha256_hex(manifest.as_bytes());
+    request["definition_json"] = json!(raw);
+    request["manifest_base64"] = json!(STANDARD.encode(manifest));
+    request["approved_digest"] = json!(digest);
+    request["origin"]["digest"] = json!(digest);
+    request["connections"] = connections;
+    request
+}
+
+#[tokio::test]
+async fn store_connections_are_atomic_preserved_and_broadcast() {
+    let (_dir, state) = setup();
+    let oauth = json!({"name":"fixture","kind":"oauth","base_url":"https://example.com/","paths":["/api/"],"writable":false,"description":"시험"});
+    let mut events = state.0.events.subscribe();
+    let (status, reply) = call(&state,"POST","/api/device/app-installs",connection_bundle("connected",json!([oauth.clone()]))).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(state.connection("fixture").unwrap().unwrap().info.base_url, "https://example.com");
+    let mut saw_snapshot = false;
+    while let Ok(event) = events.try_recv() { saw_snapshot |= matches!(event.event, DeviceEvent::ConnectionsSnapshot { .. }); }
+    assert!(saw_snapshot);
+    let mut replacement = oauth.clone(); replacement["base_url"] = json!("https://different.example");
+    let (status, reply) = call(&state,"POST","/api/device/app-installs",connection_bundle("second",json!([replacement]))).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(state.connection("fixture").unwrap().unwrap().info.base_url, "https://example.com");
+    assert_eq!(call(&state,"DELETE","/api/device/apps/connected",json!({"expected_current_version":1})).await.0, StatusCode::OK);
+    assert!(state.connection("fixture").unwrap().is_some());
+    let mut bad = oauth; bad["base_url"] = json!("https://example.com/?secret=x");
+    let (status, reply) = call(&state,"POST","/api/device/app-installs",connection_bundle("invalid",json!([bad]))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{reply}");
+    assert_eq!(reply["id"], "REGISTRYINSTALL_CONNECTION_INVALID");
+    assert!(state.app("invalid",None).unwrap().is_none());
+}
+
+#[tokio::test]
+async fn store_connection_manifest_is_checked_and_old_shell_is_supported() {
+    let (_dir, state) = setup();
+    let oauth = json!({"name":"fixture","kind":"oauth","base_url":"https://example.com","paths":["/api/"],"writable":false,"description":"시험"});
+    let mut mismatch = connection_bundle("mismatch",json!([oauth.clone()]));
+    mismatch["connections"][0]["base_url"] = json!("https://other.example");
+    let (_, reply) = call(&state,"POST","/api/device/app-installs",mismatch).await;
+    assert_eq!(reply["id"], "REGISTRYINSTALL_CONNECTION_MISMATCH");
+    assert!(state.app("mismatch",None).unwrap().is_none());
+    let mut secret = oauth.clone(); secret["headers"] = json!({"Authorization":"secret"});
+    let (_, reply) = call(&state,"POST","/api/device/app-installs",connection_bundle("secret",json!([secret]))).await;
+    assert_eq!(reply["id"], "REGISTRYINSTALL_CONNECTION_FORMAT_INVALID");
+    assert!(state.app("secret",None).unwrap().is_none());
+    let mut wrong_name = oauth.clone(); wrong_name["name"] = json!("other");
+    let (_, reply) = call(&state,"POST","/api/device/app-installs",connection_bundle("wrong-name",json!([wrong_name]))).await;
+    assert_eq!(reply["id"], "REGISTRYINSTALL_CONNECTION_NAMES_MISMATCH");
+    let mut old_shell = connection_bundle("old-shell",json!([oauth]));
+    old_shell.as_object_mut().unwrap().remove("connections");
+    let (status, reply) = call(&state,"POST","/api/device/app-installs",old_shell).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert!(state.connection("fixture").unwrap().is_none());
+}
+
 async fn call(state: &AppState, method: &str, path: &str, body: Value) -> (StatusCode, Value) {
     call_as(state, "test-token", method, path, body).await
 }
