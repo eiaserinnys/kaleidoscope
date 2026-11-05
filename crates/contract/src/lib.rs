@@ -6747,6 +6747,8 @@ mod tests {
              export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = {};\n\
              /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */\n\
              export const CONVERSATION_MESSAGE_MAX_CHARS = {};\n\
+             /** 커멘트 자리 필드와 지문 계산 형식의 판. */\n\
+             export const APP_COMMENT_ANCHOR_SCHEMA_VERSION = {};\n\
              /** JSON 저장 항목 하나의 최대 바이트 수. */\n\
              export const STORAGE_JSON_MAX_BYTES = {};\n\
              /** Markdown 저장 항목 하나의 최대 UTF-8 바이트 수. */\n\
@@ -6776,6 +6778,7 @@ mod tests {
             AGENT_ATTACHMENT_MAX_BYTES,
             AGENT_ATTACHMENTS_TOTAL_MAX_BYTES,
             CONVERSATION_MESSAGE_MAX_CHARS,
+            app_comments::APP_COMMENT_ANCHOR_SCHEMA_VERSION,
             app_storage::STORAGE_JSON_MAX_BYTES,
             app_storage::STORAGE_MD_MAX_BYTES,
             app_storage::STORAGE_COMMAND_BODY_MAX_BYTES,

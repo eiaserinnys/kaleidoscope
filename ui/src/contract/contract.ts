@@ -68,7 +68,11 @@ export type AppBadge = number | ExprRef;
 /**
  * 반복 키와 행 키는 JSON 값의 타입을 유지한다.
  */
-export type AppCommentAnchor = { kind: AppCommentAnchorKind, pointer?: string, normalized_type?: string, own_fingerprint?: string, parent_child_types?: Array<string>, repeat_chain?: Array<JsonValue>, row_identity?: JsonValue, quote?: AppCommentQuote, element?: AppCommentElement, element_rel?: AppCommentPoint, frame_rel?: AppCommentPoint, body_css_width?: number, body_css_height?: number, };
+export type AppCommentAnchor = { 
+/**
+ * 만든 자리에 사용한 필드와 지문 계산 형식의 판.
+ */
+schema_version: number, kind: AppCommentAnchorKind, pointer?: string, normalized_type?: string, own_fingerprint?: string, parent_child_types?: Array<string>, repeat_chain?: Array<JsonValue>, row_identity?: JsonValue, quote?: AppCommentQuote, element?: AppCommentElement, element_rel?: AppCommentPoint, frame_rel?: AppCommentPoint, body_css_width?: number, body_css_height?: number, };
 
 export type AppCommentAnchorKind = "block" | "row" | "control" | "text" | "point";
 

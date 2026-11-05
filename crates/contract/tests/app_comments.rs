@@ -1,5 +1,5 @@
 use kaleidoscope_contract::{
-    app_comments::{AppCommentAnchor, AppCommentSummary, AppCommentThread},
+    app_comments::{AppCommentAnchor, AppCommentSummary, AppCommentThread, APP_COMMENT_ANCHOR_SCHEMA_VERSION},
     registry::{DeviceEvent, APP_COMMENTS_REGISTRY_VERSION, REGISTRY_VERSION},
     CoreReply, CoreRequest, SharedState,
 };
@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 #[test]
 fn anchor_round_trips_and_distinguishes_typed_row_keys() {
     let number = json!({
+        "schema_version": 1,
         "kind": "row",
         "pointer": "/ui/items",
         "normalized_type": "list",
@@ -24,7 +25,7 @@ fn anchor_round_trips_and_distinguishes_typed_row_keys() {
     assert_eq!(serde_json::to_value(number_anchor).unwrap(), number);
     assert_eq!(serde_json::to_value(string_anchor).unwrap(), string);
     assert!(serde_json::to_value(serde_json::from_value::<AppCommentAnchor>(json!({
-        "kind":"point", "frame_rel":{"x":0.5,"y":0.25}
+        "schema_version":1, "kind":"point", "frame_rel":{"x":0.5,"y":0.25}
     })).unwrap()).unwrap().get("quote").is_none());
 }
 
@@ -34,7 +35,7 @@ fn summary_defaults_and_thread_round_trip() {
         "id":"c1", "app_id":"app", "number":1,
         "created_app_version":2, "created_definition_digest":"digest",
         "created_shell_version":"0.6.0", "origin":{"kind":"builtin"},
-        "source_window_id":"w1", "anchor":{"kind":"block","pointer":"/ui"},
+        "source_window_id":"w1", "anchor":{"schema_version":1,"kind":"block","pointer":"/ui"},
         "text":"고쳐 주세요", "reply_count":1, "resolved":false,
         "created_at":"2026-11-06T00:00:00Z",
         "updated_at":"2026-11-06T00:00:00Z", "revision":3
@@ -124,7 +125,7 @@ fn image_and_store_origin_round_trip_without_bytes_in_summary() {
         "created_app_version":1, "created_definition_digest":"digest",
         "created_shell_version":"0.6.0",
         "origin":{"kind":"store","origin":{"store_url":"https://example.test","store_app_id":"app","release":1,"digest":"digest"}},
-        "source_window_id":"w1", "anchor":{"kind":"point","frame_rel":{"x":0.5,"y":0.5}},
+        "source_window_id":"w1", "anchor":{"schema_version":1,"kind":"point","frame_rel":{"x":0.5,"y":0.5}},
         "text":"여기", "reply_count":0,
         "image":{"width":100,"height":50,"byte_size":10,"capture_surface":"web_view","target_rect":{"x":10.0,"y":20.0,"width":0.0,"height":0.0}},
         "resolved":false, "sent_at":"2026-11-06T00:00:00Z", "unread_reply":true,
@@ -132,4 +133,26 @@ fn image_and_store_origin_round_trip_without_bytes_in_summary() {
     });
     let summary: AppCommentSummary = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(serde_json::to_value(summary).unwrap(), value);
+}
+
+#[test]
+fn anchor_schema_version_is_required() {
+    assert_eq!(APP_COMMENT_ANCHOR_SCHEMA_VERSION, 1);
+    let anchor = json!({"schema_version":APP_COMMENT_ANCHOR_SCHEMA_VERSION,"kind":"block"});
+    let parsed: AppCommentAnchor = serde_json::from_value(anchor.clone()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap(), anchor);
+    assert!(serde_json::from_value::<AppCommentAnchor>(json!({"kind":"block"})).is_err());
+    let mut request = json!({
+        "op":"comment.create", "app_id":"app",
+        "request":{
+            "id":"c1", "anchor":{"kind":"block"}, "text":"내용",
+            "origin":{"kind":"personal"}, "created_app_version":1,
+            "created_definition_digest":"digest", "created_shell_version":"0.6.0",
+            "source_window_id":"w1"
+        }
+    });
+    assert!(serde_json::from_value::<CoreRequest>(request.clone()).is_err());
+    request["request"]["anchor"]["schema_version"] = json!(APP_COMMENT_ANCHOR_SCHEMA_VERSION);
+    assert!(serde_json::from_value::<CoreRequest>(request).is_ok());
+
 }

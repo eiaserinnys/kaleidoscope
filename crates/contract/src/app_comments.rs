@@ -5,6 +5,9 @@ use ts_rs::TS;
 
 use crate::{store::StoreOrigin, JsonValue};
 
+/// 자리 필드와 블록 지문 계산 형식의 현재 판.
+pub const APP_COMMENT_ANCHOR_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
@@ -63,6 +66,8 @@ pub struct AppCommentElement {
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct AppCommentAnchor {
+    /// 만든 자리에 사용한 필드와 지문 계산 형식의 판.
+    pub schema_version: u32,
     pub kind: AppCommentAnchorKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
