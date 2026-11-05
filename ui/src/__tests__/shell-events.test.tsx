@@ -259,10 +259,12 @@ describe("shell core events", () => {
     const trigger = within(document.querySelector(".ks-desktop-area") as HTMLElement).getByRole("button", { name: "앱 열기" });
     const bar = document.querySelector<HTMLElement>(".ks-shell-bar")!;
     trigger.style.setProperty("--ks-space-3", "12px");
+    trigger.style.setProperty("--ks-space-2", "8px");
     let anchorTop = 478;
     const anchorRect = vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => new DOMRect(500, anchorTop, 66, 32));
     const barRect = vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 1440, 49));
     const surfaceRect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      this.style.setProperty("--ks-space-2", "8px");
       return this.classList.contains("ks-app-launcher") ? new DOMRect(0, 0, 410, 300) : new DOMRect();
     });
     const previousHeight = window.innerHeight;
@@ -270,13 +272,26 @@ describe("shell core events", () => {
     try {
       fireEvent.click(trigger);
       const panel = screen.getByRole("dialog", { name: "앱 열기" });
-      await waitFor(() => expect(panel.style.maxHeight).toContain("417px"));
-      await waitFor(() => expect(panel.style.top).toBe("178px"));
+      await waitFor(() => expect(panel.style.maxHeight).toContain("409px"));
+      await waitFor(() => expect(panel.style.top).toBe("170px"));
       anchorTop = 240;
       window.innerHeight = 600;
       fireEvent(window, new Event("resize"));
-      await waitFor(() => expect(panel.style.maxHeight).toContain("316px"));
-      await waitFor(() => expect(panel.style.top).toBe("272px"));
+      await waitFor(() => expect(panel.style.maxHeight).toContain("308px"));
+      await waitFor(() => expect(panel.style.top).toBe("280px"));
+      fireEvent.keyDown(panel, { key: "Escape" });
+      const headerTrigger = within(bar).getByRole("button", { name: "앱 열기" });
+      headerTrigger.style.setProperty("--ks-space-3", "12px");
+      headerTrigger.style.setProperty("--ks-space-2", "8px");
+      const headerRect = vi.spyOn(headerTrigger, "getBoundingClientRect").mockReturnValue(new DOMRect(1300, 8, 32, 32));
+      try {
+        fireEvent.click(headerTrigger);
+        const headerPanel = screen.getByRole("dialog", { name: "앱 열기" });
+        await waitFor(() => expect(headerPanel.style.top).toBe("40px"));
+        expect(headerPanel.style.maxHeight).toContain("548px");
+      } finally {
+        headerRect.mockRestore();
+      }
     } finally {
       surfaceRect.mockRestore();
       anchorRect.mockRestore();

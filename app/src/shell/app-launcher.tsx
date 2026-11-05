@@ -5,9 +5,12 @@ import {
   focusRescued, useAnchoredOverlay, useIconGridColumns, useShellSelector, type ShellStore,
 } from "@kaleidoscope/ui";
 
-export function AppLauncher({ store, anchor, onClose, onSelect }: {
+export type LauncherSpacing = "none" | "gap";
+
+export function AppLauncher({ store, anchor, spacing, onClose, onSelect }: {
   store: ShellStore;
   anchor: HTMLElement;
+  spacing: LauncherSpacing;
   onClose: () => void;
   onSelect: (appId: string) => void;
 }) {
@@ -16,15 +19,15 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
   const grid = useRef<HTMLDivElement>(null);
   const tiles = useRef<Array<HTMLButtonElement | null>>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [space, setSpace] = useState(() => availableSpace(anchor));
+  const [space, setSpace] = useState(() => availableSpace(anchor, spacing));
   useLayoutEffect(() => {
-    const measure = () => setSpace(availableSpace(anchor));
+    const measure = () => setSpace(availableSpace(anchor, spacing));
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [anchor]);
+  }, [anchor, spacing]);
   const columns = useIconGridColumns(grid, !!apps?.length);
-  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true, preferAbove: space.preferAbove });
+  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true, preferAbove: space.preferAbove, offsetToken: spacing === "gap" ? "--ks-space-2" : undefined });
   const { groups, all } = useMemo(() => {
     const builtins = new Set<string>(BUILTIN_APP_IDS);
     const sorted = (apps ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
@@ -127,12 +130,14 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
   </div>, document.body);
 }
 
-function availableSpace(anchor: HTMLElement) {
+function availableSpace(anchor: HTMLElement, spacing: LauncherSpacing) {
   const rect = anchor.getBoundingClientRect();
   const barBottom = document.querySelector(".ks-shell-bar")?.getBoundingClientRect().bottom ?? 0;
-  const inset = Number.parseFloat(getComputedStyle(anchor).getPropertyValue("--ks-space-3")) || 0;
+  const style = getComputedStyle(anchor);
+  const inset = Number.parseFloat(style.getPropertyValue("--ks-space-3")) || 0;
+  const gap = spacing === "gap" ? Number.parseFloat(style.getPropertyValue("--ks-space-2")) || 0 : 0;
   const below = window.innerHeight - rect.bottom - inset;
   const above = rect.top - barBottom - inset;
   const preferAbove = above > below;
-  return { preferAbove, height: preferAbove ? above : below };
+  return { preferAbove, height: (preferAbove ? above : below) - gap };
 }

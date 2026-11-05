@@ -32,7 +32,7 @@ import {
   type ShellStore,
   type Workspace,
 } from "@kaleidoscope/ui";
-import { AppLauncher } from "./app-launcher";
+import { AppLauncher, type LauncherSpacing } from "./app-launcher";
 import { serverLabel } from "./server-label";
 import { ShellSettings } from "./shell-settings";
 import { MessageAppPrompt } from "./message-app-prompt";
@@ -48,8 +48,8 @@ export function Shell({ store }: { store: ShellStore }) {
   const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
-  const [launcherAnchor, setLauncherAnchor] = useState<HTMLElement | null>(null);
-  const closeLauncher = useCallback(() => setLauncherAnchor(null), []);
+  const [launcher, setLauncher] = useState<{ anchor: HTMLElement; spacing: LauncherSpacing } | null>(null);
+  const closeLauncher = useCallback(() => setLauncher(null), []);
   const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; kind: "gear" | "server"; sequence: number } | null>(null);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
@@ -178,10 +178,10 @@ export function Shell({ store }: { store: ShellStore }) {
     .filter((desktop) => desktop.workspace_id === activeWorkspace.id)
     .sort((a, b) => a.position - b.position);
 
-  const openAppMenu = (anchor: HTMLElement) => {
+  const openAppMenu = (anchor: HTMLElement, spacing: LauncherSpacing) => {
     closeSettings(false);
     closeMenu();
-    setLauncherAnchor((current) => current === anchor ? null : anchor);
+    setLauncher((current) => current?.anchor === anchor ? null : { anchor, spacing });
   };
   const selectApp = (appId: string) => {
     const latest = store.getSnapshot();
@@ -368,7 +368,7 @@ export function Shell({ store }: { store: ShellStore }) {
         </nav>
 
         <div className="ks-shell-actions">
-          <IconButton aria-label="앱 열기" aria-haspopup="dialog" aria-expanded={launcherAnchor !== null} onClick={(event) => openAppMenu(event.currentTarget)} title="앱 열기">
+          <IconButton aria-label="앱 열기" aria-haspopup="dialog" aria-expanded={launcher !== null} onClick={(event) => openAppMenu(event.currentTarget, "none")} title="앱 열기">
             <LayoutGrid />
           </IconButton>
           <IconButton aria-label="앱 정의 가져오기" onClick={() => { closeSettings(false); fileInput.current?.click(); }} title="앱 정의 가져오기">
@@ -401,17 +401,17 @@ export function Shell({ store }: { store: ShellStore }) {
         key={snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state}
         activeDesktopId={activeDesktop.id}
         activeWorkspaceId={activeWorkspace.id}
-        launcherOpen={launcherAnchor !== null}
+        launcherOpen={launcher !== null}
         onAreaChange={reportArea}
         onCall={runCommand}
-        onOpenApps={openAppMenu}
+        onOpenApps={(anchor) => openAppMenu(anchor, "gap")}
         getNewWindowRect={newWindowRect}
         store={store}
       />
 
       {settingsScreen}
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
-      {launcherAnchor ? <AppLauncher store={store} anchor={launcherAnchor} onClose={closeLauncher} onSelect={selectApp} /> : null}
+      {launcher ? <AppLauncher store={store} anchor={launcher.anchor} spacing={launcher.spacing} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}
