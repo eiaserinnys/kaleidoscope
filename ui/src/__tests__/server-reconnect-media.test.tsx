@@ -1,5 +1,5 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, CoreReply, ShellSnapshot } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
@@ -11,6 +11,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed } from "./fixtures";
 import { BlockRenderContext } from "../render/render-probe";
 
+beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {}); vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {}); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); document.querySelector(".ks-client-frames")?.remove(); });
 
 const base: AppDefinition = { id: "reconnect-test", name: "연결 시험", requires: { blocks: 12, modules: { assets: 1 } }, permissions: [], state: {}, assets: [{ id: "sample", version: 1 }], ui: { type: "text", value: "시험" } };
@@ -24,9 +25,10 @@ function setup(definition: AppDefinition, mime: string, content: string) {
   const store = createShellStore(transport);
   const original = store.call.bind(store);
   const calls = vi.spyOn(store, "call").mockImplementation(async (request) => {
-    if (request.op === "data.media") {
+    if (request.op === "data.media" || request.op === "data.media.open") {
       if (store.getSnapshot()?.link.state !== "connected") throw { code: "unavailable", message: "서버에 연결되어 있지 않습니다", details: [] };
-      return { op: "data.media", media: { mime, data_base64: btoa(content), width: null, height: null } } as CoreReply;
+      const media = { mime, data_base64: btoa(content), width: null, height: null };
+      return request.op === "data.media" ? { op: "data.media", media } : { op: "data.media.open", playback: { kind: "inline", media } };
     }
     return original(request);
   });

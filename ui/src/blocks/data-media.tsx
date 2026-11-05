@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
-import type { Block, MediaRef } from "../contract/contract";
+import type { Block, MediaPlayback, MediaRef } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
 import { DataState, useFolderPick } from "../components/data-state";
 import { DataIcon } from "../components/data-icons";
@@ -25,7 +25,8 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const generation = useSyncExternalStore(data.subscribeMedia, data.getMediaGeneration, data.getMediaGeneration);
   const key = src ? JSON.stringify(src) : "";
   useEffect(() => { folder.clear(); }, [key]);
-  const [loaded, setLoaded] = useState<{ key: string; url: string; mime: string } | null>(null);
+  const sourceKey = JSON.stringify([key, generation]);
+  const [loaded, setLoaded] = useState<{ key: string; playback: MediaPlayback; url: string; mime: string } | null>(null);
   const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
@@ -34,33 +35,46 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const element = useRef<HTMLMediaElement | null>(null);
+  const requestedKey = useRef(sourceKey);
+  requestedKey.current = sourceKey;
   useEffect(() => {
-    if (loaded?.key === key) return;
     let active = true;
     setLoaded(null); setError(null); setPlaying(false); setTime(0); setDuration(0);
+    let release: (() => void) | undefined;
     if (src) {
-      const cacheKey = JSON.stringify([src, null]);
-      let request = data.mediaCache.get(cacheKey);
-      if (!request) {
-        request = data.store.call({ op: "data.media", window_id: data.windowId, media: src })
-          .then((reply) => `data:${reply.media.mime};base64,${reply.media.data_base64}`);
-        data.mediaCache.set(cacheKey, request);
-        const cachedRequest = request;
-        void request.catch(() => { if (data.mediaCache.get(cacheKey) === cachedRequest) data.mediaCache.delete(cacheKey); });
-      }
-      void request.then((url) => {
-        if (active) setLoaded({ key, url, mime: url.slice("data:".length, url.indexOf(";")) });
-      }).catch((reason: unknown) => { if (active) setError(toCoreError(reason)); });
+      const lease = data.acquirePlayback(src, generation);
+      release = lease.release;
+      void lease.request.then((playback) => {
+        const mime = playback.kind === "inline" ? playback.media.mime : playback.mime;
+        const url = playback.kind === "inline" ? `data:${mime};base64,${playback.media.data_base64}` : playback.url;
+        if (active && requestedKey.current === sourceKey) setLoaded({ key: sourceKey, playback, url, mime });
+      }).catch((reason: unknown) => { if (active && requestedKey.current === sourceKey) setError(toCoreError(reason)); });
     }
-    return () => { active = false; };
+    return () => { active = false; release?.(); };
   }, [data, key, generation, attempt]);
-  const current = loaded?.key === key ? loaded : null;
+  const current = loaded?.key === sourceKey ? loaded : null;
+  useEffect(() => {
+    const el = element.current;
+    if (!current || !el) return;
+    return () => { currentSourceKey.current = null; el.pause(); el.removeAttribute("src"); el.load(); };
+  }, [current]);
   const video = (kind ?? (current?.mime.startsWith("video/") ? "video" : "audio")) === "video";
   const playbackError = () => { setError(shellErrors.SHELL_MEDIA_PLAYBACK_UNSUPPORTED()); setPlaying(false); setTime(0); setDuration(0); };
   // 늦게 온 재생 실패는 재생을 시작한 미디어가 아직 현재 원본일 때만 알린다.
   // URL은 캐시되므로 서로 다른 원본이 같은 데이터 URL을 가질 수 있다.
   const currentSourceKey = useRef<string | null>(null);
   currentSourceKey.current = current?.key ?? null;
+  const onMediaError = () => {
+    if (!current) return;
+    const started = current.key;
+    if (current.playback.kind === "inline") { playbackError(); return; }
+    void data.store.call({ op: "data.media.status", window_id: data.windowId, handle: current.playback.handle })
+      .then((reply) => {
+        if (currentSourceKey.current !== started) return;
+        if (reply.error) { setError(reply.error); setPlaying(false); setTime(0); setDuration(0); }
+        else playbackError();
+      }).catch(() => { if (currentSourceKey.current === started) playbackError(); });
+  };
   const play = (el: HTMLMediaElement) => {
     const started = currentSourceKey.current;
     void el.play().catch((reason: unknown) => {
@@ -77,7 +91,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
       if (event.key === " ") toggle(); else seek(time + (event.key === "ArrowLeft" ? -5 : 5));
     }
   };
-  const props = { src: current?.url, onError: () => { if (current) playbackError(); }, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
+  const props = { crossOrigin: current?.playback.kind === "stream" ? "anonymous" as const : undefined, src: current?.url, onError: onMediaError, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
   return <div className={`ks-media-player${video ? " is-video" : ""}`} style={video && ratio ? { "--ks-media-ratio": ratio } as React.CSSProperties : undefined}>
     {video ? <video ref={(el) => { element.current = el; }} {...props} onLoadedMetadata={(event) => { const { videoWidth, videoHeight } = event.currentTarget; if (videoWidth > 0 && videoHeight > 0) setRatio(videoWidth / videoHeight); }} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
     {error ? <Notice role="alert" errorId={(folder.error ?? error).id} actions={error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && src && "permission" in src ? [<Button key="pick" data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(src.permission, () => setAttempt((value) => value + 1)); }}>폴더 선택</Button>] : undefined}>{(folder.error ?? error).message}</Notice> : null}

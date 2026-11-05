@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EditorView } from "@codemirror/view";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
@@ -16,6 +16,7 @@ function setup(block: Block) {
   const result = render(<AppWindowContent store={store} windowId="viewer-window" />);
   return { ...result, transport };
 }
+beforeEach(() => { vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {}); vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {}); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it.each([
@@ -45,8 +46,8 @@ it("영상 메타데이터의 원본 비율을 상자에 전달한다", async ()
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", kind: "video", src: { permission: "media", path: "video.webm" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
-  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
-    ? Promise.resolve({ op: "data.media", media: { mime: "video/webm", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media.open"
+    ? Promise.resolve({ op: "data.media.open", playback: { kind: "inline", media: { mime: "video/webm", data_base64: "YQ==", width: null, height: null } } }) as never : original(request as never));
   const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   await waitFor(() => expect(view.container.querySelector("video")?.getAttribute("src")).toBeTruthy());
   const video = view.container.querySelector("video")!;
@@ -84,8 +85,8 @@ it("미디어의 폴더 미선택 오류에서 합성 선택을 막는다", asyn
   const original = transport.call.bind(transport);
   let selected = false;
   const calls = vi.spyOn(transport, "call").mockImplementation((request) => {
-    if (request.op === "data.media") return selected
-      ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } } as never)
+    if (request.op === "data.media.open") return selected
+      ? Promise.resolve({ op: "data.media.open", playback: { kind: "inline", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } } } as never)
       : Promise.reject({ code: "not_granted", id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "폴더를 고르세요", details: [] });
     if (request.op === "files.pick_folder") { selected = true; return Promise.resolve({ op: "files.pick_folder", grant: { permission: "docs" } } as never); }
     return original(request as never);
@@ -104,7 +105,7 @@ it("폴더 미선택 뒤 다른 미디어를 열면 새 오류를 보인다", as
   const original = transport.call.bind(transport);
   vi.spyOn(transport, "call").mockImplementation((request) => {
     if (request.op === "files.pick_folder") return Promise.reject({ code: "server", id: "FILE_PICK_FAILED", message: "선택 실패", details: [] });
-    if (request.op === "data.media") return Promise.reject("path" in request.media && request.media.path === "first.wav"
+    if (request.op === "data.media.open") return Promise.reject("path" in request.media && request.media.path === "first.wav"
       ? { code: "not_granted", id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "폴더 선택", details: [] }
       : { code: "not_found", id: "MEDIA_LOAD_NOT_FOUND", message: "다른 파일 없음", details: [] });
     return original(request as never);
@@ -206,12 +207,12 @@ it("재생기는 미디어 원본을 캐시하고 키보드로 이동한다", as
   const seed = makeTestSeed({ definitions: [definition] });
   const transport = createFakeTransport(seed);
   const original = transport.call.bind(transport);
-  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media.open" ? Promise.resolve({ op: "data.media.open", playback: { kind: "inline", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } } }) as never : original(request as never));
   const rendered = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "media", path } } } } }));
   await screen.findByRole("button", { name: "재생" });
   send("one.wav");
-  await waitFor(() => expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media", media: { permission: "media", path: "one.wav" } })));
+  await waitFor(() => expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media.open", media: { permission: "media", path: "one.wav" } })));
   const audio = rendered.container.querySelector("audio")!;
   Object.defineProperty(audio, "duration", { configurable: true, value: 60 });
   fireEvent.durationChange(audio);
@@ -220,7 +221,7 @@ it("재생기는 미디어 원본을 캐시하고 키보드로 이동한다", as
   fireEvent.keyDown(screen.getByRole("slider", { name: "재생 위치" }), { key: "ArrowRight" });
   expect(audio.currentTime).toBe(15);
   send("two.wav");
-  await waitFor(() => expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media", media: { permission: "media", path: "two.wav" } })));
+  await waitFor(() => expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media.open", media: { permission: "media", path: "two.wav" } })));
   rendered.unmount();
   expect(create).not.toHaveBeenCalled();
   expect(revoke).not.toHaveBeenCalled();
@@ -233,7 +234,7 @@ it("영상 MIME을 받으면 영상으로 자동 재생한다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", autoplay: true, src: { permission: "media", path: "movie.webm" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
-  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "video/webm", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media.open" ? Promise.resolve({ op: "data.media.open", playback: { kind: "inline", media: { mime: "video/webm", data_base64: "YQ==", width: null, height: null } } }) as never : original(request as never));
   const rendered = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   await waitFor(() => expect(rendered.container.querySelector("video")?.getAttribute("src")).toBe("data:video/webm;base64,YQ=="));
   await waitFor(() => expect(play).toHaveBeenCalled());
@@ -340,7 +341,7 @@ it("재생 실패를 알리고 원천 변경 뒤 조작부를 복구한다", asy
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", src: { expr: "$state.track" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
-  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media.open" ? Promise.resolve({ op: "data.media.open", playback: { kind: "inline", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } } }) as never : original(request as never));
   const result = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "media", path } } } } }));
   await screen.findByRole("button", { name: "재생" });
@@ -362,7 +363,7 @@ it("자동 재생 정책 거부는 오류로 보이지 않고 다른 재생 실�
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", autoplay: true, src: { permission: "media", path: "file.wav" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
-  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media.open" ? Promise.resolve({ op: "data.media.open", playback: { kind: "inline", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } } }) as never : original(request as never));
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
   expect(screen.queryByText("SHELL_MEDIA_PLAYBACK_UNSUPPORTED")).toBeNull();
@@ -380,7 +381,7 @@ it("앞 원본의 늦은 재생 실패는 새 원본에 오류를 보이지 않�
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", autoplay: true, src: { expr: "$state.track" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
-  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media" ? Promise.resolve({ op: "data.media", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media.open" ? Promise.resolve({ op: "data.media.open", playback: { kind: "inline", media: { mime: "audio/wav", data_base64: "YQ==", width: null, height: null } } }) as never : original(request as never));
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "media", path } } } } }));
   await screen.findByRole("button", { name: "재생" });

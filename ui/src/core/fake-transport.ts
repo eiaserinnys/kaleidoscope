@@ -10,6 +10,7 @@ import type {
   FileEntry,
   Grant,
   LinkStatus,
+  MediaPlayback,
   PcAccess,
   Rect,
   ShellSnapshot,
@@ -34,6 +35,7 @@ export interface FakeTransportSeed {
   storageWriteDelayMs?: number;
   webUnavailable?: boolean;
   media?: Record<string, string>;
+  playback?: Record<string, MediaPlayback>;
 }
 
 export interface FakeConversationSeed {
@@ -381,15 +383,22 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const encoded = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
         return { op: "app.icon", media: { mime: response.headers.get("content-type")?.split(";")[0] || "image/png", data_base64: encoded, width: null, height: null } };
       }
-      case "data.media": {
-        const url = seed.media?.[("asset" in request.media ? request.media.asset : request.media.path)];
+      case "data.media":
+      case "data.media.open": {
+        const key = "asset" in request.media ? request.media.asset : request.media.path;
+        const playback = seed.playback?.[key];
+        if (request.op === "data.media.open" && playback) return { op: "data.media.open", playback };
+        const url = seed.media?.[key];
         if (!url) return fail("not_found", "미디어를 찾을 수 없습니다");
         const response = await fetch(url);
         if (!response.ok) return fail("not_found", "미디어를 찾을 수 없습니다");
         const bytes = new Uint8Array(await response.arrayBuffer());
         const encoded = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
-        return { op: "data.media", media: { mime: response.headers.get("content-type")?.split(";")[0] || "image/png", data_base64: encoded, width: null, height: null } };
+        const media = { mime: response.headers.get("content-type")?.split(";")[0] || "image/png", data_base64: encoded, width: null, height: null };
+        return request.op === "data.media" ? { op: "data.media", media } : { op: "data.media.open", playback: { kind: "inline", media } };
       }
+      case "data.media.close": return { op: "data.media.close" };
+      case "data.media.status": return { op: "data.media.status", error: null };
       case "external.open": {
         const url = new URL(request.url);
         if (url.protocol !== "http:" && url.protocol !== "https:") return fail("invalid_request", "주소가 올바르지 않습니다");
