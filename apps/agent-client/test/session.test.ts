@@ -527,7 +527,7 @@ test("도구 줄이 없는 옛 지침 형태의 글은 보존하고 지침을 �
   const { f, session } = await readyWithHistory();
   await session.loadSession("chosen");
   const id = f.writes.at(-1).id;
-  const text = "kaleidoscope 앱 제작 지침\n도구 줄 없는 글";
+  const text = "  kaleidoscope 앱 제작 지침\n도구 줄 없는 글  ";
   await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "user_message_chunk", messageId: "one", content: { type: "text", text } } } });
   await f.emit({ jsonrpc: "2.0", id, result: {} });
   assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), [text]);

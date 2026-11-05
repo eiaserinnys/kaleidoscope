@@ -24,7 +24,8 @@ export function cleanReplay(items: Item[]): Item[] {
     if (text.trimStart().startsWith(LEGACY_GUIDE_HEAD)) {
       const lines = LEGACY_TOOL_LINES.map((line) => ({ line, index: text.indexOf(line) }))
         .filter(({ index }) => index >= 0).sort((a, b) => a.index - b.index);
-      if (lines.length) text = text.slice(lines[0].index + lines[0].line.length);
+      if (!lines.length) return [{ ...item, text }];
+      text = text.slice(lines[0].index + lines[0].line.length);
     }
     text = text.trim();
     return text ? [{ ...item, text }] : [];
