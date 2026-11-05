@@ -209,6 +209,11 @@ if (harnessParams.has("transfer-skips")) {
   snapshot.last_transfer = { imported: 3, skipped: ["app:sample-a", "value:sample-a/settings"] };
 }
 if (shellSettingsPreview) {
+  if (snapshot.link.state !== "unlinked" && (!(snapshot.link.state === "connected" || snapshot.link.state === "offline") || snapshot.link.mode === "remote")) {
+    snapshot.link.server_url = "https://eiaserinnys.me/kaleidoscope";
+    if (snapshot.link.state === "connected" || snapshot.link.state === "offline") snapshot.link.device_name = "AD02028236";
+  }
+  if (harnessParams.has("transfer-error")) snapshot.transfer_error = "가져오지 못했습니다. 다시 시도하세요.";
   snapshot.shared.preferences = harnessParams.get("prefs") === "waiting" ? null : {
     revision: 1, default_message_app_id: "agent",
     asked_message_app_ids: harnessParams.has("prompt") ? [] : ["workspace-pas"],

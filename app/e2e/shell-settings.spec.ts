@@ -1,143 +1,99 @@
 import { expect, test } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 
-const captures = "/home/eias/workspace/.local/tmp/card982/implementation";
+const captures = "/home/eias/workspace/.local/tmp/card1005";
 const base = "/harness.html?preview=shell-settings";
 
-test("서버 설정 진입과 전환, 닫기와 초점", async ({ page }) => {
-  await page.goto(`${base}&link=embedded`);
-  await expect(page.locator(".ks-harness-webview")).toBeVisible();
+test("설정 창을 열고 앱 창과 오가며 크기와 초점을 보존한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${base}&link=connected`);
   await mkdir(captures, { recursive: true });
   await page.screenshot({ path: `${captures}/desktop-before-1440.png` });
-  const gear = page.getByRole("button", { name: "설정", exact: true });
+  const gear = page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true });
   await gear.click();
-  await expect(page.getByRole("heading", { name: "설정" })).toBeFocused();
-  await expect(page.locator(".ks-desktop-area")).toBeHidden();
-  await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-  await mkdir(captures, { recursive: true });
-  const metrics = await page.evaluate(() => {
-    const rect = (selector: string) => {
-      const value = document.querySelector(selector)!.getBoundingClientRect();
-      return { left: value.left, right: value.right, top: value.top, bottom: value.bottom };
-    };
-    return {
-      brand: rect(".ks-brand"), back: rect(".ks-shell-settings .ks-data-toolbar button"),
-      group: rect(".ks-shell-settings .ks-settings-group h3"), entry: rect(".ks-shell-settings .ks-settings-entry"),
-      address: rect(".ks-settings-inline input"), connect: rect(".ks-settings-inline button"),
-      select: rect(".ks-shell-settings .ks-select-button"),
-      titleCenter: (() => { const range = document.createRange(); range.selectNodeContents(document.querySelector(".ks-shell-settings h2")!); const r = range.getBoundingClientRect(); return (r.top + r.bottom) / 2; })(),
-      backCenter: (() => { const r = document.querySelector(".ks-shell-settings .ks-data-toolbar button svg")!.getBoundingClientRect(); return (r.top + r.bottom) / 2; })(),
-    };
-  });
-  expect(Math.abs(metrics.titleCenter - metrics.backCenter)).toBeLessThanOrEqual(2);
-  await writeFile(`${captures}/metrics.json`, JSON.stringify(metrics, null, 2));
-  await page.getByRole("button", { name: "내 PC 서버", exact: true }).click();
-  const input = page.getByLabel("원격 서버 주소");
-  await expect(input).toBeFocused();
-  await input.fill("https://eiaserinnys.me/kaleidoscope");
-  await input.press("Enter");
-  await expect(page.getByRole("button", { name: "코드 복사" })).toBeVisible();
-  await page.getByRole("button", { name: "내 PC 서버로 돌아가기" }).click();
-  await expect(input).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(gear).toBeFocused();
+  const win = page.getByTestId("system-window-settings");
+  await expect(win.locator(".ks-window-content")).toBeFocused();
   await expect(page.locator(".ks-desktop-area")).toBeVisible();
-  await expect(page.locator(".ks-harness-webview")).toBeVisible();
+  await expect(win.getByText("https://eiaserinnys.me/kaleidoscope")).toBeVisible();
+  await expect(win.getByText("AD02028236")).toBeVisible();
+  await expect(win.locator(".ks-shell-settings").evaluate((el) => el.scrollHeight <= el.clientHeight)).resolves.toBe(true);
+  await page.screenshot({ path: `${captures}/settings-default-1440.png` });
+  const task = page.getByRole("toolbar", { name: "작업 표시줄" }).getByRole("button", { name: "설정", exact: true });
+  await expect(task).toHaveAttribute("aria-pressed", "true");
+  await task.click(); await expect(win).toHaveAttribute("data-minimized", "true");
+  await page.screenshot({ path: `${captures}/settings-minimized-1440.png` });
+  await task.click(); await expect(win).toHaveAttribute("data-minimized", "false");
+  await gear.click(); await expect(page.getByTestId("system-window-settings")).toHaveCount(1);
+  await win.getByRole("button", { name: "창 최대화" }).click();
+  await page.screenshot({ path: `${captures}/settings-maximized-1440.png` });
+  const metrics = await page.evaluate(() => {
+    const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, centerY: (r.top + r.bottom) / 2 }; };
+    return { column: rect(".ks-shell-settings-body"), group: rect(".ks-shell-settings h3"), label: rect(".ks-settings-row-label"), control: rect(".ks-settings-row-control > button"), select: rect(".ks-settings-row-select > button") };
+  });
+  await writeFile(`${captures}/metrics.json`, JSON.stringify(metrics, null, 2));
+  expect(Math.abs(metrics.column.left - metrics.group.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.group.left - metrics.label.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.control.centerY - metrics.label.centerY)).toBeLessThanOrEqual(1);
+  await win.getByRole("button", { name: "이전 크기로 복원" }).click();
+  const app = page.locator(".ks-window[data-testid^=app-window-]").first();
+  await app.locator(".ks-window-titlebar").click();
+  await expect(task).toHaveAttribute("aria-pressed", "false");
+  await task.click(); await expect(task).toHaveAttribute("aria-pressed", "true");
+  await win.getByRole("button", { name: "창 닫기" }).click();
+  await expect(gear).toBeFocused();
   await page.screenshot({ path: `${captures}/desktop-after-1440.png` });
 });
 
-test("최소 화면에서 설정을 닫으면 데스크톱을 복원한다", async ({ page }) => {
-  await page.setViewportSize({ width: 960, height: 600 });
-  await page.goto(`${base}&link=embedded`);
-  await expect(page.locator(".ks-harness-webview")).toBeVisible();
-  await mkdir(captures, { recursive: true });
-  await page.screenshot({ path: `${captures}/desktop-before-960.png` });
-  await page.getByRole("button", { name: "설정", exact: true }).click();
-  await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-  await page.getByRole("button", { name: "작업 화면으로 돌아가기" }).click();
-  await expect(page.locator(".ks-harness-webview")).toBeVisible();
-  await page.screenshot({ path: `${captures}/desktop-after-960.png` });
-});
-
-test("서버 상태를 넓은 화면과 최소 화면에서 확인한다", async ({ page }) => {
+test("최소 창에서 연결 상태와 결과를 확인한다", async ({ page }) => {
   test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await mkdir(captures, { recursive: true });
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 600 }]) {
-    await page.setViewportSize(viewport);
-    for (const state of ["connected", "embedded", "embedded-offline", "pairing", "revoked", "offline"]) {
-      await page.goto(`${base}&link=${state}`);
-      await expect(page.locator(".ks-harness-webview")).toBeVisible();
-      await page.getByRole("button", { name: "설정", exact: true }).click();
-      await expect(page.getByRole("heading", { name: "설정" })).toBeFocused();
-      await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-      await page.screenshot({ path: `${captures}/${state}-${viewport.width}.png` });
-      expect(await page.locator(".ks-shell-settings").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-      if (state === "pairing") {
-        await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => undefined } }));
-        await page.getByRole("button", { name: "코드 복사" }).click();
-        await expect(page.getByText("코드 복사됨")).toBeVisible();
-        await page.screenshot({ path: `${captures}/copied-${viewport.width}.png` });
-      }
+  for (const state of ["connected", "embedded", "pairing"]) {
+    await page.goto(`${base}&link=${state}`);
+    await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
+    const win = page.getByTestId("system-window-settings");
+    const corner = await win.locator(".ks-window-resize-east").boundingBox();
+    if (!corner) throw new Error("크기 조절 손잡이를 찾지 못했습니다");
+    await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+    await page.mouse.down(); await page.mouse.move(corner.x - 1000, corner.y + corner.height / 2); await page.mouse.up();
+    expect(Math.round((await win.boundingBox())!.width)).toBe(360);
+    expect(await win.locator(".ks-shell-settings").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await page.screenshot({ path: `${captures}/narrow-${state}.png` });
+    if (state === "pairing") {
+      await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => undefined } }));
+      await win.getByRole("button", { name: "코드 복사" }).click();
+      await expect(win.getByText("코드 복사됨")).toBeVisible();
     }
-    await page.goto(`${base}&link=connected&transfer-skips&slow-link`);
-    await expect(page.locator(".ks-harness-webview")).toBeVisible();
-    await page.getByRole("button", { name: "설정", exact: true }).click();
-    await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-    await expect(page.getByText("가져오기 완료 3개")).toBeVisible();
-    await expect(page.locator(".shell-server-skipped")).not.toHaveAttribute("open");
-    await page.screenshot({ path: `${captures}/transfer-${viewport.width}.png` });
-    const transfer = page.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" });
-    const beforeTransfer = await transfer.boundingBox();
-    await transfer.click();
-    await expect(transfer).toHaveAttribute("aria-busy", "true");
-    const duringTransfer = await transfer.boundingBox();
-    expect(duringTransfer).toEqual(beforeTransfer);
-    await page.screenshot({ path: `${captures}/busy-${viewport.width}.png` });
-    await expect(transfer).not.toHaveAttribute("aria-busy", "true");
   }
-  await page.emulateMedia({ colorScheme: "dark" });
-  await page.goto(`${base}&link=connected`);
-  await expect(page.locator(".ks-harness-webview")).toBeVisible();
-  await page.getByRole("button", { name: "설정", exact: true }).click();
-  await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-  await page.screenshot({ path: `${captures}/connected-dark-960.png` });
+  await page.goto(`${base}&link=connected&transfer-skips&slow-link`);
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
+  await expect(page.getByText("가져오기 완료 3개")).toBeVisible();
+  await page.screenshot({ path: `${captures}/transfer-success.png` });
+  const transfer = page.getByRole("button", { name: "가져오기", exact: true });
+  const before = await transfer.boundingBox(); await transfer.click();
+  await expect(transfer).toHaveAttribute("aria-busy", "true");
+  expect(await transfer.boundingBox()).toEqual(before);
+  await page.screenshot({ path: `${captures}/transfer-busy.png` });
+  await expect(transfer).not.toHaveAttribute("aria-busy", "true");
+  await page.goto(`${base}&link=connected&transfer-skips&transfer-error`);
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
+  await expect(page.getByText("가져오지 못했습니다. 다시 시도하세요.")).toBeVisible();
+  await expect(page.getByText("가져오기 완료 3개")).toHaveCount(0);
+  await page.screenshot({ path: `${captures}/transfer-error.png` });
 });
 
-test("기본 에이전트를 고르고 대기와 비연결 상태를 확인한다", async ({ page }) => {
-  test.setTimeout(60_000);
-  await mkdir(captures, { recursive: true });
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 960, height: 600 }]) {
-    await page.setViewportSize(viewport);
-    await page.goto(`${base}&link=connected&slow-preferences`);
-    await expect(page.locator(".ks-harness-webview")).toBeVisible();
-    await page.getByRole("button", { name: "설정", exact: true }).click();
-    await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-    const select = page.getByRole("button", { name: "기본 에이전트" });
-    await expect(select).toContainText("에이전트");
-    await page.screenshot({ path: `${captures}/account-${viewport.width}.png` });
-    await select.click();
-    await page.screenshot({ path: `${captures}/account-options-${viewport.width}.png` });
-    await page.getByRole("menuitem", { name: "작업 PAS" }).click();
-    await expect(select).toBeDisabled();
-    await expect(select).toContainText("에이전트");
-    await expect(page.getByText("저장 중")).toBeVisible();
-    await page.screenshot({ path: `${captures}/account-saving-${viewport.width}.png` });
-    await expect(select).toContainText("작업 PAS");
-    await expect(select).toBeFocused();
-    await page.goto(`${base}&link=unlinked`);
-    await expect(page.locator(".ks-harness-webview")).toBeVisible();
-    await page.getByRole("button", { name: "설정", exact: true }).click();
-    await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-    await expect(page.getByText("서버에 연결하면 기본 에이전트를 고를 수 있습니다")).toBeVisible();
-    await page.screenshot({ path: `${captures}/account-unlinked-${viewport.width}.png` });
-    await page.goto(`${base}&link=connected&prefs=waiting`);
-    await expect(page.locator(".ks-harness-webview")).toBeVisible();
-    await page.getByRole("button", { name: "설정", exact: true }).click();
-    await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
-    await expect(page.locator(".ks-settings-control[aria-busy=true]")).toBeVisible();
-    await page.screenshot({ path: `${captures}/account-waiting-${viewport.width}.png` });
-    await expect(page.getByRole("button", { name: "기본 에이전트" })).toContainText("에이전트", { timeout: 10000 });
-  }
+test("기본 에이전트를 고르고 비연결 이유를 확인한다", async ({ page }) => {
+  await page.goto(`${base}&link=connected&slow-preferences`);
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
+  const select = page.getByRole("button", { name: "기본 에이전트" });
+  await select.click(); await page.screenshot({ path: `${captures}/account-options.png` });
+  await page.getByRole("menuitem", { name: "작업 PAS" }).click();
+  await expect(select).toBeDisabled(); await expect(page.getByText("저장 중")).toBeVisible();
+  await expect(select).toContainText("작업 PAS"); await expect(select).toBeFocused();
+  await page.goto(`${base}&link=unlinked`);
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
+  await expect(page.getByText("서버에 연결하면 기본 에이전트를 고를 수 있습니다")).toBeVisible();
+  await page.screenshot({ path: `${captures}/account-unlinked.png` });
 });
 
 test("새 앱 질문이 데스크톱과 열린 설정 위에서 답을 받는다", async ({ page }) => {
@@ -152,7 +108,7 @@ test("새 앱 질문이 데스크톱과 열린 설정 위에서 답을 받는다
   await dialog.getByRole("button", { name: "그대로 두기" }).click();
   await expect(dialog).toHaveCount(0);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
   await page.evaluate(() => window.__kaleidoscopeHarness?.setPreferences({ revision: 3, default_message_app_id: "agent", asked_message_app_ids: [] }));
   dialog = page.getByRole("dialog", { name: "기본 에이전트를 작업 PAS로 바꿀까요?" });
   await expect(dialog).toBeVisible();

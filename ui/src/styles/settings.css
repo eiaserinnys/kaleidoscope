@@ -7,7 +7,8 @@
 .ks-settings-custom { width: 100%; max-width: calc(var(--ks-window-min-width) * 2); }
 .ks-settings-custom .ks-data-stack { height: auto; }
 .ks-settings-custom .ks-field,
-.ks-settings-custom .ks-data-stack.is-row {
+.ks-settings-custom .ks-data-stack.is-row,
+.ks-settings-row {
   display: grid;
   width: 100%;
   grid-template-columns: minmax(0, 1fr) minmax(0, var(--ks-workspace-label-max-width));
@@ -15,6 +16,15 @@
   gap: var(--ks-space-2);
   min-height: var(--ks-control-height);
 }
+.ks-settings-row { align-items: start; margin-top: var(--ks-space-2); }
+.ks-settings-row-text, .ks-settings-row-control { min-width: 0; }
+.ks-settings-row-label { display: flex; min-height: var(--ks-control-height); align-items: center; gap: var(--ks-space-2); }
+.ks-settings-row-control { display: flex; min-height: var(--ks-control-height); justify-content: flex-end; align-items: flex-start; }
+.ks-settings-row-control > .ks-button { max-width: 100%; min-width: 0; }
+.ks-settings-row-select { width: 100%; min-width: 0; }
+.ks-settings-row-select > .ks-button { width: 100%; min-width: 0; justify-content: space-between; }
+.ks-settings-row .ks-settings-description { margin-top: 0; }
+.ks-settings-row-label .ks-status-text { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
 .ks-settings-custom .ks-field > :last-child,
 .ks-settings-custom .ks-data-stack.is-row > .ks-data-stack-item { min-width: 0; }
 .ks-settings-custom .ks-field > .ks-button,

@@ -193,6 +193,7 @@
   border-radius: var(--ks-radius-small);
   background: var(--ks-color-surface);
   color: var(--ks-color-text);
+  font-family: var(--ks-font-family);
   font-size: var(--ks-type-body);
   line-height: var(--ks-line-body);
   padding: 0 var(--ks-space-2);

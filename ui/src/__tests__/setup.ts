@@ -18,6 +18,8 @@ if (typeof ResizeObserver === "undefined") {
 
 if (typeof document !== "undefined") {
   document.documentElement.style.setProperty("--ks-control-height", "32px");
+  document.documentElement.style.setProperty("--ks-window-min-width", "360px");
+  document.documentElement.style.setProperty("--ks-window-min-height", "240px");
   const clientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
   const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
   const offsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight");

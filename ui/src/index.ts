@@ -84,3 +84,4 @@ export { IconTile, useIconGridColumns } from "./components/icon-tile";
 export { useAnchoredOverlay } from "./components/anchored-overlay";
 export { GroupHeading } from "./blocks/data-view-common";
 export { focusRescued } from "./components/focus-rescue";
+export { SettingsRow } from "./components/settings-row";
