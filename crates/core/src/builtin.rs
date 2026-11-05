@@ -109,6 +109,15 @@ const FILES: &[(&str, &[u8])] = &[
     ("icons/calculator.svg", include_bytes!("../../../apps/assets/icons/calculator.svg")),
     ("icons/weather.svg", include_bytes!("../../../apps/assets/icons/weather.svg")),
     ("icons/store.svg", include_bytes!("../../../apps/assets/icons/store.svg")),
+    ("icons/profiler-v2.svg", include_bytes!("../../../apps/assets/icons/profiler-v2.svg")),
+    ("icons/agent-v2.svg", include_bytes!("../../../apps/assets/icons/agent-v2.svg")),
+    ("icons/explorer-v2.svg", include_bytes!("../../../apps/assets/icons/explorer-v2.svg")),
+    ("icons/md-editor-v2.svg", include_bytes!("../../../apps/assets/icons/md-editor-v2.svg")),
+    ("icons/html-report-v2.svg", include_bytes!("../../../apps/assets/icons/html-report-v2.svg")),
+    ("icons/web-browser-v2.svg", include_bytes!("../../../apps/assets/icons/web-browser-v2.svg")),
+    ("icons/calculator-v2.svg", include_bytes!("../../../apps/assets/icons/calculator-v2.svg")),
+    ("icons/weather-v2.svg", include_bytes!("../../../apps/assets/icons/weather-v2.svg")),
+    ("icons/store-v2.svg", include_bytes!("../../../apps/assets/icons/store-v2.svg")),
     (
         "agent/client-v1.js",
         include_bytes!("../../../apps/assets/agent/client-v1.js"),
@@ -205,7 +214,7 @@ mod tests {
             let definition = &app.version.definition;
             let icon = definition.icon.as_ref().expect("기본 앱 아이콘");
             assert_eq!(icon.asset, format!("builtin-icon-{}", identity.id));
-            assert_eq!(icon.version, 1);
+            assert_eq!(icon.version, 2);
             let spec = specs.iter().find(|spec| spec.app_id == identity.id);
             if definition.storage.is_some() || definition.worker.is_some() {
                 let spec = spec.expect("실행 선언");

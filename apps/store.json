@@ -3,8 +3,8 @@
   "name": "앱스토어",
   "description": "스토어의 앱을 찾아 설치하고, 설치한 앱을 업데이트하거나 지웁니다",
   "requires": { "blocks": 37, "modules": { "store": 1, "storage": 2, "assets": 1 } },
-  "icon": { "asset": "builtin-icon-store", "version": 1 },
-  "assets": [{ "id": "builtin-icon-store", "version": 1 }],
+  "icon": { "asset": "builtin-icon-store", "version": 2 },
+  "assets": [{ "id": "builtin-icon-store", "version": 2 }],
   "permissions": [{ "module": "store", "id": "catalog", "label": "앱 설치" }],
   "storage": {
     "entries": [

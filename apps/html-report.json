@@ -1,9 +1,9 @@
 {
   "id": "html-report",
   "name": "시안과 리포트",
-  "icon": { "asset": "builtin-icon-html-report", "version": 1 },
+  "icon": { "asset": "builtin-icon-html-report", "version": 2 },
   "description": "앱 저장소의 HTML 시안과 리포트를 리비전별로 보고 선택 영역에 코멘트를 남긴다",
-  "assets": [{ "id": "builtin-icon-html-report", "version": 1 }],
+  "assets": [{ "id": "builtin-icon-html-report", "version": 2 }],
   "requires": { "blocks": 26, "modules": { "assets": 1, "storage": 3 } },
   "permissions": [],
   "storage": {
