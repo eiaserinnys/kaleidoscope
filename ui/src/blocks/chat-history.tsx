@@ -33,6 +33,8 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef(0);
+  const previousState = useRef(state);
+  const previousItems = useRef(items);
   const respondingKey = useId();
   const responding = busy || pending !== null || Boolean(delta);
 
@@ -40,6 +42,18 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
     markResponding(respondingKey, responding);
     return () => markResponding(respondingKey, false);
   }, [respondingKey, responding]);
+
+  useLayoutEffect(() => {
+    if (previousState.current === null && state !== null) followTail.current = true;
+    previousState.current = state;
+    const lastItem = previousItems.current.at(-1);
+    if (lastItem && !items.some((item) => item.id === lastItem.id)) {
+      followTail.current = true;
+      const history = contentRef.current?.parentElement;
+      if (history) history.scrollTop = history.scrollHeight;
+    }
+    previousItems.current = items;
+  }, [state, items, followTail]);
 
   useLayoutEffect(() => {
     const content = contentRef.current;
