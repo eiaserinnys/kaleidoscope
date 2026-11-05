@@ -34,6 +34,10 @@
 .ks-data-toolbar .ks-data-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; padding-inline: var(--ks-space-3); }
+/* 바닥 여백은 구역이 소유해 자식 스크롤 밖에 남긴다. 탭 안은 탭 패널이 맡는다. */
+:is(.ks-split-pane, .ks-data-window-body) > .ks-data-section:not(.ks-data-tab-panel *) { padding-block-end: var(--ks-space-3); }
+/* 쌓인 중간 칸은 기존 칸 사이 간격만 사용한다. */
+.ks-split.is-stacked > .ks-split-pane:not(:last-child) > .ks-data-section { padding-block-end: 0; }
 :is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) { display: flex; height: 100%; flex-direction: column; }
 :is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) > .ks-data-section-child { flex: 1 1 auto; min-height: 0; overflow: auto; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) :is(

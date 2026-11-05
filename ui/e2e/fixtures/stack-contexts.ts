@@ -5,6 +5,10 @@ const contexts = ["section", "tab", "pane"] as const;
 const fills = ["number", "list"] as const;
 
 export default [
+  {
+    id: "root-section-list", name: "창 직속 구역", requires: { blocks: 37, modules: {} }, permissions: [], state: {},
+    ui: { type: "section", title: "목록", child: { type: "stack", direction: "column", fill: [0], children: [{ type: "list", items }] } },
+  },
   ...[false, true].map(tail => ({
     id: `stacked-grid-detail-${Number(tail)}`, name: "격자 상세", requires: { blocks: 37, modules: { files: 1 } }, permissions: [{ id: "media", module: "files", access: "read", label: "그림" }], state: {},
     ui: { type: "split", direction: "row", column_below: 1200, sizes: [60, 40], children: [
