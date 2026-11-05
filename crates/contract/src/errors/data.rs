@@ -1,4 +1,21 @@
 error_catalog! { ENTRIES;
+    DATA_CLIENT_HTTP_REQUEST_WINDOW_NOT_FOUND() { class: NotFound, place: "HTTP 요청 창 확인", cause: "요청할 창이 없다", message: "HTTP 요청을 보낼 창이 없습니다. 앱을 다시 여세요.", fix: "앱을 다시 여세요" }
+    DATA_CLIENT_HTTP_REQUEST_APP_NOT_FOUND(app) { class: NotFound, place: "HTTP 요청 앱 확인", cause: "앱 정의가 없다", message: "앱 {app}의 정의가 없어 HTTP 요청을 보낼 수 없습니다. 앱을 다시 가져오세요.", fix: "앱을 다시 가져오세요" }
+    DATA_CLIENT_HTTP_REQUEST_CLIENT_PERMISSION_DENIED(permission) { class: PermissionDenied, place: "HTTP 요청 클라이언트 권한 확인", cause: "클라이언트에 권한이 없다", message: "HTTP 권한 {permission}이 client.http_permissions에 없습니다. 앱 정의에 이 권한을 추가하세요.", fix: "client.http_permissions에 권한을 추가하세요" }
+    DATA_CLIENT_HTTP_REQUEST_PERMISSION_INVALID(permission) { class: PermissionDenied, place: "HTTP 요청 권한 종류 확인", cause: "HTTP 권한이 아니다", message: "권한 {permission}은 HTTP 권한이 아닙니다. 앱 정의의 permissions를 확인하세요.", fix: "앱 정의의 permissions를 확인하세요" }
+    DATA_CLIENT_HTTP_REQUEST_MODULE_VERSION(permission) { class: PermissionDenied, place: "HTTP 요청 모듈 판 확인", cause: "http 모듈이 3판보다 낮다", message: "HTTP 권한 {permission}으로 요청하려면 requires.modules.http를 3으로 올리세요.", fix: "requires.modules.http를 3으로 올리세요" }
+    DATA_CLIENT_HTTP_REQUEST_WRITE_DENIED(permission) { class: PermissionDenied, place: "HTTP 요청 쓰기 권한 확인", cause: "읽기 전용 권한으로 쓰기를 요청했다", message: "HTTP 권한 {permission}으로 쓰려면 권한에 \"access\": \"readwrite\"를 두세요.", fix: "앱 정의의 권한에 access: readwrite를 두세요" }
+    DATA_CLIENT_HTTP_REQUEST_GET_BODY() { class: InvalidRequest, place: "HTTP GET 본문 확인", cause: "GET 요청에 본문이 있다", message: "HTTP GET 요청에는 본문을 넣을 수 없습니다. 앱 코드에서 body를 빼세요.", fix: "앱 코드에서 body를 빼세요" }
+    DATA_CLIENT_HTTP_REQUEST_HEADERS_TOO_MANY() { class: InvalidRequest, place: "HTTP 요청 헤더 수 확인", cause: "헤더가 32개를 넘는다", message: "HTTP 요청 헤더는 32개까지 보낼 수 있습니다. 앱 코드의 headers를 줄이세요.", fix: "앱 코드의 headers를 줄이세요" }
+    DATA_CLIENT_HTTP_REQUEST_HEADER_NAME_INVALID(name) { class: InvalidRequest, place: "HTTP 요청 헤더 이름 확인", cause: "헤더 이름이 올바르지 않다", message: "HTTP 헤더 이름 {name}이 올바르지 않습니다. 앱 코드의 headers를 고치세요.", fix: "앱 코드의 headers를 고치세요" }
+    DATA_CLIENT_HTTP_REQUEST_HEADER_VALUE_INVALID(name) { class: InvalidRequest, place: "HTTP 요청 헤더 값 확인", cause: "헤더 값이 올바르지 않다", message: "HTTP 헤더 {name}의 값이 올바르지 않습니다. 앱 코드의 headers를 고치세요.", fix: "앱 코드의 headers를 고치세요" }
+    DATA_CLIENT_HTTP_REQUEST_HEADER_VALUE_TOO_LARGE(name) { class: InvalidRequest, place: "HTTP 요청 헤더 값 크기 확인", cause: "헤더 값이 8KiB를 넘는다", message: "HTTP 헤더 {name}의 값이 8KiB를 넘습니다. 앱 코드의 헤더 값을 줄이세요.", fix: "앱 코드의 헤더 값을 줄이세요" }
+    DATA_CLIENT_HTTP_REQUEST_HEADER_FORBIDDEN(name) { class: PermissionDenied, place: "HTTP 요청 금지 헤더 확인", cause: "인증 또는 전송 계층 헤더다", message: "HTTP 헤더 {name}은 앱에서 보낼 수 없습니다. 앱 코드의 headers에서 빼세요.", fix: "앱 코드의 headers에서 해당 헤더를 빼세요" }
+    DATA_CLIENT_HTTP_REQUEST_BODY_TOO_LARGE(limit) { class: InvalidRequest, place: "HTTP 요청 본문 크기 확인", cause: "요청 본문이 제한보다 크다", message: "HTTP 요청 본문은 {limit}까지 보낼 수 있습니다. 앱 코드에서 본문 크기를 줄이세요.", fix: "앱 코드에서 본문 크기를 줄이세요" }
+    DATA_CLIENT_HTTP_REQUEST_ADDRESS_INVALID(path) { class: PermissionDenied, place: "HTTP 요청 주소 확인", cause: "주소나 경로가 허용되지 않았다", message: "HTTP 경로 {path}는 허용되지 않습니다. 앱 정의의 공개 HTTPS 주소와 paths를 확인하세요.", fix: "앱 정의의 base_url과 paths를 확인하세요" }
+    DATA_CLIENT_HTTP_REQUEST_PRIVATE_ADDRESS(path) { class: PermissionDenied, place: "HTTP 요청 DNS 확인", cause: "DNS가 공개 주소가 아닌 값을 돌려줬다", message: "HTTP 경로 {path}의 서버가 공개 주소가 아닙니다. 앱 정의의 base_url을 확인하세요.", fix: "앱 정의의 base_url을 확인하세요" }
+    DATA_CLIENT_HTTP_REQUEST_TRANSPORT_FAILED(path) { class: Server, place: "HTTP 요청 전송", cause: "서버에 요청하거나 응답을 읽지 못했다", message: "HTTP 경로 {path}에 요청을 보내거나 응답을 읽지 못했습니다. 주소와 네트워크를 확인하세요.", fix: "주소와 네트워크를 확인하세요" }
+    DATA_CLIENT_HTTP_REQUEST_RESPONSE_TOO_LARGE(limit) { class: InvalidRequest, place: "HTTP 응답 크기 확인", cause: "응답이 제한보다 크다", message: "HTTP 응답이 {limit}를 넘습니다. 앱에서 더 작은 응답을 요청하세요.", fix: "앱에서 더 작은 응답을 요청하세요" }
     DATA_RUNTIME_MORE_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "다음 쪽을 받을 창 확인",

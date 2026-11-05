@@ -2,6 +2,27 @@ use kaleidoscope_contract::validate::parse_app_definition;
 use serde_json::json;
 
 #[test]
+fn http_write_permission_requires_version_three_and_call_stays_read_only() {
+    let permission = json!({"module":"http","id":"api","label":"API", "base_url":"https://example.com", "paths":["/v1/data"]});
+    let mut app = json!({"id":"http-test", "name":"HTTP 시험", "requires":{"blocks":4,"modules":{"http":2}},
+        "permissions":[permission], "ui":{"type":"button","label":"요청","on_click":[{"call":{"permission":"api","method":"GET","path":"/v1/data"}}]}});
+    let read = parse_app_definition(&app.to_string()).unwrap();
+    assert!(serde_json::to_value(read).unwrap()["permissions"][0].get("access").is_none());
+    app["permissions"][0]["access"] = json!("read");
+    let read = parse_app_definition(&app.to_string()).unwrap();
+    assert!(serde_json::to_value(read).unwrap()["permissions"][0].get("access").is_none());
+    app["permissions"][0]["access"] = json!("readwrite");
+    assert!(parse_app_definition(&app.to_string()).is_err());
+    app["requires"]["modules"]["http"] = json!(3);
+    let write = parse_app_definition(&app.to_string()).unwrap();
+    assert_eq!(serde_json::to_value(write).unwrap()["permissions"][0]["access"], "readwrite");
+    app["ui"]["on_click"][0]["call"]["method"] = json!("PUT");
+    let err = parse_app_definition(&app.to_string()).unwrap_err();
+    assert!(err.details.iter().any(|s| s.contains("공개 HTTPS 권한 api의 부르기 동작은 GET만 됩니다")), "{err:?}");
+    assert!(!err.details.iter().any(|s| s.contains("readwrite여야")), "{err:?}");
+}
+
+#[test]
 fn public_http_paths_match_exact_values_or_safe_trailing_prefixes() {
     use kaleidoscope_contract::validate::allowed_public_http_path;
     let paths = vec![

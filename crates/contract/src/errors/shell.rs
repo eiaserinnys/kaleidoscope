@@ -1,4 +1,6 @@
 error_catalog! { ENTRIES;
+    SHELL_CLIENT_HTTP_REQUEST_TRANSPORT_UNAVAILABLE() { class: Io, place: "앱 HTTP 요청 전송", cause: "이진 요청 전송 기능이 없다", message: "이 쉘에서는 앱 HTTP 요청을 보낼 수 없습니다. 쉘을 업데이트하세요.", fix: "쉘을 업데이트하세요" }
+    SHELL_CLIENT_HTTP_REQUEST_INPUT_INVALID() { class: InvalidRequest, place: "앱 HTTP 요청 입력 확인", cause: "요청 값의 형식이 올바르지 않다", message: "HTTP 요청 값의 형식이 올바르지 않습니다. 앱 코드의 permission, method, path, query, headers와 body를 확인하세요.", fix: "앱 코드의 HTTP 요청 값을 고치세요" }
     SHELL_BLOCK_RENDER_FAILED(block, reason) { class: InvalidRequest, place: "블록 화면 그리기", cause: "블록을 그리는 중 예외가 발생했다", message: "{block} 블록을 그리지 못했습니다. 앱 정의에서 이 블록의 값과 필드를 확인하세요. 원인: {reason}", fix: "앱 정의에서 이 블록의 값과 필드를 확인하세요" }
     SHELL_MESSAGE_SEND_SOURCE_MISSING() { class: NotFound, place: "메시지 보낸 창 찾기", cause: "보낸 창이 사라졌다", message: "보내던 창이 닫혀 메시지를 보낼 수 없습니다. 문서를 다시 열어 보내세요.", fix: "송신 창을 다시 여세요" }
     SHELL_MESSAGE_SEND_NO_RECEIVER() { class: NotFound, place: "메시지 받을 앱 찾기", cause: "메시지를 받을 수 있는 앱이 없다", message: "메시지를 받을 수 있는 앱이 없습니다. 수신 가능한 앱을 설치한 뒤 다시 보내세요.", fix: "수신 가능한 앱을 설치하세요" }

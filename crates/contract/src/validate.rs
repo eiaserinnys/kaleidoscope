@@ -875,9 +875,12 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
             }
         }
         if let PermissionDecl::Http {
-            base_url, paths, ..
+            base_url, paths, access, ..
         } = permission
         {
+            if *access == FileAccess::Readwrite {
+                validate_module_version("http", 3, definition, &mut details, &format!("권한 {}", permission.id()));
+            }
             if !valid_https_origin(base_url) {
                 details.push(format!(
                     "권한 {}의 주소는 공개 HTTPS origin이어야 합니다",
@@ -2257,7 +2260,9 @@ fn validate_actions(
                             details,
                             &at,
                         );
-                        if call.method != data::HttpMethod::Get
+                        if module == "http" && call.method != data::HttpMethod::Get {
+                            details.push(format!("{at}: 공개 HTTPS 권한 {}의 부르기 동작은 GET만 됩니다. 쓰기는 client의 http.request로 하세요", call.permission));
+                        } else if call.method != data::HttpMethod::Get
                             && find_permission(definition, &call.permission).is_some_and(
                                 |permission| permission.access() != FileAccess::Readwrite,
                             )

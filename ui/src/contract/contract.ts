@@ -443,7 +443,7 @@ export type ClientBridgeReply = { "type": "ks-client-reply", requestId: string, 
 /**
  * 격리 클라이언트와 호스트 사이의 요청.
  */
-export type ClientBridgeRequest = { "type": "ks-client-instructions", requestId: string, kind: string, } | { "type": "ks-client-context-prepare", requestId: string, channel: string, attachments: ContextAttachments, request_id: string, } | { "type": "ks-client-context-commit", requestId: string, ticket: string, } | { "type": "ks-client-http-read", requestId: string, permission: string, path: string, query: { [key in string]: JsonValue }, } | { "type": "ks-client-blob-put", requestId: string, key: string, fileId?: string, bytes?: ArrayBuffer, } | { "type": "ks-client-blob-open", requestId: string, key: string, } | { "type": "ks-client-blob-remove", requestId: string, key: string, } | { "type": "ks-client-blob-list", requestId: string, prefix: string, } | { "type": "ks-client-save-prompt", requestId: string, suggested_name: string, mime: string, } | { "type": "ks-client-can-share", requestId: string, file_id: string, } | { "type": "ks-client-share", requestId: string, file_id: string, title: string, } | { "type": "ks-client-keep-awake", requestId: string, enabled: boolean, };
+export type ClientBridgeRequest = { "type": "ks-client-instructions", requestId: string, kind: string, } | { "type": "ks-client-context-prepare", requestId: string, channel: string, attachments: ContextAttachments, request_id: string, } | { "type": "ks-client-context-commit", requestId: string, ticket: string, } | { "type": "ks-client-http-read", requestId: string, permission: string, path: string, query: { [key in string]: JsonValue }, } | { "type": "ks-client-http-request", requestId: string, permission: string, method: HttpMethod, path: string, query: { [key in string]: JsonValue }, headers: { [key in string]: string }, body?: ArrayBuffer, } | { "type": "ks-client-blob-put", requestId: string, key: string, fileId?: string, bytes?: ArrayBuffer, } | { "type": "ks-client-blob-open", requestId: string, key: string, } | { "type": "ks-client-blob-remove", requestId: string, key: string, } | { "type": "ks-client-blob-list", requestId: string, prefix: string, } | { "type": "ks-client-save-prompt", requestId: string, suggested_name: string, mime: string, } | { "type": "ks-client-can-share", requestId: string, file_id: string, } | { "type": "ks-client-share", requestId: string, file_id: string, title: string, } | { "type": "ks-client-keep-awake", requestId: string, enabled: boolean, };
 
 export type ClientCapability = "share" | "keep_awake" | "instructions" | "context_capture" | "receive_message";
 
@@ -1075,7 +1075,11 @@ connection: string, access: FileAccess,
 /**
  * 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
  */
-label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, } | { "module": "process", id: string, label: string, 
+label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, 
+/**
+ * (모듈 http 3판) `readwrite`면 client의 `http.request`가 GET 밖의 메서드도 쓴다. 동작 `call`과 `request` 원천은 이 값과 무관하게 GET만 한다.
+ */
+access?: FileAccess, } | { "module": "process", id: string, label: string, 
 /**
  * (모듈 process 2판) 이 권한으로 실행할 프로그램. 선언하면 이 기기에서 허용을 (앱, 권한, 프로그램, 환경 변수)마다 한 번 받고 인자는 앱이 실행마다 정한다. 실행 명세의 command는 이 값과 정확히 같아야 한다. 없으면 실행 명세(이름, 프로그램, 인자, 환경 변수)마다 허용을 묻는다(1판의 뜻).
  */

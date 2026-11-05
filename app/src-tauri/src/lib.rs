@@ -237,6 +237,7 @@ async fn core_bytes(
             )
             .map(|()| Vec::new()),
         "client.http_read"
+        | "client.http_request"
         | "client.blob_put"
         | "process.write"
         | "connection.realtime.read"

@@ -75,6 +75,23 @@ it("HTTP와 기기 보관 요청은 바이트를 전송 목록에 담는다", ()
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
 
+it("HTTP 요청은 문자열 본문을 UTF-8 바이트로 전송하고 응답을 돌려준다", async () => {
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  const pending = (window as any).kaleidoscope.http.request({ permission: "net", method: "PUT", path: "/item", headers: { "if-match": "abc" }, body: "한글" });
+  const request = post.mock.calls.map(([value]) => value).find((value) => value.type === "ks-client-http-request");
+  expect(new TextDecoder().decode(request.body)).toBe("한글");
+  expect(request).toMatchObject({ permission: "net", method: "PUT", path: "/item", headers: { "if-match": "abc" }, query: {} });
+  const bytes = new Uint8Array([1, 2]).buffer;
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-client-reply", token: "시험", requestId: request.requestId, result: { status: 412, headers: { etag: "abc" }, bytes, mime: "text/plain" } } }));
+  await expect(pending).resolves.toEqual({ status: 412, headers: { etag: "abc" }, bytes, mime: "text/plain" });
+  vi.restoreAllMocks();
+});
+
 it("host 기능과 저장 대화상자는 capability와 선언 액션 안에서 프레임 요청으로 전달된다", async () => {
   vi.useFakeTimers();
   const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["share", "keep_awake"], actions: ["save-and-share"] });

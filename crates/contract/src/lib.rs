@@ -348,6 +348,7 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 ///   창 범위 기기 저장소와 프로그램 파일 주소.
 /// - `process` 1판: 로컬 프로그램 실행, 명세마다 허용.
 /// - `process` 2판: 1판 + 권한의 `command`, 프로그램마다 한 번 허용.
+/// - `http` 3판: 권한의 `access: readwrite`, client `http.request`(헤더, 쓰기 메서드, 응답 상태와 헤더).
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 3),
     ("agent", 3),
@@ -355,7 +356,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("connection", realtime::REALTIME_CONNECTION_VERSION),
     ("storage", 3),
     ("assets", 1),
-    ("http", 2),
+    ("http", 3),
     ("worker", 1),
     ("profiler", 1),
     ("client", RECEIVE_MESSAGE_CLIENT_VERSION),
@@ -1166,6 +1167,10 @@ pub enum PermissionDecl {
         label: String,
         base_url: String,
         paths: Vec<String>,
+        /// (모듈 http 3판) `readwrite`면 client의 `http.request`가 GET 밖의 메서드도 쓴다. 동작 `call`과 `request` 원천은 이 값과 무관하게 GET만 한다.
+        #[serde(default, skip_serializing_if = "FileAccess::is_read")]
+        #[ts(optional, as = "Option<FileAccess>")]
+        access: FileAccess,
     },
     /// 이 기기에서 사용자가 허용한 프로그램을 실행한다.
     Process {
@@ -1266,23 +1271,28 @@ impl PermissionDecl {
 
     pub fn access(&self) -> FileAccess {
         match self {
-            PermissionDecl::Files { access, .. } | PermissionDecl::Connection { access, .. } => {
+            PermissionDecl::Files { access, .. } | PermissionDecl::Connection { access, .. } | PermissionDecl::Http { access, .. } => {
                 *access
             }
-            PermissionDecl::Process { .. } | PermissionDecl::Http { .. } => FileAccess::Read,
+            PermissionDecl::Process { .. } => FileAccess::Read,
             PermissionDecl::Profiler { .. } | PermissionDecl::Store { .. } => FileAccess::Readwrite,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[ts(export, export_to = "contract.ts")]
 pub enum FileAccess {
     /// 목록과 읽기.
+    #[default]
     Read,
     /// 목록, 읽기, 쓰기.
     Readwrite,
+}
+
+impl FileAccess {
+    fn is_read(&self) -> bool { *self == Self::Read }
 }
 
 fn default_tabs_header() -> bool {

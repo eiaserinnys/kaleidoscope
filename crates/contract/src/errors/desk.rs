@@ -1,4 +1,7 @@
 error_catalog! { ENTRIES;
+    DESK_CLIENT_HTTP_REQUEST_HEADER_MISSING() { class: InvalidRequest, place: "HTTP 이진 요청 머리 읽기", cause: "메타 길이가 없다", message: "HTTP 요청의 메타 길이가 없습니다. 앱의 HTTP 요청 코드를 확인하세요.", fix: "앱의 HTTP 요청 코드를 확인하세요" }
+    DESK_CLIENT_HTTP_REQUEST_META_TRUNCATED() { class: InvalidRequest, place: "HTTP 이진 요청 메타 읽기", cause: "메타 데이터가 잘렸다", message: "HTTP 요청의 메타 데이터가 잘렸습니다. 앱의 HTTP 요청 코드를 확인하세요.", fix: "앱의 HTTP 요청 코드를 확인하세요" }
+    DESK_CLIENT_HTTP_REQUEST_META_INVALID() { class: InvalidRequest, place: "HTTP 이진 요청 메타 해석", cause: "메타 형식이 올바르지 않다", message: "HTTP 요청의 메타 형식이 올바르지 않습니다. 앱의 HTTP 요청 코드를 확인하세요.", fix: "앱의 HTTP 요청 코드를 확인하세요" }
     DESK_LEGACY_AGENT_DATA_DIRECTORY_REMOVE_FAILED(reason) {
         class: Io,
         place: "이전 에이전트 기록 삭제",

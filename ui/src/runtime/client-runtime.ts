@@ -566,6 +566,23 @@ export class ClientRuntime {
         this.reply(message.requestId, { bytes, mime }, undefined, [bytes]);
       };
       void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+    } else if (message.type === "ks-client-http-request") {
+      const task = async () => {
+        const object = (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof ArrayBuffer);
+        if (typeof message.permission !== "string" || typeof message.method !== "string" || typeof message.path !== "string" || !object(message.query) || !object(message.headers) || (message.body != null && !(message.body instanceof ArrayBuffer)) || Object.values(message.headers ?? {}).some((v) => typeof v !== "string")) throw shellErrors.SHELL_CLIENT_HTTP_REQUEST_INPUT_INVALID();
+        if (!this.store.bytes) throw shellErrors.SHELL_CLIENT_HTTP_REQUEST_TRANSPORT_UNAVAILABLE();
+        const metadata = new TextEncoder().encode(JSON.stringify({ permission: message.permission, method: message.method, path: message.path, query: message.query, headers: message.headers }));
+        const content = message.body ? new Uint8Array(message.body) : new Uint8Array();
+        const packet = new Uint8Array(4 + metadata.length + content.length);
+        new DataView(packet.buffer).setUint32(0, metadata.length);
+        packet.set(metadata, 4); packet.set(content, 4 + metadata.length);
+        const response = await this.store.bytes({ op: "client.http_request", window_id: this.data.windowId, handle: "" }, packet.buffer);
+        const size = new DataView(response).getUint32(0);
+        const result = JSON.parse(new TextDecoder().decode(response.slice(4, 4 + size)));
+        const bytes = response.slice(4 + size);
+        this.reply(message.requestId, { ...result, bytes }, undefined, [bytes]);
+      };
+      void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-put") {
       const task = async () => {
         if ((typeof message.fileId === "string") === (message.bytes instanceof ArrayBuffer)) throw shellErrors.SHELL_CLIENT_BLOB_INPUT_INVALID();
