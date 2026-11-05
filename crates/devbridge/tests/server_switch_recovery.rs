@@ -35,6 +35,7 @@ fn connected(core: &Core, mode: ServerMode) -> bool {
 }
 fn config(dir: &Path, info: &EmbeddedServer, remote: &str) -> CoreConfig {
     CoreConfig {
+        media_origin: None,
         data_dir: dir.into(),
         seed_definitions: vec![],
         server_url: remote.into(),

@@ -28,6 +28,7 @@ use crate::{Core, CoreConfig, CoreError, Host};
 mod client_blobs_tests;
 mod client_files_tests;
 mod client_http_request_tests;
+mod media_stream_tests;
 mod connection_snapshot_race_tests;
 mod file_write_tests;
 mod layout_sync_tests;
@@ -179,6 +180,7 @@ fn external_links_only_open_http_or_https() {
 fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) -> Core {
     Core::open(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: data_dir.to_path_buf(),
             seed_definitions: definitions,
@@ -227,6 +229,7 @@ fn link_start_reads_http_200_body_as_response_read_failure() {
     let temp = TempDir::new().unwrap();
     let core = Core::open(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().to_path_buf(),
             seed_definitions: vec![],
@@ -1018,6 +1021,7 @@ fn shared_view_baselines_survive_core_restart() {
     let open = || {
         Core::open(
             CoreConfig {
+                media_origin: None,
                 embedded_server: None,
                 data_dir: data_dir.clone(),
                 seed_definitions: vec![test_definition(MD_EDITOR)],
@@ -1460,6 +1464,7 @@ fn shared_image_falls_back_when_native_capture_is_unavailable() {
     });
     let core = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![test_definition(MD_EDITOR)],
@@ -1514,6 +1519,7 @@ fn occluded_share_uses_isolated_capture_once_even_when_minimized() {
     });
     let core = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![test_definition(MD_EDITOR)],
@@ -1600,6 +1606,7 @@ fn occluded_share_skips_native_capture_and_uses_view_image() {
     });
     let core = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![test_definition(MD_EDITOR)],
@@ -1671,6 +1678,7 @@ fn conversation_capture_respects_visual_baseline() {
     let client = registry_client();
     let core = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![test_definition(MD_EDITOR), test_definition(WEB_BROWSER)],
@@ -2360,6 +2368,7 @@ fn open_core_with_attachment_opener(
 ) -> Core {
     Core::open_with_client_and_opener(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: data_dir.to_path_buf(),
             seed_definitions: definitions,
@@ -3285,6 +3294,7 @@ fn link_start_rejects_empty_server_url_when_no_default_is_configured() {
     let client = registry_client();
     let core = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![],
@@ -3697,6 +3707,7 @@ fn saved_link_reconnects_and_unauthorized_stream_revokes_it() {
     let remote_workspaces = snapshot(&core).shared.workspaces;
     let restarted = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             data_dir: data_dir.clone(),
             seed_definitions: vec![],
             server_url: String::new(),

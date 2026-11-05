@@ -246,7 +246,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 36;
+pub const CONTRACT_VERSION: u32 = 37;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -4787,6 +4787,15 @@ pub enum CoreRequest {
         #[ts(optional)]
         max_px: Option<u32>,
     },
+    /// 재생할 미디어를 열고, 폴더 소리와 영상은 스트림 주소를 돌려준다.
+    #[serde(rename = "data.media.open")]
+    DataMediaOpen { window_id: String, media: data::MediaRef },
+    /// 이 창의 재생 정보를 놓는다. 이미 놓은 핸들은 성공으로 처리한다.
+    #[serde(rename = "data.media.close")]
+    DataMediaClose { window_id: String, handle: String },
+    /// 이 창의 재생 요청에서 마지막으로 발생한 오류를 읽는다.
+    #[serde(rename = "data.media.status")]
+    DataMediaStatus { window_id: String, handle: String },
     /// (모듈 `connection` 1판) 창의 `connection` 권한이 가리키는 기기 로그인(`oauth`) 연결에 로그인한다. 코어가 이
     /// 기기의 기본 브라우저로 로그인 쪽을 열고, 로그인을 마치거나 [`data::LOGIN_TIMEOUT_SECS`]가 지나면 응답한다.
     /// 마치면 그 연결을 쓰는 모든 창의 `login_required` 원천을 다시 받는다. 사용자가 그만두거나 시간이 지나면
@@ -5643,6 +5652,12 @@ pub enum CoreReply {
     DataMore { started: bool },
     #[serde(rename = "data.media")]
     DataMedia { media: data::MediaData },
+    #[serde(rename = "data.media.open")]
+    DataMediaOpen { playback: data::MediaPlayback },
+    #[serde(rename = "data.media.close")]
+    DataMediaClose {},
+    #[serde(rename = "data.media.status")]
+    DataMediaStatus { error: Option<CoreError> },
     #[serde(rename = "connection.login")]
     ConnectionLogin {},
     #[serde(rename = "share.set")]

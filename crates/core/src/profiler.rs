@@ -512,6 +512,7 @@ fn benchmark(inner: &std::sync::Arc<crate::Inner>) -> Result<(), kaleidoscope_co
     let run = (|| {
         let core = crate::Core::open_with_client(
             crate::CoreConfig {
+                media_origin: None,
                 embedded_server: None,
                 data_dir: dir.clone(),
                 seed_definitions: vec![definition],

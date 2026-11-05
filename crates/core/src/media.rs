@@ -9,7 +9,7 @@ use std::time::{Instant, UNIX_EPOCH};
 use crate::{
     app_commands,
     connections::{self, RequestError},
-    files, Inner,
+    Inner,
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
@@ -21,6 +21,9 @@ use kaleidoscope_contract::{
 
 mod app_icon;
 pub(crate) use app_icon::get as app_icon;
+mod authorization;
+mod range;
+pub(crate) mod stream;
 mod transform;
 use transform::{as_data, dimensions, host_from_url, mime_for_path, shrink};
 
@@ -239,30 +242,7 @@ pub(crate) fn get(
             return get_asset(inner, &media.asset, version, max_px);
         }
     };
-    let module = {
-        let state = inner.state.lock().unwrap();
-        let window = state
-            .shared
-            .windows
-            .iter()
-            .find(|item| item.id == window_id)
-            .ok_or_else(|| {
-                errors::MEDIA_LOAD_WINDOW_NOT_FOUND()
-                    .and_details(vec![format!("window: {}", window_id)])
-            })?;
-        let definition =
-            app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
-                .ok_or_else(|| {
-                    errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND()
-                        .and_details(vec![format!("window: {}", window_id)])
-                })?;
-        definition
-            .permissions
-            .iter()
-            .find(|permission| permission.id() == media.permission)
-            .cloned()
-            .ok_or_else(|| errors::MEDIA_LOAD_PERMISSION_NOT_DECLARED(&media.permission))?
-    };
+    let module = authorization::permission(&inner.state.lock().unwrap(), window_id, &media.permission)?;
     if matches!(&module, PermissionDecl::Store { .. }) {
         let (server, key) = crate::store::media_key(media)?;
         let variant = format!("{key}|{:?}", max_px);
@@ -299,40 +279,19 @@ pub(crate) fn get(
     }
     let (key, source) = match module {
         PermissionDecl::Files { .. } => {
-            let state = inner.state.lock().unwrap();
-            let root = files::granted_root(&state, window, &media.permission, false)
-                .map_err(|error| file_root_error(&media.path, error))?;
-            let path = files::resolve_path(&inner.data_dir, &root, &media.path, false, false)
-                .map_err(|error| file_path_error(&media.path, error))?;
-            let metadata = fs::metadata(&path).map_err(|err| {
-                let error = if err.kind() == std::io::ErrorKind::NotFound {
-                    errors::MEDIA_LOAD_FILE_METADATA_NOT_FOUND(&media.path)
-                } else {
-                    errors::MEDIA_LOAD_FILE_METADATA_FAILED(&media.path)
-                };
-                error.and_details(vec![err.to_string()])
-            })?;
-            let modified = metadata
-                .modified()
-                .map_err(|err| {
-                    let error = if err.kind() == std::io::ErrorKind::NotFound {
-                        errors::MEDIA_LOAD_FILE_MODIFIED_TIME_NOT_FOUND(&media.path)
-                    } else {
-                        errors::MEDIA_LOAD_FILE_MODIFIED_TIME_FAILED(&media.path)
-                    };
-                    error.and_details(vec![err.to_string()])
-                })?
+            let file = authorization::file(inner, window, media)?;
+            let modified = authorization::modified(&file.metadata, &media.path)?
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos();
             (
                 format!(
                     "file:{}:{}:{}:{modified}",
-                    root.display(),
+                    file.root.display(),
                     media.path,
                     serde_json::to_string(&media.query).unwrap()
                 ),
-                Source::File(path),
+                Source::File(file.path),
             )
         }
         PermissionDecl::Connection { .. } => {

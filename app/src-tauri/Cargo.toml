@@ -10,7 +10,7 @@ name = "kaleidoscope_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-e2e = ["dep:reqwest", "dep:sha2", "dep:tokio-tungstenite"]
+e2e = ["dep:reqwest", "dep:sha2", "dep:tokio-tungstenite", "kaleidoscope-core/e2e"]
 
 [build-dependencies]
 tauri-build = "2"

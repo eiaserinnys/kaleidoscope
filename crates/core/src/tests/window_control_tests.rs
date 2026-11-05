@@ -20,6 +20,7 @@ fn fixture() -> (
     });
     let core = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().into(),
             seed_definitions: vec![test_definition(MD_EDITOR)],

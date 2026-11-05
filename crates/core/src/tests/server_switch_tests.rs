@@ -16,6 +16,7 @@ fn expired_or_missing_pairing_returns_to_embedded_without_restart() {
         client.pair_polls.lock().unwrap().push_back(poll);
         let core = Core::open_with_client(
             CoreConfig {
+                media_origin: None,
                 data_dir: temp.path().into(),
                 seed_definitions: vec![],
                 server_url: "https://remote.test".into(),
