@@ -655,6 +655,10 @@
   padding-block: var(--ks-space-4);
 }
 
+.ks-agent-chat-content:has(> .ks-data-state) {
+  height: 100%;
+}
+
 .ks-agent-chat-user {
   align-self: flex-end;
   max-width: 80%;
