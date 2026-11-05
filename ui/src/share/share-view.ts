@@ -12,6 +12,9 @@ import { ownedOverlays } from "./overlay-owner";
 
 const SHARE_ISOLATE_BUDGET_MS = 2_500;
 const RAF_TIMEOUT_MS = 100;
+// 격리를 푼 배치가 화면에 나갈 때까지 기다리는 프레임 수와 상한. 상한은 네이티브 덮개 자동 해제(5초)보다 짧다.
+const RESTORE_FRAMES = 3;
+const RESTORE_FRAME_LIMIT_MS = 1_000;
 
 interface ActiveShareView {
   element: HTMLElement;
@@ -47,6 +50,34 @@ async function twoFrames(): Promise<void> {
   await nextFrame();
 }
 
+/**
+ * 덮개를 걷기 전에 격리를 푼 배치가 실제로 그려지기를 기다린다.
+ * rAF 콜백 두 번은 그 프레임이 화면에 나갔다는 보장이 아니다. 늦게 돈 메인 프레임 바로 뒤에 다음 프레임이 붙어
+ * 두 번이 8ms 안에 끝난 실측이 있고, 그대로 덮개를 걷으면 격리 배치가 한두 프레임 보였다(카드 #1032).
+ * 프레임마다 시한을 두면 그리기가 느릴 때 프레임 없이 끝나므로 실제 프레임 세 번을 기다리고,
+ * 창이 최소화되어 프레임이 오지 않을 때만 전체 상한에서 넘어간다.
+ */
+function restoredFrames(): Promise<void> {
+  return new Promise((resolve) => {
+    let left = RESTORE_FRAMES;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(limit);
+      resolve();
+    };
+    const limit = setTimeout(finish, RESTORE_FRAME_LIMIT_MS);
+    const tick = () => {
+      if (finished) return;
+      left -= 1;
+      if (left <= 0) finish();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
 let prepareTail: Promise<void> = Promise.resolve();
 
 export function captureWindowForControl(store: ShellStore, windowId: string, requestId: string, rootElement?: HTMLElement): Promise<{ image_base64: string; geometry: WindowGeometry }> {
@@ -76,7 +107,7 @@ export function captureWindowForControl(store: ShellStore, windowId: string, req
       delete frame.dataset.shareTarget;
       for (const overlay of overlays) overlay.removeAttribute("data-share-target");
       delete root.dataset.shareIsolating;
-      try { await twoFrames(); } finally { await store.call({ op: "share.unfreeze" }); }
+      try { await restoredFrames(); } finally { await store.call({ op: "share.unfreeze" }); }
     }
   });
   prepareTail = run.then(() => undefined, () => undefined);
@@ -139,7 +170,7 @@ async function prepareOnce(store: ShellStore): Promise<void> {
       delete frame.dataset.shareTarget;
     }
     delete root.dataset.shareIsolating;
-    try { await twoFrames(); } catch { /* 프레임 대기 실패도 해제를 막지 않는다. */ }
+    try { await restoredFrames(); } catch { /* 프레임 대기 실패도 해제를 막지 않는다. */ }
     try {
       await store.call({ op: "share.unfreeze" });
     } catch {
