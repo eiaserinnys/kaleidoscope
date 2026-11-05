@@ -602,9 +602,12 @@ pub struct SharedState {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub preferences: Option<preferences::AccountPreferences>,
-    /// 앱별 커멘트 개수와 변경 순번. 본문은 명령 응답으로만 받는다.
+    /// 앱별 커멘트 개수와 변경 순번. None은 이 서버의 스냅샷을 아직 받지 못한 상태이며
+    /// 화면은 기능을 숨긴다. 옛 서버에서는 계속 None이고, Some(빈 맵)은 지원 서버에
+    /// 커멘트가 없음을 뜻한다. 서버를 바꾸면 preferences처럼 비우고 새 스냅샷을 기다린다.
     #[serde(default)]
-    pub app_comments: BTreeMap<String, app_comments::AppCommentAppMeta>,
+    #[ts(optional = nullable)]
+    pub app_comments: Option<BTreeMap<String, app_comments::AppCommentAppMeta>>,
 }
 
 /// 이 기기에만 두는 상태.
@@ -4332,7 +4335,11 @@ pub enum CoreRequest {
     #[serde(rename = "comment.image")]
     CommentImage { app_id: String, id: String },
     #[serde(rename = "comment.capture")]
-    CommentCapture { window_id: String, target_rect: app_comments::AppCommentRect },
+    CommentCapture {
+        window_id: String,
+        /// 창 본문(.ks-window-content)의 왼쪽 위를 기준으로 한 CSS 픽셀 대상 상자 또는 점.
+        target_rect: app_comments::AppCommentRect,
+    },
     /// 계정의 기본 메시지 수신 앱을 바꾼다. None은 기본 앱 묶음의 초기 수신 앱을 뜻한다.
     #[serde(rename = "shell.preferences.set_default")]
     ShellPreferencesSetDefault { app_id: Option<String> },
@@ -5462,7 +5469,10 @@ pub enum CoreReply {
     #[serde(rename = "comment.image")]
     CommentImage { image: app_comments::AppCommentImage },
     #[serde(rename = "comment.capture")]
-    CommentCapture { image: app_comments::AppCommentImage },
+    CommentCapture {
+        /// 이미지 메타의 target_rect는 그림 픽셀 좌표다.
+        image: app_comments::AppCommentImage,
+    },
     #[serde(rename = "shell.preferences.set_default")]
     ShellPreferencesSetDefault { preferences: preferences::AccountPreferences },
     #[serde(rename = "shell.preferences.answer")]

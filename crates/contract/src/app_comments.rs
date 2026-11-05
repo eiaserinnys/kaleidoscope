@@ -27,7 +27,8 @@ pub struct AppCommentPoint {
     pub y: f64,
 }
 
-/// 캡처 입력은 CSS 좌표, 저장된 그림의 대상 상자는 그림 픽셀 좌표다.
+/// 캡처 입력은 창 본문(.ks-window-content) 왼쪽 위 기준 CSS 픽셀 좌표이고,
+/// 출력과 저장된 그림의 대상 상자는 그림 픽셀 좌표다.
 /// 점은 너비와 높이가 0인 상자로 나타낸다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
@@ -133,6 +134,7 @@ pub struct AppCommentImageMeta {
     #[ts(type = "number")]
     pub byte_size: u64,
     pub capture_surface: AppCommentCaptureSurface,
+    /// 그림 왼쪽 위를 기준으로 한 그림 픽셀 좌표.
     pub target_rect: AppCommentRect,
 }
 

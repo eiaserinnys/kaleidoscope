@@ -75,7 +75,7 @@ fn events_and_commands_keep_small_metadata_and_images_out_of_lists() {
         "apps":[],"app_versions":[],"workspaces":[],"desktops":[],"windows":[]
     })).unwrap();
     let json: Value = serde_json::to_value(shared).unwrap();
-    assert_eq!(json["app_comments"], json!({}));
+    assert_eq!(json["app_comments"], Value::Null);
 }
 
 #[test]
@@ -155,4 +155,18 @@ fn anchor_schema_version_is_required() {
     request["request"]["anchor"]["schema_version"] = json!(APP_COMMENT_ANCHOR_SCHEMA_VERSION);
     assert!(serde_json::from_value::<CoreRequest>(request).is_ok());
 
+}
+
+#[test]
+fn app_comment_snapshot_distinguishes_not_received_from_empty() {
+    let base = json!({
+        "apps":[], "app_versions":[], "workspaces":[], "desktops":[], "windows":[]
+    });
+    let missing: SharedState = serde_json::from_value(base.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&missing).unwrap()["app_comments"], Value::Null);
+    let mut supported = base;
+    supported["app_comments"] = json!({});
+    let empty: SharedState = serde_json::from_value(supported).unwrap();
+    assert_eq!(serde_json::to_value(&empty).unwrap()["app_comments"], json!({}));
+    assert_ne!(missing, empty);
 }
