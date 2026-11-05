@@ -105,6 +105,39 @@ fn allow_pc_with_native_input(app: &AppHandle, log: &mut File) -> Result<(), Str
             + (bounds["y"].as_f64().ok_or("PC consent y missing")? * scale).round() as i32;
         let target = super::native_target::wait_shell_at(x, y)?;
         record(log, "ui.pc_access.target", target)?;
+        evaluate(
+            app,
+            &r#"
+            const point = CSS_POINT;
+            const root = document.querySelector('[data-testid="app-window-explorer"]');
+            const button = [...root.querySelectorAll('button')].find(b => b.textContent.trim() === '이 PC의 파일 읽기 허용');
+            const summary = element => element ? {
+                tagName: element.tagName,
+                text: element.textContent.trim().slice(0, 40),
+                testId: element.closest('[data-testid]')?.getAttribute('data-testid') ?? null,
+            } : null;
+            const snapshot = () => {
+                const rect = button.getBoundingClientRect();
+                const style = getComputedStyle(root);
+                return {
+                    hasFocus: document.hasFocus(), visibilityState: document.visibilityState,
+                    button: {rect: {left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom}, isConnected: button.isConnected},
+                    elementFromPoint: summary(document.elementFromPoint(point.x, point.y)),
+                    explorer: {opacity: style.opacity, transform: style.transform, pointerEvents: style.pointerEvents},
+                };
+            };
+            const trace = window.__ksE2ePc = {events: [], before: snapshot()};
+            const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+            const listener = event => trace.events.push({
+                type: event.type, isTrusted: event.isTrusted, x: event.clientX, y: event.clientY,
+                t: performance.now(), target: summary(event.target),
+            });
+            types.forEach(type => window.addEventListener(type, listener, true));
+            window.__ksE2ePcObserver = {snapshot, types, listener};
+            return true;
+            "#
+            .replace("CSS_POINT", &bounds.to_string()),
+        )?;
         super::share_isolate::native_input::click(x, y)
     }
     #[cfg(not(windows))]
@@ -309,12 +342,31 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
     wait_web_hidden(&browser_id, browser_place)?;
     let start = request_mark();
     allow_pc_with_native_input(app, log)?;
-    require_request(
+    let request_result = require_request(
         log,
         start,
         "UI PC access",
         |request| matches!(request, CoreRequest::FilesAllowPc { window_id, permission } if window_id == &explorer_id && permission == "pc"),
+    );
+    let trace = evaluate(
+        app,
+        r#"
+        const observer = window.__ksE2ePcObserver;
+        window.__ksE2ePc.after = observer.snapshot();
+        return window.__ksE2ePc;
+    "#,
     )?;
+    record(log, "ui.pc_access.trace", trace)?;
+    evaluate(
+        app,
+        r#"
+        const observer = window.__ksE2ePcObserver;
+        observer.types.forEach(type => window.removeEventListener(type, observer.listener, true));
+        delete window.__ksE2ePcObserver;
+        return true;
+    "#,
+    )?;
+    request_result?;
     wait_until("PC access", || {
         Ok(snapshot(core)?
             .device

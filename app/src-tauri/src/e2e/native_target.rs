@@ -7,14 +7,14 @@ use std::{
 use windows::{
     core::PWSTR,
     Win32::{
-        Foundation::{CloseHandle, HWND, POINT},
+        Foundation::{CloseHandle, HWND, POINT, RECT},
         System::Threading::{
             OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
             PROCESS_QUERY_LIMITED_INFORMATION,
         },
         UI::WindowsAndMessaging::{
-            GetAncestor, GetClassNameW, GetForegroundWindow, GetWindowTextW,
-            GetWindowThreadProcessId, WindowFromPoint, GA_ROOT,
+            GetAncestor, GetClassNameW, GetForegroundWindow, GetParent, GetWindowRect,
+            GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible, WindowFromPoint, GA_ROOT,
         },
     },
 };
@@ -24,23 +24,47 @@ pub(super) fn wait_shell_at(x: i32, y: i32) -> Result<Value, String> {
     let mut checks = 0;
     loop {
         checks += 1;
-        let root = unsafe { GetAncestor(WindowFromPoint(POINT { x, y }), GA_ROOT) };
+        let at_point = unsafe { WindowFromPoint(POINT { x, y }) };
+        let root = unsafe { GetAncestor(at_point, GA_ROOT) };
         let mut pid = 0;
         unsafe { GetWindowThreadProcessId(root, Some(&mut pid)) };
         if pid == std::process::id() {
             return Ok(json!({"x": x, "y": y, "checks": checks,
                 "elapsed_ms": started.elapsed().as_millis(),
                 "at_point": unsafe { describe(root) },
+                "chain": unsafe { window_chain(at_point, root) },
                 "foreground": unsafe { describe(GetForegroundWindow()) }}));
         }
         if started.elapsed() >= Duration::from_secs(5) {
             return Err(format!(
-                "native click target ({x},{y}) is covered by another window; the shell did not come to the front within 5 seconds; at_point: {}; foreground: {}",
-                unsafe { describe(root) }, unsafe { describe(GetForegroundWindow()) }
+                "native click target ({x},{y}) is covered by another window; the shell did not come to the front within 5 seconds; at_point: {}; chain: {}; foreground: {}",
+                unsafe { describe(root) }, json!(unsafe { window_chain(at_point, root) }), unsafe { describe(GetForegroundWindow()) }
             ));
         }
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+unsafe fn window_chain(mut hwnd: HWND, root: HWND) -> Vec<Value> {
+    let mut chain = Vec::new();
+    while !hwnd.is_invalid() {
+        let mut window = describe(hwnd);
+        let mut rect = RECT::default();
+        let rect = GetWindowRect(hwnd, &mut rect).ok().map(|()| {
+            json!({"left": rect.left, "top": rect.top, "right": rect.right, "bottom": rect.bottom})
+        });
+        window["visible"] = json!(IsWindowVisible(hwnd).as_bool());
+        window["rect"] = json!(rect);
+        chain.push(window);
+        if hwnd == root {
+            break;
+        }
+        hwnd = match GetParent(hwnd) {
+            Ok(parent) => parent,
+            Err(_) => break,
+        };
+    }
+    chain
 }
 
 pub(super) unsafe fn describe(hwnd: HWND) -> Value {
