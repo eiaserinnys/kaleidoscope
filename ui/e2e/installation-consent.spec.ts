@@ -20,7 +20,7 @@ test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
     for (const hidden of ["settings", "research-client", "archive-token", "threads", "입력:", "출력:", "창 상태:"]) await expect(dialog).not.toContainText(hidden);
     const details = dialog.locator("details").filter({ hasText: "자세히" });
     await expect(details).not.toHaveAttribute("open", "");
-    await expect(details.locator("pre")).toBeHidden();
+    await expect(details.locator(".ks-install-paths")).toBeHidden();
     const alignment = await dialog.evaluate((node) => {
       const title = node.querySelector(".ks-dialog-title")!.getBoundingClientRect();
       const body = node.querySelector(".ks-dialog-body")!.getBoundingClientRect();
@@ -42,9 +42,9 @@ test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
     await target.dblclick();
     expect(await page.evaluate(() => getSelection()?.toString())).toMatch(/archive|example|org/);
     await details.locator("summary").click();
-    await expect(details.locator("pre")).toBeVisible();
-    await expect(details.locator("pre")).toContainText("https://archive.example.org/articles");
-    expect(await details.locator("pre").evaluate((node) => getComputedStyle(node).userSelect)).toBe("text");
+    await expect(details.locator(".ks-install-paths")).toBeVisible();
+    await expect(details.locator(".ks-install-path").first()).toHaveText("/articles");
+    expect(await details.locator(".ks-install-path").first().evaluate((node) => getComputedStyle(node).userSelect)).toBe("text");
     await details.locator("summary").click();
     await dialog.getByText("코드 보기").click();
     await expect(dialog.getByText("def run(action, data):", { exact: false })).toBeVisible();
@@ -105,7 +105,7 @@ test("사이트와 상세 코드를 끌어 복사할 수 있다", async ({ page,
   expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
   expect(await copy(dialog.getByText("archive.example.org", { exact: true }))).toBe("archive.example.org");
   await dialog.getByText("자세히", { exact: true }).click();
-  expect(await copy(dialog.locator("details[open] pre"))).toBe("https://archive.example.org/articles\nhttps://archive.example.org/images\nhttps://archive.example.org/public/long-path-for-research-materials");
+  expect(await copy(dialog.locator("details[open] .ks-install-path").last())).toBe("/public/long-path-for-research-materials");
   await dialog.getByText("자세히", { exact: true }).click();
   await dialog.getByText("코드 보기", { exact: true }).click();
   expect(await copy(dialog.locator("details[open] pre"))).toBe("def run(action, data):\n    return {'status': 'ready'}");
@@ -138,4 +138,50 @@ test("긴 사이트 이름과 프로그램도 좁은 창에서 잘리지 않는�
   }
   await expect(dialog.getByText(command, { exact: true })).toBeVisible();
   await expect(dialog.getByText(host, { exact: true })).toBeVisible();
+});
+
+test("경고와 일반 권한의 내용이 한 선에 맞는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 780 });
+  await page.goto("/installation-consent.html?link=embedded");
+  await page.evaluate(async () => { await (window as any).installationHarness.ready; (window as any).installationHarness.show("heavy"); });
+  const positions = await page.getByRole("dialog").evaluate((node) => {
+    const groups = node.querySelectorAll(".ks-install-group");
+    const x = (element: Element | null) => element!.getBoundingClientRect().left;
+    return {
+      processText: x(groups[0].querySelector(".ks-install-sentence > span")),
+      processRow: x(groups[0].querySelector(".ks-install-rows li")),
+      processNote: x(groups[0].querySelector(".ks-install-content > .ks-install-meta")),
+      workerText: x(groups[1].querySelector(".ks-install-sentence > span")),
+      workerNote: x(groups[1].querySelector(".ks-install-content > .ks-install-meta")),
+      workerSummary: x(groups[1].querySelector("summary")),
+      normalRow: x(groups[2].querySelector(".ks-install-rows li")),
+    };
+  });
+  console.log("installation-alignment:", JSON.stringify(positions));
+  expect(Math.max(...Object.values(positions)) - Math.min(...Object.values(positions))).toBeLessThanOrEqual(1);
+});
+
+test("열두 경로를 펼쳐도 요약은 제자리에 있어 같은 곳을 눌러 접는다", async ({ page }) => {
+  for (const width of [1000, 360]) {
+    await page.setViewportSize({ width, height: 780 });
+    await page.goto("/installation-consent.html");
+    await page.evaluate(async () => {
+      await (window as any).installationHarness.ready;
+      (window as any).installationHarness.show("light", { permissions: [{ module: "http", id: "web", label: "자료", base_url: "https://example.org", paths: Array.from({ length: 12 }, (_, i) => `/자료/경로-${i}`) }] });
+    });
+    const dialog = page.getByRole("dialog");
+    const details = dialog.locator("details");
+    const summary = details.locator("summary");
+    const before = (await summary.boundingBox())!;
+    const point = { x: before.x + before.width / 2, y: before.y + before.height / 2 };
+    await page.mouse.click(point.x, point.y);
+    await expect(details).toHaveAttribute("open", "");
+    const after = (await summary.boundingBox())!;
+    console.log(`installation-summary-${width}:`, JSON.stringify({ before: before.y, after: after.y }));
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    await expect(details.locator(".ks-install-path")).toHaveCount(12);
+    await expect(details.locator(".ks-install-paths")).not.toContainText("https://");
+    await page.mouse.click(point.x, point.y);
+    await expect(details).not.toHaveAttribute("open", "");
+  }
 });

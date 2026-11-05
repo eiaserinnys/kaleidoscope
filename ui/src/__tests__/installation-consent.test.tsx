@@ -53,7 +53,7 @@ it("창 밖에 닿는 권한과 출처를 읽고 상세를 열 수 있다", asyn
   for (const value of ["prefs", "drafts", "api-key", "writer", "입력:", "출력:", "창 상태:", "https://store.example.org/apps"]) expect(dialog.textContent).not.toContain(value);
   const details = within(dialog).getByText("자세히").closest("details")!;
   expect(details.open).toBe(false);
-  expect(details.querySelector("pre")?.textContent).toBe("https://example.org/one\nhttps://example.org/two");
+  expect(Array.from(details.querySelectorAll(".ks-install-path"), (item) => item.textContent)).toEqual(["/one", "/two"]);
   expect(within(dialog).getByText("코드 보기").closest("details")?.querySelector("pre")?.textContent).toBe("print('hello')");
   expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "취소" }));
   store.dispose();

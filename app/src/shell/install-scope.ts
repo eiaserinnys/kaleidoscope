@@ -6,7 +6,17 @@ type ClientCapability = NonNullable<ClientDecl["capabilities"]>[number];
 type WorkerDecl = NonNullable<AppDefinition["worker"]>;
 
 export type ConsentRow = { target?: string; reason?: string };
-export type ConsentGroup = { tone: "warning" | "normal"; sentence: string; rows: ConsentRow[]; notes: string[]; details?: { label: string; text: string } };
+export type ConsentGroup = { tone: "warning" | "normal"; sentence: string; rows: ConsentRow[]; notes: string[]; details?: { label: "코드 보기"; code: string } | { label: "자세히"; hosts: Array<{ host: string; paths: string[] }> } };
+
+// 코어 crates/core/src/store/install.rs scope()와 같은 다섯 키.
+const scopeKeys: Record<Extract<keyof AppDefinition, "permissions" | "storage" | "client" | "worker" | "agent">, string> = {
+  permissions: "permissionKinds가 하나씩 문장으로 만든다",
+  storage: "계정과 앱마다 따로인 앱 자기 저장소라 다른 앱과 이 PC 파일에 닿지 않는다",
+  client: "격리 프레임에서 돌고 바깥 네트워크가 막혀 있다. clientFields와 capabilityKinds가 가른다",
+  worker: "worker 문장으로 보인다. workerFields가 가른다",
+  agent: "대화는 agent.permission이 가리키는 연결 권한으로만 나가고 그 연결은 connection 문장에 보인다",
+};
+void scopeKeys;
 
 const permissionKinds: { [M in PermissionDecl["module"]]: "shown" } = {
   files: "shown", connection: "shown", http: "shown", process: "shown", profiler: "shown", store: "shown",
@@ -48,12 +58,8 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
   const groups: Array<ConsentGroup | undefined> = [];
   const group = (index: number, sentence: string, tone: ConsentGroup["tone"] = "normal") =>
     groups[index] ??= { tone, sentence, rows: [], notes: [] };
-  const httpLabels = new Map<string, string[]>();
-  const httpPaths: string[] = [];
+  const httpHosts = new Map<string, { labels: string[]; paths: string[] }>();
 
-  // 코어 crates/core/src/store/install.rs scope()와 같은 다섯 키.
-  // storage: 계정과 앱마다 따로인 앱 자기 저장소라 다른 앱과 이 PC 파일에 닿지 않는다.
-  // agent: 대화는 agent.permission이 가리키는 연결 권한으로만 나가고 그 연결은 connection 문장에 보인다.
   for (const permission of definition.permissions) {
     if (!Object.hasOwn(permissionKinds, permission.module)) {
       const unknown = permission as unknown as { module: string; label: string };
@@ -63,8 +69,11 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
     switch (permission.module) {
       case "process": {
         const item = group(0, "이 PC에서 프로그램을 실행합니다", "warning");
-        item.rows.push(permission.command ? { target: permission.command, reason: permission.label } : { reason: `${permission.label}, 실행할 프로그램은 그때마다 묻습니다` });
-        item.notes = ["실행한 프로그램은 내 계정 권한으로 파일과 인터넷에 닿습니다"];
+        item.rows.push(permission.command ? { target: permission.command, reason: permission.label } : { reason: permission.label });
+        item.notes = [
+          ...(item.rows.some((row) => !row.target) ? ["실행할 프로그램은 그때마다 묻습니다"] : []),
+          "실행한 프로그램은 내 계정 권한으로 파일과 인터넷에 닿습니다",
+        ];
         break;
       }
       case "files": {
@@ -80,10 +89,10 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
       }
       case "http": {
         const host = new URL(permission.base_url).host;
-        const labels = httpLabels.get(host) ?? [];
-        if (!labels.includes(permission.label)) labels.push(permission.label);
-        httpLabels.set(host, labels);
-        httpPaths.push(...permission.paths.map((path) => `${permission.base_url.replace(/\/$/, "")}${path}`));
+        const item = httpHosts.get(host) ?? { labels: [], paths: [] };
+        if (!item.labels.includes(permission.label)) item.labels.push(permission.label);
+        for (const path of permission.paths) if (!item.paths.includes(path)) item.paths.push(path);
+        httpHosts.set(host, item);
         break;
       }
       case "store": group(9, "스토어에서 앱을 설치하고 지웁니다").rows.push({ reason: permission.label }); break;
@@ -91,10 +100,10 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
       default: { const exhaustive: never = permission; void exhaustive; }
     }
   }
-  if (httpLabels.size) {
+  if (httpHosts.size) {
     const item = group(7, "인터넷에서 자료를 받아옵니다");
-    item.rows = Array.from(httpLabels, ([target, labels]) => ({ target, reason: labels.join(", ") }));
-    item.details = { label: "자세히", text: httpPaths.join("\n") };
+    item.rows = Array.from(httpHosts, ([target, value]) => ({ target, reason: value.labels.join(", ") }));
+    item.details = { label: "자세히", hosts: Array.from(httpHosts, ([host, value]) => ({ host, paths: value.paths })) };
   }
   const worker = definition.worker;
   if (worker) {
@@ -104,7 +113,7 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
     if (worker.webhook) item.notes.push("바깥에서 주소로 불러 실행할 수 있습니다");
     if (worker.calls?.length) item.notes.push(`다른 앱의 서버 코드를 부릅니다: ${worker.calls.join(", ")}`);
     item.notes.push("실행한 코드는 그 컴퓨터의 파일과 인터넷에 닿습니다");
-    item.details = { label: "코드 보기", text: worker.code };
+    item.details = { label: "코드 보기", code: worker.code };
   }
   for (const capability of definition.client?.capabilities ?? []) {
     if (!Object.hasOwn(capabilityKinds, capability)) {

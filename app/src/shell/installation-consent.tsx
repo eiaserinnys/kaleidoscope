@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useLayoutEffect, useSyncExternalStore, type MouseEvent } from "react";
 import { Dialog, isWindowTop, TriangleAlert, useShellSelector, type ShellStore } from "@kaleidoscope/ui";
 import { describeInstallScope } from "./install-scope";
 
@@ -32,17 +32,23 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
     title="이 앱을 설치할까요?" ok="허용하고 설치" onCancel={cancel} onConfirm={confirm}
     body={<>
       <div><strong className="ks-consent-value">{request.app_name}</strong> · {request.release}판<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>
-      {groups.length === 0 ? <span>이 앱은 창 안에서만 동작합니다</span> : groups.map((group) => <section className="ks-install-group" key={group.sentence}>
-        <strong className={group.tone === "warning" ? "ks-install-warning" : undefined}>{group.tone === "warning" ? <TriangleAlert size="inline" /> : null}<span>{group.sentence}</span></strong>
-        {group.rows.length ? <ul className="ks-install-rows">{group.rows.map((row, index) => <li key={index}>
-          {row.target ? <span className="ks-consent-value">{row.target}</span> : null}{row.reason ? <span className="ks-install-meta">{row.reason}</span> : null}
-        </li>)}</ul> : null}
-        {group.notes.map((note) => <div className="ks-install-meta" key={note}>{note}</div>)}
-        {group.details ? <Details label={group.details.label}>{group.details.text}</Details> : null}
-      </section>)}
+      {groups.length === 0 ? <span>이 앱은 창 안에서만 동작합니다</span> : groups.map((group) => {
+        const details = group.details;
+        return <section className="ks-install-group" key={group.sentence}>
+        <strong className={`ks-install-sentence${group.tone === "warning" ? " is-warning" : ""}`}>{group.tone === "warning" ? <TriangleAlert size="inline" /> : null}<span>{group.sentence}</span></strong>
+        {group.rows.length || group.notes.length || group.details ? <div className="ks-install-content">
+          {group.rows.length ? <ul className="ks-install-rows">{group.rows.map((row, index) => <li key={index}>
+            {row.target ? <span className="ks-consent-value">{row.target}</span> : null}{row.reason ? <span className="ks-install-meta">{row.reason}</span> : null}
+          </li>)}</ul> : null}
+          {group.notes.map((note) => <div className="ks-install-meta" key={note}>{note}</div>)}
+          {details ? <details className="ks-install-details"><summary className="ks-install-meta">{details.label}</summary>
+            {details.label === "코드 보기" ? <pre className="ks-process-command">{details.code}</pre> : details.hosts.map(({ host, paths }) => <Fragment key={host}>
+              {details.hosts.length > 1 ? <div className="ks-consent-value">{host}</div> : null}
+              <ul className="ks-install-paths">{paths.map((path) => <li className="ks-consent-value ks-install-path" key={path}>{path.split("/").map((part, index) => index === 0 ? part : <Fragment key={index}>/<wbr />{part}</Fragment>)}</li>)}</ul>
+            </Fragment>)}
+          </details> : null}
+        </div> : null}
+        </section>;
+      })}
     </>} />;
-}
-
-function Details({ label, children }: { label: string; children: ReactNode }) {
-  return <details className="ks-install-details"><summary className="ks-install-meta">{label}</summary><pre className="ks-process-command">{children}</pre></details>;
 }
