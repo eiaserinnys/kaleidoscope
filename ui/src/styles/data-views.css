@@ -93,12 +93,12 @@
   :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-table-header { border-bottom-color: transparent; border-radius: var(--ks-radius-small); }
 }
 @container scroll-state(scrollable: left) {
-  .ks-table-grid .ks-grid-corner, .ks-grid-row-header { background: var(--ks-material-dialog); backdrop-filter: blur(var(--ks-blur-window)); }
+  .ks-table-grid .ks-grid-corner, .ks-grid-row-header { background: light-dark(var(--ks-material-dialog), var(--ks-material-window-body)); backdrop-filter: blur(var(--ks-blur-window)); }
 }
 /* 스크롤 상태 쿼리를 모르는 엔진은 머리에 항상 유리를 깐다. */
 @supports not (container-type: scroll-state) {
   .ks-table-header::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--ks-material-window-body); backdrop-filter: blur(var(--ks-blur-window)); }
-  .ks-table-grid .ks-grid-corner, .ks-grid-row-header { background: var(--ks-material-dialog); backdrop-filter: blur(var(--ks-blur-window)); }
+  .ks-table-grid .ks-grid-corner, .ks-grid-row-header { background: light-dark(var(--ks-material-dialog), var(--ks-material-window-body)); backdrop-filter: blur(var(--ks-blur-window)); }
 }
 .ks-table-header button { display: flex; align-items: center; gap: var(--ks-space-1); width: 100%; padding: var(--ks-space-1) var(--ks-space-2); border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: start; }
 .ks-table-header button.is-numeric { justify-content: flex-end; }
