@@ -24,7 +24,7 @@ export const ContentCell = memo(function ContentCell({ value, column }: { value:
     </span>;
   }
   const color = validColor(content?.color) ? content.color : undefined;
-  return <span className="ks-table-content" style={{ ...(color ? { backgroundColor: color, color: badgeForeground(color) } : {}), "--ks-table-lines": column.max_lines ?? 3 } as CSSProperties}>
+  return <span className={`ks-table-content${color ? " has-color" : ""}`} style={{ ...(color ? { "--ks-table-color": color, "--ks-table-on": badgeForeground(color) } : {}), "--ks-table-lines": column.max_lines ?? 3 } as CSSProperties}>
     {content && <><span className="ks-table-content-title">{String(content.title)}</span>
       {typeof content.subtitle === "string" && <span className="ks-table-content-subtitle">{content.subtitle}</span>}
       <Badges values={content.badges} /></>}

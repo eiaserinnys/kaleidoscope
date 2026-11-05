@@ -49,6 +49,28 @@ test("동적 일정표의 선택과 고정 행 머리", async ({ page }) => {
     await page.reload();
     const tab = app.getByRole("tab", { name: "일정표", exact: true });
     await tab.click();
+    const headerBackground = () => grid.locator(".ks-table-header").evaluate((element) => getComputedStyle(element, "::before").backgroundColor);
+    await grid.evaluate((element) => { element.scrollTop = 0; });
+    await expect.poll(headerBackground).toBe("rgba(0, 0, 0, 0)");
+    await grid.evaluate((element) => { element.scrollTop = 200; });
+    await expect.poll(headerBackground).not.toBe("rgba(0, 0, 0, 0)");
+    await grid.evaluate((element) => { element.scrollTop = 0; });
+    if (theme === "dark") {
+      const content = lightCell.locator(".ks-table-content");
+      const contrast = await content.evaluate((element) => {
+        const context = document.createElement("canvas").getContext("2d")!;
+        const luminance = (color: string) => {
+          context.clearRect(0, 0, 1, 1); context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+          const [r, g, b] = Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3).map((v) => {
+            const channel = v / 255; return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const style = getComputedStyle(element), foreground = luminance(style.color), background = luminance(style.backgroundColor);
+        return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+      });
+      expect(contrast).toBeGreaterThanOrEqual(4.5);
+    }
     await first.focus(); await page.keyboard.press("ArrowRight");
     await capture(page, `r4-${theme}-light-focus-only`);
     await page.keyboard.press("ArrowRight"); await page.keyboard.press("ArrowRight");
@@ -78,7 +100,7 @@ test("동적 일정표의 선택과 고정 행 머리", async ({ page }) => {
   const alignment = await pinned.evaluate((element) => {
     const root = element.closest("[role=grid]")!.getBoundingClientRect();
     const rect = element.getBoundingClientRect(), row = element.parentElement!;
-    return { left: Math.abs(rect.left - root.left), height: Math.abs(rect.height - (row.clientHeight - parseFloat(getComputedStyle(row).paddingBottom))) };
+    return { left: Math.abs(rect.left - root.left), height: Math.abs(rect.height - row.clientHeight) };
   });
   expect(alignment.left).toBeLessThanOrEqual(2);
   expect(alignment.height).toBeLessThanOrEqual(1);
@@ -188,6 +210,9 @@ test("높은 행의 일정표에서 Ctrl+End와 Ctrl+Home 및 End 끝 칸을 드
     expect(visible).toBe(true);
     await capture(page, `r5-${key.replace("+", "-").toLowerCase()}`);
   }
+  await page.keyboard.press("Home");
+  await expect(grid.getByRole("gridcell", { name: /작업 묶음 1, 1일/ })).toBeFocused();
+  await expect.poll(() => grid.evaluate((element) => element.scrollLeft)).toBe(0);
 });
 
 test("마우스 누름 뒤 Ctrl 이동에는 초점 링을 그리고 다시 누르면 지운다", async ({ page }) => {
@@ -324,7 +349,7 @@ test("잘못된 내용 칸과 정상 칸을 함께 표시한다", async ({ page 
       const style = getComputedStyle(code);
       return { inside: codeBounds.top >= cellBounds.top && codeBounds.bottom <= cellBounds.bottom && codeBounds.right <= cellBounds.right,
         oneLine: codeBounds.height <= parseFloat(style.lineHeight) + 1, ellipsis: style.textOverflow,
-        height: cellBounds.height, reserved: (Number(getComputedStyle(element.closest('[role="grid"]')!).getPropertyValue("--ks-grid-lines")) + 2) * parseFloat(style.getPropertyValue("--ks-type-body")) * Number(style.getPropertyValue("--ks-line-body")) + 4 * parseFloat(style.getPropertyValue("--ks-space-1")) };
+        height: cellBounds.height, reserved: (Number(getComputedStyle(element.closest('[role="grid"]')!).getPropertyValue("--ks-grid-lines")) + 1) * parseFloat(style.getPropertyValue("--ks-type-body")) * Number(style.getPropertyValue("--ks-line-body")) + parseFloat(style.getPropertyValue("--ks-type-meta")) * Number(style.getPropertyValue("--ks-line-body")) + 2 * parseFloat(style.getPropertyValue("--ks-space-1")) + 2 * parseFloat(style.getPropertyValue("--ks-space-2")) };
     });
     expect(bounds.inside).toBe(true);
     expect(bounds.oneLine).toBe(true);
