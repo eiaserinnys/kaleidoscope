@@ -554,7 +554,9 @@
 .ks-install-details > summary { width: fit-content; border-radius: var(--ks-radius-small); }
 .ks-install-details > summary:focus-visible { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-focus-offset); }
 .ks-install-paths { list-style: none; margin: var(--ks-space-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--ks-space-1); }
-.ks-install-details .ks-consent-value + .ks-install-paths { padding-inline-start: var(--ks-space-3); }
+.ks-install-hosts { display: flex; flex-direction: column; gap: var(--ks-space-2); margin-block-start: var(--ks-space-1); }
+.ks-install-host { display: flex; flex-direction: column; gap: var(--ks-space-1); }
+.ks-install-host > .ks-install-paths { margin-block-start: 0; padding-inline-start: var(--ks-space-3); }
 .ks-install-path { font-family: var(--ks-font-code); font-size: var(--ks-type-meta); padding-inline-start: var(--ks-space-3); text-indent: calc(-1 * var(--ks-space-3)); }
 .ks-install-details > .ks-process-command { margin: var(--ks-space-1) 0 0; }
 

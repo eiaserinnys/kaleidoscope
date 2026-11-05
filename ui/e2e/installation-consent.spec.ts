@@ -2,6 +2,30 @@ import { expect, test } from "@playwright/test";
 
 test.use({ deviceScaleFactor: 2 });
 
+test("호스트 사이는 호스트와 그 경로 사이보다 넓다", async ({ page }) => {
+  await page.goto("/installation-consent.html");
+  await page.evaluate(async () => {
+    await (window as any).installationHarness.ready;
+    (window as any).installationHarness.show("light", { permissions: [
+      { module: "http", id: "first", label: "자료", base_url: "https://first.example.org", paths: ["/articles", "/images"] },
+      { module: "http", id: "second", label: "그림", base_url: "https://second.example.org", paths: ["/pictures"] },
+    ] });
+  });
+  const details = page.getByRole("dialog").locator("details");
+  await details.locator("summary").click();
+  const gaps = await details.evaluate((node) => {
+    const values = Array.from(node.querySelectorAll(".ks-consent-value"));
+    const first = values.find((el) => el.textContent === "first.example.org")!;
+    const second = values.find((el) => el.textContent === "second.example.org")!;
+    const paths = first.nextElementSibling!.querySelectorAll("li");
+    return {
+      inside: paths[0].getBoundingClientRect().top - first.getBoundingClientRect().bottom,
+      between: second.getBoundingClientRect().top - paths[paths.length - 1].getBoundingClientRect().bottom,
+    };
+  });
+  expect(gaps.between).toBeGreaterThan(gaps.inside);
+});
+
 test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
   for (const [width, theme] of [[1000, "light"], [360, "dark"], [1000, "dark"], [360, "light"]] as const) {
     await page.setViewportSize({ width, height: 780 });

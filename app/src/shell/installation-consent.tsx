@@ -34,6 +34,12 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
       <div><strong className="ks-consent-value">{request.app_name}</strong> · {request.release}판<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>
       {groups.length === 0 ? <span>이 앱은 창 안에서만 동작합니다</span> : groups.map((group) => {
         const details = group.details;
+        const hostPaths = details?.label === "자세히" ? details.hosts.map(({ host, paths }) => {
+          const list = <ul className="ks-install-paths">{paths.map((path) => <li className="ks-consent-value ks-install-path" key={path}>{path.split("/").map((part, index) => index === 0 ? part : <Fragment key={index}>/<wbr />{part}</Fragment>)}</li>)}</ul>;
+          return details.hosts.length > 1
+            ? <div className="ks-install-host" key={host}><div className="ks-consent-value">{host}</div>{list}</div>
+            : <Fragment key={host}>{list}</Fragment>;
+        }) : null;
         return <section className="ks-install-group" key={group.sentence}>
         <strong className={`ks-install-sentence${group.tone === "warning" ? " is-warning" : ""}`}>{group.tone === "warning" ? <TriangleAlert size="inline" /> : null}<span>{group.sentence}</span></strong>
         {group.rows.length || group.notes.length || group.details ? <div className="ks-install-content">
@@ -42,10 +48,8 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
           </li>)}</ul> : null}
           {group.notes.map((note) => <div className="ks-install-meta" key={note}>{note}</div>)}
           {details ? <details className="ks-install-details"><summary className="ks-install-meta">{details.label}</summary>
-            {details.label === "코드 보기" ? <pre className="ks-process-command">{details.code}</pre> : details.hosts.map(({ host, paths }) => <Fragment key={host}>
-              {details.hosts.length > 1 ? <div className="ks-consent-value">{host}</div> : null}
-              <ul className="ks-install-paths">{paths.map((path) => <li className="ks-consent-value ks-install-path" key={path}>{path.split("/").map((part, index) => index === 0 ? part : <Fragment key={index}>/<wbr />{part}</Fragment>)}</li>)}</ul>
-            </Fragment>)}
+            {details.label === "코드 보기" ? <pre className="ks-process-command">{details.code}</pre>
+              : details.hosts.length > 1 ? <div className="ks-install-hosts">{hostPaths}</div> : hostPaths}
           </details> : null}
         </div> : null}
         </section>;
