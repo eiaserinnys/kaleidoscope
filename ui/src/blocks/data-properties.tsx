@@ -1,10 +1,28 @@
-import type { Block, PropertyField } from "../contract/contract";
+import { useLayoutEffect, useRef, useState } from "react";
+import type { Badge as BadgeValue, Block, PropertyField } from "../contract/contract";
 import { Badge, isBadge, validColor } from "../components/badge";
 import { DataState } from "../components/data-state";
 import { useBinding } from "../data/window-data";
 import { MarkdownText } from "./markdown-text";
 import { display } from "./data-layout";
 import { asArray, dateText } from "./data-view-common";
+
+function PropertyBadges({ badges }: { badges: BadgeValue[] }) {
+  const group = useRef<HTMLSpanElement>(null);
+  const [clipped, setClipped] = useState<boolean[]>([]);
+  useLayoutEffect(() => {
+    const element = group.current!;
+    const measure = () => {
+      const next = [...element.querySelectorAll<HTMLElement>(":scope > .ks-badge")].map(badge => badge.scrollWidth > badge.clientWidth);
+      setClipped(previous => previous.length === next.length && previous.every((value, index) => value === next[index]) ? previous : next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [badges]);
+  return <span className="ks-view-badges" ref={group}>{badges.map((badge, index) => <Badge value={badge} tooltip={clipped[index]} key={index} />)}</span>;
+}
 
 function Property({ field, pointer }: { field: PropertyField; pointer: string }) {
   const label = useBinding(`${pointer}/label`, field.label);
@@ -20,7 +38,7 @@ function Property({ field, pointer }: { field: PropertyField; pointer: string })
   }
   else if (field.format === "badge") {
     const badges = asArray(value.value);
-    content = <span className="ks-view-badges">{badges.filter(isBadge).map((badge, i) => <Badge value={badge} key={i} />)}</span>;
+    content = <PropertyBadges badges={badges.filter(isBadge)} />;
   } else if (field.format === "markdown") content = <MarkdownText>{display(value.value)}</MarkdownText>;
   else if (field.format === "code") content = <code>{display(value.value)}</code>;
   else if (field.format === "date") content = dateText(value.value);

@@ -30,4 +30,11 @@ test("격자 목록은 같은 칸의 입력과 끝선을 맞추고 폭에 맞춰
   });
   expect(Math.abs(inset.left)).toBeLessThanOrEqual(1);
   expect(Math.abs(inset.right)).toBeLessThanOrEqual(1);
+
+  await page.goto("/?preview=stacked-grid-detail-0");
+  const padded = page.getByTestId("app-window-stacked-grid-detail-0").locator(".ks-list.is-grid");
+  await padded.evaluate((element) => { element.style.width = "344px"; });
+  await expect.poll(() => padded.locator(".ks-list-grid-row").first().locator(".ks-list-card").count()).toBe(1);
+  await padded.evaluate((element) => { element.style.width = "356px"; });
+  await expect.poll(() => padded.locator(".ks-list-grid-row").first().locator(".ks-list-card").count()).toBe(2);
 });

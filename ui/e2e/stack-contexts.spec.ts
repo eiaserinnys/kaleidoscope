@@ -1,5 +1,88 @@
 import { expect, test } from "@playwright/test";
 
+test("쌓인 상세의 뼈대와 격자는 속성 시작선에 맞는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto("/?preview=stacked-grid-detail-1");
+  const app = page.getByTestId("app-window-stacked-grid-detail-1");
+  const skeleton = app.locator(".ks-data-skeleton > i").first();
+  const label = app.locator(".ks-properties dt").first();
+  const card = app.locator(".ks-list.is-grid .ks-list-card").first();
+  await expect(card).toBeVisible();
+  const left = async (locator: typeof card) => (await locator.boundingBox())!.x;
+  expect.soft(Math.abs(await left(skeleton) - await left(label))).toBeLessThanOrEqual(1);
+  expect.soft(Math.abs(await left(card) - await left(label))).toBeLessThanOrEqual(1);
+});
+
+test("긴 속성 배지는 말줄이고 툴팁으로 전문을 보인다", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto("/?preview=stacked-grid-detail-1");
+  const app = page.getByTestId("app-window-stacked-grid-detail-1");
+  const dd = app.locator(".ks-properties dd").first();
+  await dd.evaluate(element => {
+    element.style.width = "500px";
+    const before = document.createElement("button"); before.id = "badge-before";
+    const after = document.createElement("button"); after.id = "badge-after";
+    element.before(before); element.after(after);
+  });
+  const badge = dd.locator(".ks-badge");
+  await expect(badge).not.toHaveAttribute("tabindex");
+  await badge.hover();
+  await page.waitForTimeout(600);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(badge).not.toHaveAttribute("aria-describedby");
+  await page.locator("#badge-before").focus();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#badge-after")).toBeFocused();
+  await page.mouse.move(0, 0);
+  await dd.evaluate(element => { element.style.width = "120px"; });
+  await expect(badge).toHaveAttribute("tabindex", "0");
+  const size = await badge.evaluate(element => ({ width: element.getBoundingClientRect().width, scroll: element.scrollWidth, parent: element.parentElement!.parentElement!.getBoundingClientRect().width, overflow: getComputedStyle(element).textOverflow }));
+  expect(size.width).toBeLessThanOrEqual(size.parent + 1);
+  expect(size.scroll).toBeGreaterThan(size.width);
+  expect(size.overflow).toBe("ellipsis");
+  await badge.hover();
+  await expect(page.getByRole("tooltip")).toHaveText("아주 긴 외부 서비스 접속 권한을 표시하는 배지");
+  await page.mouse.move(0, 0);
+  await page.locator("#badge-before").focus();
+  await page.keyboard.press("Tab");
+  await expect(badge).toBeFocused();
+  await expect(page.getByRole("tooltip")).toHaveText("아주 긴 외부 서비스 접속 권한을 표시하는 배지");
+  await expect(badge).toHaveAttribute("aria-describedby", /.+/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(badge).not.toHaveAttribute("aria-describedby");
+  const copied = await badge.evaluate(element => {
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return { text: selection.toString(), selectable: getComputedStyle(element).userSelect };
+  });
+  expect(copied).toEqual({ text: "아주 긴 외부 서비스 접속 권한을 표시하는 배지", selectable: "text" });
+  await page.keyboard.press("Control+C");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(copied.text);
+});
+
+for (const tail of [0, 1]) test(`격자가 든 상세 칸은 바깥 스크롤로 끝까지 읽는다 (결정 줄 ${tail})`, async ({ page }) => {
+  await page.setViewportSize({ width: 1049, height: 780 });
+  await page.goto(`/?preview=stacked-grid-detail-${tail}`);
+  const app = page.getByTestId(`app-window-stacked-grid-detail-${tail}`);
+  const panes = app.locator(".ks-split.is-stacked > .ks-split-pane");
+  await expect(panes).toHaveCount(2);
+  await expect(app.locator(".ks-list.is-grid .ks-list-card").first()).toBeVisible();
+  const heights = await panes.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+  expect(heights[0]).toBe(320);
+  expect(heights[1]).toBeGreaterThan(320);
+  const detail = panes.nth(1);
+  const inner = detail.locator(".ks-stack-scroll");
+  if (tail) expect(await inner.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
+  await app.getByText("상세 설명의 마지막 문장입니다.").scrollIntoViewIfNeeded();
+  await expect(app.getByText("상세 설명의 마지막 문장입니다.")).toBeVisible();
+  if (tail) await expect(app.getByRole("button", { name: "설치" })).toBeVisible();
+});
+
 test("쌓인 분할 칸의 fill 목록은 내용 높이를 유지한다", async ({ page }) => {
   await page.setViewportSize({ width: 1049, height: 780 });
   await page.goto('/?preview=stacked-fill-detail');

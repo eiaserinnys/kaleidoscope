@@ -48,6 +48,7 @@
   .ks-data-tree,
   .ks-view-group,
   .ks-data-stack-item > .ks-data-text,
+  .ks-data-stack-item > .ks-data-skeleton,
   .ks-timeline-labels > div
 ) { padding-inline: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-feed-entry-nested { padding-inline-end: 0; }
@@ -69,7 +70,10 @@
 .ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:first-child) { padding-inline-start: var(--ks-space-3); }
 .ks-split.is-stacked { display: flex; flex-direction: column; overflow-y: auto; }
 .ks-split.is-stacked > .ks-split-pane { flex: 0 0 auto; overflow: visible; }
-.ks-split.is-stacked > .ks-split-pane:not(:has(> .ks-split.is-stacked)):has(:is(
+.ks-split.is-stacked > .ks-split-pane:not(:has(> .ks-split.is-stacked)):not(:has(
+  > .ks-data-stack.is-column > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) > .ks-data-stack.is-column:not(.has-explicit-fill),
+  > .ks-data-stack.is-column > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill)
+)):has(:is(
   .ks-list, .ks-table-scroll, .ks-data-tree, .ks-feed, .ks-explorer-icons, .ks-repeat.is-virtual,
   .ks-explorer, .ks-file-tree, .ks-code-view, .ks-markdown-editor, .ks-markdown-view,
   .ks-agent-chat, .ks-html-view, .ks-web-view, .ks-canvas, .ks-map, .ks-chart, .ks-timeline,
@@ -88,6 +92,7 @@
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-tree,
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-view-group,
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-stack-item > .ks-data-text,
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-stack-item > .ks-data-skeleton,
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-timeline-labels > div { padding-inline: 0; }
 .ks-data-tab-panel .ks-data-section-child > .ks-properties-container > .ks-properties { padding-block-start: var(--ks-space-1); }
 /* 첫 내용 간격은 탭 줄이나 쌓인 칸이 소유한다. 내용은 위 여백을 더하지 않는다. */
@@ -327,6 +332,8 @@
 .ks-data-text-error > svg { flex: 0 0 auto; }
 .ks-data-text-error > span { min-width: 0; }
 .ks-data-stack-item > .ks-data-text { padding-inline: var(--ks-space-3); }
+.ks-data-stack-item > .ks-data-skeleton { padding: var(--ks-space-3); }
+.ks-data-stack.is-center .ks-data-stack-item > .ks-data-skeleton { padding: 0; }
 .ks-data-text .ks-markdown-text { color: inherit; font-size: inherit; line-height: inherit; }
 .ks-data-text .ks-markdown-text > :last-child { margin-block-end: 0; }
 .ks-data-text.is-meta .ks-markdown-text a { color: inherit; }
