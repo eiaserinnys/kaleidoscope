@@ -300,9 +300,13 @@ pub const CONTRACT_VERSION: u32 = 37;
 /// - 36판: 목록 빼기와 주소 열기 동작.
 /// - 37판: 쌓기 목록 채움.
 /// - 38판: chat의 불러오는 중 바인딩.
-pub const BLOCK_SET_VERSION: u32 = APP_BADGE_BLOCK_SET_VERSION;
+/// - 39판: 앱 아이콘 숫자 배지.
+/// - 40판: list 행 잠금 바인딩.
+pub const BLOCK_SET_VERSION: u32 = LIST_DISABLED_BLOCK_SET_VERSION;
 /// 앱 아이콘의 숫자 배지를 처음 지원하는 블록 세트 판.
 pub const APP_BADGE_BLOCK_SET_VERSION: u32 = 39;
+/// list.disabled를 처음 지원하는 블록 세트 판.
+pub const LIST_DISABLED_BLOCK_SET_VERSION: u32 = 40;
 /// chat.loading을 처음 지원하는 블록 세트 판.
 pub const CHAT_LOADING_BLOCK_SET_VERSION: u32 = 38;
 pub const LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION: u32 = 36;
@@ -1893,6 +1897,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         item_menu: Option<Vec<ItemMenuEntry>>,
+        #[schemars(description = "(블록 세트 40판) chat.loading처럼 리터럴 boolean, state, expr, client를 받는다. 참이면 행 선택, 빼기와 메뉴를 잠근다.")]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        disabled: Option<Binding>,
     },
     /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
     /// 열 머리를 누르면 오름차순, 내림차순, 처음 순서로 돈다(저장하지 않음, `sort`가 처음 모습). 머리는 위에
@@ -2643,6 +2651,8 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        disabled: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_remove: Option<Actions>,
@@ -3294,6 +3304,7 @@ impl From<RawBlock> for Block {
                 layout,
                 grouped,
                 selected,
+                disabled,
                 on_select,
                 on_remove,
                 item_menu,
@@ -3302,6 +3313,7 @@ impl From<RawBlock> for Block {
                 layout,
                 grouped,
                 selected,
+                disabled,
                 on_select,
                 on_remove,
                 item_menu,
@@ -3673,6 +3685,7 @@ impl Block {
             } => 6,
             Block::Markdown { value: Some(_), .. } => 4,
             Block::Markdown { .. } => 1,
+            Block::List { disabled: Some(_), .. } => LIST_DISABLED_BLOCK_SET_VERSION,
             Block::Chat { loading: Some(_), .. } => CHAT_LOADING_BLOCK_SET_VERSION,
             Block::Chat {
                 client: Some(_), ..

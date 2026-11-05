@@ -3311,13 +3311,16 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::List { selected, layout, .. } => {
+        Block::List { selected, disabled, layout, .. } => {
             if *layout == crate::ListLayout::Icons && definition.requires.blocks < crate::LIST_ICONS_BLOCK_SET_VERSION {
                 let version = crate::LIST_ICONS_BLOCK_SET_VERSION;
                 details.push(format!("{at}: list의 icons 배치는 블록 세트 {version}판 이상이 필요합니다"));
             }
             if let Some(selected) = selected {
                 validate_control_binding(selected, definition, details, at);
+            }
+            if let Some(disabled) = disabled {
+                validate_ui_binding(disabled, definition, details, &format!("{at}/disabled"));
             }
         }
         Block::Feed {

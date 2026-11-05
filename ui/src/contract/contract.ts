@@ -371,7 +371,7 @@ meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Bloc
 /**
  * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
  */
-on_remove?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+on_remove?: Actions, item_menu?: Array<ItemMenuEntry>, disabled?: Binding, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.

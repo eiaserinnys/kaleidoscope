@@ -11,6 +11,7 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore, shareShellSnapshot, shareStructure } from "../core/shell-store";
 import * as windowData from "../data/window-data";
+import { emptyClientChatState } from "../data/client-chat";
 import { useWindowData, WindowDataProvider, type WindowData } from "../data/window-data";
 import type { BlockContext } from "../blocks/block-context";
 import { TimelineBlock } from "../blocks/timeline";
@@ -330,7 +331,7 @@ if (!globalThis.ResizeObserver) {
   });
 }
 
-async function setup(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }) {
+async function setup(definitions: AppDefinition[] = [definition], firstState: Record<string, JsonValue> = { first: null, second: null, compound: null }, waitForSkeleton = true) {
   calls.length = 0;
   blockWrapperRenders.clear();
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
@@ -351,16 +352,16 @@ async function setup(definitions: AppDefinition[] = [definition], firstState: Re
   render(<Shell store={store} />);
   await store.ready;
   await waitFor(() => expect(document.querySelector('[data-window-id="window-a"]')).not.toBeNull());
-  await waitFor(() => expect(document.querySelector(".ks-data-skeleton")).toBeNull());
+  if (waitForSkeleton) await waitFor(() => expect(document.querySelector(".ks-data-skeleton")).toBeNull());
   calls.length = 0;
   return { store, transport, snapshot };
 }
 
-async function setupChatWindow() {
+async function setupChatWindow(chatApp: AppDefinition = chatDefinition) {
   calls.length = 0;
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
   if (probe) probe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
-  const snapshot = makeTestSnapshot({ definitions: [definition, chatDefinition] });
+  const snapshot = makeTestSnapshot({ definitions: [definition, chatApp] });
   snapshot.shared.windows[0].id = "window-a";
   snapshot.shared.windows[0].state = { first: "a" };
   snapshot.shared.windows[1].id = "window-b";
@@ -403,6 +404,7 @@ async function setState(store: ReturnType<typeof createShellStore>, windowId: st
 
 afterEach(() => {
   cleanup();
+  emptyClientChatState.loading = true;
   rowRenders.clear();
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;
   if (probe) probe.current = null;
@@ -427,6 +429,80 @@ it("앱 배지 변경은 해당 타일과 앱 열기 단추만 갱신한다", as
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("제공자 초안은 폭 갈래 재마운트와 반복 복원 뒤 한 번만 남고 같은 요청 ID로 보낸다", async () => {
+    const app: AppDefinition = { ...chatDefinition, requires: { blocks: 19, modules: { agent: 3 } }, ui: { type: "stack", direction: "column", children: [
+      { type: "when", min_width: 640, child: { type: "chat" } }, { type: "when", max_width: 639, child: { type: "chat" } },
+    ] } };
+    let width = 1100;
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("ks-data-window") ? { width, height: 500 } as DOMRect : original.call(this);
+    });
+    const resize: Array<(value: number) => void> = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(target: Element) { if (target.classList.contains("ks-data-window")) { const update = (value: number) => this.callback([{ target, contentRect: { width: value, height: 500 } } as ResizeObserverEntry], this as unknown as ResizeObserver); resize.push(update); update(width); } }
+      unobserve() {} disconnect() {}
+    });
+    const { store, transport } = await setupChatWindow(app);
+    const call = vi.spyOn(transport, "call");
+    const draftEvent: CoreEvent = { event: "conversation.draft", window_id: "window-b", request_id: "retry-width", text: "복원한 초안", attachments: [{ name: "초안.txt", mime: "text/plain", data_base64: "aGVsbG8=" }], failed: false };
+    act(() => transport.emit(draftEvent));
+    let input = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    expect(input.value).toBe("복원한 초안");
+    for (const next of [639, 1100]) {
+      width = next;
+      act(() => resize.forEach((update) => update(next)));
+      const previous = input;
+      await waitFor(() => expect(screen.getByRole("textbox", { name: "메시지" })).not.toBe(previous));
+      input = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+      act(() => transport.emit(draftEvent));
+      expect(input.value).toBe("복원한 초안");
+      expect(screen.getAllByText("초안.txt")).toHaveLength(1);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: "conversation.send", request_id: "retry-width", text: "복원한 초안" })));
+    store.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals();
+  });
+  it("폭 갈래를 오가도 대화 초안과 첨부를 유지하고 다른 블록과 창은 다시 그리지 않는다", async () => {
+    const chat = { type: "chat", client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" } } as const;
+    const app: AppDefinition = { ...clientChatDefinition, ui: { type: "stack", direction: "column", children: [
+      { type: "when", min_width: 640, child: chat }, { type: "when", max_width: 639, child: chat },
+      { type: "text", value: "유지되는 이웃" },
+    ] } };
+    emptyClientChatState.loading = false;
+    let width = 1100;
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("ks-data-window") || this.classList.contains("ks-data-window-body") ? { width, height: 500 } as DOMRect : original.call(this);
+    });
+    const resize: Array<(value: number) => void> = [];
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(target: Element) { if (target.classList.contains("ks-data-window")) { const update = (value: number) => this.callback([{ target, contentRect: { width: value, height: 500 } } as ResizeObserverEntry], this as unknown as ResizeObserver); resize.push(update); update(width); } }
+      unobserve() {} disconnect() {}
+    });
+    const { store } = await setup([app], {}, false);
+    const first = document.querySelector('[data-window-id="window-a"]') as HTMLElement;
+    let input = within(first).getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    calls.length = 0;
+    fireEvent.change(input, { target: { value: "남길 초안" } });
+    const fileInput = input.parentElement!.querySelector('input[type="file"]')!;
+    fireEvent.change(fileInput, { target: { files: [new File(["내용"], "초안.txt", { type: "text/plain" })] } });
+    expect(countFor("window-b")).toBe(0);
+    expect(countFor("window-a", "/ui/children/2")).toBe(0);
+    for (const next of [639, 1100]) {
+      width = next;
+      act(() => resize.forEach((update) => update(next)));
+      const previous = input;
+      await waitFor(() => expect(within(first).getByRole("textbox", { name: "메시지" })).not.toBe(previous));
+      input = within(first).getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+      expect(input.value).toBe("남길 초안");
+      expect(within(first).getByText("초안.txt")).toBeTruthy();
+    }
+    store.dispose();
+    vi.restoreAllMocks(); vi.unstubAllGlobals();
+  });
   it("설정 창 이동과 크기 조절은 앱 창을 다시 그리지 않는다", async () => {
     if (!globalThis.PointerEvent) Object.defineProperty(globalThis, "PointerEvent", { configurable: true, value: MouseEvent });
     const snapshot = testSnapshot([definition]);
@@ -913,6 +989,37 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     expect(screen.getAllByLabelText("메시지")[0]).toBe(input);
     expect(input.value).toBe("남길 초안");
     expect(screen.getByText("초안.txt")).toBeTruthy();
+    store.dispose();
+  });
+
+  it("client chat 전송 실패는 재마운트된 입력줄에 초안과 오류를 복원한다", async () => {
+    const snapshot = testSnapshot([clientChatDefinition], {});
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    await store.ready;
+    const window = snapshot.shared.windows[0]!;
+    const context: BlockContext = { store, window, definition: clientChatDefinition };
+    const chat = (clientChatDefinition.ui as Extract<AppDefinition["ui"], { type: "stack" }>).children[0]!;
+    let data: WindowData | null = null;
+    function Capture() { const current = useWindowData(); useEffect(() => { data = current; }, [current]); return null; }
+    const tree = (pointer: string) => <WindowDataProvider store={store} windowId={window.id} definition={clientChatDefinition}><Capture /><div key={pointer}>{renderBlockModule.renderBlock(chat, context, pointer)}</div></WindowDataProvider>;
+    const view = render(tree("/first"));
+    await waitFor(() => expect(data).toBeTruthy());
+    await act(async () => {
+      data!.publishClientChat("thread", { kind: "snapshot", items: [], stream_id: null, text: "", busy: false, tool: null, queued: [] });
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    let rejectSend!: (reason: unknown) => void;
+    const pending = new Promise<never>((_resolve, reject) => { rejectSend = reject; });
+    vi.spyOn(data!, "requestClientAction").mockReturnValue(pending);
+    const input = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "보낼 초안" } });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    view.rerender(tree("/second"));
+    const next = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    expect(next).not.toBe(input);
+    await act(async () => rejectSend(new Error("전송 실패")));
+    await waitFor(() => expect(next.value).toBe("보낼 초안"));
+    expect(screen.getByRole("alert").textContent).toContain("전송 실패");
     store.dispose();
   });
 

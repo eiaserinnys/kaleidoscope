@@ -26,7 +26,7 @@ type ListHandlers = {
   remove: (item: ListItem) => void;
   menu: (event: React.MouseEvent<HTMLElement>, item: ListItem) => void;
 };
-const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, icons, handlers, readOnly, removable }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; icons: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean; removable: boolean }) {
+const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, icons, handlers, readOnly, removable, disabled }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; icons: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean; removable: boolean; disabled: boolean }) {
   const ref = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     const row = ref.current;
@@ -60,13 +60,13 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
     return () => observer.disconnect();
   }, [item, grid, icons]);
   const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : <LayoutGrid size="tile" />} selected={active}
-    role={removable ? "button" : "option"} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
-    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)}>
+    role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
+    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)}>
     {grid ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
-  return removable ? <div role="listitem" onFocus={() => handlers.current.focus(index)} data-list-index={index} className={`ks-list-item${grid || icons ? " is-grid" : ""}${active ? " is-selected" : ""}`}>{row}<IconButton className="ks-list-remove" aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
+  return removable ? <div role="listitem" onFocus={() => handlers.current.focus(index)} data-list-index={index} className={`ks-list-item${grid || icons ? " is-grid" : ""}${active ? " is-selected" : ""}${disabled ? " is-disabled" : ""}`}>{row}<IconButton className="ks-list-remove" disabled={disabled} aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
 });
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/items`, block.items);
@@ -117,6 +117,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const { virtual } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys);
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
+  const disabledValue = useBinding(`${pointer}/disabled`, block.disabled ?? false);
+  const disabled = disabledValue.status === "ready" && disabledValue.value === true;
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
   keepRovingRow(virtual, rowOf(roving.focus));
@@ -124,9 +126,9 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   handlers.current = {
     focus: roving.setFocus,
     keyDown: (event, index, item) => { const trigger = event.currentTarget; roving.keyDown(event, index, () => handlers.current.choose(item, trigger), activeColumns); },
-    choose: (item, trigger) => { if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); else if (isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger }); },
-    remove: (item) => { if (block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
-    menu: (event, item) => { if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },
+    choose: (item, trigger) => { if (disabled) return; if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); else if (isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger }); },
+    remove: (item) => { if (!disabled && block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
+    menu: (event, item) => { if (disabled) { event.preventDefault(); return; } if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },
   };
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, useWindowVisible(context), icons ? <IconTileSkeleton count={activeColumns} /> : undefined, items.length);
@@ -141,7 +143,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       return <div className={entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
         {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.items.map((item, n) => {
           const index = entry.start + n; const active = item.key === selected;
-          return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} icons={icons} handlers={handlers} readOnly={!block.on_select && !block.on_remove && !isMedia(item.image) && !block.item_menu?.length} removable={Boolean(block.on_remove)} key={item.key} />;
+          return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} icons={icons} handlers={handlers} readOnly={disabled || (!block.on_select && !block.on_remove && !isMedia(item.image) && !block.item_menu?.length)} removable={Boolean(block.on_remove)} disabled={disabled} key={item.key} />;
         })}
       </div>;
     })}</VirtualSurface>}

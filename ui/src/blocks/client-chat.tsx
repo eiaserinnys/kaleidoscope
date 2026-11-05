@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Block, ChatClient, ConversationAttachment, ConversationItem, CoreError } from "../contract/contract";
+import type { Block, ChatClient, ConversationAttachment, ConversationItem } from "../contract/contract";
 import type { ClientChatAttachment, ClientChatQueuedMessage } from "../data/client-chat";
-import { useBinding, useWindowData } from "../data/window-data";
+import { useBinding, useChatDraft, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory, messageContextMenu, type ChatPendingMessage } from "./chat-history";
-import { HistoryAttachmentView, ImagePreview, PendingAttachment, type DraftAttachment, type Preview } from "./agent-attachments";
+import { HistoryAttachmentView, ImagePreview, PendingAttachment, type Preview } from "./agent-attachments";
 import { useFrameCoalesced } from "./frame-coalesced";
 import { renderBlock } from "../render/render-block";
 import { toCoreError } from "../core/core-transport";
@@ -55,11 +55,9 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const historyState = loadingBinding.status !== "ready" ? loadingBinding
     : loadingBinding.value === true || chat.loading ? { status: "loading" as const } : null;
   const disabled = historyState !== null;
-  const [draft, setDraft] = useState("");
+  const { draft, setDraft, attachments, setAttachments, error: actionError, setError: setActionError } = useChatDraft(`client:${channelName}`);
   const [pending, setPending] = useState<PendingMessage | null>(null);
-  const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [actionError, setActionError] = useState<CoreError | null>(null);
   const [delta, setDelta] = useState("");
   const coalescedDelta = useFrameCoalesced(setDelta);
   const historyRef = useRef<HTMLDivElement>(null);
