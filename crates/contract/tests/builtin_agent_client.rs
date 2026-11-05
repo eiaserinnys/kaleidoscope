@@ -18,16 +18,42 @@ fn builtin_agent_declares_client_process_and_settings() {
 
 #[test]
 fn builtin_agent_keeps_chat_mounted_while_switching_sessions() {
+    fn find_chats<'a>(node: &'a Value, switching_gate: bool, chats: &mut Vec<(&'a Value, bool)>) {
+        match node {
+            Value::Object(fields) => {
+                let switching_gate = switching_gate
+                    || (fields.get("type").and_then(Value::as_str) == Some("when")
+                        && matches!(node["value"]["client"].as_str(), Some("session_ready" | "session_switching")));
+                if fields.get("type").and_then(Value::as_str) == Some("chat") {
+                    chats.push((node, switching_gate));
+                }
+                for child in fields.values() {
+                    find_chats(child, switching_gate, chats);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    find_chats(item, switching_gate, chats);
+                }
+            }
+            _ => {}
+        }
+    }
+
     let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     let states = value["ui"]["children"].as_array().unwrap();
     let chat_screen = states.iter().find(|state| state["value"]["client"] == "show_chat").unwrap();
-    assert_eq!(chat_screen["child"]["fill"], 1);
-    assert_eq!(chat_screen["child"]["children"][1]["fill"], 0);
-    let children = chat_screen["child"]["children"][1]["children"].as_array().unwrap();
-    assert_eq!(children.len(), 1);
-    assert_eq!(children[0]["type"], "chat");
-    assert_eq!(children[0]["loading"]["client"], "session_switching");
-    assert_eq!(children[0]["client"]["channel"], "conversation");
+    let branches = chat_screen["child"]["children"].as_array().unwrap();
+    for width in ["min_width", "max_width"] {
+        let branch = branches.iter().find(|branch| branch["type"] == "when" && branch[width].is_number()).unwrap();
+        let mut chats = Vec::new();
+        find_chats(&branch["child"], false, &mut chats);
+        assert_eq!(chats.len(), 1, "{width} 갈래에는 chat이 하나 있어야 한다");
+        let (chat, switching_gate) = chats[0];
+        assert!(!switching_gate, "{width} 갈래의 chat은 세션 전환 중에도 유지되어야 한다");
+        assert_eq!(chat["loading"]["client"], "session_switching");
+        assert_eq!(chat["client"]["channel"], "conversation");
+    }
 }
 
 #[test]
