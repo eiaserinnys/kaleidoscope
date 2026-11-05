@@ -1094,13 +1094,10 @@ pub(crate) fn dormant(
 
 pub(crate) fn detach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, CoreError> {
     let mut windows = inner.data_runtimes.windows.lock().unwrap();
-    let mut detached = false;
     if let Some(runtime) = windows.get_mut(window_id) {
         runtime.attached = runtime.attached.saturating_sub(1);
-        detached = runtime.attached == 0;
     }
     drop(windows);
-    if detached { inner.media_streams.release_window(window_id); }
     inner.layout_signal.notify();
     Ok(CoreReply::DataDetach {})
 }

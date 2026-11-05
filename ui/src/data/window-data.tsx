@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import type { AppDefinition, Binding, BindingValue, CoreError, DataView, EventModifiers, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, CoreError, DataView, EventModifiers, MediaPlayback, MediaRef, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { applyClientChatEnvelope, emptyClientChatState, type ClientChatAttachment, type ClientChatEnvelope, type ClientChatState } from "./client-chat";
 import * as shellErrors from "../contract/shell-errors";
@@ -16,6 +16,7 @@ import { checkAppLink } from "./app-link";
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
 const lifecycle = new WeakMap<ShellStore, Map<string, Promise<void>>>();
+type PlaybackLease = { request: Promise<MediaPlayback>; users: number; closed: boolean };
 
 type BindingKind =
   | { kind: "state" | "client" | "expr" | "message" | "item" | "parent_item"; key: string }
@@ -123,6 +124,35 @@ export class WindowData {
   setClientHost = (host: HTMLElement | null) => { this.clientHost = host; this.runtime?.observeHost(host); };
   setClientDormant = (dormant: boolean) => { this.clientDormant = dormant; this.runtime?.scheduleLifecycle(); };
   readonly mediaCache = new Map<string, Promise<string>>();
+  private readonly playbackCache = new Map<string, PlaybackLease>();
+  acquirePlayback = (media: MediaRef, generation: number) => {
+    const key = JSON.stringify([media, generation]);
+    let lease = this.playbackCache.get(key);
+    if (!lease) {
+      const request = this.store.call({ op: "data.media.open", window_id: this.windowId, media }).then((reply) => reply.playback);
+      lease = { request, users: 0, closed: false };
+      this.playbackCache.set(key, lease);
+      const entry = lease;
+      void request.catch(() => { if (this.playbackCache.get(key) === entry) this.playbackCache.delete(key); });
+    }
+    const entry = lease;
+    entry.users += 1;
+    return { request: entry.request, release: () => {
+      entry.users -= 1;
+      if (entry.users === 0) this.closePlayback(key, entry);
+    } };
+  };
+  private closePlayback(key: string, lease: PlaybackLease) {
+    if (lease.closed) return;
+    lease.closed = true;
+    if (this.playbackCache.get(key) === lease) this.playbackCache.delete(key);
+    void lease.request.then((playback) => {
+      if (playback.kind === "stream") return this.store.call({ op: "data.media.close", window_id: this.windowId, handle: playback.handle });
+    }).catch(() => undefined);
+  }
+  private clearPlayback() {
+    for (const [key, lease] of this.playbackCache) this.closePlayback(key, lease);
+  }
   private values: DataView["values"] = {};
   private clientValues: Record<string, BindingValue> = {};
   private clientChatValues = new Map<string, ClientChatState>();
@@ -339,6 +369,7 @@ export class WindowData {
       if (nextLink && pendingMedia && recoveryVisible(this.store.getSnapshot(), this.windowId)) {
         pendingMedia = false;
         this.mediaCache.clear();
+        this.clearPlayback();
         this.mediaGeneration += 1;
         this.mediaListeners.forEach((listener) => listener());
         if (this.initialized && this.definition.client && (this.clientFailed || !this.runtime)) void this.restartClient();
@@ -376,6 +407,7 @@ export class WindowData {
       this.active = false;
       this.attached = false;
       this.mediaCache.clear();
+      this.clearPlayback();
       this.unsubscribe?.();
       this.unsubscribeLink?.();
       globalThis.window.removeEventListener("focus", onFocus);
