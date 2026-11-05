@@ -571,6 +571,25 @@ async fn worker_builtin_runtime_registration_requires_device_and_valid_declarati
     assert!(state.worker_definition("agent").is_ok());
 }
 
+#[test]
+fn store_moved_builtin_specs_are_removed_without_incoming_specs() {
+    let state = AppState::in_memory("test");
+    {
+        let db = state.lock_db().unwrap();
+        for id in ["market", "earth", "reader", "agent"] {
+            db.execute(
+                "INSERT INTO builtin_app_specs(app_id,version,updated_at) VALUES(?1,1,'now')",
+                [id],
+            ).unwrap();
+        }
+    }
+    state.register_builtin_specs(&[]).unwrap();
+    let db = state.lock_db().unwrap();
+    let ids: Vec<String> = db.prepare("SELECT app_id FROM builtin_app_specs ORDER BY app_id")
+        .unwrap().query_map([], |row| row.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+    assert_eq!(ids, ["agent"]);
+}
+
 #[tokio::test]
 async fn worker_retired_builtin_registration_is_ignored() {
     let state = AppState::in_memory("test");

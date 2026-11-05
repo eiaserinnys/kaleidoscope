@@ -27,7 +27,7 @@ export const SHARE_TEXT_CUT_MARK = "…(아래는 길어서 뺐습니다)";
 /** (9판) 같이 보기 창이 바뀐 뒤 글을 다시 옮기기까지 기다리는 시간(ms). */
 export const SHARE_DEBOUNCE_MS = 800;
 /** 쉘에 기본 탑재되는 앱 ID 목록. */
-export const BUILTIN_APP_IDS = ["profiler", "agent", "explorer", "md-editor", "html-report", "web-browser", "calculator", "weather", "market", "earth", "reader"] as const;
+export const BUILTIN_APP_IDS = ["profiler", "agent", "explorer", "md-editor", "html-report", "web-browser", "calculator", "weather", "store"] as const;
 /** 기본 메시지 수신 앱으로 표시된 기본 앱 ID 목록. */
 export const BUILTIN_DEFAULT_MESSAGE_APP_IDS = ["agent"] as const;
 /** 단추 아이콘으로 쓸 수 있는 Lucide 아이콘 이름(블록 세트 4판). */

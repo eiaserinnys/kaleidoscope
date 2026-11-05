@@ -8,7 +8,7 @@ use kaleidoscope_data::{CompiledApp, SourcePlan};
 use serde_json::json;
 use std::collections::BTreeMap;
 
-const READER: &str = include_str!("../../../apps/reader.json");
+const READER: &str = include_str!("../../../tests/fixtures/store-apps/reader.json");
 
 fn reader() -> (AppDefinition, CompiledApp) {
     let definition = parse_app_definition(READER).expect("reader 앱 정의");

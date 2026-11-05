@@ -130,5 +130,104 @@
     "byte_size": 38265,
     "created_at": "2026-11-05T00:00:00Z",
     "path": "agent/client-v4.js"
+  },
+  {
+    "id": "builtin-icon-profiler",
+    "version": 1,
+    "format": "svg",
+    "sha256": "b899e043e3faecf405818c4971307007ce486261948000f78da2156e69d6b666",
+    "source": "apps/assets/icons/profiler.svg",
+    "license": "MIT",
+    "byte_size": 200,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/profiler.svg"
+  },
+  {
+    "id": "builtin-icon-agent",
+    "version": 1,
+    "format": "svg",
+    "sha256": "17c030cf3a7dbdac167446fda565928a888d5916e5c7b48a761af65f22f804a2",
+    "source": "apps/assets/icons/agent.svg",
+    "license": "MIT",
+    "byte_size": 307,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/agent.svg"
+  },
+  {
+    "id": "builtin-icon-explorer",
+    "version": 1,
+    "format": "svg",
+    "sha256": "8447de2c244d915cd8cbdec416ad01b432c267c5572bc7ecaec286f37accbec8",
+    "source": "apps/assets/icons/explorer.svg",
+    "license": "MIT",
+    "byte_size": 271,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/explorer.svg"
+  },
+  {
+    "id": "builtin-icon-md-editor",
+    "version": 1,
+    "format": "svg",
+    "sha256": "46688c7978ad2bd077176e3f6a91021d53856b01968ee566a29f2f1140140e58",
+    "source": "apps/assets/icons/md-editor.svg",
+    "license": "MIT",
+    "byte_size": 330,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/md-editor.svg"
+  },
+  {
+    "id": "builtin-icon-html-report",
+    "version": 1,
+    "format": "svg",
+    "sha256": "9d286bb0c9c25348ef51e3bc9500755bf45ab2cde8a41a7eb8d3ebea1edb97d8",
+    "source": "apps/assets/icons/html-report.svg",
+    "license": "MIT",
+    "byte_size": 281,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/html-report.svg"
+  },
+  {
+    "id": "builtin-icon-web-browser",
+    "version": 1,
+    "format": "svg",
+    "sha256": "41ce77bbadf6b41a5277003f2796f01001e13313ab5cc9c6a771dc165b96be7d",
+    "source": "apps/assets/icons/web-browser.svg",
+    "license": "MIT",
+    "byte_size": 268,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/web-browser.svg"
+  },
+  {
+    "id": "builtin-icon-calculator",
+    "version": 1,
+    "format": "svg",
+    "sha256": "a76b7563466ac0964eab229182669e6a0d2e9ed0b215256414fb8ae5e99c35c6",
+    "source": "apps/assets/icons/calculator.svg",
+    "license": "MIT",
+    "byte_size": 338,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/calculator.svg"
+  },
+  {
+    "id": "builtin-icon-weather",
+    "version": 1,
+    "format": "svg",
+    "sha256": "65d766d58787dddfafb4da85974b563e6da1f744bef75edeb2d1423557699665",
+    "source": "apps/assets/icons/weather.svg",
+    "license": "MIT",
+    "byte_size": 328,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/weather.svg"
+  },
+  {
+    "id": "builtin-icon-store",
+    "version": 1,
+    "format": "svg",
+    "sha256": "3fb91357d133557cd309f7ebef05afa937f680adac317211f2958b28ff923371",
+    "source": "apps/assets/icons/store.svg",
+    "license": "MIT",
+    "byte_size": 233,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "icons/store.svg"
   }
 ]

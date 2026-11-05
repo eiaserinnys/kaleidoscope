@@ -6909,12 +6909,22 @@ mod tests {
         );
     }
 
+    fn without_icon_at_block_set(json: &str, blocks: u32) -> serde_json::Value {
+        let mut definition: serde_json::Value = serde_json::from_str(json).unwrap();
+        let object = definition.as_object_mut().unwrap();
+        object.remove("icon");
+        object.remove("assets");
+        definition["requires"]["modules"].as_object_mut().unwrap().remove("assets");
+        definition["requires"]["blocks"] = serde_json::json!(blocks);
+        definition
+    }
+
     #[test]
     fn web_view_rules() {
         let browser = example("web-browser.json");
         rejected(&browser.replace(r#""web": 1"#, r#""files": 1"#), "web 모듈");
         rejected(
-            &browser.replace(r#""blocks": 3"#, r#""blocks": 2"#),
+            &without_icon_at_block_set(&browser, 2).to_string(),
             "블록 세트 3판",
         );
         rejected(
@@ -6956,8 +6966,7 @@ mod tests {
     #[test]
     fn opens_rules() {
         let editor = example("md-editor.json");
-        let mut insufficient_blocks: serde_json::Value = serde_json::from_str(&editor).unwrap();
-        insufficient_blocks["requires"]["blocks"] = serde_json::json!(1);
+        let mut insufficient_blocks = without_icon_at_block_set(&editor, 1);
         insufficient_blocks["ui"] = serde_json::json!({"type":"text","value":"시험"});
         rejected(&insufficient_blocks.to_string(), "opens는 블록 세트 3판");
         rejected(
@@ -6981,7 +6990,7 @@ mod tests {
         let pas = include_str!("../tests/legacy-workspace-pas.json")
             .replace(r#""blocks": 2"#, r#""blocks": 1"#);
         rejected(&pas, "블록 세트 2판");
-        let explorer = example("explorer.json").replace(r#""blocks": 5"#, r#""blocks": 2"#);
+        let explorer = without_icon_at_block_set(&example("explorer.json"), 2).to_string();
         rejected(&explorer, "블록 세트 3판");
     }
 
@@ -7008,7 +7017,7 @@ mod tests {
             }
         ));
         rejected(
-            &five.replace(r#""blocks": 5"#, r#""blocks": 4"#),
+            &without_icon_at_block_set(&five, 4).to_string(),
             "블록 세트 5판",
         );
         rejected(

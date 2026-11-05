@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 #[test]
 fn earth_selects_quake_for_map_and_dependent_requests() {
-    let definition = parse_app_definition(include_str!("../../../apps/earth.json")).unwrap();
+    let definition = parse_app_definition(include_str!("../../../tests/fixtures/store-apps/earth.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let mut state = definition.state.clone();
     state.insert("selected_quake".into(), json!("b"));
@@ -96,7 +96,7 @@ fn earth_selects_quake_for_map_and_dependent_requests() {
 
 #[test]
 fn map_and_table_keep_all_quakes_and_share_initial_selection() {
-    let definition = parse_app_definition(include_str!("../../../apps/earth.json")).unwrap();
+    let definition = parse_app_definition(include_str!("../../../tests/fixtures/store-apps/earth.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let features: Vec<Value> = (0..65).map(|i| json!({"id":format!("q{i}"),"geometry":{"coordinates":[127,37,10]},"properties":{"mag":5.2,"place":"Seoul","time":1760000000000i64,"tsunami":0}})).collect();
     let data = BTreeMap::from([
@@ -129,7 +129,7 @@ fn map_and_table_keep_all_quakes_and_share_initial_selection() {
 
 #[test]
 fn filter_empty_stops_dependent_requests_and_clears_quake_views() {
-    let definition = parse_app_definition(include_str!("../../../apps/earth.json")).unwrap();
+    let definition = parse_app_definition(include_str!("../../../tests/fixtures/store-apps/earth.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let mut state = definition.state.clone();
     state.insert("min_mag".into(), json!("6"));

@@ -1,8 +1,10 @@
 {
   "id": "web-browser",
   "name": "웹 브라우저",
+  "icon": { "asset": "builtin-icon-web-browser", "version": 1 },
   "description": "주소를 열어 웹 페이지를 본다",
-  "requires": { "blocks": 3, "modules": { "web": 1 } },
+  "assets": [{ "id": "builtin-icon-web-browser", "version": 1 }],
+  "requires": { "blocks": 26, "modules": { "assets": 1, "web": 1 } },
   "state": { "url": "https://www.google.com/" },
   "ui": {
     "type": "web_view",

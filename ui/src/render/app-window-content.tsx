@@ -43,6 +43,9 @@ export const AppWindowContent = memo(function AppWindowContent({
   const version = useShellSelector(store, (snapshot) => window
     ? snapshot?.shared.app_versions.find((item) => item.app_id === window.app_id && item.version === window.app_version)
     : undefined);
+  const installed = useShellSelector(store, (snapshot) => window
+    ? Boolean(snapshot?.shared.apps.some((app) => app.id === window.app_id))
+    : false);
   const context = useMemo<BlockContext | null>(() => window && version ? {
     store, window, definition: version.definition, newWindowRect,
   } : null, [store, window, version, newWindowRect]);
@@ -54,6 +57,7 @@ export const AppWindowContent = memo(function AppWindowContent({
       : <div className="ks-app-content-loading"><StatusText>불러오는 중</StatusText></div>;
   }
   if (!window) return <div className="ks-app-content-error"><ErrorNotice error={shellErrors.SHELL_APP_WINDOW_NOT_FOUND()} /></div>;
+  if (!installed) return <div className="ks-app-content-error"><ErrorNotice error={shellErrors.SHELL_APP_NOT_INSTALLED({ app_id: window.app_id })} /></div>;
   if (!version || !context) return <div className="ks-app-content-error"><ErrorNotice error={shellErrors.SHELL_APP_VERSION_NOT_FOUND()} /></div>;
 
   const hasSettings = Boolean(version.definition.settings)

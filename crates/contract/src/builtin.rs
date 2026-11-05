@@ -27,6 +27,15 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-agent-client", 2),
     ("builtin-agent-client", 3),
     ("builtin-agent-client", 4),
+    ("builtin-icon-profiler", 1),
+    ("builtin-icon-agent", 1),
+    ("builtin-icon-explorer", 1),
+    ("builtin-icon-md-editor", 1),
+    ("builtin-icon-html-report", 1),
+    ("builtin-icon-web-browser", 1),
+    ("builtin-icon-calculator", 1),
+    ("builtin-icon-weather", 1),
+    ("builtin-icon-store", 1),
 ];
 
 // BUNDLED_ASSET_KEYS와 같은 순서. 코어의 번들 매니페스트 대조 시험이 형식을 확인한다.
@@ -43,6 +52,15 @@ const BUNDLED_ASSET_FORMATS: &[AssetFormat] = &[
     AssetFormat::Javascript,
     AssetFormat::Javascript,
     AssetFormat::Javascript,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
+    AssetFormat::Svg,
 ];
 
 pub fn bundled_asset_format(id: &str, version: u32) -> Option<AssetFormat> {
@@ -52,131 +70,115 @@ pub fn bundled_asset_format(id: &str, version: u32) -> Option<AssetFormat> {
         .and_then(|index| BUNDLED_ASSET_FORMATS.get(index).copied())
 }
 
-// 날씨 자산 뒤에 에이전트 client의 보존 판과 현재 판이 온다.
-pub const WEATHER_ASSET_KEYS: &[(&str, u32)] =
-    BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 4).0;
-pub const AGENT_ASSET_KEYS: &[(&str, u32)] =
-    BUNDLED_ASSET_KEYS.split_at(BUNDLED_ASSET_KEYS.len() - 1).1;
+pub const WEATHER_ASSET_KEYS: &[(&str, u32)] = &[
+    ("builtin-weather-clear", 1),
+    ("builtin-weather-partly-cloudy", 1),
+    ("builtin-weather-cloudy", 1),
+    ("builtin-weather-fog", 1),
+    ("builtin-weather-rain", 1),
+    ("builtin-weather-showers", 1),
+    ("builtin-weather-snow", 1),
+    ("builtin-weather-thunderstorm", 1),
+    ("builtin-icon-weather", 1),
+];
+pub const AGENT_ASSET_KEYS: &[(&str, u32)] = &[
+    ("builtin-agent-client", 4),
+    ("builtin-icon-agent", 1),
+];
 
 pub const RETIRED_BUILTIN_APP_IDS: &[&str] = &["md-viewer", "slackbot"];
+pub const STORE_MOVED_BUILTIN_APP_IDS: &[&str] = &["market", "earth", "reader"];
 
 pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
     BuiltinIdentity {
         default_message_receiver: false,
         id: "profiler",
         name: "프로파일러",
-        version: 4,
+        version: 5,
         updated_at: "2026-11-05T00:00:00Z",
-        blocks: 20,
-        modules: &[("profiler", 1)],
-        assets: &[],
+        blocks: 26,
+        modules: &[("assets", 1), ("profiler", 1)],
+        assets: &[("builtin-icon-profiler", 1)],
     },
     BuiltinIdentity {
         default_message_receiver: true,
         id: "agent",
         name: "에이전트",
-        version: 7,
+        version: 8,
         updated_at: "2026-11-05T00:00:00Z",
         blocks: crate::RECEIVE_MESSAGE_BLOCK_SET_VERSION,
-        modules: &[
-            ("assets", 1),
-            ("client", crate::RECEIVE_MESSAGE_CLIENT_VERSION),
-            ("files", 1),
-            ("process", 1),
-            ("storage", 1),
-            ("worker", 1),
-        ],
+        modules: &[("assets", 1), ("client", crate::RECEIVE_MESSAGE_CLIENT_VERSION), ("files", 1), ("process", 1), ("storage", 1), ("worker", 1)],
         assets: AGENT_ASSET_KEYS,
     },
     BuiltinIdentity {
         default_message_receiver: false,
         id: "explorer",
         name: "탐색기",
-        version: 3,
-        updated_at: "2026-10-30T00:00:00Z",
-        blocks: 5,
-        modules: &[("files", 2)],
-        assets: &[],
+        version: 4,
+        updated_at: "2026-11-05T00:00:00Z",
+        blocks: 26,
+        modules: &[("assets", 1), ("files", 2)],
+        assets: &[("builtin-icon-explorer", 1)],
     },
     BuiltinIdentity {
         default_message_receiver: false,
         id: "md-editor",
         name: "마크다운 편집기",
-        version: 4,
-        updated_at: "2026-11-02T00:00:00Z",
-        blocks: 15,
-        modules: &[("files", 3), ("storage", 3)],
-        assets: &[],
+        version: 5,
+        updated_at: "2026-11-05T00:00:00Z",
+        blocks: 26,
+        modules: &[("assets", 1), ("files", 3), ("storage", 3)],
+        assets: &[("builtin-icon-md-editor", 1)],
     },
     BuiltinIdentity {
         default_message_receiver: false,
         id: "html-report",
         name: "시안과 리포트",
-        version: 2,
-        updated_at: "2026-11-02T00:00:00Z",
-        blocks: 10,
-        modules: &[("storage", 3)],
-        assets: &[],
+        version: 3,
+        updated_at: "2026-11-05T00:00:00Z",
+        blocks: 26,
+        modules: &[("assets", 1), ("storage", 3)],
+        assets: &[("builtin-icon-html-report", 1)],
     },
     BuiltinIdentity {
         default_message_receiver: false,
         id: "web-browser",
         name: "웹 브라우저",
-        version: 1,
-        updated_at: "2026-10-30T00:00:00Z",
-        blocks: 3,
-        modules: &[("web", 1)],
-        assets: &[],
+        version: 2,
+        updated_at: "2026-11-05T00:00:00Z",
+        blocks: 26,
+        modules: &[("assets", 1), ("web", 1)],
+        assets: &[("builtin-icon-web-browser", 1)],
     },
     BuiltinIdentity {
         default_message_receiver: false,
         id: "calculator",
         name: "계산기",
-        version: 2,
-        updated_at: "2026-10-31T00:00:00Z",
-        blocks: 9,
-        modules: &[],
-        assets: &[],
+        version: 3,
+        updated_at: "2026-11-05T00:00:00Z",
+        blocks: 26,
+        modules: &[("assets", 1)],
+        assets: &[("builtin-icon-calculator", 1)],
     },
     BuiltinIdentity {
         default_message_receiver: false,
         id: "weather",
         name: "날씨",
-        version: 2,
-        updated_at: "2026-11-04T00:00:00Z",
-        blocks: 9,
+        version: 3,
+        updated_at: "2026-11-05T00:00:00Z",
+        blocks: 26,
         modules: &[("assets", 1), ("http", 1)],
         assets: WEATHER_ASSET_KEYS,
     },
     BuiltinIdentity {
         default_message_receiver: false,
-        id: "market",
-        name: "시세와 환율",
-        version: 3,
+        id: "store",
+        name: "앱스토어",
+        version: 1,
         updated_at: "2026-11-05T00:00:00Z",
-        blocks: 19,
-        modules: &[("http", 1)],
-        assets: &[],
-    },
-    BuiltinIdentity {
-        default_message_receiver: false,
-        id: "earth",
-        name: "지구 상황판",
-        version: 3,
-        updated_at: "2026-11-05T00:00:00Z",
-        blocks: 19,
-        modules: &[("http", 1)],
-        assets: &[],
-    },
-    BuiltinIdentity {
-        default_message_receiver: false,
-        id: "reader",
-        name: "해커뉴스",
-        version: 5,
-        updated_at: "2026-11-05T00:00:00Z",
-        blocks: 22,
-        modules: &[("http", 1)],
-        assets: &[],
+        blocks: 37,
+        modules: &[("assets", 1), ("storage", 2), ("store", 1)],
+        assets: &[("builtin-icon-store", 1)],
     },
 ];
 
@@ -188,6 +190,9 @@ pub fn is_builtin(id: &str) -> bool {
 }
 pub fn is_retired_builtin(id: &str) -> bool {
     RETIRED_BUILTIN_APP_IDS.contains(&id)
+}
+pub fn is_store_moved_builtin(id: &str) -> bool {
+    STORE_MOVED_BUILTIN_APP_IDS.contains(&id)
 }
 pub fn is_bundled_asset(id: &str, version: u32) -> bool {
     BUNDLED_ASSET_KEYS.contains(&(id, version))

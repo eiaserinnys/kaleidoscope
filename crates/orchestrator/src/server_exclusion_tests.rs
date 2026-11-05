@@ -20,22 +20,11 @@ fn server_binary_has_no_builtin_definition_or_asset_content() {
     let calculator = read_json("apps/calculator.json");
     let agent = read_json("apps/agent.json");
     let html_report = read_json("apps/html-report.json");
-    let market = read_json("apps/market.json");
-    let earth = read_json("apps/earth.json");
-    let reader = read_json("apps/reader.json");
+    let store = read_json("apps/store.json");
     let profiler = read_json("apps/profiler.json");
     let icon = std::fs::read(root.join("apps/assets/weather/clear.svg")).unwrap();
     let sentinels = [
         profiler["permissions"][0]["label"]
-            .as_str()
-            .unwrap()
-            .as_bytes(),
-        earth["permissions"][0]["paths"][0]
-            .as_str()
-            .unwrap()
-            .as_bytes(),
-        reader["description"].as_str().unwrap().as_bytes(),
-        market["permissions"][1]["base_url"]
             .as_str()
             .unwrap()
             .as_bytes(),
@@ -56,6 +45,7 @@ fn server_binary_has_no_builtin_definition_or_asset_content() {
             .unwrap()
             .as_bytes(),
         html_report["description"].as_str().unwrap().as_bytes(),
+        store["description"].as_str().unwrap().as_bytes(),
         icon.as_slice(),
     ];
     let bytes = std::fs::read(std::env::current_exe().unwrap()).unwrap();

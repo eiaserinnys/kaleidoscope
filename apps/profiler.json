@@ -1,10 +1,13 @@
 {
   "id": "profiler",
   "name": "프로파일러",
+  "icon": { "asset": "builtin-icon-profiler", "version": 1 },
   "description": "코어 응답 시간과 계산 통계",
+  "assets": [{ "id": "builtin-icon-profiler", "version": 1 }],
   "requires": {
-    "blocks": 20,
+    "blocks": 26,
     "modules": {
+      "assets": 1,
       "profiler": 1
     }
   },

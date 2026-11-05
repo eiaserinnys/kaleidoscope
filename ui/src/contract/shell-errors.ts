@@ -82,6 +82,7 @@ export const SHELL_HTML_COMMENT_LIST_REPLY_INVALID = (): CoreError => ({ id: "SH
 export const SHELL_HTML_COMMENT_THREAD_REPLY_INVALID = (): CoreError => ({ id: "SHELL_HTML_COMMENT_THREAD_REPLY_INVALID", code: "io", message: `HTML 문서의 커멘트를 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
 export const SHELL_HTML_COMMENT_SAVE_CONFLICT = (): CoreError => ({ id: "SHELL_HTML_COMMENT_SAVE_CONFLICT", code: "conflict", message: `HTML 문서 커멘트가 다른 창의 변경과 충돌해 저장되지 않았습니다. 잠시 뒤 다시 저장하세요.`, details: [] });
 export const SHELL_APP_WINDOW_NOT_FOUND = (): CoreError => ({ id: "SHELL_APP_WINDOW_NOT_FOUND", code: "not_found", message: `앱 창이 사라져 내용을 표시할 수 없습니다. 이 창을 닫고 앱을 다시 여세요.`, details: [] });
+export const SHELL_APP_NOT_INSTALLED = (args: { app_id: string }): CoreError => ({ id: "SHELL_APP_NOT_INSTALLED", code: "not_found", message: `${args.app_id} 앱이 이 기기에 설치되어 있지 않습니다. 앱스토어에서 같은 앱을 설치하면 이 창이 그대로 이어집니다. 더 쓰지 않을 창이면 닫으세요.`, details: [] });
 export const SHELL_APP_VERSION_NOT_FOUND = (): CoreError => ({ id: "SHELL_APP_VERSION_NOT_FOUND", code: "not_found", message: `앱 정의를 찾을 수 없어 창을 표시하지 못했습니다. 이 창을 닫고 앱을 다시 여세요.`, details: [] });
 export const SHELL_WINDOW_DATA_CONTEXT_MISSING = (): CoreError => ({ id: "SHELL_WINDOW_DATA_CONTEXT_MISSING", code: "io", message: `창 데이터가 연결되지 않아 화면을 그릴 수 없습니다. 쉘을 다시 시작하세요.`, details: [] });
 export const SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING = (): CoreError => ({ id: "SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING", code: "io", message: `화면 값의 데이터 연결을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.`, details: [] });

@@ -5,6 +5,17 @@ const contexts = ["section", "tab", "pane"] as const;
 const fills = ["number", "list"] as const;
 
 export default [
+  {
+    id: "stacked-fill-detail", name: "쌓인 상세", requires: { blocks: 37, modules: {} }, permissions: [], state: {},
+    ui: { type: "split", direction: "row", column_below: 1200, sizes: [60, 40], children: [
+      { type: "text", value: "목록 칸" },
+      { type: "stack", direction: "column", fill: [1, 2], children: [
+        { type: "text", value: "상세 머리" },
+        { type: "text", format: "markdown", value: "선택한 항목의 상세 내용" },
+        { type: "text", value: "상태 안내" },
+      ] },
+    ] },
+  },
   ...contexts.flatMap(context => (context === "section" ? ["list", "markdown"] : ["list"]).flatMap(kind => fills.flatMap(fill => [false, true].map(tail => {
     const children = [
       { type: "properties", fields: [{ label: "상태", value: "내용", format: "text" }] },

@@ -1,8 +1,10 @@
 {
   "id": "explorer",
   "name": "탐색기",
+  "icon": { "asset": "builtin-icon-explorer", "version": 1 },
   "description": "내 PC의 알려진 폴더와 드라이브를 왼쪽 폴더 트리와 오른쪽 내용으로 보고, 파일을 그 확장자를 여는 앱으로 연다",
-  "requires": { "blocks": 5, "modules": { "files": 2 } },
+  "assets": [{ "id": "builtin-icon-explorer", "version": 1 }],
+  "requires": { "blocks": 26, "modules": { "assets": 1, "files": 2 } },
   "permissions": [
     { "module": "files", "id": "pc", "access": "read", "label": "내 PC", "scope": "pc" }
   ],

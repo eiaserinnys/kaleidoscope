@@ -22,9 +22,7 @@ const APPS: &[(&str, &str)] = &[
     ),
     ("calculator", include_str!("../../../apps/calculator.json")),
     ("weather", include_str!("../../../apps/weather.json")),
-    ("market", include_str!("../../../apps/market.json")),
-    ("earth", include_str!("../../../apps/earth.json")),
-    ("reader", include_str!("../../../apps/reader.json")),
+    ("store", include_str!("../../../apps/store.json")),
 ];
 
 pub fn builtin_apps() -> Vec<RegistryApp> {
@@ -102,6 +100,15 @@ pub fn builtin_app(id: &str) -> Option<RegistryApp> {
 
 const MANIFEST: &str = include_str!("../../../apps/assets/manifest.json");
 const FILES: &[(&str, &[u8])] = &[
+    ("icons/profiler.svg", include_bytes!("../../../apps/assets/icons/profiler.svg")),
+    ("icons/agent.svg", include_bytes!("../../../apps/assets/icons/agent.svg")),
+    ("icons/explorer.svg", include_bytes!("../../../apps/assets/icons/explorer.svg")),
+    ("icons/md-editor.svg", include_bytes!("../../../apps/assets/icons/md-editor.svg")),
+    ("icons/html-report.svg", include_bytes!("../../../apps/assets/icons/html-report.svg")),
+    ("icons/web-browser.svg", include_bytes!("../../../apps/assets/icons/web-browser.svg")),
+    ("icons/calculator.svg", include_bytes!("../../../apps/assets/icons/calculator.svg")),
+    ("icons/weather.svg", include_bytes!("../../../apps/assets/icons/weather.svg")),
+    ("icons/store.svg", include_bytes!("../../../apps/assets/icons/store.svg")),
     (
         "agent/client-v1.js",
         include_bytes!("../../../apps/assets/agent/client-v1.js"),
@@ -196,6 +203,9 @@ mod tests {
             assert_eq!(app.version.version, identity.version);
             assert_eq!(app.version.definition.requires.blocks, identity.blocks);
             let definition = &app.version.definition;
+            let icon = definition.icon.as_ref().expect("기본 앱 아이콘");
+            assert_eq!(icon.asset, format!("builtin-icon-{}", identity.id));
+            assert_eq!(icon.version, 1);
             let spec = specs.iter().find(|spec| spec.app_id == identity.id);
             if definition.storage.is_some() || definition.worker.is_some() {
                 let spec = spec.expect("실행 선언");

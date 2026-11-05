@@ -53,7 +53,7 @@ fn every_builtin_stays_within_the_default_screen_budget() {
 #[test]
 fn market_default_and_all_binance_call_rates_are_measured() {
     let definition =
-        parse(serde_json::from_slice(include_bytes!("../../../apps/market.json")).unwrap());
+        parse(serde_json::from_slice(include_bytes!("../../../tests/fixtures/store-apps/market.json")).unwrap());
     let (default, all) = budget(&definition, "api.binance.com");
     assert_eq!(default, 2.0);
     assert!((all - 3.6).abs() < 0.0001);

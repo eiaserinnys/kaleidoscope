@@ -9,6 +9,8 @@ fn browser_definition() -> Value {
 
 fn nested_browser() -> Value {
     let mut definition = browser_definition();
+    definition.as_object_mut().unwrap().remove("icon");
+    definition.as_object_mut().unwrap().remove("assets");
     definition["requires"]["blocks"] = json!(4);
     let web = definition["ui"].take();
     definition["ui"] = json!({
