@@ -145,12 +145,6 @@ impl Streams {
         let server = self.server.lock().unwrap().take();
         drop(server);
     }
-    pub(crate) fn release_window(&self, window: &str) {
-        self.leases
-            .lock()
-            .unwrap()
-            .retain(|_, lease| lease.window != window);
-    }
 }
 
 pub(crate) fn open(
