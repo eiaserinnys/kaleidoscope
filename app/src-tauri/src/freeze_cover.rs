@@ -24,6 +24,7 @@ thread_local! {
 unsafe extern "system" fn expire(window: HWND, _: u32, timer: usize, _: u32) {
     let _ = KillTimer(Some(window), timer);
     let _ = DestroyWindow(window);
+    trace("cover.expired");
     COVER.with(|cover| {
         if cover.get() == window {
             cover.set(HWND(std::ptr::null_mut()));
@@ -143,6 +144,7 @@ pub fn freeze(owner: HWND) -> Result<(), String> {
         }
         COVER.with(|current| current.set(cover));
         let _ = ShowWindow(cover, SW_SHOWNOACTIVATE);
+        trace("cover.shown");
         Ok(())
     }
 }
@@ -155,6 +157,7 @@ pub fn unfreeze() {
                 let _ = KillTimer(Some(cover), WATCHDOG_ID);
                 let _ = DestroyWindow(cover);
             }
+            trace("cover.destroyed");
         }
     });
 }
@@ -167,4 +170,38 @@ pub fn flush() -> Result<(), String> {
 pub fn active() -> bool {
     use windows::Win32::UI::WindowsAndMessaging::IsWindow;
     COVER.with(|current| unsafe { IsWindow(Some(current.get())).as_bool() })
+}
+
+/// 덮개 시점을 화면 기록기와 같은 시계(QPC, 밀리초)로 남긴다. E2E 빌드에서만 기록한다.
+#[cfg(feature = "e2e")]
+static TRACE: std::sync::Mutex<Vec<(&'static str, f64)>> = std::sync::Mutex::new(Vec::new());
+
+#[cfg(feature = "e2e")]
+pub fn trace(label: &'static str) {
+    use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
+    let (mut counter, mut frequency) = (0i64, 0i64);
+    unsafe {
+        if QueryPerformanceCounter(&mut counter).is_err()
+            || QueryPerformanceFrequency(&mut frequency).is_err()
+            || frequency <= 0
+        {
+            return;
+        }
+    }
+    let ms = counter as f64 * 1000.0 / frequency as f64;
+    if let Ok(mut trace) = TRACE.lock() {
+        trace.push((label, ms));
+    }
+}
+
+#[cfg(not(feature = "e2e"))]
+#[inline(always)]
+pub fn trace(_: &'static str) {}
+
+#[cfg(feature = "e2e")]
+pub fn take_trace() -> Vec<(&'static str, f64)> {
+    TRACE
+        .lock()
+        .map(|mut trace| std::mem::take(&mut *trace))
+        .unwrap_or_default()
 }

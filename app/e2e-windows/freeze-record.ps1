@@ -29,6 +29,17 @@ public class FreezeRecorder {
    if(!String.IsNullOrEmpty(path)) b.Save(path,ImageFormat.Png); return v;
   }
  }
+ // 비교한 프레임 바이트를 그대로 저장한다. 다시 찍으면 짧은 깜빡임은 이미 지나가 있다.
+ public static void Save(byte[] v,string path) {
+  int width=GetSystemMetrics(0),height=GetSystemMetrics(1);
+  using(var b=new Bitmap(width,height,PixelFormat.Format32bppArgb)) {
+   var d=b.LockBits(new Rectangle(0,0,width,height),ImageLockMode.WriteOnly,PixelFormat.Format32bppArgb);
+   Marshal.Copy(v,0,d.Scan0,v.Length); b.UnlockBits(d);
+   b.Save(path,ImageFormat.Png);
+  }
+ }
+ // 쉘의 덮개 기록(QueryPerformanceCounter)과 같은 시계다.
+ public static double Qpc() { return System.Diagnostics.Stopwatch.GetTimestamp()*1000.0/System.Diagnostics.Stopwatch.Frequency; }
  public static int Diff(byte[] a,byte[] b) { int n=0; for(int i=0;i<a.Length;i+=4) if(a[i]!=b[i]||a[i+1]!=b[i+1]||a[i+2]!=b[i+2]) n++; return n; }
  static int Read(string json,string name) {
   var m=Regex.Match(json,"\\\""+name+"\\\":(-?[0-9]+)");
@@ -167,9 +178,10 @@ while ($null -eq $phase -or $null -eq $protection) {
   if ($null -eq $phase -or $null -eq $protection) { Start-Sleep -Milliseconds 20 }
 }
 $baseline = [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-baseline.png"))
+$previous = $baseline
 $clock = [System.Diagnostics.Stopwatch]::StartNew()
 $rows = [System.Collections.Generic.List[string]]::new()
-$rows.Add('index,ms,different_pixels,protected_pixels,protected_raw_pixels,protected_max_delta,phase,protected_bbox')
+$rows.Add('index,ms,different_pixels,protected_pixels,protected_raw_pixels,protected_max_delta,phase,protected_bbox,capture_start_qpc_ms,capture_end_qpc_ms')
 [System.IO.File]::WriteAllText((Join-Path $Out 'record.ready'), '')
 [System.IO.File]::WriteAllText((Join-Path $Out "phase-$phase.ready"), '')
 $index = 0
@@ -184,18 +196,25 @@ while (-not (Test-Path (Join-Path $Out 'record.stop')) -and $clock.Elapsed.Total
     $phase = $nextPhase
     $protection = $nextProtection
     $baseline = [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-baseline.png"))
+    $previous = $baseline
     [System.IO.File]::WriteAllText((Join-Path $Out "phase-$phase.ready"), '')
   }
+  $captureStart = [FreezeRecorder]::Qpc()
   $frame = [FreezeRecorder]::Frame($null)
+  $captureEnd = [FreezeRecorder]::Qpc()
   $diff = [FreezeRecorder]::Diff($baseline, $frame)
   $protected = [FreezeRecorder]::ProtectedDiff($baseline, $frame, $protection)
   $ms = $clock.Elapsed.TotalMilliseconds
   $bbox = if ($protected[0] -gt 0) { '{0};{1};{2};{3}' -f $protected[3],$protected[4],$protected[5],$protected[6] } else { '' }
-  $rows.Add([string]::Format([Globalization.CultureInfo]::InvariantCulture,'{0},{1:F3},{2},{3},{4},{5},{6},{7}',$index,$ms,$diff,$protected[0],$protected[1],$protected[2],$phase,$bbox))
+  $rows.Add([string]::Format([Globalization.CultureInfo]::InvariantCulture,'{0},{1:F3},{2},{3},{4},{5},{6},{7},{8:F3},{9:F3}',$index,$ms,$diff,$protected[0],$protected[1],$protected[2],$phase,$bbox,$captureStart,$captureEnd))
   if ($protected[0] -gt 0 -and -not $phaseChanges.ContainsKey($phase)) {
-    [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-first-change.png")) | Out-Null
+    # 바뀐 프레임과 바로 앞 프레임을 그대로 남기고, 그 뒤 화면은 따로 찍는다.
+    [FreezeRecorder]::Save($frame, (Join-Path $Out "phase-$phase-first-change.png"))
+    [FreezeRecorder]::Save($previous, (Join-Path $Out "phase-$phase-before-change.png"))
+    [FreezeRecorder]::Frame((Join-Path $Out "phase-$phase-after-change.png")) | Out-Null
     $phaseChanges[$phase] = $true
   }
+  $previous = $frame
   if (-not $phaseSamples.ContainsKey($phase)) { $phaseSamples[$phase] = 0 }
   $phaseSamples[$phase]++
   $index++
