@@ -21,7 +21,7 @@
       }
     ]
   },
-  "state": { "category": "", "query": "", "selected": null, "selected_name": "" },
+  "state": { "category": "", "query": "", "selected": null, "selected_name": "", "selected_store": null },
   "sources": {
     "catalog": {
       "kind": "store", "store": "index", "permission": "catalog",
@@ -30,7 +30,7 @@
     "detail": {
       "kind": "store", "store": "app", "permission": "catalog",
       "server": { "expr": "$storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore'" },
-      "id": { "state": "selected" }
+      "id": { "expr": "$state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') ? $state.selected : null" }
     }
   },
   "window_title": {
@@ -66,7 +66,8 @@
             "selected": { "state": "selected" },
             "on_select": [
               { "set_state": "selected" },
-              { "set_state": "selected_name", "value": { "expr": "$item.title" } }
+              { "set_state": "selected_name", "value": { "expr": "$item.title" } },
+              { "set_state": "selected_store", "value": { "expr": "$storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore'" } }
             ]
           }
         ]
@@ -74,9 +75,9 @@
       {
         "type": "stack", "direction": "column", "gap": "none", "fill": 1,
         "children": [
-          { "type": "toolbar", "start": [{ "type": "text", "value": { "state": "selected_name" }, "format": "plain", "style": "title" }] },
+          { "type": "toolbar", "start": [{ "type": "text", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') ? $state.selected_name : ''" }, "format": "plain", "style": "title" }] },
           {
-            "type": "when", "value": { "expr": "$state.selected != null" },
+            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') and $data.detail.id = $state.selected" },
             "child": {
               "type": "stack", "direction": "column", "gap": "medium",
               "children": [
@@ -106,7 +107,7 @@
             }
           },
           {
-            "type": "when", "value": { "expr": "$state.selected != null" },
+            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore')" },
             "child": {
               "type": "toolbar",
               "start": [{

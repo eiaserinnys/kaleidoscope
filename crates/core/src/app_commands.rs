@@ -245,12 +245,16 @@ fn apply_version(state: &mut CoreState, app: App, version: AppVersion, replace_h
             })
     });
 
-    if state.shared.apps.iter().any(|current| current.id == app.id) {
+    let app_exists = state.shared.apps.iter().any(|current| current.id == app.id);
+    {
         let windows_to_update = state
             .shared
             .windows
             .iter()
-            .filter(|window| window.app_id == app.id)
+            .filter(|window| {
+                window.app_id == app.id
+                    && (app_exists || definition_for(&state.shared, &app.id, window.app_version).is_none())
+            })
             .map(|window| (window.id.clone(), window.app_version, window.state.clone()))
             .collect::<Vec<_>>();
         let mut old_permissions_by_window = BTreeMap::new();

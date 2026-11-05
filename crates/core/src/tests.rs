@@ -304,7 +304,7 @@ fn store_install_restores_window_whose_app_cache_was_removed() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let (_, desktop) = active_ids(&core);
     let source_window = open_window(&core, &desktop, "agent");
-    let (accepted, restored) = {
+    let received = {
         let mut state = core.inner.state.lock().unwrap();
         let mut app = state.shared.apps.iter().find(|item| item.id == "agent").unwrap().clone();
         app.id = "market".into();
@@ -324,13 +324,24 @@ fn store_install_restores_window_whose_app_cache_was_removed() {
         window.app_version = 3;
         window.state.insert("asset".into(), json!("ETH"));
         state.shared.windows.push(window);
-        let accepted = crate::app_commands::import_registry(&mut state, RegistryApp { app, version });
-        let restored = state.shared.windows.iter().find(|item| item.id == "market-window").unwrap().clone();
-        (accepted, restored)
+        RegistryApp { app, version }
     };
-    assert!(accepted);
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        if let CoreEvent::StateChanged { snapshot, .. } = event {
+            tx.send(snapshot.clone()).unwrap();
+        }
+    }));
+    assert!(crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::AppPublished { app: received, open: false, workspace_id: None },
+    ));
+    let emitted = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    let restored = emitted.shared.windows.iter().find(|item| item.id == "market-window").unwrap();
     assert_eq!(restored.app_version, 1);
     assert_eq!(restored.state.get("asset"), Some(&json!("ETH")));
+    assert!(rx.try_recv().is_err());
 }
 
 #[test]
@@ -603,7 +614,7 @@ fn builtin_agent_reads_defaults_before_linking() {
         .shared
         .app_versions
         .iter()
-        .find(|version| version.app_id == "agent" && version.version == 7)
+        .find(|version| version.app_id == "agent" && version.version == 8)
         .unwrap()
         .definition;
     assert_eq!(definition.requires.blocks, 29);
@@ -639,7 +650,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .into_iter()
         .find(|w| w.id == window_id)
         .unwrap();
-    assert_eq!(before.app_version, 3);
+    assert_eq!(before.app_version, 4);
     drop(core);
     let reopened = open_core(temp.path(), vec![], &host);
     let after = snapshot(&reopened)
@@ -649,7 +660,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .find(|w| w.id == window_id)
         .unwrap();
     assert_eq!(before, after);
-    assert_eq!(snapshot(&reopened).shared.apps.len(), 11);
+    assert_eq!(snapshot(&reopened).shared.apps.len(), 9);
 }
 
 #[test]
@@ -708,8 +719,8 @@ fn builtin_md_editor_v3_window_migrates_current_file_on_restart() {
         .iter()
         .find(|window| window.id == window_id)
         .unwrap();
-    assert_eq!(app.current_version, 4);
-    assert_eq!(window.app_version, 4);
+    assert_eq!(app.current_version, 5);
+    assert_eq!(window.app_version, 5);
     assert_eq!(
         window.state.get("source").and_then(Value::as_f64),
         Some(1.0)
@@ -770,7 +781,7 @@ fn registry_events_remove_personal_apps_but_preserve_builtins() {
     assert!(state
         .apps
         .iter()
-        .any(|app| app.id == "md-editor" && app.current_version == 4 && app.name != "바뀐 이름"));
+        .any(|app| app.id == "md-editor" && app.current_version == 5 && app.name != "바뀐 이름"));
 }
 
 #[test]
@@ -3056,7 +3067,7 @@ fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let core = open_core(&data_dir, vec![], &host);
     let snapshot = snapshot(&core);
     assert_eq!(snapshot.shared.workspaces.len(), 1);
-    assert_eq!(snapshot.shared.apps.len(), 11);
+    assert_eq!(snapshot.shared.apps.len(), 9);
     assert!(fs::read_dir(&data_dir).unwrap().any(|entry| {
         entry
             .unwrap()
