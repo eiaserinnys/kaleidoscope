@@ -580,6 +580,24 @@ impl Core {
                 result.extend_from_slice(&bytes);
                 Ok(result)
             }
+            "client.http_request" => {
+                #[derive(serde::Deserialize)]
+                struct Request {
+                    permission: String,
+                    method: kaleidoscope_contract::data::HttpMethod,
+                    path: String,
+                    query: std::collections::BTreeMap<String, serde_json::Value>,
+                    headers: std::collections::BTreeMap<String, String>,
+                }
+                let size = body.get(..4).and_then(|head| <[u8; 4]>::try_from(head).ok()).map(u32::from_be_bytes)
+                    .ok_or_else(errors::DESK_CLIENT_HTTP_REQUEST_HEADER_MISSING)? as usize;
+                let metadata = body.get(4..4 + size).ok_or_else(errors::DESK_CLIENT_HTTP_REQUEST_META_TRUNCATED)?;
+                let request: Request = serde_json::from_slice(metadata).map_err(|_| errors::DESK_CLIENT_HTTP_REQUEST_META_INVALID())?;
+                let content = &body[4 + size..];
+                let response = client_http::request(&self.inner, window, &request.permission, request.method, &request.path, request.query, request.headers,
+                    if content.is_empty() { None } else { Some(content) })?;
+                Ok(client_http::encode_response(response))
+            }
             "process.write" => {
                 let size = body
                     .get(..4)

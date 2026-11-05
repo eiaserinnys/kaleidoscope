@@ -193,7 +193,15 @@ function bridgeSource(init: SandboxInit): string {
         },
       },
       assets: { bytes(id) { return clientRequest('ks-client-asset-bytes', { id }); } },
-      http: { read({ permission, path, query = {} }) { return clientRequest('ks-client-http-read', { permission, path, query }); } },
+      http: {
+        read({ permission, path, query = {} }) { return clientRequest('ks-client-http-read', { permission, path, query }); },
+        request({ permission, method = 'GET', path, query = {}, headers = {}, body }) {
+          if (typeof body === 'string') body = new TextEncoder().encode(body).buffer;
+          else if (ArrayBuffer.isView(body)) body = new Uint8Array(body.buffer, body.byteOffset, body.byteLength).slice().buffer;
+          else if (body == null) body = undefined;
+          return clientRequest('ks-client-http-request', { permission, method, path, query, headers, body }, body instanceof ArrayBuffer ? [body] : undefined);
+        },
+      },
       blobs: {
         put({ key, file_id, bytes }) { return clientRequest('ks-client-blob-put', { key, fileId: file_id, bytes }, bytes instanceof ArrayBuffer ? [bytes] : undefined); },
         open({ key }) { return clientRequest('ks-client-blob-open', { key }); },

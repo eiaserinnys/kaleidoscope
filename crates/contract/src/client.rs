@@ -9,7 +9,7 @@ use ts_rs::TS;
 
 use crate::{
     assets::AssetDep,
-    data::{Actions, Binding},
+    data::{Actions, Binding, HttpMethod},
 };
 
 pub const CLIENT_OUTPUT_MAX_BYTES: usize = 1024 * 1024;
@@ -394,6 +394,20 @@ pub enum ClientBridgeRequest {
         permission: String,
         path: String,
         query: BTreeMap<String, Value>,
+    },
+    #[serde(rename = "ks-client-http-request")]
+    HttpRequest {
+        #[serde(rename = "requestId")]
+        request_id: String,
+        permission: String,
+        method: HttpMethod,
+        path: String,
+        query: BTreeMap<String, Value>,
+        #[serde(default)]
+        headers: BTreeMap<String, String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "ArrayBuffer")]
+        body: Option<Vec<u8>>,
     },
     #[serde(rename = "ks-client-blob-put")]
     BlobPut {

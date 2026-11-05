@@ -129,6 +129,7 @@ impl Transport for Loopback {
                 }
                 Ok(PublicResponse {
                     status,
+                    headers: BTreeMap::new(),
                     mime: mime.into(),
                     bytes,
                     retry_after: Some("7".into()),

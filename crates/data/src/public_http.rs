@@ -5,12 +5,13 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use std::time::Duration;
 
 use kaleidoscope_contract::{
-    data,
+    data::{self, HttpMethod},
     validate::{allowed_public_http_path, valid_https_origin},
 };
 
 pub struct PublicResponse {
     pub status: u16,
+    pub headers: BTreeMap<String, String>,
     pub rate_limit: Option<kaleidoscope_contract::registry::RateLimitHint>,
     pub retry_after: Option<String>,
     pub mime: String,
@@ -91,11 +92,21 @@ pub fn get_typed(
     query: &BTreeMap<String, String>,
     limit: u64,
 ) -> Result<PublicResponse, PublicHttpError> {
-    get_with(
+    request_typed(base_url, paths, path, query, HttpMethod::Get, &BTreeMap::new(), None, limit)
+}
+
+pub fn request_typed(
+    base_url: &str, paths: &[String], path: &str, query: &BTreeMap<String, String>,
+    method: HttpMethod, headers: &BTreeMap<String, String>, body: Option<&[u8]>, limit: u64,
+) -> Result<PublicResponse, PublicHttpError> {
+    request_with(
         base_url,
         paths,
         path,
         query,
+        method,
+        headers,
+        body,
         limit,
         |host| {
             if let Ok(ip) = host
@@ -110,7 +121,7 @@ pub fn get_typed(
                 .map(|items| items.collect())
                 .map_err(|error| error.to_string())
         },
-        |host, addresses, address, query, limit| {
+        |host, addresses, address, query, method, headers, body, limit| {
             let client = client_builder()
                 .no_proxy()
                 .resolve_to_addrs(host, addresses)
@@ -118,10 +129,10 @@ pub fn get_typed(
                 .timeout(Duration::from_secs(data::CONNECTION_TIMEOUT_SECS))
                 .build()
                 .map_err(|error| PublicHttpError::Transport(error.to_string()))?;
-            let response = client
-                .get(address)
-                .query(query)
-                .send()
+            let mut request = client.request(reqwest::Method::from_bytes(method.as_str().as_bytes()).expect("HTTP 메서드는 계약에 정의되어 있다"), address).query(query);
+            for (name, value) in headers { request = request.header(name.as_str(), value.as_str()); }
+            if let Some(body) = body { request = request.body(body.to_vec()); }
+            let response = request.send()
                 .map_err(|error| PublicHttpError::Transport(error.without_url().to_string()))?;
             read_response(response, limit)
         },
@@ -147,6 +158,20 @@ where
         &BTreeMap<String, String>,
         u64,
     ) -> Result<PublicResponse, PublicHttpError>,
+{
+    request_with(base_url, paths, path, query, HttpMethod::Get, &BTreeMap::new(), None, limit, resolve,
+        |host, addresses, address, query, _, _, _, limit| transport(host, addresses, address, query, limit))
+}
+
+/// 같은 공개 주소 검사 뒤 메서드와 헤더, 본문을 전송한다.
+pub fn request_with<R, T>(
+    base_url: &str, paths: &[String], path: &str, query: &BTreeMap<String, String>,
+    method: HttpMethod, headers: &BTreeMap<String, String>, body: Option<&[u8]>, limit: u64,
+    resolve: R, transport: T,
+) -> Result<PublicResponse, PublicHttpError>
+where
+    R: FnOnce(&str) -> Result<Vec<std::net::SocketAddr>, String>,
+    T: FnOnce(&str, &[std::net::SocketAddr], &str, &BTreeMap<String, String>, HttpMethod, &BTreeMap<String, String>, Option<&[u8]>, u64) -> Result<PublicResponse, PublicHttpError>,
 {
     let parsed = url::Url::parse(base_url).map_err(|_| PublicHttpError::InvalidAddress)?;
     let valid_ip_origin = match parsed.host() {
@@ -185,7 +210,7 @@ where
         return Err(PublicHttpError::PrivateAddress);
     }
     let address = format!("{}{}", base_url.trim_end_matches('/'), path);
-    transport(host, &addresses, &address, query, limit)
+    transport(host, &addresses, &address, query, method, headers, body, limit)
 }
 
 fn read_response(
@@ -193,6 +218,14 @@ fn read_response(
     limit: u64,
 ) -> Result<PublicResponse, PublicHttpError> {
     let status = response.status().as_u16();
+    let mut headers = BTreeMap::<String, String>::new();
+    for (name, value) in response.headers() {
+        let name = name.as_str();
+        if name == "set-cookie" || name == "set-cookie2" { continue; }
+        if let Ok(value) = std::str::from_utf8(value.as_bytes()) {
+            headers.entry(name.to_owned()).and_modify(|v| { v.push_str(", "); v.push_str(value); }).or_insert_with(|| value.to_owned());
+        }
+    }
     let rate_limit = crate::rate_limit::rate_limit(status, response.headers());
     let retry_after = response
         .headers()
@@ -215,6 +248,7 @@ fn read_response(
     }
     Ok(PublicResponse {
         status,
+        headers,
         rate_limit,
         retry_after,
         mime,
@@ -274,6 +308,26 @@ mod tests {
             .unwrap();
         let response = read_response(response, 1024).unwrap();
         assert_eq!(response.rate_limit.unwrap().retry_after_secs, Some(7));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn response_exposes_combined_headers_without_cookies() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0; 4096];
+            stream.read(&mut request).unwrap();
+            stream.write_all(b"HTTP/1.1 412 Precondition Failed\r\nETag: v1\r\nX-Result: one\r\nX-Result: two\r\nSet-Cookie: secret=1\r\nSet-Cookie2: secret=2\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        let response = client_builder().no_proxy().build().unwrap().get(format!("http://{address}/")).send().unwrap();
+        let response = read_response(response, 1024).unwrap();
+        assert_eq!(response.status, 412);
+        assert_eq!(response.headers["etag"], "v1");
+        assert_eq!(response.headers["x-result"], "one, two");
+        assert!(!response.headers.contains_key("set-cookie"));
+        assert!(!response.headers.contains_key("set-cookie2"));
         server.join().unwrap();
     }
 }
