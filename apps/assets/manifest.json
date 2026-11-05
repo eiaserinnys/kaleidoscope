@@ -234,7 +234,7 @@
     "id": "builtin-icon-profiler",
     "version": 2,
     "format": "svg",
-    "sha256": "8d1a51cdb9dfad3008af0becff4d855c08c590e4b049961114f268b04bb3c247",
+    "sha256": "2c949eb6026b01aac9ee461d87fffefcaac426828bb1dcd7f2c4a73164049d57",
     "source": "gpt-image-2.6-flare SVG 생성 후 타일 정리, 카드 #1014",
     "license": "MIT",
     "byte_size": 1086,

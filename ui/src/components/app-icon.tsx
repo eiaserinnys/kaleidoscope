@@ -74,6 +74,6 @@ export const AppIcon = memo(function AppIcon({ store, appId, appVersion, size, p
     void request.then((image) => { if (active) setResult({ key, image }); }, () => { if (active) setResult({ key, image: null }); });
     return () => { active = false; };
   }, [store, key, appId, appVersion, icon]);
-  if (placeholder === "skeleton" && icon && result.key !== key) return <i aria-hidden="true" className="ks-icon-skeleton-icon" />;
+  if (placeholder === "skeleton" && icon && result.key !== key) return <i aria-hidden="true" className={`ks-icon-skeleton-icon${size === "chrome" ? " ks-icon-skeleton-chrome" : ""}`} style={{ width: ICON_SIZE[size], height: ICON_SIZE[size] }} />;
   return result.key === key && result.image ? <IconImage image={result.image} size={size} /> : <LayoutGrid className="ks-app-icon" size={size} />;
 });

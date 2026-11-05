@@ -57,7 +57,7 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
 
   return <WindowChrome area={area} rect={appWindow.rect} maximized={isMaximized} minimized={isMinimized}
     zIndex={appWindow.z} isTop={isTop} title={windowHeader?.title ?? appName} meta={windowHeader?.meta}
-    icon={<AppIcon store={store} appId={appWindow.app_id} appVersion={appWindow.app_version} size="chrome" />}
+    icon={<AppIcon store={store} appId={appWindow.app_id} appVersion={appWindow.app_version} size="chrome" placeholder="skeleton" />}
     titleActions={<>
       {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={toggleShare}><ScreenShare size="chrome" /></IconButton> : null}
       {hasSettings && settingsAvailable ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={toggleSettings}><Settings size="chrome" /></IconButton></span> : null}

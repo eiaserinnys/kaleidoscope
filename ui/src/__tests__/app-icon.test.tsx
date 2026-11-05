@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppIcon, svgUsesCurrentColor } from "../components/app-icon";
+import { IconTileSkeleton } from "../components/icon-tile";
 
 describe("앱 아이콘 SVG 표시 방식", () => {
   it.each([
@@ -39,6 +40,25 @@ if (!globalThis.ResizeObserver) {
 afterEach(cleanup);
 
 describe("쉘 앱 아이콘", () => {
+  it("창 아이콘을 불러오는 동안 14px 뼈대를 보여 주고 격자 뼈대는 32px을 유지한다", async () => {
+    const snapshot = makeTestSnapshot({ definitions: [{ ...mdViewerDefinition, icon: { asset: "logo", version: 1 } }] });
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const original = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) =>
+      request.op === "app.icon" ? new Promise(() => {}) : original(request)) as typeof transport.call);
+    const store = createShellStore(transport);
+    await store.ready;
+    const { container } = render(<><AppIcon store={store} appId={snapshot.shared.app_versions[0].app_id} appVersion={1} size="chrome" placeholder="skeleton" /><IconTileSkeleton count={1} /></>);
+    const skeletons = container.querySelectorAll<HTMLElement>(".ks-icon-skeleton-icon");
+    expect(skeletons).toHaveLength(2);
+    expect(skeletons[0].classList.contains("ks-icon-skeleton-chrome")).toBe(true);
+    expect(skeletons[0].style.width).toBe("14px");
+    expect(skeletons[0].style.height).toBe("14px");
+    expect(skeletons[1].style.width).toBe("32px");
+    expect(skeletons[1].style.height).toBe("32px");
+    expect(container.querySelector("svg.ks-app-icon")).toBeNull();
+    store.dispose();
+  });
   it("창은 최신 앱 판 대신 자기 판의 아이콘을 요청한다", async () => {
     const snapshot = makeTestSnapshot({ definitions: [{ ...mdViewerDefinition, icon: { asset: "old-logo", version: 1 } }] });
     const version = snapshot.shared.app_versions[0];
@@ -96,6 +116,7 @@ describe("쉘 앱 아이콘", () => {
     expect(screen.getByRole("dialog", { name: "앱 열기" }).querySelector(".ks-icon-skeleton-icon")).not.toBeNull();
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] } } });
     await screen.findByTestId("app-window-md-viewer");
+    expect(screen.getByTestId("app-window-md-viewer").querySelector(".ks-window-titlebar .ks-icon-skeleton-chrome")).not.toBeNull();
     expect(iconCalls()).toHaveLength(1);
     complete({ op: "app.icon", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } });
     await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(2));
