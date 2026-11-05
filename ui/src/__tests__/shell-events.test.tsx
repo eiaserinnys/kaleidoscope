@@ -565,11 +565,19 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "페어링 코드 123456" }));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "코드 복사" }));
-    fireEvent.click(screen.getByRole("button", { name: "코드 복사" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("123456"));
-    expect((await screen.findByText("복사했습니다")).getAttribute("role")).toBe("status");
-    expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-check")).toBeTruthy();
-    expect(screen.queryByText("코드 복사됨")).toBeNull();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "코드 복사" }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith("123456"));
+      const status = await screen.findByText("복사했습니다");
+      expect(status.getAttribute("role")).toBe("status");
+      expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-check")).toBeTruthy();
+      expect(screen.queryByText("코드 복사됨")).toBeNull();
+      act(() => { vi.advanceTimersByTime(1500); });
+      expect(status.textContent).toBe("");
+      expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-copy")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-check")).toBeNull();
+    } finally { vi.useRealTimers(); }
     transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
     expect(await screen.findByText("집")).toBeTruthy();
     expect(screen.getByRole("button", { name: "연결 끊기" })).toBeTruthy(); store.dispose();

@@ -24,6 +24,9 @@ export function ShellSettings({ snapshot, entry, call, store }: {
   const [localTransfer, setTransfer] = useState<TransferResult | null>(null);
   const [busy, setBusy] = useState<CoreRequest["op"] | null>(null);
   const [copyResult, setCopyResult] = useState<"copied" | "failed" | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearCopyTimer = () => { if (copyTimer.current) clearTimeout(copyTimer.current); copyTimer.current = null; };
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const transfer = localTransfer ?? snapshot.last_transfer;
   useEffect(() => { if (revokedUrl !== null) setUrl(revokedUrl); }, [revokedUrl]);
   useEffect(() => {
@@ -39,7 +42,7 @@ export function ShellSettings({ snapshot, entry, call, store }: {
   }, [link.state, busy]);
 
   const run = async (request: CoreRequest) => {
-    setBusy(request.op); setCopyResult(null); setTransfer(null);
+    setBusy(request.op); clearCopyTimer(); setCopyResult(null); setTransfer(null);
     try {
       const reply = await call(request);
       if (reply?.op === "link.sync_local_to_remote") setTransfer(reply.result);
@@ -66,8 +69,11 @@ export function ShellSettings({ snapshot, entry, call, store }: {
           <span aria-hidden="true" className={`shell-server-dot is-${link.state}`} /><span>{link.state === "pairing" ? <>페어링 코드 <span className="ks-pairing-code">{link.user_code}</span></> : status}</span>
           {link.state === "offline" && link.mode === "embedded" && !link.reason ? <LoaderCircle size="inline" className="ks-settings-apply-spinner" /> : null}
           {link.state === "pairing" ? <IconButton aria-label="코드 복사" title="코드 복사" disabled={busy !== null} onClick={async () => {
-            try { await navigator.clipboard.writeText(link.user_code); setCopyResult("copied"); }
-            catch { setCopyResult("failed"); }
+            try {
+              await navigator.clipboard.writeText(link.user_code);
+              clearCopyTimer(); setCopyResult("copied");
+              copyTimer.current = setTimeout(() => { copyTimer.current = null; setCopyResult((current) => current === "copied" ? null : current); }, 1500);
+            } catch { clearCopyTimer(); setCopyResult("failed"); }
           }}>{copyResult === "copied" ? <Check /> : <Copy />}</IconButton> : null}
           {link.state === "pairing" ? <span aria-live="polite" className="ks-accessible-hidden" role="status">{copyResult === "copied" ? "복사했습니다" : ""}</span> : null}
         </>} meta={<div className="shell-server-meta-group">
