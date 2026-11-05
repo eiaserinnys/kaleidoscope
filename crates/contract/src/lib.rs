@@ -2126,7 +2126,7 @@ pub enum Block {
         #[ts(optional)]
         wrap: Option<bool>,
     },
-    /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 휠과 단추로 확대하고
+    /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 Ctrl(⌘)+휠, 오므리기와 단추로 확대하고
     /// 끌어서 옮기며, 두 번 누르면 맞춤으로 돌아간다. 이미지가 없으면 빈 상태를 보인다.
     Image {
         src: Binding,
@@ -2821,7 +2821,7 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<bool>,
     },
-    /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 휠과 단추로 확대하고
+    /// (4판) 이미지 하나. `src`는 [`data::MediaRef`]이고 그 `crop`대로 자른다. `zoom`이면 Ctrl(⌘)+휠, 오므리기와 단추로 확대하고
     /// 끌어서 옮기며, 두 번 누르면 맞춤으로 돌아간다. 이미지가 없으면 빈 상태를 보인다.
     Image {
         src: Binding,

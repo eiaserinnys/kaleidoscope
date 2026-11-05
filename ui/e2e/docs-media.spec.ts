@@ -61,7 +61,9 @@ test("이미지 확대와 이동, 소리 재생과 위치 조절", async ({ page
   const frame = image.locator(".ks-image-frame");
   await expect(frame.locator("img")).toBeVisible();
   await image.hover();
+  await page.keyboard.down("Control");
   await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
   await expect(frame).toHaveCSS("transform", /matrix\(1\.25/);
   const bounds = await image.boundingBox();
   if (!bounds) throw new Error("이미지 크기가 없습니다");
