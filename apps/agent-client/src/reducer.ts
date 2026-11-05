@@ -1,5 +1,6 @@
 import type { InitializeResponse, NewSessionResponse, RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { agentError } from "./errors.ts";
+import { GUIDE_OPEN } from "./guide.ts";
 
 export type Attachment = { id: string; name: string; mime: string; key: string; size: number };
 export type Queued = { id: string; text: string; attachments: Attachment[] };
@@ -172,7 +173,7 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
   if (request.kind === "switch" || request.kind === "new_user") {
     const result = message.result as NewSessionResponse;
     return { ...next, sessionId: request.kind === "switch" ? String(request.params) : result.sessionId,
-      replay: false, replayItems: [], sessionError: null, guideSent: false, controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
+      replay: false, replayItems: [], sessionError: null, guideSent: request.kind === "switch" && (state.replayItems ?? []).some((item) => item.kind === "user" && item.text.includes(GUIDE_OPEN)), controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
   }
   if (request.kind === "new" || request.kind === "load") {
     const result = message.result as NewSessionResponse;

@@ -1,6 +1,6 @@
 /** Existing AGENT identifiers keep their original place and cause in the client. */
 const messages = {
-  AGENT_SESSION_LIST_FAILED: (reason: string) => `지난 세션 목록을 받지 못했습니다. 다시 열어 보세요. 원인: ${reason}`,
+  AGENT_SESSION_LIST_FAILED: (reason: string) => `지난 세션 목록을 받지 못했습니다. 다시 받기를 누르세요. 원인: ${reason}`,
   AGENT_SESSION_LOAD_FAILED: (reason: string) => `선택한 세션을 이어 가지 못했습니다. 다시 선택하세요. 원인: ${reason}`,
   AGENT_SESSION_LOAD_ACTIVE_WRITER: "다른 곳에서 열려 있는 세션입니다. 그쪽을 닫고 다시 고르세요.",
   AGENT_SESSION_NEW_FAILED: (reason: string) => `새 세션을 만들지 못했습니다. 다시 시도하세요. 원인: ${reason}`,

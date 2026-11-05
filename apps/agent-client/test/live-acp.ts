@@ -87,7 +87,7 @@ test("실제 가짜 ACP 프로세스의 승인 중 재접속과 큐", async (t) 
   ] });
   await f.waitFor(() => f.view()?.permissions.length === 1);
   const prompt = f.writes.find((item) => item.method === "session/prompt");
-  assert.deepEqual(prompt.params.prompt.map((item: any) => item.type), ["text", "text", "image", "resource_link"]);
+  assert.deepEqual(prompt.params.prompt.map((item: any) => item.type), ["text", "image", "resource_link", "text"]);
   await first.send({ id: "two", text: "next", attachments: [] });
   const resumed = new AgentSession(f.host as any);
   assert.equal(await resumed.attach(spec), true);

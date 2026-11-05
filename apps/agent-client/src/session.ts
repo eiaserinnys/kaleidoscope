@@ -2,6 +2,7 @@ import { History, type BlobStore } from "./history.ts";
 import { answerPermission, enqueue, initialState, reduceMessage, reserveRequest, type Attachment, type Item, type State } from "./reducer.ts";
 import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
+import { cleanReplay, GUIDE_TAG } from "./guide.ts";
 
 export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[] };
 type InstallerCheckpoint = { stdout: string };
@@ -377,7 +378,7 @@ export class AgentSession {
           this.state = { ...this.state, restoreControls };
         }
         if (request && !message.error && (request.kind === "switch" || request.kind === "new_user") && this.state.sessionId) {
-          await this.history.replace(this.state.sessionId, request.kind === "switch" ? replayItems : []);
+          await this.history.replace(this.state.sessionId, request.kind === "switch" ? cleanReplay(replayItems) : []);
         }
         if (request && !message.error && request.kind === "configure") {
           const control = request.params as { id: string; value: string | boolean };
@@ -443,13 +444,8 @@ export class AgentSession {
     const [queued, ...queue] = this.state.queue;
     const prepared = await this.host.prepare(queued.id, queued.attachments.length, queued.attachments.reduce((sum, item) => sum + item.size, 0));
     const content: Record<string, unknown>[] = [];
-    if (!this.state.guideSent) {
-      const guide = await this.host.instructions();
-      const tools = this.state.capabilities.http && this.tools ? "MCP 도구가 연결되어 있습니다." : "현재 MCP 도구를 사용할 수 없습니다.";
-      content.push({ type: "text", text: `${guide}\n${tools}` });
-    }
-    if (prepared.text) content.push({ type: "text", text: prepared.text });
     if (queued.text) content.push({ type: "text", text: queued.text });
+    if (prepared.text) content.push({ type: "text", text: prepared.text });
     const allAttachments: Array<{ id: string; name: string; mime: string; key: string; bytes?: Uint8Array }> = [
       ...queued.attachments, ...prepared.images.map((image, index) => ({ ...image, id: `visual-${index}`, key: "" })),
     ];
@@ -462,6 +458,11 @@ export class AgentSession {
         if (!attachment.key) await this.host.blobs.put(key, bytes);
         content.push({ type: "resource_link", name: attachment.name, mimeType: attachment.mime, uri: await this.host.process.file_uri(key) });
       }
+    }
+    if (!this.state.guideSent) {
+      const guide = await this.host.instructions();
+      const tools = this.state.capabilities.http && this.tools ? "MCP 도구가 연결되어 있습니다." : "현재 MCP 도구를 사용할 수 없습니다.";
+      content.push({ type: "text", text: `<${GUIDE_TAG}>\n${guide}\n${tools}\n</${GUIDE_TAG}>` });
     }
     const item: Item = { id: queued.id, kind: "user", text: queued.text, at: this.host.now(), attachments: queued.attachments.map(({ id, name, mime }) => ({ id, name, mime })) };
     await this.history.append([item]);

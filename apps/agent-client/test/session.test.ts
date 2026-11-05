@@ -118,7 +118,7 @@ test("같은 프로세스에 다시 붙으면 진행 중인 승인과 큐를 복
   assert.ok(f.snapshots.slice(beforeHandoff).every((view) => view.busy), "줄 선 말을 이어 보내는 동안 생각 중 상태를 유지해야 합니다");
   const prompts = f.writes.filter((message) => message.method === "session/prompt");
   assert.equal(prompts.length, 2);
-  assert.equal(prompts[1].params.prompt.some((part: any) => part.text?.startsWith("안내문")), false);
+  assert.equal(prompts[1].params.prompt.some((part: any) => part.text?.includes("<kaleidoscope-app-guide>")), false);
 });
 
 test("응답 중 도구 주소가 바뀌면 턴을 마친 뒤 프로세스를 바꾸고 같은 세션을 load한다", async () => {
@@ -213,16 +213,16 @@ test("큐를 순서대로 보내고 첫 말에만 지침과 같이 보기 및 �
   await new Promise((resolve) => setTimeout(resolve, 0));
   await session.send({ id: "two", text: "다음 말", attachments: [] });
   const first = f.writes.find((message) => message.method === "session/prompt");
-  assert.deepEqual(first.params.prompt.map((block: any) => block.type), ["text", "text", "text", "image", "resource_link"]);
-  assert.ok(first.params.prompt[0].text.includes("MCP 도구"));
-  assert.equal(first.params.prompt[4].uri, "file:///attachments/one-1");
+  assert.deepEqual(first.params.prompt.map((block: any) => block.type), ["text", "text", "image", "resource_link", "text"]);
+  assert.ok(first.params.prompt[4].text.includes("MCP 도구"));
+  assert.equal(first.params.prompt[3].uri, "file:///attachments/one-1");
   assert.equal(JSON.stringify(f.getCheckpoint()).includes("안내문"), false);
   assert.equal(JSON.stringify(f.getCheckpoint()).includes("AQI="), false);
   assert.equal(f.writes.filter((message) => message.method === "session/prompt").length, 1);
   await f.emit({ jsonrpc: "2.0", id: first.id, result: { stopReason: "end_turn" } });
   const prompts = f.writes.filter((message) => message.method === "session/prompt");
   assert.equal(prompts.length, 2);
-  assert.equal(prompts[1].params.prompt.at(-1).text, "다음 말");
+  assert.equal(prompts[1].params.prompt[0].text, "다음 말");
   assert.equal(guides, 1);
   assert.equal(commits, 2);
 });
@@ -467,3 +467,40 @@ test("목록 능력이 없는 이전 판 체크포인트는 같은 프로세스�
   assert.equal(f.snapshots.at(-1).sessionId, "current");
   assert.equal(f.writes.filter((write: any) => write.method === "initialize").length, before);
 });
+
+test("첫 지침은 사용자 글과 같이 보기 뒤에 표지로 감싸 보낸다", async () => {
+  const f = fixture();
+  f.host.prepare = async () => ({ text: "같이 보기", images: [], ticket: "ticket" });
+  const session = new AgentSession(f.host as any);
+  await session.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: {} } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "s" } });
+  await session.send({ id: "q", text: "사용자 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const prompt = f.writes.at(-1).params.prompt;
+  assert.equal(prompt[0].text, "사용자 말");
+  assert.equal(prompt[1].text, "같이 보기");
+  assert.match(prompt.at(-1).text, /^<kaleidoscope-app-guide>\n안내문\n.*\n<\/kaleidoscope-app-guide>$/);
+});
+
+for (const hasGuide of [true, false]) {
+  test(`리플레이의 지침 표지 ${hasGuide ? "있음" : "없음"}에 따라 기록과 발송 여부를 정한다`, async () => {
+    const { f, session } = await readyWithHistory();
+    await session.loadSession("chosen");
+    const id = f.writes.at(-1).id;
+    const chunk = (messageId: string, text: string) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "user_message_chunk", messageId, content: { type: "text", text } } } });
+    await f.emit(chunk("one", " 사용자 말 "));
+    if (hasGuide) {
+      await f.emit(chunk("one", "<kaleidoscope-app-"));
+      await f.emit(chunk("one", "guide>지침</kaleidoscope-app-guide>"));
+      await f.emit(chunk("two", "<kaleidoscope-app-guide>지침만"));
+    }
+    await f.emit({ jsonrpc: "2.0", id, result: {} });
+    assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["사용자 말"]);
+    assert.equal((f.getCheckpoint() as any).guideSent, hasGuide);
+    await session.send({ id: "after", text: "다음", attachments: [] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const parts = f.writes.at(-1).params.prompt;
+    assert.equal(parts.some((part: any) => part.text?.includes("<kaleidoscope-app-guide>")), !hasGuide);
+  });
+}

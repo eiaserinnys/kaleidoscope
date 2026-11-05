@@ -1,5 +1,6 @@
 import { AgentSession, type Host, type SendInput, type SessionView, type Spec } from "./session.ts";
 import { agentError } from "./errors.ts";
+import { cleanTitle } from "./guide.ts";
 
 type Agent = Spec & { id: string };
 type Program = { name: string; winget: string; url: string };
@@ -61,6 +62,7 @@ export class AppClient {
   private lastActivity = "";
   private lastOutputs = "";
   private historyOpen = false;
+  private switchRequested: "new" | "load" | null = null;
 
   constructor(client: Bridge, defaults: Agent[]) {
     this.client = client;
@@ -96,12 +98,23 @@ export class AppClient {
     client.handle("cancel", () => this.session.cancel());
     client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
     client.handle("attachment", ({ event }) => this.attachment(event));
-    client.handle("new_session", () => this.session.newSession());
+    client.handle("new_session", () => this.switchSession(null));
     client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
     client.handle("close_history", () => { this.historyOpen = false; this.update(); });
     client.handle("select_session", ({ event }) => {
       if (event === this.view?.sessionId) { this.historyOpen = false; this.update(); return; }
-      return this.session.loadSession(String(event));
+      return this.switchSession(String(event));
+    });
+  }
+
+  private switchSession(id: string | null): Promise<void> {
+    this.historyOpen = false;
+    this.switchRequested = id ? "load" : "new";
+    this.update();
+    return (id ? this.session.loadSession(id) : this.session.newSession()).catch((error) => {
+      this.switchRequested = null;
+      this.update();
+      throw error;
     });
   }
 
@@ -345,7 +358,10 @@ export class AppClient {
   private receive(view: SessionView): void {
     const previous = this.view;
     this.view = view;
-    if (previous?.switching && !view.switching && !view.sessionError && previous.sessionId !== view.sessionId) this.historyOpen = false;
+    if (previous?.switching && !view.switching) {
+      if (this.switchRequested === "load" && view.sessionError) this.historyOpen = true;
+      this.switchRequested = null;
+    }
     if (!this.historyOpen && view.sessionError && view.sessionError !== previous?.sessionError && view.sessionError.id === "AGENT_SESSION_NEW_FAILED") {
       this.client.chat.publish("conversation", { kind: "error", error: { ...view.sessionError, code: "local_agent_failed", details: [] } });
     }
@@ -422,13 +438,14 @@ export class AppClient {
       selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
-      history_open: this.historyOpen, session_buttons_busy: !!(this.view?.busy || this.view?.switching || this.view?.configuring),
-      history_disabled: !!(this.view?.busy || this.view?.switching || this.view?.configuring || !this.view?.canListSessions),
+      history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested),
+      history_disabled: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested || !this.view?.canListSessions),
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
-      history_items: (this.view?.sessions ?? []).map((session) => ({ key: session.sessionId, title: session.title || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt) })),
+      history_items: (this.view?.sessions ?? []).map((session) => ({ key: session.sessionId, title: cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt) })),
       history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading,
       history_empty: !!this.view && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,
       history_has_items: !!this.view?.sessions.length, history_has_error: !!this.view?.sessionError,
+      history_list_error: this.view?.sessionError?.id === "AGENT_SESSION_LIST_FAILED", history_other_error: !!this.view?.sessionError && this.view.sessionError.id !== "AGENT_SESSION_LIST_FAILED",
       history_error_message: this.view?.sessionError?.message ?? "", history_error_id: this.view?.sessionError?.id ?? null,
       permissions: this.view?.permissions ?? [], auth_methods: this.view?.authMethods ?? [],
       has_error: !!(this.error || failure), error_message: message, error_id: unsupported ? "AGENT_INSTALL_UNSUPPORTED_PLATFORM" : this.error?.id ?? failure?.id ?? null,

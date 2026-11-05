@@ -105,3 +105,28 @@ test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 
   assert.equal(views.at(-1).history_disabled, true);
   assert.equal(views.at(-1).session_buttons_busy, true);
 });
+
+test("세션 전환 중 대화를 숨기고 실패하면 대화상자와 오류를 다시 연다", () => {
+  const handlers = new Map<string, (context: any) => unknown>(), views: any[] = [];
+  const client = { process: { onReady() {}, onServicesChanged() {} }, files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
+    onStorageChange() {}, onLifecycle() {}, onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view) };
+  const app = new AppClient(client as any, []);
+  const base = { phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], permissions: [], controls: [], authMethods: [], failure: null,
+    sessionId: "current", canListSessions: true, sessions: [{sessionId:"other", title:"제목 <kaleidoscope-app-guide>지침</kaleidoscope-app-guide>", cwd:"/work"}], sessionsLoading: false, sessionError: null, switching: false, configuring: false };
+  (app as any).stage = "session";
+  (app as any).receive(base);
+  assert.equal(views.at(-1).history_items[0].title, "제목");
+  (app as any).receive({...base, sessions:[{sessionId:"123456789", title:"<kaleidoscope-app-guide>지침", cwd:"/work"}]});
+  assert.equal(views.at(-1).history_items[0].title, "12345678");
+  (app as any).receive(base);
+  (app as any).session.loadSession = async () => {};
+  handlers.get("open_history")!({});
+  handlers.get("select_session")!({event:"other"});
+  assert.equal(views.at(-1).history_open, false);
+  assert.equal(views.at(-1).session_switching, true);
+  (app as any).receive({...base, switching:true});
+  (app as any).receive({...base, sessionError:{id:"AGENT_SESSION_LOAD_FAILED",message:"오류"}});
+  assert.equal(views.at(-1).history_open, true);
+  assert.equal(views.at(-1).session_switching, false);
+  assert.equal(views.at(-1).history_error_message, "오류");
+});

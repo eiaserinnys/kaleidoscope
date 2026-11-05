@@ -537,57 +537,82 @@
               ]
             },
             {
-              "type": "chat",
-              "client": {
-                "channel": "conversation",
-                "on_send": "send",
-                "on_cancel": "cancel",
-                "on_attachment": "attachment"
-              },
-              "footer": {
-                "type": "repeat",
-                "items": {
-                  "client": "permissions"
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "fill": 1,
+              "children": [
+                {
+                  "type": "when",
+                  "value": {
+                    "client": "session_switching"
+                  },
+                  "child": {
+                    "type": "notice",
+                    "kind": "loading",
+                    "message": ""
+                  }
                 },
-                "key": "id",
-                "template": {
-                  "type": "stack",
-                  "direction": "column",
-                  "gap": "small",
-                  "children": [
-                    {
-                      "type": "text",
-                      "value": {
-                        "item": "title"
-                      }
+                {
+                  "type": "when",
+                  "value": {
+                    "client": "session_ready"
+                  },
+                  "child": {
+                    "type": "chat",
+                    "client": {
+                      "channel": "conversation",
+                      "on_send": "send",
+                      "on_cancel": "cancel",
+                      "on_attachment": "attachment"
                     },
-                    {
+                    "footer": {
                       "type": "repeat",
                       "items": {
-                        "item": "options"
+                        "client": "permissions"
                       },
                       "key": "id",
                       "template": {
-                        "type": "button",
-                        "label": {
-                          "item": "label"
-                        },
-                        "on_click": {
-                          "client": "answer"
-                        }
-                      },
-                      "layout": "row"
+                        "type": "stack",
+                        "direction": "column",
+                        "gap": "small",
+                        "children": [
+                          {
+                            "type": "text",
+                            "value": {
+                              "item": "title"
+                            }
+                          },
+                          {
+                            "type": "repeat",
+                            "items": {
+                              "item": "options"
+                            },
+                            "key": "id",
+                            "template": {
+                              "type": "button",
+                              "label": {
+                                "item": "label"
+                              },
+                              "on_click": {
+                                "client": "answer"
+                              }
+                            },
+                            "layout": "row"
+                          }
+                        ]
+                      }
                     }
-                  ]
+                  }
                 }
-              }
+              ]
             },
             {
               "type": "dialog",
               "open": {
                 "client": "history_open"
               },
-              "title": "지난 세션",
+              "title": "이어 갈 세션 고르기",
               "on_close": {
                 "client": "close_history"
               },
@@ -599,7 +624,31 @@
                   {
                     "type": "when",
                     "value": {
-                      "client": "history_has_error"
+                      "client": "history_list_error"
+                    },
+                    "child": {
+                      "type": "notice",
+                      "kind": "error",
+                      "message": {
+                        "client": "history_error_message"
+                      },
+                      "error_id": {
+                        "client": "history_error_id"
+                      },
+                      "actions": [
+                        {
+                          "label": "다시 받기",
+                          "on_click": {
+                            "client": "open_history"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "when",
+                    "value": {
+                      "client": "history_other_error"
                     },
                     "child": {
                       "type": "notice",
@@ -828,6 +877,18 @@
       },
       "history_error_id": {
         "default": null
+      },
+      "session_switching": {
+        "default": false
+      },
+      "session_ready": {
+        "default": true
+      },
+      "history_list_error": {
+        "default": false
+      },
+      "history_other_error": {
+        "default": false
       }
     },
     "channels": [
