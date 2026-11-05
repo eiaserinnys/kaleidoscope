@@ -1805,7 +1805,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
 
   it("쉘 업데이트 상태 변경은 앱 블록을 다시 그리지 않는다", async () => {
     const { store, snapshot, transport } = await setup();
-    transport.emit({ event: "state.changed", snapshot: { ...snapshot, update: { state: "ready", current_version: "0.6.2", version: "0.7.0" } } });
+    transport.emit({ event: "state.changed", snapshot: { ...snapshot, update: { state: "ready", current_version: "0.6.2", version: "0.7.0", changes: [] } } });
     expect(calls).toHaveLength(0);
     store.dispose();
   });

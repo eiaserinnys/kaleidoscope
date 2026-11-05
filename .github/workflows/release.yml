@@ -22,6 +22,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: 릴리스 변경 내역 확인
+        if: ${{ !contains(github.ref_name, '-') }}
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.Substring(1)
+          node .github/scripts/release-notes.mjs check --version $version
+          if ($LASTEXITCODE -ne 0) { throw '릴리스 변경 내역 확인 실패' }
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
@@ -83,10 +91,13 @@ jobs:
           $installerPath = Join-Path $env:GITHUB_WORKSPACE "target/release/bundle/nsis/$installer"
           $signaturePath = "$installerPath.sig"
           $manifestPath = Join-Path $env:RUNNER_TEMP 'latest.json'
+          $changesPath = Join-Path $env:RUNNER_TEMP 'changes.json'
           $publicBase = 'https://kaleidoscope.eiaserinnys.me/releases'
           $versionedKey = "releases/v$version/$installer"
           $endpoint = "https://$env:R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-          & ./.github/scripts/write-update-manifest.ps1 -Version $version -SignaturePath $signaturePath -Url "$publicBase/v$version/$installer" -OutFile $manifestPath
+          node .github/scripts/release-notes.mjs changes --version $version --out $changesPath
+          if ($LASTEXITCODE -ne 0) { throw '릴리스 변경 내역 생성 실패' }
+          & ./.github/scripts/write-update-manifest.ps1 -Version $version -SignaturePath $signaturePath -ChangesPath $changesPath -Url "$publicBase/v$version/$installer" -OutFile $manifestPath
 
           aws s3 cp $installerPath "s3://$env:R2_BUCKET/$versionedKey" --endpoint-url $endpoint --region auto --content-type 'application/octet-stream' --cache-control 'public, max-age=31536000, immutable'
           if ($LASTEXITCODE -ne 0) { throw 'R2 판별 설치본 업로드 실패' }
@@ -99,6 +110,7 @@ jobs:
 
           $published = Invoke-RestMethod -Uri "$publicBase/latest.json?run=${{ github.run_id }}"
           if ($published.version -ne $version) { throw '공개 업데이트 매니페스트의 판이 다릅니다' }
+          if ($published.changes[0].version -ne $version) { throw '공개 변경 내역의 첫 판이 다릅니다' }
           $downloaded = Join-Path $env:RUNNER_TEMP 'published-setup.exe'
           Invoke-WebRequest -Uri "$publicBase/kaleidoscope_x64-setup.exe?run=${{ github.run_id }}" -OutFile $downloaded
           if ((Get-FileHash -Algorithm SHA256 $downloaded).Hash -ne (Get-FileHash -Algorithm SHA256 $installerPath).Hash) { throw '공개 설치본이 올린 파일과 다릅니다' }

@@ -4,7 +4,7 @@ use std::time::Duration;
 use kaleidoscope_core::kaleidoscope_contract::{
     UpdateStatus, UPDATE_CHECK_INTERVAL_SECS, UPDATE_FIRST_CHECK_DELAY_SECS,
 };
-use kaleidoscope_core::{Core, UpdateHost};
+use kaleidoscope_core::{update_changes, Core, UpdateHost};
 use tauri::AppHandle;
 use tauri_plugin_updater::{Error, Update, UpdaterExt};
 
@@ -60,10 +60,13 @@ pub(crate) fn start(app: AppHandle, core: Arc<Core>, host: Arc<TauriUpdateHost>)
                     });
                     match update.download(|_, _| {}, || {}).await {
                         Ok(bytes) => {
+                            let changes =
+                                update_changes(&update.raw_json, &current_version, &version);
                             *host.prepared.lock().unwrap() = Some((update, bytes));
                             core.set_update_status(UpdateStatus::Ready {
                                 current_version: current_version.clone(),
                                 version,
+                                changes,
                             });
                             return;
                         }

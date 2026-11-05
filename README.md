@@ -53,7 +53,7 @@ kaleidoscope is under active development. Windows is the first supported desktop
 
 ### 1. Install the shell
 
-Download the [Windows installer](https://kaleidoscope.eiaserinnys.me/releases/kaleidoscope_x64-setup.exe). It is not Authenticode-signed, so Windows may show a SmartScreen warning. Installed shells update themselves from the same place.
+Download the [Windows installer](https://kaleidoscope.eiaserinnys.me/releases/kaleidoscope_x64-setup.exe). It is not Authenticode-signed, so Windows may show a SmartScreen warning. Installed shells update themselves from the same place. Before installing an update, the shell shows what changed and asks for confirmation.
 
 The shell starts its built-in server on launch. Its database and token are kept in the app data folder as `local-orchestrator.db` and `local-orchestrator.token`.
 

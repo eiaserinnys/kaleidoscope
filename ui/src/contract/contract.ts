@@ -1507,13 +1507,18 @@ export type UiFrameSample = { ms: number, blocking_ms: number, script_ms: number
 export type UiInputSample = { event: string, target: string, app_id: string | null, responding: boolean, wait_ms: number, processing_ms: number, paint_ms: number, };
 
 /**
+ * 한 판에서 사용자에게 보일 변경 내역.
+ */
+export type UpdateChanges = { version: string, items: Array<string>, };
+
+/**
  * (10판) 이 쉘 자신의 새 판 받기 상태. `state`로 가른다. 위 「쉘 업데이트」 절.
  *
  * 흐름: `idle` → (새 판이 있음) `downloading` → (받고 서명 확인) `ready` → (`update.restart`) 쉘이 끝나고 새 판이 뜬다.
  * 묻기, 받기, 서명 확인, 설치 시작 가운데 하나가 실패하면 `failed`이고, 다음 확인 때 처음부터 다시 한다.
  * 화면은 `ready`일 때만 디렉터에게 알린다. 나머지 상태는 보이지 않는다(검증과 진단용).
  */
-export type UpdateStatus = { "state": "unavailable", } | { "state": "idle", current_version: string, } | { "state": "downloading", current_version: string, version: string, } | { "state": "ready", current_version: string, version: string, } | { "state": "failed", current_version: string, version: string | null, reason: string, };
+export type UpdateStatus = { "state": "unavailable", } | { "state": "idle", current_version: string, } | { "state": "downloading", current_version: string, version: string, } | { "state": "ready", current_version: string, version: string, changes: Array<UpdateChanges>, } | { "state": "failed", current_version: string, version: string | null, reason: string, };
 
 /**
  * 주소 값. 창 상태에서 읽거나(`{ "state": "url" }`) 정의에 직접 적는다(`"https://example.com"`).

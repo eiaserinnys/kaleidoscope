@@ -76,7 +76,9 @@ jobs:
           $testDir = Join-Path $env:RUNNER_TEMP 'kaleidoscope-update-test'
           $out = Join-Path $env:GITHUB_WORKSPACE 'windows-update-e2e'
           New-Item -ItemType Directory -Force $out | Out-Null
-          & ./.github/scripts/write-update-manifest.ps1 -Version '0.0.2' -SignaturePath (Join-Path $testDir 'old.exe.sig') -Url 'http://127.0.0.1:8719/new.exe' -OutFile (Join-Path $testDir 'update.json')
+          $changesPath = Join-Path $testDir 'changes.json'
+          [IO.File]::WriteAllText($changesPath, '[{"version":"0.0.2","items":["시험 판에서 바뀐 것"]},{"version":"0.0.1","items":["앞 판에서 바뀐 것","앞 판 둘째 줄"]}]', [Text.UTF8Encoding]::new($false))
+          & ./.github/scripts/write-update-manifest.ps1 -Version '0.0.2' -SignaturePath (Join-Path $testDir 'old.exe.sig') -ChangesPath $changesPath -Url 'http://127.0.0.1:8719/new.exe' -OutFile (Join-Path $testDir 'update.json')
           $app = $null
           $exe = $null
           function Read-Events([string]$path, [switch]$Final) {
@@ -132,7 +134,7 @@ jobs:
             $rejected = @(Read-Events (Join-Path $rejectOut 'events.jsonl') -Final)
             if (-not ($rejected | Where-Object { $_.step -eq 'failed' -and $_.data.version -eq '0.0.2' -and $_.data.reason -eq '서명이 맞지 않아 깔지 않았습니다' })) { throw '서명 거부 기록 없음' }
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.1') { throw '거부 후 설치 판 변경됨' }
-            & ./.github/scripts/write-update-manifest.ps1 -Version '0.0.2' -SignaturePath (Join-Path $testDir 'new.exe.sig') -Url 'http://127.0.0.1:8719/new.exe' -OutFile (Join-Path $testDir 'update.json')
+            & ./.github/scripts/write-update-manifest.ps1 -Version '0.0.2' -SignaturePath (Join-Path $testDir 'new.exe.sig') -ChangesPath $changesPath -Url 'http://127.0.0.1:8719/new.exe' -OutFile (Join-Path $testDir 'update.json')
             $updateOut = Join-Path $out 'update'
             $app = Start-Process $exe -ArgumentList @('--e2e-scenario=update', "--e2e-out=$updateOut") -PassThru
             $deadline = (Get-Date).AddMinutes(4)
@@ -165,6 +167,8 @@ jobs:
               $complete = [bool]($events | Where-Object { $_.step -eq 'complete' -and $_.data.version -eq '0.0.2' })
             }
             if (-not $complete -or -not $captured) { throw '업데이트 완료 또는 화면 캡처 시간 초과' }
+            $ready = @($events | Where-Object { $_.step -eq 'ready' })
+            if ($ready.Count -ne 1 -or @($ready[0].data.changes).Count -ne 1 -or $ready[0].data.changes[0].version -ne '0.0.2') { throw '업데이트 변경 내역 범위 불일치' }
             if ((Get-Item $exe).VersionInfo.ProductVersion -ne '0.0.2') { throw 'B 설치 판 불일치' }
           } finally {
             Write-Diagnostics 'final'

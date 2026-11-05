@@ -192,7 +192,13 @@ const snapshot: ShellSnapshot = {
   link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],
   update: harnessParams.get("update") === "ready"
-    ? { state: "ready", current_version: "0.4.1", version: "0.5.0" }
+    ? { state: "ready", current_version: "0.6.50", version: "0.6.53", changes: harnessParams.get("update-changes") === "empty" ? [] : [
+      { version: "0.6.53", items: ["앱을 설치할 때 묻는 권한을 알아보기 쉬운 문장으로 보여 줍니다"] },
+      ...(harnessParams.get("update-changes") === "multiple" ? [
+        { version: "0.6.52", items: ["앱 설치나 서버에 보내는 내용이 너무 크면 무엇이 얼마나 큰지 알려 줍니다", "앱이 공개 웹 서비스에 쓸 때 그사이 남이 바꾼 내용을 덮어쓰지 않게 할 수 있습니다"] },
+        { version: "0.6.51", items: ["움직이는 GIF가 첫 장면 그림으로 바뀌지 않고 움직이는 그대로 보입니다"] },
+      ] : []),
+    ] }
     : harnessParams.get("update") === "idle"
       ? { state: "idle", current_version: "0.5.0" }
       : { state: "unavailable" },

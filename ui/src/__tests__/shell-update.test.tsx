@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
 import { FileEditorSession, flushEditors } from "../blocks/file-editor-session";
@@ -31,11 +31,51 @@ function readySeed() {
     editorPath: "README.md",
     grants: [grantFor("editor-window", "docs")],
   });
-  seed.snapshot.update = { state: "ready", current_version: "0.4.1", version: "0.5.0" };
+  seed.snapshot.update = { state: "ready", current_version: "0.4.1", version: "0.5.0", changes: [{ version: "0.5.0", items: ["새로운 기능"] }] };
   return seed;
 }
 
 describe("shell update action", () => {
+  it("opens automatically, stays dismissed for the same version, and reopens from the bar", async () => {
+    const seed = readySeed();
+    const transport = createFakeTransport(seed);
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const dialog = await screen.findByRole("dialog", { name: "0.5.0판으로 업데이트할까요?" });
+    expect(within(dialog).getByText("0.4.1 → 0.5.0")).toBeTruthy();
+    expect(within(dialog).getByText("새로운 기능")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "나중에" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(calls.mock.calls.some(([request]) => request.op === "update.restart")).toBe(false);
+    act(() => transport.emit({ event: "state.changed", snapshot: { ...seed.snapshot, update: { ...seed.snapshot.update } } }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "새 판 0.5.0 받음" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    store.dispose();
+  });
+
+  it("shows an empty description and the action when no changes exist", async () => {
+    const seed = readySeed();
+    if (seed.snapshot.update.state === "ready") seed.snapshot.update.changes = [];
+    const store = createShellStore(createFakeTransport(seed));
+    render(<Shell store={store} />);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("업데이트 정보에 바뀐 것 목록이 없습니다")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "다시 시작해서 업데이트" })).toBeTruthy();
+    store.dispose();
+  });
+
+  it("shows multiple versions in order", async () => {
+    const seed = readySeed();
+    if (seed.snapshot.update.state === "ready") seed.snapshot.update.changes.push({ version: "0.4.9", items: ["앞 판 내용"] });
+    const store = createShellStore(createFakeTransport(seed));
+    render(<Shell store={store} />);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toMatch(/0\.5\.0판.*새로운 기능.*0\.4\.9판.*앞 판 내용/s);
+    store.dispose();
+  });
   it.each([
     { state: "unavailable" },
     { state: "idle", current_version: "0.4.1" },
@@ -69,10 +109,7 @@ describe("shell update action", () => {
     editor.setText("# Saved before restart");
     calls.length = 0;
 
-    fireEvent.click(screen.getByRole("button", { name: "새 판 0.5.0 받음" }));
-    expect(screen.getByRole("menuitem", { name: "0.4.1 → 0.5.0" })).toHaveProperty("disabled", true);
-    expect(screen.getByRole("menu").querySelector(".ks-menu-separator")).toBeTruthy();
-    fireEvent.click(screen.getByRole("menuitem", { name: "다시 시작해서 업데이트" }));
+    fireEvent.click(await screen.findByRole("button", { name: "다시 시작해서 업데이트" }));
 
     await waitFor(() => expect(calls.some((request) => request.op === "update.restart")).toBe(true));
     expect(calls.map((request) => request.op).filter((op) => op === "files.write" || op === "update.restart"))
@@ -99,12 +136,11 @@ describe("shell update action", () => {
     editor.setText("# Unsaved");
     calls.length = 0;
 
-    fireEvent.click(screen.getByRole("button", { name: "새 판 0.5.0 받음" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "다시 시작해서 업데이트" }));
+    fireEvent.click(await screen.findByRole("button", { name: "다시 시작해서 업데이트" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("저장하지 못한 편집이 있어 다시 시작하지 않았습니다");
     expect(calls.map((request) => request.op)).toEqual(["files.write"]);
-    expect(screen.getByRole("button", { name: "새 판 0.5.0 받음" })).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
     editor.dispose();
     store.dispose();
   });
@@ -116,11 +152,10 @@ describe("shell update action", () => {
     render(<Shell store={store} />);
     await store.ready;
 
-    fireEvent.click(screen.getByRole("button", { name: "새 판 0.5.0 받음" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "다시 시작해서 업데이트" }));
+    fireEvent.click(await screen.findByRole("button", { name: "다시 시작해서 업데이트" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("설치를 시작할 수 없습니다");
-    expect(screen.getByRole("button", { name: "새 판 0.5.0 받음" })).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
     store.dispose();
   });
 });
