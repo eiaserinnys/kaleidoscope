@@ -77,20 +77,19 @@
         "children": [
           { "type": "toolbar", "start": [{ "type": "text", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') ? $state.selected_name : ''" }, "format": "plain", "style": "title" }] },
           {
-            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') and $data.detail.id = $state.selected" },
+            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') and $data_meta.detail.state = 'ready'" },
             "child": {
               "type": "stack", "direction": "column", "gap": "medium",
               "children": [
                 {
                   "type": "properties",
                   "fields": [
-                    { "label": "한 줄 소개", "value": { "expr": "$data.detail.summary" }, "format": "text" },
                     { "label": "제작자", "value": { "expr": "$data.detail.publisher" }, "format": "text" },
                     { "label": "분류", "value": { "expr": "$data.detail.category" }, "format": "text" },
                     { "label": "판", "value": { "expr": "$string($data.detail.release)" }, "format": "text" },
                     { "label": "올린 날", "value": { "expr": "$data.detail.releases[release = $data.detail.release].published_at" }, "format": "date" },
                     { "label": "권한", "value": { "expr": "( $d := $data.detail; $p := [$d.permissions.{ \"text\": label ? label : module, \"color\": module = 'process' ? '#a9363d' : '#6b7280' }]; $b := [$d.badges[$ = 'worker'].{ \"text\": \"서버 실행 코드\", \"color\": \"#a9363d\" }]; $all := $append($p, $b); $count($all) = 0 ? [{ \"text\": \"없음\", \"color\": \"#6b7280\" }] : $all )" }, "format": "badge" },
-                    { "label": "요구 쉘", "value": { "expr": "$data.detail.compatible ? '블록 세트 ' & $string($data.detail.requires.blocks) : '블록 세트 ' & $string($data.detail.requires.blocks) & ', 쉘을 올려야 설치합니다'" }, "format": "text" },
+                    { "label": "요구 쉘", "value": { "expr": "$data.detail.compatible ? null : '블록 세트 ' & $string($data.detail.requires.blocks) & ', 쉘을 올려야 설치합니다'" }, "format": "text" },
                     { "label": "상태", "value": { "expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($exists($a)) ? '설치 전' : ($a.origin = null ? '같은 id의 다른 앱이 있어 설치할 수 없습니다' : ($a.modified ? '설치 뒤 고친 앱이라 업데이트하지 않습니다' : ($a.origin.release < $d.release ? $string($a.origin.release) & '판 설치됨, 새 판 있음' : $string($a.origin.release) & '판 설치됨'))) )" }, "format": "text" },
                     { "label": "id", "value": { "state": "selected" }, "format": "code" }
                   ]
@@ -107,7 +106,11 @@
             }
           },
           {
-            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore')" },
+            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') and $data_meta.detail.state != 'ready'" },
+            "child": { "type": "text", "value": { "expr": "$data.detail.name" } }
+          },
+          {
+            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') and $data_meta.detail.state = 'ready'" },
             "child": {
               "type": "toolbar",
               "start": [{

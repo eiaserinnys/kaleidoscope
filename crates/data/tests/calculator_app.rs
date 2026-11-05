@@ -138,7 +138,7 @@ fn weather_city_selection_and_live_search_actions() {
 #[test]
 fn weather_definition_parses_with_its_declared_permissions_and_assets() {
     let app = parse_app_definition(&app_file("weather.json")).unwrap();
-    assert_eq!(app.assets.len(), 8);
+    assert_eq!(app.assets.len(), 9);
     assert_eq!(app.sources.len(), 2);
 }
 
