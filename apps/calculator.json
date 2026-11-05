@@ -1,10 +1,11 @@
 {
   "id": "calculator",
   "name": "계산기",
+  "icon": { "asset": "builtin-icon-calculator", "version": 1 },
   "description": "사칙연산",
   "requires": {
-    "blocks": 9,
-    "modules": {}
+    "blocks": 26,
+    "modules": {"assets": 1}
   },
   "permissions": [],
   "state": {
@@ -17,7 +18,7 @@
       "formula": ""
     }
   },
-  "assets": [],
+  "assets": [{ "id": "builtin-icon-calculator", "version": 1 }],
   "ui": {
     "type": "stack",
     "direction": "column",

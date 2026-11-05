@@ -1619,7 +1619,7 @@ mod freshness_tests {
     }
 
     fn request_runtime() -> Runtime {
-        let definition = parse_app_definition(include_str!("../../../apps/reader.json")).unwrap();
+        let definition = parse_app_definition(include_str!("../../../tests/fixtures/store-apps/reader.json")).unwrap();
         Runtime::new(
             2,
             definition.clone(),

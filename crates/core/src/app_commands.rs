@@ -135,6 +135,20 @@ pub(crate) fn ensure_builtin(state: &mut CoreState) {
             .retain(|access| !kaleidoscope_contract::builtin::is_retired_builtin(&access.app_id));
     }
     remove_retired_windows(state, false);
+    let moved: Vec<String> = state
+        .shared
+        .apps
+        .iter()
+        .filter(|app| {
+            kaleidoscope_contract::builtin::is_store_moved_builtin(&app.id) && app.origin.is_none()
+        })
+        .map(|app| app.id.clone())
+        .collect();
+    state.shared.apps.retain(|app| !moved.contains(&app.id));
+    state
+        .shared
+        .app_versions
+        .retain(|version| !moved.contains(&version.app_id));
     crate::layout_apply::reconcile(state);
     for row in crate::builtin::builtin_apps() {
         let same = state

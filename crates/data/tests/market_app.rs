@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 #[test]
 fn market_bindings_evaluate_with_representative_public_api_data() {
-    let definition = parse_app_definition(include_str!("../../../apps/market.json")).unwrap();
+    let definition = parse_app_definition(include_str!("../../../tests/fixtures/store-apps/market.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let ticker = json!({"symbol":"BTCUSDT","lastPrice":"100","highPrice":"110","lowPrice":"90","priceChangePercent":"2"});
     let candle = json!([172800000, "95", "105", "90", "100", "42"]);
@@ -116,7 +116,7 @@ fn market_bindings_evaluate_with_representative_public_api_data() {
 
 #[test]
 fn market_fx_quote_is_independent_of_asset_tickers_but_macro_ranges_follow_fx_dates() {
-    let definition = parse_app_definition(include_str!("../../../apps/market.json")).unwrap();
+    let definition = parse_app_definition(include_str!("../../../tests/fixtures/store-apps/market.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     assert!(!app
         .source_dependencies("fx_asset_quote")

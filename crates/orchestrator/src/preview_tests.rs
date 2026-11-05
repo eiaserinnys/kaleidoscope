@@ -363,7 +363,7 @@ fn market_display_bindings_match_for_legacy_and_normalized_fx_samples() {
     }
 
     let market_path =
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/market.json");
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/store-apps/market.json");
     let current: Value = serde_json::from_slice(&std::fs::read(market_path).unwrap()).unwrap();
     let mut legacy = current.clone();
     legacy["sources"]["fx_asset_quote"]["query"]["amount"] = json!({
@@ -390,7 +390,7 @@ fn market_currency_table_uses_full_subcent_asset_price() {
     use std::collections::BTreeMap;
 
     let market_path =
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/market.json");
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/store-apps/market.json");
     let source: Value = serde_json::from_slice(&std::fs::read(market_path).unwrap()).unwrap();
     let definition = parse_app_definition(&source.to_string()).unwrap();
     let data = market_sample_data(None, "0.123");

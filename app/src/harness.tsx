@@ -24,7 +24,7 @@ import explorerJson from "../../apps/explorer.json";
 import agentJson from "../../apps/agent.json";
 import calculatorJson from "../../apps/calculator.json";
 import weatherJson from "../../apps/weather.json";
-import marketJson from "../../apps/market.json";
+import marketJson from "../../tests/fixtures/store-apps/market.json";
 import pasJson from "../../examples/workspace-pas.json";
 
 declare global {

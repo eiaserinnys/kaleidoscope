@@ -1,0 +1,130 @@
+{
+  "id": "store",
+  "name": "앱스토어",
+  "description": "스토어의 앱을 찾아 설치하고, 설치한 앱을 업데이트하거나 지웁니다",
+  "requires": { "blocks": 36, "modules": { "store": 1, "storage": 2, "assets": 1 } },
+  "icon": { "asset": "builtin-icon-store", "version": 1 },
+  "assets": [{ "id": "builtin-icon-store", "version": 1 }],
+  "permissions": [{ "module": "store", "id": "catalog", "label": "앱 설치" }],
+  "storage": {
+    "entries": [
+      {
+        "id": "store", "key": "settings/store", "kind": "json", "label": "스토어", "presentation": "settings",
+        "description": "앱 목록을 읽어 올 곳",
+        "schema": { "type": "string", "enum": ["default", "custom"] }, "default": "default",
+        "choices": [{ "value": "default", "label": "기본 스토어" }, { "value": "custom", "label": "직접 입력" }]
+      },
+      {
+        "id": "custom_url", "key": "settings/custom-url", "kind": "json", "label": "직접 입력 주소", "presentation": "settings",
+        "description": "직접 입력을 골랐을 때 읽을 https 주소",
+        "schema": { "type": "string" }, "default": ""
+      }
+    ]
+  },
+  "state": { "category": "", "query": "", "selected": null, "selected_name": "" },
+  "sources": {
+    "catalog": {
+      "kind": "store", "store": "index", "permission": "catalog",
+      "server": { "expr": "$storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore'" }
+    },
+    "detail": {
+      "kind": "store", "store": "app", "permission": "catalog",
+      "server": { "expr": "$storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore'" },
+      "id": { "state": "selected" }
+    }
+  },
+  "window_title": {
+    "title": "앱스토어",
+    "meta": { "expr": "$storage.store = 'custom' ? $trim($storage.custom_url) : null" }
+  },
+  "ui": {
+    "type": "split", "direction": "row", "sizes": [18, 47, 35], "column_below": 640,
+    "children": [
+      {
+        "type": "stack", "direction": "column", "gap": "none", "fill": 1,
+        "children": [
+          { "type": "toolbar", "start": [{ "type": "text", "value": "카테고리", "format": "plain", "style": "title" }] },
+          {
+            "type": "list", "layout": "rows",
+            "items": { "expr": "( $all := $data.catalog.items; $installed := $apps[origin != null].id; $cats := $sort($distinct($all.category)); $append($append([{ \"key\": \"\", \"title\": \"전체\", \"meta\": $string($count($all)) }], [$cats.( $c := $; { \"key\": $c, \"title\": $c, \"meta\": $string($count($all[category = $c])) } )]), [{ \"key\": \"__installed\", \"title\": \"설치됨\", \"meta\": $string($count($installed)) }]) )" },
+            "selected": { "state": "category" },
+            "on_select": [{ "set_state": "category" }]
+          }
+        ]
+      },
+      {
+        "type": "stack", "direction": "column", "gap": "none", "fill": 1,
+        "children": [
+          {
+            "type": "toolbar",
+            "start": [{ "type": "input", "kind": "search", "value": { "state": "query" }, "on_change": { "set_state": "query" }, "placeholder": "앱 이름이나 id로 찾기" }],
+            "end": [{ "type": "button", "label": "다시 받기", "icon": "refresh-cw", "icon_only": true, "variant": "ghost", "on_click": [{ "refresh": ["catalog", "detail"] }] }]
+          },
+          {
+            "type": "list", "layout": "icons",
+            "items": { "expr": "( $all := $data.catalog.items; $q := $lowercase($trim($state.query)); $c := $state.category; $installed := $apps[origin != null]; $pool := $c = '__installed' ? $append([$all[id in $installed.id]], [$installed[$not(id in $all.id)].{ \"id\": id, \"name\": name }]) : ($c = '' ? $all : $all[category = $c]); $hit := [$pool[$q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q) or $contains($lowercase($string(summary)), $q)]]; $byid := $q != '' and $not($q in $all.id) and $not($q in $installed.id) and $match($q, /^[a-z0-9-]{1,64}$/) ? [{ \"key\": $q, \"title\": $q }] : []; $append([$hit.{ \"key\": id, \"title\": name, \"image\": icon }], $byid) )" },
+            "selected": { "state": "selected" },
+            "on_select": [
+              { "set_state": "selected" },
+              { "set_state": "selected_name", "value": { "expr": "$item.title" } }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "stack", "direction": "column", "gap": "none", "fill": 1,
+        "children": [
+          { "type": "toolbar", "start": [{ "type": "text", "value": { "state": "selected_name" }, "format": "plain", "style": "title" }] },
+          {
+            "type": "when", "value": { "expr": "$state.selected != null" },
+            "child": {
+              "type": "stack", "direction": "column", "gap": "medium",
+              "children": [
+                {
+                  "type": "properties",
+                  "fields": [
+                    { "label": "한 줄 소개", "value": { "expr": "$data.detail.summary" }, "format": "text" },
+                    { "label": "제작자", "value": { "expr": "$data.detail.publisher" }, "format": "text" },
+                    { "label": "분류", "value": { "expr": "$data.detail.category" }, "format": "text" },
+                    { "label": "판", "value": { "expr": "$string($data.detail.release)" }, "format": "text" },
+                    { "label": "올린 날", "value": { "expr": "$data.detail.releases[release = $data.detail.release].published_at" }, "format": "date" },
+                    { "label": "권한", "value": { "expr": "( $d := $data.detail; $p := [$d.permissions.{ \"text\": label ? label : module, \"color\": module = 'process' ? '#a9363d' : '#6b7280' }]; $b := [$d.badges[$ = 'worker'].{ \"text\": \"서버 실행 코드\", \"color\": \"#a9363d\" }]; $all := $append($p, $b); $count($all) = 0 ? [{ \"text\": \"없음\", \"color\": \"#6b7280\" }] : $all )" }, "format": "badge" },
+                    { "label": "요구 쉘", "value": { "expr": "$data.detail.compatible ? '블록 세트 ' & $string($data.detail.requires.blocks) : '블록 세트 ' & $string($data.detail.requires.blocks) & ', 쉘을 올려야 설치합니다'" }, "format": "text" },
+                    { "label": "상태", "value": { "expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($exists($a)) ? '설치 전' : ($a.origin = null ? '같은 id의 다른 앱이 있어 설치할 수 없습니다' : ($a.modified ? '설치 뒤 고친 앱이라 업데이트하지 않습니다' : ($a.origin.release < $d.release ? $string($a.origin.release) & '판 설치됨, 새 판 있음' : $string($a.origin.release) & '판 설치됨'))) )" }, "format": "text" },
+                    { "label": "id", "value": { "state": "selected" }, "format": "code" }
+                  ]
+                },
+                {
+                  "type": "when", "value": { "expr": "$count($data.detail.screenshots) > 0" },
+                  "child": {
+                    "type": "list", "layout": "grid",
+                    "items": { "expr": "[$map($data.detail.screenshots, function($s, $i) { { \"key\": $string($i), \"title\": '', \"image\": $s } })]" }
+                  }
+                },
+                { "type": "text", "value": { "expr": "$data.detail.description" }, "format": "markdown", "style": "body" }
+              ]
+            }
+          },
+          {
+            "type": "when", "value": { "expr": "$state.selected != null" },
+            "child": {
+              "type": "toolbar",
+              "start": [{
+                "type": "button", "label": "지우기", "variant": "danger",
+                "disabled": { "expr": "( $a := $apps[id = $state.selected]; $not($exists($a)) or $a.origin = null )" },
+                "confirm": { "title": "앱을 지울까요?", "body": { "state": "selected_name" }, "ok": "지우기" },
+                "on_click": [{ "store.remove": { "permission": "catalog", "id": { "state": "selected" } } }]
+              }],
+              "end": [{
+                "type": "button", "variant": "primary",
+                "label": { "expr": "( $a := $apps[id = $state.selected]; $exists($a) and $a.origin != null and $a.origin.release < $data.detail.release ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )" },
+                "disabled": { "expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($d.compatible) or ($exists($a) and ($a.origin = null or $a.modified or $a.origin.release >= $d.release)) )" },
+                "on_click": [{ "store.install": { "permission": "catalog", "server": { "expr": "$data.detail.server" }, "id": { "state": "selected" }, "release": { "expr": "$data.detail.release" } } }]
+              }]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

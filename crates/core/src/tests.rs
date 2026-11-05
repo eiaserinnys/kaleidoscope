@@ -275,29 +275,106 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
-        ("profiler", 4),
-        ("agent", 7),
-        ("explorer", 3),
-        ("md-editor", 4),
-        ("html-report", 2),
-        ("web-browser", 1),
-        ("calculator", 2),
-        ("weather", 2),
-        ("market", 3),
-        ("earth", 3),
-        ("reader", 5),
+        ("profiler", 5),
+        ("agent", 8),
+        ("explorer", 4),
+        ("md-editor", 5),
+        ("html-report", 3),
+        ("web-browser", 2),
+        ("calculator", 3),
+        ("weather", 3),
+        ("store", 1),
     ] {
         assert!(apps
             .iter()
             .any(|app| app.id == id && app.current_version == version));
     }
-    assert_eq!(apps.len(), 11);
+    assert_eq!(apps.len(), 9);
     let error = core
         .handle(CoreRequest::AppImport {
             definition_json: MD_EDITOR.into(),
         })
         .unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidAppDefinition);
+}
+
+#[test]
+fn store_install_restores_window_whose_app_cache_was_removed() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let (_, desktop) = active_ids(&core);
+    let source_window = open_window(&core, &desktop, "agent");
+    let (accepted, restored) = {
+        let mut state = core.inner.state.lock().unwrap();
+        let mut app = state.shared.apps.iter().find(|item| item.id == "agent").unwrap().clone();
+        app.id = "market".into();
+        app.current_version = 1;
+        app.origin = Some(kaleidoscope_contract::store::StoreOrigin {
+            store_url: "https://example.com/store".into(), store_app_id: "market".into(),
+            release: 1, digest: "digest".into(),
+        });
+        app.installed_version = Some(1);
+        let definition = kaleidoscope_contract::validate::parse_app_definition(
+            include_str!("../../../tests/fixtures/store-apps/market.json")
+        ).unwrap();
+        let version = AppVersion { app_id: "market".into(), version: 1, definition, created_at: "now".into() };
+        let mut window = state.shared.windows.iter().find(|item| item.id == source_window).unwrap().clone();
+        window.id = "market-window".into();
+        window.app_id = "market".into();
+        window.app_version = 3;
+        window.state.insert("asset".into(), json!("ETH"));
+        state.shared.windows.push(window);
+        let accepted = crate::app_commands::import_registry(&mut state, RegistryApp { app, version });
+        let restored = state.shared.windows.iter().find(|item| item.id == "market-window").unwrap().clone();
+        (accepted, restored)
+    };
+    assert!(accepted);
+    assert_eq!(restored.app_version, 1);
+    assert_eq!(restored.state.get("asset"), Some(&json!("ETH")));
+}
+
+#[test]
+fn store_moved_builtin_cache_is_removed_without_closing_windows() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let (_, desktop) = active_ids(&core);
+    let source_window = open_window(&core, &desktop, "agent");
+    let mut state = core.inner.state.lock().unwrap();
+    let mut app = state.shared.apps.iter().find(|app| app.id == "agent").unwrap().clone();
+    app.id = "market".into();
+    app.current_version = 3;
+    let mut version = state.shared.app_versions.iter().find(|item| item.app_id == "agent").unwrap().clone();
+    version.app_id = "market".into();
+    version.version = 3;
+    let mut window = state.shared.windows.iter().find(|item| item.id == source_window).unwrap().clone();
+    window.id = "market-window".into();
+    window.app_id = "market".into();
+    window.app_version = 3;
+    window.state.insert("asset".into(), json!("ETH"));
+    state.shared.apps.push(app.clone());
+    state.shared.app_versions.push(version.clone());
+    state.shared.windows.push(window.clone());
+    state.device.pc_access.push(kaleidoscope_contract::PcAccess {
+        app_id: "market".into(), permission: "test".into(), granted_at: "now".into(),
+    });
+
+    crate::app_commands::ensure_builtin(&mut state);
+    assert!(!state.shared.apps.iter().any(|item| item.id == "market"));
+    assert!(!state.shared.app_versions.iter().any(|item| item.app_id == "market"));
+    assert!(state.shared.windows.contains(&window));
+    assert!(state.device.pc_access.iter().any(|item| item.app_id == "market"));
+
+    app.origin = Some(kaleidoscope_contract::store::StoreOrigin {
+        store_url: "https://example.com/store".into(), store_app_id: "market".into(),
+        release: 1, digest: "digest".into(),
+    });
+    app.installed_version = Some(3);
+    state.shared.apps.push(app.clone());
+    state.shared.app_versions.push(version.clone());
+    crate::app_commands::ensure_builtin(&mut state);
+    assert!(state.shared.apps.contains(&app));
+    assert!(state.shared.app_versions.contains(&version));
+    assert!(state.shared.windows.contains(&window));
 }
 
 #[test]

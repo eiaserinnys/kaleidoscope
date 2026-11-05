@@ -60,7 +60,9 @@ fn save(db: &Connection, spec: &BuiltinRuntimeSpec) -> Result<(), CoreError> {
 impl AppState {
     pub fn register_builtin_specs(&self, specs: &[BuiltinRuntimeSpec]) -> Result<(), CoreError> {
         for spec in specs {
-            if !kaleidoscope_contract::builtin::is_retired_builtin(&spec.app_id) {
+            if !kaleidoscope_contract::builtin::is_retired_builtin(&spec.app_id)
+                && !kaleidoscope_contract::builtin::is_store_moved_builtin(&spec.app_id)
+            {
                 definition(spec)?;
             }
         }
@@ -71,7 +73,19 @@ impl AppState {
                 kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED(),
             )
         })?;
+        for id in kaleidoscope_contract::builtin::STORE_MOVED_BUILTIN_APP_IDS {
+            tx.execute("DELETE FROM builtin_app_specs WHERE app_id=?1", [id])
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_BUILTIN_SPEC_SAVE_DATABASE_FAILED(),
+                    )
+                })?;
+        }
         for spec in specs {
+            if kaleidoscope_contract::builtin::is_store_moved_builtin(&spec.app_id) {
+                continue;
+            }
             if kaleidoscope_contract::builtin::is_retired_builtin(&spec.app_id) {
                 tx.execute(
                     "DELETE FROM builtin_app_specs WHERE app_id=?1",

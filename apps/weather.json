@@ -1,15 +1,17 @@
 {
   "id": "weather",
   "name": "날씨",
+  "icon": { "asset": "builtin-icon-weather", "version": 1 },
   "description": "현재 날씨와 7일 예보",
   "requires": {
-    "blocks": 9,
+    "blocks": 26,
     "modules": {
       "http": 1,
       "assets": 1
     }
   },
   "assets": [
+    { "id": "builtin-icon-weather", "version": 1 },
     {
       "id": "builtin-weather-clear",
       "version": 1
