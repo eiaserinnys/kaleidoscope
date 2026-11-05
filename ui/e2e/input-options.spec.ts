@@ -143,13 +143,25 @@ test("원천 선택지를 기다리는 화면과 잘못된 선택지 오류를 �
 test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른다", async ({ page }) => {
   const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
   const metrics = [];
-  for (const [width, theme] of [[1200, "light"], [360, "dark"]] as const) {
-    await page.setViewportSize({ width, height: 800 });
+  // 좁은 칸은 이름표가 칸 위에 서서(#314) 360폭의 이름 칸이 더 아래에 놓인다. 세 행과 먼 쪽 설명 칸이 아래에 들어가는 높이로 연다.
+  for (const [width, height, theme] of [[1200, 800, "light"], [360, 900, "dark"]] as const) {
+    await page.setViewportSize({ width, height });
     await page.emulateMedia({ colorScheme: theme });
     await page.goto("/?preview=block-gallery");
     await page.getByTestId("app-window-block-gallery").getByRole("tab", { name: "입력" }).click();
     const input = page.getByRole("combobox", { name: "이름" });
-    await input.scrollIntoViewIfNeeded(); await input.focus();
+    await input.scrollIntoViewIfNeeded();
+    const room = await input.evaluate((element) => {
+      const css = getComputedStyle(element);
+      const token = (name: string) => Number.parseFloat(css.getPropertyValue(name)) || 0;
+      const row = Math.max(token("--ks-control-height"), token("--ks-type-body") * token("--ks-line-body") + 2 * token("--ks-space-2"));
+      return {
+        below: window.innerHeight - token("--ks-space-3") - element.getBoundingClientRect().bottom - token("--ks-space-2"),
+        need: 3 * row + 2 * token("--ks-space-1") + token("--ks-pane-min-size") + token("--ks-line-width"),
+      };
+    });
+    expect(room.below, `시험 전제: ${width}x${height}에서 이름 칸 아래에 세 행과 설명 칸이 들어가야 한다`).toBeGreaterThanOrEqual(room.need);
+    await input.focus();
     const popup = page.locator(".ks-combobox-popup");
     await expect(popup).toBeVisible();
     expect(await popup.evaluate((e) => e.classList.contains("is-above"))).toBe(false);
@@ -157,7 +169,7 @@ test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른�
     const boxes = { input: (await input.boundingBox())!, popup: (await popup.boundingBox())!, row: (await row.boundingBox())! };
     expect(boxes.row.x - boxes.popup.x).toBe(4);
     expect(boxes.popup.width).toBe(boxes.input.width);
-    metrics.push({ width, theme, boxes, below: 800 - boxes.input.y - boxes.input.height });
+    metrics.push({ width, theme, boxes, below: height - boxes.input.y - boxes.input.height });
     if (output) {
       await page.screenshot({ path: join(output, `이름-${width}.png`) });
       await popup.screenshot({ path: join(output, `행-확대-${width}.png`), scale: "css" });
