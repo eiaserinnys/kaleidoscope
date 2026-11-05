@@ -173,6 +173,7 @@ pub struct EmbeddedServerInfo {
 }
 
 pub struct CoreConfig {
+    pub media_origin: Option<String>,
     pub embedded_server: Option<EmbeddedServerInfo>,
     pub data_dir: PathBuf,
     pub seed_definitions: Vec<String>,
@@ -234,6 +235,7 @@ pub(crate) struct Inner {
     pub(crate) login_store: Arc<logins::Logins>,
     pub(crate) login_in_progress: Mutex<HashSet<String>>,
     pub(crate) media_cache: media::MediaCache,
+    pub(crate) media_streams: media::stream::Streams,
     pub(crate) client_files: client_files::ClientFiles,
     pub(crate) web_attached: Mutex<std::collections::HashSet<String>>,
     pub(crate) web_follow: Mutex<HashMap<String, std::time::Instant>>,
@@ -287,6 +289,7 @@ impl Drop for Core {
             self.inner.shutting_down.store(true, Ordering::SeqCst);
             self.inner.generation.fetch_add(1, Ordering::SeqCst);
             self.inner.layout_signal.notify();
+            self.inner.media_streams.stop();
             process_host::shutdown(&self.inner);
             installation_consent::shutdown(&self.inner);
             realtime_host::shutdown_sessions(&self.inner);
@@ -299,6 +302,10 @@ impl Drop for Core {
 }
 
 impl Core {
+    #[cfg(feature = "e2e")]
+    pub fn media_stream_observations(&self) -> Vec<(u16, u64, String)> {
+        self.inner.media_streams.observations()
+    }
     /// 쉘의 최소화 상태를 데이터 원천 실행에 반영한다.
     pub fn set_shell_visible(&self, visible: bool) {
         data_runtime::set_shell_visible(&self.inner, visible);
@@ -416,6 +423,7 @@ impl Core {
             .collect::<HashSet<_>>();
 
         let inner = Arc::new(Inner {
+            media_streams: media::stream::Streams::new(config.media_origin),
             embedded_server: config.embedded_server,
             data_dir: config.data_dir,
             state: Mutex::new(state),
@@ -937,6 +945,16 @@ impl Core {
             } => Ok(CoreReply::DataMedia {
                 media: media::get(&self.inner, &window_id, &media, max_px)?,
             }),
+            CoreRequest::DataMediaOpen { window_id, media } => Ok(CoreReply::DataMediaOpen {
+                playback: media::stream::open(&self.inner, &window_id, &media)?,
+            }),
+            CoreRequest::DataMediaClose { window_id, handle } => {
+                media::stream::close(&self.inner, &window_id, &handle)?;
+                Ok(CoreReply::DataMediaClose {})
+            }
+            CoreRequest::DataMediaStatus { window_id, handle } => Ok(CoreReply::DataMediaStatus {
+                error: media::stream::status(&self.inner, &window_id, &handle)?,
+            }),
             CoreRequest::ConnectionLogin {
                 window_id,
                 permission,
@@ -957,6 +975,7 @@ impl Core {
         self.inner.shutting_down.store(true, Ordering::SeqCst);
         self.inner.generation.fetch_add(1, Ordering::SeqCst);
         self.inner.layout_signal.notify();
+        self.inner.media_streams.stop();
         client_files::release_all(&self.inner);
         process_host::shutdown(&self.inner);
         installation_consent::shutdown(&self.inner);

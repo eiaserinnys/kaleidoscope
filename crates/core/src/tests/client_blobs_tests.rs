@@ -558,6 +558,7 @@ fn picked_file_can_be_saved_without_exposing_its_path() {
     fs::write(&input, &bytes).unwrap();
     let core = Core::open(
         CoreConfig {
+            media_origin: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![definition("picked-file")],
             server_url: "http://127.0.0.1:4219".into(),

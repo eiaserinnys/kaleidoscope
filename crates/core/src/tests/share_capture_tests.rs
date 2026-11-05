@@ -43,6 +43,7 @@ fn client_context_preserves_skipped_capture_and_request_identity() {
         "ui":{"type":"text","value":"시험"}
     });
     let core = Core::open_with_client(CoreConfig {
+        media_origin: None,
         embedded_server: None, data_dir: temp.path().into(),
         seed_definitions: vec![client.to_string(), test_definition(MD_EDITOR)],
         server_url: "http://127.0.0.1:4219".into(), device_name: "시험".into(),
@@ -100,6 +101,7 @@ fn client_context_keeps_only_latest_request_and_clears_committed_content() {
         "ui":{"type":"text","value":"시험"}
     });
     let core = Core::open_with_client(CoreConfig {
+        media_origin: None,
         embedded_server: None, data_dir: temp.path().into(),
         seed_definitions: vec![client.to_string(), test_definition(MD_EDITOR)],
         server_url: "http://127.0.0.1:4219".into(), device_name: "시험".into(),
@@ -150,6 +152,7 @@ fn attachment_limit_discards_unused_isolated_capture_before_next_send() {
     });
     let core = Core::open_with_client(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![test_definition(MD_EDITOR)],

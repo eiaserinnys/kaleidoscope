@@ -16,6 +16,8 @@ use tauri::{AppHandle, Manager};
 
 mod files_write;
 #[cfg(windows)]
+mod media_stream;
+#[cfg(windows)]
 mod folder_drag;
 #[cfg(windows)]
 mod native_target;
@@ -36,6 +38,8 @@ enum ScenarioKind {
     WebControlProbe,
     Update,
     FilesWrite,
+    #[cfg(windows)]
+    MediaStream,
     Realtime,
 }
 
@@ -47,6 +51,8 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
         Some("web-control-probe") => ScenarioKind::WebControlProbe,
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("files-write") => ScenarioKind::FilesWrite,
+        #[cfg(windows)]
+        Some("media-stream") => ScenarioKind::MediaStream,
         Some("realtime") => ScenarioKind::Realtime,
         _ => ScenarioKind::WebView,
     }
@@ -538,6 +544,11 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                         files_write::scenario(&app, &core, &PathBuf::from(folder), &mut log)
                     }
                     None => Err("files-write test folder is missing".into()),
+                },
+                #[cfg(windows)]
+                ScenarioKind::MediaStream => match setting("PICK_FOLDER") {
+                    Some(folder) => media_stream::scenario(&app, &core, &PathBuf::from(folder), &out, &mut log),
+                    None => Err("media-stream test folder is missing".into()),
                 },
             } {
                 Ok(()) => 0,

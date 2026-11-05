@@ -1352,6 +1352,15 @@ pub struct MediaData {
     pub height: Option<u32>,
 }
 
+/// 쉘 재생기의 원본. 폴더 소리와 영상만 스트림으로 전달한다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum MediaPlayback {
+    Inline { media: MediaData },
+    Stream { handle: String, url: String, mime: String },
+}
+
 // ---------------------------------------------------------------------------
 // 바인딩 자리와 동작 자리
 // ---------------------------------------------------------------------------

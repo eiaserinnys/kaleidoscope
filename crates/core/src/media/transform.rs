@@ -108,7 +108,8 @@ pub(super) fn mime_for_path(path: &str) -> &'static str {
         "wav" => "audio/wav",
         "ogg" => "audio/ogg",
         "m4a" => "audio/mp4",
-        "mp4" => "video/mp4",
+        "mp4" | "m4v" => "video/mp4",
+        "mov" => "video/quicktime",
         "webm" => "video/webm",
         _ => "application/octet-stream",
     }
