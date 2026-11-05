@@ -54,6 +54,7 @@ describe("쉘 앱 아이콘", () => {
     expect(skeletons[0].classList.contains("ks-icon-skeleton-chrome")).toBe(true);
     expect(skeletons[0].style.width).toBe("14px");
     expect(skeletons[0].style.height).toBe("14px");
+    expect(skeletons[0].style.flexShrink).toBe("0");
     expect(skeletons[1].style.width).toBe("32px");
     expect(skeletons[1].style.height).toBe("32px");
     expect(container.querySelector("svg.ks-app-icon")).toBeNull();
