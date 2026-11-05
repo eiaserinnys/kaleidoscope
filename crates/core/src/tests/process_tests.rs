@@ -1,6 +1,62 @@
 use super::*;
 use kaleidoscope_contract::process::{ProcessSpec, ProcessStartResult};
 
+#[cfg(unix)]
+#[test]
+fn command_permission_reuses_grant_for_args_but_not_env_and_rejects_mismatch() {
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().into()));
+    let definition = json!({
+        "id":"process-fixture", "name":"프로세스 시험", "requires":{"blocks":17,"modules":{"assets":1,"client":3,"process":2,"files":1}},
+        "permissions":[{"module":"process","id":"run","label":"실행","command":"cat"},{"module":"files","id":"work","label":"작업","access":"readwrite"}],
+        "assets":[{"id":"client-code","version":1}], "client":{"runtime":"javascript","entry":{"id":"client-code","version":1},"process_permissions":["run"]},
+        "ui":{"type":"text","value":"시험"}
+    });
+    let core = Arc::new(open_core(temp.path(), vec![definition.to_string()], &host));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "process-fixture");
+    core.handle(CoreRequest::FilesPickFolder { window_id: window.clone(), permission: "work".into() }).unwrap();
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        if let CoreEvent::ProcessPermission { .. } = event {
+            tx.send(serde_json::to_value(event).unwrap()).unwrap();
+        }
+    }));
+    let start = |spec: ProcessSpec, key: &str| {
+        let owner = core.clone();
+        let window = window.clone();
+        let key = key.to_string();
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || { let _ = tx.send(owner.handle(CoreRequest::ProcessStart {
+            window_id: window, key, permission: "run".into(), cwd_permission: "work".into(), services: vec![], spec,
+        })); });
+        rx
+    };
+    let mut spec = ProcessSpec { name: "시험".into(), command: "cat".into(), args: vec![], env: BTreeMap::new() };
+    let first = start(spec.clone(), "first");
+    let consent = rx.recv_timeout(Duration::from_secs(10)).expect("첫 허용 요청");
+    assert_eq!(consent["scope"], "command");
+    core.handle(CoreRequest::ProcessRespondPermission { window_id: window.clone(), request_id: consent["request_id"].as_str().unwrap().into(), allow: true }).unwrap();
+    assert!(matches!(first.recv_timeout(Duration::from_secs(10)).unwrap().unwrap(), CoreReply::ProcessStart { result: ProcessStartResult::Started { .. } }));
+    spec.args.push("--help".into());
+    let second = start(spec.clone(), "second");
+    assert!(matches!(second.recv_timeout(Duration::from_secs(10)).expect("인자가 달라도 허용 재사용").unwrap(), CoreReply::ProcessStart { result: ProcessStartResult::Started { .. } }));
+    assert!(rx.try_recv().is_err());
+    assert_eq!(core.inner.state.lock().unwrap().device.process_access.len(), 1);
+    spec.env.insert("FIXTURE".into(), "changed".into());
+    let changed = start(spec.clone(), "third");
+    let consent = rx.recv_timeout(Duration::from_secs(10)).expect("환경 변경 허용 요청");
+    assert_eq!(consent["scope"], "command");
+    core.handle(CoreRequest::ProcessRespondPermission { window_id: window.clone(), request_id: consent["request_id"].as_str().unwrap().into(), allow: false }).unwrap();
+    assert!(matches!(changed.recv_timeout(Duration::from_secs(10)).unwrap().unwrap(), CoreReply::ProcessStart { result: ProcessStartResult::Cancelled { .. } }));
+    spec.command = "echo".into();
+    let error = start(spec, "first").recv_timeout(Duration::from_secs(10)).unwrap().unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("PROCESS_START_COMMAND_MISMATCH"));
+    assert!(rx.try_recv().is_err());
+}
+
 #[test]
 fn tools_service_is_supported_before_window_validation() {
     let temp = TempDir::new().unwrap();

@@ -16,7 +16,7 @@ it("합성 클릭으로 프로그램 실행을 허용하지 않는다", () => {
   expect(screen.getByRole("dialog").closest("[data-ks-user-consent]")).not.toBeNull();
 });
 
-function setup(top = "editor-window") {
+function setup(top = "editor-window", scope: "spec" | "command" = "spec") {
   let snapshot = makeTestSnapshot();
   snapshot.shared.windows = snapshot.shared.windows.map((window) => ({ ...window, z: window.id === top ? 2 : 1 }));
   const listeners = new Set<() => void>();
@@ -42,9 +42,16 @@ function setup(top = "editor-window") {
     </WindowFrame>
   </>);
   const change = (next: (previous: ShellSnapshot) => ShellSnapshot) => act(() => { snapshot = next(snapshot); listeners.forEach((listener) => listener()); });
-  const emit = () => act(() => events.forEach((listener) => listener({ event: "process.permission", window_id: a.id, request_id: "request", spec: { name: "긴 프로그램 이름", command: "test-command", args: ["--option"], env: { FIRST: "one", SECOND: "two" } } })));
+  const emit = () => act(() => events.forEach((listener) => listener({ event: "process.permission", window_id: a.id, request_id: "request", scope, spec: { name: "긴 프로그램 이름", command: "test-command", args: ["--option"], env: { FIRST: "one", SECOND: "two" } } } as CoreEvent)));
   return { a, b, call, change, emit, onCall, onMinimize, onMaximize };
 }
+
+it("프로그램 단위 허용은 프로그램 이름과 이후 인자에 관한 안내를 보인다", () => {
+  const { emit } = setup("editor-window", "command"); emit();
+  const dialog = screen.getByRole("dialog");
+  expect(within(dialog).getByText("이 앱이 이 PC에서 test-command을(를) 실행하게 할까요?")).toBeTruthy();
+  expect(within(dialog).getByText("앞으로는 인자가 달라도 다시 묻지 않습니다.")).toBeTruthy();
+});
 
 it("앞 창의 허용 표면 자체에 먼저 포커스하고 Enter로 허용하지 않는다", () => {
   const { call, emit } = setup();

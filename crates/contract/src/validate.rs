@@ -858,6 +858,14 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
                 ));
             }
         }
+        if let PermissionDecl::Process { id, command: Some(command), .. } = permission {
+            if definition.requires.modules.get("process").copied().unwrap_or(0) < 2 {
+                details.push(format!("권한 {id}의 command는 process 모듈 2판이라 requires.modules.process가 2 이상이어야 합니다"));
+            }
+            if !(1..=260).contains(&command.chars().count()) || command.trim() != command || command.chars().any(char::is_control) {
+                details.push(format!("권한 {id}의 command는 앞뒤 공백과 제어 문자 없이 1~260자여야 합니다"));
+            }
+        }
         if let PermissionDecl::Connection { connection, .. } = permission {
             if !valid_id(connection) {
                 details.push(format!(

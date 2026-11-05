@@ -20,8 +20,17 @@ pub struct ProcessSpec {
 pub struct ProcessAccess {
     pub app_id: String,
     pub permission: String,
+    /// 권한에 따라 실행 명세 또는 프로그램과 환경의 허용 해시를 저장한다.
     pub spec_hash: String,
     pub granted_at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ProcessGrantScope {
+    Spec,
+    Command,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -80,4 +89,15 @@ pub fn spec_hash(spec: &ProcessSpec) -> String {
         "{:x}",
         Sha256::digest(serde_json::to_vec(&canonical).expect("spec serialize"))
     )
+}
+
+/// 프로그램과 환경의 정렬 JSON으로 허용 해시를 계산한다. 실행 명세 해시와 키 집합이 다르다.
+/// name은 표시용이라 빼고, env는 PATH 같은 값으로 다른 실행 파일을 돌리지 못하게 넣는다.
+pub fn command_grant_hash(spec: &ProcessSpec) -> String {
+    let canonical = BTreeMap::from([
+        ("command", serde_json::to_value(&spec.command).expect("command serialize")),
+        ("env", serde_json::to_value(&spec.env).expect("env serialize")),
+        ("scope", serde_json::to_value("command").expect("scope serialize")),
+    ]);
+    format!("{:x}", Sha256::digest(serde_json::to_vec(&canonical).expect("command grant serialize")))
 }

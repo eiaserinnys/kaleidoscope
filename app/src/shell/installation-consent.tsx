@@ -91,7 +91,7 @@ function PermissionEntry({ permission }: { permission: Permission }) {
     case "http":
       content = <><Field name="기준 주소"><Values value={permission.base_url} /></Field><Field name="허용 경로"><Values value={permission.paths} /></Field></>;
       break;
-    case "process": content = <span className="ks-consent-value">프로그램 실행</span>; break;
+    case "process": content = <span className="ks-consent-value">프로그램 실행{permission.command ? ` · ${permission.command}` : ""}</span>; break;
     case "profiler": content = <span className="ks-consent-value">이 기기의 성능 기록 조회와 측정</span>; break;
     case "store": content = <span className="ks-consent-value">스토어 읽기, 설치와 삭제</span>; break;
     default: {

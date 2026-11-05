@@ -595,7 +595,7 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "window.control", request: WindowControlRequest, } | { "event": "state.changed", snapshot: ShellSnapshot, sequence: number, } | { "event": "files.changed", root: string, changes: Array<FileChange>, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, error: CoreError, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, } | { "event": "app.install_permission", window_id: string, request_id: string, app_name: string, release: number, store_url: string, digest: string, definition: AppDefinition, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, } | { "event": "connection.realtime.ready", window_id: string, session: string, handle: string, } | { "event": "connection.realtime.closed", window_id: string, session: string, handle: string, code: number, reason: string, error: CoreError | null, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, };
+export type CoreEvent = { "event": "window.control", request: WindowControlRequest, } | { "event": "state.changed", snapshot: ShellSnapshot, sequence: number, } | { "event": "files.changed", root: string, changes: Array<FileChange>, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, error: CoreError, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, } | { "event": "app.install_permission", window_id: string, request_id: string, app_name: string, release: number, store_url: string, digest: string, definition: AppDefinition, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, scope: ProcessGrantScope, } | { "event": "connection.realtime.ready", window_id: string, session: string, handle: string, } | { "event": "connection.realtime.closed", window_id: string, session: string, handle: string, code: number, reason: string, error: CoreError | null, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
@@ -1071,7 +1071,11 @@ connection: string, access: FileAccess,
 /**
  * 로그인을 구할 때와 오류에 보일 이름(예: "카드 보드").
  */
-label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, } | { "module": "process", id: string, label: string, } | { "module": "profiler", id: string, label: string, } | { "module": "store", id: string, label: string, };
+label: string, } | { "module": "http", id: string, label: string, base_url: string, paths: Array<string>, } | { "module": "process", id: string, label: string, 
+/**
+ * (모듈 process 2판) 이 권한으로 실행할 프로그램. 선언하면 이 기기에서 허용을 (앱, 권한, 프로그램, 환경 변수)마다 한 번 받고 인자는 앱이 실행마다 정한다. 실행 명세의 command는 이 값과 정확히 같아야 한다. 없으면 실행 명세(이름, 프로그램, 인자, 환경 변수)마다 허용을 묻는다(1판의 뜻).
+ */
+command?: string, } | { "module": "profiler", id: string, label: string, } | { "module": "store", id: string, label: string, };
 
 export type PickFilesAction = { pick_files: PickFilesSpec, };
 
@@ -1083,9 +1087,15 @@ export type PointerEventData = { phase: PointerPhase, pointer_id: bigint, x: num
 
 export type PointerPhase = "down" | "move" | "up" | "cancel";
 
-export type ProcessAccess = { app_id: string, permission: string, spec_hash: string, granted_at: string, };
+export type ProcessAccess = { app_id: string, permission: string, 
+/**
+ * 권한에 따라 실행 명세 또는 프로그램과 환경의 허용 해시를 저장한다.
+ */
+spec_hash: string, granted_at: string, };
 
 export type ProcessExit = { code: number | null, };
+
+export type ProcessGrantScope = "spec" | "command";
 
 export type ProcessSnapshot = { handle: string, after: number, checkpoint: JsonValue | null, cwd: string, services: { [key in string]: string | null }, exit: ProcessExit | null, };
 

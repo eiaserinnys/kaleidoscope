@@ -72,6 +72,13 @@ it("설치 선언 전체와 출처를 읽고 접힌 상세를 열 수 있다", a
   store.dispose();
 });
 
+it("프로그램 권한에 실행 파일이 있으면 설치 전에 함께 표시한다", async () => {
+  const { emit, store } = await setup();
+  emit({ ...definition, permissions: [{ module: "process", id: "run", label: "변환", command: "python3" }] } as AppDefinition);
+  expect(screen.getByRole("dialog").textContent).toContain("프로그램 실행 · python3");
+  store.dispose();
+});
+
 it("빈 선언을 표시하고 합성 허용은 거부하며 취소는 같은 digest로 응답한다", async () => {
   const { appWindow, call, emit, store } = await setup();
   emit({ ...definition, permissions: [], storage: undefined, client: undefined, worker: undefined, agent: undefined });
