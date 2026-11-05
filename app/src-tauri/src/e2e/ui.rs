@@ -103,7 +103,7 @@ fn allow_pc_with_native_input(app: &AppHandle, log: &mut File) -> Result<(), Str
             + (bounds["x"].as_f64().ok_or("PC consent x missing")? * scale).round() as i32;
         let y = position.y
             + (bounds["y"].as_f64().ok_or("PC consent y missing")? * scale).round() as i32;
-        let target = super::native_target::wait_shell_at(x, y)?;
+        let target = super::native_target::wait_main_webview_at(app, x, y)?;
         record(log, "ui.pc_access.target", target)?;
         evaluate(
             app,

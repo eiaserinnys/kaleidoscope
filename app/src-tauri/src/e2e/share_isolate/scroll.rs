@@ -33,7 +33,7 @@ fn scroll_html_frame(
     let x = position.x + (bounds["x"].as_f64().ok_or("frame x missing")? * scale).round() as i32;
     let y = position.y + (bounds["y"].as_f64().ok_or("frame y missing")? * scale).round() as i32;
     window.set_focus().map_err(|error| error.to_string())?;
-    native_target::wait_shell_at(x, y)?;
+    native_target::wait_main_webview_at(app, x, y)?;
     native_input::click(x, y)?;
     let focus_result = ui::wait_dom(app, &format!(
         "const frame=document.querySelector('[data-testid=\\\"app-window-{A_ID}\\\"] iframe');return !!frame && document.hasFocus() && document.activeElement===frame;"

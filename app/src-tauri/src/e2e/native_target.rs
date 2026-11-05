@@ -1,9 +1,11 @@
-//! 실제 입력 좌표를 덮은 최상위 창을 확인한다.
+//! 실제 입력 좌표가 주 웹뷰에 닿는지 창 계층을 확인한다.
 use serde_json::{json, Value};
 use std::{
+    sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
+use tauri::{AppHandle, Manager};
 use windows::{
     core::PWSTR,
     Win32::{
@@ -19,27 +21,52 @@ use windows::{
     },
 };
 
-pub(super) fn wait_shell_at(x: i32, y: i32) -> Result<Value, String> {
+pub(super) fn wait_main_webview_at(app: &AppHandle, x: i32, y: i32) -> Result<Value, String> {
+    let (tx, rx) = mpsc::channel();
+    app.get_webview("main")
+        .ok_or("main webview missing")?
+        .with_webview(move |native| {
+            let result = unsafe {
+                let mut hwnd = HWND::default();
+                native
+                    .controller()
+                    .ParentWindow(&mut hwnd)
+                    .map(|()| hwnd.0 as usize)
+                    .map_err(|error| error.to_string())
+            };
+            let _ = tx.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+    let main_container = rx
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|error| error.to_string())??;
     let started = Instant::now();
     let mut checks = 0;
+    let mut first_chain = None;
     loop {
         checks += 1;
         let at_point = unsafe { WindowFromPoint(POINT { x, y }) };
         let root = unsafe { GetAncestor(at_point, GA_ROOT) };
-        let mut pid = 0;
-        unsafe { GetWindowThreadProcessId(root, Some(&mut pid)) };
-        if pid == std::process::id() {
-            return Ok(json!({"x": x, "y": y, "checks": checks,
+        let chain = unsafe { window_chain(at_point, root) };
+        if chain.iter().any(|window| window["hwnd"] == main_container) {
+            let mut result = json!({"x": x, "y": y, "checks": checks,
                 "elapsed_ms": started.elapsed().as_millis(),
-                "at_point": unsafe { describe(root) },
-                "chain": unsafe { window_chain(at_point, root) },
-                "foreground": unsafe { describe(GetForegroundWindow()) }}));
+                "main_container": main_container, "chain": chain,
+                "foreground": unsafe { describe(GetForegroundWindow()) }});
+            if let Some(first_chain) = first_chain {
+                result["first_chain"] = json!(first_chain);
+            }
+            return Ok(result);
         }
         if started.elapsed() >= Duration::from_secs(5) {
             return Err(format!(
-                "native click target ({x},{y}) is covered by another window; the shell did not come to the front within 5 seconds; at_point: {}; chain: {}; foreground: {}",
-                unsafe { describe(root) }, json!(unsafe { window_chain(at_point, root) }), unsafe { describe(GetForegroundWindow()) }
+                "native click target ({x},{y}) is not the main webview; chain: {}; foreground: {}",
+                json!(chain),
+                unsafe { describe(GetForegroundWindow()) }
             ));
+        }
+        if first_chain.is_none() {
+            first_chain = Some(chain);
         }
         thread::sleep(Duration::from_millis(50));
     }

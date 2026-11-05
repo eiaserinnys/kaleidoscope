@@ -190,7 +190,7 @@ pub(super) fn scenario(
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
     let x = position.x + (bounds["x"].as_f64().ok_or("consent x missing")? * scale).round() as i32;
     let y = position.y + (bounds["y"].as_f64().ok_or("consent y missing")? * scale).round() as i32;
-    native_target::wait_shell_at(x, y)?;
+    native_target::wait_main_webview_at(app, x, y)?;
     native_input::click(x, y)?;
     // 첫 누름이 창 활성화에 쓰였으면 현재 위치를 다시 재서 한 번 더 누른다.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
@@ -213,7 +213,7 @@ pub(super) fn scenario(
             position.x + (bounds["x"].as_f64().ok_or("consent x missing")? * scale).round() as i32;
         let y =
             position.y + (bounds["y"].as_f64().ok_or("consent y missing")? * scale).round() as i32;
-        native_target::wait_shell_at(x, y)?;
+        native_target::wait_main_webview_at(app, x, y)?;
         native_input::click(x, y)?;
     }
     record(
