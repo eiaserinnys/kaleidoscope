@@ -1,9 +1,9 @@
 {
   "id": "md-editor",
   "name": "마크다운 편집기",
-  "icon": { "asset": "builtin-icon-md-editor", "version": 1 },
+  "icon": { "asset": "builtin-icon-md-editor", "version": 2 },
   "description": "서버 문서와 고른 폴더의 md 파일을 원문 그대로 고친다",
-  "assets": [{ "id": "builtin-icon-md-editor", "version": 1 }],
+  "assets": [{ "id": "builtin-icon-md-editor", "version": 2 }],
   "requires": { "blocks": 26, "modules": { "assets": 1, "files": 3, "storage": 3 } },
   "permissions": [
     { "module": "files", "id": "docs", "access": "readwrite", "label": "문서 폴더" }

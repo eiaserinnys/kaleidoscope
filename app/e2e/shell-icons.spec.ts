@@ -81,7 +81,7 @@ test("아이콘을 기다리는 동안에도 창 머리와 메뉴의 자리를 �
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/harness.html?app-icons");
   const bar = page.getByTestId("app-window-web-browser").locator(".ks-window-titlebar");
-  await expect(bar.locator("svg.ks-app-icon")).toBeVisible();
+  await expect(bar.locator(".ks-icon-skeleton-chrome")).toBeVisible();
   const before = await bar.locator(".ks-window-title").boundingBox();
   await page.locator(".ks-shell-actions").getByRole("button", { name: "앱 열기" }).click();
   const output = process.env.KS_ICON_CAPTURE_DIR ?? "/tmp/ks-icon-979/captures";

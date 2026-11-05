@@ -1,7 +1,7 @@
 {
   "id": "agent",
   "name": "에이전트",
-  "icon": { "asset": "builtin-icon-agent", "version": 1 },
+  "icon": { "asset": "builtin-icon-agent", "version": 2 },
   "requires": {
     "blocks": 29,
     "modules": {
@@ -720,7 +720,7 @@
     ]
   },
   "assets": [
-    { "id": "builtin-icon-agent", "version": 1 },
+    { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
       "version": 5

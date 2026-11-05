@@ -1,7 +1,7 @@
 {
   "id": "weather",
   "name": "날씨",
-  "icon": { "asset": "builtin-icon-weather", "version": 1 },
+  "icon": { "asset": "builtin-icon-weather", "version": 2 },
   "description": "현재 날씨와 7일 예보",
   "requires": {
     "blocks": 26,
@@ -11,7 +11,7 @@
     }
   },
   "assets": [
-    { "id": "builtin-icon-weather", "version": 1 },
+    { "id": "builtin-icon-weather", "version": 2 },
     {
       "id": "builtin-weather-clear",
       "version": 1

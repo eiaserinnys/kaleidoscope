@@ -71,7 +71,7 @@
 .ks-icon-skeleton-grid { width: 100%; }
 .ks-icon-tile-skeleton { pointer-events: none; }
 .ks-icon-tile-skeleton i, .ks-icon-skeleton-icon { display: block; background: var(--ks-color-hover); border-radius: var(--ks-radius-small); }
-.ks-icon-skeleton-icon { width: var(--ks-space-6); height: var(--ks-space-6); }
+.ks-icon-skeleton-chrome { border-radius: calc(var(--ks-radius-small) / 2); }
 .ks-icon-skeleton-name { display: flex; width: 100%; flex-direction: column; gap: var(--ks-space-1); }
 .ks-icon-skeleton-name i { width: 100%; height: calc(var(--ks-type-body) * var(--ks-line-body)); }
 .ks-list-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); min-width: 0; border: var(--ks-focus-width) solid transparent; border-radius: var(--ks-radius-small); padding: 0; background: transparent; cursor: pointer; color: inherit; font: inherit; text-align: start; }

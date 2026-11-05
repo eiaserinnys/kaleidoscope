@@ -275,15 +275,15 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
-        ("profiler", 5),
-        ("agent", 9),
-        ("explorer", 4),
-        ("md-editor", 5),
-        ("html-report", 3),
-        ("web-browser", 2),
-        ("calculator", 3),
-        ("weather", 3),
-        ("store", 1),
+        ("profiler", 6),
+        ("agent", 10),
+        ("explorer", 5),
+        ("md-editor", 6),
+        ("html-report", 4),
+        ("web-browser", 3),
+        ("calculator", 4),
+        ("weather", 4),
+        ("store", 2),
     ] {
         assert!(apps
             .iter()
@@ -614,7 +614,7 @@ fn builtin_agent_reads_defaults_before_linking() {
         .shared
         .app_versions
         .iter()
-        .find(|version| version.app_id == "agent" && version.version == 9)
+        .find(|version| version.app_id == "agent" && version.version == 10)
         .unwrap()
         .definition;
     assert_eq!(definition.requires.blocks, 29);
@@ -650,7 +650,7 @@ fn builtin_window_state_survives_restart_at_the_same_version() {
         .into_iter()
         .find(|w| w.id == window_id)
         .unwrap();
-    assert_eq!(before.app_version, 4);
+    assert_eq!(before.app_version, 5);
     drop(core);
     let reopened = open_core(temp.path(), vec![], &host);
     let after = snapshot(&reopened)
@@ -719,8 +719,8 @@ fn builtin_md_editor_v3_window_migrates_current_file_on_restart() {
         .iter()
         .find(|window| window.id == window_id)
         .unwrap();
-    assert_eq!(app.current_version, 5);
-    assert_eq!(window.app_version, 5);
+    assert_eq!(app.current_version, 6);
+    assert_eq!(window.app_version, 6);
     assert_eq!(
         window.state.get("source").and_then(Value::as_f64),
         Some(1.0)
@@ -781,7 +781,7 @@ fn registry_events_remove_personal_apps_but_preserve_builtins() {
     assert!(state
         .apps
         .iter()
-        .any(|app| app.id == "md-editor" && app.current_version == 5 && app.name != "바뀐 이름"));
+        .any(|app| app.id == "md-editor" && app.current_version == 6 && app.name != "바뀐 이름"));
 }
 
 #[test]

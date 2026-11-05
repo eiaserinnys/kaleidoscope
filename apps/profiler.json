@@ -1,9 +1,9 @@
 {
   "id": "profiler",
   "name": "프로파일러",
-  "icon": { "asset": "builtin-icon-profiler", "version": 1 },
+  "icon": { "asset": "builtin-icon-profiler", "version": 2 },
   "description": "코어 응답 시간과 계산 통계",
-  "assets": [{ "id": "builtin-icon-profiler", "version": 1 }],
+  "assets": [{ "id": "builtin-icon-profiler", "version": 2 }],
   "requires": {
     "blocks": 26,
     "modules": {

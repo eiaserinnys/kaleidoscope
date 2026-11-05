@@ -1,7 +1,7 @@
 {
   "id": "calculator",
   "name": "계산기",
-  "icon": { "asset": "builtin-icon-calculator", "version": 1 },
+  "icon": { "asset": "builtin-icon-calculator", "version": 2 },
   "description": "사칙연산",
   "requires": {
     "blocks": 26,
@@ -18,7 +18,7 @@
       "formula": ""
     }
   },
-  "assets": [{ "id": "builtin-icon-calculator", "version": 1 }],
+  "assets": [{ "id": "builtin-icon-calculator", "version": 2 }],
   "ui": {
     "type": "stack",
     "direction": "column",
