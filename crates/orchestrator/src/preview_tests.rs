@@ -50,6 +50,22 @@ async fn preview_evaluates_sample_apps_and_defaults_to_empty() {
 }
 
 #[tokio::test]
+async fn preview_badge_uses_latest_and_warns_for_non_integer() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let mut definition = json!({"id":"badge-preview","name":"배지 미리보기","requires":{"blocks":39,"modules":{"store":2}},
+        "permissions":[{"module":"store","id":"catalog","label":"스토어"}],
+        "badge":{"expr":"$count($apps[latest.release > origin.release])"},"ui":{"type":"text","value":"시험"}});
+    let mut input = args(definition.clone());
+    input.apps = Some(vec![serde_json::from_value(json!({"id":"example","name":"보기","version":1,"origin":{"store_url":"https://example.com","store_app_id":"example","release":1,"digest":"digest"},"latest":{"release":2,"compatible":true},"installed_version":1,"modified":false,"icon":null})).unwrap()]);
+    let result = result_value(server.preview_app_result(input).await.unwrap());
+    assert_eq!(result["badge"], 1);
+    definition["badge"] = json!({"expr":"1.5"});
+    let invalid = result_value(server.preview_app_result(args(definition)).await.unwrap());
+    assert!(invalid["badge"].is_null());
+    assert!(invalid["warnings"].as_array().unwrap().iter().any(|warning| warning.as_str().unwrap().contains("badge")));
+}
+
+#[tokio::test]
 async fn preview_uses_default_locale_and_marks_repeat_values() {
     let server = McpServer::new(AppState::in_memory("secret"));
     let definition = json!({"id":"repeat-preview", "name":"반복 미리보기", "requires":{"blocks":14,"modules":{}},

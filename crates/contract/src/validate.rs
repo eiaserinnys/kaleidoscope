@@ -79,6 +79,25 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
     crate::validate_input::validate_input_extensions(&definition)?;
     crate::validate_button::validate_button_extensions(&definition)?;
 
+    if let Some(badge) = &definition.badge {
+        if definition.requires.blocks < crate::APP_BADGE_BLOCK_SET_VERSION {
+            return Err(crate::errors::APP_BADGE_VERSION_LOW(crate::APP_BADGE_BLOCK_SET_VERSION, crate::APP_BADGE_BLOCK_SET_VERSION));
+        }
+        if let crate::AppBadge::Expr(expr) = badge {
+            use jsonata_core::parser::{Lexer, Token};
+            let mut lexer = Lexer::new(expr.expr.clone());
+            loop {
+                match lexer.next_token() {
+                    Ok(Token::Variable(name)) if matches!(name.as_str(), "state" | "data" | "data_meta" | "storage" | "storage_meta" | "client" | "item" | "parent_item" | "event" | "modifiers") => {
+                        return Err(crate::errors::APP_BADGE_VARIABLE_FORBIDDEN(format!("${name}")));
+                    }
+                    Ok(Token::Eof) | Err(_) => break,
+                    _ => {}
+                }
+            }
+        }
+    }
+
     let mut stack_fill_error = None;
     data::walk_definition_blocks(&definition, &mut |pointer, block| {
         if stack_fill_error.is_some() { return; }

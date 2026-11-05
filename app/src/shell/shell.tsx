@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
+  CountBadge,
   ContextMenuHost,
   SHELL_DESKTOP_DELETE_UNSAVED,
   SHELL_WINDOW_CLOSE_UNSAVED,
@@ -43,6 +44,13 @@ import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
 
 type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
+
+function AppLauncherButton({ store, expanded, onClick }: { store: ShellStore; expanded: boolean; onClick: (anchor: HTMLElement) => void }) {
+  const count = useShellSelector(store, (snapshot) => Object.values(snapshot?.app_badges ?? {}).reduce((sum, value) => sum + value, 0));
+  return <IconButton className="ks-app-launcher-button" aria-label={count ? `앱 열기, 알림 ${count}개` : "앱 열기"} aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onClick(event.currentTarget)} title="앱 열기">
+    <span className="ks-badge-anchor"><LayoutGrid /><CountBadge count={count} dot /></span>
+  </IconButton>;
+}
 
 export function Shell({ store }: { store: ShellStore }) {
   useWindowControlHost(store);
@@ -375,9 +383,7 @@ export function Shell({ store }: { store: ShellStore }) {
         </nav>
 
         <div className="ks-shell-actions">
-          <IconButton aria-label="앱 열기" aria-haspopup="dialog" aria-expanded={launcher !== null} onClick={(event) => openAppMenu(event.currentTarget, "none")} title="앱 열기">
-            <LayoutGrid />
-          </IconButton>
+          <AppLauncherButton store={store} expanded={launcher !== null} onClick={(anchor) => openAppMenu(anchor, "none")} />
           <IconButton aria-label="앱 정의 가져오기" onClick={() => { fileInput.current?.click(); }} title="앱 정의 가져오기">
             <Import />
           </IconButton>

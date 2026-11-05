@@ -63,6 +63,8 @@ name: string,
  */
 current_version: number, created_at: string, updated_at: string, };
 
+export type AppBadge = number | ExprRef;
+
 /**
  * 앱 정의. 에이전트가 쓰는 JSON 문서이고, 가져오면 앱 버전 하나가 된다.
  *
@@ -110,7 +112,11 @@ name: string, description?: string,
 /**
  * 앱 아이콘. assets에 같은 id와 판을 선언한 SVG, PNG 또는 WebP 자산이다.
  */
-icon?: AppIconRef, requires: Requires, 
+icon?: AppIconRef, 
+/**
+ * 창 없이 계산하는 앱 아이콘 숫자 배지.
+ */
+badge?: AppBadge, requires: Requires, 
 /**
  * 앱이 참조할 수 있는 자산과 고정된 판.
  */
@@ -885,7 +891,7 @@ export type InputKind = "text" | "search" | "number" | "date" | "time";
 /**
  * 식 변수 $apps의 각 항목. 출처 없는 앱의 관련 값은 null이다.
  */
-export type InstalledAppValue = { id: string, name: string, version: number, origin: StoreOrigin | null, installed_version: number | null, modified: boolean, icon: AppIconRef | null, };
+export type InstalledAppValue = { id: string, name: string, version: number, origin: StoreOrigin | null, latest: StoreLatest | null, installed_version: number | null, modified: boolean, icon: AppIconRef | null, };
 
 /**
  * 항목 메뉴의 동작. `$event`는 블록의 `on_select`와 같은 항목 키(트리도 같은 값), `$item`은 항목이다.
@@ -1248,7 +1254,7 @@ preferences?: AccountPreferences | null, };
 /**
  * 화면이 보는 상태 전체.
  */
-export type ShellSnapshot = { last_transfer?: TransferResult, transfer_error?: string, embedded_available: boolean, shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
+export type ShellSnapshot = { app_badges: { [key in string]: number }, last_transfer?: TransferResult, transfer_error?: string, embedded_available: boolean, shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
 /**
  * 이 기기 코어 메모리에서 같이 보기를 켠 살아 있는 창 id. 켠 순서다.
  */
@@ -1388,6 +1394,8 @@ export type StoreIndexValue = { format: number, generated_at: string, server: st
 export type StoreInstallAction = { "store.install": StoreInstallSpec, };
 
 export type StoreInstallSpec = { permission: string, server: Binding, id: Binding, release: Binding, };
+
+export type StoreLatest = { release: number, compatible: boolean, };
 
 export type StoreOrigin = { store_url: string, store_app_id: string, release: number, digest: string, };
 

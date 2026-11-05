@@ -300,7 +300,9 @@ pub const CONTRACT_VERSION: u32 = 37;
 /// - 36판: 목록 빼기와 주소 열기 동작.
 /// - 37판: 쌓기 목록 채움.
 /// - 38판: chat의 불러오는 중 바인딩.
-pub const BLOCK_SET_VERSION: u32 = CHAT_LOADING_BLOCK_SET_VERSION;
+pub const BLOCK_SET_VERSION: u32 = APP_BADGE_BLOCK_SET_VERSION;
+/// 앱 아이콘의 숫자 배지를 처음 지원하는 블록 세트 판.
+pub const APP_BADGE_BLOCK_SET_VERSION: u32 = 39;
 /// chat.loading을 처음 지원하는 블록 세트 판.
 pub const CHAT_LOADING_BLOCK_SET_VERSION: u32 = 38;
 pub const LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION: u32 = 36;
@@ -363,7 +365,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("profiler", 1),
     ("client", RECEIVE_MESSAGE_CLIENT_VERSION),
     ("process", 2),
-    ("store", 1),
+    ("store", 2),
 ];
 
 /// 단추 강조 바인딩과 새 아이콘을 처음 지원한 블록 세트 판.
@@ -678,6 +680,8 @@ impl Supported {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct ShellSnapshot {
+    #[serde(default)]
+    pub app_badges: BTreeMap<String, u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub last_transfer: Option<transfer::TransferResult>,
@@ -837,6 +841,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub icon: Option<assets::AppIconRef>,
+    /// 창 없이 계산하는 앱 아이콘 숫자 배지.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub badge: Option<AppBadge>,
     pub requires: Requires,
     /// 앱이 참조할 수 있는 자산과 고정된 판.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -897,6 +905,14 @@ pub struct AppDefinition {
     pub window_title: Option<WindowTitleDecl>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum AppBadge {
+    Count(u32),
+    Expr(data::ExprRef),
 }
 
 /// 앱 정의의 사용자 지정 설정 패널.

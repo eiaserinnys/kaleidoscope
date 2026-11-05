@@ -3,7 +3,8 @@ import { expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cwd } from "node:process";
-import { Badge, badgeForeground } from "../components/badge";
+import { Badge, CountBadge, badgeForeground } from "../components/badge";
+import { IconTile } from "../components/icon-tile";
 
 const foundation = readFileSync(resolve(cwd(), "src/styles/foundation.css"), "utf8");
 
@@ -32,4 +33,30 @@ it.each([
 it("uses the theme default for an invalid color", () => {
   render(<Badge value={{ text: "상태", color: "red" }} />);
   expect(screen.getByText("상태").getAttribute("style")).toBeNull();
+});
+
+it("숫자 배지는 0을 숨기고 100부터 99+로 보인다", () => {
+  const { container, rerender } = render(<CountBadge count={0} />);
+  expect(container.textContent).toBe("");
+  rerender(<CountBadge count={100} />);
+  expect(screen.getByText("99+").getAttribute("aria-hidden")).toBe("true");
+});
+
+it("타일 접근 이름에 알림 수를 더한다", () => {
+  render(<IconTile name="앱" aria-label="별도 이름" icon={<i />} badge={2} />);
+  expect(screen.getByRole("button", { name: "별도 이름, 알림 2개" })).toBeTruthy();
+});
+
+it("점 배지는 1 미만이면 숨기고 알림 수와 관계없이 글자 없이 보인다", () => {
+  const { container, rerender } = render(<CountBadge count={0} dot />);
+  expect(container.querySelector(".is-dot")).toBeNull();
+  rerender(<CountBadge count={-1} dot />);
+  expect(container.querySelector(".is-dot")).toBeNull();
+  for (const count of [1, 12, 150]) {
+    rerender(<CountBadge count={count} dot />);
+    const dot = container.querySelector(".ks-badge.is-count.is-dot");
+    expect(dot).not.toBeNull();
+    expect(dot?.textContent).toBe("");
+    expect(dot?.getAttribute("aria-hidden")).toBe("true");
+  }
 });

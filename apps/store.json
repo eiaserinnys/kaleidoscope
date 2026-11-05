@@ -2,7 +2,8 @@
   "id": "store",
   "name": "앱스토어",
   "description": "스토어의 앱을 찾아 설치하고, 설치한 앱을 업데이트하거나 지웁니다",
-  "requires": { "blocks": 37, "modules": { "store": 1, "storage": 2, "assets": 1 } },
+  "requires": { "blocks": 39, "modules": { "store": 2, "storage": 2, "assets": 1 } },
+  "badge": { "expr": "$count($apps[origin != null and $not(modified) and latest.compatible = true and latest.release > origin.release])" },
   "icon": { "asset": "builtin-icon-store", "version": 2 },
   "assets": [{ "id": "builtin-icon-store", "version": 2 }],
   "permissions": [{ "module": "store", "id": "catalog", "label": "앱 설치" }],
@@ -46,7 +47,7 @@
           { "type": "toolbar", "start": [{ "type": "text", "value": "카테고리", "format": "plain", "style": "title" }] },
           {
             "type": "list", "layout": "rows",
-            "items": { "expr": "( $all := $data.catalog.items; $installed := $apps[origin != null].id; $cats := $sort($distinct($all.category)); $append($append([{ \"key\": \"\", \"title\": \"전체\", \"meta\": $string($count($all)) }], [$cats.( $c := $; { \"key\": $c, \"title\": $c, \"meta\": $string($count($all[category = $c])) } )]), [{ \"key\": \"__installed\", \"title\": \"설치됨\", \"meta\": $string($count($installed)) }]) )" },
+            "items": { "expr": "( $all := $data.catalog.items; $installed := $apps[origin != null].id; $updates := $apps[origin != null and $not(modified) and latest.compatible = true and latest.release > origin.release]; $cats := $sort($distinct($all.category)); $append($append([{ \"key\": \"\", \"title\": \"전체\", \"meta\": $string($count($all)) }], [$cats.( $c := $; { \"key\": $c, \"title\": $c, \"meta\": $string($count($all[category = $c])) } )]), [{ \"key\": \"__updates\", \"title\": \"업데이트\", \"meta\": $string($count($updates)) }, { \"key\": \"__installed\", \"title\": \"설치됨\", \"meta\": $string($count($installed)) }]) )" },
             "selected": { "state": "category" },
             "on_select": [{ "set_state": "category" }]
           }
@@ -62,7 +63,7 @@
           },
           {
             "type": "list", "layout": "icons",
-            "items": { "expr": "( $all := $data.catalog.items; $q := $lowercase($trim($state.query)); $c := $state.category; $installed := $apps[origin != null]; $pool := $c = '__installed' ? $append([$all[id in $installed.id]], [$installed[$not(id in $all.id)].{ \"id\": id, \"name\": name }]) : ($c = '' ? $all : $all[category = $c]); $hit := [$pool[$q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q) or $contains($lowercase($string(summary)), $q)]]; $byid := $q != '' and $not($q in $all.id) and $not($q in $installed.id) and $match($q, /^[a-z0-9-]{1,64}$/) ? [{ \"key\": $q, \"title\": $q }] : []; $append([$hit.{ \"key\": id, \"title\": name, \"image\": icon }], $byid) )" },
+            "items": { "expr": "( $all := $data.catalog.items; $q := $lowercase($trim($state.query)); $c := $state.category; $installed := $apps[origin != null]; $updates := $installed[$not(modified) and latest.compatible = true and latest.release > origin.release]; $chosen := $c = '__updates' ? $updates : $installed; $pool := $c = '__installed' or $c = '__updates' ? $append([$all[id in $chosen.id]], [$chosen[$not(id in $all.id)].{ \"id\": id, \"name\": name }]) : ($c = '' ? $all : $all[category = $c]); $hit := [$pool[$q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q) or $contains($lowercase($string(summary)), $q)]]; $byid := $c != '__updates' and $q != '' and $not($q in $all.id) and $not($q in $installed.id) and $match($q, /^[a-z0-9-]{1,64}$/) ? [{ \"key\": $q, \"title\": $q }] : []; $append([$hit.{ \"key\": id, \"title\": name, \"image\": icon }], $byid) )" },
             "selected": { "state": "selected" },
             "on_select": [
               { "set_state": "selected" },
@@ -132,7 +133,7 @@
             "child": {
               "type": "toolbar",
               "start": [{ "type": "button", "label": "지우기", "variant": "danger", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }],
-              "end": [{ "type": "button", "label": { "expr": "$exists($apps[id = $state.selected]) ? '설치됨' : '설치'" }, "variant": "primary", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }]
+              "end": [{ "type": "button", "label": { "expr": "( $a := $apps[id = $state.selected]; $exists($a[origin != null and $not(modified) and latest.compatible = true and latest.release > origin.release]) ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )" }, "variant": "primary", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }]
             }
           }
         ]

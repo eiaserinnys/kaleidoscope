@@ -37,6 +37,13 @@ pub fn evaluate_page_next(expr: &str, response: &Value, loaded: usize, pages: us
     Ok(Value::from(&result))
 }
 
+/// JSONata는 정수도 부동소수점 숫자로 내므로 값이 정수인지 확인한다.
+pub fn badge_count(value: &Value) -> Option<u32> {
+    let number = value.as_f64()?;
+    (number.is_finite() && number >= 0.0 && number <= u32::MAX as f64 && number.fract() == 0.0)
+        .then_some(number as u32)
+}
+
 pub struct CompiledApp {
     sources: BTreeMap<String, SourceDecl>,
     source_order: Vec<String>,
@@ -312,6 +319,18 @@ impl CompiledApp {
 
     pub fn binding_dependencies(&self) -> &[BindingDependencies] {
         &self.bindings
+    }
+
+    /// 창이나 원천 없이 앱 목록만으로 배지를 계산한다.
+    pub fn evaluate_badge(&self, badge: &kaleidoscope_contract::AppBadge, apps: Option<&[kaleidoscope_contract::store::InstalledAppValue]>) -> Result<Value, String> {
+        match badge {
+            kaleidoscope_contract::AppBadge::Count(count) => Ok(Value::from(*count)),
+            kaleidoscope_contract::AppBadge::Expr(_) => {
+                let empty = BTreeMap::new();
+                let vars = Variables::new(&empty, &empty, &empty, &empty, None, None).with_apps(apps);
+                self.eval("/badge", &vars)
+            }
+        }
     }
 
     /// 앱 정의의 제공자 바인딩을 같은 식 엔진으로 계산한다.

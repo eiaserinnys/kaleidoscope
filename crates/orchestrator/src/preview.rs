@@ -567,13 +567,20 @@ impl McpServer {
             })
             .collect::<Vec<_>>();
 
+        let mut warnings = call_budget_warnings(&definition);
+        let badge = definition.badge.as_ref().and_then(|badge| {
+            let result = compiled.evaluate_badge(badge, apps);
+            let count = result.as_ref().ok().and_then(kaleidoscope_data::badge_count);
+            if count.is_none() { warnings.push(format!("앱 정의의 badge 식 결과는 0 이상의 정수여야 합니다: {result:?}")); }
+            count
+        });
         let mut response = json!({
             "sources": source_results,
             "source_meta": data_meta,
             "values": values,
             "notes": notes,
+            "badge": badge,
         });
-        let warnings = call_budget_warnings(&definition);
         if !warnings.is_empty() {
             response["warnings"] = serde_json::json!(warnings);
         }

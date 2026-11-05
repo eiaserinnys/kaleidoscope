@@ -409,6 +409,23 @@ afterEach(() => {
   fallbackProbe.current = null;
 });
 
+it("앱 배지 변경은 해당 타일과 앱 열기 단추만 갱신한다", async () => {
+  const { store, transport } = await setup([definition, whenDefinition]);
+  fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기" }));
+  await screen.findByRole("dialog", { name: "앱 열기" });
+  await settleRenders();
+  tileRenders.clear(); frameRenders.count = 0;
+  const current = store.getSnapshot()!;
+  await act(async () => transport.emit({ event: "state.changed", snapshot: { ...current, app_badges: { [definition.id]: 1 } } }));
+  await settleRenders();
+  expect(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기, 알림 1개" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: `${definition.name}, 알림 1개` })).toBeTruthy();
+  expect(tileRenders.get(definition.name)).toBe(1);
+  expect(tileRenders.get(whenDefinition.name) ?? 0).toBe(0);
+  expect(frameRenders.count).toBe(0);
+  store.dispose();
+});
+
 describe("실제 Shell의 블록 렌더 격리", () => {
   it("설정 창 이동과 크기 조절은 앱 창을 다시 그리지 않는다", async () => {
     if (!globalThis.PointerEvent) Object.defineProperty(globalThis, "PointerEvent", { configurable: true, value: MouseEvent });

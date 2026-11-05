@@ -2093,6 +2093,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
 /// 앱 정의의 모든 식(자리와 원문). `ui` 바인딩, 동작 안의 값, 원천의 값 자리를 모두 담는다. 검사가 쓴다.
 pub fn all_exprs(definition: &AppDefinition) -> Vec<(String, &str)> {
     let mut out: Vec<(String, &str)> = Vec::new();
+    if let Some(crate::AppBadge::Expr(expr)) = &definition.badge {
+        out.push(("/badge".into(), expr.expr.as_str()));
+    }
     for (name, source) in &definition.sources {
         let base = format!("/sources/{}", escape_pointer(name));
         for (field, binding) in source_bindings(source) {

@@ -48,7 +48,15 @@ pub(crate) fn fetch_named(
             if !allowed { return Err(errors::STORECLIENT_SOURCE_PERMISSION_UNDECLARED(permission).into()); }
             let client = crate::store::client(inner, server)?;
             let result = match plan {
-                SourcePlan::StoreIndex { .. } => client.index(permission).map(|value| serde_json::to_value(value).expect("스토어 색인 JSON")),
+                SourcePlan::StoreIndex { .. } => {
+                    let url = crate::store::StoreUrl::parse(server)?;
+                    let gate = crate::store_latest::gate(inner, url.as_str());
+                    let _guard = gate.lock().unwrap();
+                    client.index(permission).map(|value| {
+                        crate::store_latest::record(inner, &value);
+                        serde_json::to_value(value).expect("스토어 색인 JSON")
+                    })
+                },
                 SourcePlan::StoreApp { id, .. } => client.app(id, permission).map(|value| serde_json::to_value(value).expect("스토어 상세 JSON")),
                 _ => unreachable!(),
             };
