@@ -460,6 +460,37 @@ describe("shell core events", () => {
 });
 
 describe("shell server link control", () => {
+  it("설정이 맨 위일 때 앱 창을 누르면 앱을 올린다", async () => {
+    const seed = makeTestSeed();
+    const transport = createFakeTransport(seed); const spy = vi.spyOn(transport, "call");
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    const target = seed.snapshot.shared.windows[0];
+    fireEvent.pointerDown(screen.getByTestId(`app-window-${target.app_id}`));
+    expect(spy).toHaveBeenCalledWith({ op: "window.raise", window_id: target.id });
+    store.dispose();
+  });
+
+  it("설정 위로 올린 앱 창을 최소화하면 설정이 맨 위로 보인다", async () => {
+    const seed = makeTestSeed();
+    const store = createShellStore(createFakeTransport(seed)); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    const target = seed.snapshot.shared.windows[0];
+    const frame = screen.getByTestId(`app-window-${target.app_id}`);
+    fireEvent.pointerDown(frame);
+    await waitFor(() => expect(frame.querySelector(".ks-window-frame-active")).toBeTruthy());
+    fireEvent.click(within(frame).getByRole("button", { name: "창 최소화" }));
+    await waitFor(() => expect(frame.getAttribute("data-minimized")).toBe("true"));
+    const taskbar = screen.getByRole("toolbar", { name: "작업 표시줄" });
+    const items = within(taskbar).getAllByRole("button");
+    const settingsItem = within(taskbar).getByRole("button", { name: "설정" });
+    expect(settingsItem.getAttribute("aria-pressed")).toBe("true");
+    const appItems = items.filter((item) => item !== settingsItem);
+    expect(appItems.length).toBeGreaterThan(0);
+    expect(appItems.map((item) => item.getAttribute("aria-pressed"))).toEqual(appItems.map(() => "false"));
+    store.dispose();
+  });
+
   it("pairs with the entered remote URL and keeps the code visible", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
@@ -508,7 +539,7 @@ describe("shell server link control", () => {
     const spy = vi.spyOn(transport, "call");
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "원격 연결 거부됨" }));
-    expect(screen.queryByRole("button", { name: "내 PC 앱과 데이터 가져오기" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "가져오기" })).toBeNull();
     const input = screen.getByRole("textbox", { name: "원격 서버 주소" }) as HTMLInputElement;
     expect((screen.getByRole("button", { name: "연결" }) as HTMLButtonElement).disabled).toBe(false);
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "내 PC 서버로 전환" }));
@@ -522,7 +553,7 @@ describe("shell server link control", () => {
     const store = createShellStore(createFakeTransport(makeTestSeed()));
     render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "연결 해제됨" }));
-    expect(screen.getByText("서버 연결")).toBeTruthy();
+    expect(within(screen.getByTestId("system-window-settings")).getByText("연결 해제됨")).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "원격 서버 주소" })).toBeTruthy();
     expect(screen.queryByText("내 PC 내장 서버")).toBeNull(); store.dispose();
   });
@@ -534,9 +565,19 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "페어링 코드 123456" }));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "코드 복사" }));
-    fireEvent.click(screen.getByRole("button", { name: "코드 복사" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("123456"));
-    expect(await screen.findByText("코드 복사됨")).toBeTruthy();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "코드 복사" }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith("123456"));
+      const status = await screen.findByText("복사했습니다");
+      expect(status.getAttribute("role")).toBe("status");
+      expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-check")).toBeTruthy();
+      expect(screen.queryByText("코드 복사됨")).toBeNull();
+      act(() => { vi.advanceTimersByTime(1500); });
+      expect(status.textContent).toBe("");
+      expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-copy")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-check")).toBeNull();
+    } finally { vi.useRealTimers(); }
     transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
     expect(await screen.findByText("집")).toBeTruthy();
     expect(screen.getByRole("button", { name: "연결 끊기" })).toBeTruthy(); store.dispose();
@@ -559,7 +600,7 @@ describe("shell server link control", () => {
     const spy = vi.spyOn(transport, "call");
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "원격 서버 (remote.example)" }));
-    fireEvent.click(screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" }));
+    fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
     expect(await screen.findByText("가져오기 완료 3개")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 전환" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.use_local" })); store.dispose();
@@ -577,7 +618,7 @@ describe("shell server link control", () => {
     }) as typeof transport.call);
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "원격 서버 (remote.example)" }));
-    const button = screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" });
+    const button = screen.getByRole("button", { name: "가져오기" });
     fireEvent.click(button);
     expect(button.classList.contains("is-progress")).toBe(true);
     expect(button.querySelector(".ks-button-progress")).toBeTruthy();
@@ -593,21 +634,22 @@ describe("shell server link control", () => {
     expect(screen.getByText("연결 끊김")).toBeTruthy();
     expect(screen.getByText("CONN_EVENTS_SEND_FAILED")).toBeTruthy();
     expect(screen.queryByText("host=remote.example")).toBeNull();
-    expect((screen.getByRole("button", { name: "내 PC 앱과 데이터 가져오기" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "가져오기" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.keyDown(screen.getByRole("region", { name: "설정" }), { key: "Escape" });
-    expect(screen.queryByRole("region", { name: "설정" })).toBeNull();
+    expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
+    fireEvent.click(within(screen.getByTestId("system-window-settings")).getByRole("button", { name: "창 닫기" }));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "원격 오프라인" })); store.dispose();
   });
-  it("톱니와 뒤로 단추로 설정을 열고 닫으며 초점을 되돌린다", async () => {
+  it("톱니와 창 닫기로 설정을 열고 닫으며 초점을 되돌린다", async () => {
     const store = createShellStore(createFakeTransport(makeTestSeed()));
     render(<Shell store={store} />); await store.ready;
     const gear = screen.getByRole("button", { name: "설정" });
     fireEvent.click(gear);
-    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "설정" }));
-    expect(document.querySelector(".app-root")?.hasAttribute("data-settings-open")).toBe(true);
+    expect(document.activeElement).toBe(screen.getByTestId("system-window-settings").querySelector(".ks-window-content"));
+    expect(document.querySelector(".app-root")?.hasAttribute("data-settings-open")).toBe(false);
     fireEvent.pointerDown(document.body);
     expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "작업 화면으로 돌아가기" }));
+    fireEvent.click(within(screen.getByTestId("system-window-settings")).getByRole("button", { name: "창 닫기" }));
     expect(screen.queryByRole("region", { name: "설정" })).toBeNull();
     expect(document.activeElement).toBe(gear);
     store.dispose();
@@ -632,11 +674,11 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     fireEvent.click(screen.getByRole("button", { name: "설정" }));
     const desktop = screen.getByRole("button", { name: "Desktop" });
-    expect(desktop.getAttribute("aria-pressed")).toBe("false");
+    expect(desktop.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "원격 서버 주소" }));
     fireEvent.click(desktop);
-    expect(screen.queryByRole("region", { name: "설정" })).toBeNull();
+    expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
     expect(desktop.getAttribute("aria-pressed")).toBe("true");
     store.dispose();
   });
@@ -650,8 +692,8 @@ describe("shell server link control", () => {
     const current = store.getSnapshot()!;
     transport.emit({ event: "state.changed", snapshot: { ...current, shared: { ...current.shared, workspaces: next.shared.workspaces, desktops: next.shared.desktops }, device: next.device } });
     await waitFor(() => expect(screen.getByRole("button", { name: "데스크톱 추가" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "작업 화면으로 돌아가기" }));
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "설정" }));
+    fireEvent.click(within(screen.getByTestId("system-window-settings")).getByRole("button", { name: "창 닫기" }));
+    expect(document.activeElement).toBe(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
     store.dispose();
   });
 });

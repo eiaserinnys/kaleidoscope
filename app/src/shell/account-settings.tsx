@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ErrorNotice, StatusText, defaultMessageApp, messageApps, toCoreError, type CoreError, type ShellStore } from "@kaleidoscope/ui";
+import { ErrorNotice, StatusText, SettingsRow, defaultMessageApp, messageApps, toCoreError, type CoreError, type ShellStore } from "@kaleidoscope/ui";
 import { LoaderCircle } from "../../../ui/src/components/icons";
 import { Select } from "../../../ui/src/components/select-toggle";
 import { useMessageSnapshot } from "./use-message-snapshot";
@@ -35,15 +35,13 @@ export function AccountSettings({ store }: { store: ShellStore }) {
   };
   return <section className="ks-settings-group" aria-labelledby={`${id}-account`}>
     <h3 className="ks-data-section-title" id={`${id}-account`}>계정</h3>
-    <div className="ks-settings-entry">
-      <div className="ks-settings-label-row"><label>기본 에이전트</label>{saving ? <StatusText>저장 중</StatusText> : null}</div>
-      {reason ? <div className="ks-settings-description" id={`${id}-reason`}>{reason}</div> : null}
-      <div ref={control} className="ks-settings-control" aria-busy={waiting || undefined}>
+    <SettingsRow label={<label>기본 에이전트</label>} status={saving ? <StatusText>저장 중</StatusText> : null}
+      meta={reason ? <div className="ks-settings-description" id={`${id}-reason`}>{reason}</div> : null}
+      control={<div ref={control} className="ks-settings-row-select" aria-busy={waiting || undefined}>
         <Select label="기본 에이전트" items={apps.map((app) => ({ value: app.id, label: app.name }))} value={waiting ? null : current?.id ?? null}
           disabled={Boolean(reason) || waiting || saving} describedBy={reason ? `${id}-reason` : undefined}
           prefix={waiting ? <LoaderCircle size="inline" className="ks-settings-apply-spinner" /> : undefined} onChange={(value) => void choose(value)} />
-      </div>
-      {error ? <ErrorNotice error={error} /> : null}
-    </div>
+      </div>} />
+    {error ? <ErrorNotice error={error} /> : null}
   </section>;
 }
