@@ -142,6 +142,7 @@ const appVersions: AppVersion[] = definitions.map((definition) => ({
   created_at: timestamp,
 }));
 const initialSnapshot: ShellSnapshot = {
+  app_badges: {},
   embedded_available: false,
   shared: {
     apps,

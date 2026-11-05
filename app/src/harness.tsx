@@ -176,6 +176,7 @@ function linkStatus(state: string | null): LinkStatus {
 }
 
 const snapshot: ShellSnapshot = {
+  app_badges: {},
   embedded_available: true,
   shared: {
     apps,
