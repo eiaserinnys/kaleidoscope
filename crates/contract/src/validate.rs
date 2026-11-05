@@ -3123,7 +3123,11 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         Block::Chat {
             client: chat_client,
             footer,
+            loading,
         } => {
+            if let Some(loading) = loading {
+                validate_ui_binding(loading, definition, details, &format!("{at}/loading"));
+            }
             if let Some(chat_client) = chat_client {
                 if definition.agent.is_some() {
                     details.push(format!(

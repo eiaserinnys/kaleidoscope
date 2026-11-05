@@ -297,7 +297,10 @@ pub const CONTRACT_VERSION: u32 = 36;
 /// - 35판: 날짜와 시간 입력.
 /// - 36판: 목록 빼기와 주소 열기 동작.
 /// - 37판: 쌓기 목록 채움.
-pub const BLOCK_SET_VERSION: u32 = STACK_FILL_LIST_BLOCK_SET_VERSION;
+/// - 38판: chat의 불러오는 중 바인딩.
+pub const BLOCK_SET_VERSION: u32 = CHAT_LOADING_BLOCK_SET_VERSION;
+/// chat.loading을 처음 지원하는 블록 세트 판.
+pub const CHAT_LOADING_BLOCK_SET_VERSION: u32 = 38;
 pub const LIST_REMOVE_OPEN_URL_BLOCK_SET_VERSION: u32 = 36;
 /// 날짜와 시간 입력의 첫 블록 세트 판.
 pub const INPUT_DATE_TIME_BLOCK_SET_VERSION: u32 = 35;
@@ -1655,6 +1658,10 @@ pub enum Block {
     ///   보낼 첨부로 쌓인다. 첨부가 있으면 글 없이도 보낸다. 기록의 사용자 말에 첨부가 보이고, 이미지는
     ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
     Chat {
+        /// (블록 세트 38판) true면 기록만 뼈대로 표시하고 입력을 잠근다. 생략하면 false다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        loading: Option<Binding>,
         /// (블록 세트 18판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2443,6 +2450,8 @@ enum RawBlock {
     ///   눌러 크게 보고 다른 파일은 눌러 기기의 기본 앱으로 연다.
     Chat {
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        loading: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         client: Option<client::ChatClient>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         footer: Option<Box<RawBlock>>,
@@ -3158,7 +3167,8 @@ impl From<RawBlock> for Block {
                 selected_revision,
                 on_select_revision,
             },
-            RawBlock::Chat { client, footer } => Block::Chat {
+            RawBlock::Chat { loading, client, footer } => Block::Chat {
+                loading,
                 client,
                 footer: footer.map(|child| Box::new((*child).into())),
             },
@@ -3563,6 +3573,7 @@ impl From<RawBlock> for Block {
                 wrap,
             },
             RawBlock::AgentChat {} => Block::Chat {
+                loading: None,
                 client: None,
                 footer: None,
             },
@@ -3615,6 +3626,7 @@ impl Block {
             } => 6,
             Block::Markdown { value: Some(_), .. } => 4,
             Block::Markdown { .. } => 1,
+            Block::Chat { loading: Some(_), .. } => CHAT_LOADING_BLOCK_SET_VERSION,
             Block::Chat {
                 client: Some(_), ..
             } => 18,

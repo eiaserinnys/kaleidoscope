@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 type ClientChatHarnessCall = {
@@ -17,11 +17,56 @@ declare global {
       restartClient: () => Promise<void>;
       clientGeneration: () => number;
       chatState: () => { loading: boolean; busy: boolean; items: number; queued: number; attachments: number } | null;
+      setLoading: (value: boolean) => void;
     };
   }
 }
 
 const captureDir = "/home/eias/workspace/.local/tmp/card933/chat-client";
+
+test("대화를 불러오는 동안 입력 줄과 초안은 유지된다", async ({ page }) => {
+  const capture = "/home/eias/workspace/.local/artifacts/c1009-chat-loading";
+  await mkdir(capture, { recursive: true });
+  await page.setViewportSize({ width: 1100, height: 820 });
+  await page.goto("/?preview=client-chat-test");
+  await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
+  const app = page.getByTestId("app-window-client-chat");
+  await expect(app.getByText("파일을 살펴봐 줘")).toBeVisible();
+  const input = app.getByRole("textbox", { name: "메시지" });
+  await input.fill("남길 초안");
+  const inputHandle = await input.elementHandle();
+  const measure = () => app.evaluate((element) => {
+    const bounds = (selector: string) => {
+      const rect = element.querySelector(selector)!.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    };
+    return { history: bounds(".ks-agent-chat-history"), composer: bounds(".ks-agent-chat-input-area") };
+  });
+  const wideBefore = await measure();
+  await app.screenshot({ path: `${capture}/wide-before.png` });
+  await page.evaluate(() => window.clientChatHarness.setLoading(true));
+  await expect(app.getByLabel("불러오는 중")).toBeVisible();
+  await expect(input).toBeDisabled();
+  expect(await input.evaluate((element, original) => element === original, inputHandle)).toBe(true);
+  const wideLoading = await measure();
+  expect(Math.abs(wideBefore.composer.top - wideLoading.composer.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(wideLoading.history.left - wideLoading.composer.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(wideLoading.history.right - wideLoading.composer.right)).toBeLessThanOrEqual(1);
+  await app.screenshot({ path: `${capture}/wide-loading.png` });
+  await page.setViewportSize({ width: 360, height: 820 });
+  const narrowLoading = await measure();
+  await app.screenshot({ path: `${capture}/narrow-loading.png` });
+  await page.evaluate(() => window.clientChatHarness.setLoading(false));
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue("남길 초안");
+  await expect(app.getByText("파일을 살펴봐 줘")).toBeVisible();
+  const narrowAfter = await measure();
+  expect(Math.abs(narrowAfter.composer.top - narrowLoading.composer.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(narrowLoading.history.left - narrowLoading.composer.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(narrowLoading.history.right - narrowLoading.composer.right)).toBeLessThanOrEqual(1);
+  await app.screenshot({ path: `${capture}/narrow-after.png` });
+  await writeFile(`${capture}/bounds.json`, JSON.stringify({ wideBefore, wideLoading, narrowLoading, narrowAfter }, null, 2));
+});
 
 test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리로드 복구", async ({ page }) => {
   await mkdir(captureDir, { recursive: true });
@@ -35,7 +80,7 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
   const app = page.getByTestId("app-window-client-chat");
   await expect(app).toBeVisible();
   await expect(app.locator(".ks-agent-chat-history")).toBeVisible();
-  await expect(app.getByText("불러오는 중…")).toBeVisible();
+  await expect(app.getByLabel("불러오는 중")).toBeVisible();
   await app.screenshot({ path: `${captureDir}/loading.png` });
 
   await expect(app.getByText("파일을 살펴봐 줘")).toBeVisible();
@@ -158,7 +203,7 @@ test("클라이언트 재시작은 대기 중인 채팅 상태를 초기화한�
   await page.evaluate(() => window.clientChatHarness.pauseNextSnapshot());
   await page.evaluate(() => window.clientChatHarness.restartClient());
   await expect.poll(() => page.evaluate(() => window.clientChatHarness.clientGeneration())).toBe(oldGeneration + 1);
-  await expect(app.getByText("불러오는 중…")).toBeVisible();
+  await expect(app.getByLabel("불러오는 중")).toBeVisible();
   await expect(app.getByText("파일을 살펴봐 줘", { exact: true })).toHaveCount(0);
   await expect(app.getByText("이미지에서 글자를 찾고 있습니다. 응답 조각이 도착했습니다.", { exact: true })).toHaveCount(0);
   await expect(app.locator(".ks-agent-chat-history").getByText("재시작 대기", { exact: true })).toHaveCount(0);

@@ -171,3 +171,45 @@ fn app_definition_schema_contains_client_channels_and_chat_client_footer() {
         assert!(schema.contains(key), "schema does not expose {key}");
     }
 }
+
+#[test]
+fn chat_loading_requires_block_set_38_and_registers_binding() {
+    let client = client_decl(json!(["conversation"]), json!(["send", "cancel", "attachment"]));
+    for loading in [json!(false), json!(true), json!({"state":"switching"}), json!({"expr":"switching"}), json!({"client":"footer"})] {
+        let mut chat = chat_block();
+        chat["loading"] = loading.clone();
+        let mut old = definition(37, chat.clone(), client.clone());
+        old["state"]["switching"] = json!(false);
+        let error = parse_app_definition(&old.to_string()).expect_err("loading에는 38판이 필요하다");
+        assert!(error.details.iter().any(|detail| detail.contains("38판")), "{error:?}");
+        old["requires"]["blocks"] = json!(38);
+        let app = parse_app_definition(&old.to_string()).expect("38판 loading 바인딩");
+        assert_eq!(serde_json::to_value(&app).unwrap()["ui"]["loading"], loading);
+        assert!(data::all_ui_bindings(&app).iter().any(|(pointer, _)| pointer == "/ui/loading"));
+    }
+    let mut invalid = chat_block();
+    invalid["loading"] = json!({"client":"missing"});
+    let error = parse_app_definition(&definition(38, invalid, client).to_string()).unwrap_err();
+    assert!(error.details.iter().any(|detail| detail.contains("missing")), "{error:?}");
+}
+
+#[test]
+fn chat_loading_is_in_chat_schema() {
+    let schema = app_definition_schema();
+    let text = schema.to_string();
+    let value: Value = serde_json::from_str(&text).unwrap();
+    fn chat_has_loading(value: &Value) -> bool {
+        match value {
+            Value::Object(map) => {
+                let properties = map.get("properties");
+                let is_chat = properties.and_then(|p| p.get("type")).is_some_and(|kind|
+                    kind.get("const") == Some(&json!("chat")) || kind.get("enum") == Some(&json!(["chat"])));
+                (is_chat && properties.is_some_and(|p| p.get("loading").is_some()))
+                    || map.values().any(chat_has_loading)
+            }
+            Value::Array(values) => values.iter().any(chat_has_loading),
+            _ => false,
+        }
+    }
+    assert!(chat_has_loading(&value), "chat schema에 loading이 없다");
+}

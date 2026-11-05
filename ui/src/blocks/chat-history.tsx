@@ -1,5 +1,6 @@
 import { memo, useEffect, useId, useLayoutEffect, useRef, type MouseEvent, type ReactNode, type Ref, type UIEvent } from "react";
-import type { ConversationAttachment, ConversationItem } from "../contract/contract";
+import type { BindingValue, ConversationAttachment, ConversationItem } from "../contract/contract";
+import { DataState } from "../components/data-state";
 import { Notice } from "../components/primitives";
 import { ThinkingOrb } from "thinking-orbs";
 import { MarkdownText } from "./markdown-text";
@@ -14,7 +15,7 @@ export function messageContextMenu(event: MouseEvent<HTMLElement>, text: string)
 
 export type ChatPendingMessage = { text: string; attachments: DraftAttachment[]; afterResponse?: boolean };
 
-export function ChatHistory({ items, pending, delta, busy, tool, historyRef, followTail, onReachTop, renderAttachment, renderPendingAttachment, queued = null, footer = null, hideThinking = false }: {
+export function ChatHistory({ items, pending, delta, busy, tool, historyRef, followTail, onReachTop, renderAttachment, renderPendingAttachment, queued = null, footer = null, hideThinking = false, state = null }: {
   items: ConversationItem[];
   pending: ChatPendingMessage | null;
   delta: string;
@@ -28,6 +29,7 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
   queued?: ReactNode;
   footer?: ReactNode;
   hideThinking?: boolean;
+  state?: Exclude<BindingValue, { status: "ready" }> | null;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const lastScrollTop = useRef(0);
@@ -64,6 +66,7 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
   const pendingRow = pending !== null ? <div className="ks-agent-chat-user is-pending" tabIndex={pending.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, pending.text)}>{pending.text}{pending.attachments.length ? <div className={`ks-agent-attachment-history${pending.text ? " has-text" : ""}`}>{pending.attachments.map((attachment, index) => renderPendingAttachment(attachment, index))}</div> : null}</div> : null;
   return <div aria-label="대화 기록" className="ks-agent-chat-history" onScroll={handleScroll} ref={historyRef} role="log">
     <div className="ks-agent-chat-content" ref={contentRef}>
+      {state ? <DataState value={state} /> : <>
       <ChatItems items={items} renderAttachment={renderAttachment} />
       {!pending?.afterResponse ? pendingRow : null}
       {delta ? <div className="ks-agent-chat-assistant" tabIndex={0} onContextMenu={(event) => messageContextMenu(event, delta)}><div className="ks-agent-chat-assistant-content"><MarkdownText>{delta}</MarkdownText></div></div> : null}
@@ -76,6 +79,7 @@ export function ChatHistory({ items, pending, delta, busy, tool, historyRef, fol
         </div>
       ) : null}
       {footer}
+      </>}
     </div>
   </div>;
 }

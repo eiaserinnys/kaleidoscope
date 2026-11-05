@@ -52,16 +52,16 @@ const workspacePas = workspacePasJson as unknown as AppDefinition;
 const clientChatScriptUrl = URL.createObjectURL(new Blob([clientChatSource], { type: "text/javascript" }));
 const clientChatApp = {
   id: "client-chat-test", name: "클라이언트 채팅 시험",
-  requires: { blocks: 18, modules: { assets: 1, client: 4 } },
+  requires: { blocks: 38, modules: { assets: 1, client: 4 } },
   permissions: [], state: {},
   assets: [{ id: "client-chat-fixture", version: 1 }, { id: "client-chat-image", version: 1 }],
   client: {
     runtime: "javascript", entry: { id: "client-chat-fixture", version: 1 }, inputs: {},
-    outputs: { footer: { default: "도구 승인 기본값" } }, channels: ["thread"],
+    outputs: { footer: { default: "도구 승인 기본값" }, switching: { default: false } }, channels: ["thread"],
     actions: ["send", "cancel", "attachment"], commands: {}, state_keys: [], storage_entries: [],
   },
   ui: {
-    type: "chat", client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" },
+    type: "chat", loading: { client: "switching" }, client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" },
     footer: { type: "text", value: { client: "footer" }, style: "body" },
   },
 } as unknown as AppDefinition;
@@ -330,6 +330,7 @@ if (!coreUrl) {
     // 성능 측정기가 주기마다 보내는 profiler.report는 사용자 조작과 무관해 세지 않는다.
     coreCalls: () => fakeTransport.getCalls().filter((call) => call.op !== "profiler.report").length,
     control: (type: string) => document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")?.contentWindow?.postMessage({ type }, "*"),
+    setLoading: (value: boolean) => clientChatWindowData?.publishClient({ switching: value }),
     pauseNextSnapshot: () => { holdClientChatSnapshot = true; },
     restartClient: async () => { await clientChatWindowData?.restartClient(); },
     clientGeneration: () => clientChatWindowData?.getClientGeneration() ?? 0,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Block, ChatClient, ConversationAttachment, ConversationItem, CoreError } from "../contract/contract";
 import type { ClientChatAttachment, ClientChatQueuedMessage } from "../data/client-chat";
-import { useWindowData } from "../data/window-data";
+import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { ChatComposer } from "./chat-composer";
 import { ChatHistory, messageContextMenu, type ChatPendingMessage } from "./chat-history";
@@ -9,7 +9,6 @@ import { HistoryAttachmentView, ImagePreview, PendingAttachment, type DraftAttac
 import { useFrameCoalesced } from "./frame-coalesced";
 import { renderBlock } from "../render/render-block";
 import { toCoreError } from "../core/core-transport";
-import { ThinkingOrb } from "thinking-orbs";
 
 export type ClientChatBlockData = Extract<Block, { type: "chat" }> & { client: ChatClient };
 type PendingMessage = ChatPendingMessage & { requestId: string; generation: number; knownIds: Set<string> };
@@ -52,6 +51,10 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const subscribe = useCallback((listener: () => void) => data.subscribeClientChat(channelName, listener), [channelName, data]);
   const getState = useCallback(() => data.getClientChat(channelName), [channelName, data]);
   const chat = useSyncExternalStore(subscribe, getState, getState);
+  const loadingBinding = useBinding(`${pointer}/loading`, block.loading ?? false);
+  const historyState = loadingBinding.status !== "ready" ? loadingBinding
+    : loadingBinding.value === true || chat.loading ? { status: "loading" as const } : null;
+  const disabled = historyState !== null;
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingMessage | null>(null);
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
@@ -74,7 +77,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     const observer = new MutationObserver(refresh);
     observer.observe(footer, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });
     return () => observer.disconnect();
-  }, [block.footer]);
+  }, [block.footer, disabled]);
 
   useEffect(() => {
     if (chat.loading) {
@@ -173,7 +176,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     const submittedDraft = draft;
     const text = submittedDraft.trim();
     const submittedAttachments = attachments;
-    if ((!text && submittedAttachments.length === 0) || sending) return;
+    if (disabled || (!text && submittedAttachments.length === 0) || sending) return;
     const requestId = crypto.randomUUID();
     setSending(true);
     followTail.current = true;
@@ -204,11 +207,11 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   };
 
   const cancel = () => {
+    if (disabled) return;
     void data.requestClientAction(on_cancel, { stream_id: chat.stream_id }).catch((reason) => setActionError(toCoreError(reason)));
   };
 
   const footer = <>
-    {chat.loading ? <div className="ks-agent-chat-working"><ThinkingOrb aria-label="불러오는 중" size={20} state="working" theme="auto" /><span>불러오는 중…</span></div> : null}
     {block.footer ? <div className="ks-agent-chat-footer" ref={footerRef}>{renderBlock(block.footer, context, `${pointer}/footer`)}</div> : null}
   </>;
   const pendingForDisplay = pending?.generation === chat.generation && !chat.queued.some((message) => message.id === pending.requestId)
@@ -228,6 +231,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       queued={chat.queued.map(renderQueuedMessage)}
       hideThinking={waitingForFooter}
       footer={footer}
+      state={historyState}
     />
     <ChatComposer
       draft={draft}
@@ -236,7 +240,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       attachments={attachments}
       onAttachmentsChange={setAttachments}
       onSend={(returnFocus) => { void send(returnFocus); }}
-      disabled={false}
+      disabled={disabled}
       busy={sending || chat.busy}
       onCancel={chat.busy ? cancel : undefined}
       sharedWindows={[]}
