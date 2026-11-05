@@ -504,3 +504,32 @@ for (const hasGuide of [true, false]) {
     assert.equal(parts.some((part: any) => part.text?.includes("<kaleidoscope-app-guide>")), !hasGuide);
   });
 }
+
+for (const toolLine of ["MCP 도구가 연결되어 있습니다.", "현재 MCP 도구를 사용할 수 없습니다."]) {
+  test(`옛 지침과 ${toolLine} 뒤에 이어 붙은 사용자 말만 복원한다`, async () => {
+    const { f, session } = await readyWithHistory();
+    await session.loadSession("chosen");
+    const id = f.writes.at(-1).id;
+    const chunk = (messageId: string, text: string) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "user_message_chunk", messageId, content: { type: "text", text } } } });
+    await f.emit(chunk("one", " \n  kaleidoscope 앱 제작 지침\n지침 본문\n" + toolLine));
+    await f.emit(chunk("one", "아까 기억하라던 말"));
+    await f.emit(chunk("two", "kaleidoscope 앱 제작 지침\n지침 본문\n" + toolLine));
+    await f.emit({ jsonrpc: "2.0", id, result: {} });
+    assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["아까 기억하라던 말"]);
+    assert.equal((f.getCheckpoint() as any).guideSent, true);
+    await session.send({ id: "after", text: "다음", attachments: [] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(f.writes.at(-1).params.prompt.some((part: any) => part.text?.includes("<kaleidoscope-app-guide>")), false);
+  });
+}
+
+test("도구 줄이 없는 옛 지침 형태의 글은 보존하고 지침을 보낸 세션으로 판정한다", async () => {
+  const { f, session } = await readyWithHistory();
+  await session.loadSession("chosen");
+  const id = f.writes.at(-1).id;
+  const text = "kaleidoscope 앱 제작 지침\n도구 줄 없는 글";
+  await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "user_message_chunk", messageId: "one", content: { type: "text", text } } } });
+  await f.emit({ jsonrpc: "2.0", id, result: {} });
+  assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), [text]);
+  assert.equal((f.getCheckpoint() as any).guideSent, true);
+});
