@@ -24,7 +24,9 @@
 .ks-html-comment p,
 .ks-html-target-name.is-quote,
 .ks-icon-tile-name,
-.ks-html-text {
+.ks-html-text,
+.ks-settings-row-label,
+.ks-settings-description {
   overflow-wrap: anywhere;
   word-break: keep-all;
 }

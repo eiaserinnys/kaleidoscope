@@ -3,7 +3,8 @@
 .ks-app-settings h2, .ks-app-settings h3 { margin: 0; }
 .ks-app-settings h2 { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-app-settings > .ks-data-toolbar > h2 { line-height: var(--ks-control-height); }
-.ks-app-settings-scroll { min-height: 0; overflow: auto; padding: var(--ks-space-3); }
+/* 스크롤바 칸을 늘 비워 두고 안쪽 여백에서 그만큼 뺀다. 스크롤이 생겨도 오른쪽 끝선이 그대로다(.ks-html-rail-body와 같은 꼴). */
+.ks-app-settings-scroll { min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: var(--ks-space-3) calc(var(--ks-space-3) - var(--ks-space-2)) var(--ks-space-3) var(--ks-space-3); }
 .ks-settings-custom { width: 100%; max-width: calc(var(--ks-window-min-width) * 2); }
 .ks-settings-custom .ks-data-stack { height: auto; }
 .ks-settings-custom .ks-field,
@@ -17,6 +18,7 @@
   min-height: var(--ks-control-height);
 }
 .ks-settings-row { align-items: start; margin-top: var(--ks-space-2); }
+.ks-settings-row.is-without-control { grid-template-columns: minmax(0, 1fr); }
 .ks-settings-row-text, .ks-settings-row-control { min-width: 0; }
 /* 이름표가 여러 줄로 꺾여도 첫 줄을 조작 높이의 세로 가운데에 두고, 점과 단추 같은 표시도 그 줄에 맞춘다. */
 .ks-settings-row-label {

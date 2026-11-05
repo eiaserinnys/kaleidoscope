@@ -567,7 +567,9 @@ describe("shell server link control", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "코드 복사" }));
     fireEvent.click(screen.getByRole("button", { name: "코드 복사" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("123456"));
-    expect(await screen.findByText("코드 복사됨")).toBeTruthy();
+    expect((await screen.findByText("복사했습니다")).getAttribute("role")).toBe("status");
+    expect(screen.getByRole("button", { name: "코드 복사" }).querySelector(".lucide-check")).toBeTruthy();
+    expect(screen.queryByText("코드 복사됨")).toBeNull();
     transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
     expect(await screen.findByText("집")).toBeTruthy();
     expect(screen.getByRole("button", { name: "연결 끊기" })).toBeTruthy(); store.dispose();

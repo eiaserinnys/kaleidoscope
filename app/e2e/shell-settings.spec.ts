@@ -68,27 +68,41 @@ test("최소 창에서 연결 상태와 결과를 확인한다", async ({ page }
     expect(Math.round((await win.boundingBox())!.width)).toBe(360);
     expect(await win.locator(".ks-shell-settings").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     await page.screenshot({ path: `${captures}/narrow-${state}.png` });
-    const firstLine = await win.locator(".ks-settings-row").first().evaluate((row) => {
+    const measureFirstLine = () => win.locator(".ks-settings-row").first().evaluate((row) => {
       const label = row.querySelector(".ks-settings-row-label")!;
       const center = (rect: DOMRect) => (rect.top + rect.bottom) / 2;
       const text = [...label.children].find((element) => element.tagName === "SPAN" && element.classList.length === 0)!;
       const range = document.createRange(); range.selectNodeContents(text);
       const marks = [label.querySelector(".shell-server-dot"), label.querySelector("button"), row.querySelector(".ks-settings-row-control > button")]
         .filter((element): element is Element => element !== null).map((element) => center(element.getBoundingClientRect()));
-      return { line: center(range.getClientRects()[0]), marks, code: label.querySelector(".ks-pairing-code")?.getClientRects().length ?? 1 };
+      const lines = new Set([...label.querySelectorAll("span:not([aria-hidden]):not(.ks-accessible-hidden)")].flatMap((element) => [...element.getClientRects()].map((rect) => Math.round(rect.top))));
+      return { line: center(range.getClientRects()[0]), marks, code: label.querySelector(".ks-pairing-code")?.getClientRects().length ?? 1, lines: lines.size };
     });
-    for (const mark of firstLine.marks) expect(Math.abs(mark - firstLine.line)).toBeLessThanOrEqual(1);
-    expect(firstLine.code).toBe(1);
+    const checkFirstLine = async () => {
+      const firstLine = await measureFirstLine();
+      for (const mark of firstLine.marks) expect(Math.abs(mark - firstLine.line)).toBeLessThanOrEqual(1);
+      expect(firstLine.code).toBe(1);
+      expect(firstLine.lines).toBeLessThanOrEqual(2);
+    };
+    await checkFirstLine();
     if (state === "pairing") {
       await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async () => undefined } }));
       await win.getByRole("button", { name: "코드 복사" }).click();
-      await expect(win.getByText("코드 복사됨")).toBeVisible();
+      await expect(win.locator('.ks-accessible-hidden[role="status"]')).toHaveText("복사했습니다");
+      await expect(win.getByRole("button", { name: "코드 복사" }).locator(".lucide-check")).toHaveCount(1);
+      await checkFirstLine();
     }
   }
   await page.goto(`${base}&link=connected&transfer-skips&slow-link`);
   await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
   await expect(page.getByText("가져오기 완료 3개")).toBeVisible();
   await page.screenshot({ path: `${captures}/transfer-success.png` });
+  const gaps = await page.getByTestId("system-window-settings").locator(".ks-shell-settings").evaluate((element) => {
+    const outer = element.getBoundingClientRect(); const body = element.querySelector(".ks-shell-settings-body")!.getBoundingClientRect();
+    return { left: body.left - outer.left, right: outer.right - body.right, scrolls: element.scrollHeight > element.clientHeight };
+  });
+  expect(gaps.scrolls).toBe(true);
+  expect(Math.abs(gaps.left - gaps.right)).toBeLessThanOrEqual(1);
   const transfer = page.getByRole("button", { name: "가져오기", exact: true });
   const before = await transfer.boundingBox(); await transfer.click();
   await expect(transfer).toHaveAttribute("aria-busy", "true");

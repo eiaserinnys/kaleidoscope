@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Button, ErrorId, ErrorNotice, IconButton, Notice, StatusText, TextInput, SettingsRow, SHELL_SERVER_PAIRING_CODE_COPY_FAILED, type CoreReply, type CoreRequest, type ShellSnapshot, type ShellStore, type TransferResult } from "@kaleidoscope/ui";
-import { Copy, LoaderCircle } from "../../../ui/src/components/icons";
+import { Button, ErrorId, ErrorNotice, IconButton, Notice, TextInput, SettingsRow, SHELL_SERVER_PAIRING_CODE_COPY_FAILED, type CoreReply, type CoreRequest, type ShellSnapshot, type ShellStore, type TransferResult } from "@kaleidoscope/ui";
+import { Check, Copy, LoaderCircle } from "../../../ui/src/components/icons";
 import { serverLabel } from "./server-label";
 import { AccountSettings } from "./account-settings";
 
@@ -68,8 +68,8 @@ export function ShellSettings({ snapshot, entry, call, store }: {
           {link.state === "pairing" ? <IconButton aria-label="코드 복사" title="코드 복사" disabled={busy !== null} onClick={async () => {
             try { await navigator.clipboard.writeText(link.user_code); setCopyResult("copied"); }
             catch { setCopyResult("failed"); }
-          }}><Copy /></IconButton> : null}
-          {copyResult === "copied" ? <StatusText>코드 복사됨</StatusText> : null}
+          }}>{copyResult === "copied" ? <Check /> : <Copy />}</IconButton> : null}
+          {link.state === "pairing" ? <span aria-live="polite" className="ks-accessible-hidden" role="status">{copyResult === "copied" ? "복사했습니다" : ""}</span> : null}
         </>} meta={<div className="shell-server-meta-group">
           {meta.map((item) => <span key={item} className="shell-server-meta">{item}</span>)}
           {link.state === "offline" && link.reason ? <span className="shell-server-meta">{link.reason.message} {link.reason.id ? <ErrorId id={link.reason.id} /> : null}</span> : null}
