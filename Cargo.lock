@@ -2284,6 +2284,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "chrono",
+ "dunce",
  "futures-util",
  "image",
  "kaleidoscope-contract",

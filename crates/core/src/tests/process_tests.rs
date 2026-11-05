@@ -497,12 +497,14 @@ fn windows_process_cmd_terminates_descendants_in_unicode_cwd() {
     })
     .unwrap();
     let CoreReply::ProcessStart {
-        result: ProcessStartResult::Started { handle, .. },
+        result: ProcessStartResult::Started { handle, cwd, .. },
     } = task.join().unwrap()
     else {
         panic!("시작 결과")
     };
     let spawn_returned = started.elapsed();
+    assert!(!cwd.starts_with(r"\\?\"), "시작 응답의 작업 폴더: {cwd}");
+    assert_eq!(fs::canonicalize(&cwd).unwrap(), fs::canonicalize(&work).unwrap());
     // 이 시험은 멈춤이 자손까지 끝내는지를 본다. CI 러너에서 PowerShell 첫 기동이
     // 30초를 넘긴 일이 있어(cmd_started 뒤 worker_started 없음) 기동 대기는 넉넉히 둔다.
     let deadline = Instant::now() + Duration::from_secs(120);

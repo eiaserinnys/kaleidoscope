@@ -12,6 +12,7 @@ e2e = []
 axum = "0.8"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+dunce = "1"
 kaleidoscope-contract = { path = "../contract" }
 kaleidoscope-data = { path = "../data" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif"] }
