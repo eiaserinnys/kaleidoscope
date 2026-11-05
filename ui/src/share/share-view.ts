@@ -12,9 +12,9 @@ import { ownedOverlays } from "./overlay-owner";
 
 const SHARE_ISOLATE_BUDGET_MS = 2_500;
 const RAF_TIMEOUT_MS = 100;
-// 격리를 푼 배치가 화면에 나갈 때까지 기다리는 프레임 수와 상한. 상한은 네이티브 덮개 자동 해제(5초)보다 짧다.
+// 격리를 푼 배치가 화면에 나가기를 기다리는 상한. 네이티브 덮개 자동 해제(5초)보다 짧다.
+const RESTORE_LIMIT_MS = 1_000;
 const RESTORE_FRAMES = 3;
-const RESTORE_FRAME_LIMIT_MS = 1_000;
 
 interface ActiveShareView {
   element: HTMLElement;
@@ -51,12 +51,42 @@ async function twoFrames(): Promise<void> {
 }
 
 /**
- * 덮개를 걷기 전에 격리를 푼 배치가 실제로 그려지기를 기다린다.
- * rAF 콜백 두 번은 그 프레임이 화면에 나갔다는 보장이 아니다. 늦게 돈 메인 프레임 바로 뒤에 다음 프레임이 붙어
- * 두 번이 8ms 안에 끝난 실측이 있고, 그대로 덮개를 걷으면 격리 배치가 한두 프레임 보였다(카드 #1032).
- * 프레임마다 시한을 두면 그리기가 느릴 때 프레임 없이 끝나므로 실제 프레임 세 번을 기다리고,
- * 창이 최소화되어 프레임이 오지 않을 때만 전체 상한에서 넘어간다.
+ * 덮개를 걷기 전에 격리를 푼 배치가 실제로 화면에 나가기를 기다린다. 격리 속성을 지운 같은 작업에서 불러야 한다.
+ * rAF 콜백은 다음 프레임을 그릴 차례가 왔다는 신호이지 화면에 나갔다는 신호가 아니다. 메인 스레드가 한 번 막히면
+ * 두세 번의 콜백이 몰려 돌고, 그 사이 복원 프레임은 아직 합성과 표시 전이라 덮개를 걷으면 격리 배치가 보였다(카드 #1032).
+ * 그래서 복원과 같은 프레임에 표식 글자를 넣고, 그 프레임이 표시된 뒤에 오는 Element Timing 항목을 받은 뒤 걷는다.
+ * Element Timing이 없는 환경은 실제 프레임 세 번을 기다린다. 화면이 가려져 있거나 프레임이 오지 않으면 상한에서 넘어간다.
  */
+function restoredOnScreen(): Promise<void> {
+  if (document.visibilityState === "hidden") return Promise.resolve();
+  const supported = typeof PerformanceObserver === "undefined" ? [] : PerformanceObserver.supportedEntryTypes ?? [];
+  if (!supported.includes("element")) return restoredFrames();
+  restoreSequence += 1;
+  const identifier = `ks-share-restore-${restoreSequence}`;
+  const marker = document.createElement("span");
+  marker.setAttribute("elementtiming", identifier);
+  marker.setAttribute("aria-hidden", "true");
+  marker.textContent = ".";
+  marker.style.cssText = "position:fixed;left:0;top:0;font:2px/2px sans-serif;pointer-events:none;user-select:none;z-index:2147483647";
+  document.body.append(marker);
+  return new Promise((resolve) => {
+    let finished = false;
+    const observer = new PerformanceObserver((list) => {
+      if (list.getEntries().some((entry) => (entry as PerformanceEntry & { identifier?: string }).identifier === identifier)) finish();
+    });
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(limit);
+      observer.disconnect();
+      marker.remove();
+      resolve();
+    };
+    const limit = setTimeout(finish, RESTORE_LIMIT_MS);
+    observer.observe({ type: "element", buffered: true });
+  });
+}
+
 function restoredFrames(): Promise<void> {
   return new Promise((resolve) => {
     let left = RESTORE_FRAMES;
@@ -67,7 +97,7 @@ function restoredFrames(): Promise<void> {
       clearTimeout(limit);
       resolve();
     };
-    const limit = setTimeout(finish, RESTORE_FRAME_LIMIT_MS);
+    const limit = setTimeout(finish, RESTORE_LIMIT_MS);
     const tick = () => {
       if (finished) return;
       left -= 1;
@@ -79,6 +109,7 @@ function restoredFrames(): Promise<void> {
 }
 
 let prepareTail: Promise<void> = Promise.resolve();
+let restoreSequence = 0;
 
 export function captureWindowForControl(store: ShellStore, windowId: string, requestId: string, rootElement?: HTMLElement): Promise<{ image_base64: string; geometry: WindowGeometry }> {
   const run = prepareTail.then(async () => {
@@ -107,7 +138,7 @@ export function captureWindowForControl(store: ShellStore, windowId: string, req
       delete frame.dataset.shareTarget;
       for (const overlay of overlays) overlay.removeAttribute("data-share-target");
       delete root.dataset.shareIsolating;
-      try { await restoredFrames(); } finally { await store.call({ op: "share.unfreeze" }); }
+      try { await restoredOnScreen(); } finally { await store.call({ op: "share.unfreeze" }); }
     }
   });
   prepareTail = run.then(() => undefined, () => undefined);
@@ -170,7 +201,7 @@ async function prepareOnce(store: ShellStore): Promise<void> {
       delete frame.dataset.shareTarget;
     }
     delete root.dataset.shareIsolating;
-    try { await restoredFrames(); } catch { /* 프레임 대기 실패도 해제를 막지 않는다. */ }
+    try { await restoredOnScreen(); } catch { /* 표시 대기 실패도 해제를 막지 않는다. */ }
     try {
       await store.call({ op: "share.unfreeze" });
     } catch {
