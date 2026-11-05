@@ -1,4 +1,9 @@
 error_catalog! { ENTRIES;
+    STORECLIENT_INSTALL_REQUEST_TOO_LARGE(app, size) {
+        class: InvalidRequest, place: "스토어 설치 요청 전송", cause: "프록시가 설치 요청 크기를 거절했다",
+        message: "“{app}” 설치 요청 {size}를 서버가 크기 초과로 받지 않았습니다. 서버나 그 앞 프록시의 요청 크기 한도를 이 요청보다 크게 늘린 뒤 다시 설치하세요.", fix: "서버나 프록시의 요청 크기 한도를 늘린 뒤 다시 설치하세요"
+    }
+
     STORECLIENT_INDEX_SERVER_INVALID() {
         class: InvalidRequest, place: "스토어 목록 원천 입력", cause: "서버 주소가 문자열이 아니다",
         message: "스토어 목록의 서버 주소가 문자열이 아닙니다. 앱 작성자가 서버 값을 확인해야 합니다.", fix: "앱 작성자가 서버 값을 확인해야 합니다"

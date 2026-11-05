@@ -341,7 +341,7 @@ fn map_worker_error(error: crate::registry_client::RegistryError, action: &str) 
         crate::registry_client::RegistryError::NotFound => {
             errors::DATA_ACT_WORKER_NOT_FOUND(action)
         }
-        crate::registry_client::RegistryError::Failure { stage, detail } => {
+        crate::registry_client::RegistryError::Failure { stage, detail, .. } => {
             let error = match stage {
                 crate::registry_client::FailureStage::Send => {
                     errors::DATA_ACT_WORKER_UNREACHABLE(action)
@@ -375,6 +375,7 @@ mod error_mapping_tests {
                 RegistryError::Failure {
                     stage,
                     detail: "HTTP 503; host=registry.example".into(),
+                    http: None,
                 },
                 "save",
             );

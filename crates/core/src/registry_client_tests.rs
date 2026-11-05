@@ -175,6 +175,7 @@ fn request_failure_does_not_expose_url_query_keys() {
         RegistryError::Failure {
             stage: crate::registry_client::FailureStage::Send,
             detail,
+            ..
         } => {
             assert!(!detail.contains("api_key"));
             assert!(!detail.contains("secret-query-key"));
@@ -356,4 +357,70 @@ fn snapshot_keeps_readable_apps_when_another_definition_is_unknown() {
     assert!(
         matches!(parse_event_line(&line), Some(DeviceEvent::AppsSnapshot { apps, .. }) if apps.len() == 1)
     );
+}
+
+#[test]
+fn install_proxy_413_reports_actual_serialized_size() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let worker = std::thread::spawn(move || {
+        let (mut conn, _) = listener.accept().unwrap();
+        conn.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+        let mut reader = std::io::BufReader::new(conn.try_clone().unwrap());
+        let mut line = String::new();
+        let mut length = 0;
+        loop {
+            line.clear();
+            reader.read_line(&mut line).unwrap();
+            if line == "\r\n" { break; }
+            if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                length = value.trim().parse::<usize>().unwrap();
+            }
+        }
+        let mut bytes = vec![0; length];
+        reader.read_exact(&mut bytes).unwrap();
+        conn.write_all(b"HTTP/1.1 413 Payload Too Large\r\nContent-Length: 13\r\nConnection: close\r\n\r\n<h1>413</h1>!").unwrap();
+        length
+    });
+    let request = serde_json::from_value::<kaleidoscope_contract::store::DeviceInstallRequest>(serde_json::json!({
+        "definition_json":"한글".repeat(1024), "asset_uploads":[], "manifest_base64":"", "approved_digest":"digest",
+        "origin":{"store_url":"https://example.com/", "store_app_id":"fixture", "release":1,"digest":"digest"},
+        "expected_current_version":null
+    })).unwrap();
+    let result = HttpRegistryClient::new().install_store_app(&format!("http://{address}"), "token", &request).unwrap_err();
+    let error = crate::store::install::registry_error(result, true, "fixture");
+    let length = worker.join().unwrap();
+    assert_eq!(length, serde_json::to_vec(&request).unwrap().len());
+    assert_eq!(error.id.as_deref(), Some("STORECLIENT_INSTALL_REQUEST_TOO_LARGE"));
+    assert!(error.message.contains(&kaleidoscope_contract::size::format_byte_limit(length as u64)));
+    assert!(error.message.contains("fixture"));
+    assert!(error.details.iter().any(|d| d.contains("HTTP 413") && d.contains("127.0.0.1")));
+}
+
+#[test]
+fn proxy_413_keeps_server_json_error_and_other_request_sizes() {
+    for json_error in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let expected = kaleidoscope_contract::errors::SERVER_HTTP_BODY_TOO_LARGE("32MB");
+        let body = if json_error { serde_json::to_string(&expected).unwrap() } else { "<h1>413</h1>".into() };
+        let worker = std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            conn.set_read_timeout(Some(std::time::Duration::from_secs(10))).unwrap();
+            let mut bytes = [0; 4096];
+            conn.read(&mut bytes).unwrap();
+            write!(conn, "HTTP/1.1 413 Payload Too Large\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        });
+        let body = serde_json::json!({"value":"한글"});
+        let result = reqwest::blocking::Client::new().post(format!("http://{address}/api/device/apps"))
+            .json(&body).send_registry().unwrap_err();
+        if json_error {
+            assert!(matches!(result, RegistryError::Validation(error) if error.id == expected.id && error.message == expected.message));
+        } else {
+            assert!(matches!(result, RegistryError::Failure { detail, http: Some(http), .. }
+                if http.status == 413 && http.request_bytes == serde_json::to_vec(&body).unwrap().len()
+                && detail.contains("요청 18B가 서버 한도를 넘었습니다(HTTP 413)")));
+        }
+        worker.join().unwrap();
+    }
 }

@@ -95,7 +95,7 @@ pub(crate) fn map_error(inner: &Arc<Inner>, file: &LinkFile, err: RegistryError)
             kaleidoscope_contract::errors::STORAGE_SERVER_UNAUTHORIZED()
         }
         RegistryError::NotFound => kaleidoscope_contract::errors::STORAGE_SERVER_NOT_FOUND(),
-        RegistryError::Failure { stage, detail } => {
+        RegistryError::Failure { stage, detail, .. } => {
             let error = match stage {
                 crate::registry_client::FailureStage::Send => {
                     kaleidoscope_contract::errors::STORAGE_SERVER_REQUEST_SEND_FAILED()
