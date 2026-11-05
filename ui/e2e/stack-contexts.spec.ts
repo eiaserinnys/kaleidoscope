@@ -19,8 +19,24 @@ test("긴 속성 배지는 말줄이고 툴팁으로 전문을 보인다", async
   await page.goto("/?preview=stacked-grid-detail-1");
   const app = page.getByTestId("app-window-stacked-grid-detail-1");
   const dd = app.locator(".ks-properties dd").first();
-  await dd.evaluate(element => { element.style.width = "120px"; });
+  await dd.evaluate(element => {
+    element.style.width = "500px";
+    const before = document.createElement("button"); before.id = "badge-before";
+    const after = document.createElement("button"); after.id = "badge-after";
+    element.before(before); element.after(after);
+  });
   const badge = dd.locator(".ks-badge");
+  await expect(badge).not.toHaveAttribute("tabindex");
+  await badge.hover();
+  await page.waitForTimeout(600);
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(badge).not.toHaveAttribute("aria-describedby");
+  await page.locator("#badge-before").focus();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#badge-after")).toBeFocused();
+  await page.mouse.move(0, 0);
+  await dd.evaluate(element => { element.style.width = "120px"; });
+  await expect(badge).toHaveAttribute("tabindex", "0");
   const size = await badge.evaluate(element => ({ width: element.getBoundingClientRect().width, scroll: element.scrollWidth, parent: element.parentElement!.parentElement!.getBoundingClientRect().width, overflow: getComputedStyle(element).textOverflow }));
   expect(size.width).toBeLessThanOrEqual(size.parent + 1);
   expect(size.scroll).toBeGreaterThan(size.width);
@@ -28,8 +44,14 @@ test("긴 속성 배지는 말줄이고 툴팁으로 전문을 보인다", async
   await badge.hover();
   await expect(page.getByRole("tooltip")).toHaveText("아주 긴 외부 서비스 접속 권한을 표시하는 배지");
   await page.mouse.move(0, 0);
-  await badge.focus();
+  await page.locator("#badge-before").focus();
+  await page.keyboard.press("Tab");
+  await expect(badge).toBeFocused();
   await expect(page.getByRole("tooltip")).toHaveText("아주 긴 외부 서비스 접속 권한을 표시하는 배지");
+  await expect(badge).toHaveAttribute("aria-describedby", /.+/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
+  await expect(badge).not.toHaveAttribute("aria-describedby");
   const copied = await badge.evaluate(element => {
     const selection = window.getSelection()!;
     const range = document.createRange();

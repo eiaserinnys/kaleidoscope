@@ -460,3 +460,36 @@ it("uses a selected child as the tree entry point when items arrive later", asyn
   const selected = await screen.findByRole("treeitem", { name: "선택한 하위" });
   expect(selected.tabIndex).toBe(0);
 });
+
+it("속성 배지는 잘린 동안만 초점을 받고 묶음의 폭 변화로 다시 판단한다", async () => {
+  let width = 100;
+  let resize = () => {};
+  let groups = 0;
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("ks-badge") ? width : 600;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
+    return this.textContent === "짧은 권한" ? 60 : 160;
+  });
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private callback: () => void) {}
+    observe(element: HTMLElement) { if (element.classList.contains("ks-view-badges")) { groups++; resize = this.callback; } }
+    unobserve() {}
+    disconnect() {}
+  });
+  try {
+    setup({ type: "properties", fields: [{ label: "권한", format: "badge", value: ["짧은 권한", "긴 권한 전체 이름"] }] });
+    const short = await screen.findByText("짧은 권한");
+    const long = screen.getByText("긴 권한 전체 이름");
+    expect(short.hasAttribute("tabindex")).toBe(false);
+    expect(long.getAttribute("tabindex")).toBe("0");
+    expect(groups).toBe(1);
+    width = 200;
+    act(() => resize());
+    expect(screen.getByText("긴 권한 전체 이름").hasAttribute("tabindex")).toBe(false);
+    width = 100;
+    act(() => resize());
+    expect(screen.getByText("긴 권한 전체 이름").getAttribute("tabindex")).toBe("0");
+    expect(groups).toBe(1);
+  } finally { vi.unstubAllGlobals(); }
+});
