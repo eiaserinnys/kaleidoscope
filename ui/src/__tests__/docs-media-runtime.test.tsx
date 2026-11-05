@@ -18,22 +18,27 @@ function setup(block: Block) {
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it("이미지 자연 크기와 자르기 비율을 상자에 전달한다", async () => {
+it.each([
+  { name: "줄인 자르기 이미지", width: 512, height: 384, crop: { x: 0, y: 0, w: 0.5, h: 0.75 }, ratio: 256 / 288, naturalHeight: "" },
+  { name: "원본 크기 이미지", width: 160, height: 90, crop: undefined, ratio: 160 / 90, naturalHeight: "90px" },
+])("$name의 비율과 자연 높이 상한을 전달한다", async ({ width, height, crop, ratio, naturalHeight }) => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("devicePixelRatio", 1);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
-  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { permission: "media", path: "image.png", crop: { x: 0, y: 0, w: 0.5, h: 0.75 } } } };
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { permission: "media", path: "image.png", ...(crop ? { crop } : {}) } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
   vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
-    ? Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 800, height: 600 } }) as never : original(request as never));
+    ? Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width, height } }) as never : original(request as never));
   const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media", max_px: 512 }));
   const image = view.container.querySelector(".ks-image-frame img")!;
-  Object.defineProperties(image, { naturalWidth: { value: 800 }, naturalHeight: { value: 600 } });
+  Object.defineProperties(image, { naturalWidth: { value: width }, naturalHeight: { value: height } });
   fireEvent.load(image);
   const host = view.container.querySelector<HTMLElement>(".ks-image-view")!;
-  expect(Number(host.style.getPropertyValue("--ks-image-ratio"))).toBeCloseTo(400 / 450);
-  expect(host.style.getPropertyValue("--ks-image-natural-height")).toBe("450px");
+  expect(Number(host.style.getPropertyValue("--ks-image-ratio"))).toBeCloseTo(ratio);
+  expect(host.style.getPropertyValue("--ks-image-natural-height")).toBe(naturalHeight);
 });
 
 it("영상 메타데이터의 원본 비율을 상자에 전달한다", async () => {
