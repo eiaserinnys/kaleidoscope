@@ -150,6 +150,7 @@ async fn run() -> Result<(), String> {
     )
     .await?;
     let config = CoreConfig {
+        media_origin: Some("http://localhost:1420".into()),
         embedded_server: Some(kaleidoscope_core::EmbeddedServerInfo {
             server_url: embedded.server_url.clone(),
             device_id: embedded.device_id.clone(),

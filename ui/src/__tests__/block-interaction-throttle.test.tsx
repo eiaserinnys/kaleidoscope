@@ -32,6 +32,7 @@ const runtime = vi.hoisted(() => {
     act: (...args: [string, unknown]) => state.act(...args),
     store: { call: (...args: unknown[]) => state.storeCall(...args) },
     mediaCache: state.mediaCache,
+    acquirePlayback: () => ({ request: state.storeCall().then((reply: { media: unknown }) => ({ kind: "inline", media: reply.media })), release: () => {} }),
     attachSurface: (...args: unknown[]) => state.attachSurface(...args),
     resizeSurface: (...args: unknown[]) => state.resizeSurface(...args),
     detachSurface: (...args: unknown[]) => state.detachSurface(...args),
@@ -56,6 +57,8 @@ let frameId = 0;
 let frames: Map<number, FrameRequestCallback>;
 
 beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
   runtime.calls.length = 0;
   runtime.act.mockClear();
   runtime.act.mockImplementation((pointer: string, event: unknown) => { runtime.calls.push({ pointer, event }); return Promise.resolve(true); });
@@ -296,7 +299,7 @@ describe("timeline seek and playback visibility", () => {
   });
 });
 
-it("reuses a window media request after the block remounts", async () => {
+it("opens playback again after the block remounts", async () => {
   const media = { asset: "audio", version: 1 } as MediaRef;
   runtime.bindings["/ui/src"] = media;
   const block = { type: "media", src: media, kind: "audio" } as Extract<Block, { type: "media" }>;
@@ -305,7 +308,7 @@ it("reuses a window media request after the block remounts", async () => {
   first.unmount();
   const second = render(<MediaBlock block={block} pointer="/ui" />);
   await waitFor(() => expect(second.container.querySelector("audio")?.getAttribute("src")).toContain("data:audio/mpeg"));
-  expect(runtime.storeCall).toHaveBeenCalledTimes(1);
+  expect(runtime.storeCall).toHaveBeenCalledTimes(2);
 });
 
 it("does not rebuild chart geometry when only the selected point changes", () => {

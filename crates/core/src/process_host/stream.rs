@@ -7,7 +7,7 @@ use kaleidoscope_contract::{
 };
 use std::{
     collections::{BTreeMap, VecDeque},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, Weak},
 };
 use tokio::{
@@ -18,6 +18,29 @@ use tokio::{
 const OUTPUT_LIMIT: usize = 8 * 1024 * 1024;
 const STDERR_LIMIT: usize = 64 * 1024;
 pub(super) const READ_LIMIT: usize = 64 * 1024;
+
+fn process_cwd(cwd: &Path) -> &Path {
+    dunce::simplified(cwd)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::process_cwd;
+    use std::path::Path;
+
+    #[test]
+    fn process_cwd_preserves_a_plain_path() {
+        let cwd = Path::new("ordinary/working/folder");
+        assert_eq!(process_cwd(cwd), cwd);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn process_cwd_simplifies_a_verbatim_path() {
+        let cwd = Path::new(r"\\?\C:\work\project");
+        assert_eq!(process_cwd(cwd), Path::new(r"C:\work\project"));
+    }
+}
 
 pub(super) enum Input {
     Write(Vec<u8>),
@@ -55,6 +78,7 @@ impl Running {
         cwd: PathBuf,
         scope: PathBuf,
     ) -> Result<Arc<Self>, CoreError> {
+        let cwd = process_cwd(&cwd).to_path_buf();
         let handle = uuid::Uuid::new_v4().to_string();
         let (tx, mut rx) = mpsc::unbounded_channel();
         let (stop_tx, mut stop_rx) = mpsc::unbounded_channel();

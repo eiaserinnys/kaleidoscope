@@ -44,7 +44,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: target/release/kaleidoscope-app.exe
-          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'ui/e2e/fixtures/realtime/**', 'pnpm-lock.yaml', 'examples/**') }}
+          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'ui/e2e/fixtures/realtime/**', 'pnpm-lock.yaml', 'examples/**', 'apps/**') }}
       - if: steps.executable-cache.outputs.cache-hit != 'true'
         run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol,e2e
       - name: 실행 파일 캐시 저장
@@ -60,6 +60,33 @@ jobs:
           Start-Sleep -Seconds 1
           Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object {
             Write-Host "$($_.ProcessName): $($_.MainWindowTitle)"
+          }
+      - name: 미디어 전송 실측 데이터 초기화
+        shell: pwsh
+        run: ./app/e2e-windows/reset-app-data.ps1
+      - name: 실제 웹뷰 미디어 재생과 시킹
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-media-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-media-localappdata'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-media-webview'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/media-stream'
+          $env:KALEIDOSCOPE_E2E_PICK_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-media-docs'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT, $env:KALEIDOSCOPE_E2E_PICK_FOLDER | Out-Null
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=media-stream', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -RedirectStandardOutput (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stdout.log') -RedirectStandardError (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stderr.log') -PassThru
+          try {
+            if (-not $app.WaitForExit(120000)) { throw '미디어 실측 시간 초과' }
+            $resultPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'media-stream-results.json'
+            if (Test-Path $resultPath) { Get-Content -Raw -Encoding utf8 $resultPath | Write-Host }
+            if ($app.ExitCode -ne 0) { throw "미디어 실측 실패: $($app.ExitCode)" }
+            if (-not (Test-Path $resultPath)) { throw '미디어 실측 결과 없음' }
+            $result = Get-Content -Raw -Encoding utf8 $resultPath | ConvertFrom-Json
+            if (-not $result.passed -or -not $result.webview.seeked -or -not $result.webview.progress -or -not $result.webview.unbuffered) { throw '재생과 버퍼 밖 시킹 확인 실패' }
+            if (-not @($result.requests | Where-Object { $_[0] -eq 206 -and $_[1] -gt 0 -and $_[2] -eq 'http://tauri.localhost' }).Count) { throw '요청 출처와 0이 아닌 206 범위가 없음' }
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
+            $app.Dispose()
           }
       - name: 웹 화면 DevTools 실측 데이터 초기화
         shell: pwsh

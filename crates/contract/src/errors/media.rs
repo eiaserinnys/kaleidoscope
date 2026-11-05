@@ -1,4 +1,79 @@
 error_catalog! { ENTRIES;
+    MEDIA_STREAM_LISTEN_FAILED(reason) {
+        class: Unavailable, place: "미디어 전송 소켓 시작", cause: "루프백 소켓을 열지 못했다",
+        message: "이 PC에서 미디어 전송을 시작하지 못했습니다. 재생을 다시 시도해 주세요. 원인: {reason}",
+        fix: "재생을 다시 시도하세요"
+    }
+    MEDIA_STREAM_RUNTIME_START_FAILED(reason) {
+        class: Unavailable, place: "미디어 전송 실행기 시작", cause: "실행기를 만들지 못했다",
+        message: "미디어 전송 실행기를 시작하지 못했습니다. 파일을 다시 열어 주세요. 원인: {reason}",
+        fix: "파일을 다시 여세요"
+    }
+    MEDIA_STREAM_SERVER_STOPPED(reason) {
+        class: Unavailable, place: "미디어 전송 서버", cause: "서버 실행이 중단됐다",
+        message: "이 PC의 미디어 전송이 중단되었습니다. 쉘을 다시 시작해 주세요. 원인: {reason}",
+        fix: "쉘을 다시 시작하세요"
+    }
+    MEDIA_STREAM_ORIGIN_NOT_CONFIGURED() {
+        class: Unavailable, place: "미디어 전송 출처 설정", cause: "쉘 출처가 설정되지 않았다",
+        message: "쉘에 미디어 전송 출처가 설정되지 않았습니다. 쉘을 다시 시작해 주세요.",
+        fix: "쉘을 다시 시작하세요"
+    }
+    MEDIA_STREAM_ORIGIN_REJECTED() {
+        class: PermissionDenied, place: "미디어 전송 출처 확인", cause: "요청 출처가 쉘 출처와 다르다",
+        message: "이 페이지에는 폴더 미디어를 읽을 권한이 없습니다. 쉘의 재생 블록에서 열어 주세요.",
+        fix: "쉘의 재생 블록에서 여세요"
+    }
+    MEDIA_STREAM_METHOD_UNSUPPORTED(method) {
+        class: InvalidRequest, place: "미디어 전송 요청", cause: "받지 않는 HTTP 메서드다",
+        message: "이 재생 주소는 {method} 요청을 받지 않습니다. 쉘의 재생 블록에서 열어 주세요.",
+        fix: "쉘의 재생 블록에서 여세요"
+    }
+    MEDIA_STREAM_PREFLIGHT_REJECTED(detail) {
+        class: PermissionDenied, place: "미디어 전송 사전 요청", cause: "허용하지 않는 메서드나 헤더를 요청했다",
+        message: "이 재생 주소는 요청한 방식({detail})을 허용하지 않습니다. 쉘의 재생 블록에서 열어 주세요.",
+        fix: "쉘의 재생 블록에서 여세요"
+    }
+    MEDIA_STREAM_HANDLE_INVALID() {
+        class: NotFound, place: "미디어 재생 정보 조회", cause: "재생 정보가 없거나 해제됐다",
+        message: "이 파일의 재생 주소가 만료되었습니다. 파일을 다시 열어 주세요.",
+        fix: "파일을 다시 여세요"
+    }
+    MEDIA_STREAM_HANDLE_OWNER_MISMATCH() {
+        class: PermissionDenied, place: "미디어 재생 정보 소유 확인", cause: "다른 창의 재생 정보다",
+        message: "다른 창의 재생 정보를 사용할 수 없습니다. 이 창에서 파일을 다시 열어 주세요.",
+        fix: "이 창에서 파일을 다시 여세요"
+    }
+    MEDIA_STREAM_AUTHORITY_CHANGED() {
+        class: Conflict, place: "미디어 전송 권한 재확인", cause: "창의 앱이나 폴더 권한 또는 연결이 바뀌었다",
+        message: "파일을 읽던 권한이나 연결이 바뀌었습니다. 폴더를 다시 선택하고 파일을 열어 주세요.",
+        fix: "폴더를 다시 선택하고 파일을 여세요"
+    }
+    MEDIA_STREAM_FILE_NOT_REGULAR(path) {
+        class: InvalidRequest, place: "미디어 전송 파일 종류 확인", cause: "일반 파일이 아니다",
+        message: "「{path}」은 재생할 파일이 아닙니다. 소리나 영상 파일을 골라 주세요.",
+        fix: "소리나 영상 파일을 고르세요"
+    }
+    MEDIA_STREAM_FILE_CHANGED(path) {
+        class: Conflict, place: "미디어 전송 파일 재확인", cause: "원본 파일이 바뀌었다",
+        message: "재생하던 「{path}」 파일이 바뀌었습니다. 파일을 다시 열어 주세요.",
+        fix: "파일을 다시 여세요"
+    }
+    MEDIA_STREAM_RANGE_INVALID() {
+        class: InvalidRequest, place: "미디어 전송 구간 해석", cause: "구간 문법이나 숫자가 잘못됐다",
+        message: "요청한 재생 구간을 읽을 수 없습니다. 파일을 다시 열어 주세요.",
+        fix: "파일을 다시 여세요"
+    }
+    MEDIA_STREAM_RANGE_UNSATISFIABLE(path) {
+        class: InvalidRequest, place: "미디어 전송 구간 확인", cause: "구간이 파일 범위 밖이다",
+        message: "「{path}」에 요청한 재생 구간이 없습니다. 파일을 다시 열어 주세요.",
+        fix: "파일을 다시 여세요"
+    }
+    MEDIA_STREAM_SEEK_FAILED(path, reason) {
+        class: Io, place: "미디어 전송 파일 위치 이동", cause: "파일에서 요청한 위치로 이동하지 못했다",
+        message: "「{path}」의 재생 위치로 이동하지 못했습니다. 파일을 다시 열어 주세요. 원인: {reason}",
+        fix: "파일을 다시 여세요"
+    }
     MEDIA_LOAD_OPTIONS_INVALID(media) {
         class: InvalidRequest,
         place: "앱 창의 미디어 불러오기",

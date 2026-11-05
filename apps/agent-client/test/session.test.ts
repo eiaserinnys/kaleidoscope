@@ -343,9 +343,11 @@ async function readyWithHistory() {
   await session.attach();
   await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
   await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "current" } });
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [] } });
   await session.send({ id: "old", text: "기존 대화", attachments: [] });
   await new Promise((resolve) => setTimeout(resolve, 0));
   await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { stopReason: "end_turn" } });
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [] } });
   return { f, session };
 }
 
@@ -366,6 +368,22 @@ test("지난 세션은 모든 쪽을 받고 폴더를 정확히 거른 뒤 최�
   assert.deepEqual(f.snapshots.at(-1).sessions.map((s: any) => s.sessionId), ["newer", "older"]);
   assert.equal(f.snapshots.at(-1).sessionsLoading, false);
   assert.equal(JSON.stringify(f.getCheckpoint()).includes("newer"), false);
+});
+
+test("목록 갱신 중과 실패 뒤에는 기존 행을 유지하고 성공하면 결과로 교체한다", async () => {
+  const { f, session } = await readyWithHistory();
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "old", cwd: "/work" }] } });
+  await session.listSessions();
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["old"]);
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "new", cwd: "/work" }], nextCursor: "next" } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["old"]);
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "목록 오류" } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["old"]);
+  assert.equal(f.snapshots.at(-1).sessionError.id, "AGENT_SESSION_LIST_FAILED");
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "new", cwd: "/work" }] } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((item: any) => item.sessionId), ["new"]);
 });
 
 test("고른 세션의 리플레이를 메시지별로 모아 성공 후에 기록과 세션을 바꾼다", async () => {
@@ -483,6 +501,20 @@ test("첫 지침은 사용자 글과 같이 보기 뒤에 표지로 감싸 보�
   assert.match(prompt.at(-1).text, /^<kaleidoscope-app-guide>\n안내문\n.*\n<\/kaleidoscope-app-guide>$/);
 });
 
+test("MCP HTTP 도구가 연결된 새 세션의 첫 말에는 지침이나 연결 문구를 넣지 않는다", async () => {
+  const f = fixture();
+  let guides = 0;
+  f.host.instructions = async () => { guides++; return "안내문"; };
+  const session = new AgentSession(f.host as any);
+  await session.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { mcpCapabilities: { http: true } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "s" } });
+  await session.send({ id: "q", text: "사용자 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(f.writes.at(-1).params.prompt, [{ type: "text", text: "사용자 말" }]);
+  assert.equal(guides, 0);
+});
+
 for (const hasGuide of [true, false]) {
   test(`리플레이의 지침 표지 ${hasGuide ? "있음" : "없음"}에 따라 기록과 발송 여부를 정한다`, async () => {
     const { f, session } = await readyWithHistory();
@@ -532,4 +564,91 @@ test("도구 줄이 없는 옛 지침 형태의 글은 보존하고 지침을 �
   await f.emit({ jsonrpc: "2.0", id, result: {} });
   assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), [text]);
   assert.equal((f.getCheckpoint() as any).guideSent, true);
+});
+
+test("세션 준비와 전환, 새 대화의 첫 응답에 목록을 갱신하고 일반 턴에는 갱신하지 않는다", async () => {
+  const f = fixture();
+  const session = new AgentSession(f.host as any);
+  const count = () => f.writes.filter((entry) => entry.method === "session/list").length;
+  const finishList = async () => {
+    const request = f.writes.filter((entry) => entry.method === "session/list").at(-1);
+    await f.emit({ jsonrpc: "2.0", id: request.id, result: { sessions: [] } });
+  };
+  await session.start({ name: "시험", command: "agent", args: [], env: {} });
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "first" } });
+  assert.equal(count(), 1);
+  await session.listSessions();
+  assert.equal(count(), 1);
+  await finishList();
+  await session.send({ id: "first", text: "첫 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { stopReason: "end_turn" } });
+  assert.equal(count(), 2);
+  await finishList();
+  await session.send({ id: "second", text: "다음 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { stopReason: "end_turn" } });
+  assert.equal(count(), 2);
+  await session.loadSession("older");
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: {} });
+  assert.equal(count(), 3);
+  await finishList();
+  await session.newSession();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessionId: "new" } });
+  assert.equal(count(), 4);
+  await finishList();
+  await session.listSessions();
+  assert.equal(count(), 5);
+  await finishList();
+  await session.send({ id: "new-first", text: "새 대화 첫 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { stopReason: "end_turn" } });
+  assert.equal(count(), 6);
+  await finishList();
+});
+
+test("이미 준비된 세션에 붙으면 목록을 받는다", async () => {
+  const f = fixture();
+  const first = new AgentSession(f.host as any);
+  await first.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { sessionCapabilities: { list: {} } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "first" } });
+  const initial = f.writes.filter((entry) => entry.method === "session/list").at(-1);
+  if (initial) await f.emit({ jsonrpc: "2.0", id: initial.id, result: { sessions: [] } });
+  const count = f.writes.filter((entry) => entry.method === "session/list").length;
+  const resumed = new AgentSession(f.host as any);
+  await resumed.attach();
+  assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, count + 1);
+});
+
+test("목록을 받는 중 다시 붙으면 진행 표시를 유지하고 중복 요청하지 않는다", async () => {
+  const f = fixture();
+  const first = new AgentSession(f.host as any);
+  await first.attach();
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { sessionCapabilities: { list: {} } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "first" } });
+  const count = f.writes.filter((entry) => entry.method === "session/list").length;
+  const resumed = new AgentSession(f.host as any);
+  await resumed.attach();
+  assert.equal(f.snapshots.at(-1).sessionsLoading, true);
+  assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, count);
+});
+
+test("목록을 기다리는 동안 대화를 보내고 첫 응답 뒤에 목록을 다시 받는다", async () => {
+  const f = fixture();
+  const session = new AgentSession(f.host as any);
+  await session.start({ name: "시험", command: "agent", args: [], env: {} });
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { sessionCapabilities: { list: {} } } } });
+  await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "new" } });
+  const listing = f.writes.at(-1);
+  assert.equal(listing.method, "session/list");
+  await session.send({ id: "first", text: "첫 말", attachments: [] });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const prompt = f.writes.at(-1);
+  assert.equal(prompt.method, "session/prompt");
+  await f.emit({ jsonrpc: "2.0", id: prompt.id, result: { stopReason: "end_turn" } });
+  assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, 1);
+  await f.emit({ jsonrpc: "2.0", id: listing.id, result: { sessions: [] } });
+  assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, 2);
 });

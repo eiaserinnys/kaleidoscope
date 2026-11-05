@@ -24,6 +24,7 @@ fn nested_browser() -> Value {
 fn web_core(data: &Path, definition: Value, host: &Arc<HostWithWeb>) -> Core {
     Core::open(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: data.into(),
             seed_definitions: vec![definition.to_string()],

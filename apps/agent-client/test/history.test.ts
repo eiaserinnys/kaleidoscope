@@ -36,3 +36,22 @@ test("기록 페이지가 없으면 위치가 담긴 오류를 반환한다", as
   const history = new History({ put: async () => {}, read: async (key) => key === "record/manifest.json" ? manifest : null });
   await assert.rejects(history.load(), (error: any) => error.id === "AGENT_RECORD_PAGE_NOT_FOUND" && error.message.includes("0"));
 });
+
+test("Windows 경로 접두어가 없어져도 같은 폴더의 기록을 보존한다", async () => {
+  const data = new Map<string, Uint8Array>();
+  const blobs = { put: async (key: string, bytes: Uint8Array) => { data.set(key, bytes.slice()); }, read: async (key: string) => data.get(key) ?? null };
+  const history = new History(blobs);
+  await history.bind("spec", String.raw`\\?\C:\work`);
+  await history.setSession("old");
+  await history.append([{ id: "one", kind: "user", text: "이전", at: "now", attachments: [] }]);
+  await history.bind("spec", String.raw`C:\work`);
+  const manifest = JSON.parse(new TextDecoder().decode(data.get("record/manifest.json")));
+  assert.equal(manifest.cwd, String.raw`C:\work`);
+  assert.equal(manifest.pages, 1);
+  assert.equal(history.sessionId, "old");
+  assert.equal(history.items[0].text, "이전");
+  await history.bind("spec", String.raw`\\?\UNC\server\share`);
+  await history.setSession("unc");
+  await history.bind("spec", String.raw`\\server\share`);
+  assert.equal(history.sessionId, "unc");
+});

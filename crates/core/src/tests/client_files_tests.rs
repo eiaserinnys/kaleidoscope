@@ -34,6 +34,7 @@ fn picked_files_and_offset_exports_are_scoped_and_abort_preserves_destination() 
     });
     let core = Core::open(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: temp.path().join("data"),
             seed_definitions: vec![definition],

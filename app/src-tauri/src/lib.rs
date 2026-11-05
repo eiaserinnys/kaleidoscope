@@ -286,6 +286,11 @@ pub fn run() {
             app.manage(Arc::clone(&web));
             let core = match Core::open(
                 CoreConfig {
+                    media_origin: if cfg!(debug_assertions) {
+                        app.config().build.dev_url.as_ref().map(|url| url.origin().ascii_serialization())
+                    } else {
+                        Some("http://tauri.localhost".into())
+                    },
                     embedded_server: Some(embedded_info),
                     data_dir,
                     seed_definitions: vec![],

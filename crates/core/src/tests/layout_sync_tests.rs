@@ -359,6 +359,7 @@ fn another_core_keeps_synced_share_baselines_after_local_opt_in() {
     let open = |data_dir: &Path, host: &Arc<CaptureTestHost>| {
         Core::open(
             CoreConfig {
+                media_origin: None,
                 embedded_server: None,
                 data_dir: data_dir.to_path_buf(),
                 seed_definitions: vec![test_definition(MD_EDITOR)],

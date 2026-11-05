@@ -13,6 +13,11 @@ const decoder = new TextDecoder();
 const manifestKey = "record/manifest.json";
 const pageKey = (index: number) => `record/page-${index}.json`;
 const pageSize = 100;
+const comparableCwd = (cwd: string | null): string | null => {
+  if (cwd?.startsWith("\\\\?\\UNC\\")) return "\\\\" + cwd.slice(8);
+  if (cwd?.startsWith("\\\\?\\")) return cwd.slice(4);
+  return cwd;
+};
 
 /** Window-scoped pages avoid rewriting the entire conversation on every completed message. */
 export class History {
@@ -40,7 +45,7 @@ export class History {
   get controls(): Record<string, string | boolean> { return { ...this.manifest.controls }; }
 
   async bind(identity: string, cwd: string): Promise<void> {
-    if (this.manifest.identity !== null && (this.manifest.identity !== identity || this.manifest.cwd !== cwd)) {
+    if (this.manifest.identity !== null && (this.manifest.identity !== identity || comparableCwd(this.manifest.cwd) !== comparableCwd(cwd))) {
       this.manifest = { pages: 0, sessionId: null, controls: {}, identity, cwd };
       this.pages = [];
       this.cachedItems = null;

@@ -1,6 +1,6 @@
 [package]
 name = "kaleidoscope-app"
-version = "0.6.53"
+version = "0.6.54"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
@@ -10,7 +10,7 @@ name = "kaleidoscope_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-e2e = ["dep:reqwest", "dep:sha2", "dep:tokio-tungstenite"]
+e2e = ["dep:reqwest", "dep:sha2", "dep:tokio-tungstenite", "kaleidoscope-core/e2e"]
 
 [build-dependencies]
 tauri-build = "2"

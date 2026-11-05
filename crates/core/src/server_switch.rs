@@ -361,6 +361,7 @@ mod tests {
     use super::*;
     fn config(dir: &std::path::Path) -> CoreConfig {
         CoreConfig {
+            media_origin: None,
             data_dir: dir.into(),
             seed_definitions: vec![],
             server_url: "https://remote.example".into(),
@@ -534,6 +535,7 @@ mod preferences_switch_tests {
         let dir = tempfile::tempdir().unwrap();
         let core = crate::Core::open(
             CoreConfig {
+                media_origin: None,
                 data_dir: dir.path().into(),
                 seed_definitions: vec![],
                 server_url: "https://example.test".into(),

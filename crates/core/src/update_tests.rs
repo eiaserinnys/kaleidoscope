@@ -34,6 +34,7 @@ impl UpdateHost for FakeHost {
 fn core(dir: &TempDir, host: Arc<FakeHost>) -> Core {
     Core::open(
         CoreConfig {
+            media_origin: None,
             embedded_server: None,
             data_dir: dir.path().into(),
             seed_definitions: vec![],
