@@ -163,8 +163,9 @@ function probeSurface(element: HTMLElement): WebSurfaceProbe | null {
   const bounds = rect ? roundedRect(rect) : null;
   if (!bounds) return null;
   const ownWindow = element.closest<HTMLElement>(".ks-window");
-  const siblings = ownWindow?.parentElement
-    ? [...ownWindow.parentElement.querySelectorAll<HTMLElement>(".ks-window")].filter((item) => item !== ownWindow)
+  const windowArea = ownWindow?.closest<HTMLElement>(".ks-desktop-area") ?? ownWindow?.parentElement;
+  const siblings = windowArea
+    ? [...windowArea.querySelectorAll<HTMLElement>(".ks-window")].filter((item) => item !== ownWindow)
     : [];
   const overlays = [...document.querySelectorAll<HTMLElement>("[data-ks-overlay]")]
     .map((item) => ({ visible: isRendered(item), bounds: item.getBoundingClientRect() }))

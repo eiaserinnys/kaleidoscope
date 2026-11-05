@@ -3,11 +3,13 @@
 .ks-app-settings h2, .ks-app-settings h3 { margin: 0; }
 .ks-app-settings h2 { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-app-settings > .ks-data-toolbar > h2 { line-height: var(--ks-control-height); }
-.ks-app-settings-scroll { min-height: 0; overflow: auto; padding: var(--ks-space-3); }
+/* 스크롤바 칸을 늘 비워 두고 안쪽 여백에서 그만큼 뺀다. 스크롤이 생겨도 오른쪽 끝선이 그대로다(.ks-html-rail-body와 같은 꼴). */
+.ks-app-settings-scroll { min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: var(--ks-space-3) calc(var(--ks-space-3) - var(--ks-space-2)) var(--ks-space-3) var(--ks-space-3); }
 .ks-settings-custom { width: 100%; max-width: calc(var(--ks-window-min-width) * 2); }
 .ks-settings-custom .ks-data-stack { height: auto; }
 .ks-settings-custom .ks-field,
-.ks-settings-custom .ks-data-stack.is-row {
+.ks-settings-custom .ks-data-stack.is-row,
+.ks-settings-row {
   display: grid;
   width: 100%;
   grid-template-columns: minmax(0, 1fr) minmax(0, var(--ks-workspace-label-max-width));
@@ -15,6 +17,27 @@
   gap: var(--ks-space-2);
   min-height: var(--ks-control-height);
 }
+.ks-settings-row { align-items: start; margin-top: var(--ks-space-2); }
+.ks-settings-row.is-without-control { grid-template-columns: minmax(0, 1fr); }
+.ks-settings-row-text, .ks-settings-row-control { min-width: 0; }
+/* 이름표가 여러 줄로 꺾여도 첫 줄을 조작 높이의 세로 가운데에 두고, 점과 단추 같은 표시도 그 줄에 맞춘다. */
+.ks-settings-row-label {
+  --ks-settings-row-line: calc(var(--ks-type-body) * var(--ks-line-body));
+  display: flex; box-sizing: border-box; min-height: var(--ks-control-height); align-items: flex-start; gap: var(--ks-space-2);
+  padding-top: calc((var(--ks-control-height) - var(--ks-settings-row-line)) / 2); line-height: var(--ks-line-body);
+}
+.ks-settings-row-label > :is([aria-hidden="true"], button, .ks-status-text) {
+  flex-shrink: 0;
+  margin-top: calc(var(--ks-settings-row-line) / 2);
+  margin-bottom: calc(var(--ks-control-height) / -2);
+  translate: 0 -50%;
+}
+.ks-settings-row-control { display: flex; min-height: var(--ks-control-height); justify-content: flex-end; align-items: flex-start; }
+.ks-settings-row-control > .ks-button { max-width: 100%; min-width: 0; }
+.ks-settings-row-select { width: 100%; min-width: 0; }
+.ks-settings-row-select > .ks-button { width: 100%; min-width: 0; justify-content: space-between; }
+.ks-settings-row .ks-settings-description { margin-top: 0; }
+.ks-settings-row-label .ks-status-text { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
 .ks-settings-custom .ks-field > :last-child,
 .ks-settings-custom .ks-data-stack.is-row > .ks-data-stack-item { min-width: 0; }
 .ks-settings-custom .ks-field > .ks-button,

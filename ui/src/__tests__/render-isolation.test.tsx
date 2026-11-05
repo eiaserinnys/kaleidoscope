@@ -25,6 +25,15 @@ import { mockVirtualLayout } from "./virtual-layout";
 import { useDefaultMessageApp } from "../shell/message-target";
 import { useMessageSnapshot } from "../../../app/src/shell/use-message-snapshot";
 
+const frameRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("../../../app/src/shell/window-frame", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../../app/src/shell/window-frame")>();
+  return { ...original, WindowFrame: (props: import("../../../app/src/shell/window-frame").WindowFrameProps) => {
+    frameRenders.count += 1;
+    return <original.WindowFrame {...props} />;
+  } };
+});
+
 const rowRenders = vi.hoisted(() => new Map<string, number>());
 const tileRenders = vi.hoisted(() => new Map<string, number>());
 const blockWrapperRenders = vi.hoisted(() => new Map<string, number>());
@@ -401,6 +410,30 @@ afterEach(() => {
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {
+  it("설정 창 이동과 크기 조절은 앱 창을 다시 그리지 않는다", async () => {
+    if (!globalThis.PointerEvent) Object.defineProperty(globalThis, "PointerEvent", { configurable: true, value: MouseEvent });
+    const snapshot = testSnapshot([definition]);
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />); await store.ready;
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    const window = screen.getByTestId("system-window-settings");
+    await settleRenders(); frameRenders.count = 0;
+    const before = { left: window.style.left, width: window.style.width };
+    const title = window.querySelector(".ks-window-titlebar")!;
+    fireEvent.pointerDown(title, { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 130, clientY: 130 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 130, clientY: 130 });
+    const resize = window.querySelector(".ks-window-resize-corner")!;
+    fireEvent.pointerDown(resize, { pointerId: 2, button: 0, clientX: 400, clientY: 300 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 440, clientY: 330 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 440, clientY: 330 });
+    await settleRenders();
+    expect(window.style.left).not.toBe(before.left);
+    expect(window.style.width).not.toBe(before.width);
+    expect(frameRenders.count).toBe(0);
+    store.dispose();
+  });
+
   it("계정 설정은 다른 창을 다시 그리지 않고 창 상태는 닫힌 설정과 질문의 구독을 갱신하지 않는다", async () => {
     const snapshot = testSnapshot([definition]);
     snapshot.link = { state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "내 PC" };

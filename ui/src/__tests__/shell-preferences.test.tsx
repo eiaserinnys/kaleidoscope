@@ -27,6 +27,55 @@ function setup(asked: string[] = ["pas", "report"]) {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("쉘 기본 에이전트 설정", () => {
+  it("설정은 한 창으로 열리고 작업 표시줄에서 복원하며 닫으면 연 단추로 돌아간다", async () => {
+    const { store } = setup(); await store.ready;
+    const gear = screen.getByRole("button", { name: /^설정$/ });
+    fireEvent.click(gear);
+    const window = screen.getByTestId("system-window-settings");
+    fireEvent.click(gear);
+    expect(screen.getAllByTestId("system-window-settings")).toHaveLength(1);
+    const task = within(screen.getByRole("toolbar", { name: "작업 표시줄" })).getByRole("button", { name: "설정" });
+    expect(task.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(window).getByRole("button", { name: "창 최소화" }));
+    expect(window.getAttribute("data-minimized")).toBe("true");
+    fireEvent.click(task);
+    expect(window.getAttribute("data-minimized")).toBe("false");
+    fireEvent.click(within(window).getByRole("button", { name: "창 닫기" }));
+    expect(screen.queryByTestId("system-window-settings")).toBeNull();
+    expect(document.activeElement).toBe(gear);
+    store.dispose();
+  });
+
+  it("서버 전환 응답을 기다리는 동안 같은 설정 창과 진행 표시를 유지한다", async () => {
+    const { transport, store } = setup(); await store.ready;
+    const current = store.getSnapshot()!;
+    act(() => transport.emit({ event: "state.changed", snapshot: { ...current, embedded_available: true } }));
+    const original = transport.call.bind(transport);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(transport, "call").mockImplementation((async (request: CoreRequest) => {
+      if (request.op === "link.use_local") { await pending; return { op: "link.use_local" }; }
+      return original(request as never);
+    }) as typeof transport.call);
+    fireEvent.click(screen.getByRole("button", { name: /^설정$/ }));
+    const window = screen.getByTestId("system-window-settings");
+    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 전환" }));
+    act(() => transport.setLink({ state: "connected", mode: "remote", server_url: "https://other.example", device_name: "내 PC" }));
+    expect(screen.getByTestId("system-window-settings")).toBe(window);
+    expect(screen.getByRole("button", { name: "내 PC 서버로 전환" }).getAttribute("aria-busy")).toBe("true");
+    await act(async () => release());
+    store.dispose();
+  });
+
+  it("가져오기 오류가 있으면 이전 성공 결과를 숨긴다", async () => {
+    const { transport, store } = setup(); await store.ready;
+    const current = store.getSnapshot()!;
+    act(() => transport.emit({ event: "state.changed", snapshot: { ...current, embedded_available: true, last_transfer: { imported: 3, skipped: [] }, transfer_error: "가져오지 못했습니다" } }));
+    fireEvent.click(screen.getByRole("button", { name: /^설정$/ }));
+    expect(screen.getByText("가져오지 못했습니다")).toBeTruthy();
+    expect(screen.queryByText("가져오기 완료 3개")).toBeNull();
+    store.dispose();
+  });
   it("선택을 서버에 즉시 저장하고 응답 전에는 확정값을 표시한다", async () => {
     const { transport, store } = setup(); await store.ready;
     const original = transport.call.bind(transport);

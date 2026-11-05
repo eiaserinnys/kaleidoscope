@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
   ContextMenuHost,
@@ -31,6 +31,7 @@ import {
   type ShellSnapshot,
   type ShellStore,
   type Workspace,
+  type Rect,
 } from "@kaleidoscope/ui";
 import { AppLauncher, type LauncherSpacing } from "./app-launcher";
 import { serverLabel } from "./server-label";
@@ -38,6 +39,7 @@ import { ShellSettings } from "./shell-settings";
 import { MessageAppPrompt } from "./message-app-prompt";
 import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
+import { SystemWindow, type SystemWindowState } from "./system-window";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect } from "./window-geometry";
 
@@ -50,7 +52,8 @@ export function Shell({ store }: { store: ShellStore }) {
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [launcher, setLauncher] = useState<{ anchor: HTMLElement; spacing: LauncherSpacing } | null>(null);
   const closeLauncher = useCallback(() => setLauncher(null), []);
-  const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; kind: "gear" | "server"; sequence: number } | null>(null);
+  const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; entry: { kind: "gear" | "server"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
+  const settingsRect = useRef<Rect | null>(null);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
@@ -72,6 +75,20 @@ export function Shell({ store }: { store: ShellStore }) {
   useEffect(() => {
     activeDesktopTabRef.current?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
   }, [activeDesktop?.id]);
+  const settingsOpen = settings !== null;
+  // 설정의 맨 위 판정은 DesktopCanvas의 topWindowId처럼 최소화 창을 빼고, 닫혀 있으면 구독하지 않는다.
+  const maxWindowZ = useShellSelector(store, (value) => settingsOpen
+    ? Math.max(0, ...(value?.shared.windows.filter((item) => item.desktop_id === activeDesktop?.id && !item.minimized).map((item) => item.z) ?? []))
+    : 0);
+  const maxZNow = useCallback(() => {
+    const current = store.getSnapshot();
+    const workspace = current ? selectWorkspace(current) : undefined;
+    const desktop = current && workspace ? selectDesktop(current, workspace) : undefined;
+    return Math.max(0, ...(current?.shared.windows.filter((item) => item.desktop_id === desktop?.id).map((item) => item.z) ?? []));
+  }, [store]);
+  useEffect(() => {
+    setSettings((current) => current ? { ...current, z: maxZNow() + 1 } : null);
+  }, [activeDesktop?.id, maxZNow]);
 
   const runCommand = useCallback(async (request: CoreRequest): Promise<CoreReply | undefined> => {
     try {
@@ -132,43 +149,61 @@ export function Shell({ store }: { store: ShellStore }) {
   }), [newWindowRect, runCommand, store]);
 
   const openSettings = (anchor: HTMLElement, kind: "gear" | "server") => {
-    closeMenu();
-    closeLauncher();
+    closeMenu(); closeLauncher();
+    const z = maxZNow() + 1;
     setSettings((current) => current
-      ? { ...current, kind, sequence: current.sequence + 1 }
-      : { anchor, origin: kind, kind, sequence: 0 });
+      ? { ...current, minimized: false, z, entry: { kind, sequence: current.entry.sequence + 1 } }
+      : { anchor, origin: kind, entry: { kind, sequence: 0 }, minimized: false, maximized: false, z });
   };
-  const closeSettings = (restoreFocus = true) => {
-    if (restoreFocus && settings) {
-      const target = settings.anchor.isConnected ? settings.anchor : document.querySelector<HTMLElement>(settings.origin === "server" ? ".ks-shell-bar .shell-link-button" : '.ks-shell-bar button[aria-label="설정"]');
+  const settingsAnchor = settings?.anchor;
+  const settingsOrigin = settings?.origin;
+  const closeSettings = useCallback(() => {
+    if (settingsAnchor) {
+      const target = settingsAnchor.isConnected ? settingsAnchor : document.querySelector<HTMLElement>(settingsOrigin === "server" ? ".ks-shell-bar .shell-link-button" : '.ks-shell-bar button[aria-label="설정"]');
       target?.focus();
     }
     setSettings(null);
-  };
+  }, [settingsAnchor, settingsOrigin]);
+  const raiseSettings = useCallback(() => setSettings((current) => current ? { ...current, minimized: false, z: maxZNow() + 1 } : null), [maxZNow]);
+  const minimizeSettings = useCallback(() => setSettings((current) => current ? { ...current, minimized: true } : null), []);
+  const maximizeSettings = useCallback(() => setSettings((current) => current ? { ...current, maximized: true } : null), []);
+  const restoreSettings = useCallback(() => setSettings((current) => current ? { ...current, maximized: false } : null), []);
+  const settingsMinimized = settings?.minimized ?? false;
+  const settingsMaximized = settings?.maximized ?? false;
+  const settingsZ = settings?.z ?? 0;
+  const settingsIsTop = settingsOpen && !settingsMinimized && settingsZ > maxWindowZ;
+  const systemState = useMemo<SystemWindowState | undefined>(() => settingsOpen ? {
+    minimized: settingsMinimized, maximized: settingsMaximized, z: settingsZ, isTop: settingsIsTop,
+    raise: raiseSettings, minimize: minimizeSettings, maximize: maximizeSettings, restore: restoreSettings, close: closeSettings,
+  } : undefined, [settingsOpen, settingsMinimized, settingsMaximized, settingsZ, settingsIsTop, raiseSettings, minimizeSettings, maximizeSettings, restoreSettings, closeSettings]);
+
   const serverButton = snapshot ? (
     <Button className="ks-button-quiet shell-link-button" onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabel(snapshot)}>
       <span aria-hidden="true" className={`shell-server-dot is-${snapshot.link.state}`} />
       <span className="ks-truncate">{serverLabel(snapshot)}</span>
     </Button>
   ) : null;
-  const settingsButton = <IconButton aria-label="설정" title="설정" pressed={settings !== null} onClick={(event) => {
-    if (settings) closeSettings(); else openSettings(event.currentTarget, "gear");
-  }}><Settings /></IconButton>;
-  const settingsScreen = snapshot && settings ? <ShellSettings snapshot={snapshot} entry={settings} onClose={() => closeSettings()} call={runCommand} store={store} /> : null;
+  const settingsButton = <IconButton aria-label="설정" title="설정" onClick={(event) => openSettings(event.currentTarget, "gear")}><Settings /></IconButton>;
+  const canvasKey = snapshot ? (snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state) : "";
+  const systemWindow = snapshot && settings && systemState ? {
+    state: systemState,
+    render: (area: { width: number; height: number }) => <SystemWindow area={area} state={systemState} title="설정" icon={<Settings className="ks-app-icon" size="chrome" />} lastRect={settingsRect} testId="system-window-settings">
+      <ShellSettings snapshot={snapshot} entry={settings.entry} call={runCommand} store={store} />
+    </SystemWindow>,
+  } : undefined;
 
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
 
   if (!activeWorkspace || !activeDesktop) {
-    return <main className="app-root" ref={setHost} data-settings-open={settings ? "" : undefined}>
+    return <main className="app-root" ref={setHost}>
+      <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}{settingsButton}</div></header>
-      <EmptyState
-        icon={<LayoutGrid size="empty" />}
-        text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
-        action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined}
-      />
-      {settingsScreen}
+      {/* 아래 작업 있는 갈래와 main의 같은 자리에 DesktopArea를 두어야 연결 중과 페어링을 거쳐도 설정 창이 다시 만들어지지 않는다. */}
+      <DesktopArea canvasKey={canvasKey} systemWindow={systemWindow} launcherOpen={false} onAreaChange={reportArea} onCall={runCommand} onOpenApps={() => {}} store={store}
+        emptyState={<EmptyState icon={<LayoutGrid size="empty" />} text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
+          action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined} />} />
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
     </main>;
   }
@@ -179,7 +214,6 @@ export function Shell({ store }: { store: ShellStore }) {
     .sort((a, b) => a.position - b.position);
 
   const openAppMenu = (anchor: HTMLElement, spacing: LauncherSpacing) => {
-    closeSettings(false);
     closeMenu();
     setLauncher((current) => current?.anchor === anchor ? null : { anchor, spacing });
   };
@@ -222,7 +256,7 @@ export function Shell({ store }: { store: ShellStore }) {
         onSelect: () => void runCommand({ op: "workspace.delete", workspace_id: activeWorkspace.id }),
       },
     ];
-    setMenu({ kind: "items", anchor, entries: entries.map((entry) => "onSelect" in entry && entry.onSelect ? { ...entry, onSelect: () => { closeSettings(false); return entry.onSelect?.(); } } : entry) });
+    setMenu({ kind: "items", anchor, entries });
   };
 
   const openDesktopMenu = (anchor: HTMLElement, desktop: Desktop) => {
@@ -278,7 +312,6 @@ export function Shell({ store }: { store: ShellStore }) {
   };
 
   const createDesktop = () => {
-    closeSettings(false);
     const name = nextName("데스크톱", desktops.map((item) => item.name));
     void runCommand({ op: "desktop.create", workspace_id: activeWorkspace.id, name });
   };
@@ -302,7 +335,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
 
   return (
-    <main className="app-root" ref={setHost} data-settings-open={settings ? "" : undefined}>
+    <main className="app-root" ref={setHost}>
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar">
         <BrandMark />
@@ -345,9 +378,9 @@ export function Shell({ store }: { store: ShellStore }) {
                   />
                 ) : (
                   <button
-                    aria-pressed={!settings && desktop.id === activeDesktop.id}
-                    className={`ks-desktop-tab${!settings && desktop.id === activeDesktop.id ? " ks-desktop-tab-active" : ""}`}
-                    onClick={() => { closeSettings(false); void runCommand({ op: "desktop.activate", desktop_id: desktop.id }); }}
+                    aria-pressed={desktop.id === activeDesktop.id}
+                    className={`ks-desktop-tab${desktop.id === activeDesktop.id ? " ks-desktop-tab-active" : ""}`}
+                    onClick={() => { void runCommand({ op: "desktop.activate", desktop_id: desktop.id }); }}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       openDesktopMenu(event.currentTarget, desktop);
@@ -371,7 +404,7 @@ export function Shell({ store }: { store: ShellStore }) {
           <IconButton aria-label="앱 열기" aria-haspopup="dialog" aria-expanded={launcher !== null} onClick={(event) => openAppMenu(event.currentTarget, "none")} title="앱 열기">
             <LayoutGrid />
           </IconButton>
-          <IconButton aria-label="앱 정의 가져오기" onClick={() => { closeSettings(false); fileInput.current?.click(); }} title="앱 정의 가져오기">
+          <IconButton aria-label="앱 정의 가져오기" onClick={() => { fileInput.current?.click(); }} title="앱 정의 가져오기">
             <Import />
           </IconButton>
           {snapshot.update.state === "ready" ? (
@@ -398,7 +431,8 @@ export function Shell({ store }: { store: ShellStore }) {
       </header>
 
       <DesktopArea
-        key={snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state}
+        canvasKey={canvasKey}
+        systemWindow={systemWindow}
         activeDesktopId={activeDesktop.id}
         activeWorkspaceId={activeWorkspace.id}
         launcherOpen={launcher !== null}
@@ -409,7 +443,6 @@ export function Shell({ store }: { store: ShellStore }) {
         store={store}
       />
 
-      {settingsScreen}
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {launcher ? <AppLauncher store={store} anchor={launcher.anchor} spacing={launcher.spacing} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (

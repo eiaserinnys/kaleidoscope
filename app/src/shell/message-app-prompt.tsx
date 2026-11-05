@@ -37,6 +37,6 @@ export function MessageAppPrompt({ store, host }: { store: ShellStore; host: HTM
   const body = error ? <ErrorNotice error={error} /> : undefined;
   return <Dialog key={key} host={host} title={`기본 에이전트를 ${candidate.name}${directionParticle(candidate.name)} 바꿀까요?`}
     body={body} ok="바꾸기" cancelLabel="그대로 두기" userConsent busy={busy}
-    overlayClassName="ks-shell-dialog-layer" inertSelector=":scope > .ks-shell-bar, :scope > .ks-desktop-area, :scope > .ks-shell-settings, :scope > .ks-empty-state"
+    overlayClassName="ks-shell-dialog-layer" inertSelector=":scope > .ks-shell-bar, :scope > .ks-desktop-area"
     onCancel={cancel} onConfirm={() => void answer(true)} />;
 }

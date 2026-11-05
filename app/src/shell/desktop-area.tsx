@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AppWindowContent,
   Button,
@@ -18,10 +18,14 @@ import {
 } from "@kaleidoscope/ui";
 import { WindowFrame } from "./window-frame";
 import { windowMenuEntries } from "./window-menu";
+import { systemWindowMenu, type SystemWindowState } from "./system-window";
 
 export interface DesktopAreaProps {
-  activeDesktopId: string;
-  activeWorkspaceId: string;
+  activeDesktopId?: string;
+  activeWorkspaceId?: string;
+  canvasKey: string;
+  systemWindow?: { state: SystemWindowState; render: (area: { width: number; height: number }) => ReactNode };
+  emptyState?: ReactNode;
   launcherOpen: boolean;
   onAreaChange: (area: { width: number; height: number }) => void;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
@@ -33,6 +37,9 @@ export interface DesktopAreaProps {
 export function DesktopArea({
   activeDesktopId,
   activeWorkspaceId,
+  canvasKey,
+  systemWindow,
+  emptyState,
   launcherOpen,
   onAreaChange,
   onCall,
@@ -58,6 +65,9 @@ export function DesktopArea({
 
   return (
     <main className="ks-desktop-area" ref={areaRef}>
+      {/* 동률인 앱 창이 뒤에 그려져 설정 창 위로 올라온다. */}
+      {systemWindow?.render(area)}
+      <div key={canvasKey}>
       {desktops.map((desktop) => <DesktopCanvas
         activeDesktopId={activeDesktopId}
         activeWorkspaceId={activeWorkspaceId}
@@ -70,7 +80,10 @@ export function DesktopArea({
         onOpenApps={onOpenApps}
         setWindowMenu={setWindowMenu}
         store={store}
+        systemWindow={systemWindow?.state}
       />)}
+      {!activeDesktopId ? <section className="ks-desktop-canvas">{emptyState}{systemWindow ? <Taskbar systemWindow={systemWindow.state} setWindowMenu={setWindowMenu} /> : null}</section> : null}
+      </div>
       {windowMenu ? <Menu anchor={windowMenu.anchor} items={windowMenu.entries} onClose={() => setWindowMenu(null)} /> : null}
     </main>
   );
@@ -87,10 +100,11 @@ const DesktopCanvas = memo(function DesktopCanvas({
   setWindowMenu,
   store,
   getNewWindowRect,
+  systemWindow,
 }: {
   desktopId: string;
-  activeDesktopId: string;
-  activeWorkspaceId: string;
+  activeDesktopId?: string;
+  activeWorkspaceId?: string;
   area: { width: number; height: number };
   launcherOpen: boolean;
   onCall: DesktopAreaProps["onCall"];
@@ -98,6 +112,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   setWindowMenu: (menu: { anchor: HTMLElement; entries: MenuEntry[] } | null) => void;
   store: ShellStore;
   getNewWindowRect?: DesktopAreaProps["getNewWindowRect"];
+  systemWindow?: SystemWindowState;
 }) {
   const emptyTrigger = useRef<HTMLButtonElement | null>(null);
   const setEmptyTrigger = useCallback((element: HTMLButtonElement | null) => {
@@ -118,7 +133,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   if (!desktop) return null;
 
   const active = desktop.id === activeDesktopId && desktop.workspace_id === activeWorkspaceId;
-  const topWindowId = windows
+  const topWindowId = systemWindow?.isTop && active ? null : windows
     .filter((window) => !window.minimized)
     .reduce<(typeof windows)[number] | undefined>(
       (top, window) => !top || window.z > top.z ? window : top,
@@ -139,7 +154,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
       onCall={onCall}
       store={store}
     />)}
-    {windows.length > 0 ? <nav aria-label="작업 표시줄" className="ks-taskbar" role="toolbar">
+    {windows.length > 0 || (active && systemWindow) ? <nav aria-label="작업 표시줄" className="ks-taskbar" role="toolbar">
       <div className="ks-taskbar-windows">
         {windows.map((appWindow) => <TaskbarItem
           isTop={appWindow.id === topWindowId}
@@ -149,6 +164,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
           store={store}
           window={appWindow}
         />)}
+        {active && systemWindow ? <SystemTaskbarItem state={systemWindow} setWindowMenu={setWindowMenu} /> : null}
       </div>
     </nav> : null}
   </section>;
@@ -162,20 +178,33 @@ const TaskbarItem = memo(function TaskbarItem({ window, isTop, store, onAct, set
   setWindowMenu: (menu: { anchor: HTMLElement; entries: MenuEntry[] } | null) => void;
 }) {
   const title = useShellSelector(store, (snapshot) => windowTitle(window, snapshot));
-  const state = window.minimized ? "minimized" : isTop ? "active" : "inactive";
   const toggle = () => onAct(window.id, !window.minimized && isTop ? "window.minimize" : "window.raise");
+  return <TaskbarButton title={title} minimized={Boolean(window.minimized)} isTop={isTop} onClick={toggle} windowId={window.id} onContextMenu={(anchor) => setWindowMenu({
+    anchor,
+    entries: windowMenuEntries(window, { minimize: () => onAct(window.id, "window.minimize"), raise: () => onAct(window.id, "window.raise"), maximize: () => onAct(window.id, "window.maximize"), restore: () => onAct(window.id, "window.restore"), close: () => onAct(window.id, "window.close") }),
+  })} />;
+});
+
+function Taskbar({ systemWindow, setWindowMenu }: { systemWindow: SystemWindowState; setWindowMenu: (menu: { anchor: HTMLElement; entries: MenuEntry[] } | null) => void }) {
+  return <nav aria-label="작업 표시줄" className="ks-taskbar" role="toolbar"><div className="ks-taskbar-windows"><SystemTaskbarItem state={systemWindow} setWindowMenu={setWindowMenu} /></div></nav>;
+}
+
+function SystemTaskbarItem({ state, setWindowMenu }: { state: SystemWindowState; setWindowMenu: (menu: { anchor: HTMLElement; entries: MenuEntry[] } | null) => void }) {
+  return <TaskbarButton title="설정" minimized={state.minimized} isTop={state.isTop} onClick={!state.minimized && state.isTop ? state.minimize : state.raise}
+    onContextMenu={(anchor) => setWindowMenu({ anchor, entries: systemWindowMenu(state) })} />;
+}
+
+function TaskbarButton({ title, minimized, isTop, onClick, onContextMenu, windowId }: { title: string; minimized: boolean; isTop: boolean; onClick: () => void; onContextMenu: (anchor: HTMLElement) => void; windowId?: string }) {
+  const state = minimized ? "minimized" : isTop ? "active" : "inactive";
   return <button
-    aria-pressed={!window.minimized && isTop}
+    aria-pressed={!minimized && isTop}
     className="ks-taskbar-item ks-taskbar-window"
     data-state={state}
-    data-window-id={window.id}
-    onClick={toggle}
+    data-window-id={windowId}
+    onClick={onClick}
     onContextMenu={(event) => {
       event.preventDefault();
-      setWindowMenu({
-        anchor: event.currentTarget,
-        entries: windowMenuEntries(window, { minimize: () => onAct(window.id, "window.minimize"), raise: () => onAct(window.id, "window.raise"), maximize: () => onAct(window.id, "window.maximize"), restore: () => onAct(window.id, "window.restore"), close: () => onAct(window.id, "window.close") }),
-      });
+      onContextMenu(event.currentTarget);
     }}
     title={title}
     type="button"
@@ -183,7 +212,7 @@ const TaskbarItem = memo(function TaskbarItem({ window, isTop, store, onAct, set
     <span aria-hidden="true" className="ks-taskbar-window-dot" />
     <span className="ks-taskbar-item-label">{title}</span>
   </button>;
-});
+}
 
 const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCall, store, getNewWindowRect }: {
   appWindow: AppWindow;
