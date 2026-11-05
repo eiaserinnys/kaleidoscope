@@ -1847,6 +1847,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::List {
             items,
             selected,
+            disabled,
             on_select,
             on_remove,
             ..
@@ -1854,6 +1855,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             bind!("items", items);
             if let Some(selected) = selected {
                 bind!("selected", selected);
+            }
+            if let Some(disabled) = disabled {
+                bind!("disabled", disabled);
             }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);

@@ -6,6 +6,20 @@ fn app(ui: Value, blocks: u32) -> Value {
 }
 
 #[test]
+fn list_disabled_requires_new_version_and_registers_binding() {
+    for disabled in [json!(true), json!(false), json!({"state":"locked"}), json!({"expr":"$state.locked"})] {
+        let mut value = app(json!({"type":"list", "items":[], "disabled":disabled}), 39);
+        value["state"]["locked"] = json!(true);
+        let error = parse_app_definition(&value.to_string()).expect_err("list.disabled에는 새 판이 필요하다");
+        assert!(format!("{error:?}").contains("requires.blocks가 40 이상"));
+        value["requires"]["blocks"] = json!(40);
+        let definition = parse_app_definition(&value.to_string()).expect("새 판에서 잠금 허용");
+        assert_eq!(serde_json::to_value(&definition).unwrap()["ui"]["disabled"], disabled);
+        assert!(data::all_ui_bindings(&definition).iter().any(|(pointer, _)| pointer == "/ui/disabled"));
+    }
+}
+
+#[test]
 fn feed_media_and_link_round_trip() {
     let value = json!({"key":"a","body":"본문","media":[{"image":{"asset":"photo"},"kind":"video","alt":"사진"}],"link":"https://example.com"});
     let parsed: FeedEntry = serde_json::from_value(value.clone()).unwrap();

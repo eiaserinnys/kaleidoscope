@@ -14,6 +14,8 @@ declare global {
       control: (type: string) => void;
       coreCalls: () => number;
       pauseNextSnapshot: () => void;
+      snapshotPending: () => boolean;
+      resumeSnapshot: () => void;
       restartClient: () => Promise<void>;
       clientGeneration: () => number;
       chatState: () => { loading: boolean; busy: boolean; items: number; queued: number; attachments: number } | null;
@@ -71,7 +73,7 @@ test("대화를 불러오는 동안 입력 줄과 초안은 유지된다", async
 test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리로드 복구", async ({ page }) => {
   await mkdir(captureDir, { recursive: true });
   await page.setViewportSize({ width: 1100, height: 820 });
-  await page.goto("/?preview=client-chat-test");
+  await page.goto("/?preview=client-chat-test&hold_chat_snapshot=1");
   await page.addStyleTag({ content: `
     .ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; }
     .ks-harness-dev-panel { display: none; }
@@ -82,6 +84,8 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
   await expect(app.locator(".ks-agent-chat-history")).toBeVisible();
   await expect(app.getByLabel("불러오는 중")).toBeVisible();
   await app.screenshot({ path: `${captureDir}/loading.png` });
+  await expect.poll(() => page.evaluate(() => window.clientChatHarness.snapshotPending())).toBe(true);
+  await page.evaluate(() => window.clientChatHarness.resumeSnapshot());
 
   await expect(app.getByText("파일을 살펴봐 줘")).toBeVisible();
   await expect(app.getByText("두 첨부를 확인하고 있습니다.")).toBeVisible();
@@ -160,6 +164,8 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
 
   await page.reload();
   const reloadedApp = page.getByTestId("app-window-client-chat");
+  await expect.poll(() => page.evaluate(() => window.clientChatHarness.snapshotPending())).toBe(true);
+  await page.evaluate(() => window.clientChatHarness.resumeSnapshot());
   await expect(reloadedApp.getByText("파일을 살펴봐 줘")).toBeVisible();
   await expect(reloadedApp.getByText("이미지에서 글자를 찾고 있습니다. 응답 조각이 도착했습니다.")).toBeVisible();
   await expect(reloadedApp.locator(".ks-agent-chat-history").getByText("도구 승인 대기")).toBeVisible();

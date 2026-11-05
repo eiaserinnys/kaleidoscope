@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import type { DraftAttachment } from "../blocks/agent-attachments";
 import type { AppDefinition, Binding, BindingValue, CoreError, DataView, EventModifiers, MediaPlayback, MediaRef, PickFilesSpec, SaveFileSpec, ShellSnapshot, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { applyClientChatEnvelope, emptyClientChatState, type ClientChatAttachment, type ClientChatEnvelope, type ClientChatState } from "./client-chat";
@@ -17,6 +18,9 @@ const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
 const lifecycle = new WeakMap<ShellStore, Map<string, Promise<void>>>();
 type PlaybackLease = { request: Promise<MediaPlayback>; users: number; closed: boolean };
+type ChatRetry = { id: string; text: string; attachments: DraftAttachment[]; failed: boolean };
+type ChatDraft = { text: string; attachments: DraftAttachment[]; retry: ChatRetry | null; restored: ReadonlySet<string>; error: CoreError | null };
+const emptyChatDraft: ChatDraft = { text: "", attachments: [], retry: null, restored: new Set(), error: null };
 
 type BindingKind =
   | { kind: "state" | "client" | "expr" | "message" | "item" | "parent_item"; key: string }
@@ -159,6 +163,8 @@ export class WindowData {
   private pendingClientChatValues = new Map<string, ClientChatState>();
   private clientChatFrames = new Map<string, number>();
   private clientChatListeners = new Map<string, Set<() => void>>();
+  private chatDrafts = new Map<string, ChatDraft>();
+  private chatDraftListeners = new Map<string, Set<() => void>>();
   private sources: DataView["sources"] = emptySources;
   private sourceMeta: NonNullable<DataView["source_meta"]> = {};
   private listeners = new Map<string, Set<() => void>>();
@@ -225,6 +231,20 @@ export class WindowData {
     }
   };
   getClientChat = (channel: string) => this.clientChatValues.get(channel) ?? emptyClientChatState;
+  getChatDraft = (key: string) => this.chatDrafts.get(key) ?? emptyChatDraft;
+  subscribeChatDraft = (key: string, listener: () => void) => {
+    let group = this.chatDraftListeners.get(key);
+    if (!group) { group = new Set(); this.chatDraftListeners.set(key, group); }
+    group.add(listener);
+    return () => { group?.delete(listener); if (!group?.size) this.chatDraftListeners.delete(key); };
+  };
+  updateChatDraft = (key: string, update: (draft: ChatDraft) => ChatDraft) => {
+    const current = this.getChatDraft(key);
+    const next = update(current);
+    if (next === current) return;
+    this.chatDrafts.set(key, next);
+    this.chatDraftListeners.get(key)?.forEach((listener) => listener());
+  };
   takeClientChatAttachment = (channel: string, requestId: string): ClientChatAttachment | undefined => {
     const state = this.getClientChat(channel);
     const attachment = state.attachments.get(requestId);
@@ -648,6 +668,18 @@ export function useWindowData(): WindowData {
   const value = useOptionalWindowData();
   if (!value) throw shellErrors.SHELL_WINDOW_DATA_CONTEXT_MISSING();
   return value;
+}
+
+export function useChatDraft(key: string) {
+  const data = useWindowData();
+  const subscribe = useCallback((listener: () => void) => data.subscribeChatDraft(key, listener), [data, key]);
+  const snapshot = useCallback(() => data.getChatDraft(key), [data, key]);
+  const draft = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const setDraft = useCallback<Dispatch<SetStateAction<string>>>((value) => data.updateChatDraft(key, (current) => ({ ...current, text: typeof value === "function" ? value(current.text) : value })), [data, key]);
+  const setAttachments = useCallback<Dispatch<SetStateAction<DraftAttachment[]>>>((value) => data.updateChatDraft(key, (current) => ({ ...current, attachments: typeof value === "function" ? value(current.attachments) : value })), [data, key]);
+  const setError = useCallback<Dispatch<SetStateAction<CoreError | null>>>((value) => data.updateChatDraft(key, (current) => ({ ...current, error: typeof value === "function" ? value(current.error) : value })), [data, key]);
+  const updateComposer = useCallback((update: (current: ChatDraft) => ChatDraft) => data.updateChatDraft(key, update), [data, key]);
+  return { draft: draft.text, attachments: draft.attachments, error: draft.error, setDraft, setAttachments, setError, updateComposer, getComposer: snapshot };
 }
 
 export function useDormant(pointer: string, dormant: boolean) {

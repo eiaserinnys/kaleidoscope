@@ -18,13 +18,47 @@ beforeEach(() => { mockVirtualLayout();
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function setup(ui: unknown) {
-  const definition = { ...mdViewerDefinition, requires: { blocks: 34, modules: {} }, state: { ...mdViewerDefinition.state, choice: null, removed: [] }, ui: ui as Block } as AppDefinition;
+  const definition = { ...mdViewerDefinition, requires: { blocks: 40, modules: {} }, state: { ...mdViewerDefinition.state, choice: null, removed: [], locked: true, selected: "a" }, ui: ui as Block } as AppDefinition;
   const transport = createFakeTransport({ ...makeTestSeed({ definitions: [definition] }), media: { "builtin-icon": "data:image/png;base64,iVBORw0KGgo=" } });
   const calls = vi.spyOn(transport, "call");
   const store = createShellStore(transport);
   render(<><ContextMenuHost /><AppWindowContent store={store} windowId="viewer-window" /></>);
   return { calls, store };
 }
+
+it.each(["rows", "grid", "icons"])("잠긴 %s 목록은 행 조작을 막고 해제하면 다시 허용한다", async (layout) => {
+  const { calls, store } = setup({ type: "stack", direction: "column", children: [
+    { type: "list", layout, disabled: { state: "locked" }, items: [{ key: "a", title: "첫 행" }, { key: "b", title: "둘째 행" }], selected: { state: "selected" }, on_select: { set_state: "choice" }, on_remove: { set_state: "removed" }, item_menu: [{ label: "행 동작", on_select: { set_state: "choice" } }] },
+    { type: "button", label: "잠금 해제", on_click: { set_state: "locked", value: false } },
+  ] });
+  const row = await screen.findByRole("button", { name: "첫 행" });
+  expect(row.getAttribute("aria-disabled")).toBe("true");
+  expect(row.getAttribute("aria-pressed")).toBe("true");
+  expect((screen.getByRole("button", { name: "첫 행 빼기" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(row);
+  row.focus();
+  await userEvent.keyboard("{Enter}{Space}");
+  fireEvent.contextMenu(row);
+  expect(screen.queryByRole("menuitem", { name: "행 동작" })).toBeNull();
+  expect(calls.mock.calls.filter(([request]) => request.op === "data.act")).toHaveLength(0);
+  await userEvent.keyboard("{ArrowDown}");
+  expect(document.activeElement?.getAttribute("aria-label")).toBe("둘째 행");
+  fireEvent.click(screen.getByRole("button", { name: "잠금 해제" }));
+  await waitFor(() => expect(row.getAttribute("aria-disabled")).not.toBe("true"));
+  expect(row.getAttribute("aria-pressed")).toBe("true");
+  expect((screen.getByRole("button", { name: "첫 행 빼기" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.contextMenu(row);
+  expect(await screen.findByRole("menuitem", { name: "행 동작" })).toBeTruthy();
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  fireEvent.click(row);
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.choice).toBe("a"));
+});
+
+it("잠긴 그림 목록은 미리보기를 열지 않는다", async () => {
+  setup({ type: "list", disabled: true, items: [{ key: "a", title: "사진", image: { asset: "builtin-icon" } }] });
+  fireEvent.click(await screen.findByRole("option", { name: "사진" }));
+  expect(screen.queryByRole("dialog", { name: "사진" })).toBeNull();
+});
 
 it("피드 첨부와 링크를 조작한다", async () => {
   const { calls } = setup({ type: "feed", on_select: { set_state: "choice" }, entries: [{ key: "a", name: "글쓴이", meta: "시각", body: "본문", media: [{ image: { asset: "builtin-icon" }, alt: "사진", kind: "image" }, { image: { asset: "builtin-icon" }, kind: "video" }, { image: { asset: "builtin-icon" }, kind: "animation" }], link: "https://example.com/post" }] });

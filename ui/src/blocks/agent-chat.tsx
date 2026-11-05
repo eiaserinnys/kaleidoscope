@@ -7,7 +7,7 @@ import { MessageSquare } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { useShellSelector } from "../core/shell-store";
-import { useBinding } from "../data/window-data";
+import { useBinding, useChatDraft } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
 import { prepareShareForSend } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
@@ -58,12 +58,10 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const [loadingChoices, setLoadingChoices] = useState(false);
   const [pendingSwitch, setPendingSwitch] = useState<{ profile?: string; model?: string; label: string } | null>(null);
   const [notices, setNotices] = useState<string[]>([]);
-  const [draft, setDraft] = useState("");
+  const { draft, setDraft, attachments, setAttachments, error: sendError, setError: setSendError, updateComposer, getComposer } = useChatDraft("conversation");
   const [pending, setPending] = useState<PendingMessage | null>(null);
-  const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [sending, setSending] = useState(false);
-  const [sendError, setSendError] = useState<CoreError | null>(null);
   const [busy, setBusy] = useState(false);
   const [tool, setTool] = useState<string | null>(null);
   const [delta, setDelta] = useState("");
@@ -80,8 +78,6 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const streamId = useRef<string | null>(null);
   const conversationQueue = useRef<CoreEvent[] | null>(null);
   const creatingConversation = useRef(false);
-  const retryDraft = useRef<{ id: string; text: string; attachments: DraftAttachment[]; failed: boolean } | null>(null);
-  const restored = useRef(new Set<string>());
   const closePreview = useCallback(() => setPreview(null), []);
 
   const renderAttachment = useCallback((attachment: ConversationAttachment, item: ConversationItem, index: number) => <HistoryAttachmentView
@@ -96,7 +92,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     open={async () => { await context.store.call({ op: "conversation.attachment_open", window_id: windowId, item_id: item.id, attachment_id: attachment.id }); }}
     onPreview={setPreview}
     onError={(reason) => setSendError(toCoreError(reason))}
-  />, [context.store, windowId]);
+  />, [context.store, windowId, setSendError]);
 
   const acknowledge = useCallback((incoming: ConversationItem[]) => {
     setPending((current) => current && incoming.some((item) => matchesPending(item, current)) ? null : current);
@@ -134,21 +130,19 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   }, [acknowledge, coalescedDelta]);
 
   const restoreDraft = useCallback((id: string, text: string, uploads: ConversationUpload[], failed: boolean) => {
-    if (retryDraft.current?.id === id) {
-      retryDraft.current.failed = failed;
-      restored.current.add(id);
-      return;
-    }
-    if (restored.current.has(id)) return;
-    restored.current.add(id);
-    const files = uploads.map((upload) => {
-      const bytes = Uint8Array.from(atob(upload.data_base64), (char) => char.charCodeAt(0));
-      return makeDraftAttachment(new File([bytes], upload.name, { type: upload.mime }), upload.name);
+    updateComposer((current) => {
+      if (current.retry?.id === id) {
+        return { ...current, retry: { ...current.retry, failed }, restored: new Set([...current.restored, id]) };
+      }
+      if (current.restored.has(id)) return current;
+      const files = uploads.map((upload) => {
+        const bytes = Uint8Array.from(atob(upload.data_base64), (char) => char.charCodeAt(0));
+        return makeDraftAttachment(new File([bytes], upload.name, { type: upload.mime }), upload.name);
+      });
+      return { ...current, retry: { id, text, attachments: files, failed }, restored: new Set([...current.restored, id]),
+        text: current.text ? `${text}\n${current.text}` : text, attachments: [...files, ...current.attachments] };
     });
-    retryDraft.current = { id, text, attachments: files, failed };
-    setDraft((current) => current ? `${text}\n${current}` : text);
-    setAttachments((current) => [...files, ...current]);
-  }, []);
+  }, [updateComposer]);
 
   const load = useCallback(async (initialEvents: CoreEvent[] = [], profile?: string, quiet = false) => {
     if (!connected || !workspaceId || !hasProvider) return;
@@ -393,7 +387,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     const text = submittedDraft.trim();
     const submittedAttachments = attachments;
     if (inputDisabled || (!text && submittedAttachments.length === 0) || sending) return;
-    const retry = retryDraft.current;
+    const retry = getComposer().retry;
     const requestId = retry && !retry.failed && retry.text === text && retry.attachments.length === submittedAttachments.length && retry.attachments.every((item, index) => item.id === submittedAttachments[index].id) ? retry.id : crypto.randomUUID();
     followTail.current = true;
     setPending({ text, attachments: submittedAttachments, knownIds: new Set(items.map((item) => item.id)) });
@@ -406,12 +400,12 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       const uploads = await Promise.all(submittedAttachments.map(readUpload));
       await prepareShareForSend(context.store);
       await context.store.call({ op: "conversation.send", window_id: windowId, request_id: requestId, text, attachments: uploads });
-      retryDraft.current = null;
+      updateComposer((current) => ({ ...current, retry: null }));
     } catch (reason) {
       setPending(null);
       const error = toCoreError(reason);
       if (!handleError(error)) setSendError(error);
-      retryDraft.current = { id: requestId, text, attachments: submittedAttachments, failed: false };
+      updateComposer((current) => ({ ...current, retry: { id: requestId, text, attachments: submittedAttachments, failed: false } }));
       setDraft((current) => current ? `${submittedDraft}\n${current}` : submittedDraft);
       setAttachments((current) => [...submittedAttachments, ...current]);
       if (error.code !== "login_required" && error.code !== "binding_conflict") void load();

@@ -308,7 +308,8 @@ const transport = coreUrl ? createHttpTransport(coreUrl) : fakeTransport;
 const store = createShellStore(transport);
 let clientChatWindowData: WindowData | null = null;
 let noticeFixtureData: WindowData | null = null;
-let holdClientChatSnapshot = false;
+let holdClientChatSnapshot = new URLSearchParams(window.location.search).has("hold_chat_snapshot");
+let clientChatSnapshotPending = false;
 const captureClientChatWindowData = (data: WindowData | null) => { clientChatWindowData = data; };
 const captureNoticeFixtureData = (data: WindowData | null) => { noticeFixtureData = data; };
 if (!coreUrl) {
@@ -321,7 +322,7 @@ if (!coreUrl) {
       return;
     }
     if (event.data?.type === "chat-test-snapshot-request") {
-      if (holdClientChatSnapshot) { holdClientChatSnapshot = false; return; }
+      if (holdClientChatSnapshot) { holdClientChatSnapshot = false; clientChatSnapshotPending = true; return; }
       frame.contentWindow?.postMessage({ type: "chat-test-continue-snapshot" }, "*");
       return;
     }
@@ -337,6 +338,8 @@ if (!coreUrl) {
     control: (type: string) => document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")?.contentWindow?.postMessage({ type }, "*"),
     setLoading: (value: boolean) => clientChatWindowData?.publishClient({ switching: value }),
     pauseNextSnapshot: () => { holdClientChatSnapshot = true; },
+    snapshotPending: () => clientChatSnapshotPending,
+    resumeSnapshot: () => { clientChatSnapshotPending = false; document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")?.contentWindow?.postMessage({ type: "chat-test-continue-snapshot" }, "*"); },
     restartClient: async () => { await clientChatWindowData?.restartClient(); },
     clientGeneration: () => clientChatWindowData?.getClientGeneration() ?? 0,
     chatState: () => {

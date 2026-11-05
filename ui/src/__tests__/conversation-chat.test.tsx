@@ -63,6 +63,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
     call,
     window,
     setLoading: (loading: boolean) => view.rerender(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat", loading }} context={context} pointer="/ui" /></WindowDataProvider>),
+    remount: () => view.rerender(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock key="new-branch" block={{ type: "chat", loading: initialLoading }} context={context} pointer="/ui/other" /></WindowDataProvider>),
     emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }),
     updateSnapshot: () => {
       const nextSnapshot = structuredClone(snapshot);
@@ -95,6 +96,26 @@ async function setupMarkdownRenderCounter() {
 }
 
 describe("대화 제공자 화면", () => {
+  it("전송 실패가 다시 마운트된 뒤 돌아와도 초안과 첨부를 복원한다", async () => {
+    let rejectSend!: (reason: unknown) => void;
+    const send = new Promise<CoreReply>((_resolve, reject) => { rejectSend = reject; });
+    const state = setup(async (request) => request.op === "conversation.get" ? get() : request.op === "conversation.send" ? send : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    const input = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "실패할 초안" } });
+    fireEvent.change(input.parentElement!.querySelector('input[type="file"]')!, { target: { files: [new File(["내용"], "첨부.txt", { type: "text/plain" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "보내기" }));
+    await waitFor(() => expect(state.call.mock.calls.some(([request]) => request.op === "conversation.send")).toBe(true));
+    state.remount();
+    await screen.findByText("기록");
+    const next = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    expect(next).not.toBe(input);
+    fireEvent.change(next, { target: { value: "새로 쓴 글" } });
+    await act(async () => rejectSend(new Error("전송 실패")));
+    await waitFor(() => expect(next.value).toBe("실패할 초안\n새로 쓴 글"));
+    expect(screen.getByText("첨부.txt")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("전송 실패");
+  });
   it("불러오는 동안 기록만 뼈대로 바꾸고 입력과 초안을 유지한다", async () => {
     const state = setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
     await screen.findByText("기록");
