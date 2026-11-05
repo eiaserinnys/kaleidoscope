@@ -8,6 +8,7 @@ test("설정 창을 열고 앱 창과 오가며 크기와 초점을 보존한다
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`${base}&link=connected`);
   await mkdir(captures, { recursive: true });
+  await expect(page.locator(".ks-harness-webview")).toBeVisible();
   await page.screenshot({ path: `${captures}/desktop-before-1440.png` });
   const gear = page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true });
   await gear.click();
@@ -17,9 +18,18 @@ test("설정 창을 열고 앱 창과 오가며 크기와 초점을 보존한다
   await expect(win.getByText("https://eiaserinnys.me/kaleidoscope")).toBeVisible();
   await expect(win.getByText("AD02028236")).toBeVisible();
   await expect(win.locator(".ks-shell-settings").evaluate((el) => el.scrollHeight <= el.clientHeight)).resolves.toBe(true);
+  await expect(page.locator(".ks-web-frozen-image")).toBeVisible();
+  await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
   await page.screenshot({ path: `${captures}/settings-default-1440.png` });
   const task = page.getByRole("toolbar", { name: "작업 표시줄" }).getByRole("button", { name: "설정", exact: true });
   await expect(task).toHaveAttribute("aria-pressed", "true");
+  const app = page.locator("[data-testid=app-window-web-browser]");
+  await app.locator(".ks-window-titlebar").click();
+  await expect(task).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".ks-harness-webview")).toBeVisible();
+  await page.screenshot({ path: `${captures}/web-window-on-top-1440.png` });
+  await task.click();
+  await expect(page.locator(".ks-harness-webview")).toHaveCount(0);
   await task.click(); await expect(win).toHaveAttribute("data-minimized", "true");
   await page.screenshot({ path: `${captures}/settings-minimized-1440.png` });
   await task.click(); await expect(win).toHaveAttribute("data-minimized", "false");
@@ -35,7 +45,6 @@ test("설정 창을 열고 앱 창과 오가며 크기와 초점을 보존한다
   expect(Math.abs(metrics.group.left - metrics.label.left)).toBeLessThanOrEqual(1);
   expect(Math.abs(metrics.control.centerY - metrics.label.centerY)).toBeLessThanOrEqual(1);
   await win.getByRole("button", { name: "이전 크기로 복원" }).click();
-  const app = page.locator(".ks-window[data-testid^=app-window-]").first();
   await app.locator(".ks-window-titlebar").click();
   await expect(task).toHaveAttribute("aria-pressed", "false");
   await task.click(); await expect(task).toHaveAttribute("aria-pressed", "true");

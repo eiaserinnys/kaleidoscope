@@ -135,4 +135,25 @@ describe("web surface overlap", () => {
     clientRects.mockRestore();
     canvas.remove();
   });
+
+  it.each([["더 큰 z", "3", false], ["같은 z", "2", true]])(
+    "데스크톱 영역의 캔버스 밖 창이 %s일 때 웹 화면의 가림을 판정한다",
+    (_label, zIndex, visible) => {
+      const area = document.createElement("main");
+      area.className = "ks-desktop-area";
+      const canvas = document.createElement("div");
+      canvas.className = "ks-desktop-canvas";
+      const appWindow = document.createElement("section");
+      appWindow.className = "ks-window"; appWindow.style.zIndex = "2";
+      const surface = document.createElement("div"); appWindow.append(surface); canvas.append(appWindow);
+      const systemWindow = document.createElement("section");
+      systemWindow.className = "ks-window"; systemWindow.style.zIndex = zIndex;
+      area.append(systemWindow, canvas); document.body.append(area);
+      const rect = new DOMRect(20, 20, 100, 80);
+      const bounds = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+      const clientRects = vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => rect } as unknown as DOMRectList);
+      expect(isFullyVisible(surface)).toBe(visible);
+      bounds.mockRestore(); clientRects.mockRestore(); area.remove();
+    },
+  );
 });
