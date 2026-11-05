@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
-use image::{GenericImageView, ImageEncoder};
+use image::{AnimationDecoder, GenericImageView, ImageDecoder, ImageEncoder};
 use kaleidoscope_contract::{data::MediaData, errors, CoreError};
 
 use super::Entry;
@@ -33,6 +33,18 @@ pub(super) fn host_from_url(url: &str) -> String {
 pub(super) fn shrink(entry: &Entry, max: u32, media: &str) -> Result<Entry, CoreError> {
     if !raster(&entry.mime) {
         return Ok(entry.clone());
+    }
+    if entry.mime.split(';').next().unwrap_or("").trim() == "image/gif" {
+        if let Ok(decoder) = image::codecs::gif::GifDecoder::new(Cursor::new(&*entry.bytes)) {
+            let (width, height) = decoder.dimensions();
+            let mut frames = decoder.into_frames().take(2);
+            if matches!((frames.next(), frames.next()), (Some(Ok(_)), Some(Ok(_)))) {
+                let mut original = entry.clone();
+                original.width = original.width.or(Some(width));
+                original.height = original.height.or(Some(height));
+                return Ok(original);
+            }
+        }
     }
     let image = image::load_from_memory(&entry.bytes).map_err(|err| {
         errors::MEDIA_RESIZE_IMAGE_DECODE_FAILED(media).and_details(vec![err.to_string()])
