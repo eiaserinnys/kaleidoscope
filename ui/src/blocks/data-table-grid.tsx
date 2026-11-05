@@ -96,8 +96,9 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
     const container = scroll.current; if (!container) return;
     const rect = target.getBoundingClientRect(), bounds = container.getBoundingClientRect();
     const ring = Number.parseFloat(getComputedStyle(target).getPropertyValue("--ks-focus-width")) || 0;
+    const leftGap = Math.max(ring, Number.parseFloat(getComputedStyle(target.closest<HTMLElement>(".ks-grid-row")!).columnGap) || 0);
     const pinned = rowHeader ? container.querySelector<HTMLElement>(".ks-grid-row-header")?.getBoundingClientRect().width ?? 0 : 0;
-    if (rect.left - ring < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - (rect.left - ring);
+    if (rect.left - leftGap < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - (rect.left - leftGap);
     const right = bounds.left + container.clientLeft + container.clientWidth;
     if (rect.right + ring > right) container.scrollLeft += rect.right + ring - right;
     const top = bounds.top + container.clientTop + (container.querySelector<HTMLElement>(".ks-table-header")?.getBoundingClientRect().height ?? 0);

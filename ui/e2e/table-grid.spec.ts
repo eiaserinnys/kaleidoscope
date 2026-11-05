@@ -210,6 +210,9 @@ test("높은 행의 일정표에서 Ctrl+End와 Ctrl+Home 및 End 끝 칸을 드
     expect(visible).toBe(true);
     await capture(page, `r5-${key.replace("+", "-").toLowerCase()}`);
   }
+  await page.keyboard.press("Home");
+  await expect(grid.getByRole("gridcell", { name: /작업 묶음 1, 1일/ })).toBeFocused();
+  await expect.poll(() => grid.evaluate((element) => element.scrollLeft)).toBe(0);
 });
 
 test("마우스 누름 뒤 Ctrl 이동에는 초점 링을 그리고 다시 누르면 지운다", async ({ page }) => {
