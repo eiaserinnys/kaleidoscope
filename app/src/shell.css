@@ -543,7 +543,11 @@
 .ks-window-consent-overlay .ks-dialog-body > * { flex: 0 0 auto; }
 .ks-window-consent-overlay .ks-dialog-actions { flex: 0 0 auto; }
 .ks-window-consent-overlay .ks-process-env { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
-.ks-install-warning { color: color-mix(in srgb, var(--ks-color-danger) 65%, var(--ks-color-muted)); }
+.ks-install-group { display: flex; min-width: 0; flex-direction: column; gap: var(--ks-space-1); }
+.ks-install-rows { list-style: none; margin: 0; padding-inline-start: var(--ks-space-3); }
+.ks-install-rows li { display: flex; flex-wrap: wrap; column-gap: var(--ks-space-2); align-items: baseline; }
+.ks-install-warning { display: flex; gap: var(--ks-space-1); align-items: baseline; color: color-mix(in srgb, var(--ks-color-danger) 65%, var(--ks-color-muted)); }
+.ks-install-warning svg { flex: none; align-self: start; margin-block-start: calc((1em * var(--ks-line-body) - 1em) / 2); }
 .ks-install-meta { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
 .ks-install-details > .ks-process-command { margin: var(--ks-space-1) 0 0; }
 

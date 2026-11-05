@@ -11,6 +11,7 @@ export {
   ChevronDown,
   ChevronRight,
   UpdateReady,
+  TriangleAlert,
   Cloud,
   CloudOff,
   FilePlus,
