@@ -176,7 +176,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         name: "앱스토어",
         version: 1,
         updated_at: "2026-11-05T00:00:00Z",
-        blocks: 36,
+        blocks: 37,
         modules: &[("assets", 1), ("storage", 2), ("store", 1)],
         assets: &[("builtin-icon-store", 1)],
     },

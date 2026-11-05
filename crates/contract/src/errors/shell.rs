@@ -272,6 +272,13 @@ error_catalog! { ENTRIES;
         message: "앱 창이 사라져 내용을 표시할 수 없습니다. 이 창을 닫고 앱을 다시 여세요.",
         fix: "이 창을 닫고 앱을 다시 여세요"
     }
+    SHELL_APP_NOT_INSTALLED(app_id) {
+        class: NotFound,
+        place: "앱 창 설치 확인",
+        cause: "창이 참조하는 앱이 이 기기에 설치되어 있지 않다",
+        message: "{app_id} 앱이 이 기기에 설치되어 있지 않습니다. 앱스토어에서 같은 앱을 설치하면 이 창이 그대로 이어집니다. 더 쓰지 않을 창이면 닫으세요.",
+        fix: "앱스토어에서 같은 앱을 설치하거나 더 쓰지 않을 창을 닫으세요"
+    }
     SHELL_APP_VERSION_NOT_FOUND() {
         class: NotFound,
         place: "앱 창 정의 읽기",

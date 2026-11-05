@@ -2,7 +2,7 @@
   "id": "store",
   "name": "앱스토어",
   "description": "스토어의 앱을 찾아 설치하고, 설치한 앱을 업데이트하거나 지웁니다",
-  "requires": { "blocks": 36, "modules": { "store": 1, "storage": 2, "assets": 1 } },
+  "requires": { "blocks": 37, "modules": { "store": 1, "storage": 2, "assets": 1 } },
   "icon": { "asset": "builtin-icon-store", "version": 1 },
   "assets": [{ "id": "builtin-icon-store", "version": 1 }],
   "permissions": [{ "module": "store", "id": "catalog", "label": "앱 설치" }],
@@ -73,7 +73,7 @@
         ]
       },
       {
-        "type": "stack", "direction": "column", "gap": "none", "fill": 1,
+        "type": "stack", "direction": "column", "gap": "none", "fill": [1, 2],
         "children": [
           { "type": "toolbar", "start": [{ "type": "text", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') ? $state.selected_name : ''" }, "format": "plain", "style": "title" }] },
           {
@@ -125,6 +125,14 @@
                 "disabled": { "expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($d.compatible) or ($exists($a) and ($a.origin = null or $a.modified or $a.origin.release >= $d.release)) )" },
                 "on_click": [{ "store.install": { "permission": "catalog", "server": { "expr": "$data.detail.server" }, "id": { "state": "selected" }, "release": { "expr": "$data.detail.release" } } }]
               }]
+            }
+          },
+          {
+            "type": "when", "value": { "expr": "$state.selected != null and $state.selected_store = ($storage.store = 'custom' ? ($trim($storage.custom_url) = '' ? null : $trim($storage.custom_url)) : 'https://kaleidoscope.eiaserinnys.me/appstore') and $data_meta.detail.state != 'ready'" },
+            "child": {
+              "type": "toolbar",
+              "start": [{ "type": "button", "label": "지우기", "variant": "danger", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }],
+              "end": [{ "type": "button", "label": "설치", "variant": "primary", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }]
             }
           }
         ]

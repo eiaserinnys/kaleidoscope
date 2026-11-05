@@ -37,6 +37,25 @@ it("기존 블록 이름을 정본 이름과 모드로 정규화한다", () => {
 });
 
 describe("app definition renderer", () => {
+  it("앱이 없는 창과 앱의 판만 없는 창을 구분한다", async () => {
+    const missingApp = makeTestSeed({ definitions: [mdViewerDefinition] });
+    missingApp.snapshot.shared.apps = [];
+    missingApp.snapshot.shared.app_versions = [];
+    const first = createShellStore(createFakeTransport(missingApp));
+    const view = render(<AppWindowContent store={first} windowId="viewer-window" />);
+    expect((await screen.findByRole("alert")).querySelector(".ks-error-id")?.textContent).toBe("SHELL_APP_NOT_INSTALLED");
+    expect(screen.getByText(/md-viewer 앱이 이 기기에 설치되어 있지 않습니다/)).toBeTruthy();
+    view.unmount();
+    first.dispose();
+
+    const missingVersion = makeTestSeed({ definitions: [mdViewerDefinition] });
+    missingVersion.snapshot.shared.app_versions = [];
+    const second = createShellStore(createFakeTransport(missingVersion));
+    render(<AppWindowContent store={second} windowId="viewer-window" />);
+    expect((await screen.findByRole("alert")).querySelector(".ks-error-id")?.textContent).toBe("SHELL_APP_VERSION_NOT_FOUND");
+    expect(screen.getByText(/앱 정의를 찾을 수 없어 창을 표시하지 못했습니다/)).toBeTruthy();
+    second.dispose();
+  });
   it("대신 옮긴 초점을 떠난 뒤 직접 다시 고르면 사용자 초점으로 남긴다", () => {
     render(<><button>대신</button><button>직접</button></>);
     const rescued = screen.getByRole("button", { name: "대신" });
