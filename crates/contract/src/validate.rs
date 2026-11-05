@@ -79,6 +79,25 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
     crate::validate_input::validate_input_extensions(&definition)?;
     crate::validate_button::validate_button_extensions(&definition)?;
 
+    let mut stack_fill_error = None;
+    data::walk_definition_blocks(&definition, &mut |pointer, block| {
+        if stack_fill_error.is_some() { return; }
+        if let Block::Stack { fill: Some(crate::StackFill::Indices(indices)), children, .. } = block {
+            let version = crate::STACK_FILL_LIST_BLOCK_SET_VERSION;
+            let mut seen = HashSet::new();
+            stack_fill_error = if definition.requires.blocks < version {
+                Some(crate::errors::APP_STACK_FILL_VERSION_LOW(pointer, version))
+            } else if indices.is_empty() {
+                Some(crate::errors::APP_STACK_FILL_EMPTY(pointer))
+            } else if let Some(index) = indices.iter().find(|index| **index as usize >= children.len()) {
+                Some(crate::errors::APP_STACK_FILL_INDEX_OUT_OF_RANGE(pointer, index, children.len()))
+            } else if let Some(index) = indices.iter().find(|index| !seen.insert(**index)) {
+                Some(crate::errors::APP_STACK_FILL_DUPLICATE(pointer, index))
+            } else { None };
+        }
+    });
+    if let Some(error) = stack_fill_error { return Err(error); }
+
     validate_store_contract(&definition)?;
 
     if definition.client.as_ref().and_then(|client| client.capabilities.as_ref())
@@ -3204,7 +3223,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             if children.is_empty() {
                 details.push(format!("{at}: stack에는 자식 블록이 하나 이상 필요합니다"));
             }
-            if fill.is_some_and(|fill| fill as usize >= children.len()) {
+            if matches!(fill, Some(crate::StackFill::Index(index)) if *index as usize >= children.len()) {
                 details.push(format!("{at}: stack의 fill이 자식 수를 넘습니다"));
             }
         }

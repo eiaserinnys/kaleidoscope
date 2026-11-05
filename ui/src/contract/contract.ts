@@ -341,7 +341,7 @@ view?: StateRef,
 /**
  * (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
  */
-on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: number, wrap?: boolean, 
+on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: StackFill, wrap?: boolean, 
 /**
  * (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
  */
@@ -1270,6 +1270,11 @@ export type SplitDirection = "row" | "column";
  * `stack` 자식의 교차축 정렬. 생략하면 flex의 기존 늘이기 동작을 유지한다.
  */
 export type StackAlign = "start" | "center" | "end" | "baseline";
+
+/**
+ * 쌓기에서 남은 공간을 차지할 자식 번호 또는 번호 목록.
+ */
+export type StackFill = number | Array<number>;
 
 export type StackPlace = "center";
 

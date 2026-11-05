@@ -27,6 +27,10 @@ function bindingText(value: ReturnType<typeof useBinding>): string {
 }
 
 function fitTextarea(element: HTMLTextAreaElement) {
+  if (getComputedStyle(element).getPropertyValue("--ks-textarea-fill").trim() === "100%") {
+    element.style.height = "";
+    return;
+  }
   if (element.clientWidth === 0) return;
   element.style.height = "auto";
   element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`;
@@ -236,7 +240,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   };
   const numericValue = block.kind === "number" && draft.trim() !== "" && Number.isFinite(Number(draft)) ? Number(draft) : undefined;
   const input = <div className={`ks-data-input${dateTime && isDate ? " has-date-time" : ""}${block.kind === "search" ? " is-search" : ""}${block.kind === "number" ? " is-number" : ""}${block.spin ? " has-spin" : ""}${(block.rows ?? 0) >= 2 ? " has-rows" : ""}${block.columns !== undefined ? " has-columns" : ""}`}
-    style={block.columns !== undefined ? { "--ks-input-columns": `${block.columns}ch` } as CSSProperties : undefined}>
+    style={{ ...(block.columns !== undefined ? { "--ks-input-columns": `${block.columns}ch` } : {}), "--ks-input-rows": block.rows ?? 1 } as CSSProperties}>
     {block.kind === "search" ? <span className="ks-data-input-search"><DataIcon name="search" size="inline" /></span> : null}
     {multiline ? <textarea {...props} ref={textarea} rows={block.rows ?? 1} /> : dateTime && isDate ? <WindowDatePicker context={context} inputProps={props} inputRef={inputElement} value={dateTimeValue} min={minDateTime} max={maxDateTime} locale={formatter.locale} label={labelText} onChoose={choose} onEditingEnd={() => { if (block.commit === "submit") prepare.current(); else commit(draft); setFocused(false); finish(canSyncExternal()); }} /> : dateTime ? <WindowTimePicker context={context} inputProps={props} inputRef={inputElement} value={dateTimeValue} min={minDateTime} max={maxDateTime} step={typeof stepValue === "number" && Number.isInteger(stepValue) && stepValue > 0 ? stepValue : 30} locale={formatter.locale} onChoose={choose} onCommit={() => { if (block.commit === "submit" && tabKey.current) { tabKey.current = false; prepare.current(); return true; } tabKey.current = false; return commit(draft); }} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : block.options !== undefined ? <WindowCombobox context={context} optionsOnly={optionsOnly} loading={optionsBinding.status === "loading"} inputProps={{ ...props, type: "text" }} inputRef={inputElement} options={normalizedOptions?.ok ? normalizedOptions.options : []} ready={normalizedOptions?.ok === true} onChoose={choose} onCommit={() => commit(draft)} onEditingEnd={() => { setFocused(false); finish(canSyncExternal()); }} /> : <input {...props}
       ref={inputElement}

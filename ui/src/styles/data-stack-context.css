@@ -1,0 +1,48 @@
+/* 쌓기의 내용은 직접 자식 또는 결정 줄 앞 스크롤 본문에 있다.
+   맥락은 바깥 쌓기가 정하고 두 위치에 같은 규칙을 적용한다. */
+:is(.ks-data-tab-panel, .ks-data-section-child) > .ks-data-stack.is-column {
+  &:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-markdown-view, .ks-timeline, .ks-chart, .ks-map)) {
+    height: auto;
+    :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 0 0 auto; overflow: visible; }
+  }
+  &.has-fill-list {
+    height: 100%;
+    :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 1 1 0; overflow: auto; }
+  }
+  &.has-textarea-fill { height: 100%; }
+  :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll):has(> :is(.ks-data-input, .ks-input-field) textarea) { flex: 1 1 0; overflow: auto; }
+}
+.ks-data-section-child > .ks-data-stack.is-column {
+  &:has(> .ks-data-stack-item.is-fill > :is(.ks-data-view, .ks-data-state, .ks-markdown-view), > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > :is(.ks-data-view, .ks-data-state, .ks-markdown-view)) { height: 100%; min-height: 100%; }
+  :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:has(> :is(.ks-data-view, .ks-data-state, .ks-markdown-view)) { min-height: var(--ks-pane-min-size); }
+}
+.ks-data-stack-item.is-fill:not(.ks-stack-scroll) > .ks-data-stack.is-column {
+  height: auto; min-height: 100%;
+  &:not(.has-explicit-fill) {
+    :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 0 0 auto; overflow: visible; }
+  }
+  &.has-explicit-fill {
+    :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) {
+      flex: 1 1 0; min-height: var(--ks-pane-min-size);
+      &:has(> .ks-data-input > textarea), &:has(> .ks-input-field > .ks-data-input > textarea) { min-height: min-content; }
+      &:has(> :is(.ks-data-tabs, .ks-table-scroll)) { min-height: calc(var(--ks-pane-min-size) * 2); }
+    }
+  }
+}
+.ks-data-tab-panel > .ks-data-stack {
+  :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item:first-child {
+    &,
+    & > .ks-split-row > .ks-split-pane {
+      > .ks-data-section > .ks-data-section-header,
+      > .ks-properties-container > .ks-properties,
+      > :is(.ks-feed, .ks-markdown-view, .ks-metrics, .ks-chart, .ks-map, .ks-data-tree, .ks-keypad),
+      > .ks-code-view .cm-content { padding-block-start: 0; }
+    }
+  }
+}
+.ks-data-window-body > .ks-data-section {
+  &:has(> .ks-data-section-child > .ks-data-stack.is-column > .ks-data-stack-item.is-fill > .ks-repeat.is-grid .ks-data-button.has-preview, > .ks-data-section-child > .ks-data-stack.is-column > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-repeat.is-grid .ks-data-button.has-preview) {
+    box-sizing: border-box; display: flex; height: 100%; flex-direction: column;
+    > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
+  }
+}

@@ -1,8 +1,12 @@
 import type { AppDefinition } from "../../src/contract/contract";
+import stackFillRegressions from "./stack-fill-regressions.json";
+import stackContexts from "./stack-contexts";
 
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
 export const shellDefectFixtures = [
+  ...stackFillRegressions,
+  ...stackContexts,
   { ...base, id: "list-row-fit-940", name: "목록 줄 축소", state: {}, ui: { type: "list", grouped: true, items: [{ title: "묶음", items: Array.from({ length: 20 }, (_, i) => ({ key: String(i), title: `@작성자_${i}`, subtitle: "말줄임으로 표시할 아주 긴 부제입니다. ".repeat(8), color: "#804080", meta: "11/03", badges: ["고치는 중"] })) }] } },
   ...(["grid", "icons"] as const).map((layout) => ({ ...base, requires: { blocks: 30, modules: {} }, id: `layout-940-${layout}`, name: "그림 목록", state: {}, ui: { type: "tabs", tabs: [
     { label: "그림", child: { type: "stack", direction: "column", children: [
@@ -26,6 +30,13 @@ export const shellDefectFixtures = [
     { type: "button", label: "표 열기", on_click: [{ set_state: "open", value: true }] },
     { type: "dialog", title: "표 선택", open: { state: "open" }, on_close: [{ set_state: "open", value: false }], child: { type: "section", title: "항목", child: { type: "table", columns: [{ field: "title", label: "제목" }], rows: [{ key: "a", title: "하나" }] } } },
   ] } },
+  { ...base, requires: { blocks: 37, modules: {} }, id: "stack-fill-list-fixture", name: "채움 시험", state: { first: "", second: "" }, ui: {
+    type: "section", title: "답글", child: { type: "stack", direction: "column", gap: "small", fill: [0, 1], children: [
+      { type: "input", label: "한국어", multiline: true, value: { state: "first" }, on_change: { set_state: "first" } },
+      { type: "input", label: "영어", multiline: true, rows: 3, value: { state: "second" }, on_change: { set_state: "second" } },
+      { type: "button", label: "올리기", on_click: [] },
+    ] },
+  } },
   { ...base, requires: { blocks: 21, modules: {} }, id: "input-autogrow-fixture", name: "여러 줄 입력", state: { text: "", fixed: "" }, ui: { type: "tabs", tabs: [
     { label: "입력", child: { type: "stack", direction: "column", gap: "small", children: [
       { type: "input", label: "한국어", multiline: true, value: { state: "text" }, on_change: { set_state: "text" } },

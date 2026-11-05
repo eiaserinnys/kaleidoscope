@@ -150,6 +150,34 @@ error_catalog! { ENTRIES;
         message: "앱 ID {app_id}, 아이콘 자산 {asset} {version}판: SVG, PNG 또는 WebP 아이콘은 블록 세트 {required}판 이상이 필요합니다. requires.blocks를 고치세요.",
         fix: "requires.blocks를 필요한 판 이상으로 지정하세요"
     }
+    APP_STACK_FILL_VERSION_LOW(at, required) {
+        class: InvalidAppDefinition,
+        place: "쌓기 채움 목록 판 확인",
+        cause: "채움 목록을 지원하지 않는 블록 세트 판이다",
+        message: "{at}의 stack.fill 목록은 블록 세트 {required}판부터입니다. requires.blocks를 필요한 판 이상으로 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 지정하세요"
+    }
+    APP_STACK_FILL_EMPTY(at) {
+        class: InvalidAppDefinition,
+        place: "쌓기 채움 목록 확인",
+        cause: "채울 칸 목록이 비었다",
+        message: "{at}의 stack.fill 목록이 비었습니다. 채울 자식의 번호를 하나 이상 넣으세요.",
+        fix: "채울 자식 번호를 하나 이상 지정하세요"
+    }
+    APP_STACK_FILL_INDEX_OUT_OF_RANGE(at, index, count) {
+        class: InvalidAppDefinition,
+        place: "쌓기 채움 번호 확인",
+        cause: "채울 칸 번호가 자식 수를 벗어났다",
+        message: "{at}의 stack.fill 번호 {index}는 자식 {count}개의 범위를 벗어납니다. 0부터 시작하는 자식 번호로 고치세요.",
+        fix: "자식 범위 안의 번호로 고치세요"
+    }
+    APP_STACK_FILL_DUPLICATE(at, index) {
+        class: InvalidAppDefinition,
+        place: "쌓기 채움 중복 확인",
+        cause: "채울 칸 번호가 중복됐다",
+        message: "{at}의 stack.fill 목록에 번호 {index}가 중복됩니다. 같은 번호는 한 번만 넣으세요.",
+        fix: "중복된 번호를 빼세요"
+    }
     APP_INPUT_SPIN_VERSION_LOW(at, required, required_min) {
         class: InvalidAppDefinition,
         place: "숫자 스핀 블록 판 확인",
