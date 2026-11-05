@@ -356,7 +356,7 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "업데이트 재시작",
         cause: "설치할 업데이트가 준비되지 않았다",
-        message: "설치할 새 판이 아직 준비되지 않았습니다. 새 판을 받았다는 표시가 뜨면 그 메뉴에서 다시 시작해서 업데이트를 누르세요.",
+        message: "설치할 새 판이 아직 준비되지 않았습니다. 새 판을 받았다는 표시가 뜨면 업데이트 창에서 다시 시작해서 업데이트를 누르세요.",
         fix: "새 판 표시가 뜨면 다시 시작해서 업데이트를 누르세요"
     }
     DESK_UPDATE_INSTALLER_UNAVAILABLE() {

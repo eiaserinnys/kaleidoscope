@@ -20,6 +20,9 @@ if (!globalThis.ResizeObserver) {
     },
   });
 }
+if (!Element.prototype.scrollIntoView) {
+  Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: () => {} });
+}
 
 afterEach(() => {
   cleanup();
@@ -44,7 +47,7 @@ describe("shell update action", () => {
     render(<Shell store={store} />);
     await store.ready;
     const dialog = await screen.findByRole("dialog", { name: "0.5.0판으로 업데이트할까요?" });
-    expect(within(dialog).getByText("0.4.1 → 0.5.0")).toBeTruthy();
+    expect(within(dialog).queryByText("0.4.1 → 0.5.0")).toBeNull();
     expect(within(dialog).getByText("새로운 기능")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "나중에" }));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -62,7 +65,7 @@ describe("shell update action", () => {
     const store = createShellStore(createFakeTransport(seed));
     render(<Shell store={store} />);
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("업데이트 정보에 바뀐 것 목록이 없습니다")).toBeTruthy();
+    expect(within(dialog).getByText("바뀐 것 목록이 없습니다")).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "다시 시작해서 업데이트" })).toBeTruthy();
     store.dispose();
   });
@@ -156,6 +159,18 @@ describe("shell update action", () => {
 
     expect((await screen.findByRole("alert")).textContent).toContain("설치를 시작할 수 없습니다");
     expect(screen.getByRole("dialog")).toBeTruthy();
+    store.dispose();
+  });
+
+  it("scrolls the failure notice into view", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    const transport = createFakeTransport({ ...readySeed(), updateRestartError: "설치를 시작할 수 없습니다" });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    fireEvent.click(await screen.findByRole("button", { name: "다시 시작해서 업데이트" }));
+    const alert = await screen.findByRole("alert");
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: "nearest" }));
+    expect(scroll.mock.contexts.some((element) => element instanceof Element && element.contains(alert))).toBe(true);
     store.dispose();
   });
 });

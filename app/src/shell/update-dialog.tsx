@@ -9,6 +9,7 @@ export function UpdateDialog({ store, host, openRequest, seen }: { store: ShellS
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<CoreError | null>(null);
   const pending = useRef(false);
+  const errorRef = useRef<HTMLDivElement>(null);
   const ready = useRef<Ready | null>(null);
   const previousRequest = useRef(openRequest);
   if (update?.state === "ready") ready.current = update;
@@ -27,6 +28,9 @@ export function UpdateDialog({ store, host, openRequest, seen }: { store: ShellS
       if (version) { setError(null); setOpen(true); }
     }
   }, [openRequest, version]);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [error]);
   const cancel = useCallback(() => { setOpen(false); setError(null); }, []);
   const confirm = async () => {
     if (pending.current) return;
@@ -46,11 +50,10 @@ export function UpdateDialog({ store, host, openRequest, seen }: { store: ShellS
     cancelLabel="나중에" userConsent busy={busy} onCancel={cancel} onConfirm={() => void confirm()}
     overlayClassName="ks-shell-dialog-layer" inertSelector=":scope > .ks-shell-bar, :scope > .ks-desktop-area"
     body={<div className="ks-update-content">
-      <div className="ks-install-meta">{current.current_version} → {current.version}</div>
       {current.changes.length ? current.changes.map((change) => <section className="ks-install-group" key={change.version}>
         {current.changes.length > 1 ? <div className="ks-install-meta">{change.version}판</div> : null}
         <ul className="ks-install-rows">{change.items.map((item, index) => <li className="ks-update-item" key={index}>{item}</li>)}</ul>
-      </section>) : <div className="ks-install-meta">업데이트 정보에 바뀐 것 목록이 없습니다</div>}
-      {error ? <ErrorNotice error={error} /> : null}
+      </section>) : <div className="ks-install-meta">바뀐 것 목록이 없습니다</div>}
+      {error ? <div ref={errorRef}><ErrorNotice error={error} /></div> : null}
     </div>} />;
 }
