@@ -121,6 +121,7 @@ pub(super) fn scenario(
         let from = point("from")?;
         let to = point("to")?;
         probe(app, core, "before_press", &bounds, from, to)?;
+        native_target::wait_main_webview_at(app, from.0, from.1)?;
         let input = native_input::drag(from, to, || {
             probe(app, core, "before_release", &bounds, from, to)
         });

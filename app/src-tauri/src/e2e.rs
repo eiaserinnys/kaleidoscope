@@ -15,9 +15,11 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 mod files_write;
-mod realtime;
 #[cfg(windows)]
 mod folder_drag;
+#[cfg(windows)]
+mod native_target;
+mod realtime;
 #[cfg(windows)]
 mod share_isolate;
 mod ui;
