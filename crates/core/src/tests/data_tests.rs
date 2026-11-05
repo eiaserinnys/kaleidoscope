@@ -783,6 +783,66 @@ fn oauth_requires_login_and_media_is_resized_and_cached() {
     );
 }
 
+fn gif_media(frame_count: usize) -> (Vec<u8>, kaleidoscope_contract::data::MediaData) {
+    use image::codecs::gif::GifEncoder;
+    use kaleidoscope_contract::data::{MediaRef, ResourceMediaRef};
+
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = GifEncoder::new(&mut bytes);
+        for index in 0..frame_count {
+            let image = image::RgbaImage::from_pixel(
+                80,
+                40,
+                image::Rgba([255, (index * 255) as u8, 0, 255]),
+            );
+            encoder.encode_frame(image::Frame::new(image)).unwrap();
+        }
+    }
+    let temp = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    fs::write(folder.path().join("test.gif"), &bytes).unwrap();
+    let host = Arc::new(FakeHost::default());
+    host.choose(Some(folder.path().to_path_buf()));
+    let core = open_core(temp.path(), vec![definition()], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "data-app");
+    pick_folder(&core, &window);
+    let CoreReply::DataMedia { media } = core
+        .handle(CoreRequest::DataMedia {
+            window_id: window,
+            media: MediaRef::Resource(ResourceMediaRef {
+                permission: "docs".into(),
+                path: "test.gif".into(),
+                query: BTreeMap::new(),
+                crop: None,
+            }),
+            max_px: Some(20),
+        })
+        .unwrap()
+    else {
+        panic!("expected media reply")
+    };
+    (bytes, media)
+}
+
+#[test]
+fn animated_gif_media_keeps_original_bytes_and_dimensions() {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+
+    let (original, media) = gif_media(2);
+    assert_eq!(media.mime, "image/gif");
+    assert_eq!(STANDARD.decode(media.data_base64).unwrap(), original);
+    assert_eq!((media.width, media.height), (Some(80), Some(40)));
+}
+
+#[test]
+fn single_frame_gif_media_is_resized_as_before() {
+    let (_, media) = gif_media(1);
+    assert_eq!(media.mime, "image/jpeg");
+    assert_eq!((media.width, media.height), (Some(20), Some(10)));
+}
+
 #[test]
 fn remote_asset_without_server_reports_media_load_error() {
     use kaleidoscope_contract::data::{AssetMediaRef, MediaRef};

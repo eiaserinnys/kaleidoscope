@@ -4766,7 +4766,8 @@ pub enum CoreRequest {
     DataMore { window_id: String, source: String },
     /// 이미지와 소리 원본 하나를 받는다. `media`의 권한은 그 창의 앱이 선언한 것이어야 한다(`permission_denied`).
     /// 코어는 원본을 (권한, 경로, 쿼리)로 캐시한다. 이미지이고 `max_px`가 있으면 긴 변이 그 값을 넘지 않게 줄여서
-    /// 보낸다(PNG, JPEG, WebP, GIF 첫 장. 투명이 있으면 PNG, 아니면 JPEG). 원본이 [`data::MEDIA_MAX_BYTES`]보다
+    /// 보낸다(PNG, JPEG, WebP, 정지 GIF. 투명이 있으면 PNG, 아니면 JPEG). 움직이는 GIF는 줄이지 않고 원본 그대로
+    /// 보낸다. 원본이 [`data::MEDIA_MAX_BYTES`]보다
     /// 크면 `io`, 파일이 없으면 `not_found`, 연결이 실패하면 `server`, 로그인이 필요하면 `not_granted`다.
     #[serde(rename = "data.media")]
     DataMedia {
