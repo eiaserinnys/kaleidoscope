@@ -26,6 +26,7 @@ export type State = {
   partialKey: string | null;
   streamKey: string | null;
   guideSent: boolean;
+  refreshAfterFirstPrompt?: boolean;
   phase: "starting" | "login" | "ready" | "responding" | "failed";
   replay: boolean;
   replayItems: Item[];
@@ -173,11 +174,11 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
   if (request.kind === "switch" || request.kind === "new_user") {
     const result = message.result as NewSessionResponse;
     return { ...next, sessionId: request.kind === "switch" ? String(request.params) : result.sessionId,
-      replay: false, replayItems: [], sessionError: null, guideSent: request.kind === "switch" && hadGuide(state.replayItems ?? []), controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
+      replay: false, replayItems: [], sessionError: null, guideSent: request.kind === "switch" && hadGuide(state.replayItems ?? []), refreshAfterFirstPrompt: request.kind === "new_user", controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
   }
   if (request.kind === "new" || request.kind === "load") {
     const result = message.result as NewSessionResponse;
-    return { ...next, phase: "ready", replay: false, needsNew: false, failure: null, sessionId: request.kind === "new" ? result.sessionId : state.sessionId, controls: controlsFrom(result as Record<string, any>) };
+    return { ...next, phase: "ready", replay: false, needsNew: false, failure: null, sessionId: request.kind === "new" ? result.sessionId : state.sessionId, refreshAfterFirstPrompt: request.kind === "new", controls: controlsFrom(result as Record<string, any>) };
   }
   if (request.kind === "authenticate") return { ...next, phase: "starting", failure: null };
   if (request.kind === "prompt") return { ...finishText(next), phase: "ready", permissions: [], tools: [] };

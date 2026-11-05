@@ -55,6 +55,7 @@ export class AgentSession {
   private sessions: SessionInfo[] = [];
   private sessionsLoading = false;
   private listError: State["sessionError"] = null;
+  private listWanted = false;
 
   constructor(host: Host) {
     this.host = host;
@@ -111,6 +112,10 @@ export class AgentSession {
       if (this.state.initialized && this.state.capabilities.http && this.state.servicesUsed !== this.tools) this.state.restartPending = true;
       this.publish();
       await this.drain();
+      if (this.state.phase === "ready" && !Object.values(this.state.pending).some((request) => request.kind === "list")) {
+        this.listWanted = true;
+        await this.refreshList();
+      }
       if (this.state.phase !== "failed") await this.pump();
       return true;
     });
@@ -234,14 +239,21 @@ export class AgentSession {
 
   listSessions(): Promise<void> {
     return this.serial(async () => {
-      if (!this.handle || !this.state.capabilities.list || this.state.phase !== "ready" || Object.values(this.state.pending).some((request) => request.kind === "list" || request.kind === "switch" || request.kind === "new_user")) return;
-      this.sessions = [];
-      this.sessionsLoading = true;
-      this.listError = null;
-      this.state = { ...this.state, sessionError: null };
-      await this.request("list", "session/list", { cwd: this.cwd });
-      this.publish();
+      if (Object.values(this.state.pending).some((request) => request.kind === "list")) return;
+      this.listWanted = true;
+      await this.refreshList();
     });
+  }
+
+  private async refreshList(): Promise<void> {
+    if (!this.listWanted || !this.handle || !this.state.capabilities.list || this.state.phase !== "ready" || Object.values(this.state.pending).some((request) => request.kind === "list" || request.kind === "switch" || request.kind === "new_user")) return;
+    this.listWanted = false;
+    this.sessions = [];
+    this.sessionsLoading = true;
+    this.listError = null;
+    this.state = { ...this.state, sessionError: null };
+    await this.request("list", "session/list", { cwd: this.cwd });
+    this.publish();
   }
 
   newSession(): Promise<void> { return this.switchSession(null); }
@@ -374,12 +386,15 @@ export class AgentSession {
         }
         if (request && !message.error && (request.kind === "new" || request.kind === "load")) {
           await this.history.setSession(this.state.sessionId);
+          this.listWanted = true;
           const restoreControls = Object.entries(this.history.controls).filter(([id, value]) => this.state.controls.some((control) => control.id === id && (control.kind === "boolean" ? typeof value === "boolean" : control.options.some((option) => option.value === value)))).map(([id, value]) => ({ id, value }));
           this.state = { ...this.state, restoreControls };
         }
         if (request && !message.error && (request.kind === "switch" || request.kind === "new_user") && this.state.sessionId) {
           await this.history.replace(this.state.sessionId, request.kind === "switch" ? cleanReplay(replayItems) : []);
+          this.listWanted = true;
         }
+        if (request?.kind === "prompt" && (request.params as { refreshList?: boolean } | null)?.refreshList) this.listWanted = true;
         if (request && !message.error && request.kind === "configure") {
           const control = request.params as { id: string; value: string | boolean };
           await this.history.setControl(control.id, control.value);
@@ -393,6 +408,7 @@ export class AgentSession {
       await this.checkpoint();
       this.publish();
       if (result.exit) continue;
+      await this.refreshList();
       if (!result.exit) await this.pump();
       // 다음 읽기를 줄 끝으로 보내 연속 응답 사이에도 보내기와 조작을 접수한다.
       this.background(this.serial(() => this.drain()));
@@ -411,7 +427,7 @@ export class AgentSession {
       const [message, ...rest] = this.state.outbox;
       await this.write(message, { ...this.state, outbox: rest });
     }
-    if (Object.keys(this.state.pending).length) return;
+    if (Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
     if (this.state.phase === "starting") {
       if (!this.state.initialized) {
         await this.request("initialize", "initialize", { protocolVersion: 1, clientCapabilities: {} });
@@ -466,8 +482,9 @@ export class AgentSession {
     }
     const item: Item = { id: queued.id, kind: "user", text: queued.text, at: this.host.now(), attachments: queued.attachments.map(({ id, name, mime }) => ({ id, name, mime })) };
     await this.history.append([item]);
-    this.state = { ...this.state, queue, guideSent: true, contextTicket: prepared.ticket };
-    await this.request("prompt", "session/prompt", { sessionId: this.state.sessionId, prompt: content });
+    const refreshList = this.state.refreshAfterFirstPrompt === true;
+    this.state = { ...this.state, queue, guideSent: true, refreshAfterFirstPrompt: false, contextTicket: prepared.ticket };
+    await this.request("prompt", "session/prompt", { sessionId: this.state.sessionId, prompt: content, _control: { refreshList } });
     await this.host.commit(prepared.ticket);
     this.state = { ...this.state, contextTicket: null };
     await this.checkpoint();

@@ -98,11 +98,29 @@ test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 
     sessionId: "current", canListSessions: false, sessions: [], sessionsLoading: false, sessionError: null, switching: false });
   assert.equal(views.at(-1).history_disabled, true);
   assert.equal(views.at(-1).history_description, "이 에이전트는 지난 세션 목록을 주지 않습니다");
+  assert.equal(views.at(-1).history_unsupported, true);
+  assert.equal(views.at(-1).history_empty, false);
   (app as any).receive({ ...(app as any).view, canListSessions: true });
   assert.equal(views.at(-1).history_disabled, false);
   assert.equal(views.at(-1).history_description, null);
   (app as any).receive({ ...(app as any).view, configuring: true });
   assert.equal(views.at(-1).history_disabled, true);
+  assert.equal(views.at(-1).session_buttons_busy, true);
+});
+
+test("응답 중에는 목록 행을 눌러도 세션을 바꾸지 않는다", async () => {
+  const handlers = new Map<string, (context: any) => any>(), views: any[] = [];
+  const client = { process: { onReady() {}, onServicesChanged() {} }, files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
+    onStorageChange() {}, onLifecycle() {}, onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view) };
+  const app = new AppClient(client as any, []);
+  (app as any).receive({ phase: "responding", items: [], stream_id: null, text: "", busy: true, tool: null,
+    queued: [], permissions: [], controls: [], authMethods: [], failure: null, sessionId: "current",
+    canListSessions: true, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false });
+  let loads = 0;
+  (app as any).session.loadSession = async () => { loads++; };
+  await handlers.get("select_session")!({ event: "other" });
+  assert.equal(loads, 0);
+  assert.equal(views.at(-1).session_switching, false);
   assert.equal(views.at(-1).session_buttons_busy, true);
 });
 
