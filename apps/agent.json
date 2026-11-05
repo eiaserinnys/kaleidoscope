@@ -3,7 +3,7 @@
   "name": "에이전트",
   "icon": { "asset": "builtin-icon-agent", "version": 2 },
   "requires": {
-    "blocks": 29,
+    "blocks": 38,
     "modules": {
       "files": 1,
       "storage": 1,
@@ -540,68 +540,54 @@
               "type": "stack",
               "direction": "column",
               "gap": "none",
-              "fill": 1,
+              "fill": 0,
               "children": [
                 {
-                  "type": "when",
-                  "value": {
+                  "type": "chat",
+                  "loading": {
                     "client": "session_switching"
                   },
-                  "child": {
-                    "type": "notice",
-                    "kind": "loading",
-                    "message": ""
-                  }
-                },
-                {
-                  "type": "when",
-                  "value": {
-                    "client": "session_ready"
+                  "client": {
+                    "channel": "conversation",
+                    "on_send": "send",
+                    "on_cancel": "cancel",
+                    "on_attachment": "attachment"
                   },
-                  "child": {
-                    "type": "chat",
-                    "client": {
-                      "channel": "conversation",
-                      "on_send": "send",
-                      "on_cancel": "cancel",
-                      "on_attachment": "attachment"
+                  "footer": {
+                    "type": "repeat",
+                    "items": {
+                      "client": "permissions"
                     },
-                    "footer": {
-                      "type": "repeat",
-                      "items": {
-                        "client": "permissions"
-                      },
-                      "key": "id",
-                      "template": {
-                        "type": "stack",
-                        "direction": "column",
-                        "gap": "small",
-                        "children": [
-                          {
-                            "type": "text",
-                            "value": {
-                              "item": "title"
+                    "key": "id",
+                    "template": {
+                      "type": "stack",
+                      "direction": "column",
+                      "gap": "small",
+                      "children": [
+                        {
+                          "type": "text",
+                          "value": {
+                            "item": "title"
+                          }
+                        },
+                        {
+                          "type": "repeat",
+                          "items": {
+                            "item": "options"
+                          },
+                          "key": "id",
+                          "template": {
+                            "type": "button",
+                            "label": {
+                              "item": "label"
+                            },
+                            "on_click": {
+                              "client": "answer"
                             }
                           },
-                          {
-                            "type": "repeat",
-                            "items": {
-                              "item": "options"
-                            },
-                            "key": "id",
-                            "template": {
-                              "type": "button",
-                              "label": {
-                                "item": "label"
-                              },
-                              "on_click": {
-                                "client": "answer"
-                              }
-                            },
-                            "layout": "row"
-                          }
-                        ]
-                      }
+                          "layout": "row"
+                        }
+                      ]
                     }
                   }
                 }
