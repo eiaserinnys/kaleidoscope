@@ -40,6 +40,12 @@ fn request_rejects_missing_permissions_version_unsafe_headers_and_body() {
         value = meta.clone(); value["headers"] = Value::Object([(name.to_string(), json!("value"))].into_iter().collect());
         assert_eq!(call(&value, &[]), "DATA_CLIENT_HTTP_REQUEST_HEADER_FORBIDDEN", "{name}");
     }
+    for (name, header_value) in [("X-HTTP-Method-Override", "TRACE"), ("x-method-override", "get, Connect"), ("X-HTTP-Method", "track")] {
+        value = meta.clone(); value["headers"] = Value::Object([(name.to_string(), json!(header_value))].into_iter().collect());
+        assert_eq!(call(&value, &[]), "DATA_CLIENT_HTTP_REQUEST_HEADER_FORBIDDEN", "{name}: {header_value}");
+    }
+    value = meta.clone(); value["path"] = json!("/item?invalid"); value["headers"] = json!({"X-HTTP-Method-Override":"PATCH"});
+    assert_eq!(call(&value, &[]), "DATA_CLIENT_HTTP_REQUEST_ADDRESS_INVALID");
     value = meta.clone(); value["headers"] = Value::Object((0..33).map(|n| (format!("x-{n}"), json!("v"))).collect());
     assert_eq!(call(&value, &[]), "DATA_CLIENT_HTTP_REQUEST_HEADERS_TOO_MANY");
     value = meta.clone(); value["headers"] = json!({"bad header":"x"});

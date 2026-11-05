@@ -11,9 +11,11 @@ const FORBIDDEN_HEADERS: &[&str] = &[
     "accept-encoding", "access-control-request-headers", "access-control-request-method",
 ];
 
-fn forbidden_header(name: &str) -> bool {
+fn forbidden_header(name: &str, value: &str) -> bool {
     let name = name.to_ascii_lowercase();
     name.starts_with("proxy-") || name.starts_with("sec-") || FORBIDDEN_HEADERS.contains(&name.as_str())
+        || (["x-http-method", "x-http-method-override", "x-method-override"].contains(&name.as_str())
+            && value.split(',').map(str::trim).any(|method| ["CONNECT", "TRACE", "TRACK"].iter().any(|forbidden| method.eq_ignore_ascii_case(forbidden))))
 }
 
 pub(crate) fn encode_response(response: kaleidoscope_data::public_http::PublicResponse) -> Vec<u8> {
@@ -57,7 +59,7 @@ pub(crate) fn request(
         if reqwest::header::HeaderName::from_bytes(name.as_bytes()).is_err() { return Err(errors::DATA_CLIENT_HTTP_REQUEST_HEADER_NAME_INVALID(name)); }
         if value.len() > 8 * 1024 { return Err(errors::DATA_CLIENT_HTTP_REQUEST_HEADER_VALUE_TOO_LARGE(name)); }
         if reqwest::header::HeaderValue::from_str(value).is_err() { return Err(errors::DATA_CLIENT_HTTP_REQUEST_HEADER_VALUE_INVALID(name)); }
-        if forbidden_header(name) { return Err(errors::DATA_CLIENT_HTTP_REQUEST_HEADER_FORBIDDEN(name)); }
+        if forbidden_header(name, value) { return Err(errors::DATA_CLIENT_HTTP_REQUEST_HEADER_FORBIDDEN(name)); }
     }
     if body.is_some_and(|bytes| bytes.len() as u64 > data::SOURCE_MAX_BYTES) { return Err(errors::DATA_CLIENT_HTTP_REQUEST_BODY_TOO_LARGE("16MiB")); }
     let query = query.into_iter().filter_map(|(k, v)| match v {
