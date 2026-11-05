@@ -1,4 +1,24 @@
 error_catalog! { ENTRIES;
+    REGISTRYINSTALL_CONNECTION_FORMAT_INVALID(app_id, reason) {
+        class: InvalidRequest, place: "설치 연결 정의 읽기", cause: "연결 정의 형식이 올바르지 않거나 OAuth가 아니다",
+        message: "앱 {app_id}의 연결 정의 형식이 올바르지 않아 설치하지 못했습니다. 스토어 게시자가 OAuth 연결 정의를 확인해야 합니다. 원인: {reason}", fix: "스토어 게시자가 연결 정의를 확인하세요"
+    }
+    REGISTRYINSTALL_CONNECTION_MISMATCH(app_id) {
+        class: InvalidRequest, place: "설치 연결 매니페스트 대조", cause: "요청과 매니페스트의 연결 정의가 다르다",
+        message: "앱 {app_id}의 연결 정의가 매니페스트와 달라 설치하지 못했습니다. 스토어에서 다시 받으세요.", fix: "스토어에서 다시 받으세요"
+    }
+    REGISTRYINSTALL_CONNECTION_NAMES_MISMATCH(app_id) {
+        class: InvalidRequest, place: "설치 연결 권한 대조", cause: "연결 정의 이름과 앱 권한 이름이 다르거나 중복되었다",
+        message: "앱 {app_id}의 연결 정의 이름이 앱 권한과 일치하지 않아 설치하지 못했습니다. 스토어 게시자가 연결 이름을 확인해야 합니다.", fix: "스토어 게시자가 연결 이름을 확인하세요"
+    }
+    REGISTRYINSTALL_CONNECTION_INVALID(app_id, name, reason) {
+        class: InvalidRequest, place: "설치 연결 등록 검사", cause: "OAuth 연결의 이름, 주소 또는 경로가 올바르지 않다",
+        message: "앱 {app_id}의 연결 {name}을 등록할 수 없어 설치하지 못했습니다. 스토어 게시자가 연결 설정을 확인해야 합니다. 원인: {reason}", fix: "스토어 게시자가 연결 설정을 확인하세요"
+    }
+    REGISTRYINSTALL_CONNECTION_DATABASE_FAILED(app_id, name) {
+        class: Server, place: "설치 연결 저장", cause: "설치 중 연결을 데이터베이스에 저장하지 못했다",
+        message: "앱 {app_id}의 연결 {name}을 저장하지 못해 설치하지 못했습니다. 잠시 뒤 다시 시도하세요.", fix: "잠시 뒤 다시 시도하세요"
+    }
     REGISTRYINSTALL_INSTALL_ACCOUNT_FORBIDDEN(app_id) {
         class: PermissionDenied, place: "기기 앱 설치 계정 확인", cause: "기기의 계정이 레지스트리 주인 계정이 아니다",
         message: "앱 {app_id}을 설치할 수 없습니다. 이 기기는 앱 레지스트리의 주인 계정에 연결되어 있지 않습니다. 주인 계정의 기기에서 다시 시도하세요.", fix: "주인 계정의 기기에서 다시 시도하세요"

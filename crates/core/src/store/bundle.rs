@@ -22,6 +22,7 @@ pub(crate) struct PreparedBundle {
     pub assets: Vec<AssetUpload>,
     pub manifest: Vec<u8>,
     pub digest: String,
+    pub connections: Option<serde_json::Value>,
 }
 
 impl<T: Transport> StoreClient<T> {
@@ -205,6 +206,7 @@ impl<T: Transport> StoreClient<T> {
             definition,
             definition_json,
             assets,
+            connections: manifest_value.get("connections").cloned(),
             digest: format!("{:x}", Sha256::digest(&manifest_bytes)),
             manifest: manifest_bytes,
         })
