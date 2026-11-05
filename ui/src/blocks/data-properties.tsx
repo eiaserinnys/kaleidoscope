@@ -20,7 +20,7 @@ function Property({ field, pointer }: { field: PropertyField; pointer: string })
   }
   else if (field.format === "badge") {
     const badges = asArray(value.value);
-    content = <span className="ks-view-badges">{badges.filter(isBadge).map((badge, i) => <Badge value={badge} key={i} />)}</span>;
+    content = <span className="ks-view-badges">{badges.filter(isBadge).map((badge, i) => <Badge value={badge} tooltip key={i} />)}</span>;
   } else if (field.format === "markdown") content = <MarkdownText>{display(value.value)}</MarkdownText>;
   else if (field.format === "code") content = <code>{display(value.value)}</code>;
   else if (field.format === "date") content = dateText(value.value);

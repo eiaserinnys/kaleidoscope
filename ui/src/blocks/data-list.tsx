@@ -98,7 +98,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       const style = getComputedStyle(element);
       const pane = parseFloat(style.getPropertyValue("--ks-pane-min-size")) || 160;
       const gap = parseFloat(style.getPropertyValue("--ks-space-3")) || 12;
-      setColumns(Math.max(1, Math.floor((element.clientWidth + gap) / (pane + gap))));
+      const width = element.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      setColumns(Math.max(1, Math.floor((width + gap) / (pane + gap))));
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
   }, [grid, scroll]);

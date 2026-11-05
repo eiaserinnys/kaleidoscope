@@ -1,4 +1,5 @@
 import type { Badge as BadgeValue } from "../contract/contract";
+import { Tooltip } from "./tooltip";
 
 export function validColor(color: unknown): color is string {
   return typeof color === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(color);
@@ -20,7 +21,9 @@ export function badgeForeground(color: string): string {
 export function isBadge(value: unknown): value is BadgeValue {
   return typeof value === "string" || (typeof value === "object" && value !== null && "text" in value && typeof value.text === "string");
 }
-export function Badge({ value }: { value: BadgeValue }) {
+export function Badge({ value, tooltip = false }: { value: BadgeValue; tooltip?: boolean }) {
   const color = typeof value === "object" && validColor(value.color) ? value.color : undefined;
-  return <span className="ks-badge" style={color ? { backgroundColor: color, color: badgeForeground(color) } : undefined}>{typeof value === "string" ? value : value.text}</span>;
+  const text = typeof value === "string" ? value : value.text;
+  const badge = <span className="ks-badge" tabIndex={tooltip ? 0 : undefined} style={color ? { backgroundColor: color, color: badgeForeground(color) } : undefined}>{text}</span>;
+  return tooltip ? <Tooltip content={text}>{badge}</Tooltip> : badge;
 }
