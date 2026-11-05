@@ -18,6 +18,39 @@ function setup(block: Block) {
 }
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+it("이미지 자연 크기와 자르기 비율을 상자에 전달한다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { permission: "media", path: "image.png", crop: { x: 0, y: 0, w: 0.5, h: 0.75 } } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 800, height: 600 } }) as never : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  const image = view.container.querySelector(".ks-image-frame img")!;
+  Object.defineProperties(image, { naturalWidth: { value: 800 }, naturalHeight: { value: 600 } });
+  fireEvent.load(image);
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view")!;
+  expect(Number(host.style.getPropertyValue("--ks-image-ratio"))).toBeCloseTo(400 / 450);
+  expect(host.style.getPropertyValue("--ks-image-natural-height")).toBe("450px");
+});
+
+it("영상 메타데이터의 원본 비율을 상자에 전달한다", async () => {
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "media", kind: "video", src: { permission: "media", path: "video.webm" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? Promise.resolve({ op: "data.media", media: { mime: "video/webm", data_base64: "YQ==", width: null, height: null } }) as never : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector("video")?.getAttribute("src")).toBeTruthy());
+  const video = view.container.querySelector("video")!;
+  Object.defineProperties(video, { videoWidth: { value: 1080 }, videoHeight: { value: 1920 } });
+  fireEvent.loadedMetadata(video);
+  const host = view.container.querySelector<HTMLElement>(".ks-media-player")!;
+  expect(Number(host.style.getPropertyValue("--ks-media-ratio"))).toBeCloseTo(9 / 16);
+});
+
 it("미디어의 폴더 미선택 오류에서 합성 선택을 막는다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { permission: "docs", path: "file.wav" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));

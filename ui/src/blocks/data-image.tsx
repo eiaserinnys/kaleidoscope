@@ -96,7 +96,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
       return rect.left < bounds.left - 0.5 || rect.right > bounds.right + 0.5 || rect.top < bounds.top - 0.5 || rect.bottom > bounds.bottom + 0.5;
     })) setOverflowKey(layoutKey);
   }, [failure, short, layoutKey]);
-  return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} tabIndex={!preview && media && result.status === "ready" ? 0 : undefined} onContextMenu={preview ? undefined : (event) => {
+  return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}`} ref={host} style={media && sourceWidth && sourceHeight && result.status !== "failed" ? { "--ks-image-ratio": sourceWidth / sourceHeight, "--ks-image-natural-height": `${sourceHeight}px` } as React.CSSProperties : undefined} tabIndex={!preview && media && result.status === "ready" ? 0 : undefined} onContextMenu={preview ? undefined : (event) => {
     const image = host.current?.querySelector(".ks-image-frame img");
     if (!(image instanceof HTMLImageElement) || (event.target !== event.currentTarget && event.target !== image)) return;
     openContextMenu(event, [{ id: "image-copy", label: "이미지 복사", onSelect: () => { void writeMenuImage(image, "이미지 복사"); } }]);
