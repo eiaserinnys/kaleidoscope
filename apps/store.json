@@ -132,7 +132,7 @@
             "child": {
               "type": "toolbar",
               "start": [{ "type": "button", "label": "지우기", "variant": "danger", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }],
-              "end": [{ "type": "button", "label": "설치", "variant": "primary", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }]
+              "end": [{ "type": "button", "label": { "expr": "$exists($apps[id = $state.selected]) ? '설치됨' : '설치'" }, "variant": "primary", "disabled": true, "on_click": [{ "set_state": "selected", "value": { "state": "selected" } }] }]
             }
           }
         ]

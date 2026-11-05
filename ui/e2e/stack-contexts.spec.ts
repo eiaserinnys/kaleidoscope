@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
 
+test("쌓인 분할 칸의 fill 목록은 내용 높이를 유지한다", async ({ page }) => {
+  await page.setViewportSize({ width: 1049, height: 780 });
+  await page.goto('/?preview=stacked-fill-detail');
+  const app = page.getByTestId('app-window-stacked-fill-detail');
+  const slot = app.locator('.ks-split.is-stacked > .ks-split-pane > .ks-data-stack.has-fill-list > .ks-data-stack-item.is-fill');
+  await expect(slot).toHaveCount(2);
+  for (const item of await slot.all()) expect((await item.boundingBox())!.height).toBeGreaterThan(0);
+});
+
 test("구역·탭·분할 칸의 숫자·목록 채움은 결정 줄 유무와 관계없이 같은 맥락을 쓴다",async({page},info)=>{
   await page.setViewportSize({width:1049,height:780});
   for(const [context,kind] of [['section','list'],['section','markdown'],['tab','list'],['pane','list']]) for(const fill of ['number','list']) {
