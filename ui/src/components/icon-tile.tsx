@@ -1,7 +1,7 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode, type RefObject } from "react";
+import { useEffect, useState, type ComponentPropsWithRef, type ReactNode, type RefObject } from "react";
 import { ICON_SIZE } from "./icons";
 
-type IconTileProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
+type IconTileProps = Omit<ComponentPropsWithRef<"button">, "children"> & {
   icon: ReactNode;
   name: string;
   selected?: boolean;

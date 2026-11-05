@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
-  AppIcon,
   ContextMenuHost,
   SHELL_DESKTOP_DELETE_UNSAVED,
   SHELL_WINDOW_CLOSE_UNSAVED,
   SHELL_WORKSPACE_DELETE_UNSAVED,
   SHELL_UPDATE_RESTART_UNSAVED,
-  BUILTIN_APP_IDS,
   ChevronDown,
   EmptyState,
   Import,
@@ -34,6 +32,7 @@ import {
   type ShellStore,
   type Workspace,
 } from "@kaleidoscope/ui";
+import { AppLauncher, type LauncherSpacing } from "./app-launcher";
 import { serverLabel } from "./server-label";
 import { ShellSettings } from "./shell-settings";
 import { MessageAppPrompt } from "./message-app-prompt";
@@ -49,6 +48,8 @@ export function Shell({ store }: { store: ShellStore }) {
   const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
+  const [launcher, setLauncher] = useState<{ anchor: HTMLElement; spacing: LauncherSpacing } | null>(null);
+  const closeLauncher = useCallback(() => setLauncher(null), []);
   const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; kind: "gear" | "server"; sequence: number } | null>(null);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
@@ -132,6 +133,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
   const openSettings = (anchor: HTMLElement, kind: "gear" | "server") => {
     closeMenu();
+    closeLauncher();
     setSettings((current) => current
       ? { ...current, kind, sequence: current.sequence + 1 }
       : { anchor, origin: kind, kind, sequence: 0 });
@@ -176,40 +178,21 @@ export function Shell({ store }: { store: ShellStore }) {
     .filter((desktop) => desktop.workspace_id === activeWorkspace.id)
     .sort((a, b) => a.position - b.position);
 
-  const openAppMenu = (anchor: HTMLElement) => {
+  const openAppMenu = (anchor: HTMLElement, spacing: LauncherSpacing) => {
     closeSettings(false);
-    const builtins = new Set<string>(BUILTIN_APP_IDS);
-    const sortApps = (apps: ShellSnapshot["shared"]["apps"]) => apps.slice().sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
-    const builtinApps = sortApps(snapshot.shared.apps.filter((app) => builtins.has(app.id)));
-    const customApps = sortApps(snapshot.shared.apps.filter((app) => !builtins.has(app.id)));
-    const appEntries = (apps: typeof builtinApps) => apps.map((app) => ({
-        id: `app-${app.id}`,
-        label: app.name,
-        leading: <AppIcon store={store} appId={app.id} appVersion={app.current_version} size="control" />,
-        onSelect: () => {
-          const latest = store.getSnapshot();
-          if (!latest) return;
-          void runCommand({
-            op: "window.open",
-            desktop_id: activeDesktop.id,
-            app_id: app.id,
-            rect: newWindowRect(activeDesktop.id, latest),
-          });
-        },
-      }));
-    const entries: MenuEntry[] = [
-      ...(builtinApps.length ? [{ id: "app-group-builtin", type: "heading" as const, label: "기본앱" }, ...appEntries(builtinApps)] : []),
-      ...(customApps.length ? [
-        ...(builtinApps.length ? [{ id: "app-group-separator", type: "separator" as const }] : []),
-        { id: "app-group-custom", type: "heading" as const, label: "커스텀 앱" },
-        ...appEntries(customApps),
-      ] : []),
-    ];
-    if (!entries.length) entries.push({ id: "no-apps", label: "앱 없음", disabled: true });
-    setMenu({ kind: "items", anchor, entries });
+    closeMenu();
+    setLauncher((current) => current?.anchor === anchor ? null : { anchor, spacing });
+  };
+  const selectApp = (appId: string) => {
+    const latest = store.getSnapshot();
+    const workspace = latest ? selectWorkspace(latest) : undefined;
+    const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
+    if (!latest || !desktop) return;
+    void runCommand({ op: "window.open", desktop_id: desktop.id, app_id: appId, rect: newWindowRect(desktop.id, latest) });
   };
 
   const openWorkspaceMenu = (anchor: HTMLElement) => {
+    closeLauncher();
     const entries: MenuEntry[] = [
       ...workspaces.map((workspace) => ({
         id: `workspace-${workspace.id}`,
@@ -243,6 +226,7 @@ export function Shell({ store }: { store: ShellStore }) {
   };
 
   const openDesktopMenu = (anchor: HTMLElement, desktop: Desktop) => {
+    closeLauncher();
     const count = desktops.length;
     setMenu({
       kind: "items",
@@ -279,6 +263,7 @@ export function Shell({ store }: { store: ShellStore }) {
   };
 
   const openUpdateMenu = (anchor: HTMLElement) => {
+    closeLauncher();
     const update = snapshot.update;
     if (update.state !== "ready") return;
     setMenu({
@@ -383,7 +368,7 @@ export function Shell({ store }: { store: ShellStore }) {
         </nav>
 
         <div className="ks-shell-actions">
-          <IconButton aria-label="앱 열기" onClick={(event) => openAppMenu(event.currentTarget)} title="앱 열기">
+          <IconButton aria-label="앱 열기" aria-haspopup="dialog" aria-expanded={launcher !== null} onClick={(event) => openAppMenu(event.currentTarget, "none")} title="앱 열기">
             <LayoutGrid />
           </IconButton>
           <IconButton aria-label="앱 정의 가져오기" onClick={() => { closeSettings(false); fileInput.current?.click(); }} title="앱 정의 가져오기">
@@ -416,15 +401,17 @@ export function Shell({ store }: { store: ShellStore }) {
         key={snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state}
         activeDesktopId={activeDesktop.id}
         activeWorkspaceId={activeWorkspace.id}
+        launcherOpen={launcher !== null}
         onAreaChange={reportArea}
         onCall={runCommand}
-        onOpenApps={openAppMenu}
+        onOpenApps={(anchor) => openAppMenu(anchor, "gap")}
         getNewWindowRect={newWindowRect}
         store={store}
       />
 
       {settingsScreen}
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
+      {launcher ? <AppLauncher store={store} anchor={launcher.anchor} spacing={launcher.spacing} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}

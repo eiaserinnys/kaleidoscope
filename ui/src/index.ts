@@ -79,3 +79,8 @@ export type { ResolveResult } from "./share/numbered";
 export { installShellDragGuard } from "./shell-drag-guard";
 export * from "./contract/shell-errors";
 export { AppIcon } from "./components/app-icon";
+
+export { IconTile, useIconGridColumns } from "./components/icon-tile";
+export { useAnchoredOverlay } from "./components/anchored-overlay";
+export { GroupHeading } from "./blocks/data-view-common";
+export { focusRescued } from "./components/focus-rescue";

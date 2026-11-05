@@ -13,6 +13,7 @@ export interface ButtonProps {
   title?: string;
   "aria-pressed"?: boolean;
   "aria-expanded"?: boolean;
+  "aria-haspopup"?: "dialog" | "listbox";
   "aria-label"?: string;
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
@@ -37,6 +38,7 @@ export function Button({
   title,
   "aria-pressed": pressed,
   "aria-expanded": expanded,
+  "aria-haspopup": hasPopup,
   "aria-label": label,
   "aria-invalid": invalid,
   "aria-describedby": describedBy,
@@ -52,6 +54,7 @@ export function Button({
       disabled={disabled}
       aria-pressed={pressed}
       aria-expanded={expanded}
+      aria-haspopup={hasPopup}
       aria-label={label}
       aria-invalid={invalid}
       aria-describedby={describedBy}

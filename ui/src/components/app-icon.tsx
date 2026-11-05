@@ -53,8 +53,8 @@ function serverContext(link: NonNullable<ReturnType<ShellStore["getSnapshot"]>>[
   return `${link.state === "connected" || link.state === "offline" ? "server" : link.state}:${link.server_url}`;
 }
 
-export const AppIcon = memo(function AppIcon({ store, appId, appVersion, size }: {
-  store: ShellStore; appId: string; appVersion: number; size: IconSize;
+export const AppIcon = memo(function AppIcon({ store, appId, appVersion, size, placeholder = "default" }: {
+  store: ShellStore; appId: string; appVersion: number; size: IconSize; placeholder?: "default" | "skeleton";
 }) {
   const icon = useShellSelector(store, (snapshot) => snapshot?.shared.app_versions.find((item) => item.app_id === appId && item.version === appVersion)?.definition.icon);
   const context = useShellSelector(store, (snapshot) => snapshot ? serverContext(snapshot.link) : "");
@@ -74,5 +74,6 @@ export const AppIcon = memo(function AppIcon({ store, appId, appVersion, size }:
     void request.then((image) => { if (active) setResult({ key, image }); }, () => { if (active) setResult({ key, image: null }); });
     return () => { active = false; };
   }, [store, key, appId, appVersion, icon]);
+  if (placeholder === "skeleton" && icon && result.key !== key) return <i aria-hidden="true" className="ks-icon-skeleton-icon" />;
   return result.key === key && result.image ? <IconImage image={result.image} size={size} /> : <LayoutGrid className="ks-app-icon" size={size} />;
 });
