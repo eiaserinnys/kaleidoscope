@@ -1,0 +1,6 @@
+/* 블록 창의 내용은 여러 스크롤 칸을 겹쳐 쓴다. 외곽선을 테두리 안에
+   그리면 칸 끝에서도 네 변이 보이고 내용 폭·높이·스크롤 범위는 바뀌지 않는다.
+   색, 두께, 모서리는 각 컴포넌트의 포커스 정본을 그대로 따른다. */
+:is(.ks-data-window, .ks-dialog) :is(:focus-visible, .ks-text-input:focus) {
+  outline-offset: calc(-1 * var(--ks-focus-width));
+}
