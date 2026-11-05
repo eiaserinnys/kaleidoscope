@@ -662,6 +662,7 @@ pub(super) fn scenario(
 
     // 녹화기는 중간에 실패한 단계가 있어도 종료하고 판정 근거를 저장한다.
     fs::write(out.join("record.stop"), b"").map_err(|error| error.to_string())?;
+    write_cover_trace(out)?;
     check!("5-flicker", { wait_for_recorder(out, log) });
     check!("6-focus", {
         if focus_results.len() != 7 || focus_results.iter().any(|(_, ok)| !ok) {

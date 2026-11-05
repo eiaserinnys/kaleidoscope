@@ -414,7 +414,9 @@ impl WebHost for TauriWebHost {
             .ok_or_else(errors::WEB_HOST_CAPTURE_MAIN_WINDOW_NOT_FOUND)?
             .scale_factor()
             .map_err(|error| with_detail(error, errors::WEB_HOST_CAPTURE_SCALE_FAILED()))?;
-        Ok(capture_view(view, "쉘")?.map(|bytes| (bytes, scale)))
+        let captured = capture_view(view, "쉘")?.map(|bytes| (bytes, scale));
+        crate::freeze_cover::trace("capture.shell");
+        Ok(captured)
     }
     fn freeze(&self) -> Result<bool, CoreError> {
         self.on_main(
@@ -440,9 +442,11 @@ impl WebHost for TauriWebHost {
             );
             return Err(with_detail(error, errors::WEB_HOST_FREEZE_FAILED()));
         }
+        crate::freeze_cover::trace("freeze.flushed");
         Ok(true)
     }
     fn unfreeze(&self) -> Result<(), CoreError> {
+        crate::freeze_cover::trace("unfreeze.called");
         let before = crate::freeze_cover::flush();
         let destroy = self.on_main(
             |_| {
@@ -452,6 +456,7 @@ impl WebHost for TauriWebHost {
             |_| errors::WEB_HOST_UNFREEZE_FAILED(),
         );
         let after = crate::freeze_cover::flush();
+        crate::freeze_cover::trace("unfreeze.flushed");
         before
             .and(destroy.map_err(|error| format!("{error:?}")))
             .and(after)

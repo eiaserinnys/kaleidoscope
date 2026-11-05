@@ -240,3 +240,101 @@ it("동시에 보낸 준비는 앞의 해제가 끝난 뒤 다음 고정을 시�
   const gates = operations.filter((op) => op === "share.freeze" || op === "share.unfreeze");
   expect(gates).toEqual(["share.freeze", "share.unfreeze", "share.freeze", "share.unfreeze"]);
 });
+
+async function isolateUntilCapture() {
+  layout();
+  vi.spyOn(visible, "describeVisible").mockReturnValue({ text: "가린 창", visual: true });
+  const operations: string[] = [];
+  const frames: FrameRequestCallback[] = [];
+  let manualFrames = false;
+  let captured!: () => void;
+  const capture = new Promise<void>((resolve) => { captured = resolve; });
+  const call = vi.fn(async (request: { op: string }) => {
+    operations.push(request.op);
+    if (request.op === "share.capture") {
+      // 캡처 뒤의 프레임과 시간은 시험이 직접 돌린다.
+      manualFrames = true;
+      // 프레임은 시험이 돌리므로 requestAnimationFrame은 가짜 시계에 맡기지 않는다.
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      captured();
+    }
+    return request.op === "share.freeze"
+      ? { op: "share.freeze", frozen: true } as const
+      : { op: request.op } as never;
+  });
+  const store = { call } as unknown as ShellStore;
+  function Probe() {
+    const root = useRef<HTMLDivElement>(null);
+    useShareView({ windowId: "target", root, enabled: true, store });
+    return <section className="ks-window" data-minimized="true"><div ref={root} /></section>;
+  }
+  render(<Probe />);
+  await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 10)); });
+  operations.length = 0;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    if (manualFrames) frames.push(callback);
+    else window.setTimeout(() => callback(performance.now()), 0);
+    return frames.length;
+  });
+  const pending = prepareShareForSend(store);
+  await capture;
+  await vi.advanceTimersByTimeAsync(0);
+  return { operations, frames, pending };
+}
+
+it("고정을 풀기 전에 격리를 푼 배치의 실제 프레임 세 번을 기다린다", async () => {
+  const { operations, frames, pending } = await isolateUntilCapture();
+  expect(document.documentElement.dataset.shareIsolating).toBeUndefined();
+  // 프레임마다 100ms 시한으로 넘어가던 옛 대기는 여기서 덮개를 걷었다.
+  await vi.advanceTimersByTimeAsync(300);
+  expect(operations).not.toContain("share.unfreeze");
+  for (let frame = 1; frame <= 3; frame++) {
+    expect(frames).toHaveLength(1);
+    expect(operations).not.toContain("share.unfreeze");
+    frames.shift()!(performance.now());
+    await vi.advanceTimersByTimeAsync(0);
+  }
+  await pending;
+  expect(operations.at(-1)).toBe("share.unfreeze");
+});
+
+it("프레임이 오지 않으면 1초 상한에서 고정을 푼다", async () => {
+  const { operations, pending } = await isolateUntilCapture();
+  await vi.advanceTimersByTimeAsync(999);
+  expect(operations).not.toContain("share.unfreeze");
+  await vi.advanceTimersByTimeAsync(1);
+  await pending;
+  expect(operations.at(-1)).toBe("share.unfreeze");
+});
+
+it("Element Timing이 있으면 복원 표식 항목이 온 뒤에 고정을 푼다", async () => {
+  const observers: Array<{ callback: PerformanceObserverCallback; disconnected: boolean }> = [];
+  class FakeObserver {
+    static supportedEntryTypes = ["element"];
+    private readonly entry: { callback: PerformanceObserverCallback; disconnected: boolean };
+    constructor(callback: PerformanceObserverCallback) { this.entry = { callback, disconnected: false }; observers.push(this.entry); }
+    observe() {}
+    disconnect() { this.entry.disconnected = true; }
+  }
+  vi.stubGlobal("PerformanceObserver", FakeObserver);
+  const { operations, frames, pending } = await isolateUntilCapture();
+  const marker = document.querySelector<HTMLElement>("[elementtiming^='ks-share-restore-']");
+  expect(marker?.textContent).toBe(".");
+  // 프레임 콜백이 몇 번 돌아도 표시 항목 전에는 풀지 않는다.
+  for (let frame = 0; frame < 5; frame++) {
+    frames.shift()?.(performance.now());
+    await vi.advanceTimersByTimeAsync(16);
+  }
+  const deliver = (identifier: string) => observers.at(-1)!.callback(
+    { getEntries: () => [{ identifier } as unknown as PerformanceEntry] } as PerformanceObserverEntryList,
+    {} as PerformanceObserver,
+  );
+  deliver("other-element");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(operations).not.toContain("share.unfreeze");
+  deliver(marker!.getAttribute("elementtiming")!);
+  await pending;
+  expect(operations.at(-1)).toBe("share.unfreeze");
+  expect(document.querySelector("[elementtiming^='ks-share-restore-']")).toBeNull();
+  expect(observers.at(-1)!.disconnected).toBe(true);
+});

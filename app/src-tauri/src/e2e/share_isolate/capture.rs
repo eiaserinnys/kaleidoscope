@@ -311,6 +311,65 @@ pub(super) fn cover_active(app: &AppHandle) -> Result<bool, String> {
         .map_err(|error| error.to_string())
 }
 
+/// 덮개 시점(QPC 밀리초)을 화면 기록과 맞춰 보도록 남긴다.
+pub(super) fn write_cover_trace(out: &Path) -> Result<(), String> {
+    let mut csv = String::from("label,qpc_ms\n");
+    for (label, ms) in crate::freeze_cover::take_trace() {
+        csv.push_str(&format!("{label},{ms:.3}\n"));
+    }
+    fs::write(out.join("cover-trace.csv"), csv).map_err(|error| error.to_string())
+}
+
+fn read_cover_trace(out: &Path) -> Vec<(String, f64)> {
+    let mut trace = fs::read_to_string(out.join("cover-trace.csv"))
+        .map(|content| {
+            content
+                .lines()
+                .skip(1)
+                .filter_map(|line| {
+                    let (label, ms) = line.split_once(',')?;
+                    Some((label.to_owned(), ms.parse::<f64>().ok()?))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    trace.sort_by(|a, b| a.1.total_cmp(&b.1));
+    trace
+}
+
+/// 바뀐 프레임을 찍기 직전과 찍는 순간에 덮개가 있었는지, 그 앞뒤 덮개 기록을 바뀐 프레임 기준 상대 시각으로 적는다.
+fn describe_cover(trace: &[(String, f64)], unchanged_end: f64, start: f64, end: f64) -> String {
+    let cover_at = |at: f64| {
+        if at.is_nan() {
+            return "unknown";
+        }
+        trace
+            .iter()
+            .filter(|(label, ms)| *ms <= at && label.starts_with("cover."))
+            .last()
+            .map_or("down", |(label, _)| {
+                if label == "cover.shown" {
+                    "up"
+                } else {
+                    "down"
+                }
+            })
+    };
+    let from = (if unchanged_end.is_nan() { start } else { unchanged_end }) - 1_000.0;
+    let nearby = trace
+        .iter()
+        .filter(|(_, ms)| *ms >= from && *ms <= end + 200.0)
+        .map(|(label, ms)| format!("{label}{:+.1}", ms - start))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "unchanged_until={:+.1}, cover_when_unchanged={}, cover_at_capture={}, cover_events_ms=[{nearby}]",
+        unchanged_end - start,
+        cover_at(unchanged_end),
+        cover_at(start)
+    )
+}
+
 pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String> {
     if let Ok(error) = fs::read_to_string(out.join("record.failure")) {
         let recorder_error = fs::read_to_string(out.join("recorder-error.txt")).unwrap_or_default();
@@ -366,11 +425,20 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
     let mut phase_peaks = BTreeMap::<String, (usize, usize, usize)>::new();
     let mut phase_elapsed = BTreeMap::<String, (f64, f64)>::new();
     let mut first_change = None;
+    let trace = read_cover_trace(out);
+    // 같은 단계의 앞 프레임이 보호 영역 변화 없이 끝난 시각. 단계 첫 프레임이면 기준 화면만 있어 비운다.
+    let mut last_in_phase = BTreeMap::<String, (usize, f64)>::new();
     for row in &rows {
         let columns = row.split(',').collect::<Vec<_>>();
-        if columns.len() != 8 {
+        if columns.len() != 10 {
             return Err(format!("invalid screen recorder row: {row}"));
         }
+        let capture_start = columns[8]
+            .parse::<f64>()
+            .map_err(|error| error.to_string())?;
+        let capture_end = columns[9]
+            .parse::<f64>()
+            .map_err(|error| error.to_string())?;
         let elapsed = columns[1]
             .parse::<f64>()
             .map_err(|error| error.to_string())?;
@@ -384,10 +452,18 @@ pub(super) fn wait_for_recorder(out: &Path, log: &mut File) -> Result<(), String
             .parse::<usize>()
             .map_err(|error| error.to_string())?;
         let phase = columns[6].to_owned();
+        let unchanged_end = last_in_phase
+            .get(&phase)
+            .filter(|(previous_protected, _)| *previous_protected == 0)
+            .map_or(f64::NAN, |(_, end)| *end);
+        last_in_phase.insert(phase.clone(), (protected, capture_end));
         if first_change.is_none() && protected > 0 && measured_phases.contains(&phase.as_str()) {
             first_change = Some(format!(
-                "phase={phase}, frame={}, ms={}, bbox={}",
-                columns[0], columns[1], columns[7]
+                "phase={phase}, frame={}, ms={}, bbox={}, {}",
+                columns[0],
+                columns[1],
+                columns[7],
+                describe_cover(&trace, unchanged_end, capture_start, capture_end)
             ));
         }
         phase_peaks
