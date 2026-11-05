@@ -101,6 +101,37 @@ fn loopback_ranges_origins_and_grant_changes() {
         .unwrap();
     assert_eq!(preflight.status(), 204);
     assert_eq!(preflight.headers()["access-control-allow-origin"], ORIGIN);
+    let response = client.post(&url).header("Origin", ORIGIN).send().unwrap();
+    assert_eq!(response.status(), 405);
+    assert_eq!(
+        response.json::<Value>().unwrap()["id"],
+        "MEDIA_STREAM_METHOD_UNSUPPORTED"
+    );
+    for (requested_method, requested_header) in [("POST", "range"), ("GET", "x-other")] {
+        let response = client
+            .request(reqwest::Method::OPTIONS, &url)
+            .header("Origin", ORIGIN)
+            .header("Access-Control-Request-Method", requested_method)
+            .header("Access-Control-Request-Headers", requested_header)
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 403);
+        assert_eq!(
+            response.json::<Value>().unwrap()["id"],
+            "MEDIA_STREAM_PREFLIGHT_REJECTED"
+        );
+    }
+    let response = client
+        .request(reqwest::Method::OPTIONS, &url)
+        .header("Origin", "https://other.test")
+        .header("Access-Control-Request-Method", "POST")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 403);
+    assert_eq!(
+        response.json::<Value>().unwrap()["id"],
+        "MEDIA_STREAM_ORIGIN_REJECTED"
+    );
     let get = |range: Option<&str>| {
         let request = client.get(&url).header("Origin", ORIGIN);
         if let Some(range) = range {

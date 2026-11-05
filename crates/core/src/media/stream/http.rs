@@ -131,8 +131,8 @@ pub(super) async fn serve(
     if !matches!(method, Method::GET | Method::HEAD | Method::OPTIONS) {
         return fail(
             &lease,
-            StatusCode::BAD_REQUEST,
-            errors::MEDIA_STREAM_RANGE_INVALID(),
+            StatusCode::METHOD_NOT_ALLOWED,
+            errors::MEDIA_STREAM_METHOD_UNSUPPORTED(&method),
         );
     }
     if let Err(error) = authorized(&inner, &lease) {
@@ -156,7 +156,15 @@ pub(super) async fn serve(
         {
             return rejected(
                 StatusCode::FORBIDDEN,
-                errors::MEDIA_STREAM_ORIGIN_REJECTED(),
+                errors::MEDIA_STREAM_PREFLIGHT_REJECTED(format!(
+                    "메서드 {}, 헤더 {}",
+                    requested.unwrap_or("(없음)"),
+                    if headers.is_empty() {
+                        "(없음)"
+                    } else {
+                        headers
+                    }
+                )),
             );
         }
         return Response::builder()

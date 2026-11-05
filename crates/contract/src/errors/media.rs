@@ -24,6 +24,16 @@ error_catalog! { ENTRIES;
         message: "이 페이지에는 폴더 미디어를 읽을 권한이 없습니다. 쉘의 재생 블록에서 열어 주세요.",
         fix: "쉘의 재생 블록에서 여세요"
     }
+    MEDIA_STREAM_METHOD_UNSUPPORTED(method) {
+        class: InvalidRequest, place: "미디어 전송 요청", cause: "받지 않는 HTTP 메서드다",
+        message: "이 재생 주소는 {method} 요청을 받지 않습니다. 쉘의 재생 블록에서 열어 주세요.",
+        fix: "쉘의 재생 블록에서 여세요"
+    }
+    MEDIA_STREAM_PREFLIGHT_REJECTED(detail) {
+        class: PermissionDenied, place: "미디어 전송 사전 요청", cause: "허용하지 않는 메서드나 헤더를 요청했다",
+        message: "이 재생 주소는 요청한 방식({detail})을 허용하지 않습니다. 쉘의 재생 블록에서 열어 주세요.",
+        fix: "쉘의 재생 블록에서 여세요"
+    }
     MEDIA_STREAM_HANDLE_INVALID() {
         class: NotFound, place: "미디어 재생 정보 조회", cause: "재생 정보가 없거나 해제됐다",
         message: "이 파일의 재생 주소가 만료되었습니다. 파일을 다시 열어 주세요.",
