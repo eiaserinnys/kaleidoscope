@@ -22,6 +22,7 @@ import { windowMenuEntries } from "./window-menu";
 export interface DesktopAreaProps {
   activeDesktopId: string;
   activeWorkspaceId: string;
+  launcherOpen: boolean;
   onAreaChange: (area: { width: number; height: number }) => void;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   onOpenApps: (anchor: HTMLElement) => void;
@@ -32,6 +33,7 @@ export interface DesktopAreaProps {
 export function DesktopArea({
   activeDesktopId,
   activeWorkspaceId,
+  launcherOpen,
   onAreaChange,
   onCall,
   onOpenApps,
@@ -61,6 +63,7 @@ export function DesktopArea({
         activeWorkspaceId={activeWorkspaceId}
         area={area}
         desktopId={desktop.id}
+        launcherOpen={launcherOpen}
         getNewWindowRect={getNewWindowRect}
         key={desktop.id}
         onCall={onCall}
@@ -78,6 +81,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   activeDesktopId,
   activeWorkspaceId,
   area,
+  launcherOpen,
   onCall,
   onOpenApps,
   setWindowMenu,
@@ -88,6 +92,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   activeDesktopId: string;
   activeWorkspaceId: string;
   area: { width: number; height: number };
+  launcherOpen: boolean;
   onCall: DesktopAreaProps["onCall"];
   onOpenApps: DesktopAreaProps["onOpenApps"];
   setWindowMenu: (menu: { anchor: HTMLElement; entries: MenuEntry[] } | null) => void;
@@ -122,7 +127,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   return <section aria-hidden={!active} className="ks-desktop-canvas" hidden={!active}>
     {windows.length === 0 ? (
       <EmptyState
-        action={<Button ref={setEmptyTrigger} onClick={(event) => onOpenApps(event.currentTarget)}>앱 열기</Button>}
+        action={<Button ref={setEmptyTrigger} aria-haspopup="dialog" aria-expanded={launcherOpen} onClick={(event) => onOpenApps(event.currentTarget)}>앱 열기</Button>}
         icon={<LayoutGrid size="empty" />}
       />
     ) : windows.map((appWindow) => <DesktopWindow

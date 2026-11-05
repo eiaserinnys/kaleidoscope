@@ -192,7 +192,7 @@ describe("shell core events", () => {
     const calls = vi.spyOn(transport, "call");
     const store = createShellStore(transport);
     const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
-      return this.classList.contains("ks-icon-grid") ? 428 : 960;
+      return this.classList.contains("ks-icon-grid") ? 392 : 960;
     });
     render(<Shell store={store} />);
     await store.ready;
@@ -207,8 +207,8 @@ describe("shell core events", () => {
     fireEvent.keyDown(tiles[1], { key: "ArrowDown" });
     expect(document.activeElement).toBe(tiles[4]);
     fireEvent.keyDown(tiles[4], { key: "ArrowDown" });
-    expect(document.activeElement).toBe(tiles[5]);
-    fireEvent.keyDown(tiles[5], { key: "ArrowUp" });
+    expect(document.activeElement).toBe(tiles[6]);
+    fireEvent.keyDown(tiles[6], { key: "ArrowUp" });
     expect(document.activeElement).toBe(tiles[4]);
     fireEvent.keyDown(tiles[4], { key: "End" });
     expect(document.activeElement).toBe(tiles[7]);
@@ -236,14 +236,54 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
     const trigger = within(document.querySelector(".ks-desktop-area") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(within(screen.getByRole("dialog", { name: "앱 열기" })).getByRole("button", { name: "계산기" })).toBeTruthy();
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, apps: [] } } });
     await waitFor(() => expect(within(screen.getByRole("dialog", { name: "앱 열기" })).getByText("앱 없음")).toBeTruthy());
     expect(document.activeElement).toBe(screen.getByRole("dialog", { name: "앱 열기" }));
     fireEvent.keyDown(screen.getByRole("dialog", { name: "앱 열기" }), { key: "Escape" });
     expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
     store.dispose();
+  });
+
+  it("남은 공간이 큰 쪽에 패널을 열고 창 크기 변경 때 다시 고른다", async () => {
+    const snapshot = makeTestSnapshot({ definitions: [calculatorJson] as AppDefinition[] });
+    snapshot.shared.windows = [];
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />);
+    await store.ready;
+    const trigger = within(document.querySelector(".ks-desktop-area") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    const bar = document.querySelector<HTMLElement>(".ks-shell-bar")!;
+    trigger.style.setProperty("--ks-space-3", "12px");
+    let anchorTop = 478;
+    const anchorRect = vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => new DOMRect(500, anchorTop, 66, 32));
+    const barRect = vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 1440, 49));
+    const surfaceRect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("ks-app-launcher") ? new DOMRect(0, 0, 410, 300) : new DOMRect();
+    });
+    const previousHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: 900 });
+    try {
+      fireEvent.click(trigger);
+      const panel = screen.getByRole("dialog", { name: "앱 열기" });
+      await waitFor(() => expect(panel.style.maxHeight).toContain("417px"));
+      await waitFor(() => expect(panel.style.top).toBe("178px"));
+      anchorTop = 240;
+      window.innerHeight = 600;
+      fireEvent(window, new Event("resize"));
+      await waitFor(() => expect(panel.style.maxHeight).toContain("316px"));
+      await waitFor(() => expect(panel.style.top).toBe("272px"));
+    } finally {
+      surfaceRect.mockRestore();
+      anchorRect.mockRestore();
+      barRect.mockRestore();
+      Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: previousHeight });
+      store.dispose();
+    }
   });
 
   it("빈 데스크톱에서 앱을 열어 단추가 사라지면 우상단 단추에 초점을 보존한다", async () => {

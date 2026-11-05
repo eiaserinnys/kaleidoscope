@@ -401,6 +401,7 @@ export function Shell({ store }: { store: ShellStore }) {
         key={snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state}
         activeDesktopId={activeDesktop.id}
         activeWorkspaceId={activeWorkspace.id}
+        launcherOpen={launcherAnchor !== null}
         onAreaChange={reportArea}
         onCall={runCommand}
         onOpenApps={openAppMenu}

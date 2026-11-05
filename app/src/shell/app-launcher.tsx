@@ -16,8 +16,15 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
   const grid = useRef<HTMLDivElement>(null);
   const tiles = useRef<Array<HTMLButtonElement | null>>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [space, setSpace] = useState(() => availableSpace(anchor));
+  useLayoutEffect(() => {
+    const measure = () => setSpace(availableSpace(anchor));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [anchor]);
   const columns = useIconGridColumns(grid, !!apps?.length);
-  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true });
+  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true, preferAbove: space.preferAbove });
   const { groups, all } = useMemo(() => {
     const builtins = new Set<string>(BUILTIN_APP_IDS);
     const sorted = (apps ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
@@ -99,7 +106,7 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
   let offset = 0;
   return createPortal(<div
     aria-label="앱 열기" className="ks-anchored-overlay ks-app-launcher" data-ks-overlay
-    onKeyDown={keyDown} ref={panel} role="dialog" style={position} tabIndex={-1}
+    onKeyDown={keyDown} ref={panel} role="dialog" style={{ ...position, maxHeight: `min(calc(var(--ks-pane-min-size) * 3), ${space.height}px)` }} tabIndex={-1}
   >
     {groups.length ? groups.map((group, groupIndex) => {
       const start = offset;
@@ -118,4 +125,14 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
       </div>;
     }) : <EmptyState icon={<LayoutGrid size="empty" />} text="앱 없음" />}
   </div>, document.body);
+}
+
+function availableSpace(anchor: HTMLElement) {
+  const rect = anchor.getBoundingClientRect();
+  const barBottom = document.querySelector(".ks-shell-bar")?.getBoundingClientRect().bottom ?? 0;
+  const inset = Number.parseFloat(getComputedStyle(anchor).getPropertyValue("--ks-space-3")) || 0;
+  const below = window.innerHeight - rect.bottom - inset;
+  const above = rect.top - barBottom - inset;
+  const preferAbove = above > below;
+  return { preferAbove, height: preferAbove ? above : below };
 }
