@@ -200,7 +200,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await captureThemePair("small-window-empty-path-960");
   await expect(editorWindow.getByText("폴더를 먼저 선택하세요")).toHaveCount(0);
   await expect(editorWindow.getByText("파일을 선택하세요")).toHaveCount(0);
-  const blockButtonHeight = await editorWindow.locator(".ks-button").evaluate((element) => element.getBoundingClientRect().height);
+  const blockButtonHeight = await editorWindow.locator(".ks-button").first().evaluate((element) => element.getBoundingClientRect().height);
   expect(blockButtonHeight).toBe(32);
   measurements.blockButtonHeight = blockButtonHeight;
 
@@ -286,6 +286,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.shrinkAfterViewportResize = { titleBeforeRelease, titleAfterRelease };
   await captureThemePair("viewport-shrink-release-960");
 
+  await editorWindow.getByRole("tab", { name: "내 폴더" }).click();
   await editorWindow.getByRole("button", { name: "문서 폴더 고르기" }).click();
   await editorWindow.getByRole("button", { name: "a.md" }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
