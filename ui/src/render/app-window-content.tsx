@@ -9,6 +9,7 @@ import type { CoreError, Rect } from "../contract/contract";
 import { useShellSelector } from "../core/shell-store";
 import { registerAppShortcuts } from "../runtime/shortcuts";
 import { focusRescued, writableControlSelector } from "../components/focus-rescue";
+import { revealStackControl } from "./focus-scroll";
 import { renderBlock } from "./render-block";
 import * as shellErrors from "../contract/shell-errors";
 
@@ -97,14 +98,27 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     let inContent = false;
     let restore = false;
     let pointer = false;
+    let focusFrame = 0;
+    let tabMove = false;
     const visibleControls = (within: ParentNode) => Array.from(within.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
       .filter((element) => element.tabIndex >= 0 && !element.closest("[hidden], [inert], [aria-hidden='true']")
         && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
-    const onPointer = () => { pointer = true; };
-    const onKey = () => { pointer = false; };
+    const onPointer = () => { pointer = true; tabMove = false; };
+    const onKey = (event: KeyboardEvent) => {
+      pointer = false;
+      tabMove = event.key === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey;
+    };
+    const onKeyUp = () => { tabMove = false; };
     const onFocus = (event: FocusEvent) => {
+      const fromTab = tabMove;
+      tabMove = false;
       const target = event.target;
       if (!(target instanceof HTMLElement) || target.classList.contains("ks-window-content")) return;
+      cancelAnimationFrame(focusFrame);
+      // 브라우저의 커서 스크롤이 끝난 다음, Tab으로 옮긴 입력 상자를 온전히 보인다.
+      if (fromTab && content.contains(target)) focusFrame = requestAnimationFrame(() => {
+        if (document.activeElement === target) revealStackControl(target);
+      });
       focused = target;
       focusedRemove = target.classList.contains("ks-list-remove");
       inContent = content.contains(target);
@@ -191,11 +205,14 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     scope.addEventListener("focusin", onFocus);
     scope.addEventListener("pointerdown", onPointer, true);
     scope.addEventListener("keydown", onKey, true);
+    document.addEventListener("keyup", onKeyUp, true);
     observer.observe(scope, { childList: true, subtree: true });
     return () => {
+      cancelAnimationFrame(focusFrame);
       scope.removeEventListener("focusin", onFocus);
       scope.removeEventListener("pointerdown", onPointer, true);
       scope.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("keyup", onKeyUp, true);
       observer.disconnect();
     };
   }, [data]);
