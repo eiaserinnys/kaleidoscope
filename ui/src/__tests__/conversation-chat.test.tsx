@@ -398,6 +398,61 @@ describe("대화 제공자 화면", () => {
 });
 
 describe("공용 대화 부품", () => {
+  it("자리 표시를 거쳐 다른 기록을 불러오면 바닥을 따라간다", () => {
+    const followTail = { current: false };
+    const snapshot = makeTestSnapshot({ definitions: [definition] });
+    const store = {
+      getSnapshot: () => snapshot, subscribe: () => () => {}, subscribeEvents: () => () => {},
+      call: vi.fn(async (request: CoreRequest) => request.op === "data.attach"
+        ? { op: "data.attach", view: { values: {}, sources: {} } }
+        : { op: "data.detach" }),
+    } as unknown as ShellStore;
+    const windowId = snapshot.shared.windows[0].id;
+    const props = {
+      items: [item("old", "이전 기록")], pending: null, delta: "", busy: false, tool: null,
+      historyRef: createRef<HTMLDivElement>(), followTail,
+      renderAttachment: () => null, renderPendingAttachment: () => null,
+    };
+    const wrap = (state: Exclude<BindingValue, { status: "ready" }> | null, items = props.items) => <WindowDataProvider store={store} windowId={windowId} definition={definition}>
+      <ChatHistory {...props} items={items} state={state} />
+    </WindowDataProvider>;
+    const { rerender } = render(wrap(null));
+    rerender(wrap({ status: "loading" }));
+    expect(followTail.current).toBe(true);
+    rerender(wrap(null, [item("new", "새 기록")]));
+    expect(followTail.current).toBe(true);
+  });
+
+  it("자리 표시 없이 기록 전체가 바뀌면 바닥으로 이동한다", () => {
+    const followTail = { current: false };
+    const historyRef = createRef<HTMLDivElement>();
+    const props = {
+      items: [item("old", "이전 기록")], pending: null, delta: "", busy: false, tool: null,
+      historyRef, followTail, renderAttachment: () => null, renderPendingAttachment: () => null,
+    };
+    const { rerender } = render(<ChatHistory {...props} />);
+    Object.defineProperty(historyRef.current!, "scrollHeight", { configurable: true, value: 1000 });
+    rerender(<ChatHistory {...props} items={[item("new", "새 기록")]} />);
+    expect(followTail.current).toBe(true);
+    expect(historyRef.current!.scrollTop).toBe(1000);
+  });
+
+  it("기록 앞이나 뒤에 항목이 붙으면 읽던 자리를 유지한다", () => {
+    const followTail = { current: false };
+    const original = item("original", "읽던 기록");
+    const props = {
+      items: [original], pending: null, delta: "", busy: false, tool: null,
+      historyRef: createRef<HTMLDivElement>(), followTail,
+      renderAttachment: () => null, renderPendingAttachment: () => null,
+    };
+    const { rerender } = render(<ChatHistory {...props} />);
+    const appended = [original, item("later", "새 답변")];
+    rerender(<ChatHistory {...props} items={appended} />);
+    expect(followTail.current).toBe(false);
+    rerender(<ChatHistory {...props} items={[item("older", "옛 기록"), ...appended]} />);
+    expect(followTail.current).toBe(false);
+  });
+
   it("생각 중은 줄 선 말과 넘어가기 전 말 뒤에 놓는다", () => {
     render(<ChatHistory items={[]} pending={{ text: "새 말", attachments: [], afterResponse: true }} delta="" busy tool={null}
       historyRef={createRef<HTMLDivElement>()} followTail={{ current: true }}
