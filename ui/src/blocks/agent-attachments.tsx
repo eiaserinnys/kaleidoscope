@@ -48,13 +48,13 @@ function AttachmentImage({ src, name, className, onPreview }: { src: string; nam
   }}><img src={src} alt="" /></button>;
 }
 
-export function DraftChip({ attachment, onRemove, onPreview }: { attachment: DraftAttachment; onRemove: () => void; onPreview: OpenPreview }) {
+export function DraftChip({ attachment, onRemove, onPreview, disabled = false }: { attachment: DraftAttachment; onRemove: () => void; onPreview: OpenPreview; disabled?: boolean }) {
   const url = useFileUrl(attachment.file);
-  return <AttachmentChip name={attachment.name} removeLabel={`${attachment.name} 빼기`} onRemove={onRemove} preview={url ? <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-chip-preview" onPreview={onPreview} /> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>} />;
+  return <AttachmentChip name={attachment.name} removeLabel={`${attachment.name} 빼기`} onRemove={onRemove} disabled={disabled} preview={url ? <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-chip-preview" onPreview={onPreview} /> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>} />;
 }
 
-export function AttachmentChip({ name, preview, removeLabel, onRemove }: { name: string; preview: ReactNode; removeLabel: string; onRemove: () => void }) {
-  return <div className="ks-agent-attachment-chip" role="listitem">{preview}<span className="ks-agent-attachment-name" title={name}>{name}</span><IconButton aria-label={removeLabel} onClick={onRemove}><X /></IconButton></div>;
+export function AttachmentChip({ name, preview, removeLabel, onRemove, disabled = false }: { name: string; preview: ReactNode; removeLabel: string; onRemove: () => void; disabled?: boolean }) {
+  return <div className="ks-agent-attachment-chip" role="listitem">{preview}<span className="ks-agent-attachment-name" title={name}>{name}</span><IconButton aria-label={removeLabel} disabled={disabled} onClick={onRemove}><X /></IconButton></div>;
 }
 
 export function PendingAttachment({ attachment, onPreview }: { attachment: DraftAttachment; onPreview: OpenPreview }) {

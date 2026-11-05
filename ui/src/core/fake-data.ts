@@ -69,6 +69,7 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
     case "input": add("min", block.min); add("max", block.max); add("step", block.step); add("focus", block.focus); add("options", block.options); break;
     case "progress": add("value", block.value); add("label", block.label); break;
     case "button": add("disabled", block.disabled); add("confirm/body", block.confirm?.body); break;
+    case "chat": add("loading", block.loading); break;
     case "image": case "media": add("src", block.src); break;
     case "metrics": add("items", block.items); break;
     case "button_grid": add("buttons", block.buttons); break;

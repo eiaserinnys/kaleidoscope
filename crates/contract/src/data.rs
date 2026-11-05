@@ -2045,7 +2045,11 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
         }
         Block::Image { src, .. } | Block::Media { src, .. } => bind!("src", src),
-        Block::Chat { .. } => {}
+        Block::Chat { loading, .. } => {
+            if let Some(value) = loading {
+                bind!("loading", value);
+            }
+        }
         Block::HtmlView {
             value: Some(value), ..
         } => bind!("value", value),

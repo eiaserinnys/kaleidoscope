@@ -307,6 +307,10 @@ item_menu?: Array<ItemMenuEntry>, } | { "type": "folder", root: FolderRoot,
  */
 header?: boolean, extensions?: Array<string>, selected?: StateRef, on_select?: Actions, read_only?: boolean, } | { "type": "markdown", file?: FileRef, document?: DocumentRef, value?: Binding, read_only?: boolean, } | { "type": "html_view", document?: DocumentRef, file?: FileRef, value?: Binding, selected_doc?: StateRef, on_select_doc?: SetState, selected_revision?: StateRef, on_select_revision?: SetState, } | { "type": "chat", 
 /**
+ * (블록 세트 38판) true면 기록만 뼈대로 표시하고 입력을 잠근다. 생략하면 false다.
+ */
+loading?: Binding, 
+/**
  * (블록 세트 18판) 대화 기록과 입력을 클라이언트 채널 및 동작에 연결한다.
  */
 client?: ChatClient, 

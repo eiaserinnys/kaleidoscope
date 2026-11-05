@@ -843,6 +843,62 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("client chat 로딩은 입력과 첨부를 보존하고 다른 창과 블록을 다시 그리지 않는다", async () => {
+    const definition: AppDefinition = {
+      ...clientChatDefinition,
+      requires: { blocks: 38, modules: { assets: 1, client: 4 } },
+      client: { ...clientChatDefinition.client!, outputs: { switching: { default: false } } },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "chat", loading: { client: "switching" }, client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" }, footer: { type: "button", label: "승인", on_click: [{ client: "send" }] } },
+        { type: "text", value: "다른 블록" },
+      ] },
+    };
+    const snapshot = testSnapshot([definition], {});
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    await store.ready;
+    const first = snapshot.shared.windows[0]!;
+    const second = snapshot.shared.windows[1]!;
+    const contextFor = (window: typeof first): BlockContext => ({ store, window, definition });
+    let dataA: WindowData | null = null;
+    function Capture() {
+      const data = useWindowData();
+      useEffect(() => { dataA = data; }, [data]);
+      return null;
+    }
+    render(<>
+      <WindowDataProvider store={store} windowId={first.id} definition={definition}><Capture />{renderBlockModule.renderBlock(definition.ui, contextFor(first))}</WindowDataProvider>
+      <WindowDataProvider store={store} windowId={second.id} definition={definition}>{renderBlockModule.renderBlock(definition.ui, contextFor(second))}</WindowDataProvider>
+    </>);
+    await waitFor(() => expect(dataA).toBeTruthy());
+    await act(async () => {
+      dataA!.publishClientChat("thread", { kind: "snapshot", items: [], stream_id: null, text: "", busy: true, tool: null, queued: [] });
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    const input = screen.getAllByRole("textbox", { name: "메시지" })[0] as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "남길 초안" } });
+    const fileInput = input.parentElement!.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [new File(["내용"], "초안.txt", { type: "text/plain" })] } });
+    const request = vi.spyOn(dataA!, "requestClientAction").mockResolvedValue(undefined);
+    calls.length = 0;
+    await act(async () => dataA!.publishClient({ switching: true }));
+    expect(screen.getAllByLabelText("메시지")[0]).toBe(input);
+    expect(input.disabled).toBe(true);
+    expect(screen.getAllByLabelText("불러오는 중").length).toBeGreaterThan(0);
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getAllByLabelText("파일 첨부")[0]!);
+    fireEvent.click(screen.getAllByLabelText("멈춤")[0]!);
+    expect(request).not.toHaveBeenCalled();
+    expect(screen.queryByText("승인")).toBeNull();
+    expect(countFor(second.id)).toBe(0);
+    expect(calls.filter((call) => call.windowId === first.id && call.pointer === "/ui/children/1")).toHaveLength(0);
+    await act(async () => dataA!.publishClient({ switching: false }));
+    expect(screen.getAllByLabelText("메시지")[0]).toBe(input);
+    expect(input.value).toBe("남길 초안");
+    expect(screen.getByText("초안.txt")).toBeTruthy();
+    store.dispose();
+  });
+
   it("클라이언트 채팅 글 조각 10개와 100개는 다시 그리는 횟수가 비례하지 않는다", async () => {
     calls.length = 0;
     const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;

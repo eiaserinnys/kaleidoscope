@@ -105,7 +105,7 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
     case "chat":
       return normalized.client
         ? <ClientChatBlock block={normalized as ClientChatBlockData} context={context} pointer={pointer} />
-        : <AgentChatBlock block={normalized as AgentChatBlockData} context={context} />;
+        : <AgentChatBlock block={normalized as AgentChatBlockData} context={context} pointer={pointer} />;
     case "stack": return <StackBlock block={normalized} context={context} pointer={pointer} />;
     case "tabs": return <TabsBlock block={normalized} context={context} pointer={pointer} />;
     case "toolbar": return <ToolbarBlock block={normalized} context={context} pointer={pointer} />;

@@ -7,7 +7,7 @@ import { HistoryAttachmentView } from "../blocks/agent-attachments";
 import { AgentChatBlock, modelAvailabilityDescription } from "../blocks/agent-chat";
 import { Select } from "../components/select-toggle";
 import { WindowDataProvider } from "../data/window-data";
-import type { AppDefinition, CoreError, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread, ShellSnapshot } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, CoreError, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread, ShellSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSnapshot } from "./fixtures";
@@ -38,7 +38,7 @@ const models = [
   { id: "m2", label: "모델 2", available: true, group: { id: "node-b", label: "노드 B" } },
 ];
 const profiles = [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }];
-function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinition: AppDefinition = definition) {
+function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinition: AppDefinition = definition, initialLoading: Binding = false) {
   const snapshot = makeTestSnapshot({ definitions: [appDefinition] });
   snapshot.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
   const listeners = new Set<(event: CoreEvent) => void>();
@@ -58,10 +58,11 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
   const store = { call, getSnapshot: () => currentSnapshot, getError: () => null, subscribe: (fn: () => void) => { snapshotListeners.add(fn); return () => snapshotListeners.delete(fn); }, subscribeEvents: (fn: (event: CoreEvent) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, ready: Promise.resolve(), dispose: unsubscribeTransport } as unknown as ShellStore;
   const window = snapshot.shared.windows[0];
   const context = { store, window: { id: window.id, app_id: window.app_id, app_version: window.app_version, desktop_id: window.desktop_id }, definition: appDefinition };
-  render(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat" }} context={context} /></WindowDataProvider>);
+  const view = render(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat", loading: initialLoading }} context={context} pointer="/ui" /></WindowDataProvider>);
   return {
     call,
     window,
+    setLoading: (loading: boolean) => view.rerender(<WindowDataProvider store={store} windowId={window.id} definition={appDefinition}><AgentChatBlock block={{ type: "chat", loading }} context={context} pointer="/ui" /></WindowDataProvider>),
     emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }),
     updateSnapshot: () => {
       const nextSnapshot = structuredClone(snapshot);
@@ -94,6 +95,43 @@ async function setupMarkdownRenderCounter() {
 }
 
 describe("대화 제공자 화면", () => {
+  it("불러오는 동안 기록만 뼈대로 바꾸고 입력과 초안을 유지한다", async () => {
+    const state = setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    const input = screen.getByRole("textbox", { name: "메시지" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "남길 초안" } });
+    state.setLoading(true);
+    expect(screen.getByLabelText("불러오는 중")).toBeTruthy();
+    expect(screen.queryByText("기록")).toBeNull();
+    expect(screen.getByLabelText("메시지")).toBe(input);
+    expect(input.disabled).toBe(true);
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.click(screen.getByLabelText("파일 첨부"));
+    expect(state.call.mock.calls.filter(([request]) => request.op === "conversation.send")).toHaveLength(0);
+    state.setLoading(false);
+    expect(screen.getByLabelText("메시지")).toBe(input);
+    expect(input.value).toBe("남길 초안");
+    expect(screen.getByText("기록")).toBeTruthy();
+  });
+  it("loading 바인딩 오류와 로그인 필요를 기록 칸에 보이고 입력을 잠근다", async () => {
+    const binding: Binding = { expr: "$data.loading" };
+    const state = setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })(), definition, binding);
+    const update = (value: BindingValue) => state.emit({ event: "data.update", window_id: state.window.id, view: { sources: {}, values: { "/ui/loading": value } } });
+    update({ status: "ready", value: "true" });
+    await screen.findByText("기록");
+    const input = screen.getByLabelText("메시지") as HTMLTextAreaElement;
+    expect(input.disabled).toBe(false);
+    update({ status: "failed", message: "불러오기 실패", retry: [] });
+    expect(await screen.findByText("불러오기 실패")).toBeTruthy();
+    expect(input.disabled).toBe(true);
+    expect(screen.getByLabelText("메시지")).toBe(input);
+    update({ status: "login_required", permission: "login" });
+    expect(await screen.findByText("로그인이 필요합니다")).toBeTruthy();
+    expect(input.disabled).toBe(true);
+    update({ status: "ready", value: false });
+    expect(await screen.findByText("기록")).toBeTruthy();
+    expect(input.disabled).toBe(false);
+  });
   it("입력 한 글자는 이미 표시한 대화를 다시 파싱하지 않는다", async () => {
     await setupMarkdownRenderCounter();
     fireEvent.change(await screen.findByRole("textbox", { name: "메시지" }), { target: { value: "가" } });

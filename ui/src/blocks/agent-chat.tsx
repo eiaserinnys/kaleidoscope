@@ -7,6 +7,7 @@ import { MessageSquare } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
 import { useShellSelector } from "../core/shell-store";
+import { useBinding } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
 import { prepareShareForSend } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
@@ -21,7 +22,8 @@ import * as shellErrors from "../contract/shell-errors";
 
 export type AgentChatBlockData = Extract<Block, { type: "chat" }>;
 
-export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlockData; context: BlockContext }) {
+export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBlockData; context: BlockContext; pointer: string }) {
+  const loadingBinding = useBinding(`${pointer}/loading`, block.loading ?? false);
   const provider = context.definition.agent;
   const windowId = context.window.id;
   const hasProvider = Boolean(provider);
@@ -42,6 +44,9 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
   const [selectedProfile, setSelectedProfile] = useState("");
   const [selectedPreset, setSelectedPreset] = useState("");
   const [loading, setLoading] = useState(true);
+  const historyState = loadingBinding.status !== "ready" ? loadingBinding
+    : loadingBinding.value === true || loading ? { status: "loading" as const } : null;
+  const inputDisabled = historyState !== null;
   const [loginRequired, setLoginRequired] = useState(false);
   const [bindingConflict, setBindingConflict] = useState<CoreError | null>(null);
   const [nextBefore, setNextBefore] = useState<string | undefined>();
@@ -387,7 +392,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     const submittedDraft = draft;
     const text = submittedDraft.trim();
     const submittedAttachments = attachments;
-    if ((!text && submittedAttachments.length === 0) || sending) return;
+    if (inputDisabled || (!text && submittedAttachments.length === 0) || sending) return;
     const retry = retryDraft.current;
     const requestId = retry && !retry.failed && retry.text === text && retry.attachments.length === submittedAttachments.length && retry.attachments.every((item, index) => item.id === submittedAttachments[index].id) ? retry.id : crypto.randomUUID();
     followTail.current = true;
@@ -420,7 +425,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
     return <div className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="서버에 연결하면 대화할 수 있습니다" /></div>;
   }
   if (!workspaceId) return null;
-  if (loading) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
+  if (loading && !agent) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
   if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { restoreFocus.current = true; void load(); }} />;
   if (bindingConflict) return <div className="ks-agent-chat-state"><Notice role="alert" errorId={bindingConflict.id}>{bindingConflict.message}</Notice></div>;
   if (loadError) {
@@ -459,6 +464,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         onReachTop={() => { if (hasProvider && nextBefore) loadOlder(); }}
         renderAttachment={renderAttachment}
         renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setPreview} />}
+        state={historyState}
       />
       <ChatComposer
         draft={draft}
@@ -467,7 +473,7 @@ export function AgentChatBlock({ block: _block, context }: { block: AgentChatBlo
         attachments={attachments}
         onAttachmentsChange={setAttachments}
         onSend={(returnFocus) => { void send(returnFocus); }}
-        disabled={false}
+        disabled={inputDisabled}
         busy={sending}
         sharedWindows={sharedWindows}
         onRemoveShared={(id) => { void context.store.call({ op: "share.set", window_id: id, on: false }); }}

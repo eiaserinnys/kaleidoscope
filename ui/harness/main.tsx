@@ -50,18 +50,22 @@ installShellDragGuard();
 const htmlReport = htmlReportJson as AppDefinition;
 const workspacePas = workspacePasJson as unknown as AppDefinition;
 const clientChatScriptUrl = URL.createObjectURL(new Blob([clientChatSource], { type: "text/javascript" }));
+const chatStateMode = new URLSearchParams(window.location.search).get("chat_state");
 const clientChatApp = {
   id: "client-chat-test", name: "클라이언트 채팅 시험",
-  requires: { blocks: 18, modules: { assets: 1, client: 4 } },
+  requires: { blocks: 38, modules: { assets: 1, client: 4 } },
   permissions: [], state: {},
+  ...(chatStateMode === "failed" || chatStateMode === "login"
+    ? { sources: { chat_status: { kind: "request", permission: "chat-connection", path: "/chat-status" } } }
+    : {}),
   assets: [{ id: "client-chat-fixture", version: 1 }, { id: "client-chat-image", version: 1 }],
   client: {
     runtime: "javascript", entry: { id: "client-chat-fixture", version: 1 }, inputs: {},
-    outputs: { footer: { default: "도구 승인 기본값" } }, channels: ["thread"],
+    outputs: { footer: { default: "도구 승인 기본값" }, switching: { default: false } }, channels: ["thread"],
     actions: ["send", "cancel", "attachment"], commands: {}, state_keys: [], storage_entries: [],
   },
   ui: {
-    type: "chat", client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" },
+    type: "chat", loading: chatStateMode === "failed" || chatStateMode === "login" ? { expr: "$data.chat_status" } : { client: "switching" }, client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" },
     footer: { type: "text", value: { client: "footer" }, style: "body" },
   },
 } as unknown as AppDefinition;
@@ -244,7 +248,7 @@ const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["rea
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
-  data: { sources: { ...pagingSeeds, date_bounds: { value: { min: "2026-11-19", max: "2026-11-25" }, delayMs: Number(params.get("bounds-delay")) || 1500 }, pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, slow_options: { value: ["첫째", "둘째"], delayMs: Number(params.get("options-delay")) || 1500 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
+  data: { sources: { ...pagingSeeds, chat_status: chatStateMode === "login" ? { login: "chat-connection" } : { error: "대화 상태를 받지 못했습니다" }, date_bounds: { value: { min: "2026-11-19", max: "2026-11-25" }, delayMs: Number(params.get("bounds-delay")) || 1500 }, pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000 }, slow_options: { value: ["첫째", "둘째"], delayMs: Number(params.get("options-delay")) || 1500 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne,
     ...Object.fromEntries([
       "<rect x='5' y='3' width='14' height='18' rx='2'/><path d='M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15v2M8 18h2M12 18h2'/>",
@@ -330,6 +334,7 @@ if (!coreUrl) {
     // 성능 측정기가 주기마다 보내는 profiler.report는 사용자 조작과 무관해 세지 않는다.
     coreCalls: () => fakeTransport.getCalls().filter((call) => call.op !== "profiler.report").length,
     control: (type: string) => document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")?.contentWindow?.postMessage({ type }, "*"),
+    setLoading: (value: boolean) => clientChatWindowData?.publishClient({ switching: value }),
     pauseNextSnapshot: () => { holdClientChatSnapshot = true; },
     restartClient: async () => { await clientChatWindowData?.restartClient(); },
     clientGeneration: () => clientChatWindowData?.getClientGeneration() ?? 0,

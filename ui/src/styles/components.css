@@ -40,7 +40,8 @@
 }
 
 .ks-button:disabled,
-.ks-icon-button:disabled {
+.ks-icon-button:disabled,
+.ks-agent-chat-input:disabled {
   opacity: 0.56;
 }
 

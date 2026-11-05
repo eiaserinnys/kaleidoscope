@@ -25,6 +25,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const addAttachments = (newAttachments: DraftAttachment[]) => {
+    if (disabled) return;
     onError(null);
     const accepted = [...attachments];
     let total = accepted.reduce((sum, item) => sum + item.file.size, 0);
@@ -39,6 +40,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
   };
 
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) return;
     const data = event.clipboardData;
     const files = Array.from(data.files);
     const pasted = files.length ? files : Array.from(data.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null);
@@ -49,6 +51,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
   };
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) return;
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     event.preventDefault();
     onSend();
@@ -56,19 +59,19 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
 
   return <div className="ks-agent-chat-input-area">
     {error ? <Notice role="alert" errorId={error.id}>{error.message}</Notice> : null}
-    {sharedWindows.length ? <div className="ks-agent-attachment-list" role="list">{sharedWindows.map(({ id, name }) => <AttachmentChip key={id} name={name} preview={<span className="ks-agent-attachment-chip-preview ks-share-chip-icon"><ScreenShare /></span>} removeLabel={`${name} 같이 보기 끄기`} onRemove={() => onRemoveShared(id)} />)}</div> : null}
-    {attachments.length ? <div className="ks-agent-attachment-list" role="list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={onPreview} onRemove={() => onAttachmentsChange(attachments.filter((item) => item.id !== attachment.id))} />)}</div> : null}
+    {sharedWindows.length ? <div className="ks-agent-attachment-list" role="list">{sharedWindows.map(({ id, name }) => <AttachmentChip key={id} name={name} preview={<span className="ks-agent-attachment-chip-preview ks-share-chip-icon"><ScreenShare /></span>} removeLabel={`${name} 같이 보기 끄기`} disabled={disabled} onRemove={() => { if (!disabled) onRemoveShared(id); }} />)}</div> : null}
+    {attachments.length ? <div className="ks-agent-attachment-list" role="list">{attachments.map((attachment) => <DraftChip key={attachment.id} attachment={attachment} onPreview={onPreview} disabled={disabled} onRemove={() => { if (!disabled) onAttachmentsChange(attachments.filter((item) => item.id !== attachment.id)); }} />)}</div> : null}
     <div className="ks-agent-chat-input-row">
       <input type="file" multiple hidden ref={fileRef} disabled={disabled} onChange={(event) => {
         addAttachments(Array.from(event.currentTarget.files ?? []).map((file) => makeDraftAttachment(file, file.name)));
         event.currentTarget.value = "";
       }} />
-      <IconButton aria-label="파일 첨부" disabled={disabled} onClick={() => fileRef.current?.click()}><Paperclip /></IconButton>
+      <IconButton aria-label="파일 첨부" disabled={disabled} onClick={() => { if (!disabled) fileRef.current?.click(); }}><Paperclip /></IconButton>
       <textarea
         aria-label="메시지"
         className="ks-text-input ks-agent-chat-input"
         disabled={disabled}
-        onChange={(event) => onDraft(event.currentTarget.value)}
+        onChange={(event) => { if (!disabled) onDraft(event.currentTarget.value); }}
         onKeyDown={onInputKeyDown}
         onPaste={onPaste}
         spellCheck={false}
@@ -80,7 +83,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
         value={draft}
       />
       {busy && onCancel
-        ? <IconButton aria-label="멈춤" onClick={(event) => { onCancel(); if (event.detail === 0) inputRef.current?.focus(); }}><SquareIcon aria-hidden="true" size={ICON_SIZE.control} strokeWidth={1.5} /></IconButton>
+        ? <IconButton aria-label="멈춤" disabled={disabled} onClick={(event) => { if (disabled) return; onCancel(); if (event.detail === 0) inputRef.current?.focus(); }}><SquareIcon aria-hidden="true" size={ICON_SIZE.control} strokeWidth={1.5} /></IconButton>
         : <IconButton aria-label="보내기" disabled={disabled || (!draft.trim() && !attachments.length) || busy} onClick={() => onSend(true)}><ArrowUp /></IconButton>}
     </div>
   </div>;
