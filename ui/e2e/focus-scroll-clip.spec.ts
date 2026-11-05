@@ -24,7 +24,13 @@ for (const context of ["fill", "dialog", "tail"]) test(`${context}: 스크롤 �
   if (context === "dialog") await app.getByRole("button", { name: "대화상자 열기" }).click();
   const target = context === "tail" ? app.getByLabel("영어") : context === "dialog" ? app.getByRole("dialog").getByLabel("메모") : app.getByLabel("가로");
   // 실제 키보드 모드에서 앞으로/뒤로 모두 확인한다.
-  await page.keyboard.press("Tab"); await target.focus();
+  await page.keyboard.press("Tab");
+  if (context === "tail") {
+    await target.fill("두 줄 영어 입력\n둘째 줄 커서");
+    await app.getByLabel("첨부 이름").last().focus();
+    await page.keyboard.press("Shift+Tab");
+    await expect(target).toBeFocused();
+  } else await target.focus();
   for (const step of ["first", "back"]) {
     if (step === "back") { await page.keyboard.press("Tab"); await page.keyboard.press("Shift+Tab"); }
     const result = await visibleRing(target);
