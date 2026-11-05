@@ -3,7 +3,7 @@
   "name": "에이전트",
   "icon": { "asset": "builtin-icon-agent", "version": 2 },
   "requires": {
-    "blocks": 38,
+    "blocks": 40,
     "modules": {
       "files": 1,
       "storage": 1,
@@ -721,6 +721,9 @@
                                 "items": {
                                   "client": "history_items"
                                 },
+                                "disabled": {
+                                  "client": "session_buttons_busy"
+                                },
                                 "selected": {
                                   "client": "history_selected"
                                 },
@@ -977,6 +980,9 @@
                             "type": "list",
                             "items": {
                               "client": "history_items"
+                            },
+                            "disabled": {
+                              "client": "session_buttons_busy"
                             },
                             "selected": {
                               "client": "history_selected"
