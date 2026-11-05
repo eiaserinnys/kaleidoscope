@@ -1,15 +1,18 @@
 param(
   [Parameter(Mandatory = $true)][string]$Version,
   [Parameter(Mandatory = $true)][string]$SignaturePath,
+  [Parameter(Mandatory = $true)][string]$ChangesPath,
   [Parameter(Mandatory = $true)][string]$Url,
   [Parameter(Mandatory = $true)][string]$OutFile
 )
 
 $signature = (Get-Content -Raw -LiteralPath $SignaturePath).Trim()
+$changes = ConvertFrom-Json -InputObject ([IO.File]::ReadAllText($ChangesPath, [Text.Encoding]::UTF8)) -NoEnumerate
 $platform = @{ signature = $signature; url = $Url }
 $manifest = [ordered]@{
   version = $Version
-  notes = "kaleidoscope v$Version"
+  notes = (@($changes[0].items) -join "`n")
+  changes = @($changes)
   pub_date = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
   platforms = @{
     'windows-x86_64-nsis' = $platform

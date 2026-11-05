@@ -31,6 +31,7 @@ textarea,
 .ks-process-command,
 .ks-process-env,
 .ks-consent-value,
+.ks-update-item,
 .ks-metric-subvalue,
 .ks-combobox-description {
   user-select: text;

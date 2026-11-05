@@ -5,7 +5,6 @@ import {
   SHELL_DESKTOP_DELETE_UNSAVED,
   SHELL_WINDOW_CLOSE_UNSAVED,
   SHELL_WORKSPACE_DELETE_UNSAVED,
-  SHELL_UPDATE_RESTART_UNSAVED,
   ChevronDown,
   EmptyState,
   Import,
@@ -17,7 +16,6 @@ import {
   Settings,
   TextInput,
   UpdateReady,
-  flushEditors,
   flushSandboxes,
   flushWindowEditors,
   toCoreError,
@@ -37,6 +35,7 @@ import { AppLauncher, type LauncherSpacing } from "./app-launcher";
 import { serverLabel } from "./server-label";
 import { ShellSettings } from "./shell-settings";
 import { MessageAppPrompt } from "./message-app-prompt";
+import { UpdateDialog } from "./update-dialog";
 import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { SystemWindow, type SystemWindowState } from "./system-window";
@@ -58,7 +57,8 @@ export function Shell({ store }: { store: ShellStore }) {
   const [notice, setNotice] = useState<CoreError | null>(null);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingDesktopId, setRenamingDesktopId] = useState<string | null>(null);
-  const [restartingUpdate, setRestartingUpdate] = useState(false);
+  const [updateOpenRequest, setUpdateOpenRequest] = useState(0);
+  const seenUpdates = useRef(new Set<string>());
   const desktopAreaRef = useRef({ width: 0, height: 0 });
   const activeDesktopTabRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -205,6 +205,7 @@ export function Shell({ store }: { store: ShellStore }) {
         emptyState={<EmptyState icon={<LayoutGrid size="empty" />} text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
           action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined} />} />
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
+      {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
     </main>;
   }
 
@@ -283,33 +284,6 @@ export function Shell({ store }: { store: ShellStore }) {
     });
   };
 
-
-  const restartUpdate = async () => {
-    closeMenu();
-    setRestartingUpdate(true);
-    if (!await flushEditors() || !await flushSandboxes()) {
-      setNotice(SHELL_UPDATE_RESTART_UNSAVED());
-      setRestartingUpdate(false);
-      return;
-    }
-    const reply = await runCommand({ op: "update.restart" });
-    if (reply?.op !== "update.restart") setRestartingUpdate(false);
-  };
-
-  const openUpdateMenu = (anchor: HTMLElement) => {
-    closeLauncher();
-    const update = snapshot.update;
-    if (update.state !== "ready") return;
-    setMenu({
-      kind: "items",
-      anchor,
-      entries: [
-        { id: "update-version", label: `${update.current_version} → ${update.version}`, disabled: true },
-        { id: "update-separator", type: "separator" },
-        { id: "update-restart", label: "다시 시작해서 업데이트", onSelect: () => void restartUpdate() },
-      ],
-    });
-  };
 
   const createDesktop = () => {
     const name = nextName("데스크톱", desktops.map((item) => item.name));
@@ -409,10 +383,10 @@ export function Shell({ store }: { store: ShellStore }) {
           </IconButton>
           {snapshot.update.state === "ready" ? (
             <IconButton
-              aria-label={restartingUpdate ? "다시 시작하는 중" : `새 판 ${snapshot.update.version} 받음`}
-              disabled={restartingUpdate}
-              onClick={(event) => openUpdateMenu(event.currentTarget)}
-              title={restartingUpdate ? "다시 시작하는 중" : `새 판 ${snapshot.update.version} 받음`}
+              aria-label={`새 판 ${snapshot.update.version} 받음`}
+              aria-haspopup="dialog"
+              onClick={() => { closeLauncher(); closeMenu(); setUpdateOpenRequest((value) => value + 1); }}
+              title={`새 판 ${snapshot.update.version} 받음`}
             >
               <UpdateReady className="ks-link-icon-accent" />
             </IconButton>
@@ -444,6 +418,7 @@ export function Shell({ store }: { store: ShellStore }) {
       />
 
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
+      {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
       {launcher ? <AppLauncher store={store} anchor={launcher.anchor} spacing={launcher.spacing} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />

@@ -183,6 +183,8 @@
 //!   [`UPDATE_CHECK_INTERVAL_SECS`](5분)마다 R2 정적 매니페스트(`https://kaleidoscope.eiaserinnys.me/releases/latest.json`)에
 //!   먼저 묻고 연결이나 HTTP 오류면 공용 업데이트 서버(서비스 `tauri-app-updater`)에 묻는다. 새 판이 있으면 바로 받아 서명을 확인하고
 //!   [`UpdateStatus::Ready`]로 알린다.
+//!   바뀐 것 목록은 매니페스트의 `changes`에서 오며 지금 판보다 새롭고 받은 판 이하인 판을 새 판부터 놓는다.
+//!   목록이 비면 화면은 판 번호만 보인다.
 //!   받은 설치본은 메모리에만 있어 다시 시작하지 않고 쉘을 끄면 다음에 켤 때 다시 받는다. `ready`인 동안에는 묻지 않는다.
 //! - 쉘은 혼자 다시 시작하지 않는다. 디렉터가 화면에서 고르면 화면이 편집기의 저장 대기분을 먼저 저장하고(저장이
 //!   실패하거나 충돌이면 다시 시작하지 않는다) `update.restart`를 부른다. 코어는 디스크에 쓸 것을 쓰고 설치를 시작한다.
@@ -716,6 +718,8 @@ pub enum UpdateStatus {
     Ready {
         current_version: String,
         version: String,
+        #[serde(default)]
+        changes: Vec<UpdateChanges>,
     },
     /// 실패했다. `version`은 받으려던 새 판(묻기에서 실패했으면 null), `reason`은 사람이 읽는 한국어 한 줄.
     Failed {
@@ -723,6 +727,14 @@ pub enum UpdateStatus {
         version: Option<String>,
         reason: String,
     },
+}
+
+/// 한 판에서 사용자에게 보일 변경 내역.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct UpdateChanges {
+    pub version: String,
+    pub items: Vec<String>,
 }
 
 /// 이 기기와 오케스트레이터의 연결 상태. `state`로 가른다.
@@ -6619,9 +6631,10 @@ mod tests {
             serde_json::to_value(UpdateStatus::Ready {
                 current_version: "0.5.0".into(),
                 version: "0.5.1".into(),
+                changes: vec![],
             })
             .unwrap(),
-            serde_json::json!({ "state": "ready", "current_version": "0.5.0", "version": "0.5.1" })
+            serde_json::json!({ "state": "ready", "current_version": "0.5.0", "version": "0.5.1", "changes": [] })
         );
         assert_eq!(
             serde_json::to_value(UpdateStatus::Failed {

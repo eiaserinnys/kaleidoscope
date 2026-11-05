@@ -47,6 +47,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: 변경 내역 스크립트 시험
+        run: node --test .github/scripts/release-notes.test.mjs
+
+      - name: 현재 판의 변경 내역 확인
+        run: node .github/scripts/release-notes.mjs check
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 

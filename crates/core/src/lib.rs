@@ -42,6 +42,8 @@ mod startup_readiness;
 mod store;
 mod storage;
 mod sync_state;
+mod update_changes;
+pub use update_changes::update_changes;
 mod web;
 mod window_control;
 
@@ -1010,6 +1012,7 @@ impl Core {
             UpdateStatus::Ready {
                 current_version,
                 version,
+                ..
             } => (current_version, version),
             _ => return Err(errors::DESK_UPDATE_RESTART_NOT_READY()),
         };

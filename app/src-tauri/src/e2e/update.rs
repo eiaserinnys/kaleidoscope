@@ -115,14 +115,30 @@ pub(super) fn scenario(
     let deadline = Instant::now() + Duration::from_secs(90);
     while Instant::now() < deadline {
         match snapshot(core)?.update {
-            UpdateStatus::Ready { version, .. } => {
-                record(log, "ready", json!({"version": version}))?;
+            UpdateStatus::Ready {
+                version, changes, ..
+            } => {
+                record(
+                    log,
+                    "ready",
+                    json!({"version": version, "changes": changes}),
+                )?;
                 if reject || version != "0.0.2" {
                     return Err("unexpected ready update".into());
                 }
+                super::ui::driver::wait_dom(
+                    app,
+                    r#"const d = document.querySelector('[role="dialog"]'); return !!d && d.textContent.includes('0.0.2판으로 업데이트할까요?') && d.textContent.includes('시험 판에서 바뀐 것') && !d.textContent.includes('앞 판에서 바뀐 것');"#,
+                    "업데이트 대화상자",
+                )?;
                 screen(out, log, "update-ready")?;
                 record(log, "restart.request", json!({"version": version}))?;
-                call(core, CoreRequest::UpdateRestart {})?;
+                super::ui::driver::action(
+                    app,
+                    r#"const d = document.querySelector('[role="dialog"]'); const b = [...(d?.querySelectorAll('button') ?? [])].find(x => x.textContent.includes('다시 시작해서 업데이트')); if (!b) return false; b.click(); return true;"#,
+                    "업데이트 확인",
+                )?;
+                thread::sleep(Duration::from_secs(30));
                 return Err("update restart returned without exiting".into());
             }
             UpdateStatus::Failed {

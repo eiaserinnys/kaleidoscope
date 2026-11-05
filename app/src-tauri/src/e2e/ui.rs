@@ -1,7 +1,7 @@
 use super::*;
 use std::sync::Mutex;
 
-mod driver;
+pub(super) mod driver;
 use driver::{
     action, editor_state, on_top, open, request_mark, require_request, snapshot, wait_place,
     wait_until, wait_web, WebEvents,

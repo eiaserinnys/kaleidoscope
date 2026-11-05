@@ -192,7 +192,21 @@ const snapshot: ShellSnapshot = {
   link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],
   update: harnessParams.get("update") === "ready"
-    ? { state: "ready", current_version: "0.4.1", version: "0.5.0" }
+    ? { state: "ready", current_version: harnessParams.get("update-changes") === "long" ? "0.6.44" : "0.6.50", version: "0.6.53", changes: harnessParams.get("update-changes") === "empty" ? [] : [
+      { version: "0.6.53", items: ["앱을 설치할 때 묻는 권한을 알아보기 쉬운 문장으로 보여 줍니다"] },
+      ...(["multiple", "long"].includes(harnessParams.get("update-changes") ?? "") ? [
+        { version: "0.6.52", items: ["앱 설치나 서버에 보내는 내용이 너무 크면 무엇이 얼마나 큰지 알려 줍니다", "앱이 공개 웹 서비스에 쓸 때 그사이 남이 바꾼 내용을 덮어쓰지 않게 할 수 있습니다"] },
+        { version: "0.6.51", items: ["움직이는 GIF가 첫 장면 그림으로 바뀌지 않고 움직이는 그대로 보입니다"] },
+      ] : []),
+      ...(harnessParams.get("update-changes") === "long" ? [
+        { version: "0.6.50", items: ["그림과 영상이 다른 블록 사이에 놓여도 원래 비율의 높이로 보입니다", "그림 위에서 휠을 굴리면 확대하지 않고 스크롤합니다. 확대는 Ctrl+휠이나 단추로 합니다"] },
+        { version: "0.6.49", items: ["대화 기록을 위로 올려 둔 채 세션을 바꿔도 새 기록은 맨 아래 최근 말부터 보입니다"] },
+        { version: "0.6.48", items: ["에이전트 세션을 바꾸는 동안에도 입력줄이 사라지지 않습니다", "설치 프로그램과 제거 프로그램에도 쉘 아이콘이 보입니다"] },
+        { version: "0.6.47", items: ["블록을 쌓거나 격자로 놓았을 때의 여백을 고르게 맞췄습니다", "좁은 창에서 상세 내용이 끝까지 스크롤되고, 잘린 배지는 가리키면 전체 글이 보입니다"] },
+        { version: "0.6.46", items: ["쉘 아이콘이 네잎 클로버 표식으로 바뀌었습니다", "대화 기록을 불러오는 동안에도 입력줄이 그대로 있고, 불러오지 못하면 그 자리에 알려 줍니다"] },
+        { version: "0.6.45", items: ["앱이 이 PC의 프로그램을 실행할 때 프로그램마다 한 번만 허용을 묻습니다"] },
+      ] : []),
+    ] }
     : harnessParams.get("update") === "idle"
       ? { state: "idle", current_version: "0.5.0" }
       : { state: "unavailable" },

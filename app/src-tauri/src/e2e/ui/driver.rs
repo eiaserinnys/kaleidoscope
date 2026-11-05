@@ -178,7 +178,7 @@ pub(crate) fn evaluate(app: &AppHandle, body: &str) -> Result<Value, String> {
     Ok(value)
 }
 
-pub(super) fn action(app: &AppHandle, body: &str, label: &str) -> Result<(), String> {
+pub(crate) fn action(app: &AppHandle, body: &str, label: &str) -> Result<(), String> {
     if evaluate(app, body)? == json!(true) {
         Ok(())
     } else {

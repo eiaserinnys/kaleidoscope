@@ -69,6 +69,7 @@ export type {
   ShellSnapshot,
   ServerMode,
   TransferResult,
+  UpdateStatus,
   Workspace,
 } from "./contract/contract";
 export { prepareShareForSend, useShareView } from "./share/share-view";

@@ -551,6 +551,9 @@
 .ks-install-sentence.is-warning { display: flex; gap: var(--ks-space-1); align-items: baseline; color: color-mix(in srgb, var(--ks-color-danger) 65%, var(--ks-color-muted)); }
 .ks-install-sentence svg { flex: none; width: 1em; height: 1em; align-self: start; margin-block-start: calc((1em * var(--ks-line-body) - 1em) / 2); }
 .ks-install-meta { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
+.ks-update-content { display: flex; min-width: 0; flex-direction: column; gap: var(--ks-space-2); white-space: normal; }
+.ks-update-content > .ks-install-group + .ks-install-group { margin-block-start: calc(var(--ks-space-4) - var(--ks-space-2)); }
+.ks-update-content .ks-install-rows { gap: var(--ks-space-2); }
 .ks-install-details > summary { width: fit-content; border-radius: var(--ks-radius-small); }
 .ks-install-details > summary:focus-visible { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-focus-offset); }
 .ks-install-paths { list-style: none; margin: var(--ks-space-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--ks-space-1); }

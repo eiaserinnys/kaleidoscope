@@ -50,6 +50,7 @@ fn ready() -> UpdateStatus {
     UpdateStatus::Ready {
         current_version: "0.0.1".into(),
         version: "0.0.2".into(),
+        changes: vec![],
     }
 }
 

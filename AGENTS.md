@@ -28,6 +28,12 @@
 - 오케스트레이터 로컬 실행: `KALEIDOSCOPE_MCP_TOKEN=dev KALEIDOSCOPE_DB_PATH=/tmp/ks.db cargo run -p kaleidoscope-orchestrator`
 - Windows 설치본은 GitHub Actions에서만 빌드한다. 개발 서버(eiaserinnys)에서는 Tauri 전체 빌드를 하지 않는다.
 
+## 판 올리기
+
+- 판 올림 PR은 `app/src-tauri/tauri.conf.json`, `app/src-tauri/Cargo.toml`, `Cargo.lock`의 판과 함께 `CHANGELOG.md` 맨 위에 그 판의 절을 씁니다.
+- 지난 태그 뒤 머지된 PR을 보고 사용자가 알아볼 일상어로 한 줄씩 적습니다. 시험과 CI만 바뀐 PR은 빼고 PR 제목을 그대로 옮기지 않습니다.
+- `node .github/scripts/release-notes.mjs check`로 확인합니다. 절이 없으면 PR CI와 릴리스가 멈춥니다. 쉘은 이 목록을 업데이트 대화상자에 보여 줍니다.
+
 ## 지킬 것
 
 - 확정된 설계 결정은 뒤집지 않고 제안합니다.
