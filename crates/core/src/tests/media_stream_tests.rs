@@ -371,10 +371,11 @@ fn folder_authorization_and_stream_lifetime() {
         client()
             .get(&url)
             .header("Origin", ORIGIN)
+            .header("Range", "bytes=2-5")
             .send()
             .unwrap()
             .status(),
-        404
+        206
     );
     {
         let mut state = core.inner.state.lock().unwrap();
