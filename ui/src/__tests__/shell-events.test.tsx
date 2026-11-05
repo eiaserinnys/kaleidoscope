@@ -471,6 +471,26 @@ describe("shell server link control", () => {
     store.dispose();
   });
 
+  it("설정 위로 올린 앱 창을 최소화하면 설정이 맨 위로 보인다", async () => {
+    const seed = makeTestSeed();
+    const store = createShellStore(createFakeTransport(seed)); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    const target = seed.snapshot.shared.windows[0];
+    const frame = screen.getByTestId(`app-window-${target.app_id}`);
+    fireEvent.pointerDown(frame);
+    await waitFor(() => expect(frame.querySelector(".ks-window-frame-active")).toBeTruthy());
+    fireEvent.click(within(frame).getByRole("button", { name: "창 최소화" }));
+    await waitFor(() => expect(frame.getAttribute("data-minimized")).toBe("true"));
+    const taskbar = screen.getByRole("toolbar", { name: "작업 표시줄" });
+    const items = within(taskbar).getAllByRole("button");
+    const settingsItem = within(taskbar).getByRole("button", { name: "설정" });
+    expect(settingsItem.getAttribute("aria-pressed")).toBe("true");
+    const appItems = items.filter((item) => item !== settingsItem);
+    expect(appItems.length).toBeGreaterThan(0);
+    expect(appItems.map((item) => item.getAttribute("aria-pressed"))).toEqual(appItems.map(() => "false"));
+    store.dispose();
+  });
+
   it("pairs with the entered remote URL and keeps the code visible", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);

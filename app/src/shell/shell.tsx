@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
   ContextMenuHost,
@@ -75,7 +75,11 @@ export function Shell({ store }: { store: ShellStore }) {
   useEffect(() => {
     activeDesktopTabRef.current?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
   }, [activeDesktop?.id]);
-  const maxWindowZ = useShellSelector(store, (value) => Math.max(0, ...(value?.shared.windows.filter((item) => item.desktop_id === activeDesktop?.id).map((item) => item.z) ?? [])));
+  const settingsOpen = settings !== null;
+  // 설정의 맨 위 판정은 DesktopCanvas의 topWindowId처럼 최소화 창을 빼고, 닫혀 있으면 구독하지 않는다.
+  const maxWindowZ = useShellSelector(store, (value) => settingsOpen
+    ? Math.max(0, ...(value?.shared.windows.filter((item) => item.desktop_id === activeDesktop?.id && !item.minimized).map((item) => item.z) ?? []))
+    : 0);
   const maxZNow = useCallback(() => {
     const current = store.getSnapshot();
     const workspace = current ? selectWorkspace(current) : undefined;
@@ -151,23 +155,27 @@ export function Shell({ store }: { store: ShellStore }) {
       ? { ...current, minimized: false, z, entry: { kind, sequence: current.entry.sequence + 1 } }
       : { anchor, origin: kind, entry: { kind, sequence: 0 }, minimized: false, maximized: false, z });
   };
-  const closeSettings = () => {
-    if (settings) {
-      const target = settings.anchor.isConnected ? settings.anchor : document.querySelector<HTMLElement>(settings.origin === "server" ? ".ks-shell-bar .shell-link-button" : '.ks-shell-bar button[aria-label="설정"]');
+  const settingsAnchor = settings?.anchor;
+  const settingsOrigin = settings?.origin;
+  const closeSettings = useCallback(() => {
+    if (settingsAnchor) {
+      const target = settingsAnchor.isConnected ? settingsAnchor : document.querySelector<HTMLElement>(settingsOrigin === "server" ? ".ks-shell-bar .shell-link-button" : '.ks-shell-bar button[aria-label="설정"]');
       target?.focus();
     }
     setSettings(null);
-  };
-  const raiseSettings = () => setSettings((current) => current ? { ...current, minimized: false, z: maxZNow() + 1 } : null);
-  const systemState: SystemWindowState | undefined = settings ? {
-    minimized: settings.minimized, maximized: settings.maximized, z: settings.z,
-    isTop: !settings.minimized && settings.z > maxWindowZ,
-    raise: raiseSettings,
-    minimize: () => setSettings((current) => current ? { ...current, minimized: true } : null),
-    maximize: () => setSettings((current) => current ? { ...current, maximized: true } : null),
-    restore: () => setSettings((current) => current ? { ...current, maximized: false } : null),
-    close: closeSettings,
-  } : undefined;
+  }, [settingsAnchor, settingsOrigin]);
+  const raiseSettings = useCallback(() => setSettings((current) => current ? { ...current, minimized: false, z: maxZNow() + 1 } : null), [maxZNow]);
+  const minimizeSettings = useCallback(() => setSettings((current) => current ? { ...current, minimized: true } : null), []);
+  const maximizeSettings = useCallback(() => setSettings((current) => current ? { ...current, maximized: true } : null), []);
+  const restoreSettings = useCallback(() => setSettings((current) => current ? { ...current, maximized: false } : null), []);
+  const settingsMinimized = settings?.minimized ?? false;
+  const settingsMaximized = settings?.maximized ?? false;
+  const settingsZ = settings?.z ?? 0;
+  const settingsIsTop = settingsOpen && !settingsMinimized && settingsZ > maxWindowZ;
+  const systemState = useMemo<SystemWindowState | undefined>(() => settingsOpen ? {
+    minimized: settingsMinimized, maximized: settingsMaximized, z: settingsZ, isTop: settingsIsTop,
+    raise: raiseSettings, minimize: minimizeSettings, maximize: maximizeSettings, restore: restoreSettings, close: closeSettings,
+  } : undefined, [settingsOpen, settingsMinimized, settingsMaximized, settingsZ, settingsIsTop, raiseSettings, minimizeSettings, maximizeSettings, restoreSettings, closeSettings]);
 
   const serverButton = snapshot ? (
     <Button className="ks-button-quiet shell-link-button" onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabel(snapshot)}>
@@ -192,6 +200,7 @@ export function Shell({ store }: { store: ShellStore }) {
     return <main className="app-root" ref={setHost}>
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}{settingsButton}</div></header>
+      {/* 아래 작업 있는 갈래와 main의 같은 자리에 DesktopArea를 두어야 연결 중과 페어링을 거쳐도 설정 창이 다시 만들어지지 않는다. */}
       <DesktopArea canvasKey={canvasKey} systemWindow={systemWindow} launcherOpen={false} onAreaChange={reportArea} onCall={runCommand} onOpenApps={() => {}} store={store}
         emptyState={<EmptyState icon={<LayoutGrid size="empty" />} text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
           action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined} />} />

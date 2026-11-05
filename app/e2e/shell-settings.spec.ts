@@ -121,6 +121,7 @@ test("새 앱 질문이 데스크톱과 열린 설정 위에서 답을 받는다
   await page.evaluate(() => window.__kaleidoscopeHarness?.setPreferences({ revision: 3, default_message_app_id: "agent", asked_message_app_ids: [] }));
   dialog = page.getByRole("dialog", { name: "기본 에이전트를 작업 PAS로 바꿀까요?" });
   await expect(dialog).toBeVisible();
+  await expect(page.getByTestId("system-window-settings").evaluate((element) => Boolean(element.closest("[inert]")))).resolves.toBe(true);
   await page.screenshot({ path: `${captures}/question-settings-1440.png` });
   await page.setViewportSize({ width: 960, height: 600 });
   await page.screenshot({ path: `${captures}/question-settings-960.png` });
