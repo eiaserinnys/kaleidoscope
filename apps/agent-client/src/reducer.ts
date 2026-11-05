@@ -1,5 +1,6 @@
 import type { InitializeResponse, NewSessionResponse, RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { agentError } from "./errors.ts";
+import { hadGuide } from "./guide.ts";
 
 export type Attachment = { id: string; name: string; mime: string; key: string; size: number };
 export type Queued = { id: string; text: string; attachments: Attachment[] };
@@ -14,7 +15,7 @@ export type State = {
   nextId: number;
   pending: Record<string, Pending>;
   sessionId: string | null;
-  capabilities: { loadSession: boolean; image: boolean; http: boolean };
+  capabilities: { loadSession: boolean; image: boolean; http: boolean; list: boolean };
   authMethods: { id: string; name: string; description: string }[];
   controls: Control[];
   permissions: Permission[];
@@ -27,6 +28,8 @@ export type State = {
   guideSent: boolean;
   phase: "starting" | "login" | "ready" | "responding" | "failed";
   replay: boolean;
+  replayItems: Item[];
+  sessionError: { id: string; message: string } | null;
   needsNew: boolean;
   initialized: boolean;
   failure: { id: string; reason: string; code?: string; message?: string } | null;
@@ -40,16 +43,18 @@ export type State = {
 
 export function initialState(): State {
   return { schema: 1, generation: "", nextId: 1, pending: {}, sessionId: null,
-    capabilities: { loadSession: false, image: false, http: false }, authMethods: [], controls: [], permissions: [], queue: [],
+    capabilities: { loadSession: false, image: false, http: false, list: false }, authMethods: [], controls: [], permissions: [], queue: [],
     stream: { id: null, text: "" }, tools: [], partial: [], partialKey: null, streamKey: null, guideSent: false,
-    phase: "starting", replay: false, needsNew: false, initialized: false, failure: null,
+    phase: "starting", replay: false, replayItems: [], sessionError: null, needsNew: false, initialized: false, failure: null,
     completed: [], outbox: [], servicesUsed: null, restartPending: false, contextTicket: null, restoreControls: [] };
 }
 
 export function reserveRequest(state: State, kind: string, params: unknown): [State, number] {
   const id = state.nextId;
   return [{ ...state, nextId: id + 1, phase: kind === "prompt" ? "responding" : kind === "authenticate" ? "starting" : state.phase,
-    failure: kind === "prompt" ? null : state.failure, replay: kind === "load" ? true : state.replay, pending: { ...state.pending, [id]: { kind, params } } }, id];
+    failure: kind === "prompt" ? null : state.failure, replay: kind === "load" || kind === "switch" ? true : state.replay,
+    replayItems: kind === "switch" ? [] : state.replayItems, sessionError: kind === "switch" || kind === "new_user" ? null : state.sessionError,
+    pending: { ...state.pending, [id]: { kind, params } } }, id];
 }
 
 export function enqueue(state: State, message: Queued): State {
@@ -104,6 +109,15 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
   }
   if (message.method === "session/update") {
     const update = message.params?.update;
+    if (state.replay && Object.values(state.pending).some((request) => request.kind === "switch")) {
+      if ((update?.sessionUpdate !== "user_message_chunk" && update?.sessionUpdate !== "agent_message_chunk") || update.content?.type !== "text") return state;
+      const id = String(update.messageId ?? streamId);
+      const items = [...(state.replayItems ?? [])];
+      const index = items.findIndex((item) => item.id === id);
+      if (index >= 0) items[index] = { ...items[index], text: items[index].text + update.content.text };
+      else items.push({ id, kind: update.sessionUpdate === "user_message_chunk" ? "user" : "assistant", text: update.content.text, at: new Date().toISOString(), attachments: [] });
+      return { ...state, replayItems: items };
+    }
     if (update?.sessionUpdate === "agent_message_chunk" && update.content?.type === "text") {
       if (state.replay) return state;
       return { ...state, stream: { id: state.stream.id ?? streamId, text: state.stream.text + update.content.text } };
@@ -137,6 +151,11 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
   const next = { ...state, pending };
   if (message.error) {
     const reason = String(message.error.message ?? "ACP 오류");
+    if (request.kind === "switch" || request.kind === "new_user") {
+      const active = request.kind === "switch" && message.error.data?.reason === "thread_active_writer";
+      const error = agentError(active ? "AGENT_SESSION_LOAD_ACTIVE_WRITER" : request.kind === "switch" ? "AGENT_SESSION_LOAD_FAILED" : "AGENT_SESSION_NEW_FAILED", reason);
+      return { ...next, replay: false, replayItems: [], sessionError: { id: error.id, message: error.message } };
+    }
     if ((request.kind === "new" || request.kind === "load") && message.error.code === -32000) return { ...next, phase: "login", replay: false };
     if (request.kind === "load") return { ...next, phase: "starting", replay: false, needsNew: true };
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
@@ -147,8 +166,14 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
   if (request.kind === "initialize") {
     const result = message.result as InitializeResponse;
     return { ...next, initialized: true, capabilities: { loadSession: result.agentCapabilities?.loadSession === true,
-      image: result.agentCapabilities?.promptCapabilities?.image === true, http: result.agentCapabilities?.mcpCapabilities?.http === true },
+      image: result.agentCapabilities?.promptCapabilities?.image === true, http: result.agentCapabilities?.mcpCapabilities?.http === true,
+      list: result.agentCapabilities?.sessionCapabilities?.list != null },
       authMethods: (result.authMethods ?? []).filter((method) => "id" in method && "name" in method && (method as { type?: string }).type !== "terminal").map((method) => ({ id: method.id, name: method.name, description: method.description ?? "" })) };
+  }
+  if (request.kind === "switch" || request.kind === "new_user") {
+    const result = message.result as NewSessionResponse;
+    return { ...next, sessionId: request.kind === "switch" ? String(request.params) : result.sessionId,
+      replay: false, replayItems: [], sessionError: null, guideSent: request.kind === "switch" && hadGuide(state.replayItems ?? []), controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
   }
   if (request.kind === "new" || request.kind === "load") {
     const result = message.result as NewSessionResponse;

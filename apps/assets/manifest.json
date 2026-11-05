@@ -231,7 +231,17 @@
     "path": "icons/store.svg"
   },
   {
-    "id": "builtin-icon-profiler",
+    "id": "builtin-agent-client",
+    "version": 5,
+    "format": "javascript",
+    "sha256": "67bc3464457fb69a0b5f5fce4440dd2cc774a7e41717d2617782e64bab314796",
+    "source": "apps/agent-client",
+    "license": "MIT",
+    "byte_size": 45900,
+    "created_at": "2026-11-05T00:00:00Z",
+    "path": "agent/client-v5.js"},
+  {
+"id": "builtin-icon-profiler",
     "version": 2,
     "format": "svg",
     "sha256": "2c949eb6026b01aac9ee461d87fffefcaac426828bb1dcd7f2c4a73164049d57",

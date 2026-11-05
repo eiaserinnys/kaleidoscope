@@ -1,5 +1,9 @@
 /** Existing AGENT identifiers keep their original place and cause in the client. */
 const messages = {
+  AGENT_SESSION_LIST_FAILED: (reason: string) => `지난 세션 목록을 받지 못했습니다. 다시 받기를 누르세요. 원인: ${reason}`,
+  AGENT_SESSION_LOAD_FAILED: (reason: string) => `선택한 세션을 이어 가지 못했습니다. 다시 선택하세요. 원인: ${reason}`,
+  AGENT_SESSION_LOAD_ACTIVE_WRITER: "다른 곳에서 열려 있는 세션입니다. 그쪽을 닫고 다시 고르세요.",
+  AGENT_SESSION_NEW_FAILED: (reason: string) => `새 세션을 만들지 못했습니다. 다시 시도하세요. 원인: ${reason}`,
   AGENT_PROMPT_REQUEST_ID_MISSING: "메시지 ID가 비어 있습니다. 쉘을 업데이트한 뒤 다시 보내세요.",
   AGENT_PROMPT_CONTENT_EMPTY: "에이전트에 보낼 글과 첨부 파일이 없습니다. 글이나 파일을 추가해 보내세요.",
   AGENT_PROMPT_TEXT_TOO_LONG: "에이전트 메시지가 20000자를 넘었습니다. 글을 줄인 뒤 다시 보내세요.",
