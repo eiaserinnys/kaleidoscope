@@ -72,6 +72,7 @@
   --ks-color-on-color-light: #ffffff;
   --ks-color-muted: #675a70;
   --ks-color-hover: rgb(104 81 120 / 8%);
+  --ks-color-taskbar-hover: rgb(104 81 120 / 16%);
   --ks-color-accent: #6f569a;
   --ks-color-accent-soft: #a58cbb;
   --ks-color-accent-contrast: #ffffff;
@@ -110,6 +111,7 @@
     --ks-color-text: #ece3f2;
     --ks-color-muted: #b8a7c5;
     --ks-color-hover: rgb(231 220 239 / 8%);
+    --ks-color-taskbar-hover: rgb(231 220 239 / 16%);
     --ks-color-accent: #c6aee3;
     --ks-color-accent-soft: #a47dba;
     --ks-color-accent-contrast: #241b2c;

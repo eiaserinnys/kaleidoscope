@@ -1,6 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { expect as baseExpect, test } from "@playwright/test";
+
+const expect = baseExpect.configure({ timeout: 30_000 });
 
 test.beforeEach(async ({ page }) => {
+  test.setTimeout(240_000);
   await page.goto("/?core=http://127.0.0.1:7420");
 });
 
@@ -8,11 +11,10 @@ test.describe("125% 화면 배율", () => {
   test.use({ deviceScaleFactor: 1.25, viewport: { width: 600, height: 900 } });
 
   test("목록 끝까지 스크롤하면 오른쪽 페이드가 꺼진다", async ({ page }, testInfo) => {
-    test.setTimeout(60_000);
     const bar = page.locator(".ks-taskbar");
     const list = bar.locator(".ks-taskbar-windows");
     const windows = page.getByTestId("app-window-calculator");
-    for (let count = 1; count <= 5; count += 1) {
+    for (let count = 1; count <= 12; count += 1) {
       await bar.getByRole("button", { name: "앱 열기" }).click();
       await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기", exact: true }).click();
       await expect(windows).toHaveCount(count);
@@ -36,7 +38,7 @@ test.describe("125% 화면 배율", () => {
     console.log("125% 목록 끝 측정", JSON.stringify(metrics));
     await testInfo.attach("125-percent-end", { body: JSON.stringify(metrics), contentType: "application/json" });
     await page.screenshot({ path: testInfo.outputPath("125-percent-end.png") });
-    for (let count = 5; count > 0; count -= 1) {
+    for (let count = 12; count > 0; count -= 1) {
       await windows.last().getByRole("button", { name: "창 닫기" }).click();
       await expect(windows).toHaveCount(count - 1);
     }
@@ -44,7 +46,7 @@ test.describe("125% 화면 배율", () => {
 });
 
 test("목록 가장자리 페이드는 실제 스크롤과 폭과 창 수를 따른다", async ({ page }, testInfo) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const bar = page.locator(".ks-taskbar");
   const list = bar.locator(".ks-taskbar-windows");
   const windows = page.getByTestId("app-window-calculator");
@@ -56,25 +58,26 @@ test("목록 가장자리 페이드는 실제 스크롤과 폭과 창 수를 따
   const shot = async (name: string) => {
     await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
   };
-  for (let count = 1; count <= 20; count += 1) {
+  for (let count = 1; count <= 40; count += 1) {
     await bar.getByRole("button", { name: "앱 열기" }).click();
     await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기", exact: true }).click();
     await expect(windows).toHaveCount(count);
-    if (count === 5 || count === 20) {
-      for (const width of count === 5 ? [600, 360] : [1440]) {
+    if (count === 12 || count === 40) {
+      for (const width of count === 12 ? [600, 360] : [1440]) {
         await page.setViewportSize({ width, height: 900 });
         await list.hover();
         await page.mouse.wheel(0, -10000);
         await fade(false, true);
         await shot(`fade-${count}-${width}-start`);
-        await page.mouse.wheel(0, 60);
+        const overflow = await list.evaluate((element) => element.scrollWidth - element.clientWidth);
+        await page.mouse.wheel(0, overflow / 2);
         await fade(true, true);
         await shot(`fade-${count}-${width}-middle`);
         await page.mouse.wheel(0, 10000);
         await fade(true, false);
         await shot(`fade-${count}-${width}-end`);
       }
-      if (count === 5) {
+      if (count === 12) {
         await page.setViewportSize({ width: 1440, height: 900 });
         await fade(false, false);
         await shot("fade-five-no-overflow");
@@ -101,17 +104,17 @@ test("목록 가장자리 페이드는 실제 스크롤과 폭과 창 수를 따
   });
   // 양 끝 항목은 예외이고, 중간 항목은 페이드가 켜진 쪽에서 토큰 폭만큼 떨어진다.
   for (const direction of ["Control+Alt+Tab", "Control+Alt+Shift+Tab"]) {
-    for (let step = 0; step < 20; step += 1) {
+    for (let step = 0; step < 40; step += 1) {
       await page.keyboard.press(direction);
-      const index = direction === "Control+Alt+Tab" ? step : 18 - step;
-      await expect(list.locator(".ks-taskbar-item").nth((index + 20) % 20)).toHaveAttribute("data-state", "active");
+      const index = direction === "Control+Alt+Tab" ? step : 38 - step;
+      await expect(list.locator(".ks-taskbar-item").nth((index + 40) % 40)).toHaveAttribute("data-state", "active");
       await expect.poll(activeOutsideFade).toEqual({ left: true, right: true });
     }
   }
   await page.emulateMedia({ colorScheme: "dark" });
   await shot("fade-twenty-dark-active-end");
   await page.emulateMedia({ colorScheme: "light" });
-  for (let count = 20; count > 0; count -= 1) {
+  for (let count = 40; count > 0; count -= 1) {
     const lastItem = list.locator(".ks-taskbar-item").last();
     if (await lastItem.getAttribute("data-state") !== "active") await lastItem.click();
     await expect(lastItem).toHaveAttribute("data-state", "active");
@@ -149,7 +152,6 @@ test("막대 단추에 Tab으로 들어가면 초점 고리가 안쪽 여백에 
 });
 
 test("창 수가 달라도 같은 자리를 연속으로 눌러 데스크톱을 순환한다", async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
   const bar = page.locator(".ks-taskbar");
   const launcher = bar.getByRole("button", { name: "앱 열기" });
   for (let index = 0; index < 3; index += 1) {
@@ -190,7 +192,6 @@ test("창 수가 달라도 같은 자리를 연속으로 눌러 데스크톱을 
 });
 
 test("팔레트 간격과 막대 단추를 맞추고 넘치는 창은 세로 휠로 스크롤한다", async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
   const bar = page.locator(".ks-taskbar");
   const launcher = bar.getByRole("button", { name: "앱 열기" });
   const defaultIcon = page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true });
@@ -237,7 +238,7 @@ test("팔레트 간격과 막대 단추를 맞추고 넘치는 창은 세로 휠
     expect.soft(metrics.itemCenter).toBe(metrics.iconCenter);
     expect.soft(metrics.itemHeight).toBe(metrics.iconHeight);
     expect.soft(metrics.itemRadius).toBe(metrics.iconRadius);
-    expect.soft(metrics.itemWidth).toBeGreaterThanOrEqual(104);
+    expect.soft(metrics.itemWidth).toBeGreaterThanOrEqual(32);
     expect.soft(metrics.itemWidth).toBeLessThan(160);
     expect.soft(metrics.scrollbar).toBe("none");
     expect.soft(metrics.scrollbarDisplay).toBe("none");
@@ -247,7 +248,8 @@ test("팔레트 간격과 막대 단추를 맞추고 넘치는 창은 세로 휠
     await page.mouse.wheel(0, -5000);
     await expect.poll(() => list.evaluate((element) => element.scrollLeft)).toBe(0);
     await page.mouse.wheel(0, 120);
-    await expect.poll(() => list.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    if (width === 360) await expect.poll(() => list.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    else await expect.poll(() => list.evaluate((element) => element.scrollLeft)).toBe(0);
   }
   const windows = page.getByTestId("app-window-calculator");
   for (let remaining = 5; remaining > 0; remaining -= 1) {
@@ -257,13 +259,38 @@ test("팔레트 간격과 막대 단추를 맞추고 넘치는 창은 세로 휠
 });
 
 test("많은 창에서도 양 끝 조작을 고정하고 창 목록만 스크롤한다", async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
-  for (let index = 0; index < 20; index += 1) {
+  test.setTimeout(300_000);
+  const widths: number[] = [];
+  for (let index = 0; index < 40; index += 1) {
     await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
     await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기" }).click();
     await expect(page.getByTestId("app-window-calculator")).toHaveCount(index + 1);
+    const count = index + 1;
+    if ([8, 13, 20, 40].includes(count)) {
+      const item = page.locator(".ks-taskbar-item").first();
+      widths.push((await item.boundingBox())!.width);
+      const label = item.locator(".ks-taskbar-item-label");
+      if (count === 20) {
+        await expect(label).toBeHidden();
+        await expect(item).toHaveAttribute("aria-label", "계산기");
+        await expect(item).toHaveAttribute("title", "계산기");
+        await item.click();
+        await expect(item).toHaveAttribute("data-state", "active");
+      }
+      await page.screenshot({ path: testInfo.outputPath(`taskbar-${count}-1440.png`) });
+    }
+    if ([5, 12].includes(count)) {
+      await page.setViewportSize({ width: 600, height: 900 });
+      const list = page.locator(".ks-taskbar-windows");
+      await expect.poll(() => list.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(count === 12);
+      await page.screenshot({ path: testInfo.outputPath(`taskbar-${count}-600.png`) });
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
   }
-  await expect(page.locator(".ks-taskbar-window")).toHaveCount(20);
+  expect(widths[0]).toBeGreaterThan(widths[1]);
+  expect(widths[1]).toBeGreaterThan(widths[2]);
+  expect(widths[2]).toBeGreaterThan(widths[3]);
+  await expect(page.locator(".ks-taskbar-window")).toHaveCount(40);
   for (const width of [1440, 600]) {
     await page.setViewportSize({ width, height: 900 });
     const metrics = await page.locator(".ks-taskbar").evaluate((bar) => {
@@ -284,7 +311,7 @@ test("많은 창에서도 양 끝 조작을 고정하고 창 목록만 스크롤
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
   await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기" }).click();
-  await expect(page.getByTestId("app-window-calculator")).toHaveCount(21);
+  await expect(page.getByTestId("app-window-calculator")).toHaveCount(41);
   const list = page.locator(".ks-taskbar-windows");
   const activeItemVisible = () => list.evaluate((element) => {
     const active = element.querySelector<HTMLElement>('[data-state="active"]');
@@ -297,68 +324,80 @@ test("많은 창에서도 양 끝 조작을 고정하고 창 목록만 스크롤
   await page.keyboard.press("Control+Alt+Tab");
   await expect(list.locator(".ks-taskbar-item").first()).toHaveAttribute("data-state", "active");
   await expect.poll(activeItemVisible).toBe(true);
-  for (let index = 0; index < 21; index += 1) {
+  for (let index = 0; index < 41; index += 1) {
     const lastItem = list.locator(".ks-taskbar-item").last();
     if (await lastItem.getAttribute("data-state") !== "active") await lastItem.click();
     await expect(lastItem).toHaveAttribute("data-state", "active");
     await page.getByTestId("app-window-calculator").last().getByRole("button", { name: "창 닫기" }).click();
-    await expect(page.getByTestId("app-window-calculator")).toHaveCount(20 - index);
+    await expect(page.getByTestId("app-window-calculator")).toHaveCount(40 - index);
   }
 });
 
-test("전체 최대화는 설정을 포함한 창의 실제 겹침 순서를 지킨다", async ({ page }) => {
+test("전체 다시 열기는 설정을 포함한 겹침과 창 크기를 보존한다", async ({ page }, testInfo) => {
   for (const name of ["계산기", "마크다운 편집기"]) {
     await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
     await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name, exact: true }).click();
   }
   const taskbar = page.locator(".ks-taskbar");
-  await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
-  await taskbar.getByRole("button", { name: "마크다운 편집기" }).click();
-  const a = page.getByTestId("app-window-calculator");
+  const a = page.getByTestId("app-window-calculator").first();
   const b = page.getByTestId("app-window-md-editor");
+  await a.getByRole("button", { name: "창 최대화" }).click();
+  await taskbar.getByRole("button", { name: "마크다운 편집기" }).click();
+  const original = await b.boundingBox();
+  const title = await b.locator(".ks-window-titlebar").boundingBox();
+  if (!title) throw new Error("창 제목을 찾지 못했습니다");
+  await page.mouse.move(title.x + 80, title.y + 16);
+  await page.mouse.down();
+  await page.mouse.move(title.x + 140, title.y + 46);
+  await page.mouse.up();
+  const edge = await b.locator(".ks-window-resize-east").boundingBox();
+  if (!edge) throw new Error("창 크기 조절점을 찾지 못했습니다");
+  await page.mouse.move(edge.x + edge.width / 2, edge.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + edge.width / 2 - 80, edge.y + 80);
+  await page.mouse.up();
+  await expect.poll(() => b.boundingBox()).not.toEqual(original);
+  await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
   const settings = page.getByTestId("system-window-settings");
+  await taskbar.getByRole("button", { name: "마크다운 편집기" }).click();
+  await expect(taskbar.getByRole("button", { name: "마크다운 편집기" })).toHaveAttribute("data-state", "active");
+  await taskbar.getByRole("button", { name: "앱 열기" }).click();
+  await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기", exact: true }).click();
+  const c = page.getByTestId("app-window-calculator").last();
+  await expect(page.getByTestId("app-window-calculator")).toHaveCount(2);
   const ordered = async () => page.evaluate(() => {
-    const windows = ["app-window-calculator", "system-window-settings", "app-window-md-editor"].map((id) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!);
+    const [a, c] = document.querySelectorAll<HTMLElement>('[data-testid="app-window-calculator"]');
+    const windows = [a, c, document.querySelector<HTMLElement>('[data-testid="system-window-settings"]')!, document.querySelector<HTMLElement>('[data-testid="app-window-md-editor"]')!];
     return windows.sort((left, right) => Number(getComputedStyle(left).zIndex) - Number(getComputedStyle(right).zIndex)
-      || (left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)).map((element) => element.dataset.testid);
+      || (left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)).map((element) => element === a ? "a" : element === c ? "c" : element.dataset.testid);
   });
-  const expected = ["app-window-calculator", "system-window-settings", "app-window-md-editor"];
+  const expected = ["a", "system-window-settings", "app-window-md-editor", "c"];
   await expect.poll(ordered).toEqual(expected);
-  await taskbar.getByRole("button", { name: "계산기" }).click({ button: "right" });
+  const before = await b.boundingBox();
+  await taskbar.getByRole("button", { name: "모든 창 최소화" }).click();
+  await expect(settings).toHaveAttribute("data-minimized", "true");
+  await taskbar.getByRole("button", { name: "모든 창 다시 열기" }).click();
+  await expect(b).toHaveAttribute("data-minimized", "false");
+  await expect(a).toHaveAttribute("data-maximized", "true");
+  await expect(b).toHaveAttribute("data-maximized", "false");
+  await expect(c).toHaveAttribute("data-maximized", "false");
+  await expect(settings).toHaveAttribute("data-maximized", "false");
+  expect(await b.boundingBox()).toEqual(before);
+  await expect.poll(ordered).toEqual(expected);
+  await page.screenshot({ path: testInfo.outputPath("restore-all.png") });
+  await expect(taskbar.getByRole("button", { name: "모든 창 다시 열기" })).toBeDisabled();
+  await taskbar.getByRole("button", { name: "설정" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "창 최소화" }).click();
-  await expect(a).toHaveAttribute("data-minimized", "true");
-  await taskbar.getByRole("button", { name: "모든 창 최대화" }).click();
-  await expect(a).toHaveAttribute("data-minimized", "false");
-  await expect(b).toHaveAttribute("data-maximized", "true");
-  await expect(settings).toHaveAttribute("data-maximized", "true");
-  await expect.poll(ordered).toEqual(expected);
-  const visibleStack = await page.evaluate(() => {
-    const area = document.querySelector<HTMLElement>(".ks-desktop-area")!.getBoundingClientRect();
-    const b = document.querySelector<HTMLElement>('[data-testid="app-window-md-editor"]')!;
-    const settings = document.querySelector<HTMLElement>('[data-testid="system-window-settings"]')!;
-    const atPoint = () => document.elementFromPoint(area.left + area.width / 2, area.top + area.height / 2)?.closest<HTMLElement>(".ks-window")?.dataset.testid;
-    const top = atPoint();
-    b.style.visibility = "hidden";
-    const middle = atPoint();
-    settings.style.visibility = "hidden";
-    const bottom = atPoint();
-    b.style.visibility = "";
-    settings.style.visibility = "";
-    return [bottom, middle, top];
-  });
-  expect(visibleStack).toEqual(expected);
-  await taskbar.getByRole("button", { name: "설정" }).click();
-  const previousZ = await b.evaluate((element) => Number(getComputedStyle(element).zIndex));
-  await taskbar.getByRole("button", { name: "모든 창 최대화" }).click();
-  await expect.poll(() => b.evaluate((element) => Number(getComputedStyle(element).zIndex))).toBeGreaterThan(previousZ);
-  await expect.poll(ordered).toEqual(["app-window-calculator", "app-window-md-editor", "system-window-settings"]);
+  const bBefore = await b.boundingBox();
+  await page.keyboard.press("Control+Alt+Shift+ArrowUp");
+  await expect(settings).toHaveAttribute("data-minimized", "false");
+  expect(await b.boundingBox()).toEqual(bBefore);
+  await expect(a).toHaveAttribute("data-maximized", "true");
   await settings.getByRole("button", { name: "창 닫기" }).click();
-  for (const [name, window] of [["계산기", a], ["마크다운 편집기", b]] as const) {
-    const item = taskbar.getByRole("button", { name });
+  for (const [item, window, remaining] of [[taskbar.getByRole("button", { name: "계산기" }).last(), c, 1], [taskbar.getByRole("button", { name: "계산기" }).first(), a, 0], [taskbar.getByRole("button", { name: "마크다운 편집기" }), b, 0]] as const) {
     if (await item.getAttribute("data-state") !== "active") await item.click();
-    await expect(item).toHaveAttribute("data-state", "active");
     await window.getByRole("button", { name: "창 닫기" }).click();
-    await expect(window).toHaveCount(0);
+    await expect(page.getByTestId(window === b ? "app-window-md-editor" : "app-window-calculator")).toHaveCount(remaining);
   }
 });
 

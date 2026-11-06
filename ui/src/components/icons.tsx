@@ -8,6 +8,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronUp as ChevronUpIcon,
   ChevronRight as ChevronRightIcon,
+  ChevronsUp as ChevronsUpIcon,
   CircleArrowUp as CircleArrowUpIcon,
   Cloud as CloudIcon,
   CloudOff as CloudOffIcon,
@@ -101,6 +102,7 @@ export const ChevronLeft = (props: IconProps) => renderIcon(ChevronLeftIcon, pro
 export const UpdateReady = (props: IconProps) => renderIcon(CircleArrowUpIcon, props);
 export const ChevronDown = (props: IconProps) => renderIcon(ChevronDownIcon, props);
 export const ChevronUp = (props: IconProps) => renderIcon(ChevronUpIcon, props);
+export const ChevronsUp = (props: IconProps) => renderIcon(ChevronsUpIcon, props);
 export const PanelLeftOpen = (props: IconProps) => renderIcon(PanelLeftOpenIcon, props);
 export const PanelLeftClose = (props: IconProps) => renderIcon(PanelLeftCloseIcon, props);
 export const FileText = (props: IconProps) => renderIcon(FileTextIcon, props);

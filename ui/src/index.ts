@@ -13,6 +13,7 @@ export {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsUp,
   UpdateReady,
   TriangleAlert,
   Cloud,
