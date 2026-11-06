@@ -50,17 +50,7 @@ test("입력 상태와 고르기 및 분할선이 구분되고 잠긴 조작은 
   for (const button of await segments.all()) {
     expect(await button.locator(".ks-truncate-label").evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   }
-  await group.evaluate((el) => { (el as HTMLElement).style.maxWidth = "160px"; });
-  const bounds = await group.evaluate((el) => {
-    const group = el.getBoundingClientRect();
-    return [...el.querySelectorAll("button")].map((button) => {
-      const box = button.getBoundingClientRect();
-      return { left: box.left - group.left, right: box.right - group.right };
-    });
-  });
-  for (const box of bounds) { expect(box.left).toBeGreaterThanOrEqual(-1); expect(box.right).toBeLessThanOrEqual(1); }
   for (const button of await segments.all()) { await button.click(); await expect(button).toHaveAttribute("aria-pressed", "true"); }
-  await group.evaluate((el) => { (el as HTMLElement).style.maxWidth = ""; });
   await expect(app.locator(".ks-field-label").filter({ hasText: "긴 이름표" })).toHaveCSS("word-break", "keep-all");
 
   const separator = app.getByRole("separator");
@@ -73,4 +63,73 @@ test("입력 상태와 고르기 및 분할선이 구분되고 잠긴 조작은 
   expect(await separator.evaluate((el) => getComputedStyle(el, "::after").backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
   const output = process.env.KS_INPUT_CONTROL_CAPTURE_DIR;
   if (output) { mkdirSync(output, { recursive: true }); await app.screenshot({ path: join(output, "states-wide.png") }); }
+});
+
+test("읽기 전용 결과와 잠긴 부속 단추가 두 테마에서 구분된다", async ({ page }) => {
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.setViewportSize({ width: 880, height: 900 });
+    await page.goto("/?preview=input-control-review");
+    const app = page.getByTestId("app-window-input-control-review");
+    const open = app.getByRole("textbox", { name: "열림", exact: true });
+    const result = app.getByRole("textbox", { name: "결과", exact: true });
+    const style = async (field: typeof open) => field.evaluate((el) => {
+      const css = getComputedStyle(el);
+      return { color: css.color, background: css.backgroundColor, border: css.borderLeftColor,
+        textInset: parseFloat(css.borderLeftWidth) + parseFloat(css.paddingLeft) };
+    });
+    const opened = await style(open);
+    const readOnly = await style(result);
+    expect(readOnly.color).toBe(opened.color);
+    expect(readOnly.textInset).toBe(opened.textInset);
+    expect(readOnly.background).toBe("rgba(0, 0, 0, 0)");
+    expect(readOnly.border).toBe("rgba(0, 0, 0, 0)");
+    await open.focus();
+    await page.keyboard.press("Tab");
+    await expect(result).toBeFocused();
+    expect(await result.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
+    const box = (await result.boundingBox())!;
+    await page.mouse.move(box.x + 12, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 12, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.up();
+    const selected = await result.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]);
+    expect(selected[1]!).toBeGreaterThan(selected[0]!);
+    for (const [label, selector] of [["읽기 숫자", ".ks-number-spin"], ["읽기 날짜", ".ks-data-input-clear"], ["읽기 검색", ".ks-data-input-clear"]] as const) {
+      await expect(app.getByLabel(label, { exact: true }).locator("..").locator(selector)).toBeHidden();
+    }
+    for (const label of ["읽기 시간", "읽기 선택지"]) await expect(app.getByLabel(label, { exact: true })).toHaveAttribute("readonly", "");
+    for (const name of ["늘리기", "줄이기", "날짜 선택", "지우기"]) {
+      const button = app.getByRole("button", { name, exact: true });
+      await expect(button).toBeDisabled();
+      await expect(button).toHaveCSS("opacity", "1");
+    }
+  }
+});
+
+test("이름표가 있는 분할 선택지가 좁은 구역 안에 머문다", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/?preview=input-control-review");
+  const app = page.getByTestId("app-window-input-control-review");
+  const group = app.getByRole("group", { name: "포트 범위" });
+  const field = group.locator("..");
+  const geometry = await field.evaluate((el) => {
+    const section = el.closest(".ks-data-section-child")!;
+    const content = section.getBoundingClientRect();
+    const root = el.getBoundingClientRect();
+    const group = el.querySelector(".ks-data-segmented")!;
+    return { sectionScroll: section.scrollWidth, sectionWidth: section.clientWidth,
+      fieldLeft: root.left, fieldRight: root.right, contentLeft: content.left, contentRight: content.right,
+      groupScroll: group.scrollWidth, groupWidth: group.clientWidth,
+      buttons: [...group.querySelectorAll("button")].map((button) => { const rect = button.getBoundingClientRect(); return { left: rect.left, right: rect.right }; }) };
+  });
+  expect(geometry.fieldLeft).toBeGreaterThanOrEqual(geometry.contentLeft - 1);
+  expect(geometry.fieldRight).toBeLessThanOrEqual(geometry.contentRight + 1);
+  expect(geometry.sectionScroll).toBeLessThanOrEqual(geometry.sectionWidth + 1);
+  expect(geometry.groupScroll).toBeLessThanOrEqual(geometry.groupWidth + 1);
+  for (const box of geometry.buttons) expect(box.right).toBeLessThanOrEqual(geometry.contentRight + 1);
+  const label = field.locator(".ks-field-label");
+  await expect(label).toHaveCSS("word-break", "keep-all");
+  await expect(label).toHaveCSS("overflow-wrap", "break-word");
+  for (const button of await group.getByRole("button").all()) { await button.click(); await expect(button).toHaveAttribute("aria-pressed", "true"); }
 });

@@ -16,7 +16,6 @@
 .ks-empty-state-text,
 .ks-list-group-status .ks-error-id,
 .ks-data-text,
-.ks-field-label,
 .ks-data-button-card-label,
 .ks-tooltip-content,
 .ks-combobox-description,
@@ -33,6 +32,8 @@
   overflow-wrap: anywhere;
   word-break: keep-all;
 }
+
+.ks-field-label { overflow-wrap: break-word; word-break: keep-all; }
 
 .ks-markdown-text pre,
 .ks-process-command {

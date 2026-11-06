@@ -474,7 +474,7 @@ options_only?: boolean,
  */
 read_only?: Binding, 
 /**
- * (45판) 참이면 입력과 부속 조작을 잠근다.
+ * (48판) 참이면 입력과 부속 조작을 잠근다.
  */
 disabled?: Binding, spin?: boolean, min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, label_position?: LabelPosition, style?: SelectStyle, placeholder?: Binding, 
 /**
