@@ -86,8 +86,7 @@ if (warningLayout && dataViewsApp.ui.type === "tabs") {
   const child: Block = warningLayout === "section" ? { type: "section", title: "자료", child: table }
     : warningLayout === "middle" ? { type: "stack", direction: "column", children: [text, table, text] }
     : warningLayout === "other-fill" ? { type: "stack", direction: "column", fill: 1, children: [table, text] }
-    : warningLayout === "fill" ? { type: "stack", direction: "column", fill: 1, children: [{ type: "toolbar", start: [{ type: "button", label: "위 단추", on_click: { set_state: "choice", value: null } }] }, table, { type: "toolbar", start: [{ type: "button", label: "아래 단추", on_click: { set_state: "choice", value: null } }] }] }
+    : warningLayout === "fill" ? { type: "stack", direction: "column", fill: 1, children: [{ type: "toolbar", start: [{ type: "button", label: "위 단추", on_click: [{ set_state: "choice", value: null }] }] }, table, { type: "toolbar", start: [{ type: "button", label: "아래 단추", on_click: [{ set_state: "choice", value: null }] }] }] }
     : table;
-  dataViewsApp.ui.tabs.push({ label: "표 경고 배치", child });
-  dataViewsApp.state.tab = dataViewsApp.ui.tabs.length - 1;
+  dataViewsApp.ui = child;
 }

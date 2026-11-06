@@ -263,9 +263,10 @@ for (const layout of ["section", "middle", "other-fill"]) test(`비채움 ${layo
   await expect(app.getByRole("alert")).toBeVisible();
   for (const [width,height] of [[880,600],[360,180]]) {
     await app.evaluate((e,[w,h]) => {e.style.width=`${w}px`;e.style.height=`${h}px`;},[width,height]);
-    await expect.poll(() => app.getByRole("table").evaluate(e=>e.getBoundingClientRect().height)).toBeGreaterThan(100);
+    await expect.poll(() => app.getByRole("table").evaluate(e=>e.getBoundingClientRect().height)).toBeGreaterThan(0);
+    await app.getByRole("table").evaluate(e=>{e.scrollTop=e.scrollHeight;});
     await app.getByRole("table").getByText("행 40", {exact:true}).scrollIntoViewIfNeeded();
-    await expect(app.getByRole("table").getByText("행 40",{exact:true})).toBeVisible();
+    await expect(app.getByRole("table").getByText("행 40",{exact:true})).toBeInViewport();
   }
 });
 
@@ -280,4 +281,6 @@ test("높은 표 경고는 문구와 코드를 모두 보이고 낮은 창에만
   });
   expect(metrics.client).toBe(metrics.scroll);
   expect(metrics.top).toBe(8);
+  await app.evaluate(e=>{e.style.height="180px";});
+  expect(await app.getByRole("alert").evaluate(e=>e.getBoundingClientRect().top-e.closest(".ks-data-window")!.querySelector(".ks-data-window-body")!.getBoundingClientRect().top)).toBe(8);
 });

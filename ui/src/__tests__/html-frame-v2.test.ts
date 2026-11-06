@@ -40,3 +40,11 @@ it.each([
 ])("색이 고정된 글꼴 토큰 문서에는 색상 체계를 주입하지 않는다: %s", (html) => {
   expect(htmlViewSource(html)).not.toContain(":where(:root){color-scheme:light dark}");
 });
+
+it("외부 스타일은 정화와 CSP로 차단하고 인라인 색 토큰은 인식한다", () => {
+  const source = htmlViewSource('<link rel="stylesheet" href="https://example.com/colors.css"><style>@import "https://example.com/type.css";</style><p style="color:var(--ks-color-text)">본문</p>');
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  expect(doc.querySelector('link')?.hasAttribute("href")).toBe(false);
+  expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content")).toContain("style-src 'unsafe-inline'");
+  expect(source).toContain(":where(:root){color-scheme:light dark}");
+});

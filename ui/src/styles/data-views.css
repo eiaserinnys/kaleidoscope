@@ -278,9 +278,13 @@
 .ks-media-failed > svg { justify-self: center; }
 .ks-media-preview-state { display: grid; gap: var(--ks-space-3); width: calc(var(--ks-control-height) * 8); max-width: 100%; padding: var(--ks-space-4); }
 
-/* 낮은 칸에서도 정상 행이 남도록 알림만 먼저 줄인다. */
+/* 자연 높이에서는 표 내용을 펴고, 채움 자리에서는 남은 높이를 쓴다. */
 .ks-table-with-notice { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
-.ks-table-row-notice { flex: 0 0 auto; min-height: 0; padding-inline: var(--ks-space-2); }
-.ks-table-row-notice > .ks-notice { padding-block: var(--ks-space-1); }
-.ks-table-row-notice .ks-notice-message { max-height: 1lh; overflow-y: auto; }
-.ks-table-with-notice > .ks-data-view { flex: 1 1 0; height: auto; min-height: 0; }
+.ks-table-row-notice { flex: 0 0 auto; min-height: 0; padding: var(--ks-space-2); }
+@container ks-data-window (max-height: 300px) {
+  .ks-table-row-notice { padding-block: 0; }
+  .ks-table-row-notice > .ks-notice { padding-block: var(--ks-space-1); }
+  .ks-table-row-notice .ks-notice-message { max-height: 1lh; overflow-y: auto; }
+}
+.ks-data-window-body > .ks-table-with-notice > .ks-table-row-notice { padding-block-start: var(--ks-space-2); }
+.ks-table-with-notice > .ks-data-view { flex: 1 1 auto; height: auto; min-height: 0; }

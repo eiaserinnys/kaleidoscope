@@ -169,6 +169,8 @@ export class WindowData {
   private chatDrafts = new Map<string, ChatDraft>();
   private chatDraftListeners = new Map<string, Set<() => void>>();
   private sources: DataView["sources"] = emptySources;
+  private noticeSources: DataView["sources"] = emptySources;
+  private sourceRetrySequence = 0;
   private sourceMeta: NonNullable<DataView["source_meta"]> = {};
   private listeners = new Map<string, Set<() => void>>();
   private sourceListeners = new Set<() => void>();
@@ -307,6 +309,8 @@ export class WindowData {
   };
   subscribeSources = (listener: () => void) => { this.sourceListeners.add(listener); return () => this.sourceListeners.delete(listener); };
   getSources = () => this.sources;
+  getNoticeSources = () => this.noticeSources;
+  getSourceRetrySequence = () => this.sourceRetrySequence;
   getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
   getNotice = () => this.noticeRole === "status" ? this.statusMessage : this.notice;
@@ -383,6 +387,14 @@ export class WindowData {
     }
     if (Object.keys(view.sources).length || Object.keys(view.source_meta ?? {}).length) {
       this.sources = { ...this.sources, ...view.sources };
+      const noticeSources = { ...this.noticeSources };
+      for (const [name, source] of Object.entries(view.sources)) {
+        const previous = noticeSources[name];
+        // 받은 값으로 화면을 유지하는 재수신 중에는 실패 안내도 유지한다.
+        noticeSources[name] = source.state === "loading" && source.has_value
+          && previous?.state === "failed" && previous.has_value ? previous : source;
+      }
+      this.noticeSources = noticeSources;
       this.sourceMeta = { ...this.sourceMeta, ...view.source_meta };
       this.sourceListeners.forEach((listener) => listener());
     }
@@ -442,7 +454,7 @@ export class WindowData {
     });
     const onFocus = () => {
       const names = Object.entries(this.definition.sources ?? {}).filter(([, source]) => source.kind === "file" || source.kind === "folder").map(([name]) => name);
-      if (names.length) void this.refresh(names);
+      if (names.length) void this.refresh(names, false);
     };
     globalThis.window.addEventListener("focus", onFocus);
     return () => {
@@ -682,7 +694,10 @@ export class WindowData {
       return false;
     }
   };
-  refresh = async (sources: string[]) => {
+  refresh = async (sources: string[], manual = true) => {
+    const retriedFailure = Object.entries(this.noticeSources).some(([name, source]) =>
+      source.state === "failed" && source.has_value && (!sources.length || sources.includes(name)));
+    if (manual && retriedFailure) { this.sourceRetrySequence += 1; this.sourceListeners.forEach((listener) => listener()); }
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }
     catch (error) { this.setNotice(toCoreError(error)); }
   };

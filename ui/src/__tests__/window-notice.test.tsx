@@ -33,7 +33,7 @@ it.each(["동작 오류", "원천 실패"])("%s 알림이 겹친 네이티브 �
     act(() => data.setNotice({ id: "TEST_ERROR", code: "invalid_request", message: "동작 오류", details: [] }));
   } else {
     cleanup();
-    vi.spyOn(data, "getSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
+    vi.spyOn(data, "getNoticeSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
     render(<WindowNotice />);
   }
   expect(screen.getByRole("alert")).toBeTruthy();
@@ -104,7 +104,7 @@ it("오류와 다시 시작은 자동으로 사라지지 않는다", () => {
 
 it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () => {
   cleanup();
-  vi.spyOn(data, "getSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
+  vi.spyOn(data, "getNoticeSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
   const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
   render(<WindowNotice />);
   tick(10000);
@@ -119,7 +119,7 @@ it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () 
 
 it("원천이 여러 곳에서 실패하면 첫 오류와 나머지 수만 보인다", () => {
   cleanup();
-  vi.spyOn(data, "getSources").mockReturnValue({
+  vi.spyOn(data, "getNoticeSources").mockReturnValue({
     first: { state: "failed", has_value: true, message: "첫 오류", id: "FIRST_ERROR" },
     second: { state: "failed", has_value: true, message: "둘째 오류", id: "SECOND_ERROR" },
     third: { state: "failed", has_value: true, message: "셋째 오류", id: "THIRD_ERROR" },
@@ -153,7 +153,7 @@ it("새 정보 알림이 이전 문구를 교체한다", () => {
 
 it("정보 알림이 사라진 뒤 원천 실패와 다시 받기는 남는다", () => {
   cleanup();
-  vi.spyOn(data, "getSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
+  vi.spyOn(data, "getNoticeSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
   render(<WindowNotice />);
   expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
   act(() => data.setStatus("처리했습니다"));
@@ -228,4 +228,14 @@ it.each(["다시 받기", "다시 시작"])("%s 전에 안전한 본문으로 �
   button.focus();fireEvent.click(button);
   expect(document.activeElement).toBe(host.container.querySelector(".ks-data-window-body"));
   expect(label === "다시 받기" ? refresh : restart).toHaveBeenCalled();
+});
+
+it("직접 다시 받으면 닫은 같은 실패도 다시 보인다", async () => {
+  act(() => (data as any).merge({ sources: { feed: { state: "failed", has_value: true, message: "읽기 실패" } }, values: {} }));
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  vi.spyOn(store, "call").mockResolvedValue({} as never);
+  await act(async () => { await data.refresh(["other"]); });
+  expect(screen.queryByRole("alert")).toBeNull();
+  await act(async () => { await data.refresh(["feed"]); });
+  expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
 });
