@@ -8,15 +8,13 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
   const [layout, setLayout] = useState<Layout | null>(null);
   const choices = useRef({ options, loading });
   const measureNow = useRef<(() => void) | null>(null);
+  const measuredDescription = useRef<{ options: InputOption[]; width: string; height: number } | null>(null);
   choices.current = { options, loading };
   useLayoutEffect(() => {
     if (!anchor) { setLayout(null); return; }
     const host = anchor.closest<HTMLElement>(".ks-data-window[data-window-id]");
     let openedAbove: boolean | undefined;
     let openedGeometry = "";
-    let measuredOptions: InputOption[] | undefined;
-    let measuredWidth = "";
-    let descriptionHeight = 0;
     const measure = () => {
       const rect = anchor.getBoundingClientRect();
       // 스크롤 영역을 벗어난 입력에 포털 목록만 남기지 않는다.
@@ -50,27 +48,29 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
       // 그릴 폭과 배치에서 실제 설명 높이를 재고 최대 높이를 더하지 않는다.
       surface.current?.style.setProperty("--ks-combobox-list-width", width + "px");
       surface.current?.classList.toggle("is-far", far);
-      const description = surface.current?.querySelector<HTMLElement>(".ks-combobox-description");
-      const measurementWidth = [width, far].join(":");
-      if (options !== measuredOptions || measurementWidth !== measuredWidth) {
-        descriptionHeight = 0;
-        if (description && surface.current) {
-          // 같은 폭에서 모든 설명이 쓸 공간을 미리 재고 활성 행과 무관하게 예약한다.
-          const probe = description.cloneNode(false) as HTMLElement;
-          probe.removeAttribute("id"); probe.setAttribute("aria-hidden", "true");
+      let descriptionHeight = 0;
+      const measurementWidth = [width, css.font, pane, offset, inset].join(":");
+      if (far && surface.current) {
+        if (options !== measuredDescription.current?.options || measurementWidth !== measuredDescription.current?.width) {
+          // 아래 설명이 쓸 최대 높이는 목록 제한에만 반영하고 빈 칸은 그리지 않는다.
+          const probe = document.createElement("div");
+          probe.className = "ks-combobox-description";
+          probe.setAttribute("aria-hidden", "true");
           Object.assign(probe.style, { position: "absolute", visibility: "hidden", height: "auto", maxHeight: "none", pointerEvents: "none" });
           surface.current.append(probe);
           for (const text of new Set(options.map(option => option.description).filter(Boolean))) {
             probe.textContent = text!;
-            descriptionHeight = Math.max(descriptionHeight, Math.min(probe.scrollHeight, far ? pane : 2 * pane));
+            descriptionHeight = Math.max(descriptionHeight, Math.min(probe.scrollHeight, pane));
           }
           probe.remove();
+          measuredDescription.current = { options, width: measurementWidth, height: descriptionHeight };
         }
-        measuredOptions = options; measuredWidth = measurementWidth;
+        descriptionHeight = measuredDescription.current.height;
       }
-      const required = far ? listHeight + descriptionHeight + (description ? line : 0) : Math.max(listHeight, descriptionHeight);
+      const reserved = descriptionHeight ? descriptionHeight + line : 0;
+      const required = listHeight + reserved;
       const minimumList = Math.min(3, options.length || 3) * rowHeight(options[0]) + padding;
-      const minimum = far ? minimumList + descriptionHeight + (description ? line : 0) : Math.max(minimumList, descriptionHeight);
+      const minimum = minimumList + reserved;
       let top = Math.max(bounds?.top ?? 0, 0) + inset;
       let bottom = Math.min(bounds?.bottom ?? window.innerHeight, window.innerHeight) - inset;
       // 칸 자리와 설명을 뺀 실제 여유가 세 행보다 작으면 쉘 범위를 쓴다.
@@ -85,12 +85,13 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
       const above = openedAbove ?? (below < required && aboveSpace > below);
       openedAbove = above;
       const available = above ? aboveSpace : below;
-      const descriptionLimit = Math.max(0, Math.min(descriptionHeight, far ? available - Math.min(listHeight, rowHeight() + padding) - line : available));
+      const descriptionLimit = far ? Math.max(0, Math.min(descriptionHeight, available - Math.min(listHeight, rowHeight() + padding) - line)) : available;
       setLayout({ far, above, style: {
         left: position.left,
         top: above ? undefined : Math.max(rect.bottom + offset, top),
         bottom: above ? window.innerHeight - Math.min(rect.top - offset, bottom) : undefined,
         maxHeight: available,
+        "--ks-combobox-list-limit": Math.max(0, Math.min(listHeight, available - reserved)) + "px",
         "--ks-combobox-description-limit": descriptionLimit + "px",
         "--ks-combobox-list-width": width + "px",
       } as CSSProperties });

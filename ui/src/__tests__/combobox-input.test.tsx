@@ -319,6 +319,18 @@ it.each([false, true])("닫힌 Enter 뒤 첫 입력은 선택 예약이 없고 �
   }
 });
 
+it("조합을 시작하면 클릭 뒤 프레임의 전체 선택 예약도 취소한다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus(); fireEvent.keyDown(input, { key: "Escape" });
+  input.setSelectionRange(2, 2);
+  fireEvent.click(input);
+  fireEvent.compositionStart(input);
+  await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+  expect([input.selectionStart, input.selectionEnd]).toEqual([2, 2]);
+  fireEvent.compositionEnd(input);
+});
+
 it("설명 공간을 처음부터 예약하고 세 행 여유가 없으면 쉘을 쓴다", async () => {
   const { Combobox } = await import("../components/combobox");
   const { createRef } = await import("react");
@@ -327,7 +339,7 @@ it("설명 공간을 처음부터 예약하고 세 행 여유가 없으면 쉘�
   vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
   let hostWidth = 360;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-    return (this.classList.contains("ks-data-window") ? { left: 40, right: 40 + hostWidth, top: 100, bottom: 500, width: hostWidth, height: 400 } : { left: 80, right: 280, top: 250, bottom: 282, width: 200, height: 32 }) as DOMRect;
+    return (this.classList.contains("ks-data-window") ? { left: 40, right: 40 + hostWidth, top: 100, bottom: 500, width: hostWidth, height: 400 } : { left: 80, right: 400, top: 250, bottom: 282, width: 320, height: 32 }) as DOMRect;
   });
   const measurement = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(79);
   const options = Array.from({ length: 10 }, (_, index) => ({ value: String(index), label: String(index), index, searchLabel: String(index), searchValue: String(index), ...(index ? { description: "설명" } : {}) }));
@@ -338,15 +350,17 @@ it("설명 공간을 처음부터 예약하고 세 행 여유가 없으면 쉘�
   const popup = document.querySelector(".ks-combobox-popup") as HTMLElement;
   expect(Number.parseFloat(popup.style.getPropertyValue("--ks-combobox-description-limit"))).toBe(79);
   expect(Number.parseFloat(popup.style.maxHeight)).toBeGreaterThan(206);
-  const reads = measurement.mock.calls.length;
+  // 가상 목록도 scrollHeight를 읽으므로 설명 측정 노드만 센다.
+  const reads = () => measurement.mock.contexts.filter(element => element instanceof HTMLElement && element.classList.contains("ks-combobox-description") && element.getAttribute("aria-hidden") === "true").length;
+  const initialReads = reads();
   fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
   fireEvent.focus(screen.getByRole("combobox"));
-  expect(measurement.mock.calls.length).toBe(reads);
+  expect(reads()).toBe(initialReads);
   view.rerender(tree(options.map(option => ({ ...option, description: "바뀐 설명" }))));
-  expect(measurement.mock.calls.length).toBeGreaterThan(reads);
-  const changedReads = measurement.mock.calls.length;
+  expect(reads()).toBeGreaterThan(initialReads);
+  const changedReads = reads();
   hostWidth = 340;
   fireEvent(window, new Event("resize"));
-  await waitFor(() => expect(measurement.mock.calls.length).toBeGreaterThan(changedReads));
+  await waitFor(() => expect(reads()).toBeGreaterThan(changedReads));
   cleanup(); css.cssText = "";
 });

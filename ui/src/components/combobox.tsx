@@ -24,9 +24,10 @@ type Props = {
   hideValue?: boolean;
   search?: boolean;
   onRevert?: () => void;
+  clearRef?: RefObject<(() => void) | null>;
 };
 
-export function Combobox({ inputProps, inputRef, options, ready, loading = false, visible, optionsOnly = false, onChoose, onCommit, onEditingEnd, selectedValue, hideValue = false, search = false, onRevert }: Props) {
+export function Combobox({ inputProps, inputRef, options, ready, loading = false, visible, optionsOnly = false, onChoose, onCommit, onEditingEnd, selectedValue, hideValue = false, search = false, onRevert, clearRef }: Props) {
   const id = useId();
   const listId = `${id}-list`;
   const descriptionId = `${id}-description`;
@@ -37,6 +38,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   const clickedClosed = useRef(false);
   const selectAfterChoose = useRef(false);
   const autoSelected = useRef(false);
+  const suppressFocus = useRef(false);
   const selectAll = (element: HTMLInputElement) => { element.select(); autoSelected.current = true; };
   const clickSelection = useRef<(() => void) | null>(null);
   const clickFrame = useRef(0);
@@ -58,6 +60,18 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   const popupVisible = open && (loading || optionsOnly || filtered.length > 0);
   const position = useAnchoredOverlay(popupVisible ? anchor : null, surface, { offsetToken: "--ks-space-2", alignEndOnOverflow: true });
   const close = useCallback(() => { setOpen(false); setQuery(""); setActive(null); }, []);
+  useLayoutEffect(() => {
+    if (!clearRef) return;
+    clearRef.current = () => {
+      cancelClickSelection(); selectAfterChoose.current = false; autoSelected.current = false;
+      close();
+      // X가 사라질 때 초점만 돌리고, 실제로 다시 입력할 때 목록을 연다.
+      suppressFocus.current = true;
+      try { inputRef.current?.focus({ preventScroll: true }); }
+      finally { suppressFocus.current = false; }
+    };
+    return () => { clearRef.current = null; };
+  }, [clearRef, inputRef, close]);
   const optionKey = useCallback((index: number) => filtered[index].index, [filtered]);
   const [listInset] = useState(() => typeof document === "undefined" ? 0 : Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-space-1")) || 0);
   const { scroll, virtual } = useVirtualRows(filtered.length, DEFAULT_VIRTUAL_ROW_ESTIMATE, undefined, false, optionKey, undefined, undefined, { start: 0, end: listInset * 2 });
@@ -108,10 +122,10 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   };
   return <>
     <input {...inputProps} ref={inputRef} role="combobox" aria-autocomplete="list" aria-expanded={popupVisible} aria-controls={popupVisible ? listId : undefined} aria-activedescendant={popupVisible ? activeId : undefined}
-      onPointerDown={(event) => { cancelClickSelection(); const element = event.currentTarget; if (autoSelected.current && element.selectionStart === 0 && element.selectionEnd === element.value.length) element.setSelectionRange(element.value.length, element.value.length); autoSelected.current = false; pointer.current = true; clickedClosed.current = !open; inputProps.onPointerDown?.(event); }}
+      onPointerDown={(event) => { if (event.button === 0) { cancelClickSelection(); const element = event.currentTarget; if (autoSelected.current && element.selectionStart === 0 && element.selectionEnd === element.value.length) element.setSelectionRange(element.value.length, element.value.length); autoSelected.current = false; } pointer.current = true; clickedClosed.current = !open; inputProps.onPointerDown?.(event); }}
       onPointerUp={(event) => { pointer.current = false; inputProps.onPointerUp?.(event); }}
       onPointerCancel={() => { pointer.current = false; clickedClosed.current = false; }}
-      onFocus={(event) => { inputProps.onFocus?.(event); if (optionsOnly && !inputProps.readOnly && !pointer.current) selectAll(event.currentTarget); show(); }}
+      onFocus={(event) => { inputProps.onFocus?.(event); if (!suppressFocus.current) { if (optionsOnly && !inputProps.readOnly && !pointer.current) selectAll(event.currentTarget); show(); } }}
       onClick={(event) => {
         inputProps.onClick?.(event);
         const element = event.currentTarget;
@@ -131,8 +145,8 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
         pointer.current = false; clickedClosed.current = false;
       }}
       onBlur={(event) => { if (!surface.current?.contains(event.relatedTarget as Node | null)) { inputProps.onBlur?.(event); setOpen(false); } }}
-      onChange={(event) => { autoSelected.current = false; inputProps.onChange?.(event); if (ready && !inputProps.readOnly) { setAnchor(inputRef.current); const value = event.currentTarget.value; if (!composing.current || filterInputOptions(options, value).length) setQuery(value); setActive(null); setOpen(true); } }}
-      onCompositionStart={(event) => { composing.current = true; inputProps.onCompositionStart?.(event); }}
+      onChange={(event) => { selectAfterChoose.current = false; autoSelected.current = false; inputProps.onChange?.(event); if (ready && !inputProps.readOnly) { setAnchor(inputRef.current); const value = event.currentTarget.value; if (!composing.current || filterInputOptions(options, value).length) setQuery(value); setActive(null); setOpen(true); } }}
+      onCompositionStart={(event) => { composing.current = true; selectAfterChoose.current = false; autoSelected.current = false; cancelClickSelection(); inputProps.onCompositionStart?.(event); }}
       onCompositionEnd={(event) => { composing.current = false; inputProps.onCompositionEnd?.(event); if (ready && !inputProps.readOnly) { setQuery(event.currentTarget.value); setActive(null); } }}
       onKeyDown={(event) => {
         if (event.shiftKey || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a")) autoSelected.current = false;
@@ -144,7 +158,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
           if (open && activeOption) { event.preventDefault(); choose(activeOption); return; }
           const exact = optionsOnly && open ? filtered.length === 1 ? filtered[0] : filtered.find((option) => option.searchLabel === text.trim().toLowerCase() || option.searchValue === text.trim().toLowerCase()) : undefined;
           if (exact) { event.preventDefault(); choose(exact); return; }
-          selectAfterChoose.current = optionsOnly; close();
+          selectAfterChoose.current = optionsOnly && open; close();
           if (!onCommit()) { event.preventDefault(); return; }
         }
         if (event.key === "Tab") { onCommit(); setOpen(false); }
@@ -161,7 +175,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
           return <OptionRow key={option.index} option={option} id={`${id}-option-${option.index}`} top={row.start} selected={selected === option.value} active={option.index === active} size={filtered.length} position={row.index + 1} descriptionId={descriptionId} measure={virtual.measureElement} onActive={setActive} onChoose={choose} hideValue={hideValue} />;
         })}</VirtualSurface> : <div className="ks-combobox-empty">일치 없음</div>}
       </div>
-      {options.some(option => option.description) && <><div className="ks-combobox-separator" /><div className="ks-combobox-description" id={descriptionId} tabIndex={-1} aria-hidden={!activeOption?.description}>{activeOption?.description}</div></>}
+      {activeOption?.description && <><div className="ks-combobox-separator" /><div className="ks-combobox-description" id={descriptionId} tabIndex={-1}>{activeOption.description}</div></>}
     </div>, document.body)}
   </>;
 }
