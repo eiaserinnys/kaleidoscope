@@ -19,6 +19,8 @@ import { DefaultFolderPreparation } from "./default-folder";
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
 const lifecycle = new WeakMap<ShellStore, Map<string, Promise<void>>>();
+/** 성공 응답이 먼저 와도 대화상자가 닫힐 틈을 준다. 그 사이에 닫히면 알림 칸이 사라질 때 거둔다. */
+const ACTION_SUCCESS_SETTLE_MS = 300;
 type PlaybackLease = { request: Promise<MediaPlayback>; users: number; closed: boolean };
 type ChatRetry = { id: string; text: string; attachments: DraftAttachment[]; failed: boolean };
 type ChatDraft = { text: string; attachments: DraftAttachment[]; retry: ChatRetry | null; restored: ReadonlySet<string>; error: CoreError | null };
@@ -182,7 +184,7 @@ export class WindowData {
   private noticeOwner: object | null = null;
   private noticeId: string | null = null;
   private noticeRole: "alert" | "status" = "alert";
-  private actionFailure: { pointer: string; problem: CoreError } | null = null;
+  private actionFailure: { pointer: string; problem: CoreError; retrying: boolean } | null = null;
   private statusSequence = 0;
   private unsubscribe?: () => void;
   private unsubscribeLink?: () => void;
@@ -321,6 +323,8 @@ export class WindowData {
   setNoticeSlot = (element: HTMLElement | null) => {
     if (this.noticeSlot === element) return;
     this.noticeSlot = element;
+    // 재시도 중에 대화상자가 닫혔으면 지난 실패를 창 아래로 내리지 않는다.
+    if (!element && this.actionFailure?.retrying) this.clearActionFailure(this.actionFailure.pointer);
     this.noticeSlotListeners.forEach((listener) => listener());
   };
   getNotice = () => this.noticeRole === "status" ? this.statusMessage : this.notice;
@@ -350,7 +354,7 @@ export class WindowData {
     this.noticeListeners.forEach((listener) => listener());
   };
   /** 같은 동작을 다시 실행할 때 지난 실패 알림을 거둔다. 그 사이에 다른 알림이 올라왔으면 그대로 둔다. */
-  clearActionFailure = (pointer: string) => {
+  private clearActionFailure = (pointer: string) => {
     const failure = this.actionFailure;
     if (!failure || failure.pointer !== pointer) return;
     this.actionFailure = null;
@@ -643,10 +647,21 @@ export class WindowData {
     trackWindowAction(this.windowId, this.actInternal(pointer, event, item, modifiers, scope, options));
 
   private actInternal = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
+    // 지난 실패를 시작할 때 거두면 대화상자가 줄어 단추가 손가락 밑에서 움직인다. 결과가 올 때까지 그대로 두고 여기서 거둔다.
+    const retried = this.actionFailure?.pointer === pointer ? this.actionFailure : null;
+    if (retried) retried.retrying = true;
+    const result = await this.runAction(pointer, event, item, modifiers, scope, options);
+    if (retried && this.actionFailure === retried) {
+      if (!result) retried.retrying = false;
+      else if (!this.noticeSlot) this.clearActionFailure(pointer);
+      else setTimeout(() => { if (this.actionFailure === retried) this.clearActionFailure(pointer); }, ACTION_SUCCESS_SETTLE_MS);
+    }
+    return result;
+  };
+
+  private runAction = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
     const label = this.actionLabel(pointer, scope);
     try {
-      // 입력 동작은 글자마다 알림을 거뒀다 다시 띄우지 않는다. 그 밖의 동작은 시작할 때 지난 실패를 거둔다.
-      if (!options?.input) this.clearActionFailure(pointer);
       if (!options?.input) {
         const pending: Promise<void>[] = [];
         for (const settle of this.inputSettlers) {
@@ -710,12 +725,11 @@ export class WindowData {
       }
       const reply = await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
       if (options?.input) this.inputSequence = Math.max(this.inputSequence, reply.sequence);
-      if (options?.input) this.clearActionFailure(pointer);
       return true;
     } catch (error) {
       const problem = toCoreError(error);
       const shown = label ? { ...problem, message: `${label}: ${problem.message}` } : problem;
-      this.actionFailure = { pointer, problem: shown };
+      this.actionFailure = { pointer, problem: shown, retrying: false };
       this.setNotice(shown);
       return false;
     }

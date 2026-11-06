@@ -18,6 +18,24 @@ it("확정 대화상자는 사용할 수 있는 첫 입력에 초점을 둔다",
   expect(input.selectionStart).toBe(input.selectionEnd);
 });
 
+it("다른 창 입력에 초점이 있으면 새로 뜬 대화상자가 그 초점을 가져오지 않는다", () => {
+  const other = document.createElement("div");
+  other.className = "ks-data-window";
+  const outside = document.createElement("input");
+  outside.setAttribute("aria-label", "다른 입력");
+  other.appendChild(outside);
+  document.body.appendChild(other);
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  document.body.appendChild(host);
+  outside.focus();
+  render(<Dialog host={host} title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={() => {}} onConfirm={() => {}} />);
+  expect(document.activeElement).toBe(outside);
+  cleanup();
+  other.remove();
+  host.remove();
+});
+
 it.each([true, false])("입력이 없는 위험 여부 %s 확인은 취소에 초점을 둔다", (danger) => {
   const dialog = show("확인하시겠습니까?", { danger });
   expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "취소" }));

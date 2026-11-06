@@ -1,4 +1,5 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AppDefinition, CoreRequest } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
@@ -72,8 +73,10 @@ it("느린 확정 응답은 250ms 뒤에 진행을 보이고 400ms 넘게 보이
   await sleep(230);
   expect(view.confirmButton.getAttribute("aria-busy")).toBe("true");
   expect(view.confirmButton.querySelector(".ks-button-progress")).not.toBeNull();
-  expect(view.cancelButton.hasAttribute("disabled")).toBe(true);
-  expect(view.confirmButton.hasAttribute("disabled")).toBe(true);
+  expect(view.cancelButton.getAttribute("aria-disabled")).toBe("true");
+  expect(view.confirmButton.getAttribute("aria-disabled")).toBe("true");
+  expect(view.cancelButton.hasAttribute("disabled")).toBe(false);
+  expect(view.confirmButton.hasAttribute("disabled")).toBe(false);
   fireEvent.keyDown(document, { key: "Escape" });
   expect(screen.getByRole("dialog")).toBe(view.dialog);
   await sleep(250);
@@ -105,5 +108,66 @@ it("대화상자를 먼저 닫으면 다음에 열 때 진행 표시가 남지 �
   await sleep(120);
   expect(screen.getByRole("dialog")).toBe(reopened);
   expect(confirm.getAttribute("aria-busy")).toBeNull();
+  view.store.dispose();
+});
+
+it("진행 중에도 초점은 저장 단추에 남고 Enter와 누름은 요청을 더 보내지 않는다", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let confirms = 0;
+  const view = await openDialog(async () => { confirms += 1; await gate; return { op: "data.act", sequence: 1 }; });
+  view.confirmButton.focus();
+  fireEvent.click(view.confirmButton);
+  await sleep(300);
+  expect(view.confirmButton.getAttribute("aria-busy")).toBe("true");
+  expect(view.confirmButton.getAttribute("aria-disabled")).toBe("true");
+  expect(document.activeElement).toBe(view.confirmButton);
+  fireEvent.click(view.confirmButton);
+  await userEvent.keyboard("{Enter}");
+  await sleep(60);
+  expect(confirms).toBe(1);
+  release();
+  await sleep(500);
+  expect(view.confirmButton.getAttribute("aria-busy")).toBeNull();
+  expect(document.activeElement).toBe(view.confirmButton);
+  view.store.dispose();
+});
+
+it("느린 실패 뒤에도 초점은 저장 단추에 남고 Enter로 다시 보낸다", async () => {
+  let confirms = 0;
+  const view = await openDialog(async () => {
+    confirms += 1;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    throw new Error("저장하지 못했습니다");
+  });
+  view.confirmButton.focus();
+  fireEvent.click(view.confirmButton);
+  await screen.findByText(/저장하지 못했습니다/);
+  await waitFor(() => expect(view.confirmButton.getAttribute("aria-disabled")).toBeNull(), { timeout: 3000 });
+  expect(confirms).toBe(1);
+  expect(document.activeElement).toBe(view.confirmButton);
+  expect(screen.getByRole("dialog")).toBe(view.dialog);
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => expect(confirms).toBe(2), { timeout: 2000 });
+  await sleep(700);
+  view.store.dispose();
+});
+
+it("진행이 끝나도 다른 곳의 초점을 가져오지 않는다", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const view = await openDialog(async () => { await gate; throw new Error("저장하지 못했습니다"); });
+  const outside = document.createElement("button");
+  outside.textContent = "바깥";
+  document.body.appendChild(outside);
+  view.confirmButton.focus();
+  fireEvent.click(view.confirmButton);
+  outside.focus();
+  await sleep(300);
+  release();
+  await sleep(500);
+  expect(screen.getByRole("dialog")).toBe(view.dialog);
+  expect(document.activeElement).toBe(outside);
+  outside.remove();
   view.store.dispose();
 });

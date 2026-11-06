@@ -430,6 +430,11 @@
 .ks-dialog-confirm.is-danger .ks-button:active:not(:disabled) { background-image: linear-gradient(color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent), color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent)), linear-gradient(var(--ks-color-hover), var(--ks-color-hover)); }
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
 .ks-dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
+/* 진행 중인 대화상자 단추는 눌리지 않지만 초점은 남는다. 모양과 호버와 누름은 예전 disabled와 같게 둔다. */
+.ks-dialog-actions .ks-button[aria-disabled="true"] { cursor: default; opacity: .56; }
+.ks-dialog-actions .ks-button[aria-disabled="true"]:hover,
+.ks-dialog-actions .ks-button[aria-disabled="true"]:active { background-image: none; }
+.ks-dialog-actions .ks-dialog-confirm.is-danger .ks-button[aria-disabled="true"]:active { background-image: none; }
 .ks-tour-overlay { position: absolute; inset: var(--ks-space-3); z-index: 2; pointer-events: none; }
 .ks-tour-spotlight { position: absolute; z-index: 0; border-radius: var(--ks-radius-small); outline: var(--ks-focus-width) solid var(--ks-color-accent); box-shadow: 0 0 0 100vmax light-dark(color-mix(in srgb, var(--ks-color-text) 35%, transparent), color-mix(in srgb, var(--ks-color-background) 55%, transparent)); pointer-events: none; }
 .ks-tour-card { position: absolute; z-index: 1; display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; flex-direction: column; gap: var(--ks-space-2); overflow: auto; padding: var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-glass-edge); border-radius: var(--ks-radius-window); background: var(--ks-material-dialog); box-shadow: var(--ks-shadow-popover); color: var(--ks-color-text); pointer-events: auto; backdrop-filter: blur(var(--ks-blur-popover)); }

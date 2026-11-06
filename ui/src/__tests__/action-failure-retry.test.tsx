@@ -39,7 +39,9 @@ function hold(control: Control) {
   return { hit, release };
 }
 
-it("같은 동작을 다시 실행하면 지난 실패 알림을 응답 전에 거둔다", async () => {
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+it("재시도하는 동안 지난 실패 알림은 그대로 있고 성공하면 거둔다", async () => {
   const { data, control, done } = setup({ type: "button", label: "저장", on_click: [{ set_state: "saved", value: true }] }, { saved: false });
   control.fail = true;
   await data.act("/ui/on_click", null);
@@ -49,7 +51,7 @@ it("같은 동작을 다시 실행하면 지난 실패 알림을 응답 전에 �
   const gate = hold(control);
   const second = data.act("/ui/on_click", null);
   await gate.hit;
-  expect(data.getNotice()).toBeNull();
+  expect(data.getNotice()).toContain("저장하지 못했습니다");
   gate.release();
   await second;
   expect(data.getNotice()).toBeNull();
@@ -57,15 +59,66 @@ it("같은 동작을 다시 실행하면 지난 실패 알림을 응답 전에 �
   done();
 });
 
-it("다시 실패하면 같은 자리에 알림을 새로 세운다", async () => {
+it("알림 칸이 있으면 성공 응답 뒤 300ms 동안 알림을 남긴다", async () => {
   const { data, control, done } = setup({ type: "button", label: "저장", on_click: [{ set_state: "saved", value: true }] }, { saved: false });
   control.fail = true;
   await data.act("/ui/on_click", null);
-  const first = data.getNotice();
-  await data.act("/ui/on_click", null);
-  expect(first).toContain("저장하지 못했습니다");
+  const slot = document.createElement("div");
+  data.setNoticeSlot(slot);
+
+  control.fail = false;
+  const gate = hold(control);
+  const second = data.act("/ui/on_click", null);
+  await gate.hit;
   expect(data.getNotice()).toContain("저장하지 못했습니다");
-  expect(data.getNoticeId()).toBe("TEST_ACTION_FAILED");
+  gate.release();
+  await second;
+  expect(data.getNotice()).toContain("저장하지 못했습니다");
+  await sleep(150);
+  expect(data.getNotice()).toContain("저장하지 못했습니다");
+  await sleep(200);
+  expect(data.getNotice()).toBeNull();
+  data.setNoticeSlot(null);
+  done();
+});
+
+it("성공 응답을 기다리지 않고 대화상자가 닫히면 알림 칸이 사라질 때 지난 실패를 거둔다", async () => {
+  const { data, control, done } = setup({ type: "button", label: "저장", on_click: [{ set_state: "saved", value: true }] }, { saved: false });
+  control.fail = true;
+  await data.act("/ui/on_click", null);
+  const slot = document.createElement("div");
+  data.setNoticeSlot(slot);
+
+  control.fail = false;
+  const gate = hold(control);
+  const second = data.act("/ui/on_click", null);
+  await gate.hit;
+  gate.release();
+  await second;
+  expect(data.getNotice()).toContain("저장하지 못했습니다");
+  data.setNoticeSlot(null);
+  expect(data.getNotice()).toBeNull();
+  await sleep(350);
+  expect(data.getNotice()).toBeNull();
+  done();
+});
+
+it("다시 실패하면 알림을 같은 칸에서 새 내용으로 바꾸고 거두지 않는다", async () => {
+  const { data, control, done } = setup({ type: "button", label: "저장", on_click: [{ set_state: "saved", value: true }] }, { saved: false });
+  const slot = document.createElement("div");
+  data.setNoticeSlot(slot);
+  const trail: Array<string | null> = [];
+  const unsubscribe = data.subscribeNotice(() => trail.push(data.getNotice()));
+
+  control.fail = true;
+  control.message = "첫째 실패";
+  await data.act("/ui/on_click", null);
+  control.message = "둘째 실패";
+  await data.act("/ui/on_click", null);
+  expect(data.getNotice()).toContain("둘째 실패");
+  expect(trail).toEqual([expect.stringContaining("첫째 실패"), expect.stringContaining("둘째 실패")]);
+  unsubscribe();
+  data.setNoticeSlot(null);
   done();
 });
 
@@ -103,6 +156,17 @@ it("다른 알림이 덮은 뒤에는 같은 동작을 다시 실행해도 그 �
   done();
 });
 
+it("대화상자가 닫힌 뒤의 실패는 창 아래 알림으로 남는다", async () => {
+  const { data, control, done } = setup({ type: "button", label: "저장", on_click: [{ set_state: "saved", value: true }] }, { saved: false });
+  control.fail = true;
+  await data.act("/ui/on_click", null);
+  const slot = document.createElement("div");
+  data.setNoticeSlot(slot);
+  data.setNoticeSlot(null);
+  expect(data.getNotice()).toContain("저장하지 못했습니다");
+  done();
+});
+
 it("입력 동작은 보내는 동안 알림을 그대로 두고 성공하면 거둔다", async () => {
   const { data, control, done } = setup({ type: "input", label: "이름", value: { state: "text" }, on_change: { set_state: "text" } }, { text: "" });
   control.fail = true;
@@ -137,5 +201,6 @@ it("정보 알림이 떠 있는 동안에도 같은 동작의 지난 실패를 �
   gate.release();
   await second;
   expect(data.getNotice()).toBe("복사했습니다");
+  expect(data.getNoticeRole()).toBe("status");
   done();
 });

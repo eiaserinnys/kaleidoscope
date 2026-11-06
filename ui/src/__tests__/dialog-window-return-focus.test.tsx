@@ -243,11 +243,22 @@ it("창으로 돌아올 때 앱 대화상자가 있으면 대화상자 안으로
   const transport = createFakeTransport(makeTestSeed());
   const store = createShellStore(transport);
   render(<FocusHarness store={store} withAppDialog withConsent={false} />);
-  const outside = screen.getByLabelText("바깥 입력") as HTMLInputElement;
-  outside.focus();
+  (document.activeElement as HTMLElement | null)?.blur();
   await act(async () => { await store.ready; });
   const input = screen.getByLabelText("대화상자 입력");
   await waitFor(() => expect(document.activeElement).toBe(input));
+  store.dispose();
+});
+
+it("바깥 입력에 초점이 있으면 앱 대화상자가 열려도 그 초점을 지킨다", async () => {
+  const transport = createFakeTransport(makeTestSeed());
+  const store = createShellStore(transport);
+  render(<FocusHarness store={store} withAppDialog withConsent={false} />);
+  const outside = screen.getByLabelText("바깥 입력") as HTMLInputElement;
+  outside.focus();
+  await act(async () => { await store.ready; });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+  expect(document.activeElement).toBe(outside);
   store.dispose();
 });
 
