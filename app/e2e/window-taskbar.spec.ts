@@ -341,8 +341,12 @@ test("전체 다시 열기는 설정을 포함한 겹침과 창 크기를 보존
   const taskbar = page.locator(".ks-taskbar");
   const a = page.getByTestId("app-window-calculator").first();
   const b = page.getByTestId("app-window-md-editor");
+  await taskbar.getByRole("button", { name: "계산기", exact: true }).click();
+  await expect(taskbar.getByRole("button", { name: "계산기", exact: true })).toHaveAttribute("data-state", "active");
   await a.getByRole("button", { name: "창 최대화" }).click();
+  await expect(a).toHaveAttribute("data-maximized", "true");
   await taskbar.getByRole("button", { name: "마크다운 편집기" }).click();
+  await expect(taskbar.getByRole("button", { name: "마크다운 편집기" })).toHaveAttribute("data-state", "active");
   const original = await b.boundingBox();
   const title = await b.locator(".ks-window-titlebar").boundingBox();
   if (!title) throw new Error("창 제목을 찾지 못했습니다");
@@ -350,12 +354,14 @@ test("전체 다시 열기는 설정을 포함한 겹침과 창 크기를 보존
   await page.mouse.down();
   await page.mouse.move(title.x + 140, title.y + 46);
   await page.mouse.up();
+  await expect(b).not.toHaveClass(/ks-window-gesturing/);
   const edge = await b.locator(".ks-window-resize-east").boundingBox();
   if (!edge) throw new Error("창 크기 조절점을 찾지 못했습니다");
   await page.mouse.move(edge.x + edge.width / 2, edge.y + 80);
   await page.mouse.down();
   await page.mouse.move(edge.x + edge.width / 2 - 80, edge.y + 80);
   await page.mouse.up();
+  await expect(b).not.toHaveClass(/ks-window-gesturing/);
   await expect.poll(() => b.boundingBox()).not.toEqual(original);
   await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
   const settings = page.getByTestId("system-window-settings");
@@ -373,6 +379,7 @@ test("전체 다시 열기는 설정을 포함한 겹침과 창 크기를 보존
   });
   const expected = ["a", "system-window-settings", "app-window-md-editor", "c"];
   await expect.poll(ordered).toEqual(expected);
+  console.log("다시 열기 전 겹침 순서", JSON.stringify(await ordered()));
   const before = await b.boundingBox();
   await taskbar.getByRole("button", { name: "모든 창 최소화" }).click();
   await expect(settings).toHaveAttribute("data-minimized", "true");
@@ -384,6 +391,7 @@ test("전체 다시 열기는 설정을 포함한 겹침과 창 크기를 보존
   await expect(settings).toHaveAttribute("data-maximized", "false");
   expect(await b.boundingBox()).toEqual(before);
   await expect.poll(ordered).toEqual(expected);
+  console.log("다시 열기 후 겹침 순서", JSON.stringify(await ordered()));
   await page.screenshot({ path: testInfo.outputPath("restore-all.png") });
   await expect(taskbar.getByRole("button", { name: "모든 창 다시 열기" })).toBeDisabled();
   await taskbar.getByRole("button", { name: "설정" }).click({ button: "right" });
