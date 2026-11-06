@@ -4,12 +4,12 @@ import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
 import { cleanReplay, GUIDE_TAG } from "./guide.ts";
 
-export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[] };
+export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[]; assume_http_mcp?: boolean };
 type InstallerCheckpoint = { stdout: string };
 type ProcessSnapshot = { handle: string; after: number; checkpoint: State | InstallerCheckpoint | null; cwd: string; services: Record<string, string | null>; exit: unknown | null };
 type ProcessPort = {
   attach(params: { key: string }): Promise<ProcessSnapshot | null>;
-  start(params: { key: string; permission: string; cwd_permission: string; spec: Omit<Spec, "auth_methods">; services?: string[] }): Promise<{ status?: string; handle?: string; cwd?: string; services?: Record<string, string | null> }>;
+  start(params: { key: string; permission: string; cwd_permission: string; spec: Omit<Spec, "auth_methods" | "assume_http_mcp">; services?: string[] }): Promise<{ status?: string; handle?: string; cwd?: string; services?: Record<string, string | null> }>;
   read(params: { handle: string; after: number; max_bytes: number }): Promise<{ bytes: number[]; next: number; stderr_tail: number[]; exit: { code: number | null } | null }>;
   ack(params: { handle: string; after: number; checkpoint: State | InstallerCheckpoint | null }): Promise<unknown>;
   write(params: { handle: string; bytes: Uint8Array; checkpoint: State }): Promise<unknown>;
@@ -262,10 +262,14 @@ export class AgentSession {
   newSession(): Promise<void> { return this.switchSession(null); }
   loadSession(sessionId: string): Promise<void> { return this.switchSession(sessionId); }
 
+  private mcpServers() {
+    return this.state.capabilities.http && this.tools ? [{ type: "http", name: "kaleidoscope", url: this.tools, headers: [] }] : [];
+  }
+
   private switchSession(sessionId: string | null): Promise<void> {
     return this.serial(async () => {
       if (!this.handle || this.state.phase !== "ready" || this.state.queue.length || Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
-      const mcpServers = this.state.capabilities.http && this.tools ? [{ type: "http", name: "kaleidoscope", url: this.tools, headers: [] }] : [];
+      const mcpServers = this.mcpServers();
       this.listError = null;
       await this.request(sessionId ? "switch" : "new_user", sessionId ? "session/load" : "session/new", {
         cwd: this.cwd, mcpServers, ...(sessionId ? { sessionId, _control: sessionId } : {}),
@@ -388,6 +392,9 @@ export class AgentSession {
         if (request && !message.error && request.kind === "initialize" && this.spec?.auth_methods) {
           this.state = { ...this.state, authMethods: this.state.authMethods.filter((method) => this.spec!.auth_methods!.includes(method.id)) };
         }
+        if (request && !message.error && request.kind === "initialize" && this.spec?.assume_http_mcp) {
+          this.state = { ...this.state, capabilities: { ...this.state.capabilities, http: true } };
+        }
         if (request && !message.error && (request.kind === "new" || request.kind === "load")) {
           await this.history.setSession(this.state.sessionId);
           this.listWanted = true;
@@ -437,7 +444,7 @@ export class AgentSession {
         await this.request("initialize", "initialize", { protocolVersion: 1, clientCapabilities: {} });
         return;
       }
-      const mcpServers = this.state.capabilities.http && this.tools ? [{ type: "http", name: "kaleidoscope", url: this.tools, headers: [] }] : [];
+      const mcpServers = this.mcpServers();
       this.state = { ...this.state, servicesUsed: this.state.capabilities.http ? this.tools : null };
       if (this.state.sessionId && this.state.capabilities.loadSession && !this.state.needsNew) {
         await this.request("load", "session/load", { sessionId: this.state.sessionId, cwd: this.cwd, mcpServers });

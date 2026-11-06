@@ -76,6 +76,9 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "assume_http_mcp": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -136,7 +139,8 @@
             "env": {},
             "auth_methods": [
               "oauth-personal"
-            ]
+            ],
+            "assume_http_mcp": true
           }
         ]
       },
@@ -1017,14 +1021,14 @@
     { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
-      "version": 6
+      "version": 7
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 6
+      "version": 7
     },
     "inputs": {},
     "outputs": {

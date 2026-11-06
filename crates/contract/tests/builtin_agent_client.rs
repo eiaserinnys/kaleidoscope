@@ -2,6 +2,24 @@ use kaleidoscope_contract::{validate::parse_app_definition, LIST_DISABLED_BLOCK_
 use serde_json::Value;
 
 #[test]
+fn builtin_agent_assumes_http_mcp_for_one_default() {
+    let json = include_str!("../../../apps/agent.json");
+    let value: Value = serde_json::from_str(json).unwrap();
+    let agents = value["storage"]["entries"].as_array().unwrap().iter().find(|entry| entry["id"] == "agents").unwrap();
+    let defaults = agents["default"].as_array().unwrap();
+    let with_flag: Vec<_> = defaults.iter().enumerate().filter(|(_, agent)| agent.get("assume_http_mcp").is_some()).collect();
+    assert_eq!(with_flag.len(), 1);
+    assert_eq!(with_flag[0].1["assume_http_mcp"], true);
+    let app = parse_app_definition(json).unwrap();
+    let storage = app.storage.unwrap();
+    let entry = storage.entries.iter().find(|entry| entry.id == "agents").unwrap();
+    kaleidoscope_contract::app_storage::validate_storage_content(entry, &agents["default"]).unwrap();
+    let mut invalid = agents["default"].clone();
+    invalid[with_flag[0].0]["assume_http_mcp"] = "true".into();
+    assert!(kaleidoscope_contract::app_storage::validate_storage_content(entry, &invalid).is_err());
+}
+
+#[test]
 fn builtin_agent_declares_client_process_and_settings() {
     let json = include_str!("../../../apps/agent.json");
     let value: Value = serde_json::from_str(json).unwrap();
