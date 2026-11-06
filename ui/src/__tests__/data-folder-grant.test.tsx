@@ -6,6 +6,8 @@ import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed } from "./fixtures";
+import { DataState } from "../components/data-state";
+import { WindowDataProvider } from "../data/window-data";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -19,6 +21,23 @@ const folderApp: AppDefinition = {
   ui: { type: "list", items: { expr: "$data.pictures.{ \"key\": path, \"title\": name }" } },
 };
 const failed = { status: "failed" as const, id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "이 기기에서 폴더를 골라야 합니다", retry: ["pictures"] };
+
+it("기본 폴더 상태를 기다리는 동안 목록의 뼈대를 보이고 허용 상태로 전환한다", async () => {
+  const definition: AppDefinition = { ...folderApp, permissions: [{ module: "files", id: "media", access: "read", label: "자료", default_folder: "pictures" }] };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  let resolve!: (value: CoreReply) => void;
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "files.prepare_default_folder"
+    ? new Promise<CoreReply>(done => { resolve = done; }) as never : original(request as never));
+  const store = createShellStore(transport);
+  render(<WindowDataProvider store={store} windowId="viewer-window" definition={definition}>
+    <DataState value={failed} loading={<div className="ks-list is-grid" role="status" aria-label="불러오는 중" />} />
+  </WindowDataProvider>);
+  expect(screen.getByRole("status", { name: "불러오는 중" }).classList.contains("is-grid")).toBe(true);
+  await waitFor(() => expect(resolve).toBeDefined());
+  await act(async () => resolve({ op: "files.prepare_default_folder", result: { status: "consent_required", folder: "pictures", access: "read" } }));
+  expect(await screen.findByRole("button", { name: "사진 폴더 읽기 허용" })).toBeTruthy();
+});
 
 it("기본 폴더 준비가 실패해도 원천을 붙이고 오류와 폴더 선택을 보인다", async () => {
   const definition: AppDefinition = { ...folderApp, requires: { blocks: 47, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "read", label: "자료", default_folder: "pictures" }] };

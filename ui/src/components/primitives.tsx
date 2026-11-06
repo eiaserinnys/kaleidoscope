@@ -130,14 +130,16 @@ export function EmptyState({
   text,
   action,
   rootProps,
+  className = "",
 }: {
   icon?: ReactNode;
   text?: ReactNode;
   action?: ReactNode;
   rootProps?: import("../comments/block-root").BlockRootProps;
+  className?: string;
 }) {
   return (
-    <div {...rootProps} className={`ks-empty-state${text ? "" : " ks-empty-state-without-text"}`}>
+    <div {...rootProps} className={`ks-empty-state${text ? "" : " ks-empty-state-without-text"} ${className}`}>
       {icon != null ? <span aria-hidden="true" className="ks-empty-state-icon">{icon}</span> : null}
       {text ? <span className="ks-empty-state-text">{text}</span> : null}
       {action ? <span className="ks-empty-state-action">{action}</span> : null}

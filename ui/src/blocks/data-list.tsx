@@ -79,14 +79,21 @@ const ListRow = memo(function ListRow({ item, index, length, active, current, fo
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
-  if (value.status !== "ready") return block.layout === "icons" && value.status === "loading" ? <IconListLoading grouped={Boolean(block.grouped)} /> : <DataState rootProps={blockRoot} value={value} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} loading={<ListLoading block={block} />} />;
   return <ListReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
 }
-function IconListLoading({ grouped }: { grouped: boolean }) {
+function ListLoading({ block }: { block: Extract<Block, { type: "list" }> }) {
   const blockRoot = useBlockRootProps();
   const scroll = useRef<HTMLDivElement>(null);
-  const columns = useIconGridColumns(scroll, true);
-  return <div {...blockRoot} className="ks-data-view ks-list is-icons" ref={scroll}>{grouped && <div className="ks-view-group" aria-hidden="true"><span className="ks-data-skeleton"><i /></span></div>}<IconTileSkeleton count={columns * 2} /></div>;
+  const icons = block.layout === "icons";
+  const grid = block.layout === "grid";
+  const columns = useIconGridColumns(scroll, icons);
+  return <div {...blockRoot} className={`ks-data-view ks-list is-loading${grid ? " is-grid" : icons ? " is-icons" : ""}`} style={block.item_width ? { "--ks-list-grid-width": `var(--ks-repeat-grid-item-width-${block.item_width})` } as React.CSSProperties : undefined} ref={scroll} role="status" aria-label="불러오는 중">
+    {block.grouped && <div className="ks-view-group" aria-hidden="true"><span className="ks-data-skeleton"><i /></span></div>}
+    {icons ? <IconTileSkeleton count={columns * 2} status={false} /> : grid
+      ? <div className="ks-list-grid-row" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <div className="ks-list-card" key={index}><span className="ks-media-thumbnail is-loading" /><span className="ks-list-content"><span className="ks-data-skeleton"><i /></span></span></div>)}</div>
+      : Array.from({ length: 8 }, (_, index) => <div className="ks-row ks-list-row" aria-hidden="true" key={index}><span className="ks-data-skeleton"><i /></span></div>)}
+  </div>;
 }
 function ListReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const blockRoot = useBlockRootProps();

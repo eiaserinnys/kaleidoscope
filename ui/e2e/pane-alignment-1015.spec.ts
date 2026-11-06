@@ -177,6 +177,8 @@ for (const context of ["direct", "section", "tab", "dialog"]) {
     await grid.evaluate(el => { el.scrollTop = 200; });
     const band = grid.locator('.ks-view-sticky .ks-view-group');
     await expect(band).toBeVisible();
+    const stickyTop = await band.evaluate(el => Math.abs(el.getBoundingClientRect().top - el.closest('.ks-list')!.getBoundingClientRect().top));
+    expect(stickyTop).toBeLessThanOrEqual(1);
     await expect(band).toHaveCSS('border-top-left-radius', '0px');
     await expect(band).toHaveCSS('border-top-right-radius', '0px');
     if (context === "section" || context === "tab") {

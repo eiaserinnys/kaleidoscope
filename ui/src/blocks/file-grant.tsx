@@ -7,12 +7,17 @@ import type { ShellStore } from "../core/shell-store";
 import { useOptionalWindowData } from "../data/window-data";
 import { knownFolderNames } from "../data/default-folder";
 
+export function useDefaultFolderState(permission: string | undefined) {
+  const data = useOptionalWindowData();
+  const subscribe = useCallback((listener: () => void) => permission ? data?.defaultFolders.subscribe(permission, listener) ?? (() => {}) : () => {}, [data, permission]);
+  const get = useCallback(() => permission ? data?.defaultFolders.get(permission) : undefined, [data, permission]);
+  return useSyncExternalStore(subscribe, get, get);
+}
+
 export function FileGrant({ context, permission, rootProps, compact = false, onGranted, pickerLabel, contentsOnly = false }: { context: { store: ShellStore; window: { id: string }; definition: AppDefinition }; permission: string; rootProps?: import("../comments/block-root").BlockRootProps; compact?: boolean; onGranted?: () => void; pickerLabel?: string; contentsOnly?: boolean }) {
   const [error, setError] = useState<CoreError | null>(null);
   const data = useOptionalWindowData();
-  const subscribe = useCallback((listener: () => void) => data?.defaultFolders.subscribe(permission, listener) ?? (() => {}), [data, permission]);
-  const get = useCallback(() => data?.defaultFolders.get(permission), [data, permission]);
-  const state = useSyncExternalStore(subscribe, get, get);
+  const state = useDefaultFolderState(permission);
   const declaration = context.definition.permissions.find((item) => item.module === "files" && item.id === permission);
   const hasDefault = declaration?.module === "files" && Boolean(declaration.default_folder);
   if (hasDefault && !state) return <div {...rootProps} className="ks-data-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div>;

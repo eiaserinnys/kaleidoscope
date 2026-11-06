@@ -4,7 +4,7 @@ import { toCoreError } from "../core/core-transport";
 import { useWindowData } from "../data/window-data";
 import { useWindowGrants } from "../data/window-state";
 import { DataIcon } from "./data-icons";
-import { FileGrant } from "../blocks/file-grant";
+import { FileGrant, useDefaultFolderState } from "../blocks/file-grant";
 import { Button, EmptyState, ErrorId, Notice } from "./primitives";
 
 export function useFolderPick() {
@@ -34,7 +34,7 @@ export function BindingFailureNotice({ value, rootProps }: { value: BindingValue
   return <Notice rootProps={rootProps} role="alert" errorId={value.id}>{value.message}</Notice>;
 }
 
-export function DataState({ value, compact = false, layout, loginFailure, onRetry, onLogin, rootProps }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; layout?: "row"; loginFailure?: { message: string; id?: string }; onRetry?: () => void; onLogin?: () => void; rootProps?: import("../comments/block-root").BlockRootProps }) {
+export function DataState({ value, compact = false, layout, loading, loginFailure, onRetry, onLogin, rootProps }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; layout?: "row"; loading?: "rows" | React.ReactElement; loginFailure?: { message: string; id?: string }; onRetry?: () => void; onLogin?: () => void; rootProps?: import("../comments/block-root").BlockRootProps }) {
   const data = useWindowData();
   const context = { store: data.store, window: { id: data.windowId } };
   const [loginError, setLoginError] = useState<ReturnType<typeof toCoreError> | null>(null);
@@ -44,7 +44,14 @@ export function DataState({ value, compact = false, layout, loginFailure, onRetr
       .flatMap((source) => source && (source.kind === "file" || source.kind === "folder") ? [source.permission] : [])
     : [];
   const ungranted = possiblePermissions.find((permission) => !grants.some((grant) => grant.permission === permission));
-  if (value.status === "loading") return <div {...rootProps} className="ks-data-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div>;
+  const folderState = useDefaultFolderState(ungranted);
+  const declaration = data.definition.permissions.find((item) => item.module === "files" && item.id === ungranted);
+  const waitingForDefault = value.status === "failed" && value.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && declaration?.module === "files" && Boolean(declaration.default_folder) && !folderState;
+  if (value.status === "loading" || waitingForDefault) {
+    if (loading === "rows") return <div {...rootProps} className="ks-data-view ks-data-loading-rows" role="status" aria-label="불러오는 중">{Array.from({ length: 8 }, (_, index) => <div className="ks-row" aria-hidden="true" key={index}><span className="ks-data-skeleton"><i /></span></div>)}</div>;
+    if (loading) return loading;
+    return <div {...rootProps} className={`ks-data-skeleton${compact ? " is-compact" : ""}`} role="status" aria-label="불러오는 중"><i /><i /><i /></div>;
+  }
   const isLogin = value.status === "login_required";
   // 기기 폴더 원천(file, folder)이 아직 폴더를 고르지 않아 실패했으면 다시 받기 대신 폴더 고르기를 보인다.
   // 폴더 원천만 쓰는 블록에는 파일 트리처럼 폴더를 고를 다른 자리가 없다.

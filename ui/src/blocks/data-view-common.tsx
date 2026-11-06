@@ -31,7 +31,7 @@ export function Badges({ values }: { values: unknown }) {
 export function GroupHeading({ title, meta }: { title: string; meta?: string }) {
   return <div className="ks-view-group"><strong>{title}</strong>{meta && <span>{meta}</span>}</div>;
 }
-export function NoItems({ rootProps }: { rootProps?: import("../comments/block-root").BlockRootProps }) { return <EmptyState rootProps={rootProps} icon={<DataIcon name="list-filter" size="empty" />} text="없음" />; }
+export function NoItems({ rootProps }: { rootProps?: import("../comments/block-root").BlockRootProps }) { return <EmptyState rootProps={rootProps} className="ks-no-items" icon={<DataIcon name="list-filter" size="empty" />} text="없음" />; }
 export function dateText(value: unknown) {
   if (typeof value !== "string") return "";
   const date = new Date(value);

@@ -136,6 +136,28 @@ it("앱이 현재 칸을 바꾸면 그 칸으로 키보드 기준을 옮긴다",
   await waitFor(() => expect(target.tabIndex).toBe(0));
   expect(first.tabIndex).toBe(-1);
 });
+it.each(["rows", "grid"] as const)("%s 목록은 실제 목록 틀에 로딩 뼈대를 그린다", async (layout) => {
+  const { transport } = setup({ type: "list", layout, grouped: true, item_width: "small", items: { expr: "[]" } } as Block);
+  await screen.findByText("없음", { exact: true });
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/items": { status: "loading" } } } }));
+  const loading = await screen.findByRole("status", { name: "불러오는 중" });
+  expect(loading.classList.contains("ks-list")).toBe(true);
+  expect(loading.querySelector(".ks-view-group")).not.toBeNull();
+  expect(loading.querySelectorAll(layout === "grid" ? ".ks-list-grid-row > .ks-list-card .ks-media-thumbnail.is-loading" : ".ks-row.ks-list-row")).toHaveLength(layout === "grid" ? 12 : 8);
+  if (layout === "grid") expect(loading.style.getPropertyValue("--ks-list-grid-width")).toContain("small");
+});
+it.each(["tree", "table-rows", "table-columns"] as const)("%s 로딩은 여덟 행의 뼈대를 그린다", async (kind) => {
+  const table = kind.startsWith("table");
+  const block = table
+    ? { type: "table", rows: { expr: "[]" }, columns: { expr: "[]" } }
+    : { type: "tree", items: { expr: "[]" } };
+  const { transport } = setup(block as Block);
+  await screen.findByText("없음", { exact: true });
+  const key = kind === "tree" ? "items" : kind === "table-rows" ? "rows" : "columns";
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { [`/ui/${key}`]: { status: "loading" } } } }));
+  const loading = await screen.findByRole("status", { name: "불러오는 중" });
+  expect(loading.querySelectorAll(".ks-row")).toHaveLength(8);
+});
 it("누른 칸과 다른 빈 곳에 놓으면 선택을 지우지 않고 빈 곳을 누르면 초점을 유지한다", async () => {
   const { calls } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },
     items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: ["a"] }, 49);

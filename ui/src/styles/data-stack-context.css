@@ -1,7 +1,7 @@
 /* 쌓기의 내용은 직접 자식 또는 결정 줄 앞 스크롤 본문에 있다.
    맥락은 바깥 쌓기가 정하고 두 위치에 같은 규칙을 적용한다. */
 :is(.ks-data-tab-panel, .ks-data-section-child) > .ks-data-stack.is-column {
-  &:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-markdown-view, .ks-timeline, .ks-chart, .ks-map)) {
+  &:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-markdown-view, .ks-timeline, .ks-chart, .ks-map)):where(:not(:has(> .ks-data-stack-item.is-fill > .ks-no-items, > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-no-items))) {
     height: auto;
     :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 0 0 auto; overflow: visible; }
   }
@@ -13,7 +13,7 @@
   :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll):has(> :is(.ks-data-input, .ks-input-field) textarea) { flex: 1 1 0; overflow: auto; }
 }
 .ks-data-section-child > .ks-data-stack.is-column {
-  &:has(> .ks-data-stack-item.is-fill > :is(.ks-data-view, .ks-data-state, .ks-markdown-view), > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > :is(.ks-data-view, .ks-data-state, .ks-markdown-view)) { height: 100%; min-height: 100%; }
+  &:has(> .ks-data-stack-item.is-fill > :is(.ks-data-view, .ks-data-state, .ks-no-items, .ks-markdown-view), > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > :is(.ks-data-view, .ks-data-state, .ks-no-items, .ks-markdown-view)) { height: 100%; min-height: 100%; }
   :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:has(> :is(.ks-data-view, .ks-data-state, .ks-markdown-view)) { min-height: var(--ks-pane-min-size); }
 }
 .ks-data-stack-item.is-fill:not(.ks-stack-scroll) > .ks-data-stack.is-column {

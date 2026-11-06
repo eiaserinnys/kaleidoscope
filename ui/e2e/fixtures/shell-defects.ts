@@ -9,6 +9,18 @@ const tabbedPanePair = () => ({ type: "split", direction: "row", children: [
   { type: "section", title: "구역 제목", child: { type: "text", value: "내용" } },
 ] });
 export const shellDefectFixtures = [
+  { ...base, id: "empty-natural-1057", name: "내용 높이 빈 목록", state: {}, ui: { type: "tabs", tabs: [
+    { label: "내용", child: { type: "stack", direction: "column", children: [
+      { type: "list", items: [] }, { type: "button", label: "다음", on_click: [] },
+    ] } },
+  ] } },
+  { id: "loading-rows-1057", name: "행 로딩", requires: { blocks: 30, modules: { connection: 1 } },
+    permissions: [{ module: "connection", id: "sample", connection: "sample", label: "자료", access: "read" }],
+    sources: { sample: { kind: "request", permission: "sample", path: "/sample" } }, state: {},
+    ui: { type: "split", direction: "row", children: [
+      { type: "tree", by: "children", items: { expr: '[{"key":"a","title":$data.sample.message}]' } },
+      { type: "table", columns: [{ field: "name", label: "이름" }], rows: { expr: '[{"key":"a","name":$data.sample.message}]' } },
+    ] } },
   ...stackFillRegressions,
   ...stackContexts,
   ...bottomPaddingCases,
