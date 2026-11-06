@@ -40,7 +40,8 @@ for (const kind of ["tree", "table"] as const) for (const context of ["window", 
       : context === "section" ? "/ui/child" : context === "tab" ? "/ui/tabs/0/child" : "/ui";
     await page.goto(`/?preview=${id}`);
     const app = page.getByTestId(`app-window-${id}`);
-    const row = kind === "tree" ? app.getByRole("treeitem").first() : app.locator(".ks-table-row").first();
+    // 뼈대 행이 아니라 자료가 든 행을 기준으로 잡는다. 자료가 오기 전에 로딩을 흉내 내면 늦게 온 자료가 그것을 덮는다.
+    const row = app.getByRole(kind === "tree" ? "treeitem" : "row", { name: "데이터를 불러왔습니다" });
     await expect(row).toBeVisible();
     const before = (await row.boundingBox())!;
     await page.evaluate(({ id, pointer, kind }) => (window as any).conversationHarness.emit({ event: "data.update", window_id: `${id}-window`, view: {
@@ -73,8 +74,8 @@ test("행 로딩의 높이는 실제 행과 같다", async ({ page }) => {
 test("트리와 표도 로딩 행 높이를 실제 행과 맞춘다", async ({ page }) => {
   await page.goto("/?preview=loading-rows-1057");
   const app = page.getByTestId("app-window-loading-rows-1057");
-  const treeRow = app.getByRole("treeitem").first();
-  const tableRow = app.getByRole("table").locator(".ks-table-row").first();
+  const treeRow = app.getByRole("treeitem", { name: "데이터를 불러왔습니다" });
+  const tableRow = app.getByRole("row", { name: "데이터를 불러왔습니다" });
   await expect(treeRow).toBeVisible();
   await expect(tableRow).toBeVisible();
   const heights = [(await treeRow.boundingBox())!.height, (await tableRow.boundingBox())!.height];
