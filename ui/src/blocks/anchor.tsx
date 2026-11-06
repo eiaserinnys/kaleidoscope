@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useLayoutEffect, useRef } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
@@ -7,6 +8,7 @@ import { removeAnchorElement, setAnchorElement } from "./anchor-registry";
 export type AnchorBlockData = Extract<Block, { type: "anchor" }>;
 
 export function AnchorBlock({ block, context, pointer }: { block: AnchorBlockData; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const root = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = root.current;
@@ -27,5 +29,5 @@ export function AnchorBlock({ block, context, pointer }: { block: AnchorBlockDat
     };
   }, [block.id, context.window.id]);
 
-  return <div ref={root} className="ks-anchor" style={{ display: "contents" }}>{renderBlock(block.child, context, `${pointer}/child`)}</div>;
+  return <div {...blockRoot} ref={root} className="ks-anchor" style={{ display: "contents" }}>{renderBlock(block.child, context, `${pointer}/child`)}</div>;
 }

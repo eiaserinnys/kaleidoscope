@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useRef, useState } from "react";
 import type { App, AppDefinition, Block, CoreError, ExplorerView, ShellSnapshot } from "../contract/contract";
 import { Menu, type MenuEntry } from "../components/menu";
@@ -48,6 +49,7 @@ function validFolderPath(value: unknown): value is string {
 }
 
 export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const permission = block.root.permission;
   const filesPermission = context.definition.permissions.find(
     (item) => item.module === "files" && item.id === permission,
@@ -149,6 +151,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   const contextFile = (anchor: HTMLElement, path: string) => openMenu(anchor, path);
 
   const fileTree = <FileBrowserTree
+    rootProps={rootPath === null ? blockRoot : undefined}
     canCreate={false}
     context={context}
     extensions={[]}
@@ -160,7 +163,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     selectedPath={rootPath === null ? null : folder}
   />;
 
-  if (scope === "pc" && rootPath === null) return <div className={`ks-explorer-empty${actionError ? " has-error" : ""}`}>
+  if (scope === "pc" && rootPath === null) return <div {...blockRoot} className={`ks-explorer-empty${actionError ? " has-error" : ""}`}>
     <EmptyState icon={<Monitor size="empty" />} action={<>
       <Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) void allowPc(); }}>이 PC의 파일 읽기 허용</Button>
       {actionError ? <span className="ks-inline-error" role="alert">{actionError.message}{actionError.id ? <> <ErrorId id={actionError.id} /></> : null}</span> : null}
@@ -170,7 +173,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
   if (rootPath === null) return fileTree;
 
   return <>
-    <div className="ks-explorer">
+    <div {...blockRoot} className="ks-explorer">
       <SplitPanes direction="row" sizes={[28, 72]}>
         {[
           fileTree,

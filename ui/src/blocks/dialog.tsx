@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
@@ -25,6 +26,7 @@ function hasPicker(block: Block): boolean {
 }
 
 export function DialogBlock({ block, context, pointer }: { block: DialogBlockData; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const open = useBinding(`${pointer}/open`, block.open);
   const title = useBinding(`${pointer}/title`, block.title);
@@ -73,6 +75,8 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
 
   return <div ref={root} style={{ display: "contents" }}>
     {isOpen && host ? <Dialog
+      rootProps={blockRoot}
+      ownerAnchor={root.current}
       host={host}
       overlayClassName={hasPicker(block.child) ? "is-picker" : ""}
       title={titleText}

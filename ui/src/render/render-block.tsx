@@ -43,6 +43,7 @@ import { BlockRenderContext, useBlockRenderProbe } from "./render-probe";
 import { useItemScope } from "../data/item-scope";
 import { Notice } from "../components/primitives";
 import { SHELL_BLOCK_RENDER_FAILED } from "../contract/shell-errors";
+import { useBlockRootProps } from "../comments/block-root";
 
 export { renderProbe } from "./render-probe";
 
@@ -51,10 +52,10 @@ export function renderBlock(block: Block, context: BlockContext, pointer = "/ui"
 }
 
 const BlockNode = memo(function BlockNode({ block, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
-  return <BlockBoundary block={block}><BlockNodeContent block={block} context={context} pointer={pointer} /></BlockBoundary>;
+  return <BlockBoundary block={block} pointer={pointer}><BlockNodeContent block={block} context={context} pointer={pointer} /></BlockBoundary>;
 });
 
-class BlockBoundary extends Component<{ block: Block; children: ReactNode }, { block: Block; error: unknown; failed: boolean }> {
+class BlockBoundary extends Component<{ block: Block; pointer: string; children: ReactNode }, { block: Block; error: unknown; failed: boolean }> {
   state = { block: this.props.block, error: null as unknown, failed: false };
   static getDerivedStateFromError(error: unknown) { return { error, failed: true }; }
   static getDerivedStateFromProps(props: { block: Block }, state: { block: Block }) {
@@ -64,7 +65,7 @@ class BlockBoundary extends Component<{ block: Block; children: ReactNode }, { b
     if (!this.state.failed) return this.props.children;
     const reason = this.state.error instanceof Error ? this.state.error.message : String(this.state.error);
     const error = SHELL_BLOCK_RENDER_FAILED({ block: this.props.block.type, reason });
-    return <Notice role="alert" errorId={error.id}>{error.message}</Notice>;
+    return <Notice rootProps={{ "data-ks-block": this.props.pointer, "data-ks-block-type": normalizeBlock(this.props.block).type }} role="alert" errorId={error.id}>{error.message}</Notice>;
   }
 }
 
@@ -78,6 +79,7 @@ function BlockNodeContent({ block, context, pointer }: { block: Block; context: 
 
 function BlockContent({ block: normalized, context, pointer }: { block: Block; context: BlockContext; pointer: string }) {
   useBlockRenderProbe();
+  const blockRoot = useBlockRootProps();
   switch (normalized.type) {
     case "repeat": return <RepeatBlock block={normalized} context={context} pointer={pointer} />;
     case "progress": return <ProgressBlock block={normalized} pointer={pointer} />;
@@ -91,7 +93,7 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
       return <SplitBlock block={normalized} context={context} pointer={pointer} />;
     case "tree":
       if (normalized.items !== undefined) return <TreeBlock block={normalized as DataTreeBlockData} context={context} pointer={pointer} />;
-      return <div className="ks-unknown-block" role="alert">지원하지 않는 tree 블록 구성</div>;
+      return <div {...blockRoot} className="ks-unknown-block" role="alert">지원하지 않는 tree 블록 구성</div>;
     case "folder":
       return <FolderBlock block={normalized} context={context} pointer={pointer} />;
     case "markdown":
@@ -137,7 +139,7 @@ function BlockContent({ block: normalized, context, pointer }: { block: Block; c
       return <ExplorerBlock block={normalized} context={context} />;
     default: {
       const unknown = normalized as unknown as { type?: unknown };
-      return <div className="ks-unknown-block" role="alert">지원하지 않는 블록: {String(unknown.type)}</div>;
+      return <div {...blockRoot} className="ks-unknown-block" role="alert">지원하지 않는 블록: {String(unknown.type)}</div>;
     }
   }
 }

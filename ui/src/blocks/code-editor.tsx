@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -18,6 +19,7 @@ import { useFileEditorEvents } from "./file-editor-events";
 
 export type CodeEditorBlockData = Extract<Block, { type: "code" }> & { file: NonNullable<Extract<Block, { type: "code" }>["file"]> };
 export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const stateValue = useWindowStateValue(context, typeof block.file.path === "string" ? null : block.file.path.state);
   const path = resolveFilePath(block.file, stateValue);
   const emptyShareRef = useRef<HTMLDivElement>(null);
@@ -36,11 +38,11 @@ export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData
   }, [root, path, session]);
   useEffect(() => () => session.dispose(), [session]);
   useEffect(() => { const refresh = () => void session.refreshOnFocus(); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, [session]);
-  if (!root) return <FileGrant context={context} permission={block.file.permission} />;
-  if (path === null) return <div className="ks-markdown-editor" ref={emptyShareRef} />;
-  if (!state.loaded) return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (state.error && state.revision === null) return <div className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
-  return <div className="ks-markdown-editor">
+  if (!root) return <FileGrant rootProps={blockRoot} context={context} permission={block.file.permission} />;
+  if (path === null) return <div {...blockRoot} className="ks-markdown-editor" ref={emptyShareRef} />;
+  if (!state.loaded) return <div {...blockRoot} className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
+  if (state.error && state.revision === null) return <div {...blockRoot} className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
+  return <div {...blockRoot} className="ks-markdown-editor">
     {state.error ? <ErrorNotice error={state.error} /> : null}
     {state.conflict ? <EditorConflict session={session} /> : null}
     <div className="ks-editor-content">

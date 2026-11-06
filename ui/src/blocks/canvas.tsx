@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent } from "react";
 import type { Block } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
@@ -29,6 +30,7 @@ export function surfaceDpr(width: number, height: number, dpr: number) {
 }
 
 export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const surfaceValue = useBinding(`${pointer}/surface`, block.surface);
   const surface = surfaceValue.status === "ready" && typeof surfaceValue.value === "string" ? surfaceValue.value : "";
@@ -105,7 +107,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     serialSend(value, { coalesce: false });
   };
   const label = text || "캔버스";
-  return <div ref={root} className="ks-canvas" role="img" aria-label={isLoading ? `${label}, 불러오는 중` : label} aria-busy={isLoading || undefined} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined, "--ks-canvas-native-ratio": aspect } as CSSProperties}
+  return <div {...blockRoot} ref={root} className="ks-canvas" role="img" aria-label={isLoading ? `${label}, 불러오는 중` : label} aria-busy={isLoading || undefined} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined, "--ks-canvas-native-ratio": aspect } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}
     onPointerUp={(event) => pointerEvent("up", event)} onPointerCancel={(event) => pointerEvent("cancel", event)}>
     {isLoading ? <div className="ks-canvas-loading" aria-hidden="true">{progressIndicator(null, 1, null)}</div> : null}

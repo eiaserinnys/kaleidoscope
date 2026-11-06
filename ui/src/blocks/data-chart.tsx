@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -21,15 +22,17 @@ function seriesFrom(value: unknown, candle: boolean): PlotSeries[] {
 }
 
 export function ChartBlock({ block, pointer }: { block: ChartBlockType; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/series`, block.series);
   const rawSeries = value.status === "ready" ? value.value : null;
   const series = useMemo(() => rawSeries === null ? [] : seriesFrom(rawSeries, block.kind === "candlestick"), [rawSeries, block.kind]);
-  if (value.status !== "ready") return <DataState value={value} />;
-  if (!series.some((entry) => entry.points.length)) return <NoItems />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
+  if (!series.some((entry) => entry.points.length)) return <NoItems rootProps={blockRoot} />;
   return <ChartReady block={block} pointer={pointer} series={series} />;
 }
 
 function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer: string; series: PlotSeries[] }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const graph = useRef<HTMLDivElement>(null);
   const gradient = `ks-chart-gradient-${useId().replaceAll(":", "")}`;
@@ -78,7 +81,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   };
   const valueText = (point: PlotPoint | undefined) => point?.y == null ? "없음" : `${numberText(point.y)}${block.y_unit ?? ""}`;
   const accessibleValue = (point: PlotPoint | undefined) => [valueText(point), point?.label].filter(Boolean).join(" ");
-  return <div className={`ks-chart is-${block.height ?? "medium"}`}>
+  return <div {...blockRoot} className={`ks-chart is-${block.height ?? "medium"}`}>
     <div className="ks-chart-frame">
       <div className="ks-chart-readout">
         <span className="ks-chart-readout-x">{labels[current]}</span>

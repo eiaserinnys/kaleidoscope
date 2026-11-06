@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useMemo, useState } from "react";
 import type { Binding, Block, TreeItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -28,7 +29,7 @@ interface DataNode extends TreeNode {
   children: DataNode[];
 }
 
-function tree(value: unknown, byPath: boolean): DataNode[] {
+function tree(value: unknown, byPath: boolean, parent: string[] = []): DataNode[] {
   const items = asArray(value).filter((item): item is TreeItem => valid(item, byPath));
   if (!byPath) return items.flatMap((item): DataNode[] => {
     const title = item.title ?? item.path?.split("/").pop();
@@ -37,7 +38,8 @@ function tree(value: unknown, byPath: boolean): DataNode[] {
       label: title,
       item,
       data: item,
-      children: tree(item.children, false),
+      commentKey: [...parent, item.key],
+      children: tree(item.children, false, [...parent, item.key]),
       selectable: true,
       leading: <FileText size="inline" />,
       meta: item.meta,
@@ -57,6 +59,7 @@ function tree(value: unknown, byPath: boolean): DataNode[] {
         label: item.title ?? part,
         item,
         data: item,
+        commentKey: [item.key],
         children: [],
         selectable: true,
         leading: <FileText size="inline" />,
@@ -91,12 +94,14 @@ function ancestors(nodes: DataNode[], key: unknown, parents: string[] = []): str
 }
 
 export function TreeBlock({ block, context, pointer }: { block: DataTreeBlockData; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
-  if (value.status !== "ready") return <DataState value={value} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
   return <TreeReady block={block} context={context} pointer={pointer} value={value.value} />;
 }
 
 function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockData; context: BlockContext; pointer: string; value: unknown }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const nodes = useMemo(() => tree(value, block.by === "path"), [value, block.by]);
@@ -127,8 +132,9 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
     if (item && block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
   };
 
-  if (!nodes.length) return <NoItems />;
+  if (!nodes.length) return <NoItems rootProps={blockRoot} />;
   return <><TreeView
+    rootProps={blockRoot}
     className="ks-data-view ks-data-tree"
     expanded={expanded}
     label="트리"

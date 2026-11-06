@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Block, MediaRef } from "../contract/contract";
 import { useBinding } from "../data/window-data";
@@ -16,12 +17,13 @@ export function imageRequestSize(width: number, height: number, ratio: number, z
   return [512, 1024, 2048, 4096].find((size) => size >= wanted) ?? 4096;
 }
 export function ImageBlock({ block, pointer }: { block: Data; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const binding = useBinding(`${pointer}/src`, block.src);
   const preview = useContext(PreviewContext);
   const bindingError = binding.status === "failed" ? `${binding.message} (${binding.id})` : binding.status === "login_required" ? "로그인이 필요합니다" : null;
   useEffect(() => { if (binding.status !== "ready") preview?.(bindingError); }, [preview, binding.status, bindingError]);
-  if (binding.status === "loading") return <div className="ks-image-view"><ImageLoading /></div>;
-  if (binding.status !== "ready") return preview ? <div className="ks-image-view"><PreviewFailure error={bindingError ?? "이미지를 불러오지 못했습니다"} /></div> : <DataState value={binding} />;
+  if (binding.status === "loading") return <div {...blockRoot} className="ks-image-view"><ImageLoading /></div>;
+  if (binding.status !== "ready") return preview ? <div {...blockRoot} className="ks-image-view"><PreviewFailure error={bindingError ?? "이미지를 불러오지 못했습니다"} /></div> : <DataState rootProps={blockRoot} value={binding} />;
   return <ImageView media={isMedia(binding.value) ? binding.value : null} fit={block.fit ?? "contain"} zoomable={!!block.zoom && !preview} />;
 }
 function ImageLoading() {
@@ -31,6 +33,7 @@ function PreviewFailure({ error }: { error: string }) {
   return <span title={error} role="img" aria-label={error}><DataIcon name="triangle-alert" size="inline" /></span>;
 }
 function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "contain" | "cover"; zoomable: boolean }) {
+  const blockRoot = useBlockRootProps();
   const preview = useContext(PreviewContext);
   const folder = useFolderPick();
   const host = useRef<HTMLDivElement>(null);
@@ -97,7 +100,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
       return rect.left < bounds.left - 0.5 || rect.right > bounds.right + 0.5 || rect.top < bounds.top - 0.5 || rect.bottom > bounds.bottom + 0.5;
     })) setOverflowKey(layoutKey);
   }, [failure, short, layoutKey]);
-  return <div className={`ks-image-view${zoomable ? " is-zoomable" : ""}${result.status === "failed" ? " is-failed" : ""}`} ref={host} style={media && sourceWidth && sourceHeight && result.status !== "failed" ? { "--ks-image-ratio": sourceWidth / sourceHeight, ...(Math.max(natural.width, natural.height) < bucket ? { "--ks-image-natural-height": `${sourceHeight}px` } : {}) } as React.CSSProperties : undefined} tabIndex={!preview && media && result.status === "ready" ? 0 : undefined} onContextMenu={preview ? undefined : (event) => {
+  return <div {...blockRoot} className={`ks-image-view${zoomable ? " is-zoomable" : ""}${result.status === "failed" ? " is-failed" : ""}`} ref={host} style={media && sourceWidth && sourceHeight && result.status !== "failed" ? { "--ks-image-ratio": sourceWidth / sourceHeight, ...(Math.max(natural.width, natural.height) < bucket ? { "--ks-image-natural-height": `${sourceHeight}px` } : {}) } as React.CSSProperties : undefined} tabIndex={!preview && media && result.status === "ready" ? 0 : undefined} onContextMenu={preview ? undefined : (event) => {
     const image = host.current?.querySelector(".ks-image-frame img");
     if (!(image instanceof HTMLImageElement) || (event.target !== event.currentTarget && event.target !== image)) return;
     openContextMenu(event, [{ id: "image-copy", label: "이미지 복사", onSelect: () => { void writeMenuImage(image, "이미지 복사"); } }]);

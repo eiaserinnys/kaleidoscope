@@ -40,6 +40,10 @@ export {
 export { Menu, type MenuEntry, type MenuHeading, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
 export { ContextMenuHost, openContextMenu, writeMenuClipboard } from "./components/context-menu";
 export { APP_COMMENT_ANCHOR_SCHEMA_VERSION, BUILTIN_APP_IDS } from "./contract/limits";
+export { buildDefinitionIndex, resolveDefinition, type DefinitionEntry, type DefinitionIndex, type DefinitionResult } from "./comments/definition";
+export { describeTarget, type TargetDescription } from "./comments/target";
+export { resolveScreen, type ScreenContext, type ScreenResult } from "./comments/screen";
+export { encodeCommentKey, decodeCommentKey } from "./comments/key";
 export { TextInput, type TextInputProps } from "./components/text-input";
 export { createHttpTransport } from "./core/http-transport";
 export {
@@ -57,6 +61,9 @@ export { flushSandboxes } from "./blocks/sandbox-flush";
 export { toCoreError } from "./core/core-transport";
 export type { CoreTransport, ReplyFor, RequestFor } from "./core/core-transport";
 export type {
+  AppCommentAnchor,
+  AppCommentPoint,
+  AppCommentQuote,
   AppDefinition,
   AppWindow,
   Block,

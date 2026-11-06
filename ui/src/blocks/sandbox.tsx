@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -20,6 +21,7 @@ import * as shellErrors from "../contract/shell-errors";
 type SandboxData = Extract<Block, { type: "sandbox" }>;
 
 export function SandboxBlock({ block, context, pointer }: { block: SandboxData; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const mediaGeneration = useSyncExternalStore(data.subscribeMedia, data.getMediaGeneration, data.getMediaGeneration);
   const previousMediaGeneration = useRef(mediaGeneration);
@@ -82,10 +84,10 @@ export function SandboxBlock({ block, context, pointer }: { block: SandboxData; 
       if (event.event === "storage.update" && event.window_id === context.window.id && (event.update.kind === "snapshot" || (event.update.kind === "changed" && event.update.changed.item.entry_id === block.document?.entry))) void read();
     });
   }, [block.document, context.store, context.window.id, read]);
-  if (block.file && !grant && permission) return <FileGrant context={context} permission={permission} />;
-  if (block.value !== undefined && bound.status !== "ready") return <DataState value={bound} />;
-  if (loading) return <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
+  if (block.file && !grant && permission) return <FileGrant rootProps={blockRoot} context={context} permission={permission} />;
+  if (block.value !== undefined && bound.status !== "ready") return <DataState rootProps={blockRoot} value={bound} />;
+  if (loading) return <div {...blockRoot} className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
+  if (error) return <div {...blockRoot} className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
   return <SandboxFrame block={block} context={context} rawHtml={rawHtml} />;
 }
 
@@ -95,6 +97,7 @@ function sameState(left: Record<string, JsonValue>, right: Record<string, JsonVa
 }
 
 function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context: BlockContext; rawHtml: string }) {
+  const blockRoot = useBlockRootProps();
   const dataRuntime = useWindowData();
   const root = useRef<HTMLElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -242,7 +245,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
   }, [context.store, context.window.id, dataRuntime, getStorage, send, source.token, stateJson, stateSignature, storageSignature]);
   const appName = context.definition.name || "샌드박스";
   useShareDescriber(root, () => ({ text: `[${appName}]\n\n${share.text}`.trim(), visual: true, ...(share.image ? { image_base64: share.image } : {}) }));
-  return <section className="ks-sandbox" ref={root} data-share-seq={share.sequence}>
+  return <section {...blockRoot} className="ks-sandbox" ref={root} data-share-seq={share.sequence}>
     <iframe key={`${source.token}-${sequence}`} ref={frame} title={block.title ?? appName} sandbox="allow-scripts allow-downloads allow-modals" allow="autoplay" srcDoc={source.html}
       style={block.height ? { minHeight: block.height } : undefined}
       onLoad={() => { if (loaded.current) { active.current = false; loaded.current = false; setSequence((value) => value + 1); } else loaded.current = true; }} />

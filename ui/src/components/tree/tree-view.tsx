@@ -1,3 +1,4 @@
+import { encodeCommentKey } from "../../comments/key";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { isValidElement } from "react";
 import { keepRovingRow, useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
@@ -36,6 +37,7 @@ function sameNode(left: TreeRowModel["node"], right: TreeRowModel["node"]): bool
     && left.ariaSelectable === right.ariaSelectable
     && left.currentOnSelection === right.currentOnSelection
     && left.rowClassName === right.rowClassName
+    && sameValue(left.commentKey, right.commentKey)
     && sameValue(left.leading, right.leading)
     && sameValue(left.meta, right.meta)
     && sameValue(left.trailing, right.trailing)
@@ -70,6 +72,8 @@ export interface TreeFocusController {
 }
 
 export interface TreeViewProps {
+  rootProps?: import("../../comments/block-root").BlockRootProps;
+  commentKey?: (row: TreeRowModel) => import("../../contract/serde_json/JsonValue").JsonValue | undefined;
   nodes: TreeNode[];
   expanded: ReadonlySet<string>;
   selectedId?: string | null;
@@ -101,7 +105,7 @@ export interface TreeViewProps {
 
 export const END_ACTION_ID = "tree:end-action";
 
-export function TreeView({ nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController, selection, onSelectionChange, drag }: TreeViewProps) {
+export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController, selection, onSelectionChange, drag }: TreeViewProps) {
   const previousRows = useRef(new Map<string, TreeRowModel>());
   const flat = useMemo(() => {
     const nextRows = new Map<string, TreeRowModel>();
@@ -392,6 +396,7 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     if (overflow > 0) scroll.scrollTop += overflow;
   }, [flat, interactiveIndex, pendingInteractiveFocus, virtual, virtualRows]);
   return <div
+    {...rootProps}
     aria-label={label}
     aria-rowcount={treeRows.length}
     className={className}
@@ -445,7 +450,9 @@ export function TreeView({ nodes, expanded, selectedId, label, className, emptyC
     <VirtualSurface virtual={virtual}>
       {virtualRows.map((item) => {
         const row = flat[item.index];
+        const identity = commentKey?.(row) ?? row.node.commentKey;
         return <TreeRow
+          commentKey={identity === undefined ? undefined : encodeCommentKey(identity)}
           focused={effectiveFocus === row.id}
           index={item.index}
           start={item.start}

@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import type { CSSProperties } from "react";
 import type { Block, MetricItem } from "../contract/contract";
 import { Badge, isBadge } from "../components/badge";
@@ -12,10 +13,11 @@ function isMetric(value: unknown): value is MetricItem {
 }
 
 export function MetricsBlock({ block, pointer }: { block: Extract<Block, { type: "metrics" }>; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
-  if (value.status !== "ready") return <DataState value={value} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
   const items = asArray(value.value).filter(isMetric);
-  if (!items.length) return <NoItems />;
+  if (!items.length) return <NoItems rootProps={blockRoot} />;
   const groups: Array<{ featured: boolean; items: MetricItem[] }> = [];
   for (const item of items) {
     const featured = Boolean(item.featured) || items.length === 1;
@@ -35,7 +37,7 @@ export function MetricsBlock({ block, pointer }: { block: Extract<Block, { type:
       </div>
     </div>;
   };
-  return <div className="ks-metrics-container"><div className={`ks-metrics${items.length === 1 || block.columns === 1 ? " is-single" : ""}`} style={{ "--ks-metrics-columns": block.columns } as CSSProperties}>
+  return <div {...blockRoot} className="ks-metrics-container"><div className={`ks-metrics${items.length === 1 || block.columns === 1 ? " is-single" : ""}`} style={{ "--ks-metrics-columns": block.columns } as CSSProperties}>
     {groups.map((group, index) => group.featured ? tile(group.items[0], index) : <div className="ks-metrics-grid" key={index} style={block.columns ? { "--ks-metrics-columns": Math.min(block.columns, group.items.length) } as CSSProperties : undefined}>{group.items.map(tile)}</div>)}
   </div></div>;
 }

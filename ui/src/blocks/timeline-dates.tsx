@@ -1,3 +1,5 @@
+import { encodeCommentKey } from "../comments/key";
+import { useBlockRootProps } from "../comments/block-root";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Block, MediaRef } from "../contract/contract";
 import { DataIcon } from "../components/data-icons";
@@ -68,23 +70,25 @@ function readViewport(value: unknown): DateRange | null {
 }
 
 export function TimelineDatesBlock({ block, pointer, context }: { block: DatesBlock; pointer: string; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const tracks = useBinding(`${pointer}/tracks`, block.tracks);
   const markers = useBinding(`${pointer}/markers`, block.markers ?? EMPTY);
   const days = useBinding(`${pointer}/off_days`, block.off_days ?? EMPTY);
   const selection = useBinding(`${pointer}/selection`, block.selection ?? null);
   const viewport = useBinding(`${pointer}/viewport`, block.viewport ?? null);
   const localeValue = useWindowStateValue(context, context.definition.locale?.state ?? null);
-  if (tracks.status !== "ready") return <DataState value={tracks} />;
-  if (markers.status !== "ready") return <DataState value={markers} />;
-  if (days.status !== "ready") return <DataState value={days} />;
-  if (selection.status !== "ready") return <DataState value={selection} />;
-  if (viewport.status !== "ready") return <DataState value={viewport} />;
+  if (tracks.status !== "ready") return <DataState rootProps={blockRoot} value={tracks} />;
+  if (markers.status !== "ready") return <DataState rootProps={blockRoot} value={markers} />;
+  if (days.status !== "ready") return <DataState rootProps={blockRoot} value={days} />;
+  if (selection.status !== "ready") return <DataState rootProps={blockRoot} value={selection} />;
+  if (viewport.status !== "ready") return <DataState rootProps={blockRoot} value={viewport} />;
   return <DatesReady block={block} pointer={pointer} context={context} tracksValue={tracks.value} markerValue={markers.value}
     daysValue={days.value} selectionValue={selection.value} viewportValue={viewport.value} locale={typeof localeValue === "string" ? localeValue : undefined} />;
 }
 
 type ReadyProps = { block: DatesBlock; pointer: string; context: BlockContext; tracksValue: unknown; markerValue: unknown; daysValue: unknown; selectionValue: unknown; viewportValue: unknown; locale?: string };
 function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selectionValue, viewportValue, locale }: ReadyProps) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const root = useRef<HTMLDivElement>(null), scroll = useRef<HTMLDivElement>(null), corner = useRef<HTMLDivElement>(null), rowMeasure = useRef<HTMLDivElement>(null);
   const dayMeasure = useRef<HTMLSpanElement>(null), weekMeasure = useRef<HTMLSpanElement>(null), monthMeasure = useRef<HTMLSpanElement>(null);
@@ -349,7 +353,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
     scroll.current.scrollTop = pan.current.top - (event.clientY - pan.current.y);
   };
   const endPan = () => { pan.current = null; setDragging(false); };
-  return <div className="ks-timeline ks-timeline-dates" data-scale={scale} ref={root}>
+  return <div {...blockRoot} className="ks-timeline ks-timeline-dates" data-scale={scale} ref={root}>
     <div className={`ks-dates-scroll${dragging ? " is-panning" : ""}`} ref={scroll} onScroll={onScroll} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan}>
       <div className="ks-dates-measure" aria-hidden="true"><span ref={dayMeasure}>{dayText(dateToDay("2026-12-30")!)}</span><span ref={weekMeasure}>{formatDate.format(date(dateToDay("2026-12-31")!))}</span><span ref={monthMeasure}>{monthOnly.format(date(dateToDay("2026-12-01")!))}</span><div ref={rowMeasure} className="ks-dates-row-measure" /></div>
       <div className="ks-dates-header" style={{ width: metrics.left + totalWidth }}>
@@ -411,14 +415,14 @@ const DateBar = memo(function DateBar({ item, track, pxDay, scrollLeft, rangeSta
       observer?.observe(element);
       return () => observer?.disconnect();
     }, [item.label, item.start === null]);
-    if (item.start === null || item.end === null) return <button type="button" className={`ks-dates-undated is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}`} key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
+    if (item.start === null || item.end === null) return <button data-ks-comment-key={encodeCommentKey(item.id)} type="button" className={`ks-dates-undated is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}`} key={item.id} onPointerDown={(event) => event.stopPropagation()} onClick={() => handlers.current.select(item.id)}>{item.label} <span>날짜 없음</span></button>;
     const start = preview?.id === item.id ? dateToDay(preview.start)! : item.start, end = preview?.id === item.id ? dateToDay(preview.end)! : item.end;
     const outside = lanes === "each" && nameSize.width > Math.max(0, (end - start + 1) * pxDay - nameSize.padding);
     const labelOffset = outside ? 0 : Math.max(0, Math.min((end - start + 1) * pxDay, scrollLeft - (start - rangeStart) * pxDay));
     const name = `${item.label}, ${formatDate.format(new Date(start * 86_400_000))} – ${formatDate.format(new Date(end * 86_400_000))}`;
     const canEdit = !track.locked && !readOnly;
     const onPointerDown = (event: PointerEvent<HTMLElement>, kind: Edit["kind"]) => handlers.current.begin(event, track, item, kind);
-    return <div role="button" tabIndex={0} aria-label={name} title={name} key={item.id} className={`ks-timeline-item is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}${canEdit && item.movable ? "" : " is-fixed"}${lanes === "each" ? " is-each" : ""}`}
+    return <div data-ks-comment-key={encodeCommentKey(item.id)} role="button" tabIndex={0} aria-label={name} title={name} key={item.id} className={`ks-timeline-item is-${item.tone}${item.muted ? " is-muted" : ""}${selected ? " is-selected" : ""}${canEdit && item.movable ? "" : " is-fixed"}${lanes === "each" ? " is-each" : ""}`}
       style={{ left: (start - rangeStart) * pxDay, width: (end - start + 1) * pxDay }} onKeyDown={(event) => handlers.current.keyItem(event, track, item)} onPointerDown={(event) => onPointerDown(event, "move")} onPointerMove={(event) => handlers.current.move(event)} onPointerUp={(event) => handlers.current.finish(event, "commit")} onPointerCancel={(event) => handlers.current.finish(event, "cancel")}>
       {canEdit && (item.resizable || item.resizeStartOnly) && <span className="ks-timeline-handle is-start" onPointerDown={(event) => onPointerDown(event, "resize_start")} />}
       <span ref={measure} className="ks-dates-name-measure" aria-hidden="true">{item.label}</span>

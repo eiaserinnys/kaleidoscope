@@ -23,6 +23,7 @@ interface CreatingFile {
 }
 
 export interface FileBrowserTreeProps {
+  rootProps?: import("../comments/block-root").BlockRootProps;
   context: BlockContext;
   permission: string;
   permissionLabel: string;
@@ -86,6 +87,7 @@ export function FileBrowserTree({
   backendLabel,
   actionsEnabled = false,
   selectedStateKey,
+  rootProps,
 }: FileBrowserTreeProps) {
   const pane = useContext(SplitPaneContext);
   const treeRef = useRef<HTMLDivElement>(null);
@@ -598,7 +600,7 @@ export function FileBrowserTree({
   }, [onFileDoubleClick]);
 
   return (
-    <div className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
+    <div {...rootProps} className={`ks-file-tree${pane?.collapsed ? " is-collapsed" : ""}`} ref={treeRef}>
       {pane?.collapsed ? (
         <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span>
       ) : !hasRoot ? (
@@ -615,6 +617,7 @@ export function FileBrowserTree({
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader> : null}
           <TreeView
+            commentKey={(row) => { const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry; return entry ? { permission, path: entry.path } : undefined; }}
             className="ks-file-tree-list"
             expanded={expanded}
             label={mode === "folders" ? "폴더 목록" : "파일 목록"}

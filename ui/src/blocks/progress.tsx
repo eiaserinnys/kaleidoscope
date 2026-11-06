@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import type { Block } from "../contract/contract";
 import { BindingFailureNotice, DataState } from "../components/data-state";
 import { useBinding } from "../data/window-data";
@@ -14,16 +15,17 @@ export function progressIndicator(current: number | null, max: number, text: str
 }
 
 export function ProgressBlock({ block, pointer }: Props) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/value`, block.value);
   const label = useBinding(`${pointer}/label`, block.label ?? null);
-  if (value.status !== "ready") return <DataState value={value} compact />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} compact />;
   const text = label.status === "ready" && label.value !== null
     ? typeof label.value === "string" ? label.value : JSON.stringify(label.value) ?? "null"
     : null;
   const current = typeof value.value === "number" && Number.isFinite(value.value)
     ? Math.max(0, Math.min(block.max, value.value))
     : null;
-  return <div className="ks-data-progress-field">
+  return <div {...blockRoot} className="ks-data-progress-field">
     {text ? <span className="ks-data-progress-label">{text}</span> : null}
     {progressIndicator(current, block.max, text)}
     <BindingFailureNotice value={label} />

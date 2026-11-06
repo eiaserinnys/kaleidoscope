@@ -1,3 +1,5 @@
+import { encodeCommentKey } from "../comments/key";
+import { useBlockRootProps } from "../comments/block-root";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Block, ListItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -60,25 +62,28 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
     return () => observer.disconnect();
   }, [item, grid, icons]);
   const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : <LayoutGrid size="tile" />} selected={active}
-    role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
-    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)}>
+    role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
+    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)}>
     {grid ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
-  return removable ? <div role="listitem" onFocus={() => handlers.current.focus(index)} data-list-index={index} className={`ks-list-item${grid || icons ? " is-grid" : ""}${active ? " is-selected" : ""}${disabled ? " is-disabled" : ""}`}>{row}<IconButton className="ks-list-remove" disabled={disabled} aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
+  return removable ? <div data-ks-comment-key={encodeCommentKey(item.key)} role="listitem" onFocus={() => handlers.current.focus(index)} data-list-index={index} className={`ks-list-item${grid || icons ? " is-grid" : ""}${active ? " is-selected" : ""}${disabled ? " is-disabled" : ""}`}>{row}<IconButton className="ks-list-remove" disabled={disabled} aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
 });
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
-  if (value.status !== "ready") return block.layout === "icons" && value.status === "loading" ? <IconListLoading /> : <DataState value={value} />;
+  if (value.status !== "ready") return block.layout === "icons" && value.status === "loading" ? <IconListLoading /> : <DataState rootProps={blockRoot} value={value} />;
   return <ListReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
 }
 function IconListLoading() {
+  const blockRoot = useBlockRootProps();
   const scroll = useRef<HTMLDivElement>(null);
   const columns = useIconGridColumns(scroll, true);
-  return <div className="ks-data-view ks-list is-icons" ref={scroll}><IconTileSkeleton count={columns * 2} /></div>;
+  return <div {...blockRoot} className="ks-data-view ks-list is-icons" ref={scroll}><IconTileSkeleton count={columns * 2} /></div>;
 }
 function ListReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
@@ -133,10 +138,10 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, useWindowVisible(context), icons ? <IconTileSkeleton count={activeColumns} /> : undefined, items.length);
   if (value === null && !more) return null;
-  if (!items.length && !more) return <NoItems />;
+  if (!items.length && !more) return <NoItems rootProps={blockRoot} />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const currentHeading = block.grouped ? rows.slice(0, first + 1).reverse().find((row) => row.kind === "heading") : undefined;
-  return <><div className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-label="목록">
+  return <><div {...blockRoot} className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-label="목록">
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
     {!items.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
       const entry = rows[row.index];

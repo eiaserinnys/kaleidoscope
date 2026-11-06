@@ -4,6 +4,7 @@ import type { TreeRowModel } from "./tree-model";
 
 export interface TreeRowProps {
   row: TreeRowModel;
+  commentKey?: string;
   index: number;
   start: number;
   selected: boolean;
@@ -20,12 +21,13 @@ export interface TreeRowProps {
   onDoubleClick?: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
 }
 
-function TreeRowView({ row, index, start, selected, multiSelected, dropState, draggable, focused, menuTarget = false, measure, onFocus, onKeyDown, onActivate, onContextMenu, onDoubleClick }: TreeRowProps) {
+function TreeRowView({ row, commentKey, index, start, selected, multiSelected, dropState, draggable, focused, menuTarget = false, measure, onFocus, onKeyDown, onActivate, onContextMenu, onDoubleClick }: TreeRowProps) {
   const { node } = row;
   return <div
     className="ks-tree-virtual-row"
     data-index={index}
     data-tree-row={row.id}
+    data-ks-comment-key={commentKey}
     data-drop-state={node.content !== undefined ? dropState : undefined}
     data-menu-target={menuTarget && node.content !== undefined ? "" : undefined}
     ref={measure}

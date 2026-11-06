@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { registerOverlay } from "../share/overlay-owner";
@@ -31,6 +32,7 @@ export function closeTour(data: ReturnType<typeof useWindowData>, pointer: strin
 }
 
 export function TourBlock({ block, context, pointer }: { block: TourBlockData; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const open = useBinding(`${pointer}/open`, block.open);
   const current = useBinding(`${pointer}/step`, block.step);
@@ -167,6 +169,7 @@ export function TourBlock({ block, context, pointer }: { block: TourBlockData; c
       height: placement.targetHeight,
     }} /> : null}
     <section
+      {...blockRoot}
       aria-labelledby={`${pointer.replaceAll("/", "-")}-tour-title`}
       className="ks-tour-card"
       ref={card}

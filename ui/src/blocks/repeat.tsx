@@ -1,3 +1,5 @@
+import { encodeCommentKey } from "../comments/key";
+import { useBlockRootProps } from "../comments/block-root";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BindingMore, Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -16,6 +18,7 @@ type Repeat = Extract<Block, { type: "repeat" }>;
 type Entry = { item: JsonValue; key: string | number; index: { current: number } };
 
 export function RepeatBlock({ block, context, pointer }: { block: Repeat; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
   const follow = useBinding(`${pointer}/follow_key`, block.follow_key ?? null);
   const parent = useItemScope();
@@ -35,7 +38,7 @@ export function RepeatBlock({ block, context, pointer }: { block: Repeat; contex
     return result;
   }, [value, block.key]);
   useDormant(`${pointer}/template`, entries.length === 0);
-  if (value.status !== "ready") return <DataState value={value} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
   return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} follow={follow.status === "ready" ? follow.value : null} more={value.more} />;
 }
 
@@ -44,12 +47,13 @@ const Row = memo(function Row({ item, itemKey, index, parent, template, context,
 }) {
   const instance = useRef({});
   const scope = useMemo<ItemScope>(() => ({ item, parent_item: parent, key: itemKey, get index() { return index.current; }, instance: instance.current }), [item, parent, itemKey, index]);
-  return <div className="ks-repeat-item" data-repeat-key={String(itemKey)}><ItemScopeProvider value={scope}>{renderBlock(template, context, `${pointer}/template`)}</ItemScopeProvider></div>;
+  return <div className="ks-repeat-item" data-repeat-key={String(itemKey)} data-ks-comment-key={encodeCommentKey(itemKey)}><ItemScopeProvider value={scope}>{renderBlock(template, context, `${pointer}/template`)}</ItemScopeProvider></div>;
 });
 
 function RepeatReady({ block, context, pointer, entries, parent, follow, more }: {
   block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; follow: JsonValue; more?: BindingMore;
 }) {
+  const blockRoot = useBlockRootProps();
   const scroll = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<{ element: HTMLDivElement; margin: number } | null>(null);
   const [columns, setColumns] = useState(1);
@@ -124,7 +128,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe.remove(); };
   }, [layout, block.grid?.columns, block.grid?.item_width, block.gap]);
   const rowSize = layout === "grid" ? columns : 1;
-  const itemKey = useCallback((index: number) => entries[index].key, [entries]);
+  const itemKey = useCallback((index: number) => encodeCommentKey(entries[index].key), [entries]);
   const rowKeys = useMemo(() => Array.from({ length: Math.ceil(entries.length / rowSize) }, (_, i) => entries.slice(i * rowSize, (i + 1) * rowSize).map((entry) => entry.key)), [entries, rowSize]);
   const { virtual } = useVirtualRows(Math.ceil(entries.length / rowSize), DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, horizontal, layout === "grid" ? undefined : itemKey, viewport, rowKeys);
   const virtualRows = virtual.getVirtualItems();
@@ -148,9 +152,9 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setResume((n) => n + 1), ms);
   };
-  const row = (entry: Entry) => <Row key={entry.key} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} template={block.template} context={context} pointer={pointer} />;
+  const row = (entry: Entry) => <Row key={encodeCommentKey(entry.key)} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} template={block.template} context={context} pointer={pointer} />;
   const gridStyle = layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
-  return <div ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""}`} onWheel={pause} onTouchMove={pause}
+  return <div {...blockRoot} ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""}`} onWheel={pause} onTouchMove={pause}
     onPointerDown={(event) => { if (event.target === event.currentTarget) { draggingScrollbar.current = true; pause(); } }}
     onPointerUp={() => { draggingScrollbar.current = false; }} onPointerCancel={() => { draggingScrollbar.current = false; }}
     onScroll={() => { if (draggingScrollbar.current) pause(); }}

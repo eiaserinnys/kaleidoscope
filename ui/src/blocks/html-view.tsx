@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Binding, Block, FileRef } from "../contract/contract";
 import { Notice, StatusText } from "../components/primitives";
@@ -25,6 +26,7 @@ export function HtmlViewBlock({ block, context, pointer = "/ui" }: { block: Html
 }
 
 function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; pointer: string; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/value`, binding);
   const root = useRef<HTMLElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
@@ -43,12 +45,13 @@ function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; p
   }, []);
   const appName = context.definition.name || "HTML 보기";
   useShareDescriber(root, () => ({ text: `[${appName}]\n\n${visibleText || htmlText(rawHtml)}`, visual: true }));
-  if (value.status !== "ready") return <DataState value={value} />;
-  if (typeof value.value !== "string") { const error = shellErrors.SHELL_HTML_VALUE_NOT_TEXT(); return <div className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>; }
-  return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={source} /></div></section>;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
+  if (typeof value.value !== "string") { const error = shellErrors.SHELL_HTML_VALUE_NOT_TEXT(); return <div {...blockRoot} className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>; }
+  return <section {...blockRoot} className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={source} /></div></section>;
 }
 
 function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const stateValue = useWindowStateValue(context, typeof file.path === "string" ? null : file.path.state);
   const path = resolveFilePath(file, stateValue);
   const rootPath = useWindowGrant(context, file.permission)?.root_path ?? null;
@@ -84,8 +87,8 @@ function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockCon
   }, [context.store, context.window.id, file.permission, path, rootPath]);
   useEffect(() => { void read(true); return () => { version.current++; }; }, [read]);
   useEffect(() => { const refresh = () => void read(); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, [read]);
-  if (!rootPath) return <FileGrant context={context} permission={file.permission} />;
-  if (loading) return <div className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
-  return <section className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={source} /></div></section>;
+  if (!rootPath) return <FileGrant rootProps={blockRoot} context={context} permission={file.permission} />;
+  if (loading) return <div {...blockRoot} className="ks-html-state"><StatusText>불러오는 중</StatusText></div>;
+  if (error) return <div {...blockRoot} className="ks-html-state"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
+  return <section {...blockRoot} className="ks-html-view" ref={root}><div className="ks-html-content"><iframe ref={frame} title={appName} sandbox="allow-scripts" srcDoc={source} /></div></section>;
 }

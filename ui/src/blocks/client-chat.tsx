@@ -1,3 +1,5 @@
+import { encodeCommentKey } from "../comments/key";
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Block, ChatClient, ConversationAttachment, ConversationItem } from "../contract/contract";
 import type { ClientChatAttachment, ClientChatQueuedMessage } from "../data/client-chat";
@@ -46,6 +48,7 @@ function openPayload(payload: ClientChatAttachment, name: string) {
 }
 
 export function ClientChatBlock({ block, context, pointer }: { block: ClientChatBlockData; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const { channel: channelName, on_send, on_cancel, on_attachment } = block.client;
   const subscribe = useCallback((listener: () => void) => data.subscribeClientChat(channelName, listener), [channelName, data]);
@@ -152,7 +155,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     onError={(reason) => setActionError(toCoreError(reason))}
   />, [channelName, context.window.id, chat.generation, requestAttachment]);
 
-  const renderQueuedMessage = useCallback((message: ClientChatQueuedMessage) => <div className="ks-agent-chat-user is-pending" key={message.id} tabIndex={message.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, message.text)}>
+  const renderQueuedMessage = useCallback((message: ClientChatQueuedMessage) => <div data-ks-comment-key={encodeCommentKey(message.id)} className="ks-agent-chat-user is-pending" key={message.id} tabIndex={message.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, message.text)}>
     {message.text}
     {message.attachments.length ? <div className={`ks-agent-attachment-history${message.text ? " has-text" : ""}`}>
       {message.attachments.map((attachment) => <HistoryAttachmentView
@@ -215,7 +218,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const pendingForDisplay = pending?.generation === chat.generation && !chat.queued.some((message) => message.id === pending.requestId)
     && !chat.items.some((item) => matchesPending(item, pending)) ? pending : null;
 
-  return <section className="ks-agent-chat">
+  return <section {...blockRoot} className="ks-agent-chat">
     <ChatHistory
       items={chat.items}
       pending={pendingForDisplay}

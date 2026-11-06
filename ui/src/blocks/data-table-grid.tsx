@@ -1,3 +1,4 @@
+import { encodeCommentKey } from "../comments/key";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import type { Column } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -47,7 +48,7 @@ export const GridRow = memo(function GridRow({ row, index, start, columns, rowHe
 }) {
   const label = rowHeader ? cellValue(row[rowHeader], columns[0]) : row.key;
   const count = columns.length - (rowHeader ? 1 : 0);
-  return <div role="row" aria-rowindex={index + 2} data-index={index} ref={measure} className="ks-row ks-table-row ks-grid-row" style={{ position: "absolute", top: 0, transform: `translateY(${start}px)` }}>
+  return <div data-ks-comment-key={encodeCommentKey(row.key)} role="row" aria-rowindex={index + 2} data-index={index} ref={measure} className="ks-row ks-table-row ks-grid-row" style={{ position: "absolute", top: 0, transform: `translateY(${start}px)` }}>
     {columns.map((column, columnIndex) => column.field === rowHeader
       ? <span role="rowheader" aria-colindex={columnIndex + 1} key={column.field} className="ks-table-cell ks-grid-row-header" onContextMenu={(event) => {
           const first = event.currentTarget.parentElement?.querySelector<HTMLElement>('[role="gridcell"]');
@@ -57,7 +58,7 @@ export const GridRow = memo(function GridRow({ row, index, start, columns, rowHe
   </div>;
 });
 
-export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell, onContextMenu, more, data, visible = true, ariaLabel = "표" }: TableViewProps) {
+export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, onChooseCell, onContextMenu, more, data, visible = true, ariaLabel = "표" }: TableViewProps) {
   const dataColumns = useMemo(() => columns.filter((column) => column.field !== rowHeader), [columns, rowHeader]);
   const [focus, setFocus] = useState<Address | null>(() => rows.length && dataColumns.length ? { row: rows[0].key, column: dataColumns[0].field } : null);
   const last = useRef({ row: 0, column: 0 });
@@ -145,7 +146,7 @@ export function TableGrid({ columns, rows, selectedCell, rowHeader, onChooseCell
       event.preventDefault(); move(nextRow, nextColumn);
     },
   };
-  return <div className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} onPointerDownCapture={(event) => event.currentTarget.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus")} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
+  return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} onPointerDownCapture={(event) => event.currentTarget.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus")} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">
       <div className="ks-table-header" role="row" aria-rowindex={1}>{columns.map((column, index) => <div role="columnheader" aria-colindex={index + 1} key={column.field} className={column.field === rowHeader ? "ks-grid-corner" : undefined}>{column.label}</div>)}</div>
       {!rows.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((v) => {

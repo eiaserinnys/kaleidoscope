@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap } from "@codemirror/commands";
@@ -23,11 +24,13 @@ export function CodeViewBlock({ block, context, pointer }: { block: CodeViewBloc
   return <BoundCodeView block={block} pointer={pointer} />;
 }
 function BoundCodeView({ block, pointer }: { block: CodeViewBlockData; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/value`, block.value ?? null);
-  if (value.status !== "ready") return <DataState value={value} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
   return <ReadOnlyCode text={codeViewText(value.value)} language={codeLanguageForPath(null, block.language)} follow={!!block.follow} wrap={block.wrap !== false} />;
 }
 function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file: FileRef; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const stateValue = useWindowStateValue(context, typeof file.path === "string" ? null : file.path.state);
   const path = resolveFilePath(file, stateValue);
   const emptyShareRef = useRef<HTMLDivElement>(null);
@@ -49,13 +52,14 @@ function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file
   }, [root, path, context.store, context.window.id, file.permission]);
   useEffect(() => { void read(true); return () => { version.current++; }; }, [read]);
   useEffect(() => { const refresh = () => void read(); window.addEventListener("focus", refresh); return () => window.removeEventListener("focus", refresh); }, [read]);
-  if (!root) return <FileGrant context={context} permission={file.permission} />;
-  if (path === null) return <div className="ks-code-view" ref={emptyShareRef} />;
-  if (loading) return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-editor-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
+  if (!root) return <FileGrant rootProps={blockRoot} context={context} permission={file.permission} />;
+  if (path === null) return <div {...blockRoot} className="ks-code-view" ref={emptyShareRef} />;
+  if (loading) return <div {...blockRoot} className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
+  if (error) return <div {...blockRoot} className="ks-editor-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
   return <ReadOnlyCode path={path} text={text} language={codeLanguageForPath(path, block.language)} follow={!!block.follow} wrap={block.wrap !== false} />;
 }
 function ReadOnlyCode({ text, language, follow, wrap, path = null }: { text: string; language: CodeLanguage; follow: boolean; wrap: boolean; path?: string | null }) {
+  const blockRoot = useBlockRootProps();
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   useShareDescriber(host, () => describeEditor(view.current, path, "코드 보기"));
@@ -82,5 +86,5 @@ function ReadOnlyCode({ text, language, follow, wrap, path = null }: { text: str
       scroller.scrollLeft = left;
     });
   }, [text, follow]);
-  return <div className="ks-code-view" ref={host} onContextMenu={(event) => openContextMenu(event, [{ id: "code-copy", label: "코드 복사", onSelect: () => { void writeMenuClipboard(view.current?.state.doc.toString() ?? text, "코드 복사"); } }])} />;
+  return <div {...blockRoot} className="ks-code-view" ref={host} onContextMenu={(event) => openContextMenu(event, [{ id: "code-copy", label: "코드 복사", onSelect: () => { void writeMenuClipboard(view.current?.state.doc.toString() ?? text, "코드 복사"); } }])} />;
 }

@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload, ShellSnapshot } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
@@ -23,6 +24,7 @@ import * as shellErrors from "../contract/shell-errors";
 export type AgentChatBlockData = Extract<Block, { type: "chat" }>;
 
 export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBlockData; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const loadingBinding = useBinding(`${pointer}/loading`, block.loading ?? false);
   const provider = context.definition.agent;
   const windowId = context.window.id;
@@ -414,24 +416,24 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     }
   };
 
-  if (!provider) return <div className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="이 앱 판에는 대화 제공자가 없습니다" /></div>;
+  if (!provider) return <div {...blockRoot} className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="이 앱 판에는 대화 제공자가 없습니다" /></div>;
   if (!connected) {
-    return <div className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="서버에 연결하면 대화할 수 있습니다" /></div>;
+    return <div {...blockRoot} className="ks-agent-chat-state"><EmptyState icon={<MessageSquare size="empty" />} text="서버에 연결하면 대화할 수 있습니다" /></div>;
   }
   if (!workspaceId) return null;
-  if (loading && !agent) return <div className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
-  if (loginRequired && provider) return <DataState value={{ status: "login_required", permission: provider.permission }} onLogin={() => { restoreFocus.current = true; void load(); }} />;
-  if (bindingConflict) return <div className="ks-agent-chat-state"><Notice role="alert" errorId={bindingConflict.id}>{bindingConflict.message}</Notice></div>;
+  if (loading && !agent) return <div {...blockRoot} className="ks-agent-chat-state"><StatusText>불러오는 중</StatusText></div>;
+  if (loginRequired && provider) return <DataState rootProps={blockRoot} value={{ status: "login_required", permission: provider.permission }} onLogin={() => { restoreFocus.current = true; void load(); }} />;
+  if (bindingConflict) return <div {...blockRoot} className="ks-agent-chat-state"><Notice role="alert" errorId={bindingConflict.id}>{bindingConflict.message}</Notice></div>;
   if (loadError) {
     return (
-      <div className="ks-agent-chat-state">
+      <div {...blockRoot} className="ks-agent-chat-state">
         <Notice role="alert" errorId={loadError.id} actions={[<Button key="retry" onClick={() => void load()}>다시 시도</Button>]}>{loadError.message}</Notice>
       </div>
     );
   }
   if (!agent) {
     return (
-      <div className="ks-agent-chat-start" ref={startRef}>
+      <div {...blockRoot} className="ks-agent-chat-start" ref={startRef}>
         {selectorRow}
         <div className="ks-agent-chat-start-action">
           <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
@@ -443,7 +445,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   }
 
   return (
-    <section className="ks-agent-chat" ref={shareRef}>
+    <section {...blockRoot} className="ks-agent-chat" ref={shareRef}>
       {selectorRow}
       {notices.length ? <Notice>{notices.join("\n")}</Notice> : null}
       {switchError ? <Notice role="alert" errorId={switchError.id}>{switchError.message}</Notice> : null}
