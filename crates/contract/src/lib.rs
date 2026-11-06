@@ -251,7 +251,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 40;
+pub const CONTRACT_VERSION: u32 = 41;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -5028,6 +5028,11 @@ pub enum CoreRequest {
     /// 원천의 다음 쪽을 받는다. 시작 여부를 바로 응답하고 결과는 `data.update`로 보낸다.
     #[serde(rename = "data.more")]
     DataMore { window_id: String, source: String },
+    /// (쉘 내부 계약, 계약 41판) 창의 지금 상태와 완성된 계산값을 한 번 읽는다. 앱 정의와 모듈 판에 나타나지 않는다.
+    /// 동작 시점에 항목 범위나 식 바인딩을 최신 값으로 풀 때만 쓴다. 코어가 이미 들고 있는 값을 복사해 돌려줄 뿐,
+    /// 다시 계산하거나 원천을 받거나 저장하거나 이벤트를 내지 않는다. 이은 런타임이 없으면 `not_found`.
+    #[serde(rename = "data.read")]
+    DataRead { window_id: String },
     /// 이미지와 소리 원본 하나를 받는다. `media`의 권한은 그 창의 앱이 선언한 것이어야 한다(`permission_denied`).
     /// 코어는 원본을 (권한, 경로, 쿼리)로 캐시한다. 이미지이고 `max_px`가 있으면 긴 변이 그 값을 넘지 않게 줄여서
     /// 보낸다(PNG, JPEG, WebP, 정지 GIF. 투명이 있으면 PNG, 아니면 JPEG). 움직이는 GIF는 줄이지 않고 원본 그대로
@@ -5944,6 +5949,8 @@ pub enum CoreReply {
     DataRefresh {},
     #[serde(rename = "data.more")]
     DataMore { started: bool },
+    #[serde(rename = "data.read")]
+    DataRead { state: BTreeMap<String, JsonValue>, view: data::DataView },
     #[serde(rename = "data.media")]
     DataMedia { media: data::MediaData },
     #[serde(rename = "data.media.open")]

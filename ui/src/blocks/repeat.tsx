@@ -6,7 +6,7 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
 import { useWindowVisible } from "../data/window-state";
 import { useLoadMore } from "./load-more";
-import { ItemScopeProvider, useItemScope, type ItemScope } from "../data/item-scope";
+import { ItemScopeProvider, useItemScope, type ItemScope, type RepeatLocator } from "../data/item-scope";
 import { DataState } from "../components/data-state";
 import { shareStructure } from "../core/shell-store";
 import { renderBlock } from "../render/render-block";
@@ -22,6 +22,9 @@ export function RepeatBlock({ block, context, pointer }: { block: Repeat; contex
   const value = useBinding(`${pointer}/items`, block.items);
   const follow = useBinding(`${pointer}/follow_key`, block.follow_key ?? null);
   const parent = useItemScope();
+  // 동작은 부모 범위의 현재 모습을 따라가야 한다. 렌더를 일으키지 않는 참조로 넘겨 행의 memo를 지킨다.
+  const parentRef = useRef<ItemScope | null>(null);
+  parentRef.current = parent;
   const previous = useRef(new Map<string | number, Entry>());
   const entries = useMemo(() => {
     const result = value.status !== "ready" ? [] : asArray(value.value).flatMap((item, index) => {
@@ -39,20 +42,21 @@ export function RepeatBlock({ block, context, pointer }: { block: Repeat; contex
   }, [value, block.key]);
   useDormant(`${pointer}/template`, entries.length === 0);
   if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
-  return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} follow={follow.status === "ready" ? follow.value : null} more={value.more} />;
+  return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} parentRef={parentRef} follow={follow.status === "ready" ? follow.value : null} more={value.more} />;
 }
 
-const Row = memo(function Row({ item, itemKey, index, parent, template, context, pointer }: {
-  item: JsonValue; itemKey: string | number; index: { current: number }; parent?: JsonValue; template: Block; context: BlockContext; pointer: string;
+const Row = memo(function Row({ item, itemKey, index, parent, parentRef, locator, template, context, pointer }: {
+  item: JsonValue; itemKey: string | number; index: { current: number }; parent?: JsonValue; parentRef: { current: ItemScope | null }; locator: RepeatLocator; template: Block; context: BlockContext; pointer: string;
 }) {
   const instance = useRef({});
-  const scope = useMemo<ItemScope>(() => ({ item, parent_item: parent, key: itemKey, get index() { return index.current; }, instance: instance.current }), [item, parent, itemKey, index]);
+  const scope = useMemo<ItemScope>(() => ({ item, parent_item: parent, key: itemKey, get index() { return index.current; }, instance: instance.current, locator, get parentScope() { return parentRef.current ?? undefined; } }), [item, parent, itemKey, index, locator, parentRef]);
   return <div className="ks-repeat-item" data-repeat-key={String(itemKey)} data-ks-comment-key={encodeCommentKey(itemKey)}><ItemScopeProvider value={scope}>{renderBlock(template, context, `${pointer}/template`)}</ItemScopeProvider></div>;
 });
 
-function RepeatReady({ block, context, pointer, entries, parent, follow, more }: {
-  block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; follow: JsonValue; more?: BindingMore;
+function RepeatReady({ block, context, pointer, entries, parent, parentRef, follow, more }: {
+  block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; parentRef: { current: ItemScope | null }; follow: JsonValue; more?: BindingMore;
 }) {
+  const locator = useMemo<RepeatLocator>(() => ({ pointer, items: block.items, keyField: block.key }), [pointer, block.items, block.key]);
   const blockRoot = useBlockRootProps();
   const scroll = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<{ element: HTMLDivElement; margin: number } | null>(null);
@@ -152,7 +156,7 @@ function RepeatReady({ block, context, pointer, entries, parent, follow, more }:
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setResume((n) => n + 1), ms);
   };
-  const row = (entry: Entry) => <Row key={encodeCommentKey(entry.key)} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} template={block.template} context={context} pointer={pointer} />;
+  const row = (entry: Entry) => <Row key={encodeCommentKey(entry.key)} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} parentRef={parentRef} locator={locator} template={block.template} context={context} pointer={pointer} />;
   const gridStyle = layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
   return <div {...blockRoot} ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""}`} onWheel={pause} onTouchMove={pause}
     onPointerDown={(event) => { if (event.target === event.currentTarget) { draggingScrollbar.current = true; pause(); } }}

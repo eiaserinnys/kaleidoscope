@@ -44,7 +44,7 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
     }
   }, [pending]);
   const run = useCallback((entry: Pending) => {
-    const scope = { item: entry.item, parent_item: parent?.item, key: entry.key, index: 0, instance: entry.anchor };
+    const scope = { item: entry.item, parent_item: parent?.item, key: entry.key, index: 0, instance: entry.anchor, parentScope: parent ?? undefined };
     return data.act(`${pointer}/item_menu/${entry.index}/on_select`, entry.key, entry.item, undefined, scope);
   }, [data, parent, pointer]);
   const open = useCallback((event: MouseEvent | ReactMouseEvent<HTMLElement> | undefined, anchor: HTMLElement, item: JsonValue | undefined, key: string, copyLabel: string, copyText: string) => {

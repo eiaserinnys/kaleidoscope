@@ -188,6 +188,11 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       void refresh(context, []);
       return view;
     },
+    read(id: string) {
+      const context = attached.get(id);
+      if (!context) throw { code: "not_found", message: "이 창의 데이터 연결이 끝나 현재 값을 읽을 수 없습니다. 창을 다시 열어 주세요.", details: [] };
+      return { state: structuredClone(getWindow(id).state), view: structuredClone(context.view) };
+    },
     detach(id: string) { const context = attached.get(id); if (context) { context.attached = false; context.timers.forEach(clearInterval); attached.delete(id); } },
     async stateChanged(window: AppWindow) {
       const context = attached.get(window.id); if (!context) return;

@@ -363,6 +363,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "data.detach":
         data.detach(request.window_id);
         return { op: "data.detach" };
+      case "data.read":
+        return { op: "data.read", ...data.read(request.window_id) };
       case "data.refresh":
         await data.refresh(request.window_id, request.sources ?? []);
         return { op: "data.refresh" };

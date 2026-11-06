@@ -1096,6 +1096,16 @@ pub(crate) fn dormant(
     Ok(CoreReply::DataDormant {})
 }
 
+/// 창의 지금 상태와 완성된 계산값을 복사해 돌려준다(`data.read`). 다시 계산하거나 원천을 받거나 저장하거나 이벤트를 내지
+/// 않는다. 입력 `data.act`는 응답 전에 `runtime.state`와 `runtime.last`를 갱신하므로, 그 응답 뒤에 읽으면 새 값이다.
+pub(crate) fn read(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, CoreError> {
+    let windows = inner.data_runtimes.windows.lock().unwrap();
+    let runtime = windows.get(window_id).ok_or_else(|| {
+        errors::DATA_READ_RUNTIME_NOT_FOUND().and_details(vec![format!("window: {}", window_id)])
+    })?;
+    Ok(CoreReply::DataRead { state: runtime.state.clone(), view: runtime.last.clone() })
+}
+
 pub(crate) fn detach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, CoreError> {
     let mut windows = inner.data_runtimes.windows.lock().unwrap();
     if let Some(runtime) = windows.get_mut(window_id) {
