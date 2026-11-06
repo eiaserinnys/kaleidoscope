@@ -80,6 +80,33 @@ test("빈 목록은 채움 칸 가운데에 놓인다", async ({ page }) => {
   expect(geometry.delta).toBeLessThanOrEqual(1);
 });
 
+for (const context of ["direct", "section"] as const) test(`쌓인 분할 칸의 빈 목록도 칸을 채운다: ${context}`, async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto(`/?preview=empty-stacked-1057-${context}`);
+  const app = page.getByTestId(`app-window-empty-stacked-1057-${context}`);
+  const empty = app.locator(".ks-split.is-stacked .ks-no-items");
+  await expect(empty).toBeVisible();
+  const geometry = await empty.evaluate(el => {
+    const item = el.getBoundingClientRect();
+    const parent = (el.closest(".ks-data-section-child") ?? el.closest(".ks-split-pane"))!;
+    const bounds = parent.getBoundingClientRect(), style = getComputedStyle(parent);
+    const top = bounds.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
+    const bottom = bounds.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
+    return { height: item.height, delta: Math.abs((item.top + item.bottom) / 2 - (top + bottom) / 2) };
+  });
+  expect(geometry.height).toBeGreaterThan(200);
+  expect(geometry.delta).toBeLessThanOrEqual(1);
+});
+
+test("쌓인 분할 칸 안의 내용 높이 목록은 늘리지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto("/?preview=empty-stacked-1057-natural");
+  const app = page.getByTestId("app-window-empty-stacked-1057-natural");
+  const empty = app.locator(".ks-split.is-stacked .ks-data-stack-item:not(.is-fill) > .ks-no-items");
+  await expect(empty).toBeVisible();
+  expect((await empty.boundingBox())!.height).toBeLessThan(100);
+});
+
 test("내용 높이 쌓기의 빈 목록은 남은 칸을 차지하지 않는다", async ({ page }) => {
   await page.goto("/?preview=empty-natural-1057");
   const app = page.getByTestId("app-window-empty-natural-1057");

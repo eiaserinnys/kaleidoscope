@@ -90,6 +90,7 @@
   > .ks-data-stack.is-column > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill)
 )):has(:is(
   .ks-list, .ks-table-scroll, .ks-data-tree, .ks-feed, .ks-explorer-icons, .ks-repeat.is-virtual,
+  :where(.ks-split-pane > .ks-no-items, .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-no-items, .ks-data-stack-item.is-fill > .ks-no-items, .ks-data-tab-panel > .ks-no-items),
   .ks-explorer, .ks-file-tree, .ks-code-view, .ks-markdown-editor, .ks-markdown-view,
   .ks-agent-chat, .ks-html-view, .ks-web-view, .ks-canvas, .ks-map, .ks-chart, .ks-timeline,
   .ks-split:not(.is-stacked)

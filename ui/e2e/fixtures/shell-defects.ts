@@ -9,6 +9,14 @@ const tabbedPanePair = () => ({ type: "split", direction: "row", children: [
   { type: "section", title: "구역 제목", child: { type: "text", value: "내용" } },
 ] });
 export const shellDefectFixtures = [
+  ...(["direct", "section", "natural"] as const).map(context => {
+    const list = { type: "list", items: [] };
+    const child = context === "section" ? { type: "section", title: "목록", child: list }
+      : context === "natural" ? { type: "stack", direction: "column", children: [list, { type: "text", value: "아래 글" }] } : list;
+    return { ...base, id: `empty-stacked-1057-${context}`, name: "좁은 빈 목록", state: {}, ui: {
+      type: "split", direction: "row", column_below: 1200, children: [{ type: "text", value: "위 글" }, child],
+    } };
+  }),
   { ...base, id: "empty-natural-1057", name: "내용 높이 빈 목록", state: {}, ui: { type: "tabs", tabs: [
     { label: "내용", child: { type: "stack", direction: "column", children: [
       { type: "list", items: [] }, { type: "button", label: "다음", on_click: [] },
