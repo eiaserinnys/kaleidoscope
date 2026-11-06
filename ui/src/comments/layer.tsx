@@ -7,8 +7,8 @@ import { useWindowVisible } from "../data/window-state";
 import { useDefaultMessageApp } from "../shell/message-target";
 import { suspendWebSurfaces } from "../blocks/web-surface-layer";
 import { CountBadge } from "../components/badge";
-import { Check, List, MessageSquare } from "../components/icons";
-import { Button, IconButton, Notice } from "../components/primitives";
+import { Check, List, LoaderCircle, MessageSquare, TriangleAlert, X } from "../components/icons";
+import { Button, EmptyState, ErrorId, IconButton, Notice } from "../components/primitives";
 import { CommentCard, CommentCards } from "./cards";
 import { CommentComposer } from "./composer";
 import { registerCommentEntry } from "./context-entry";
@@ -20,6 +20,7 @@ import { sendComments } from "./send";
 import { commentSession, useCommentSession } from "./session";
 import { appCommentStore } from "./store";
 import type { TargetDescription } from "./target";
+import { useCommentBarPosition } from "./bar-position";
 
 export function useCommentMeta(store: ShellStore, appId: string) {
   return useShellSelector(store, (snapshot) => snapshot?.shared.app_comments == null ? undefined : snapshot.shared.app_comments[appId] ?? null);
@@ -43,7 +44,9 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
   const data = appCommentStore(store, window.app_id);
   const list = useSyncExternalStore(data.subscribe, data.snapshot, data.snapshot);
   const [ready, setReady] = useState(false);
-  const [target, setTarget] = useState<TargetDescription | null>(null);
+  const session = commentSession(window.id);
+  const [target, setTarget] = useState<TargetDescription | null>(() => session.getDraft(window.app_version)?.target ?? null);
+  const [targetChanged, setTargetChanged] = useState(() => session.getDraft(window.app_version)?.targetChanged ?? false);
   const [hover, setHover] = useState<HTMLElement | null>(null);
   const [rail, setRail] = useState(false);
   const [activeId, setActive] = useState<string | null>(null);
@@ -53,9 +56,15 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const placeThreadRef = useRef<() => boolean>(() => false);
   const onPinsPositioned = useCallback(() => placeThreadRef.current(), []);
-  const onError = useCallback((error: CoreError) => setProblem(error), []);
+  const onError = useCallback((error: CoreError) => {
+    setProblem(error);
+    void store.call({ op: "window.raise", window_id: window.id }).catch((cause) => console.error("커멘트 오류가 난 창을 앞으로 가져오지 못했습니다.", cause));
+  }, [store, window.id]);
+  const showBar = Boolean(meta?.unsent_count || (mode && ((meta?.open_count ?? 0) || (meta?.unread_reply_count ?? 0) || list.items.length)));
+  useCommentBarPosition(content, barRef, showBar && visible);
   const position = useCommentPositions(content, window.id, mode && visible && ready, definition, list.items, rail, activeId ?? hoveredId, target, hover, onPinsPositioned);
   useEffect(() => { if (meta === undefined) data.reset(); }, [meta === undefined, data]);
   useEffect(() => {
@@ -65,8 +74,8 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
     return () => { live = false; release?.(); };
   }, [mode, visible, meta === undefined, window.id, content, onError]);
   useEffect(() => { if (mode && visible && meta !== undefined && !list.error) void data.load(meta?.revision ?? 0); }, [mode, visible, meta, list.revision, list.loading, list.error, data]);
-  useEffect(() => { if (!mode) { setTarget(null); setRail(false); setActive(null); setHoveredId(null); setCluster(null); } }, [mode]);
-  const pick = useCallback((next: TargetDescription) => { if (next.range) document.getSelection()?.removeAllRanges(); setTarget(next); setActive(null); setCluster(null); setRail(false); }, []);
+  useEffect(() => { if (!mode) { setTarget(null); setTargetChanged(false); setRail(false); setActive(null); setHoveredId(null); setCluster(null); } }, [mode]);
+  const pick = useCallback((next: TargetDescription) => { if (next.range) document.getSelection()?.removeAllRanges(); session.pick(window.app_version, next); setTarget(next); setTargetChanged(false); setActive(null); setCluster(null); setRail(false); }, [session, window.app_version]);
   const onHover = useCallback((value: HTMLElement | null) => setHover(value), []);
   useCommentPick(content, mode && visible && ready, pick, onHover);
   useEffect(() => {
@@ -81,14 +90,22 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
     if (!mode || !visible) return;
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      if (!(event.target instanceof Element) || event.target.closest(".ks-window") !== content.closest(".ks-window")) return;
+      const owner = event.target instanceof Element ? event.target.closest(".ks-window") : null;
+      if (owner !== content.closest(".ks-window") && !(event.target === document.body && content.closest(".ks-window")?.querySelector(".ks-window-frame-active"))) return;
       event.preventDefault(); event.stopPropagation();
-      if (target) setTarget(null); else if (activeId) setActive(null); else if (cluster) setCluster(null); else if (rail) setRail(false); else commentSession(window.id).set(false);
+      if (target || targetChanged) {
+        const input = content.closest(".ks-window")?.querySelector<HTMLTextAreaElement>(".ks-comment-composer textarea");
+        if (input) {
+          input.focus({ preventScroll: true });
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        }
+      } else if (activeId) setActive(null); else if (cluster) setCluster(null); else if (rail) setRail(false); else commentSession(window.id).set(false);
     };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
-  }, [activeId, cluster, mode, rail, target, visible, window.id, content]);
+  }, [activeId, cluster, mode, rail, target, targetChanged, visible, window.id, content]);
   useEffect(() => { if ((meta?.unsent_count ?? 0) > 0) setSent(false); }, [meta?.unsent_count]);
+  useEffect(() => { if (cluster && !activeId) requestAnimationFrame(() => threadRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true })); }, [cluster, activeId]);
   useLayoutEffect(() => {
     const place = () => {
       const pinId = cluster?.[0] ?? activeId;
@@ -110,7 +127,7 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
   useEffect(() => {
     if (!mode || rail || (!activeId && !cluster) || target) return;
     const outside = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || event.target.closest(".ks-comment-thread, .ks-comment-pin")) return;
+      if (!(event.target instanceof Element) || event.target.closest(".ks-comment-thread, .ks-comment-pin, .ks-comment-dialog")) return;
       if (event.target.closest(".ks-window") !== content.closest(".ks-window")) return;
       event.preventDefault(); event.stopPropagation(); setActive(null); setCluster(null);
     };
@@ -131,6 +148,7 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
   };
   const closeTarget = () => {
     const element = target?.element;
+    session.clearDraft(); setTargetChanged(false);
     setTarget(null);
     if (element) requestAnimationFrame(() => {
       const hadTabIndex = element.hasAttribute("tabindex");
@@ -139,24 +157,30 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
       if (!hadTabIndex) element.removeAttribute("tabindex");
     });
   };
-  const showBar = Boolean(meta?.unsent_count || (mode && ((meta?.open_count ?? 0) || (meta?.unread_reply_count ?? 0) || list.items.length)));
-  const send = async () => { setSending(true); try { await sendComments({ store, appId: window.app_id, appName, windowId: window.id }); setSent(true); } catch (error) { onError(toCoreError(error)); } finally { setSending(false); } };
+  const send = async () => {
+    setProblem(null); setSending(true);
+    try { await sendComments({ store, appId: window.app_id, appName, windowId: window.id }); setSent(true); }
+    catch (error) { onError(toCoreError(error)); }
+    finally { setSending(false); }
+  };
   return <div className={`ks-comment-layer${mode ? " is-on" : ""}`} data-ks-share-skip>
     {mode && visible ? <>
       <div className="ks-comment-ring" />
       {hover ? <span ref={position.hoverBox} className="ks-comment-box is-hover" style={{ display: "none" }} /> : null}
       {target || activeId || hoveredId ? <span ref={position.selectedBox} className="ks-comment-box is-selected" style={{ display: "none" }} /> : null}
+      {target ? <span ref={(node) => position.setPin("__draft__", node)} className="ks-comment-pin is-draft is-preview" aria-label="초안 커멘트 자리" /> : null}
       {position.groups.map((group) => {
         const grouped = list.items.filter((item) => group.ids.includes(item.id)), first = grouped[0];
         if (!first) return null;
-        return <button key={group.id} ref={(node) => position.setPin(group.id, node)} type="button" className={`ks-comment-pin ${grouped.every((item) => !item.sent_at) ? "is-draft" : "is-sent"}${group.ids.length > 1 ? " is-cluster" : ""}`} aria-label={group.ids.length > 1 ? `커멘트 ${group.ids.length}개` : `커멘트 ${first.number}`} onPointerEnter={() => setHoveredId(group.ids.length === 1 ? group.id : null)} onPointerLeave={() => setHoveredId(null)} onClick={() => { setTarget(null); setCluster(group.ids.length > 1 ? group.ids : null); setActive(group.ids.length === 1 ? group.id : null); }}>{group.ids.length > 1 ? group.ids.length : first.number}{group.ids.length > 1 ? <span className="ks-comment-pin-stack" /> : null}{grouped.some((item) => item.unread_reply) ? <span className="ks-comment-pin-dot" /> : null}{group.ids.length === 1 && position.statuses[first.id] === "moved" ? <span className="ks-comment-pin-dot is-moved" /> : null}</button>;
+        const button = <button ref={group.ids.length === 1 ? (node) => position.setPin(group.id, node) : undefined} type="button" className={`ks-comment-pin ${grouped.every((item) => !item.sent_at) ? "is-draft" : "is-sent"}${group.ids.length > 1 ? " is-cluster" : ""}`} aria-label={group.ids.length > 1 ? `커멘트 ${group.ids.length}개` : `커멘트 ${first.number}`} onPointerEnter={() => setHoveredId(group.ids.length === 1 ? group.id : null)} onPointerLeave={() => setHoveredId(null)} onClick={() => { setTarget(null); setCluster(group.ids.length > 1 ? group.ids : null); setActive(group.ids.length === 1 ? group.id : null); }}>{group.ids.length > 1 ? group.ids.length : first.number}{grouped.some((item) => item.unread_reply) ? <span className="ks-comment-pin-dot" /> : null}{group.ids.length === 1 && position.statuses[first.id] === "moved" ? <span className="ks-comment-pin-dot is-moved" /> : null}</button>;
+        return group.ids.length > 1 ? <span key={group.id} ref={(node) => position.setPin(group.id, node)} className="ks-comment-pin-cluster"><span className="ks-comment-pin-stack" />{button}</span> : <span key={group.id}>{button}</span>;
       })}
-      {target && position.index ? <CommentComposer store={store} content={content} windowId={window.id} appId={window.app_id} appName={appName} version={window.app_version} shellVersion={shellVersion} origin={origin} digest={position.index.digest} index={position.index.entries} target={target} onRetarget={pick} onClose={closeTarget} onError={onError} onPositioned={position.refresh} /> : null}
-      {rail ? <aside className="ks-comment-rail" aria-label="커멘트 목록">{list.error ? <Notice role="alert" errorId={list.error.id} actions={[<Button key="retry" onClick={() => void data.load(meta?.revision ?? 0, true)}>다시 받기</Button>]}>{list.error.message}</Notice> : <CommentCards items={list.items} statuses={position.statuses} activeId={activeId} setActive={activate} host={content} store={store} windowId={window.id} onError={onError} more={() => void data.more()} hasMore={!!list.nextCursor} loading={list.loading} />}</aside> : null}
-      {!rail && current ? <div ref={threadRef} className="ks-comment-surface ks-comment-thread"><CommentCard item={current} status={position.statuses[current.id]} active host={content} store={store} windowId={window.id} open={() => {}} close={() => { setActive(null); requestAnimationFrame(() => position.pins.current.get(cluster?.[0] ?? current.id)?.focus({ preventScroll: true })); }} error={onError} /></div> : null}
+      {(target || targetChanged) && position.index ? <CommentComposer store={store} content={content} windowId={window.id} appId={window.app_id} appName={appName} version={window.app_version} shellVersion={shellVersion} origin={origin} digest={position.index.digest} index={position.index.entries} target={target} targetChanged={targetChanged} onRetarget={pick} onClose={closeTarget} onError={onError} onPositioned={position.refresh} /> : null}
+      {rail ? <aside className="ks-comment-rail" aria-label="커멘트 목록">{list.error ? <div className="ks-data-state" role="alert"><EmptyState icon={<TriangleAlert size="empty" />} text={<>{list.error.message}{list.error.id ? <> <ErrorId id={list.error.id} /></> : null}</>} action={<Button onClick={() => void data.load(meta?.revision ?? 0, true)}>다시 받기</Button>} /></div> : <CommentCards items={list.items} statuses={position.statuses} activeId={activeId} setActive={activate} host={content} store={store} windowId={window.id} onError={onError} more={() => void data.more()} hasMore={!!list.nextCursor} loading={list.loading} />}</aside> : null}
+      {!rail && current ? <div ref={threadRef} className="ks-comment-surface ks-comment-thread"><CommentCard item={current} status={position.statuses[current.id]} active host={content} store={store} windowId={window.id} open={() => {}} close={() => { setActive(null); requestAnimationFrame(() => { const pin = position.pins.current.get(cluster?.[0] ?? current.id); (pin?.querySelector<HTMLButtonElement>("button") ?? pin)?.focus({ preventScroll: true }); }); }} error={onError} /></div> : null}
       {!rail && cluster && !current ? <div ref={threadRef} className="ks-comment-surface ks-comment-thread"><CommentCards items={list.items.filter((item) => cluster.includes(item.id))} statuses={position.statuses} activeId={activeId} setActive={setActive} host={content} store={store} windowId={window.id} onError={onError} more={() => {}} hasMore={false} loading={false} /></div> : null}
     </> : null}
-    {showBar ? <div className="ks-comment-bar" role="toolbar" aria-label="커멘트"><button type="button" className="ks-comment-bar-item" aria-label={`커멘트 목록 ${meta?.open_count ?? 0}개`} aria-pressed={rail} onClick={() => { commentSession(window.id).set(true); setRail(!rail); }}><List size="inline" />{meta?.open_count ?? 0}{orphans ? <span className="ks-comment-pin is-rail is-orphan is-away is-mini">{orphans}</span> : null}</button>{receiver ? <button type="button" className={`ks-comment-bar-item${meta?.unsent_count ? " is-primary" : ""}`} title={`받는 앱: ${receiver.name}`} disabled={!meta?.unsent_count || sending} onClick={() => void send()}>{sent ? <><Check size="inline" />보냈습니다</> : `에이전트에게 보내기${meta?.unsent_count ? ` ${meta.unsent_count}` : ""}`}</button> : <button type="button" className="ks-comment-bar-item" onClick={(event) => chooseAgent(event.currentTarget)}>기본 에이전트 고르기…</button>}</div> : null}
-    {problem ? <Notice role="alert" errorId={problem.id} onDismiss={() => setProblem(null)}>{problem.message}</Notice> : null}
+    {showBar ? <div ref={barRef} className="ks-comment-bar" role="toolbar" aria-label="커멘트"><button type="button" className="ks-comment-bar-item" aria-label={`커멘트 목록 ${meta?.open_count ?? 0}개`} aria-pressed={rail} onClick={() => { commentSession(window.id).set(true); setRail(!rail); }}><List size="inline" />{meta?.open_count ?? 0}{orphans ? <span className="ks-comment-pin is-rail is-orphan is-away is-mini">{orphans}</span> : null}</button>{receiver ? <button type="button" className={`ks-comment-bar-item${meta?.unsent_count ? " is-primary" : ""}`} title={`받는 앱: ${receiver.name}`} disabled={!meta?.unsent_count || sending} aria-busy={sending || undefined} onClick={() => void send()}>{sending ? <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="inline" /></span> : null}{sent ? <><Check size="inline" />보냈습니다</> : `에이전트에게 보내기${meta?.unsent_count ? ` ${meta.unsent_count}` : ""}`}</button> : <button type="button" className="ks-comment-bar-item" onClick={(event) => chooseAgent(event.currentTarget)}>기본 에이전트 고르기…</button>}</div> : null}
+    {problem ? <div className="ks-comment-notice"><Notice role="alert" errorId={problem.id} onDismiss={() => setProblem(null)} actions={[<IconButton key="close" aria-label="닫기" onClick={() => setProblem(null)}><X size="inline" /></IconButton>]}>{problem.message}</Notice></div> : null}
   </div>;
 }

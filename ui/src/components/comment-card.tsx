@@ -8,7 +8,10 @@ export const CommentCardBody = memo(function CommentCardBody({ id, className = "
   onKeyDown?: KeyboardEventHandler<HTMLElement>;
 }) {
   const targetClick: MouseEventHandler = (event) => { event.stopPropagation(); activate(); };
-  return <article className={`ks-html-comment${className ? ` ${className}` : ""}${active ? " is-active" : ""}${resolved ? " is-resolved" : ""}`} id={id} onClick={() => { if (!active) activate(); }} onKeyDown={onKeyDown}>
+  return <article className={`ks-html-comment${className ? ` ${className}` : ""}${active ? " is-active" : ""}${resolved ? " is-resolved" : ""}`} id={id} onClick={(event) => {
+    const selection = event.currentTarget.ownerDocument.getSelection();
+    if (!active && (!selection || selection.isCollapsed || !selection.rangeCount || !selection.getRangeAt(0).intersectsNode(event.currentTarget))) activate();
+  }} onKeyDown={onKeyDown}>
     {pin}
     <div className="ks-html-comment-head"><button ref={targetRef} type="button" className="ks-html-comment-target" onClick={targetClick}>{target}</button>
       {active ? tools : unread ? <span className="ks-badge is-accent">답변 도착</span> : null}

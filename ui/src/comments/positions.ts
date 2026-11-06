@@ -3,7 +3,6 @@ import type { AppCommentSummary, AppDefinition } from "../contract/contract";
 import { buildDefinitionIndex, resolveDefinition, type DefinitionIndex } from "./definition";
 import { resolveScreen } from "./screen";
 import { setCommentHighlights } from "./highlight";
-import { visibleClip } from "../share/visible";
 import { describeTarget, type TargetDescription } from "./target";
 
 type Index = { digest: string; entries: DefinitionIndex };
@@ -15,6 +14,30 @@ export function definitionIndex(definition: AppDefinition): Promise<Index> {
 }
 export type PositionStatus = "exact" | "moved" | "not_visible" | "orphan";
 export type PinGroup = { id: string; ids: string[] };
+
+function scrollClip(element: HTMLElement, content: HTMLElement) {
+  let left = 0, top = 0, right = window.innerWidth, bottom = window.innerHeight;
+  for (let node: HTMLElement | null = element.parentElement; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (node === content || style.overflowX !== "visible" || style.overflowY !== "visible") {
+      const rect = node.getBoundingClientRect();
+      const x = rect.left + node.clientLeft, y = rect.top + node.clientTop;
+      left = Math.max(left, x); top = Math.max(top, y);
+      right = Math.min(right, node.clientWidth ? x + node.clientWidth : rect.right);
+      bottom = Math.min(bottom, node.clientHeight ? y + node.clientHeight : rect.bottom);
+    }
+    if (node === content) break;
+  }
+  return { left, top, right, bottom };
+}
+
+function belowStickyHeader(element: HTMLElement, pinTop: number): boolean {
+  const scroll = element.closest<HTMLElement>(".ks-table-scroll");
+  const header = scroll?.querySelector<HTMLElement>(".ks-table-header");
+  if (!scroll || !header || header.contains(element) || scroll.scrollTop <= 0) return true;
+  const bounds = header.getBoundingClientRect();
+  return pinTop >= bounds.bottom;
+}
 
 export function useCommentPositions(content: HTMLElement | null, windowId: string, enabled: boolean, definition: AppDefinition | undefined, items: AppCommentSummary[], railOpen: boolean, selectedId: string | null, target: TargetDescription | null, hover: HTMLElement | null, onPinsPositioned: () => boolean) {
   const [index, setIndex] = useState<Index>();
@@ -54,19 +77,36 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
       const surface = win.querySelector<HTMLElement>(".ks-comment-surface");
       const surfaceRect = surface?.getBoundingClientRect();
       const overlapsSurface = (rect: { left: number; right: number; top: number; bottom: number }) => !!surfaceRect && rect.left < surfaceRect.right && rect.right > surfaceRect.left && rect.top < surfaceRect.bottom && rect.bottom > surfaceRect.top;
-      const showBox = (box: HTMLElement | null, rect: DOMRect) => {
-        if (!box || overlapsSurface(rect)) return;
+      const showBox = (box: HTMLElement | null, element: HTMLElement, rect: DOMRect, expand = false) => {
+        const clip = scrollClip(element, content), extra = expand ? small : 0;
+        const left = Math.max(clip.left, rect.left - extra), top = Math.max(clip.top, rect.top - extra);
+        const right = Math.min(clip.right, rect.right + extra), bottom = Math.min(clip.bottom, rect.bottom + extra);
+        if (!box || right <= left || bottom <= top || overlapsSurface({ left, right, top, bottom })) return;
         box.style.display = "block";
-        box.style.transform = `translate(${rect.left - origin.left}px, ${rect.top - origin.top}px)`;
-        box.style.width = `${rect.width}px`; box.style.height = `${rect.height}px`;
+        box.style.transform = `translate(${left - origin.left}px, ${top - origin.top}px)`;
+        box.style.width = `${right - left}px`; box.style.height = `${bottom - top}px`;
       };
       if (selectedBox.current) selectedBox.current.style.display = "none";
       if (hoverBox.current) hoverBox.current.style.display = "none";
       if (hover && content.contains(hover)) {
-        const hovered = describeTarget(hover, content)?.element;
-        if (hovered) showBox(hoverBox.current, hovered.getBoundingClientRect());
+        const hovered = describeTarget(hover, content);
+        if (hovered) showBox(hoverBox.current, hovered.element, hovered.element.getBoundingClientRect(), hovered.anchor.kind !== "row");
       }
-      if (target && target.anchor.kind !== "text" && target.anchor.kind !== "point") showBox(selectedBox.current, target.element.getBoundingClientRect());
+      if (target && target.anchor.kind !== "text" && target.anchor.kind !== "point") showBox(selectedBox.current, target.element, target.element.getBoundingClientRect(), target.anchor.kind !== "row");
+      const place = (id: string, kind: string, element: HTMLElement, rect: DOMRect) => {
+        const clip = scrollClip(element, content);
+        const center = rect.top + Math.min(rect.height, size * 5 / 3) / 2;
+        const y = kind === "point" ? rect.top - size : kind === "control" ? rect.top - size + inset : center - size / 2;
+        if (kind !== "point" && (center < clip.top || center > clip.bottom || !belowStickyHeader(element, y))) return false;
+        if (rail && (rail.width >= contentRect.width || rect.left >= rail.left)) return true;
+        const rightLimit = Math.min(area ? area.right - size : Infinity, rail ? rail.left - size / 2 : Infinity);
+        const bounds = element.getBoundingClientRect();
+        const ownRight = kind === "block" && element.clientWidth ? bounds.left + element.clientLeft + element.clientWidth : bounds.right;
+        const edge = Math.min(kind === "text" ? bounds.right : rect.right, clip.right, ownRight);
+        const x = kind === "point" ? Math.min(rect.left, rightLimit) : Math.min(edge - inset, rightLimit);
+        if (!overlapsSurface({ left: x, right: x + size, top: y, bottom: y + size })) placed.push({ id, x: x - origin.left, y: y - origin.top });
+        return true;
+      };
       for (const item of items) {
         const definitionResult = resolveDefinition(item.anchor, item.created_definition_digest, index.entries, index.digest);
         const result = resolveScreen(item.anchor, definitionResult, content, { windowId, sourceWindowId: item.source_window_id });
@@ -76,28 +116,26 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
         if (item.resolved || !("rect" in result)) continue;
         const rect = result.range?.getClientRects()[0] ?? result.rect;
         if (item.id === selectedId && item.anchor.kind !== "point" && item.anchor.kind !== "text" && selectedBox.current) {
-          showBox(selectedBox.current, rect);
+          showBox(selectedBox.current, result.element, rect, item.anchor.kind !== "row");
         }
-        const clip = visibleClip(result.element);
-        const center = rect.top + Math.min(rect.height, size * 5 / 3) / 2;
-        if (item.anchor.kind !== "point" && (center < clip.top || center > clip.bottom)) { next[item.id] = "not_visible"; continue; }
-        if (rail && (rail.width >= contentRect.width || rect.left >= rail.left)) continue;
-        const rightLimit = Math.min(clip.right, area ? area.right - size : Infinity, rail ? rail.left - size / 2 : Infinity);
-        const x = item.anchor.kind === "point" ? Math.min(rect.left, rightLimit) : Math.min(rect.right - inset, rightLimit);
-        const y = item.anchor.kind === "point" ? rect.top - size : item.anchor.kind === "control" ? rect.top - size + inset : rect.top + Math.min(rect.height, size * 5 / 3) / 2 - size / 2;
-        if (overlapsSurface({ left: x, right: x + size, top: y, bottom: y + size })) continue;
-        placed.push({ id: item.id, x: x - origin.left, y: y - origin.top });
+        if (!place(item.id, item.anchor.kind, result.element, rect)) next[item.id] = "not_visible";
+      }
+      if (target) {
+        const bounds = target.range?.getClientRects()[0] ?? target.rect ?? target.element.getBoundingClientRect();
+        const rect = target.anchor.kind === "point" && target.anchor.frame_rel ? new DOMRect(bounds.left + bounds.width * target.anchor.frame_rel.x, bounds.top + bounds.height * target.anchor.frame_rel.y, 0, 0) : bounds;
+        place("__draft__", target.anchor.kind, target.element, rect);
       }
       placed.sort((a, b) => a.y - b.y);
       const nextGroups: PinGroup[] = [];
       const points = new Map<string, { x: number; y: number }>();
       for (const point of placed) {
+        if (point.id === "__draft__") { points.set(point.id, point); continue; }
         const previous = nextGroups.at(-1), previousPoint = previous && points.get(previous.id);
         if (previous && previousPoint && Math.abs(previousPoint.x - point.x) < size && Math.abs(previousPoint.y - point.y) < size - small) previous.ids.push(point.id);
         else { nextGroups.push({ id: point.id, ids: [point.id] }); points.set(point.id, point); }
       }
       coordinates.current = points;
-      for (const [id, pin] of pins.current) { const point = points.get(id); if (point) pin.style.transform = `translate(${point.x}px, ${point.y}px)`; }
+      for (const [id, pin] of pins.current) { const point = points.get(id); pin.style.display = point ? "" : "none"; if (point) pin.style.transform = `translate(${point.x}px, ${point.y}px)`; }
       if (onPinsPositioned()) schedule();
       setGroups((old) => JSON.stringify(old) === JSON.stringify(nextGroups) ? old : nextGroups);
       setCommentHighlights(windowId, ranges);
@@ -114,6 +152,7 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
     if (!node) { pins.current.delete(id); return; }
     pins.current.set(id, node);
     const point = coordinates.current.get(id);
+    node.style.display = point ? "" : "none";
     if (point) node.style.transform = `translate(${point.x}px, ${point.y}px)`;
   };
   return { index, statuses, pins, groups, setPin, selectedBox, hoverBox, refresh };

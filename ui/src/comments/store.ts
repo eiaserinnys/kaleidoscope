@@ -7,7 +7,16 @@ const stores = new WeakMap<ShellStore, Map<string, CommentStore>>();
 
 export function appCommentStore(store: ShellStore, appId: string): CommentStore {
   let apps = stores.get(store);
-  if (!apps) { apps = new Map(); stores.set(store, apps); }
+  if (!apps) {
+    apps = new Map(); stores.set(store, apps);
+    const cached = apps;
+    const server = () => { const link = store.getSnapshot()?.link; return link && "server_url" in link ? link.server_url : ""; };
+    let previous = server();
+    store.subscribe(() => {
+      const next = server();
+      if (next !== previous) { previous = next; cached.forEach((entry) => entry.reset()); }
+    });
+  }
   let current = apps.get(appId);
   if (!current) { current = new CommentStore(store, appId); apps.set(appId, current); }
   return current;
@@ -42,6 +51,7 @@ export class CommentStore {
     try {
       const reply = await this.store.call({ op: "comment.list", app_id: this.appId, cursor });
       if (request !== this.request) return;
+      if (reply.app_revision !== this.value.revision) { await this.load(reply.app_revision, true); return; }
       const known = new Set(this.value.items.map((item) => item.id));
       this.set({ items: [...this.value.items, ...reply.items.filter((item) => !known.has(item.id))], nextCursor: reply.next_cursor, revision: reply.app_revision, loading: false });
     } catch (error) { if (request === this.request) this.set({ loading: false, error: toCoreError(error) }); }

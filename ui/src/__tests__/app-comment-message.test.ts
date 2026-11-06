@@ -27,4 +27,11 @@ describe("앱 커멘트 전송 글", () => {
     expect(result).toContain('"x":0.25');
     expect(result).toContain("400×300");
   });
+  it("값이 없는 반복, 행과 고른 글은 보내지 않는다", () => {
+    const value = comment({ anchor: { schema_version: 1, kind: "block", pointer: "/ui", normalized_type: "text", repeat_chain: [], row_identity: "" } });
+    const result = commentMessage("앱", [value]);
+    expect(result).not.toContain("반복 []");
+    expect(result).not.toContain('행 ""');
+    expect(result).not.toContain("고른 글");
+  });
 });

@@ -3,6 +3,7 @@ import type { BlockContext } from "../blocks/block-context";
 import { isWindowVisible } from "../data/window-state";
 import { ownerOf } from "../share/overlay-owner";
 import { windowActionActive } from "../share/action-context";
+import { isCommenting } from "../comments/session";
 
 export function eventModifiers(event: Pick<MouseEvent, "shiftKey" | "altKey" | "ctrlKey" | "metaKey">): EventModifiers {
   return { shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey };
@@ -17,6 +18,7 @@ const apps = new Set<AppEntry>();
 const grids = new Set<GridEntry>();
 
 function topWindow(context: Context): boolean {
+  if (isCommenting(context.window.id)) return false;
   const snapshot = context.store.getSnapshot();
   if (!isWindowVisible(snapshot, context.window.id)) return false;
   const current = snapshot?.shared.windows.find((item) => item.id === context.window.id);
@@ -50,6 +52,7 @@ function onKeyDown(event: KeyboardEvent) {
   if (event.defaultPrevented || event.isComposing || typing(target)) return;
   if (hasVisibleShortcutOverlay(targetOwner, controlled)) return;
   for (const tour of tours) {
+    if (isCommenting(tour.context.window.id)) continue;
     if (controlled ? tour.context.window.id !== targetOwner : !topWindow(tour.context)) continue;
     if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       if (event.key === "ArrowLeft") tour.handlers.previous();
@@ -61,12 +64,13 @@ function onKeyDown(event: KeyboardEvent) {
     return;
   }
   for (const app of apps) {
+    if (isCommenting(app.context.window.id)) continue;
     if (controlled ? app.context.window.id !== targetOwner : !topWindow(app.context)) continue;
     const index = app.shortcuts.findIndex((shortcut) => matches(event, shortcut));
     if (index >= 0) { event.preventDefault(); app.run(index, eventModifiers(event)); return; }
   }
   if (event.ctrlKey || event.metaKey || event.altKey) return;
-  const eligible = [...grids].filter((entry) => (controlled ? entry.context.window.id === targetOwner : topWindow(entry.context)) && !entry.root.closest('[hidden], [inert], [aria-hidden="true"]'));
+  const eligible = [...grids].filter((entry) => !isCommenting(entry.context.window.id) && (controlled ? entry.context.window.id === targetOwner : topWindow(entry.context)) && !entry.root.closest('[hidden], [inert], [aria-hidden="true"]'));
   const focusedGrid = target?.closest(".ks-keypad");
   const candidates = eligible.flatMap((entry) => {
     if (focusedGrid && focusedGrid !== entry.root) return [];

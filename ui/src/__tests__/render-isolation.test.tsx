@@ -25,6 +25,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 import { useDefaultMessageApp } from "../shell/message-target";
 import { useMessageSnapshot } from "../../../app/src/shell/use-message-snapshot";
+import { forgetCommentSession } from "../comments/session";
 
 const frameRenders = vi.hoisted(() => ({ count: 0 }));
 vi.mock("../../../app/src/shell/window-frame", async (importOriginal) => {
@@ -404,6 +405,8 @@ async function setState(store: ReturnType<typeof createShellStore>, windowId: st
 
 afterEach(() => {
   cleanup();
+  forgetCommentSession("window-a");
+  forgetCommentSession("window-b");
   emptyClientChatState.loading = true;
   rowRenders.clear();
   const probe = (renderBlockModule as unknown as { renderProbe?: { current: typeof fallbackProbe.current } }).renderProbe;

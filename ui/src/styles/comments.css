@@ -2,8 +2,14 @@
 .ks-window[data-commenting="true"] { container-type: inline-size; }
 .ks-comment-layer > * { pointer-events: auto; }
 .ks-comment-layer > :is(.ks-comment-ring, .ks-comment-box) { pointer-events: none; }
+.ks-dialog-overlay.ks-comment-dialog { z-index: 4; inset-block-start: calc(var(--ks-window-titlebar-height) + var(--ks-line-width)); border-end-start-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); border-end-end-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); }
+.ks-comment-notice { position: absolute; left: 50%; bottom: var(--ks-space-3); transform: translateX(-50%); width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); }
+.ks-comment-bar-item .ks-button-progress { position: static; }
 .ks-comment-ring { position: absolute; inset: calc(var(--ks-window-titlebar-height) + var(--ks-line-width)) var(--ks-line-width) var(--ks-line-width); border-radius: 0 0 calc(var(--ks-radius-window) - var(--ks-line-width)) calc(var(--ks-radius-window) - var(--ks-line-width)); box-shadow: inset 0 0 0 var(--ks-focus-width) var(--ks-color-accent); }
 .ks-window[data-commenting="true"] .ks-window-content { cursor: crosshair; }
+.ks-window[data-commenting="true"] .ks-window-content :is(button, a, input, textarea, select, [role="button"], [role="row"], [role="option"], [role="tab"]) { cursor: crosshair; }
+.ks-window[data-commenting="true"] .ks-window-content :is(.ks-feed-body, .ks-markdown-text, .ks-data-text:not(.is-interactive), .ks-agent-chat-user, .ks-agent-chat-assistant, .ks-table-content-title, .ks-table-content-subtitle),
+.ks-window[data-commenting="true"] .ks-window-content :is(.ks-feed-body, .ks-markdown-text, .ks-data-text:not(.is-interactive), .ks-agent-chat-user, .ks-agent-chat-assistant, .ks-table-content-title, .ks-table-content-subtitle) * { cursor: text; }
 .ks-window[data-commenting="true"] .ks-window-content iframe { pointer-events: none; }
 .ks-comment-box { position: absolute; box-sizing: border-box; border-radius: var(--ks-radius-small); }
 .ks-comment-box.is-hover { border: var(--ks-line-width) solid var(--ks-color-accent); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast), inset 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); }
@@ -15,8 +21,10 @@
 .ks-comment-pin.is-rail.is-draft { box-shadow: inset 0 0 0 var(--ks-focus-width) var(--ks-color-accent); }
 .ks-comment-pin.is-orphan { border: var(--ks-line-width) dashed var(--ks-color-muted); background: transparent; box-shadow: none; color: var(--ks-color-muted); }
 .ks-comment-pin.is-resolved { background: var(--ks-color-hover); box-shadow: none; color: var(--ks-color-muted); }
-.ks-comment-pin.is-cluster { isolation: isolate; }
-.ks-comment-pin-stack { position: absolute; z-index: -1; inset-block-start: calc(-1 * var(--ks-space-1)); inset-inline: var(--ks-scrollbar-thumb-inset); height: 100%; border-radius: inherit; background: var(--ks-color-accent-soft); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); }
+.ks-comment-pin.is-preview { pointer-events: none; }
+.ks-comment-pin-cluster { position: absolute; z-index: 1; width: var(--ks-space-5); height: var(--ks-space-5); }
+.ks-comment-pin-cluster > .ks-comment-pin { position: relative; z-index: 1; }
+.ks-comment-pin-stack { position: absolute; inset-block-start: calc(-1 * var(--ks-space-1)); inset-inline: var(--ks-scrollbar-thumb-inset); height: 100%; border-radius: var(--ks-radius-large) var(--ks-radius-large) var(--ks-radius-large) 0; background: var(--ks-color-accent-soft); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-accent-contrast); }
 .ks-comment-pin.is-mini { width: var(--ks-space-4); min-width: var(--ks-space-4); height: var(--ks-space-4); flex: 0 0 var(--ks-space-4); margin-inline-start: var(--ks-space-1); }
 .ks-comment-pin.is-rail.is-away { border-radius: 50%; }
 .ks-comment-pin.is-rail.is-away.is-sent { background: var(--ks-color-selection); box-shadow: inset 0 0 0 var(--ks-line-width) var(--ks-color-accent-soft); color: var(--ks-color-accent); }
@@ -35,9 +43,12 @@
 .ks-comment-thumb.is-removed { display: grid; place-items: center; border-style: dashed; background: transparent; }
 .ks-comment-thumb:not(.is-removed) .ks-list-remove { position: absolute; inset-block-start: var(--ks-space-1); inset-inline-end: var(--ks-space-1); width: var(--ks-icon-button-size); height: var(--ks-icon-button-size); background: var(--ks-material-popover); color: var(--ks-color-text); }
 .ks-comment-card { margin-inline: 0; cursor: pointer; }
+.ks-comment-card > .ks-comment-thumb { grid-column: 2; }
+.ks-comment-card .ks-html-comment-text, .ks-comment-card .ks-html-reply p { white-space: pre-wrap; }
 .ks-comment-thread .ks-comment-card { padding: 0; border: 0; background: transparent; }
 .ks-comment-rail { position: absolute; z-index: 0; inset-block: calc(var(--ks-window-titlebar-height) + var(--ks-line-width)) var(--ks-line-width); inset-inline-end: var(--ks-line-width); display: flex; width: calc(var(--ks-space-6) * 8); flex-direction: column; min-height: 0; overflow: hidden; border-inline-start: var(--ks-line-width) solid var(--ks-color-border); border-end-end-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); background: var(--ks-material-dialog); backdrop-filter: blur(var(--ks-blur-popover)); cursor: default; }
 .ks-comment-bar { position: absolute; inset-block-start: calc(100% + var(--ks-space-3)); inset-inline-end: 0; display: flex; height: calc(var(--ks-control-height) + var(--ks-space-1) * 2); align-items: center; gap: var(--ks-space-1); border: var(--ks-line-width) solid var(--ks-color-glass-edge); border-radius: var(--ks-radius-bar); background: var(--ks-material-popover); box-shadow: var(--ks-shadow-bar); padding: 0 var(--ks-space-1); backdrop-filter: blur(var(--ks-blur-bar)); }
+.ks-comment-bar.is-inside { inset-block-start: auto; inset-block-end: var(--ks-space-3); }
 .ks-comment-bar-item { display: inline-flex; height: var(--ks-control-height); flex: 0 0 auto; align-items: center; gap: var(--ks-space-1); border: var(--ks-line-width) solid transparent; border-radius: calc(var(--ks-radius-bar) - var(--ks-space-1)); padding-inline: var(--ks-space-3); background: transparent; color: var(--ks-color-text); cursor: pointer; font-family: var(--ks-font-family); font-size: var(--ks-type-body); line-height: 1; white-space: nowrap; }
 .ks-comment-bar-item:hover:not(:disabled) { background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover)); }
 .ks-comment-bar-item[aria-pressed="true"] { background: var(--ks-color-selection); }

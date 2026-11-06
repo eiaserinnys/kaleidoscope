@@ -26,12 +26,13 @@ export function CommentCard({ item, status, active, host, store, windowId, open,
   const targetButton = useRef<HTMLButtonElement>(null);
   const replyInFlight = useRef(false);
   const data = appCommentStore(store, item.app_id);
+  useEffect(() => { if (active) targetButton.current?.focus({ preventScroll: true }); }, [active]);
   useEffect(() => {
     if (!active) return;
     let live = true;
     void data.thread(item.id).then((value) => { if (live) setThread(value); }).catch((cause) => error(toCoreError(cause)));
     if (item.unread_reply) void store.call({ op: "comment.mark_read", app_id: item.app_id, id: item.id }).catch((cause) => error(toCoreError(cause)));
-    if (status === "orphan" && item.image) void store.call({ op: "comment.image", app_id: item.app_id, id: item.id }).then((value) => { if (live) setImage(value.image.image_base64); }).catch((cause) => error(toCoreError(cause)));
+    if ((status === "orphan" || item.anchor.kind === "point") && item.image) void store.call({ op: "comment.image", app_id: item.app_id, id: item.id }).then((value) => { if (live) setImage(value.image.image_base64); }).catch((cause) => error(toCoreError(cause)));
     return () => { live = false; };
   }, [active, item.id, item.revision, item.unread_reply, item.image, item.app_id, status, data, store, error]);
   const change = async (work: () => Promise<unknown>) => {
@@ -49,7 +50,7 @@ export function CommentCard({ item, status, active, host, store, windowId, open,
     } catch (cause) { error(toCoreError(cause)); return false; }
     finally { replyInFlight.current = false; setReplyBusy(false); }
   };
-  const label = item.anchor.quote?.exact ? `“${item.anchor.quote.exact}”` : item.anchor.element?.description ?? item.anchor.normalized_type ?? "블록";
+  const label = item.anchor.element?.description ?? (item.anchor.quote?.exact ? `“${item.anchor.quote.exact}”` : item.anchor.normalized_type ?? "블록");
   const title = `${status === "orphan" ? `${item.created_app_version}판 ` : status === "moved" ? "옮겨 찾음, " : ""}${label}`;
   const away = status === "not_visible" || status === "orphan";
   const pinClass = item.resolved ? "is-resolved" : status === "orphan" ? "is-orphan" : item.sent_at ? "is-sent" : "is-draft";
@@ -67,7 +68,7 @@ export function CommentCard({ item, status, active, host, store, windowId, open,
     {image && preview ? <ImagePreview preview={{ src: `data:image/png;base64,${image}`, name: "그때의 창 그림", trigger: preview }} onClose={() => setPreview(null)} /> : null}
     <Compose label="답글" disabled={replyBusy} initialValue={data.draft(item.id)} onDraftChange={(value) => data.setDraft(item.id, value)} onSubmit={reply} onEscape={closeCard} />
     {menu ? <Menu anchor={menu} onClose={() => setMenu(null)} items={[{ id: "delete", label: "삭제", danger: true, onSelect: () => setConfirm(true) }]} /> : null}
-    {confirm ? <Dialog host={host} title={`커멘트 ${item.number}을 지울까요?`} ok="지우기" danger onCancel={() => setConfirm(false)} onConfirm={() => void change(async () => { await store.call({ op: "comment.delete", app_id: item.app_id, id: item.id }); setConfirm(false); close(); })} /> : null}
+    {confirm ? <Dialog host={host.closest<HTMLElement>(".ks-window") ?? host} overlayClassName="ks-comment-dialog" inertSelector=":scope > .ks-window-frame, :scope > .ks-comment-layer" title={`커멘트 ${item.number}번을 지울까요?`} ok="지우기" danger onCancel={() => setConfirm(false)} onConfirm={() => void change(async () => { await store.call({ op: "comment.delete", app_id: item.app_id, id: item.id }); setConfirm(false); close(); })} /> : null}
   </CommentCardBody>;
 }
 

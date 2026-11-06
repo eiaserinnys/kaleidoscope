@@ -25,6 +25,7 @@ export function useCommentPick(content: HTMLElement | null, enabled: boolean, pi
       cancelAnimationFrame(frame); frame = requestAnimationFrame(() => hover(target));
     };
     const leave = () => hover(null);
+    const focus = (event: FocusEvent) => hover(htmlTarget(event.target));
     const start = (event: PointerEvent) => {
       if (event.button !== 0) return;
       down = htmlTarget(event.target);
@@ -42,7 +43,19 @@ export function useCommentPick(content: HTMLElement | null, enabled: boolean, pi
     const stop = (event: Event) => { event.stopPropagation(); if (event.type !== "mousedown") event.preventDefault(); };
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") return;
-      if (["Tab", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) return;
+      if (event.key === "Tab") return;
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
+        event.stopPropagation();
+        const row = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-focus-index]") : null;
+        const scope = row?.closest<HTMLElement>('[role="listbox"], [role="grid"], [role="tree"], [role="table"]');
+        if (row && scope && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+          const rows = [...scope.querySelectorAll<HTMLElement>("[data-focus-index]")];
+          const index = rows.indexOf(row);
+          const next = event.key === "Home" ? 0 : event.key === "End" ? rows.length - 1 : event.key === "ArrowDown" || event.key === "ArrowRight" ? index + 1 : event.key === "ArrowUp" || event.key === "ArrowLeft" ? index - 1 : index;
+          if (index >= 0 && next !== index && rows[next]) { event.preventDefault(); rows[next].focus({ preventScroll: true }); rows[next].scrollIntoView({ block: "nearest", inline: "nearest" }); }
+        }
+        return;
+      }
       event.preventDefault(); event.stopPropagation();
       if ((event.key === "Enter" || event.key === " ") && event.target instanceof HTMLElement) {
         const r = event.target.getBoundingClientRect();
@@ -50,10 +63,10 @@ export function useCommentPick(content: HTMLElement | null, enabled: boolean, pi
         if (target) pick(target);
       }
     };
-    content.addEventListener("pointermove", move, true); content.addEventListener("pointerleave", leave);
+    content.addEventListener("pointermove", move, true); content.addEventListener("pointerleave", leave); content.addEventListener("focusin", focus);
     content.addEventListener("pointerdown", start, true); content.addEventListener("pointerup", up, true);
     content.addEventListener("mousedown", stop, true); content.addEventListener("click", stop, true); content.addEventListener("dblclick", stop, true);
     content.addEventListener("keydown", key, true);
-    return () => { cancelAnimationFrame(frame); hover(null); content.removeEventListener("pointermove", move, true); content.removeEventListener("pointerleave", leave); content.removeEventListener("pointerdown", start, true); content.removeEventListener("pointerup", up, true); content.removeEventListener("mousedown", stop, true); content.removeEventListener("click", stop, true); content.removeEventListener("dblclick", stop, true); content.removeEventListener("keydown", key, true); };
+    return () => { cancelAnimationFrame(frame); hover(null); content.removeEventListener("pointermove", move, true); content.removeEventListener("pointerleave", leave); content.removeEventListener("focusin", focus); content.removeEventListener("pointerdown", start, true); content.removeEventListener("pointerup", up, true); content.removeEventListener("mousedown", stop, true); content.removeEventListener("click", stop, true); content.removeEventListener("dblclick", stop, true); content.removeEventListener("keydown", key, true); };
   }, [content, enabled, pick, hover]);
 }

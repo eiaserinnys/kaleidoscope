@@ -7,13 +7,14 @@ import { createShellStore } from "../core/shell-store";
 import { WindowData } from "../data/window-data";
 import { ClientRuntime } from "../runtime/client-runtime";
 import { makeTestSeed } from "./fixtures";
+import { commentSession, forgetCommentSession } from "../comments/session";
 
 const mods = { shift: false, alt: false, ctrl: false, meta: false };
 const snapshot = () => ({ device: { active_workspace_id: "w", active_desktop_ids: { w: "d" } }, shared: { desktops: [{ id: "d", workspace_id: "w" }], windows: [{ id: "a", desktop_id: "d", z: 1, minimized: false }] } });
 const store = { getSnapshot: snapshot } as never;
 const context = { store, window: { id: "a", desktop_id: "d" } } as never;
 const disposers: Array<() => void> = [];
-afterEach(() => { disposers.splice(0).forEach((dispose) => dispose()); document.body.innerHTML = ""; });
+afterEach(() => { disposers.splice(0).forEach((dispose) => dispose()); forgetCommentSession("a"); document.body.innerHTML = ""; });
 
 function key(code: string, options: KeyboardEventInit = {}) {
   const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, code, key: code === "Space" ? " " : code, ...options });
@@ -50,6 +51,17 @@ describe("앱과 단추 격자의 단축키", () => {
     disposers.push(registerAppShortcuts(behind, [{ code: "Space", modifiers: [], action: { client: "go" } }], action));
     key("Space");
     expect(action).not.toHaveBeenCalled();
+  });
+  it("커멘트 막대에 초점이 있어도 해당 창의 앱 단축키를 막고 종료 뒤 복원한다", () => {
+    const action = vi.fn();
+    const bar = document.createElement("button"); document.body.append(bar); bar.focus();
+    disposers.push(registerAppShortcuts(context, [{ code: "KeyR", modifiers: [], action: { client: "go" } }], action));
+    commentSession("a").set(true);
+    key("KeyR", { key: "r" });
+    expect(action).not.toHaveBeenCalled();
+    commentSession("a").set(false);
+    key("KeyR", { key: "r" });
+    expect(action).toHaveBeenCalledTimes(1);
   });
 });
 

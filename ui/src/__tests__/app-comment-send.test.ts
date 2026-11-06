@@ -20,13 +20,13 @@ describe("커멘트 일괄 전송", () => {
       if (request.op === "comment.mark_sent") { expect(request.ids).toEqual(["one", "two"]); return {}; }
     });
     vi.mocked(sendToDefaultAgent).mockImplementation(async () => { calls.push("send"); return { appId: "agent", windowId: "agent-window", created: false }; });
-    await sendComments({ store: { call } as unknown as ShellStore, appId: "app", appName: "앱", windowId: "window" });
+    await sendComments({ store: { call, getSnapshot: () => null, subscribe: () => () => {} } as unknown as ShellStore, appId: "app", appName: "앱", windowId: "window" });
     expect(calls).toEqual(["comment.list", "comment.list", "comment.get", "comment.get", "send", "comment.mark_sent"]);
   });
   it("전송 실패면 보냄 표시를 하지 않는다", async () => {
     const call = vi.fn(async (request: { op: string }) => request.op === "comment.list" ? { items: [item("one")] } : { thread: item("one") });
     vi.mocked(sendToDefaultAgent).mockRejectedValueOnce({ id: "failure" });
-    await expect(sendComments({ store: { call } as unknown as ShellStore, appId: "app", appName: "앱", windowId: "window" })).rejects.toEqual({ id: "failure" });
+    await expect(sendComments({ store: { call, getSnapshot: () => null, subscribe: () => () => {} } as unknown as ShellStore, appId: "app", appName: "앱", windowId: "window" })).rejects.toEqual({ id: "failure" });
     expect(call.mock.calls.some(([request]) => request.op === "comment.mark_sent")).toBe(false);
   });
 });
