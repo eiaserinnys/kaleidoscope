@@ -1,0 +1,110 @@
+{
+  "id": "gutter-row",
+  "name": "가로 쌓기 몸통",
+  "description": "최상위 가로 쌓기",
+  "requires": {
+    "blocks": 42,
+    "modules": {}
+  },
+  "permissions": [],
+  "state": {},
+  "window_size": {
+    "width": 880,
+    "height": 360
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "row",
+    "children": [
+      {
+        "type": "section",
+        "title": "왼쪽",
+        "child": {
+          "type": "list",
+          "items": [
+            {
+              "key": "0",
+              "title": "항목 1",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "1",
+              "title": "항목 2",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "2",
+              "title": "항목 3",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "3",
+              "title": "항목 4",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "4",
+              "title": "항목 5",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "5",
+              "title": "항목 6",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "6",
+              "title": "항목 7",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "7",
+              "title": "항목 8",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "8",
+              "title": "항목 9",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "9",
+              "title": "항목 10",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "10",
+              "title": "항목 11",
+              "subtitle": "부제",
+              "meta": "11/06"
+            },
+            {
+              "key": "11",
+              "title": "항목 12",
+              "subtitle": "부제",
+              "meta": "11/06"
+            }
+          ]
+        }
+      },
+      {
+        "type": "section",
+        "title": "오른쪽",
+        "child": {
+          "type": "text",
+          "value": "오른쪽 칸"
+        }
+      }
+    ]
+  }
+}
