@@ -21,7 +21,7 @@ error_catalog! { ENTRIES;
     }
     MEDIA_STREAM_ORIGIN_REJECTED() {
         class: PermissionDenied, place: "미디어 전송 출처 확인", cause: "요청 출처가 쉘 출처와 다르다",
-        message: "이 페이지에는 폴더 미디어를 읽을 권한이 없습니다. 쉘의 재생 블록에서 열어 주세요.",
+        message: "이 페이지에는 미디어를 읽을 권한이 없습니다. 쉘의 재생 블록에서 열어 주세요.",
         fix: "쉘의 재생 블록에서 여세요"
     }
     MEDIA_STREAM_METHOD_UNSUPPORTED(method) {
@@ -72,6 +72,91 @@ error_catalog! { ENTRIES;
     MEDIA_STREAM_SEEK_FAILED(path, reason) {
         class: Io, place: "미디어 전송 파일 위치 이동", cause: "파일에서 요청한 위치로 이동하지 못했다",
         message: "「{path}」의 재생 위치로 이동하지 못했습니다. 파일을 다시 열어 주세요. 원인: {reason}",
+        fix: "파일을 다시 여세요"
+    }
+    MEDIA_BLOB_VERSION_LOW(version, media) {
+        class: InvalidRequest, place: "앱 창의 기기 저장소 미디어 판 확인", cause: "앱 정의의 requires.blocks가 이 기능의 판보다 낮다",
+        message: "기기 저장소 미디어는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 올려 주세요. 파일: {media}",
+        fix: "앱 정의의 requires.blocks를 이 기능의 판 이상으로 올리세요"
+    }
+    MEDIA_BLOB_ROOT_NOT_FOUND(media) {
+        class: NotFound, place: "앱 창의 기기 저장소 위치 확인", cause: "저장 root가 더 이상 없다",
+        message: "기기 저장소의 파일 위치를 찾지 못했습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_ROOT_RESOLVE_FAILED(media) {
+        class: Io, place: "앱 창의 기기 저장소 위치 확인", cause: "저장 root를 해석하지 못했다",
+        message: "기기 저장소의 파일 위치를 확인하지 못했습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_PATH_NOT_FOUND(media) {
+        class: NotFound, place: "앱 창의 기기 저장소 키 경로 확인", cause: "키에 해당하는 파일이 없다",
+        message: "기기 저장소에 저장된 파일을 찾지 못했습니다. 원본 파일을 다시 열거나 저장해 주세요. 파일: {media}",
+        fix: "원본 파일을 다시 열거나 저장하세요"
+    }
+    MEDIA_BLOB_PATH_RESOLVE_FAILED(media) {
+        class: Io, place: "앱 창의 기기 저장소 키 경로 확인", cause: "키의 실제 경로를 해석하지 못했다",
+        message: "기기 저장소 파일의 위치를 확인하지 못했습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_PATH_OUTSIDE_ROOT(media) {
+        class: PathOutsideRoot, place: "앱 창의 기기 저장소 경계 확인", cause: "경로가 저장 root 밖으로 해석됐다",
+        message: "기기 저장소 파일 경로가 허용된 저장 위치 밖을 가리킵니다. 앱의 저장 키를 확인해 주세요. 파일: {media}",
+        fix: "앱의 저장 키를 확인하세요"
+    }
+    MEDIA_BLOB_METADATA_NOT_FOUND(media) {
+        class: NotFound, place: "앱 창의 기기 저장소 파일 확인", cause: "경로를 해석한 뒤 파일이 없어졌다",
+        message: "기기 저장소의 파일이 지워졌습니다. 원본 파일을 다시 열거나 저장해 주세요. 파일: {media}",
+        fix: "원본 파일을 다시 열거나 저장하세요"
+    }
+    MEDIA_BLOB_METADATA_FAILED(media) {
+        class: Io, place: "앱 창의 기기 저장소 파일 확인", cause: "파일 정보를 읽지 못했다",
+        message: "기기 저장소 파일 정보를 읽지 못했습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_NOT_REGULAR(media) {
+        class: InvalidRequest, place: "앱 창의 기기 저장소 파일 종류 확인", cause: "일반 파일이 아니다",
+        message: "「{media}」은 기기 저장소의 일반 파일이 아닙니다. 저장 키를 확인해 주세요.",
+        fix: "앱의 저장 키를 확인하세요"
+    }
+    MEDIA_BLOB_MODIFIED_TIME_NOT_FOUND(media) {
+        class: NotFound, place: "앱 창의 기기 저장소 파일 변경 시각 확인", cause: "수정 시각을 확인하는 동안 파일이 없어졌다",
+        message: "기기 저장소 파일 정보가 사라져 수정 시각을 확인하지 못했습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_MODIFIED_TIME_FAILED(media) {
+        class: Io, place: "앱 창의 기기 저장소 파일 변경 시각 확인", cause: "파일의 수정 시각을 읽지 못했다",
+        message: "기기 저장소 파일의 수정 시각을 확인하지 못했습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_OPEN_NOT_FOUND(media) {
+        class: NotFound, place: "앱 창의 기기 저장소 파일 열기", cause: "열려는 파일이 없다",
+        message: "기기 저장소의 파일이 지워져 열지 못했습니다. 원본 파일을 다시 열거나 저장해 주세요. 파일: {media}",
+        fix: "원본 파일을 다시 열거나 저장하세요"
+    }
+    MEDIA_BLOB_OPEN_FAILED(media) {
+        class: Io, place: "앱 창의 기기 저장소 파일 열기", cause: "파일을 열지 못했다",
+        message: "기기 저장소의 파일을 열지 못했습니다. 다른 프로그램이 사용 중인지 확인해 주세요. 파일: {media}",
+        fix: "파일을 사용하는 다른 프로그램을 닫고 다시 시도하세요"
+    }
+    MEDIA_BLOB_READ_NOT_FOUND(media) {
+        class: NotFound, place: "앱 창의 기기 저장소 파일 읽기", cause: "읽는 중 파일이 없어졌다",
+        message: "기기 저장소의 파일을 읽는 중 파일이 사라졌습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_READ_FAILED(media) {
+        class: Io, place: "앱 창의 기기 저장소 파일 읽기", cause: "파일 내용을 읽지 못했다",
+        message: "기기 저장소의 파일 내용을 읽지 못했습니다. 저장한 파일을 다시 열어 주세요. 파일: {media}",
+        fix: "저장한 파일을 다시 여세요"
+    }
+    MEDIA_BLOB_SEEK_FAILED(media, reason) {
+        class: Io, place: "앱 창의 기기 저장소 파일 위치 이동", cause: "파일에서 요청한 위치로 이동하지 못했다",
+        message: "기기 저장소 파일의 재생 위치로 이동하지 못했습니다. 파일을 다시 열어 주세요. 파일: {media}, 원인: {reason}",
+        fix: "파일을 다시 여세요"
+    }
+    MEDIA_BLOB_AUTHORITY_CHANGED() {
+        class: Conflict, place: "기기 저장소 미디어 권한 재확인", cause: "창의 앱이나 기기 저장소 또는 연결이 바뀌었다",
+        message: "파일을 읽던 기기 저장소 권한이나 연결이 바뀌었습니다. 파일을 다시 열어 주세요.",
         fix: "파일을 다시 여세요"
     }
     MEDIA_LOAD_OPTIONS_INVALID(media) {

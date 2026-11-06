@@ -1,9 +1,9 @@
-//! 폴더 소리와 영상을 창별 권한으로 흘려보내는 루프백 서버.
+//! 폴더와 기기 저장소의 소리·영상을 창별 권한으로 흘려보내는 루프백 서버.
 use super::{authorization, transform::mime_for_path};
 use crate::Inner;
 use axum::{routing::any, Router};
 use kaleidoscope_contract::{
-    data::{MediaPlayback, MediaRef, ResourceMediaRef},
+    data::{BlobMediaRef, MediaPlayback, MediaRef, ResourceMediaRef},
     errors, CoreError, PermissionDecl,
 };
 use std::{
@@ -19,17 +19,37 @@ use tokio::sync::{oneshot, watch};
 mod http;
 use http::{serve, WebState};
 
-struct Lease {
-    handle: String,
-    window: String,
-    media: ResourceMediaRef,
-    identity: authorization::Identity,
-    generation: u64,
-    path: PathBuf,
-    len: u64,
-    modified: SystemTime,
-    mime: String,
-    error: Mutex<Option<CoreError>>,
+/// 재생 정보가 가리키는 원본과 그 권한의 정체.
+pub(super) enum LeaseSource {
+    Folder {
+        media: ResourceMediaRef,
+        identity: authorization::Identity,
+    },
+    Blob {
+        media: BlobMediaRef,
+        identity: authorization::BlobIdentity,
+    },
+}
+
+impl LeaseSource {
+    pub(super) fn label(&self) -> &str {
+        match self {
+            Self::Folder { media, .. } => &media.path,
+            Self::Blob { media, .. } => &media.blob,
+        }
+    }
+}
+
+pub(super) struct Lease {
+    pub(super) handle: String,
+    pub(super) window: String,
+    pub(super) source: LeaseSource,
+    pub(super) generation: u64,
+    pub(super) path: PathBuf,
+    pub(super) len: u64,
+    pub(super) modified: SystemTime,
+    pub(super) mime: String,
+    pub(super) error: Mutex<Option<CoreError>>,
 }
 struct Server {
     port: u16,
@@ -152,27 +172,77 @@ pub(crate) fn open(
     window: &str,
     media: &MediaRef,
 ) -> Result<MediaPlayback, CoreError> {
-    let MediaRef::Resource(resource) = media else {
-        return Ok(MediaPlayback::Inline {
+    match media {
+        MediaRef::Asset(_) => Ok(MediaPlayback::Inline {
             media: super::get(inner, window, media, None)?,
-        });
-    };
-    let permission =
-        authorization::permission(&inner.state.lock().unwrap(), window, &resource.permission)?;
-    let mime = mime_for_path(&resource.path);
-    if !matches!(permission, PermissionDecl::Files { .. })
-        || !(mime.starts_with("audio/") || mime.starts_with("video/"))
-    {
-        return Ok(MediaPlayback::Inline {
-            media: super::get(inner, window, media, None)?,
-        });
+        }),
+        MediaRef::Blob(blob) => {
+            let mime = mime_for_path(&blob.blob);
+            if !(mime.starts_with("audio/") || mime.starts_with("video/")) {
+                return Ok(MediaPlayback::Inline {
+                    media: super::get(inner, window, media, None)?,
+                });
+            }
+            let access = authorization::blob(inner, window, blob)?;
+            let modified = authorization::blob_modified(&access.metadata, &blob.blob)?;
+            fs::File::open(&access.path).map_err(|err| blob_open_error(&blob.blob, err))?;
+            let source = LeaseSource::Blob {
+                media: blob.clone(),
+                identity: access.identity,
+            };
+            start(
+                inner,
+                window,
+                source,
+                access.path,
+                access.metadata.len(),
+                modified,
+                mime,
+            )
+        }
+        MediaRef::Resource(resource) => {
+            let permission =
+                authorization::permission(&inner.state.lock().unwrap(), window, &resource.permission)?;
+            let mime = mime_for_path(&resource.path);
+            if !matches!(permission, PermissionDecl::Files { .. })
+                || !(mime.starts_with("audio/") || mime.starts_with("video/"))
+            {
+                return Ok(MediaPlayback::Inline {
+                    media: super::get(inner, window, media, None)?,
+                });
+            }
+            let file = authorization::file(inner, window, resource)?;
+            if !file.metadata.is_file() {
+                return Err(errors::MEDIA_STREAM_FILE_NOT_REGULAR(&resource.path));
+            }
+            let modified = authorization::modified(&file.metadata, &resource.path)?;
+            fs::File::open(&file.path).map_err(|err| folder_open_error(&resource.path, err))?;
+            let source = LeaseSource::Folder {
+                media: resource.clone(),
+                identity: file.identity,
+            };
+            start(
+                inner,
+                window,
+                source,
+                file.path,
+                file.metadata.len(),
+                modified,
+                mime,
+            )
+        }
     }
-    let file = authorization::file(inner, window, resource)?;
-    if !file.metadata.is_file() {
-        return Err(errors::MEDIA_STREAM_FILE_NOT_REGULAR(&resource.path));
-    }
-    let modified = authorization::modified(&file.metadata, &resource.path)?;
-    fs::File::open(&file.path).map_err(|err| open_error(&resource.path, err))?;
+}
+
+fn start(
+    inner: &Arc<Inner>,
+    window: &str,
+    source: LeaseSource,
+    path: PathBuf,
+    len: u64,
+    modified: SystemTime,
+    mime: &'static str,
+) -> Result<MediaPlayback, CoreError> {
     let port = inner.media_streams.port(inner)?;
     let handle = uuid::Uuid::new_v4().to_string();
     let token = format!(
@@ -183,11 +253,10 @@ pub(crate) fn open(
     let lease = Lease {
         handle: handle.clone(),
         window: window.into(),
-        media: resource.clone(),
-        identity: file.identity,
+        source,
         generation: inner.generation.load(Ordering::SeqCst),
-        path: file.path,
-        len: file.metadata.len(),
+        path,
+        len,
         modified,
         mime: mime.into(),
         error: Mutex::new(None),
@@ -210,7 +279,8 @@ pub(crate) fn open(
         mime: mime.into(),
     })
 }
-fn open_error(path: &str, err: io::Error) -> CoreError {
+
+fn folder_open_error(path: &str, err: io::Error) -> CoreError {
     let error = if err.kind() == io::ErrorKind::NotFound {
         errors::MEDIA_LOAD_FILE_OPEN_NOT_FOUND(path)
     } else {
@@ -218,13 +288,47 @@ fn open_error(path: &str, err: io::Error) -> CoreError {
     };
     error.and_details(vec![err.to_string()])
 }
-fn read_error(path: &str, err: &io::Error) -> CoreError {
+fn folder_read_error(path: &str, err: &io::Error) -> CoreError {
     let error = if err.kind() == io::ErrorKind::NotFound {
         errors::MEDIA_LOAD_FILE_READ_NOT_FOUND(path)
     } else {
         errors::MEDIA_LOAD_FILE_READ_FAILED(path)
     };
     error.and_details(vec![err.to_string()])
+}
+fn blob_open_error(path: &str, err: io::Error) -> CoreError {
+    let error = if err.kind() == io::ErrorKind::NotFound {
+        errors::MEDIA_BLOB_OPEN_NOT_FOUND(path)
+    } else {
+        errors::MEDIA_BLOB_OPEN_FAILED(path)
+    };
+    error.and_details(vec![err.to_string()])
+}
+fn blob_read_error(path: &str, err: &io::Error) -> CoreError {
+    let error = if err.kind() == io::ErrorKind::NotFound {
+        errors::MEDIA_BLOB_READ_NOT_FOUND(path)
+    } else {
+        errors::MEDIA_BLOB_READ_FAILED(path)
+    };
+    error.and_details(vec![err.to_string()])
+}
+pub(super) fn open_error(source: &LeaseSource, err: io::Error) -> CoreError {
+    match source {
+        LeaseSource::Folder { media, .. } => folder_open_error(&media.path, err),
+        LeaseSource::Blob { media, .. } => blob_open_error(&media.blob, err),
+    }
+}
+pub(super) fn read_error(source: &LeaseSource, err: &io::Error) -> CoreError {
+    match source {
+        LeaseSource::Folder { media, .. } => folder_read_error(&media.path, err),
+        LeaseSource::Blob { media, .. } => blob_read_error(&media.blob, err),
+    }
+}
+pub(super) fn seek_error(source: &LeaseSource, err: io::Error) -> CoreError {
+    match source {
+        LeaseSource::Folder { media, .. } => errors::MEDIA_STREAM_SEEK_FAILED(&media.path, err),
+        LeaseSource::Blob { media, .. } => errors::MEDIA_BLOB_SEEK_FAILED(&media.blob, err),
+    }
 }
 pub(crate) fn close(inner: &Arc<Inner>, window: &str, handle: &str) -> Result<(), CoreError> {
     let mut leases = inner.media_streams.leases.lock().unwrap();

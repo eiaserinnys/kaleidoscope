@@ -1,6 +1,10 @@
-//! 미디어 파일의 창과 폴더 권한을 같은 경로에서 확인한다.
-use crate::{app_commands, files, CoreState, Inner};
-use kaleidoscope_contract::{data::ResourceMediaRef, errors, CoreError, PermissionDecl};
+//! 미디어 파일의 창과 폴더, 기기 저장소 권한을 같은 경로에서 확인한다.
+use crate::{app_commands, client_blobs, files, CoreState, Inner};
+use kaleidoscope_contract::{
+    client::DeviceStorage,
+    data::{BlobMediaRef, ResourceMediaRef},
+    errors, CoreError, PermissionDecl,
+};
 use std::{fs, path::PathBuf, sync::Arc};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,6 +71,95 @@ pub(super) fn identity(state: &CoreState, window_id: &str, id: &str) -> Option<I
         app_version: window.app_version,
         root: grant.root_path.clone(),
         granted_at: grant.granted_at.clone(),
+    })
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct BlobIdentity {
+    pub app_id: String,
+    pub app_version: u32,
+    pub storage: DeviceStorage,
+    pub root: PathBuf,
+}
+
+pub(super) struct BlobAccess {
+    pub identity: BlobIdentity,
+    pub path: PathBuf,
+    pub metadata: fs::Metadata,
+}
+
+/// 기기 저장소의 키를 이 창의 앱 정의로 해석하고 실제 파일 경계를 확인한다.
+pub(super) fn blob(
+    inner: &Arc<Inner>,
+    window_id: &str,
+    media: &BlobMediaRef,
+) -> Result<BlobAccess, CoreError> {
+    let location = client_blobs::location(inner, window_id, &media.blob)?;
+    if location.requires_blocks < kaleidoscope_contract::BLOB_MEDIA_BLOCK_SET_VERSION {
+        return Err(errors::MEDIA_BLOB_VERSION_LOW(
+            kaleidoscope_contract::BLOB_MEDIA_BLOCK_SET_VERSION,
+            &media.blob,
+        ));
+    }
+    let root = fs::canonicalize(&location.root)
+        .map_err(|err| blob_root_error(&media.blob, err))?;
+    let path = fs::canonicalize(&location.path)
+        .map_err(|err| blob_path_error(&media.blob, err))?;
+    if !path.starts_with(&root) {
+        return Err(errors::MEDIA_BLOB_PATH_OUTSIDE_ROOT(&media.blob));
+    }
+    let metadata = fs::metadata(&path).map_err(|err| {
+        let error = if err.kind() == std::io::ErrorKind::NotFound {
+            errors::MEDIA_BLOB_METADATA_NOT_FOUND(&media.blob)
+        } else {
+            errors::MEDIA_BLOB_METADATA_FAILED(&media.blob)
+        };
+        error.and_details(vec![err.to_string()])
+    })?;
+    if !metadata.is_file() {
+        return Err(errors::MEDIA_BLOB_NOT_REGULAR(&media.blob));
+    }
+    Ok(BlobAccess {
+        identity: BlobIdentity {
+            app_id: location.app_id,
+            app_version: location.app_version,
+            storage: location.storage,
+            root,
+        },
+        path,
+        metadata,
+    })
+}
+
+fn blob_root_error(media: &str, err: std::io::Error) -> CoreError {
+    let error = if err.kind() == std::io::ErrorKind::NotFound {
+        errors::MEDIA_BLOB_ROOT_NOT_FOUND(media)
+    } else {
+        errors::MEDIA_BLOB_ROOT_RESOLVE_FAILED(media)
+    };
+    error.and_details(vec![err.to_string()])
+}
+
+fn blob_path_error(media: &str, err: std::io::Error) -> CoreError {
+    let error = if err.kind() == std::io::ErrorKind::NotFound {
+        errors::MEDIA_BLOB_PATH_NOT_FOUND(media)
+    } else {
+        errors::MEDIA_BLOB_PATH_RESOLVE_FAILED(media)
+    };
+    error.and_details(vec![err.to_string()])
+}
+
+pub(super) fn blob_modified(
+    metadata: &fs::Metadata,
+    media: &str,
+) -> Result<std::time::SystemTime, CoreError> {
+    metadata.modified().map_err(|err| {
+        let error = if err.kind() == std::io::ErrorKind::NotFound {
+            errors::MEDIA_BLOB_MODIFIED_TIME_NOT_FOUND(media)
+        } else {
+            errors::MEDIA_BLOB_MODIFIED_TIME_FAILED(media)
+        };
+        error.and_details(vec![err.to_string()])
     })
 }
 

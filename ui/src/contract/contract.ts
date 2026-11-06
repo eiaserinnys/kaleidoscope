@@ -335,6 +335,12 @@ export type BindingMore = { source: string, state: MoreState, message?: string, 
 export type BindingValue = { "status": "ready", value: JsonValue, more?: BindingMore, } | { "status": "loading", } | { "status": "failed", message: string, id?: string, retry: Array<string>, details?: Array<string>, } | { "status": "login_required", permission: string, };
 
 /**
+ * 기기 저장소에 든 파일을 미디어로 쓴다. `blob`은 앱 정의 `client.device_storage.prefixes`에 든 키이며,
+ * 파일 확장자가 MIME을 정한다. 앱은 저장할 때 실제 확장자를 보존한다.
+ */
+export type BlobMediaRef = { blob: string, crop?: Crop, };
+
+/**
  * 블록. 블록 세트 4판의 전부다. 새 블록은 쉘 릴리스로만 더한다.
  *
  * 4판 블록의 값 자리는 [`Binding`](리터럴, 창 상태, 식)이고, 이벤트 자리는 [`Actions`]다. 블록이 받는 데이터
@@ -1106,8 +1112,9 @@ export type MediaPlayback = { "kind": "inline", media: MediaData, } | { "kind": 
  * 이미지와 소리 원본 하나. 식이 이 모양의 객체를 내면 블록이 `data.media`로 받아 그린다.
  * `permission`의 모듈이 `connection`이면 `path`는 연결의 주소 아래 경로(`/`로 시작)이고 `query`를 붙인다.
  * `files`면 `path`는 고른 폴더 기준 상대 경로다. `crop`은 그리는 방법이라 원본을 가르지 않는다.
+ * `blob`은 이 기기의 앱 저장소(`client.device_storage`)에 든 파일의 키다. 블록 세트 52판이 필요하다.
  */
-export type MediaRef = ResourceMediaRef | AssetMediaRef;
+export type MediaRef = ResourceMediaRef | AssetMediaRef | BlobMediaRef;
 
 /**
  * 다른 창에서 받는 글. 첨부나 임의 데이터는 포함하지 않는다.

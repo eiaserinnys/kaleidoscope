@@ -387,7 +387,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "data.media":
       case "data.media.open": {
-        const key = "asset" in request.media ? request.media.asset : request.media.path;
+        const key = "blob" in request.media ? request.media.blob : "asset" in request.media ? request.media.asset : request.media.path;
         const playback = seed.playback?.[key];
         if (request.op === "data.media.open" && playback) return { op: "data.media.open", playback };
         const url = seed.media?.[key];

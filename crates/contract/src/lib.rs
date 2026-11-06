@@ -251,7 +251,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 41;
+pub const CONTRACT_VERSION: u32 = 42;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -316,7 +316,10 @@ pub const CONTRACT_VERSION: u32 = 41;
 /// - 49판: 목록 여러 선택과 항목 활성화.
 /// - 50판: 목록 현재 칸과 스택 스크롤 초기화.
 /// - 51판: input 자동 높이의 최대 줄 수.
-pub const BLOCK_SET_VERSION: u32 = INPUT_MAX_ROWS_BLOCK_SET_VERSION;
+/// - 52판: 기기 저장소에 든 파일을 그리는 미디어 참조 `blob`.
+pub const BLOCK_SET_VERSION: u32 = BLOB_MEDIA_BLOCK_SET_VERSION;
+/// 기기 저장소 미디어 참조를 처음 지원하는 블록 세트 판.
+pub const BLOB_MEDIA_BLOCK_SET_VERSION: u32 = 52;
 /// input.max_rows를 처음 지원하는 블록 세트 판.
 pub const INPUT_MAX_ROWS_BLOCK_SET_VERSION: u32 = 51;
 pub const LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION: u32 = 50;

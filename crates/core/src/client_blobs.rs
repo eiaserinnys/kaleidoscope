@@ -1,7 +1,7 @@
 //! 기기와 서버, 앱 범위의 바이너리 보관.
 use crate::{app_commands, client_files, server_switch, Inner};
 use kaleidoscope_contract::{
-    client::{ClientFile, DeviceStorageScope, CLIENT_PICK_FILE_MAX_BYTES},
+    client::{ClientFile, DeviceStorage, DeviceStorageScope, CLIENT_PICK_FILE_MAX_BYTES},
     errors, CoreError,
 };
 use sha2::{Digest, Sha256};
@@ -22,7 +22,16 @@ fn window_storage_root(archive: &Path, app_id: &str, window_id: &str) -> PathBuf
         .join(window_key)
 }
 
-fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf), CoreError> {
+pub(crate) struct Location {
+    pub(crate) app_id: String,
+    pub(crate) app_version: u32,
+    pub(crate) requires_blocks: u32,
+    pub(crate) storage: DeviceStorage,
+    pub(crate) root: PathBuf,
+    pub(crate) path: PathBuf,
+}
+
+pub(crate) fn location(inner: &Inner, window: &str, key: &str) -> Result<Location, CoreError> {
     let state = inner.state.lock().unwrap();
     let window = state
         .shared
@@ -59,7 +68,14 @@ fn location(inner: &Inner, window: &str, key: &str) -> Result<(PathBuf, PathBuf)
         DeviceStorageScope::App => archive.join("client-blobs").join(&window.app_id),
         DeviceStorageScope::Window => window_storage_root(&archive, &window.app_id, &window.id),
     };
-    Ok((root.clone(), root.join(key)))
+    Ok(Location {
+        app_id: window.app_id.clone(),
+        app_version: window.app_version,
+        requires_blocks: definition.requires.blocks,
+        storage: storage.clone(),
+        path: root.join(key),
+        root,
+    })
 }
 
 pub(crate) fn file_uri(inner: &Inner, window_id: &str, key: &str) -> Result<String, CoreError> {
@@ -95,7 +111,7 @@ pub(crate) fn file_uri(inner: &Inner, window_id: &str, key: &str) -> Result<Stri
             ));
         }
     }
-    let (_, path) = location(inner, window_id, key)?;
+    let path = location(inner, window_id, key)?.path;
     if !path.is_file() {
         return Err(errors::PROCESS_FILE_URI_BLOB_NOT_FOUND(key));
     }
@@ -120,7 +136,7 @@ pub(crate) fn put(
     file_id: Option<&str>,
     bytes: Option<&[u8]>,
 ) -> Result<(), CoreError> {
-    let (_, path) = location(inner, window, key)?;
+    let path = location(inner, window, key)?.path;
     let mut input: Box<dyn Read + '_> = match (file_id, bytes) {
         (Some(id), None) => {
             let source = client_files::input_path(inner, window, id)?;
@@ -216,14 +232,14 @@ pub(crate) fn open(
     window: &str,
     key: &str,
 ) -> Result<Option<ClientFile>, CoreError> {
-    let (_, path) = location(inner, window, key)?;
+    let path = location(inner, window, key)?.path;
     if !path.exists() {
         return Ok(None);
     }
     client_files::register(inner, window, path).map(Some)
 }
 pub(crate) fn remove(inner: &Inner, window: &str, key: &str) -> Result<(), CoreError> {
-    let (_, path) = location(inner, window, key)?;
+    let path = location(inner, window, key)?.path;
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -235,7 +251,7 @@ pub(crate) fn remove(inner: &Inner, window: &str, key: &str) -> Result<(), CoreE
     }
 }
 pub(crate) fn list(inner: &Inner, window: &str, prefix: &str) -> Result<Vec<String>, CoreError> {
-    let (root, _) = location(inner, window, prefix)?;
+    let root = location(inner, window, prefix)?.root;
     fn walk(
         root: &Path,
         dir: &Path,

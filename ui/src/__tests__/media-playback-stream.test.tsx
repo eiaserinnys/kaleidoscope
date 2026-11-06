@@ -87,6 +87,32 @@ it("늦은 스트림 오류는 바뀐 원본에 표시하지 않는다", async (
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
+it("기기 저장소의 소리는 스트림으로 열고 inline 데이터를 요청하지 않는다", async () => {
+  const blob = { blob: "media/clip.mp4" };
+  const view = setup({ type: "media", src: blob });
+  await waitFor(() => expect(view.container.querySelector("video")?.getAttribute("src")).toBe(stream.url));
+  expect(view.container.querySelector("video")?.getAttribute("crossorigin")).toBe("anonymous");
+  expect(view.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media.open", media: blob }));
+  expect(count(view.call, "data.media")).toBe(0);
+});
+
+it("기기 저장소 원본을 바꾸면 앞 스트림을 닫고 실패를 status로 알린다", async () => {
+  let opens = 0;
+  const view = setup({ type: "media", src: { expr: "$state.track" } }, async () => ({ ...stream, handle: `lease-${++opens}`, url: `http://127.0.0.1/${opens}` }), async () => problem);
+  const send = (blob: string) => act(() => view.transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { blob } } } } }));
+  await screen.findByRole("button", { name: "재생" });
+  send("media/first.mp4");
+  await waitFor(() => expect(view.container.querySelector("video")?.getAttribute("src")).toBe("http://127.0.0.1/1"));
+  send("media/second.mp4");
+  await waitFor(() => expect(view.container.querySelector("video")?.getAttribute("src")).toBe("http://127.0.0.1/2"));
+  await waitFor(() => expect(count(view.call, "data.media.close")).toBe(1));
+  fireEvent.error(view.container.querySelector("video")!);
+  expect((await screen.findByRole("alert")).textContent).toContain(problem.message);
+  expect(count(view.call, "data.media.status")).toBe(1);
+  view.unmount();
+  await waitFor(() => expect(count(view.call, "data.media.close")).toBe(2));
+});
+
 it("시킹과 음량 조작은 코어를 부르지 않는다", async () => {
   const view = setup({ type: "media", src: media });
   await waitFor(() => expect(view.container.querySelector("video")?.getAttribute("src")).toBe(stream.url));

@@ -2917,7 +2917,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                     Ok(items) => {
                         for item in items {
                             if let Some(media) = item.image {
-                                validate_media_asset(&media, definition, details, at);
+                                validate_media_ref(&media, definition, details, at);
                             }
                         }
                     }
@@ -3702,7 +3702,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             if let Binding::Literal(value) = src {
                 if !value.is_null() {
                     match serde_json::from_value::<data::MediaRef>(value.clone()) {
-                        Ok(media) => validate_media_asset(&media, definition, details, at),
+                        Ok(media) => validate_media_ref(&media, definition, details, at),
                         Err(_) => {
                             details.push(format!("{at}: 미디어 참조 형식이 올바르지 않습니다"))
                         }
@@ -3714,23 +3714,46 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
     }
 }
 
-fn validate_media_asset(
+fn validate_media_ref(
     media: &data::MediaRef,
     definition: &AppDefinition,
     details: &mut Vec<String>,
     at: &str,
 ) {
-    if let data::MediaRef::Asset(asset) = media {
-        if !definition
-            .assets
-            .iter()
-            .any(|decl| decl.id == asset.asset && asset.version.is_none_or(|v| v == decl.version))
-        {
-            details.push(format!(
-                "{at}: 선언되지 않은 자산 또는 판입니다: {}",
-                asset.asset
-            ));
+    match media {
+        data::MediaRef::Asset(asset) => {
+            if !definition
+                .assets
+                .iter()
+                .any(|decl| decl.id == asset.asset && asset.version.is_none_or(|v| v == decl.version))
+            {
+                details.push(format!(
+                    "{at}: 선언되지 않은 자산 또는 판입니다: {}",
+                    asset.asset
+                ));
+            }
         }
+        data::MediaRef::Blob(blob) => {
+            let version = crate::BLOB_MEDIA_BLOCK_SET_VERSION;
+            if definition.requires.blocks < version {
+                details.push(format!(
+                    "{at}: 기기 저장소 미디어(blob)는 블록 세트 {version}판이라 requires.blocks가 {version} 이상이어야 합니다: {}",
+                    blob.blob
+                ));
+            }
+            if definition
+                .client
+                .as_ref()
+                .and_then(|client| client.device_storage.as_ref())
+                .is_none()
+            {
+                details.push(format!(
+                    "{at}: 기기 저장소 미디어(blob)를 쓰려면 client.device_storage를 선언해야 합니다: {}",
+                    blob.blob
+                ));
+            }
+        }
+        data::MediaRef::Resource(_) => {}
     }
 }
 
