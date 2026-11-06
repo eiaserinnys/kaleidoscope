@@ -14,7 +14,7 @@ export function commentMessage(appName: string, items: AppCommentThread[]): stri
     const excerpt = Array.from(item.text);
     const request = excerpt.length > 500 ? `${excerpt.slice(0, 500).join("")}… (잘림)` : item.text;
     const replies = item.replies.map((reply) => `${reply.author === "agent" ? "에이전트" : "나"}: ${reply.text}`);
-    return [`${item.number}번 · ${commentLabel(item.anchor)} : ${request}`, ...replies].join("\n");
+    return [`${item.number}번, ${commentLabel(item.anchor)} : ${request}`, ...replies].join("\n");
   });
   const text = `[앱 화면 커멘트] ${appName}(${origin} 앱) ${first?.created_app_version}판\n\n${parts.join("\n\n")}\n\n${readHint(first.app_id)}`;
   if (Array.from(text).length > CONVERSATION_MESSAGE_MAX_CHARS) throw SHELL_COMMENT_SEND_TEXT_TOO_LONG({ limit: `${CONVERSATION_MESSAGE_MAX_CHARS.toLocaleString()}자` });

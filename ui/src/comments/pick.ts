@@ -14,7 +14,7 @@ export function targetAt(content: HTMLElement, element: HTMLElement, x: number, 
   return describeTarget(frame ?? element, content, relative);
 }
 
-export function useCommentPick(content: HTMLElement | null, enabled: boolean, pick: (target: TargetDescription) => void, hover: (target: HTMLElement | null) => void) {
+export function useCommentPick(content: HTMLElement | null, enabled: boolean, pick: (target: TargetDescription) => void, hover: (target: HTMLElement | null) => void, escape: (event: KeyboardEvent) => void) {
   useEffect(() => {
     if (!content || !enabled) return;
     let frame = 0;
@@ -42,7 +42,7 @@ export function useCommentPick(content: HTMLElement | null, enabled: boolean, pi
     };
     const stop = (event: Event) => { event.stopPropagation(); if (event.type !== "mousedown") event.preventDefault(); };
     const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") return;
+      if (event.key === "Escape") { event.stopPropagation(); escape(event); return; }
       if (event.key === "Tab") return;
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) {
         event.stopPropagation();
@@ -65,8 +65,8 @@ export function useCommentPick(content: HTMLElement | null, enabled: boolean, pi
     };
     content.addEventListener("pointermove", move, true); content.addEventListener("pointerleave", leave); content.addEventListener("focusin", focus);
     content.addEventListener("pointerdown", start, true); content.addEventListener("pointerup", up, true);
-    content.addEventListener("mousedown", stop, true); content.addEventListener("click", stop, true); content.addEventListener("dblclick", stop, true);
+    content.addEventListener("mousedown", stop, true); content.addEventListener("mouseup", stop, true); content.addEventListener("click", stop, true); content.addEventListener("dblclick", stop, true);
     content.addEventListener("keydown", key, true);
-    return () => { cancelAnimationFrame(frame); hover(null); content.removeEventListener("pointermove", move, true); content.removeEventListener("pointerleave", leave); content.removeEventListener("focusin", focus); content.removeEventListener("pointerdown", start, true); content.removeEventListener("pointerup", up, true); content.removeEventListener("mousedown", stop, true); content.removeEventListener("click", stop, true); content.removeEventListener("dblclick", stop, true); content.removeEventListener("keydown", key, true); };
-  }, [content, enabled, pick, hover]);
+    return () => { cancelAnimationFrame(frame); hover(null); content.removeEventListener("pointermove", move, true); content.removeEventListener("pointerleave", leave); content.removeEventListener("focusin", focus); content.removeEventListener("pointerdown", start, true); content.removeEventListener("pointerup", up, true); content.removeEventListener("mousedown", stop, true); content.removeEventListener("mouseup", stop, true); content.removeEventListener("click", stop, true); content.removeEventListener("dblclick", stop, true); content.removeEventListener("keydown", key, true); };
+  }, [content, enabled, pick, hover, escape]);
 }

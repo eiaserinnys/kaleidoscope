@@ -475,6 +475,26 @@ it("앱 배지 변경은 해당 타일과 앱 열기 단추만 갱신한다", as
   store.dispose();
 });
 
+it("커멘트 종료는 내용 칸 초점만 해제하고 행 초점은 유지한다", async () => {
+  const { store } = await setup();
+  const first = document.querySelector<HTMLElement>('[data-window-id="window-a"]')!.closest<HTMLElement>(".ks-window")!;
+  const content = first.querySelector<HTMLElement>(".ks-window-content")!;
+  const toggle = within(first).getByRole("button", { name: "커멘트" });
+  fireEvent.click(toggle);
+  await waitFor(() => expect(document.activeElement).toBe(content));
+  fireEvent.keyDown(content, { key: "Escape" });
+  await waitFor(() => expect(document.activeElement).not.toBe(content));
+  fireEvent.click(toggle);
+  await waitFor(() => expect(document.activeElement).toBe(content));
+  const target = first.querySelector<HTMLElement>('[data-ks-block="/ui/children/0"]')!;
+  target.tabIndex = -1;
+  act(() => target.focus());
+  fireEvent.keyDown(target, { key: "Escape" });
+  await waitFor(() => expect(first.getAttribute("data-commenting")).not.toBe("true"));
+  expect(document.activeElement).toBe(target);
+  store.dispose();
+});
+
 it("커멘트 상태와 입력 및 앱 메타 변경은 어느 창의 앱 블록도 다시 그리지 않는다", async () => {
   const resizeObserve = vi.spyOn(ResizeObserver.prototype, "observe");
   const resizeDisconnect = vi.spyOn(ResizeObserver.prototype, "disconnect");

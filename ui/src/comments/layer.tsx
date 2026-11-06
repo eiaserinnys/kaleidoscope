@@ -74,10 +74,12 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
     return () => { live = false; release?.(); };
   }, [mode, visible, meta === undefined, window.id, content, onError]);
   useEffect(() => { if (mode && visible && meta !== undefined && !list.error) void data.load(meta?.revision ?? 0); }, [mode, visible, meta, list.revision, list.loading, list.error, data]);
-  useEffect(() => { if (!mode) { setTarget(null); setTargetChanged(false); setRail(false); setActive(null); setHoveredId(null); setCluster(null); } }, [mode]);
+  useEffect(() => {
+    if (mode) return () => { if (document.activeElement === content) content.blur(); };
+    setTarget(null); setTargetChanged(false); setRail(false); setActive(null); setHoveredId(null); setCluster(null);
+  }, [mode, content]);
   const pick = useCallback((next: TargetDescription) => { if (next.range) document.getSelection()?.removeAllRanges(); session.pick(window.app_version, next); setTarget(next); setTargetChanged(false); setActive(null); setCluster(null); setRail(false); }, [session, window.app_version]);
   const onHover = useCallback((value: HTMLElement | null) => setHover(value), []);
-  useCommentPick(content, mode && visible && ready, pick, onHover);
   useEffect(() => {
     if (meta === undefined) return;
     return registerCommentEntry(content, (element, point) => {
@@ -86,9 +88,8 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
       if (next) pick(next);
     });
   }, [content, meta === undefined, pick, window.id]);
-  useEffect(() => {
-    if (!mode || !visible) return;
-    const key = (event: KeyboardEvent) => {
+  const onEscape = useCallback((event: KeyboardEvent) => {
+      if (!mode || !visible) return;
       if (event.key !== "Escape" || event.defaultPrevented || content.closest(".ks-window")?.querySelector(".ks-comment-dialog")) return;
       const owner = event.target instanceof Element ? event.target.closest(".ks-window") : null;
       if (owner !== content.closest(".ks-window") && !(event.target === document.body && content.closest(".ks-window")?.querySelector(".ks-window-frame-active"))) return;
@@ -100,10 +101,13 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
           input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
         }
       } else if (activeId) setActive(null); else if (cluster) setCluster(null); else if (rail) setRail(false); else commentSession(window.id).set(false);
-    };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
   }, [activeId, cluster, mode, rail, target, targetChanged, visible, window.id, content]);
+  useCommentPick(content, mode && visible && ready, pick, onHover, onEscape);
+  useEffect(() => {
+    if (!mode || !visible) return;
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [mode, visible, onEscape]);
   useEffect(() => { if ((meta?.unsent_count ?? 0) > 0) setSent(false); }, [meta?.unsent_count]);
   useEffect(() => { if (cluster && !activeId) requestAnimationFrame(() => threadRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true })); }, [cluster, activeId]);
   useLayoutEffect(() => {
