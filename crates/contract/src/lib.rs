@@ -314,7 +314,9 @@ pub const CONTRACT_VERSION: u32 = 40;
 /// - 47판: 기본 폴더 최초 허용 화면.
 /// - 48판: input 잠금 바인딩.
 /// - 49판: 목록 여러 선택과 항목 활성화.
-pub const BLOCK_SET_VERSION: u32 = LIST_MULTIPLE_BLOCK_SET_VERSION;
+/// - 50판: 목록 현재 칸과 스택 스크롤 초기화.
+pub const BLOCK_SET_VERSION: u32 = LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION;
+pub const LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION: u32 = 50;
 pub const LIST_MULTIPLE_BLOCK_SET_VERSION: u32 = 49;
 /// input.disabled를 처음 지원하는 블록 세트 판.
 pub const INPUT_DISABLED_BLOCK_SET_VERSION: u32 = 48;
@@ -1897,6 +1899,10 @@ pub enum Block {
     /// `place:"center"`는 `fill`을 무시하고 가운데 배치한다.
     Stack {
         direction: SplitDirection,
+        /// (50판) 값이 바뀌면 가장 가까운 세로 스크롤을 처음으로 돌린다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        scroll_reset: Option<Binding>,
         #[serde(default)]
         #[ts(optional, as = "Option<Gap>")]
         gap: Gap,
@@ -1991,6 +1997,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "ListSelection::is_single")]
         #[ts(optional, as = "Option<ListSelection>")]
         selection: ListSelection,
+        /// (50판) 다중 선택에서 현재 칸의 키. 선택된 키 안에서만 쓴다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        current: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<Binding>,
@@ -2703,6 +2713,8 @@ enum RawBlock {
     /// `place:"center"`는 `fill`을 무시하고 가운데 배치한다.
     Stack {
         direction: SplitDirection,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scroll_reset: Option<Binding>,
         #[serde(default)]
         gap: Gap,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2772,6 +2784,8 @@ enum RawBlock {
         select_on_focus: bool,
         #[serde(default, skip_serializing_if = "ListSelection::is_single")]
         selection: ListSelection,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        current: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3383,6 +3397,7 @@ impl From<RawBlock> for Block {
             },
             RawBlock::Stack {
                 direction,
+                scroll_reset,
                 gap,
                 fill,
                 wrap,
@@ -3391,6 +3406,7 @@ impl From<RawBlock> for Block {
                 children,
             } => Block::Stack {
                 direction,
+                scroll_reset,
                 gap,
                 fill,
                 wrap,
@@ -3437,6 +3453,7 @@ impl From<RawBlock> for Block {
                 select_on_focus,
                 selection,
                 selected,
+                current,
                 disabled,
                 on_select,
                 on_activate,
@@ -3451,6 +3468,7 @@ impl From<RawBlock> for Block {
                 select_on_focus,
                 selection,
                 selected,
+                current,
                 disabled,
                 on_select,
                 on_activate,
@@ -3828,6 +3846,7 @@ impl Block {
             } => 6,
             Block::Markdown { value: Some(_), .. } => 4,
             Block::Markdown { .. } => 1,
+            Block::List { current: Some(_), .. } | Block::Stack { scroll_reset: Some(_), .. } => LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION,
             Block::List { selection: ListSelection::Multiple, .. } | Block::List { on_activate: Some(_), .. } => LIST_MULTIPLE_BLOCK_SET_VERSION,
             Block::List { select_on_focus: true, .. } => LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION,
             Block::List { group_actions: Some(_), .. } => LIST_GROUP_STATUS_BLOCK_SET_VERSION,

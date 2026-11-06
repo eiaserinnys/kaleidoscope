@@ -135,16 +135,22 @@ it("숨겨진 캔버스는 마지막 크기를 유지하고 처음부터 숨겨�
 });
 
 it("비율 바인딩이 바뀌면 실제 캔버스를 세로와 정사각 무대에 맞춘다", () => {
+  vi.clearAllMocks();
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 640, height: 360 } as DOMRect);
   const original = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
   Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   try {
     const view = render(<CanvasBlock block={{ type: "canvas", surface: "preview", aspect_ratio: 9 / 16 }} pointer="/ui" />);
+    const canvas = view.container.querySelector("canvas");
     expect(view.container.querySelector("canvas")?.style.width).toBe("202.5px");
     expect(view.container.querySelector("canvas")?.style.height).toBe("360px");
     view.rerender(<CanvasBlock block={{ type: "canvas", surface: "preview", aspect_ratio: 1 }} pointer="/ui" />);
     expect(view.container.querySelector("canvas")?.style.width).toBe("360px");
+    expect(view.container.querySelector("canvas")).toBe(canvas);
+    expect(data.attachSurface).toHaveBeenCalledTimes(1);
+    expect(data.detachSurface).not.toHaveBeenCalled();
+    expect(data.resizeSurface).toHaveBeenCalledWith("preview", 1, 360, 360, expect.any(Number));
   } finally {
     if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;

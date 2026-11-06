@@ -55,5 +55,6 @@ export function useLocalDraft<T extends JsonValue>(
     adoptRevision.current = submitted.revision;
     if (externalChanges.current !== submitted.externalChanges && inFlight.current === 0) setDraft(latest.current);
   };
-  return { draft, change, finish, holding, send, mark, adopt };
+  const isSending = () => inFlight.current > 0;
+  return { draft, change, finish, holding, send, mark, adopt, isSending };
 }

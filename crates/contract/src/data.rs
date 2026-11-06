@@ -1931,6 +1931,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::List {
             items,
             selected,
+            current,
             disabled,
             on_select,
             on_activate,
@@ -1941,6 +1942,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             bind!("items", items);
             if let Some(selected) = selected {
                 bind!("selected", selected);
+            }
+            if let Some(current) = current {
+                bind!("current", current);
             }
             if let Some(disabled) = disabled {
                 bind!("disabled", disabled);
@@ -2164,6 +2168,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::HtmlView {
             value: Some(value), ..
         } => bind!("value", value),
+        Block::Stack { scroll_reset, .. } => {
+            if let Some(value) = scroll_reset { bind!("scroll_reset", value); }
+        }
         Block::Split { .. }
         | Block::HtmlView { value: None, .. }
         | Block::WebView { .. }
@@ -2171,7 +2178,6 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         | Block::Folder {
             on_select: None, ..
         }
-        | Block::Stack { .. }
         | Block::Toolbar { .. } => {}
     }
     let item_menu = match block {

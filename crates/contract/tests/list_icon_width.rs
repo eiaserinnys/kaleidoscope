@@ -7,6 +7,37 @@ fn definition(blocks: u32, ui: Value) -> Value {
 }
 
 #[test]
+fn list_current_and_stack_scroll_reset_require_version_50() {
+    for (ui, field, code) in [
+        (json!({"type":"list", "items":[], "current":"a"}), "current", "APP_LIST_CURRENT_VERSION_LOW"),
+        (json!({"type":"stack", "direction":"column", "scroll_reset":"a", "children":[{"type":"text", "value":"내용"}]}), "scroll_reset", "APP_STACK_SCROLL_RESET_VERSION_LOW"),
+    ] {
+        assert_eq!(parse_app_definition(&definition(49, ui.clone()).to_string()).unwrap_err().id.as_deref(), Some(code));
+        let parsed = parse_app_definition(&definition(50, ui.clone()).to_string()).unwrap();
+        assert_eq!(parsed.ui.introduced_in(), 50);
+        let value = serde_json::to_value(parsed).unwrap();
+        assert_eq!(value["ui"][field], ui[field]);
+        assert!(parse_cached_app_definition(&value.to_string()).is_ok());
+        let mut old = ui;
+        old.as_object_mut().unwrap().remove(field);
+        assert!(parse_app_definition(&definition(49, old).to_string()).is_ok());
+    }
+}
+
+#[test]
+fn new_bindings_are_exposed_to_the_data_runtime_and_schema() {
+    let app = definition(50, json!({"type":"stack", "direction":"column", "scroll_reset":{"state":"choice"},
+        "children":[{"type":"list", "items":[], "current":{"state":"choice"}}]}));
+    let parsed = parse_app_definition(&app.to_string()).unwrap();
+    let pointers: Vec<String> = kaleidoscope_contract::data::all_ui_bindings(&parsed).into_iter().map(|(pointer, _)| pointer).collect();
+    assert!(pointers.contains(&"/ui/scroll_reset".to_string()));
+    assert!(pointers.contains(&"/ui/children/0/current".to_string()));
+    let schema = serde_json::to_string(&kaleidoscope_contract::app_definition_schema()).unwrap();
+    assert!(schema.contains("scroll_reset"));
+    assert!(schema.contains("current"));
+}
+
+#[test]
 fn static_icons_require_version_and_known_names_in_both_list_shapes() {
     for grouped in [false, true] {
         let items = if grouped { json!([{ "title":"도구", "items":[{"key":"a", "title":"자르기", "icon":"crop"}] }]) }
