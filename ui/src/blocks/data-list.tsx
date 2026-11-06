@@ -149,7 +149,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     const observer = new ResizeObserver(measure);
     observer.observe(heading);
     return () => observer.disconnect();
-  }, [block.grouped, rows]);
+  });
   const { virtual } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 });
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
