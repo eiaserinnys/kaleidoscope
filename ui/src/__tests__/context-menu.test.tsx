@@ -2,10 +2,23 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ContextMenuHost, openContextMenu, openFrameContextMenu, writeMenuClipboard } from "../components/context-menu";
 import { EditorView } from "@codemirror/view";
+import { registerCommentEntry } from "../comments/context-entry";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("공용 우클릭 메뉴", () => {
+  it("앱 내용의 기존 메뉴 뒤에 커멘트를 붙이고 좌표를 전달한다", () => {
+    const pick = vi.fn();
+    render(<><ContextMenuHost /><div className="ks-window-content"><button onContextMenu={(event) => openContextMenu(event, [{ id: "site", label: "기존 동작", onSelect() {} }])}>대상</button></div></>);
+    const target = screen.getByRole("button", { name: "대상" });
+    const content = target.closest<HTMLElement>(".ks-window-content")!;
+    const unregister = registerCommentEntry(content, pick);
+    fireEvent.contextMenu(target, { clientX: 31, clientY: 42 });
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["기존 동작", "커멘트 달기…"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "커멘트 달기…" }));
+    expect(pick).toHaveBeenCalledWith(target, { x: 31, y: 42 });
+    unregister();
+  });
   it("값이 같으면 입력 선택을 되돌리고 바뀌었으면 현재 선택을 유지한다", async () => {
     const readText = vi.fn().mockResolvedValue("새 글");
     vi.stubGlobal("navigator", { ...navigator, clipboard: { readText } });
@@ -102,6 +115,24 @@ describe("공용 우클릭 메뉴", () => {
     act(() => openFrameContextMenu(frame, { requestId: 1, x: 10, y: 20, text: "", editable: true, readOnly: false, password: false }));
     expect(screen.getByRole("menuitem", { name: "붙여넣기" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "모두 선택" })).toBeTruthy();
+  });
+  it("프레임의 빈 곳은 커멘트가 가능할 때만 좌표를 넘긴다", () => {
+    const pick = vi.fn();
+    render(<><ContextMenuHost /><div className="ks-window-content"><iframe title="프레임" /></div></>);
+    const frame = screen.getByTitle("프레임") as HTMLIFrameElement;
+    vi.spyOn(frame, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 200, 300, 150));
+    const request = { requestId: 1, x: 10, y: 20, text: "" };
+    act(() => openFrameContextMenu(frame, request));
+    expect(screen.queryByRole("menu")).toBeNull();
+    const unregister = registerCommentEntry(frame.closest<HTMLElement>(".ks-window-content")!, pick);
+    act(() => openFrameContextMenu(frame, request));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["커멘트 달기…"]);
+    expect(document.activeElement).toBe(screen.getByRole("menu"));
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "커멘트 달기…" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "커멘트 달기…" }));
+    expect(pick).toHaveBeenCalledWith(frame, { x: 110, y: 220 });
+    unregister();
   });
   it("입력칸에 글 메뉴를 열고 자체 메뉴 항목을 뒤에 둔다", () => {
     render(<><ContextMenuHost /><input aria-label="내용" defaultValue="가나다" /></>);

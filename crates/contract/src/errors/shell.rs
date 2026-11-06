@@ -4,7 +4,7 @@ error_catalog! { ENTRIES;
     SHELL_FILE_DROP_DIRECTORY_REJECTED() { class: InvalidRequest, place: "파일 드롭 폴더 검사", cause: "폴더를 파일로 놓았다", message: "폴더는 파일로 열 수 없습니다. 폴더 안의 파일을 다시 놓으세요.", fix: "폴더 안의 파일을 다시 놓으세요" }
     SHELL_FILE_DROP_TOO_LARGE(name, limit) { class: InvalidRequest, place: "파일 드롭 크기 검사", cause: "파일 크기가 한도를 넘었다", message: "{name}의 크기가 {limit}를 넘어 열 수 없습니다. 더 작은 파일을 다시 놓으세요.", fix: "더 작은 파일을 다시 놓으세요" }
     SHELL_CLIENT_FILE_OPEN_INPUT_INVALID() { class: InvalidRequest, place: "권한 파일 열기 입력 검사", cause: "권한 이름이나 경로가 문자열이 아니다", message: "권한 파일을 열 수 없습니다. 앱 코드의 files.open에 문자열 permission과 path를 지정하세요.", fix: "앱 코드의 permission과 path를 고치세요" }
-    SHELL_COMMENT_TARGET_CHANGED() { class: Conflict, place: "커멘트 선택 대상 확인", cause: "자리를 고른 뒤 앱 화면의 판이 바뀌었다", message: "고른 뒤 앱 화면의 판이 바뀌었습니다. 내용은 남겨 두었습니다. 자리를 다시 골라 주세요.", fix: "자리를 다시 골라 주세요" }
+    SHELL_COMMENT_TARGET_CHANGED() { class: Conflict, place: "커멘트 선택 대상 확인", cause: "자리를 고른 뒤 앱 화면의 판이 바뀌었다", message: "고른 뒤 앱 화면의 판이 바뀌었습니다. 내용은 남겨 두었습니다.", fix: "자리를 다시 골라 주세요" }
     SHELL_COMMENT_SEND_TEXT_TOO_LONG(limit) { class: InvalidRequest, place: "커멘트 보내기 글 크기 검사", cause: "보내려는 안내가 글자 수 한도를 넘었다", message: "보내려는 커멘트 안내가 {limit}를 넘습니다. 보낼 커멘트를 줄여 주세요.", fix: "보낼 커멘트를 줄여 주세요" }
     SHELL_CLIENT_HTTP_REQUEST_TRANSPORT_UNAVAILABLE() { class: Io, place: "앱 HTTP 요청 전송", cause: "이진 요청 전송 기능이 없다", message: "이 쉘에서는 앱 HTTP 요청을 보낼 수 없습니다. 쉘을 업데이트하세요.", fix: "쉘을 업데이트하세요" }
     SHELL_CLIENT_HTTP_REQUEST_INPUT_INVALID() { class: InvalidRequest, place: "앱 HTTP 요청 입력 확인", cause: "요청 값의 형식이 올바르지 않다", message: "HTTP 요청 값의 형식이 올바르지 않습니다. 앱 코드의 permission, method, path, query, headers와 body를 확인하세요.", fix: "앱 코드의 HTTP 요청 값을 고치세요" }

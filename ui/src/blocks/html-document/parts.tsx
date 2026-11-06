@@ -28,14 +28,15 @@ export function Group({ title, count, open, onToggle, children }: { title: strin
   return <section className="ks-html-group"><button type="button" className="ks-data-section-toggle" aria-expanded={open} onClick={onToggle}>{open ? <ChevronDown size="inline" /> : <ChevronRight size="inline" />}<span className="ks-data-section-heading"><span className="ks-data-section-title">{title}</span>{count !== undefined ? <span className="ks-data-section-meta">{count}</span> : null}</span></button>{open ? children : null}</section>;
 }
 
-export function Compose({ label, onSubmit, onEscape, focus, selection }: { label: string; onSubmit: (text: string) => Promise<boolean>; onEscape: () => void; focus?: boolean; selection?: FrameSelection }) {
-  const [value, setValue] = useState("");
+export function Compose({ label, onSubmit, onEscape, focus, selection, initialValue = "", onDraftChange, disabled = false }: { label: string; onSubmit: (text: string) => Promise<boolean>; onEscape: () => void; focus?: boolean; selection?: FrameSelection; initialValue?: string; onDraftChange?: (value: string) => void; disabled?: boolean }) {
+  const [value, setValue] = useState(initialValue);
+  const edit = (next: string) => { setValue(next); onDraftChange?.(next); };
   const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (focus) input.current?.focus(); }, [focus, selection?.n, selection?.anchor.position?.start, selection?.anchor.position?.end]);
-  const submit = async () => { if (value.trim() && await onSubmit(value)) { setValue(""); input.current?.focus(); } };
+  const submit = async () => { if (!disabled && value.trim() && await onSubmit(value)) { edit(""); input.current?.focus(); } };
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); }
-    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (value) setValue(""); else onEscape(); }
+    else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (value) edit(""); else onEscape(); }
   };
-  return <div className="ks-html-compose"><textarea ref={input} aria-label={label} className="ks-text-input ks-agent-chat-input" rows={1} placeholder={label} value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={keyDown} /><IconButton aria-label="보내기" disabled={!value.trim()} onClick={() => void submit()}><ArrowUp /></IconButton></div>;
+  return <div className="ks-html-compose"><textarea ref={input} aria-label={label} className="ks-text-input ks-agent-chat-input" rows={1} placeholder={label} value={value} onChange={(event) => edit(event.target.value)} onKeyDown={keyDown} /><IconButton aria-label="보내기" disabled={disabled || !value.trim()} onClick={() => void submit()}><ArrowUp /></IconButton></div>;
 }

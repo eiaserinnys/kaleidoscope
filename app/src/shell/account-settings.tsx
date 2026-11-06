@@ -33,7 +33,7 @@ export function AccountSettings({ store }: { store: ShellStore }) {
     catch (cause) { setError(toCoreError(cause)); }
     finally { setSaving(false); }
   };
-  return <section className="ks-settings-group" aria-labelledby={`${id}-account`}>
+  return <section className="ks-settings-group" data-settings-agent aria-labelledby={`${id}-account`}>
     <h3 className="ks-data-section-title" id={`${id}-account`}>계정</h3>
     <SettingsRow label={<label>기본 에이전트</label>} status={saving ? <StatusText>저장 중</StatusText> : null}
       meta={reason ? <div className="ks-settings-description" id={`${id}-reason`}>{reason}</div> : null}

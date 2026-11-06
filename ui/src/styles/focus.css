@@ -1,7 +1,7 @@
 /* 같은 창의 같은 상자형 컨트롤은 스크롤 칸 여부와 관계없이 같은 안쪽 고리를 쓴다.
    링크·누르는 글·토글·슬라이더는 획과 손잡이를 덮지 않도록 정본 바깥 고리를 유지한다. */
-:is(.ks-data-window, .ks-dialog) :is(.ks-button, .ks-icon-button, .ks-text-input, .ks-list-card, .ks-agent-attachment-image, .ks-agent-attachment-file):focus-visible,
-:is(.ks-data-window, .ks-dialog) .ks-text-input:focus {
+:is(.ks-data-window, .ks-dialog, .ks-comment-layer) :is(.ks-button, .ks-icon-button, .ks-text-input, .ks-list-card, .ks-agent-attachment-image, .ks-agent-attachment-file):focus-visible,
+:is(.ks-data-window, .ks-dialog, .ks-comment-layer) .ks-text-input:focus {
   outline-offset: calc(-1 * var(--ks-focus-width));
 }
 

@@ -19,6 +19,13 @@ describe("화면에서 커멘트 자리 고르기", () => {
     expect(picked.path).toBe("표 › 4행");
     expect(resolveScreen(picked.anchor, { kind: "exact", pointer: "/ui" }, root, { windowId: "w", sourceWindowId: "w" }).kind).toBe("exact");
   });
+  it("목록 행의 이름도 표와 흐름처럼 인용한다", () => {
+    const root = document.createElement("div");
+    root.innerHTML = '<div data-ks-block="/ui" data-ks-block-type="list"><button role="option" aria-label="목록 1 행의 제목" aria-posinset="1" data-ks-comment-key="&quot;first&quot;"><span>목록 1 행의 제목</span></button></div>';
+    document.body.append(root); geometry(root);
+    const picked = describeTarget(root.querySelector("span")!, root)!;
+    expect(picked.anchor.element?.description).toBe('목록 1행 “목록 1 행의 제목”');
+  });
   it("선택한 글과 양쪽 문맥이 같은 블록 안에서 유일할 때 다시 찾는다", () => {
     const root = document.createElement("div"); root.innerHTML = '<div data-ks-block="/ui" data-ks-block-type="text">앞 문맥 <b>고른 글</b> 뒤 문맥</div>';
     document.body.append(root); geometry(root);

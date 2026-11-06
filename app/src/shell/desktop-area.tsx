@@ -39,6 +39,7 @@ export interface DesktopAreaProps {
   onAreaChange: (area: { width: number; height: number }) => void;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   onOpenApps: (anchor: HTMLElement) => void;
+  onChooseAgent?: (anchor: HTMLElement) => void;
   getNewWindowRect?: (desktopId: string, snapshot: ShellSnapshot, size?: WindowSize) => Rect | undefined;
   store: ShellStore;
   windowActions: ShellWindowActions;
@@ -54,6 +55,7 @@ export function DesktopArea({
   onAreaChange,
   onCall,
   onOpenApps,
+  onChooseAgent,
   getNewWindowRect,
   store,
   windowActions,
@@ -87,6 +89,7 @@ export function DesktopArea({
         getNewWindowRect={getNewWindowRect}
         key={desktop.id}
         onCall={onCall}
+        onChooseAgent={onChooseAgent}
         store={store}
         systemWindow={systemWindow?.state}
       />)}
@@ -106,6 +109,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   activeWorkspaceId,
   area,
   onCall,
+  onChooseAgent,
   store,
   getNewWindowRect,
   systemWindow,
@@ -115,6 +119,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   activeWorkspaceId?: string;
   area: { width: number; height: number };
   onCall: DesktopAreaProps["onCall"];
+  onChooseAgent: DesktopAreaProps["onChooseAgent"];
   store: ShellStore;
   getNewWindowRect?: DesktopAreaProps["getNewWindowRect"];
   systemWindow?: SystemWindowState;
@@ -138,6 +143,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
       isTop={appWindow.id === topWindowId}
       key={appWindow.id}
       onCall={onCall}
+      onChooseAgent={onChooseAgent}
       store={store}
     />)}
   </section>;
@@ -246,11 +252,12 @@ function TaskbarButton({ ref, title, icon, minimized, isTop, onClick, onContextM
   </button>;
 }
 
-const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCall, store, getNewWindowRect }: {
+const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCall, onChooseAgent, store, getNewWindowRect }: {
   appWindow: AppWindow;
   area: { width: number; height: number };
   isTop: boolean;
   onCall: DesktopAreaProps["onCall"];
+  onChooseAgent: DesktopAreaProps["onChooseAgent"];
   store: ShellStore;
   getNewWindowRect?: DesktopAreaProps["getNewWindowRect"];
 }) {
@@ -287,6 +294,7 @@ const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCa
     settingsAvailableInitially={details.settingsAvailableInitially}
     store={store}
     onCall={onCall}
+    onChooseAgent={onChooseAgent ?? (() => {})}
     onMinimize={(windowId) => { void onCall({ op: "window.minimize", window_id: windowId }); }}
     onMaximize={(windowId) => { void onCall({ op: "window.maximize", window_id: windowId }); }}
     onRestore={(windowId) => { void onCall({ op: "window.restore", window_id: windowId }); }}

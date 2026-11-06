@@ -38,7 +38,7 @@ function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; p
   useLayoutEffect(() => {
     const receive = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow) return;
-      if (event.data?.type === "ks-html-context-menu" && typeof event.data.x === "number" && typeof event.data.y === "number" && typeof event.data.text === "string" && (event.data.text || event.data.editable) && frame.current) openFrameContextMenu(frame.current, event.data, (command) => frame.current?.contentWindow?.postMessage({ type: "ks-html-context-command", ...command }, "*"));
+      if (event.data?.type === "ks-html-context-menu" && typeof event.data.x === "number" && typeof event.data.y === "number" && typeof event.data.text === "string" && frame.current) openFrameContextMenu(frame.current, event.data, (command) => frame.current?.contentWindow?.postMessage({ type: "ks-html-context-command", ...command }, "*"));
       else if (event.data?.type === "ks-html-visible-text" && typeof event.data.text === "string") setVisibleText(event.data.text);
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);
@@ -68,7 +68,7 @@ function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockCon
   useLayoutEffect(() => {
     const receive = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow) return;
-      if (event.data?.type === "ks-html-context-menu" && typeof event.data.x === "number" && typeof event.data.y === "number" && typeof event.data.text === "string" && (event.data.text || event.data.editable) && frame.current) openFrameContextMenu(frame.current, event.data, (command) => frame.current?.contentWindow?.postMessage({ type: "ks-html-context-command", ...command }, "*"));
+      if (event.data?.type === "ks-html-context-menu" && typeof event.data.x === "number" && typeof event.data.y === "number" && typeof event.data.text === "string" && frame.current) openFrameContextMenu(frame.current, event.data, (command) => frame.current?.contentWindow?.postMessage({ type: "ks-html-context-command", ...command }, "*"));
       else if (event.data?.type === "ks-html-visible-text" && typeof event.data.text === "string") setVisibleText(event.data.text);
     };
     window.addEventListener("message", receive); return () => window.removeEventListener("message", receive);

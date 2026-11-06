@@ -1,6 +1,7 @@
 import { memo, useCallback, useRef, useState, type MouseEvent } from "react";
 import { Check, Ellipsis, MessageSquare, RotateCcw } from "../../components/icons";
 import { Menu } from "../../components/menu";
+import { CommentCardBody } from "../../components/comment-card";
 import { Button, EmptyState, IconButton } from "../../components/primitives";
 import type { AnchorStatus } from "../html-bridge/frame-protocol";
 import type { useHtmlDocument } from "./controller";
@@ -23,23 +24,19 @@ const CommentCard = memo(function CommentCard({ comment, index, status, active, 
   const last = comment.replies.at(-1);
   const reply = useCallback(async (body: string) => change({ kind: "reply", id: comment.id, reply: { id: `r-${crypto.randomUUID()}`, role: "user", rev, body: body.trim(), created_at: new Date().toISOString() } }), [change, comment.id, rev]);
   const stop = (event: MouseEvent) => event.stopPropagation();
-  return <article className={`ks-html-comment${active ? " is-active" : ""}${resolved ? " is-resolved" : ""}`} id={`ks-html-comment-${comment.id}`} onClick={() => { if (!active) activate(comment.id); }} onKeyDown={(event) => { if (active && event.key === "Escape") { event.stopPropagation(); closeCard(); } }}>
-    <span className={`ks-html-pin${status === "moved" ? " is-moved" : ""}${status === "orphan" ? " is-orphan" : ""}${resolved ? " is-resolved" : ""}`}>{index + 1}</span>
-    <div className="ks-html-comment-head"><button ref={targetButton} type="button" className="ks-html-comment-target" onClick={(event) => { event.stopPropagation(); activate(comment.id); }}>{target}</button>
-      {active ? <span className="ks-html-comment-tools" onClick={stop}>
+  return <CommentCardBody id={`ks-html-comment-${comment.id}`} active={active} resolved={resolved} target={target} targetRef={targetButton} activate={() => activate(comment.id)}
+    onKeyDown={(event) => { if (active && event.key === "Escape") { event.stopPropagation(); closeCard(); } }}
+    pin={<span className={`ks-html-pin${status === "moved" ? " is-moved" : ""}${status === "orphan" ? " is-orphan" : ""}${resolved ? " is-resolved" : ""}`}>{index + 1}</span>}
+    text={comment.comment} unread={comment.status === "needs_user_reply"} last={last ? { author: last.role, text: last.body } : undefined}
+    tools={<span className="ks-html-comment-tools" onClick={stop}>
         <IconButton aria-label={resolved ? "다시 열기" : "해결"} disabled={saving} onClick={() => void change({ kind: "status", id: comment.id, status: resolved ? "needs_agent_review" : "resolved", resolved_rev: resolved ? null : rev })}>{resolved ? <RotateCcw /> : <Check />}</IconButton>
         <IconButton aria-label="더 보기" onClick={(event) => setMenu(event.currentTarget)}><Ellipsis /></IconButton>
-      </span> : comment.status === "needs_user_reply" ? <span className="ks-badge is-accent">답변 도착</span> : null}
-    </div>
-    <p className="ks-html-comment-text">{comment.comment}</p>
-    {!active && last ? <span className="ks-html-comment-last">{last.role === "agent" ? "에이전트" : "나"}: {last.body}</span> : null}
-    {active ? <>
+      </span>}>
       {comment.replies.map((item) => <div key={item.id} className="ks-html-reply"><span className="ks-html-reply-role">{item.role === "agent" ? "에이전트" : "나"}</span><p>{item.body}</p></div>)}
       {status === "orphan" ? <Button disabled={saving || !selected} onClick={(event) => { event.stopPropagation(); if (selected) void change({ kind: "anchor", id: comment.id, anchor: selected.anchor, anchor_rev: anchorRevisionFor(rev, dirty) }); }}>여기로 옮기기</Button> : null}
       <Compose label="답글" onSubmit={reply} onEscape={closeCard} />
-    </> : null}
     {menu ? <Menu anchor={menu} onClose={closeMenu} items={[{ id: "delete", label: "삭제", danger: true, onSelect: () => { void change({ kind: "delete", id: comment.id }).then((ok) => { if (ok) deleted(comment.id); }); } }]} /> : null}
-  </article>;
+  </CommentCardBody>;
 });
 
 export function CommentFace({ model }: { model: Model }) {

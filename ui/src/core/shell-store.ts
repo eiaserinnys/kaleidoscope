@@ -1,3 +1,4 @@
+import { forgetCommentSession } from "../comments/session";
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
 import { SHELL_STATE_REPLY_INVALID, SHELL_WINDOW_CONTROL_CONSENT_BLOCKED } from "../contract/shell-errors";
 import type { CoreError, CoreEvent, ShellSnapshot } from "../contract/contract";
@@ -77,6 +78,9 @@ export function createShellStore(transport: CoreTransport): ShellStore {
           }
           setConsent(windowId, remaining);
         }
+      }
+      for (const previous of snapshot?.shared.windows ?? []) {
+        if (!event.snapshot.shared.windows.some((next) => next.id === previous.id)) forgetCommentSession(previous.id);
       }
       snapshot = shareShellSnapshot(snapshot, event.snapshot);
       error = null;

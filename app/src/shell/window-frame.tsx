@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AppIcon, IconButton, ScreenShare, Settings, forgetNumbered, useShareView, windowActionActive, clientFileDropReady, deliverClientFiles, registerFileDropTarget, type PickFilesSpec, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow } from "@kaleidoscope/ui";
+import { AppIcon, CommentLayer, CommentTitle, IconButton, ScreenShare, Settings, commentSession, forgetNumbered, useCommentMeta, useCommentSession, useShareView, windowActionActive, clientFileDropReady, deliverClientFiles, registerFileDropTarget, type PickFilesSpec, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow } from "@kaleidoscope/ui";
+import appConfig from "../../src-tauri/tauri.conf.json";
 import { ProcessConsent } from "./process-consent";
 import { InstallationConsent } from "./installation-consent";
 import { windowMenuEntries } from "./window-menu";
@@ -20,12 +21,17 @@ export interface WindowFrameProps {
   onMinimize: (windowId: string) => void;
   onMaximize: (windowId: string) => void;
   onRestore: (windowId: string) => void;
+  onChooseAgent?: (anchor: HTMLElement) => void;
   window: AppWindow;
   children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (problem: CoreError | string | null) => void, visited: boolean, reportWindowHeader: (title: string, meta: string | null) => void, reportSettingsAvailable: (available: boolean) => void) => ReactNode);
 }
 
-export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable, hasSettings, settingsAvailableInitially = true, store, onCall, onMinimize, onMaximize, onRestore, window: appWindow, children }: WindowFrameProps) {
+export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable, hasSettings, settingsAvailableInitially = true, store, onCall, onMinimize, onMaximize, onRestore, onChooseAgent, window: appWindow, children }: WindowFrameProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const [content, setContent] = useState<HTMLDivElement | null>(null);
+  const setContentRef = useCallback((node: HTMLDivElement | null) => { contentRef.current = node; setContent(node); }, []);
+  const commentMeta = useCommentMeta(store, appWindow.app_id);
+  const commenting = useCommentSession(appWindow.id);
   const [frameHost, setFrameHost] = useState<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -62,9 +68,10 @@ export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable
   const toggleSettings = () => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } };
   const closeWindow = () => void onCall({ op: "window.close", window_id: appWindow.id });
   const titleMenu: MenuEntry[] = [
+    ...(commentMeta !== undefined ? [{ id: "comment", label: "커멘트", checked: commenting, onSelect: () => commentSession(appWindow.id).set(!commenting) }] : []),
     ...(shareable ? [{ id: "share", label: "같이 보기", checked: sharing, onSelect: toggleShare }] : []),
     ...(hasSettings && settingsAvailable ? [{ id: "settings", label: "앱 설정", checked: settingsOpen, onSelect: toggleSettings }] : []),
-    ...((shareable || (hasSettings && settingsAvailable)) ? [{ type: "separator" as const, id: "title-actions-separator" }] : []),
+    ...((commentMeta !== undefined || shareable || (hasSettings && settingsAvailable)) ? [{ type: "separator" as const, id: "title-actions-separator" }] : []),
     ...windowMenuEntries(appWindow, { minimize: () => onMinimize(appWindow.id), raise: () => void onCall({ op: "window.raise", window_id: appWindow.id }), maximize: () => onMaximize(appWindow.id), restore: () => onRestore(appWindow.id), close: closeWindow }),
   ];
 
@@ -74,13 +81,15 @@ export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable
     zIndex={appWindow.z} isTop={isTop} title={windowHeader?.title ?? appName} meta={windowHeader?.meta}
     icon={<AppIcon store={store} appId={appWindow.app_id} appVersion={appWindow.app_version} size="chrome" placeholder="skeleton" />}
     titleActions={<>
+      <CommentTitle store={store} window={appWindow} />
       {shareable ? <IconButton aria-label={sharing ? "같이 보기 끄기" : "같이 보기"} tone="share" pressed={sharing} onClick={toggleShare}><ScreenShare size="chrome" /></IconButton> : null}
       {hasSettings && settingsAvailable ? <span ref={settingsButton}><IconButton aria-label={settingsProblem ? `앱 설정: ${typeof settingsProblem === "string" ? settingsProblem : settingsProblem.message}` : "앱 설정"} pressed={settingsOpen} onClick={toggleSettings}><Settings size="chrome" /></IconButton></span> : null}
     </>}
     menuEntries={titleMenu} onRaise={() => void onCall({ op: "window.raise", window_id: appWindow.id })}
     onMinimize={() => onMinimize(appWindow.id)} onMaximize={() => onMaximize(appWindow.id)} onRestore={() => onRestore(appWindow.id)} onClose={closeWindow}
     onRectCommit={async (rect) => Boolean(await onCall({ op: "window.set_rect", window_id: appWindow.id, rect }))}
-    testId={`app-window-${appWindow.app_id}`} frameRef={setFrameHost} contentRef={contentRef} sharing={sharing}
+    testId={`app-window-${appWindow.app_id}`} frameRef={setFrameHost} contentRef={setContentRef} sharing={sharing} commenting={commenting}
+    outerOverlays={content ? <CommentLayer store={store} window={appWindow} appName={appName} content={content} shellVersion={appConfig.version} chooseAgent={(anchor) => onChooseAgent?.(anchor)} /> : null}
     pointerGuard={(event) => !event.nativeEvent.isTrusted && windowActionActive(appWindow.id)}
     overlays={<><ProcessConsent store={store} windowId={appWindow.id} host={frameHost} /><InstallationConsent store={store} windowId={appWindow.id} host={frameHost} /></>}>
     {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited, reportWindowHeader, reportSettingsAvailable) : children}
