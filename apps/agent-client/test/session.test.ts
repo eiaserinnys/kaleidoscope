@@ -205,6 +205,7 @@ test("큐를 순서대로 보내고 첫 말에만 지침과 같이 보기 및 �
   const session = new AgentSession(f.host as any);
   await session.attach();
   await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { promptCapabilities: { image: true } } } });
+  assert.deepEqual(f.writes.at(-1).params.mcpServers, []);
   await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "session" } });
   await session.send({ id: "one", text: "첫 말", attachments: [
     { name: "그림.png", mime: "image/png", bytes: new Uint8Array([1, 2]) },
@@ -226,6 +227,43 @@ test("큐를 순서대로 보내고 첫 말에만 지침과 같이 보기 및 �
   assert.equal(guides, 1);
   assert.equal(commits, 2);
 });
+
+for (const path of ["new", "resume", "new_user", "switch"] as const) {
+  test(`HTTP MCP 명시 설정은 ${path} 경로에 도구를 연결하고 첫 말에 지침을 덧붙이지 않는다`, async () => {
+    const f = fixture();
+    const spec = { name: "시험", command: "agent", args: [], env: {}, assume_http_mcp: true };
+    let startParams: any;
+    const start = f.host.process.start;
+    f.host.process.start = async (params?: any) => { startParams = params; return start(); };
+    const session = new AgentSession(f.host as any);
+    await session.start(spec);
+    await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { agentCapabilities: { loadSession: true } } });
+    let open = f.writes.at(-1);
+    if (path !== "new") {
+      await f.emit({ jsonrpc: "2.0", id: open.id, result: { sessionId: "original" } });
+      if (path === "resume") {
+        await session.retry();
+        await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { agentCapabilities: { loadSession: true } } });
+      } else if (path === "new_user") {
+        await session.newSession();
+      } else {
+        await session.loadSession("chosen");
+      }
+      open = f.writes.at(-1);
+    }
+    await f.emit({ jsonrpc: "2.0", id: open.id, result: path === "new" || path === "new_user" ? { sessionId: "new-session" } : {} });
+    await session.send({ id: "q", text: "사용자 말", attachments: [] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(open.method, path === "resume" || path === "switch" ? "session/load" : "session/new");
+    if (path === "resume" || path === "switch") assert.equal(open.params.sessionId, path === "resume" ? "original" : "chosen");
+    assert.deepEqual(open.params.mcpServers, [{ type: "http", name: "kaleidoscope", url: "http://tools/new", headers: [] }]);
+    assert.deepEqual(f.writes.at(-1).params.prompt, [{ type: "text", text: "사용자 말" }]);
+    assert.deepEqual(startParams.spec, { name: "시험", command: "agent", args: [], env: {} });
+    const manifest = JSON.parse(decoder.decode((await f.host.blobs.read("record/manifest.json"))!));
+    assert.equal(manifest.identity, JSON.stringify({ name: "시험", command: "agent", args: [], env: {} }));
+  });
+}
 
 test("프로세스 교체 후 세션과 저장한 모델을 복원한다", async () => {
   const f = fixture();
