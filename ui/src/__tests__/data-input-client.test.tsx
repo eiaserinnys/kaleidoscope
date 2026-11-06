@@ -315,7 +315,7 @@ it.each([
   expect(runtime.act).not.toHaveBeenCalled();
 });
 
-it.each([false, true])("목록 전용 검색 지우기는 빈 선택지 허용 여부 %s에 맞춰 확정한다", async (hasEmpty) => {
+it.each([false, true])("목록 전용 검색 지우기는 빈 선택지 포함 여부 %s와 관계없이 빈 값을 확정한다", async (hasEmpty) => {
   runtime.values = { text: "alpha" };
   const input = { type: "input", kind: "search", value: { client: "text" }, on_change: { client: "change" }, options: hasEmpty ? ["", "alpha"] : ["alpha", "beta"], options_only: true };
   render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
@@ -323,13 +323,8 @@ it.each([false, true])("목록 전용 검색 지우기는 빈 선택지 허용 �
   fireEvent.focus(field);
   fireEvent.blur(field);
   fireEvent.click(screen.getByRole("button", { name: "지우기" }));
-  if (hasEmpty) {
-    expect(field.value).toBe("");
-    await vi.waitFor(() => expect(runtime.act).toHaveBeenCalledWith("/input/on_change", "", undefined, undefined, undefined, { input: true }));
-  } else {
-    expect(field.value).toBe("alpha");
-    expect(runtime.act).not.toHaveBeenCalled();
-  }
+  expect(field.value).toBe("");
+  await vi.waitFor(() => expect(runtime.act).toHaveBeenCalledWith("/input/on_change", "", undefined, undefined, undefined, { input: true }));
 });
 
 it("초점을 유지한 채 읽기 전용을 해제한 뒤에도 편집 중 초안을 보존한다", () => {

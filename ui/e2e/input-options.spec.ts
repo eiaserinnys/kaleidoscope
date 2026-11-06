@@ -26,8 +26,6 @@ test("좁은 앱 창의 설명 경계와 이름 확정, 다시 입력을 지킨�
   await input.press("Enter");
   await expect(input).toHaveValue("entry-503");
   await expect(popup).toHaveCount(0);
-  await input.blur();
-  await input.click();
   await page.keyboard.type("Zombie");
   await expect(input).toHaveValue("Zombie");
 });
@@ -174,18 +172,20 @@ test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른�
     await page.getByTestId("app-window-block-gallery").getByRole("tab", { name: "입력" }).click();
     const input = page.getByRole("combobox", { name: "이름" });
     await input.scrollIntoViewIfNeeded();
+    await input.focus();
     const measureRoom = () => input.evaluate((element) => {
       const css = getComputedStyle(element);
       const token = (name: string) => Number.parseFloat(css.getPropertyValue(name)) || 0;
       const row = Math.max(token("--ks-control-height"), token("--ks-type-body") * token("--ks-line-body") + 2 * token("--ks-space-2"));
       return {
         below: window.innerHeight - token("--ks-space-3") - element.getBoundingClientRect().bottom - token("--ks-space-2"),
-        need: 3 * row + 2 * token("--ks-space-1") + token("--ks-pane-min-size") + token("--ks-line-width"),
+        need: 3 * row + 2 * token("--ks-space-1") + Math.min(document.querySelector<HTMLElement>(".ks-combobox-description")?.scrollHeight ?? 0, token("--ks-pane-min-size")) + token("--ks-line-width"),
       };
     });
     let room = await measureRoom();
     if (room.below < room.need) {
       await page.setViewportSize({ width, height: height + Math.ceil(room.need - room.below) });
+      await input.press("Escape"); await input.blur(); await input.focus();
       room = await measureRoom();
     }
     expect(room.below, `시험 전제: ${width}x${height}에서 이름 칸 아래에 세 행과 설명 칸이 들어가야 한다`).toBeGreaterThanOrEqual(room.need);

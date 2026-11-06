@@ -108,6 +108,14 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
   const commit = (value: string) => settle(value);
   const choose = (value: string) => { if (readOnly) return; const formatted = codec ? codec.format(value) : value; accepted.current = formatted; pendingAccepted.current = formatted === initialDraft && !pendingAccepted.current ? null : { value: formatted }; change(formatted); void sendDraft(value); };
   const canSyncExternal = () => pendingAccepted.current === null;
+  const revert = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    unregisterFlush.current?.(); unregisterFlush.current = null;
+    edited.current = false;
+    spinPending.current = false;
+    change(accepted.current);
+  };
   const cancel = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
@@ -118,5 +126,5 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
     finish();
     if (block.on_cancel) void data.act(`${pointer}/on_cancel`, null);
   };
-  return { sendDraft, markChanged, commit, cancel, endSpin, choose, canSyncExternal };
+  return { sendDraft, markChanged, commit, cancel, endSpin, choose, canSyncExternal, revert };
 }

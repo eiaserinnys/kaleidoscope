@@ -9,6 +9,36 @@ import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it.each(["Enter", "Escape"])("없는 이름의 %s는 값과 목록을 함께 되돌린다", async (key) => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "없는 이름" } });
+  fireEvent.keyDown(input, { key });
+  expect(input.value).toBe("value-1");
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+});
+
+it("한 행만 남으면 일부 이름 Enter도 고르고 선택한 글 전체를 고른다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus();
+  fireEvent.change(input, { target: { value: "zom" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.value).toBe("value-503");
+  expect(input.selectionStart).toBe(0);
+  expect(input.selectionEnd).toBe(input.value.length);
+});
+
+it("자유 입력도 Enter 확정에 목록을 닫는다", async () => {
+  setup();
+  const input = await screen.findByRole("combobox");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "항목" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+});
+
 it("목록 전용은 고른 글을 전체 선택하고 이름 Enter 확정 뒤 닫는다", async () => {
   setup(true);
   const input = await screen.findByRole("combobox") as HTMLInputElement;

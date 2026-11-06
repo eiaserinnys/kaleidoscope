@@ -1,5 +1,5 @@
 .ks-data-input:has(> .ks-combobox-indicator) .ks-text-input { padding-inline-end: calc(var(--ks-icon-button-size) + var(--ks-space-1)); }
-.ks-combobox-indicator { position: absolute; inset-inline-end: var(--ks-space-3); top: 50%; transform: translateY(-50%); display: flex; color: var(--ks-color-muted); pointer-events: none; }
+.ks-combobox-indicator { position: absolute; inset-inline-end: calc(var(--ks-space-3) + var(--ks-line-width)); top: 50%; transform: translateY(-50%); display: flex; color: inherit; pointer-events: none; }
 
 .ks-combobox-popup {
   box-sizing: border-box;
