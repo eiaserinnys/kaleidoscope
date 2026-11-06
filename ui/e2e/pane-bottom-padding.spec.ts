@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+test('가로 쌓기의 앞 칸도 창 바닥 여백을 갖는다', async ({ page }) => {
+  await page.goto('/?preview=bottom-horizontal-stack');
+  const section = page.getByTestId('app-window-bottom-horizontal-stack').locator('.ks-data-section');
+  await expect(section).toBeVisible();
+  expect(await section.evaluate(el => getComputedStyle(el).paddingBottom)).toBe('12px');
+});
+
 for (const width of [880, 360]) test(`분할 구역 스크롤 바깥에 바닥 여백이 남는다 (${width})`, async ({ page }) => {
   await page.setViewportSize({ width, height: 600 });
   await page.goto('/?preview=nested-fill-split');

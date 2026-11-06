@@ -55,6 +55,13 @@ export default [
 ];
 
 export const bottomPaddingCases = [
+  {
+    id: "bottom-horizontal-stack", name: "나란한 칸의 바닥", requires: { blocks: 37, modules: {} }, permissions: [], state: {},
+    ui: { type: "stack", direction: "row", fill: 0, children: [
+      { type: "split", direction: "row", children: [{ type: "section", title: "내용", child: { type: "list", items } }, { type: "list", items }] },
+      { type: "text", value: "옆 칸" },
+    ] },
+  },
   ...["controls", "markdown", "editor", "folder"].map(kind => ({
     id: `bottom-tabs-${kind}`, name: "구역 안 탭", requires: { blocks: 37, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {},
     ui: { type: "split", direction: "row", children: [
