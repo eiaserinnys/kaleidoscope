@@ -22,6 +22,8 @@ struct Layout {
 }
 
 mod capture;
+mod comment_capture;
+pub(super) use comment_capture::scenario as comment_capture_scenario;
 #[path = "share_isolate/native_input.rs"]
 pub(super) mod native_input;
 mod pixels;

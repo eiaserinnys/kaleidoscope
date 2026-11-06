@@ -571,3 +571,7 @@
   overflow: hidden auto;
   scrollbar-gutter: stable;
 }
+:root[data-share-isolating] .ks-comment-layer {
+  opacity: 0;
+  pointer-events: none;
+}

@@ -66,7 +66,7 @@ fn events_and_commands_keep_small_metadata_and_images_out_of_lists() {
         json!({"op":"comment.list","app_id":"app","cursor":"next"}),
         json!({"op":"comment.get","app_id":"app","id":"c1"}),
         json!({"op":"comment.mark_sent","app_id":"app","ids":["c1"]}),
-        json!({"op":"comment.capture","window_id":"w1","target_rect":{"x":1.0,"y":2.0,"width":3.0,"height":4.0}}),
+        json!({"op":"comment.capture","window_id":"w1","bounds":{"x":5,"y":6,"width":100,"height":80},"surface_bounds":null,"target_rect":{"x":1.0,"y":2.0,"width":3.0,"height":4.0}}),
     ] {
         let request: CoreRequest = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(request).unwrap(), value);

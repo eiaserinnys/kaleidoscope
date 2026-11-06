@@ -4,6 +4,100 @@ use kaleidoscope_contract::conversation::ConversationUpload;
 use kaleidoscope_contract::AGENT_ATTACHMENTS_MAX;
 
 #[test]
+fn comment_capture_unshared_window_marks_png_without_enabling_share() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png(100, 80)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
+    });
+    let core = Core::open_with_client(CoreConfig {
+        media_origin: None, embedded_server: None, data_dir: temp.path().into(),
+        seed_definitions: vec![test_definition(MD_EDITOR)],
+        server_url: "http://127.0.0.1:4219".into(), device_name: "시험".into(),
+    }, host, registry_client()).unwrap();
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-md-editor");
+    let request = serde_json::from_value(json!({
+        "op":"comment.capture", "window_id":window,
+        "bounds":{"x":0,"y":0,"width":100,"height":80}, "surface_bounds":null,
+        "target_rect":{"x":20.0,"y":20.0,"width":30.0,"height":20.0}
+    })).unwrap();
+    let reply = serde_json::to_value(core.handle(request).unwrap()).unwrap();
+    assert_eq!(reply["image"]["meta"]["capture_surface"], "window_body");
+    assert_eq!(reply["image"]["meta"]["target_rect"], json!({"x":20.0,"y":20.0,"width":30.0,"height":20.0}));
+    let png = STANDARD.decode(reply["image"]["image_base64"].as_str().unwrap()).unwrap();
+    let image = image::load_from_memory(&png).unwrap().to_rgba8();
+    assert_eq!(image.get_pixel(20, 20).0, [111, 86, 154, 255]);
+    assert!(matches!(core.handle(CoreRequest::ShareCapture { window_id: window.clone() }).unwrap(), CoreReply::ShareCapture { captured: false }));
+    let CoreReply::StateGet { snapshot, .. } = core.handle(CoreRequest::StateGet {}).unwrap() else { panic!("snapshot"); };
+    assert!(!snapshot.sharing.contains(&window));
+}
+
+#[test]
+fn comment_capture_without_native_host_reports_unavailable() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![test_definition(MD_EDITOR)], &host);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-md-editor");
+    let request = serde_json::from_value(json!({
+        "op":"comment.capture", "window_id":window,
+        "bounds":{"x":0,"y":0,"width":100,"height":80}, "surface_bounds":null,
+        "target_rect":{"x":20.0,"y":20.0,"width":0.0,"height":0.0}
+    })).unwrap();
+    assert_eq!(core.handle(request).unwrap_err().id.as_deref(), Some("COMMENT_CAPTURE_IMAGE_UNAVAILABLE"));
+}
+
+#[test]
+fn comment_capture_web_surface_offsets_and_scales_point() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(CaptureTestHost {
+        png: Mutex::new(test_png(200, 100)),
+        web_captures: AtomicUsize::new(0),
+        shell_captures: AtomicUsize::new(0),
+        freeze_calls: AtomicUsize::new(0),
+        unfreeze_calls: AtomicUsize::new(0),
+    });
+    let core = Core::open_with_client(CoreConfig {
+        media_origin: None, embedded_server: None, data_dir: temp.path().into(),
+        seed_definitions: vec![test_definition(WEB_BROWSER)],
+        server_url: "http://127.0.0.1:4219".into(), device_name: "시험".into(),
+    }, host.clone(), registry_client()).unwrap();
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "test-web-browser");
+    let request = serde_json::from_value(json!({
+        "op":"comment.capture", "window_id":window,
+        "bounds":{"x":10,"y":20,"width":200,"height":150},
+        "surface_bounds":{"x":30,"y":50,"width":100,"height":50},
+        "target_rect":{"x":30.0,"y":40.0,"width":0.0,"height":0.0}
+    })).unwrap();
+    let reply = serde_json::to_value(core.handle(request).unwrap()).unwrap();
+    assert_eq!(reply["image"]["meta"]["capture_surface"], "web_view");
+    assert_eq!(reply["image"]["meta"]["target_rect"], json!({"x":20.0,"y":20.0,"width":0.0,"height":0.0}));
+    let png = STANDARD.decode(reply["image"]["image_base64"].as_str().unwrap()).unwrap();
+    let image = image::load_from_memory(&png).unwrap().to_rgba8();
+    assert_eq!(image.get_pixel(20, 20).0, [111, 86, 154, 255]);
+    assert_eq!(image.get_pixel(25, 20).0, [255, 255, 255, 255]);
+    assert_eq!(host.web_captures.load(Ordering::SeqCst), 1);
+    assert_eq!(host.shell_captures.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn comment_capture_missing_window_reports_not_found() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![test_definition(MD_EDITOR)], &Arc::new(FakeHost::default()));
+    let request = serde_json::from_value(json!({
+        "op":"comment.capture", "window_id":"missing",
+        "bounds":{"x":0,"y":0,"width":100,"height":80}, "surface_bounds":null,
+        "target_rect":{"x":20.0,"y":20.0,"width":0.0,"height":0.0}
+    })).unwrap();
+    assert_eq!(core.handle(request).unwrap_err().id.as_deref(), Some("COMMENT_CAPTURE_WINDOW_NOT_FOUND"));
+}
+
+#[test]
 fn instructions_require_capability_and_return_the_canonical_guide() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());

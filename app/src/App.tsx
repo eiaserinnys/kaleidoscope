@@ -18,8 +18,14 @@ export default function App() {
     }
 
     const store = createShellStore(transport);
+    let disposed = false;
+    if (import.meta.env.VITE_KS_E2E === "1") {
+      void import("./e2e-comment-capture").then(({ installCommentCaptureProbe }) => {
+        if (!disposed) installCommentCaptureProbe(store);
+      });
+    }
     setRuntime({ store });
-    return () => store.dispose();
+    return () => { disposed = true; store.dispose(); };
   }, []);
 
   if (!runtime) return <main className="app-root" />;

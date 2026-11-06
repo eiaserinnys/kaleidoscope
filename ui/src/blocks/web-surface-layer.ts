@@ -61,6 +61,7 @@ interface RegisteredSurface {
   generation: number;
   active: boolean;
   placeQueue: Promise<void>;
+  pendingHide: Promise<void> | null;
 }
 
 export interface WebSurfaceRegistration {
@@ -69,6 +70,7 @@ export interface WebSurfaceRegistration {
 }
 
 const surfaces = new Set<RegisteredSurface>();
+const suspensions = new Map<string, number>();
 let animationFrame: number | null = null;
 
 export function registerWebSurface(
@@ -78,7 +80,7 @@ export function registerWebSurface(
   onState: (state: WebSurfaceState) => void,
   active = true,
 ): WebSurfaceRegistration {
-  const surface: RegisteredSurface = { element, windowId, store, onState, kind: null, bounds: null, generation: 0, active, placeQueue: Promise.resolve() };
+  const surface: RegisteredSurface = { element, windowId, store, onState, kind: null, bounds: null, generation: 0, active, placeQueue: Promise.resolve(), pendingHide: null };
   surfaces.add(surface);
   if (active) scheduleFrame();
   else hideSurface(surface);
@@ -114,7 +116,7 @@ function hideSurface(surface: RegisteredSurface) {
   surface.kind = "hidden";
   surface.bounds = null;
   surface.onState({ kind: "hidden" });
-  void callPlace(surface, null);
+  void callPlace(surface, null).catch(() => undefined);
 }
 
 function readSurfaces() {
@@ -127,14 +129,14 @@ function updateSurface(surface: RegisteredSurface) {
   const { element } = surface;
   const probe = probeSurface(element);
   const bounds = probe?.bounds ?? null;
-  const kind = probe ? evaluateWebSurface(probe) : "hidden";
+  const kind = probe ? (suspensions.has(surface.windowId) ? "covered" : evaluateWebSurface(probe)) : "hidden";
   if (kind === "hidden") {
     if (surface.kind !== "hidden") {
       surface.kind = "hidden";
       surface.bounds = null;
       surface.generation += 1;
       surface.onState({ kind: "hidden" });
-      void callPlace(surface, null);
+      void callPlace(surface, null).catch(() => undefined);
     }
     return;
   }
@@ -145,7 +147,7 @@ function updateSurface(surface: RegisteredSurface) {
       surface.bounds = bounds;
       surface.generation += 1;
       surface.onState({ kind: "live" });
-      void callPlace(surface, bounds);
+      void callPlace(surface, bounds).catch(() => undefined);
     }
     return;
   }
@@ -154,7 +156,8 @@ function updateSurface(surface: RegisteredSurface) {
   surface.kind = "covered";
   surface.bounds = bounds;
   const generation = ++surface.generation;
-  void captureThenHide(surface, generation);
+  surface.pendingHide = captureThenHide(surface, generation);
+  void surface.pendingHide.catch(() => undefined);
 }
 
 function probeSurface(element: HTMLElement): WebSurfaceProbe | null {
@@ -193,16 +196,47 @@ async function captureThenHide(surface: RegisteredSurface, generation: number) {
   surface.onState({ kind: "covered", image });
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   if (!surfaces.has(surface) || surface.generation !== generation || surface.kind !== "covered") return;
-  void callPlace(surface, null);
+  await callPlace(surface, null);
 }
 
 function callPlace(surface: RegisteredSurface, bounds: Rect | null) {
-  surface.placeQueue = surface.placeQueue
+  const next = surface.placeQueue
     .catch(() => undefined)
     .then(() => surface.store.call({ op: "web.place", window_id: surface.windowId, bounds }))
-    .then(() => undefined)
-    .catch(() => undefined);
-  return surface.placeQueue;
+    .then(() => undefined);
+  surface.placeQueue = next;
+  return next;
+}
+
+/** 웹 표면을 정지 그림으로 바꾸고 네이티브 표면이 사라진 뒤 선택을 허용한다. */
+export async function suspendWebSurfaces(windowId: string): Promise<() => void> {
+  suspensions.set(windowId, (suspensions.get(windowId) ?? 0) + 1);
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    const count = suspensions.get(windowId) ?? 0;
+    if (count <= 1) suspensions.delete(windowId);
+    else suspensions.set(windowId, count - 1);
+    for (const surface of surfaces) if (surface.windowId === windowId && surface.active) updateSurface(surface);
+  };
+  try {
+    const matching = [...surfaces].filter((surface) => surface.windowId === windowId);
+    for (const surface of matching) if (surface.active) updateSurface(surface);
+    await Promise.all(matching.map(async (surface) => {
+      if (surface.kind === "covered" && surface.pendingHide) await surface.pendingHide;
+      await surface.placeQueue;
+    }));
+    return release;
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
+export function webSurfaceBounds(windowId: string, store: ShellStore): Rect | null {
+  const surface = [...surfaces].find((item) => item.windowId === windowId && item.store === store);
+  return surface && surface.element.getClientRects().length ? roundedRect(surface.element.getBoundingClientRect()) : null;
 }
 
 function isRendered(element: HTMLElement): boolean {

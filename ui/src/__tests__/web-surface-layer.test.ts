@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { evaluateWebSurface, isFullyVisible, registerWebSurface } from "../blocks/web-surface-layer";
+import { evaluateWebSurface, isFullyVisible, registerWebSurface, suspendWebSurfaces } from "../blocks/web-surface-layer";
 import type { Rect } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 
@@ -22,6 +22,40 @@ function evaluate(options: {
 }
 
 describe("web surface overlap", () => {
+  it("웹 표면 정지는 네이티브 숨김 완료를 기다리고 해제 뒤 원래 배치로 돌아간다", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+    const element = document.createElement("div");
+    document.body.append(element);
+    const rect = new DOMRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    vi.spyOn(element, "getClientRects").mockReturnValue({ length: 1, item: () => rect } as unknown as DOMRectList);
+    vi.spyOn(element, "getBoundingClientRect").mockReturnValue(rect);
+    let finishHide!: () => void;
+    const call = vi.fn((request: { op: string; bounds?: Rect | null }) => {
+      if (request.op === "web.capture") return Promise.resolve({ op: "web.capture", image: "image" });
+      if (request.bounds === null) return new Promise((resolve) => { finishHide = () => resolve({ op: "web.place" }); });
+      return Promise.resolve({ op: "web.place" });
+    });
+    const store = { call } as unknown as ShellStore;
+    const onState = vi.fn();
+    const registration = registerWebSurface(element, "lease-window", store, onState);
+    frames.shift()!(0);
+    await vi.waitFor(() => expect(call).toHaveBeenCalledWith({ op: "web.place", window_id: "lease-window", bounds }));
+    let done = false;
+    const pending = suspendWebSurfaces("lease-window").then((release) => { done = true; return release; });
+    await vi.waitFor(() => expect(onState).toHaveBeenLastCalledWith({ kind: "covered", image: "image" }));
+    while (frames.length) { const frame = frames.shift()!; frame(0); if (call.mock.calls.some(([r]) => r.bounds === null)) break; await Promise.resolve(); }
+    await vi.waitFor(() => expect(finishHide).toBeTypeOf("function"));
+    expect(done).toBe(false);
+    finishHide();
+    const release = await pending;
+    release();
+    frames.shift()!(0);
+    await vi.waitFor(() => expect(onState).toHaveBeenLastCalledWith({ kind: "live" }));
+    registration.unregister();
+    element.remove();
+  });
   it("hides a surface with no rendered client rect", () => {
     expect(evaluate({ visible: false })).toBe("hidden");
   });
