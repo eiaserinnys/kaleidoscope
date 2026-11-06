@@ -14,10 +14,23 @@ import { DataIcon } from "../components/data-icons";
 import { ICON_NAMES } from "../contract/limits";
 import storeDefinitionText from "../../../apps/store.json?raw";
 import jsonata from "jsonata";
+import { createElement } from "react";
+
+const mediaRenders = vi.hoisted(() => new Map<string, number>());
+vi.mock("../components/media-thumbnail", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../components/media-thumbnail")>();
+  function Observed(props: Parameters<typeof actual.MediaThumbnail>[0]) {
+    const media = props.media as { asset?: string } | null;
+    if (media?.asset) mediaRenders.set(media.asset, (mediaRenders.get(media.asset) ?? 0) + 1);
+    return createElement(actual.MediaThumbnail, props);
+  }
+  return { ...actual, MediaThumbnail: Observed };
+});
 
 beforeEach(mockVirtualLayout);
 afterEach(() => {
   cleanup();
+  mediaRenders.clear();
   vi.restoreAllMocks();
 });
 function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?: Record<string, string>) {
@@ -25,9 +38,10 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
   const seed = makeTestSeed({ definitions: [definition] });
   seed.snapshot.shared.windows[0].state = { ...state };
   const transport = createFakeTransport({ ...seed, media });
+  const originalCall = transport.call.bind(transport);
   const calls = vi.spyOn(transport, "call");
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  return { calls, transport };
+  return { calls, transport, originalCall };
 }
 it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 쓴다", async () => {
   const app = JSON.parse(storeDefinitionText);
@@ -40,6 +54,98 @@ it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 
   const tile = await screen.findByRole("option", { name: "남은 앱" });
   expect(tile.querySelector(".is-failed")).toBeNull();
   expect(tile.querySelector(".ks-media-thumbnail.is-asset")).toBeNull();
+});
+it("여러 항목 선택은 묶음을 넘어 순서대로 선택하고 고를 수 없는 항목을 연다", async () => {
+  const items = ["a", "b", "c", "d"].map((key) => ({ key, title: key }));
+  const folder = { key: "folder", title: "폴더", selectable: false };
+  const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" },
+    grouped: true, items: [{ title: "첫째", items: items.slice(0, 2) }, { title: "둘째", items: [folder, ...items.slice(2)] }],
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 48);
+  const b = await screen.findByRole("option", { name: "b" });
+  fireEvent.click(b);
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["b"], item: items[1] })));
+  fireEvent.click(screen.getByRole("option", { name: "d" }), { ctrlKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["b", "d"], item: items[3] })));
+  fireEvent.click(screen.getByRole("option", { name: "a" }), { shiftKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["a", "b", "c", "d"], item: items[0] })));
+  fireEvent.click(b, { shiftKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["b", "c", "d"], item: items[1] })));
+  fireEvent.click(screen.getByRole("option", { name: "d" }), { ctrlKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["b", "c"], item: items[2] })));
+  fireEvent.keyDown(b, { key: "a", ctrlKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["a", "b", "c", "d"] })));
+  fireEvent.keyDown(b, { key: "Escape" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: [], item: null })));
+  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+  b.dispatchEvent(escape);
+  expect(escape.defaultPrevented).toBe(false);
+  fireEvent.click(screen.getByRole("option", { name: "폴더" }));
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_activate", event: "folder", item: folder })));
+  expect(screen.getByRole("option", { name: "폴더" }).hasAttribute("aria-selected")).toBe(false);
+});
+it("여러 선택의 키 이동과 빈 배경은 선택을 바꾼다", async () => {
+  const items = ["a", "b", "c"].map((key) => ({ key, title: key }));
+  const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+  const a = await screen.findByRole("option", { name: "a" });
+  fireEvent.click(a);
+  fireEvent.keyDown(a, { key: "ArrowDown", shiftKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["a", "b"], item: items[1] })));
+  fireEvent.click(screen.getByRole("listbox"));
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: [], item: null })));
+});
+it("응답이 느릴 때 연속 Ctrl 선택을 순서대로 보낸다", async () => {
+  const items = ["b", "d"].map((key) => ({ key, title: key }));
+  const { calls, originalCall } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+  const b = await screen.findByRole("option", { name: "b" });
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => { release = resolve; });
+  calls.mockImplementationOnce(async (request) => { await delayed; return originalCall(request); });
+  fireEvent.click(b);
+  fireEvent.click(screen.getByRole("option", { name: "d" }), { ctrlKey: true });
+  expect(screen.getByRole("option", { name: "d" }).getAttribute("aria-selected")).toBe("true");
+  await act(async () => { release(); await delayed; });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["b", "d"], item: items[1] })));
+});
+it("한 칸을 고르면 관계없는 칸은 다시 그리지 않는다", async () => {
+  const items = ["a", "b", "c"].map((key) => ({ key, title: key, image: { asset: key } }));
+  setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, items,
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+  const b = await screen.findByRole("option", { name: "b" });
+  const before = mediaRenders.get("c");
+  fireEvent.click(b);
+  await waitFor(() => expect(b.getAttribute("aria-selected")).toBe("true"));
+  expect(mediaRenders.get("c")).toBe(before);
+});
+it("앵커가 없을 때 Shift 누름은 누르기 전 초점에서 범위를 잡는다", async () => {
+  const items = ["a", "b", "c", "d"].map((key) => ({ key, title: key }));
+  const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: ["b"] }, 48);
+  const b = await screen.findByRole("option", { name: "b" });
+  const d = screen.getByRole("option", { name: "d" });
+  act(() => b.focus());
+  fireEvent.mouseDown(d, { shiftKey: true });
+  act(() => d.focus());
+  fireEvent.click(d, { shiftKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["b", "c", "d"], item: items[3] })));
+});
+it("선택 불가 칸으로 범위를 옮기면 초점만 옮기고 활성화는 Enter로 한다", async () => {
+  const a = { key: "a", title: "a" };
+  const folder = { key: "folder", title: "폴더", selectable: false };
+  const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items: [a, folder, { key: "b", title: "b" }],
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 48);
+  const first = await screen.findByRole("option", { name: "a" });
+  fireEvent.click(first);
+  fireEvent.keyDown(first, { key: "ArrowDown", shiftKey: true });
+  await waitFor(() => expect(calls.mock.calls.filter(([call]) => call.op === "data.act" && call.pointer === "/ui/on_select")).toHaveLength(2));
+  expect(calls).toHaveBeenLastCalledWith(expect.objectContaining({ op: "data.act", event: ["a"], item: a }));
+  const target = screen.getByRole("option", { name: "폴더" });
+  expect(document.activeElement).toBe(target);
+  fireEvent.click(target, { ctrlKey: true });
+  expect(calls.mock.calls.filter(([call]) => call.op === "data.act" && call.pointer === "/ui/on_activate")).toHaveLength(0);
+  fireEvent.keyDown(target, { key: "Enter" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_activate", event: "folder", item: folder })));
 });
 it("허용된 모든 아이콘 이름은 접근성 트리에서 숨긴 SVG를 그린다", () => {
   const { container } = render(<>{ICON_NAMES.map(name => <DataIcon key={name} name={name} />)}</>);

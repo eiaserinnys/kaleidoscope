@@ -108,6 +108,7 @@
 .ks-list-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); min-width: 0; border: var(--ks-focus-width) solid transparent; border-radius: var(--ks-radius-small); padding: 0; background: transparent; cursor: pointer; color: inherit; font: inherit; text-align: start; }
 .ks-list-card.is-selected { border-color: var(--ks-color-accent); }
 .ks-list-card:hover:not([aria-disabled="true"]) { background: var(--ks-color-hover); }
+.ks-list-card.is-current, .ks-list-card.is-current:hover:not([aria-disabled="true"]) { background: var(--ks-color-selection); }
 .ks-list-card .ks-media-thumbnail { flex: none; width: 100%; height: auto; aspect-ratio: 4 / 3; }
 .ks-list-card .ks-list-grid-icon { color: inherit; }
 .ks-list-row > svg { flex: none; }

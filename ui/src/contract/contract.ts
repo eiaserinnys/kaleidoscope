@@ -438,7 +438,7 @@ meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Bloc
 /**
  * 격자 칸의 최소 폭. 생략하면 medium이다.
  */
-item_width?: RepeatGridItemWidth, grouped?: boolean, select_on_focus?: boolean, selected?: Binding, on_select?: Actions, 
+item_width?: RepeatGridItemWidth, grouped?: boolean, select_on_focus?: boolean, selection?: ListSelection, selected?: Binding, on_select?: Actions, on_activate?: Actions, 
 /**
  * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
  */
@@ -1039,7 +1039,7 @@ export type ListItem = {
 /**
  * 고르기와 비교에 쓰는 열쇠. 목록 안에서 겹치지 않는다. 고르면 `$event`가 이 값이다.
  */
-key: string, title: string, 
+key: string, title: string, selectable?: boolean, 
 /**
  * 쉘이 제공하는 아이콘 이름. 목록 줄에서는 그림보다 먼저 표시한다.
  */
@@ -1058,6 +1058,8 @@ color?: string, badges?: Array<Badge>,
 image?: MediaRef, };
 
 export type ListLayout = "rows" | "grid" | "icons";
+
+export type ListSelection = "single" | "multiple";
 
 /**
  * `map` 블록의 지점 하나.

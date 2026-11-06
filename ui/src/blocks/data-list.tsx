@@ -21,17 +21,19 @@ import { ICON_NAMES } from "../contract/limits";
 import { useItemScope } from "../data/item-scope";
 import { X } from "../components/icons";
 import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
+import { selectionRange, toggleSelection } from "../components/collection-selection";
+import { useLocalDraft } from "../data/use-local-draft";
 
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "status"; group: ListGroup<ListItem> } | { kind: "items"; items: ListItem[]; start: number };
 type ListHandlers = {
   focus: (index: number) => void;
   keyDown: (event: React.KeyboardEvent<HTMLElement>, index: number, item: ListItem) => void;
-  choose: (item: ListItem, trigger: HTMLElement) => void;
+  choose: (item: ListItem, event: React.MouseEvent<HTMLElement> | React.KeyboardEvent<HTMLElement>) => void;
   remove: (item: ListItem) => void;
   menu: (event: React.MouseEvent<HTMLElement>, item: ListItem) => void;
 };
-const ListRow = memo(function ListRow({ item, index, length, active, focused, grid, icons, handlers, readOnly, removable, disabled }: { item: ListItem; index: number; length: number; active: boolean; focused: boolean; grid: boolean; icons: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean; removable: boolean; disabled: boolean }) {
+const ListRow = memo(function ListRow({ item, index, length, active, current, focused, grid, icons, handlers, readOnly, removable, disabled }: { item: ListItem; index: number; length: number; active: boolean; current: boolean; focused: boolean; grid: boolean; icons: boolean; handlers: React.RefObject<ListHandlers>; readOnly: boolean; removable: boolean; disabled: boolean }) {
   const ref = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     const row = ref.current;
@@ -66,8 +68,8 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
   }, [item, grid, icons]);
   const icon = typeof item.icon === "string" && (ICON_NAMES as readonly string[]).includes(item.icon) ? item.icon : undefined;
   const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} selected={active}
-    role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
-    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)}>
+    role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable || item.selectable === false ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
+    onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable || item.selectable === false ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}${grid && current ? " is-current" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event)} onContextMenu={(event) => handlers.current.menu(event, item)}>
     {grid ? isMedia(item.image) || !icon ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : <span className="ks-media-thumbnail ks-list-grid-icon"><DataIcon name={icon} size="empty" /></span> : icon ? <DataIcon name={icon} size="inline" /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
@@ -143,17 +145,72 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const disabledValue = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const disabled = disabledValue.status === "ready" && disabledValue.value === true;
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
-  const roving = useRoving(items, selected, scroll, virtual, rowOf);
+  const multiple = block.selection === "multiple";
+  const selectedKeys = useMemo(() => Array.isArray(selected) ? selected.filter((key): key is string => typeof key === "string") : [], [selected]);
+  type SelectionDraft = { keys: string[]; item: JsonValue };
+  const initialDraft = useMemo<SelectionDraft>(() => ({ keys: selectedKeys, item: null }), [selectedKeys]);
+  const dispatch = useCallback((next: SelectionDraft) => data.act(`${pointer}/on_select`, next.keys, next.item, undefined, undefined, { input: true }), [data, pointer]);
+  const draft = useLocalDraft(initialDraft, pointer, { sendOnChange: false, dispatch });
+  const draftRef = useRef(draft.draft);
+  draftRef.current = draft.draft;
+  const anchor = useRef<string | null>(null);
+  const pointerFocus = useRef<string | null>(null);
+  const [currentKey, setCurrentKey] = useState<string | null>(null);
+  const current = currentKey ?? items.filter((item) => item.selectable !== false && draft.draft.keys.includes(item.key)).at(-1)?.key ?? null;
+  const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf);
+  const selectable = items.filter((item) => item.selectable !== false);
+  const orderedKeys = (keys: readonly string[]) => {
+    const wanted = new Set(keys);
+    const result: string[] = [];
+    for (const item of selectable) if (wanted.delete(item.key)) result.push(item.key);
+    return result;
+  };
+  const submit = (keys: string[], item: ListItem | null, coalesce = false) => {
+    const next = { keys: orderedKeys(keys), item: item as unknown as JsonValue };
+    draftRef.current = next;
+    draft.change(next);
+    void draft.send(next, coalesce);
+    setCurrentKey(item?.key ?? null);
+  };
+  const chooseMultiple = (item: ListItem, mode: "replace" | "toggle" | "range", coalesce = false, focusIndex = roving.focus) => {
+    const previous = orderedKeys(draftRef.current.keys);
+    if (mode === "range") {
+      anchor.current ??= items[focusIndex]?.key ?? item.key;
+      const range = selectionRange(items.map((entry) => entry.key), anchor.current, item.key);
+      const focused = item.selectable === false ? items.find((entry) => entry.key === current) ?? null : item;
+      submit(range, focused, coalesce);
+    } else {
+      if (item.selectable === false) return;
+      anchor.current = item.key;
+      const keys = mode === "toggle" ? orderedKeys(toggleSelection(previous, item.key)) : [item.key];
+      const focused = mode === "toggle" && !keys.includes(item.key) ? selectable.find((entry) => entry.key === keys.at(-1)) ?? null : item;
+      submit(keys, focused, coalesce);
+    }
+  };
   keepRovingRow(virtual, rowOf(roving.focus));
   const handlers = useRef<ListHandlers>(null!);
   handlers.current = {
     focus: roving.setFocus,
     keyDown: (event, index, item) => {
-      const trigger = event.currentTarget;
-      roving.keyDown(event, index, () => handlers.current.choose(item, trigger), activeColumns,
-        block.select_on_focus && block.on_select && !disabled ? (next) => handlers.current.choose(items[next], trigger) : undefined);
+      if (multiple && event.key === " " && !disabled) { event.preventDefault(); handlers.current.choose(item, event); return; }
+      roving.keyDown(event, index, () => handlers.current.choose(item, event), activeColumns,
+        !disabled && block.on_select && (multiple || block.select_on_focus) ? (next) => {
+          if (multiple) chooseMultiple(items[next], event.shiftKey ? "range" : "replace", true, index);
+          else if (items[next].selectable !== false) handlers.current.choose(items[next], event);
+        } : undefined);
     },
-    choose: (item, trigger) => { if (disabled) return; if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); else if (isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger }); },
+    choose: (item, event) => {
+      if (disabled) return;
+      const mouse = event.type === "click";
+      if (item.selectable === false) {
+        if ((!mouse || (!event.ctrlKey && !event.shiftKey)) && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
+      } else if (multiple) {
+        if (mouse && event.shiftKey && anchor.current === null) anchor.current = pointerFocus.current ?? items[roving.focus]?.key ?? item.key;
+        chooseMultiple(item, mouse && event.shiftKey ? "range" : mouse && event.ctrlKey ? "toggle" : "replace");
+      }
+      else if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
+      else if (isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger: event.currentTarget });
+    },
     remove: (item) => { if (!disabled && block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
     menu: (event, item) => { if (disabled) { event.preventDefault(); return; } if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },
   };
@@ -164,7 +221,20 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   if (!items.length && !more && !hasStatus) return <NoItems rootProps={blockRoot} />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const currentHeading = block.grouped ? rows.slice(0, first + 1).reverse().find((row) => row.kind === "heading") : undefined;
-  return <><div {...blockRoot} className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} style={block.item_width ? { "--ks-list-grid-width": `var(--ks-repeat-grid-item-width-${block.item_width})` } as React.CSSProperties : undefined} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-label="목록">
+  return <><div {...blockRoot} className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} style={block.item_width ? { "--ks-list-grid-width": `var(--ks-repeat-grid-item-width-${block.item_width})` } as React.CSSProperties : undefined} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-multiselectable={!block.on_remove && multiple ? true : undefined} aria-label="목록"
+    onMouseDownCapture={() => { pointerFocus.current = items[roving.focus]?.key ?? null; }}
+    onClick={(event) => { if (!multiple || disabled || !(event.target instanceof Element) || event.target.closest("[data-row-key], button")) return; anchor.current = null; submit([], null); }}
+    onKeyDown={(event) => {
+      if (!multiple || disabled) return;
+      if (event.ctrlKey && event.key.toLowerCase() === "a") {
+        event.preventDefault(); event.stopPropagation();
+        const keys = orderedKeys(selectable.map((item) => item.key));
+        const focused = items[roving.focus];
+        submit(keys, focused && keys.includes(focused.key) ? focused : selectable[0] ?? null);
+      } else if (event.key === "Escape" && orderedKeys(draftRef.current.keys).length) {
+        event.preventDefault(); event.stopPropagation(); anchor.current = null; submit([], null);
+      }
+    }}>
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
     {!items.length && !hasStatus ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
       const entry = rows[row.index];
@@ -181,8 +251,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
             {status.state !== "loading" || status.message || status.code || button ? <EmptyState icon={status.state === "error" ? <DataIcon name="triangle-alert" size="inline" /> : undefined}
               text={<>{status.message ?? (status.state === "empty" ? "없음" : "")}{status.code ? <> <ErrorId id={status.code} /></> : null}</>} action={button} /> : null}</div>;
         })() : entry.items.map((item, n) => {
-          const index = entry.start + n; const active = item.key === selected;
-          return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} icons={icons} handlers={handlers} readOnly={disabled || (!block.on_select && !block.on_remove && !isMedia(item.image) && !block.item_menu?.length)} removable={Boolean(block.on_remove)} disabled={disabled} key={item.key} />;
+          const index = entry.start + n; const active = item.selectable !== false && (multiple ? draft.draft.keys.includes(item.key) : item.key === selected);
+          return <ListRow item={item} index={index} length={items.length} active={active} current={multiple && current === item.key} focused={roving.focus === index} grid={grid} icons={icons} handlers={handlers} readOnly={disabled || (!block.on_select && !block.on_activate && !block.on_remove && !isMedia(item.image) && !block.item_menu?.length)} removable={Boolean(block.on_remove)} disabled={disabled} key={item.key} />;
         })}
       </div>;
     })}</VirtualSurface>}

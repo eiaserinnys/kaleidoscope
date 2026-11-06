@@ -7,7 +7,7 @@ const identityJson = <T extends JsonValue>(value: T): JsonValue => value;
 export function useLocalDraft<T extends JsonValue>(
   current: T,
   pointer: string,
-  options: { sendOnChange?: boolean; toJson?: (value: T) => JsonValue; intervalMs?: number; resetOnFailure?: boolean; syncOnSuccess?: boolean; prepare?: { current: () => void } } = {},
+  options: { sendOnChange?: boolean; toJson?: (value: T) => JsonValue; dispatch?: (value: T) => Promise<boolean>; intervalMs?: number; resetOnFailure?: boolean; syncOnSuccess?: boolean; prepare?: { current: () => void } } = {},
 ) {
   const data = useWindowData();
   const [draft, setDraft] = useState(current);
@@ -22,17 +22,18 @@ export function useLocalDraft<T extends JsonValue>(
   const toJson = options.toJson ?? identityJson;
   const resetOnFailure = options.resetOnFailure ?? true;
   const syncOnSuccess = options.syncOnSuccess ?? false;
+  const dispatch = options.dispatch;
   const serialSend = useMemo(() => createSerialSend(async ({ value, revision: sentRevision }: { value: T; revision: number }) => {
     inFlight.current += 1;
     let success = false;
     try {
-      success = await data.act(`${pointer}/on_change`, toJson(value), undefined, undefined, undefined, { input: true });
+      success = dispatch ? await dispatch(value) : await data.act(`${pointer}/on_change`, toJson(value), undefined, undefined, undefined, { input: true });
       if (!success && resetOnFailure && !holding.current && revision.current === sentRevision) setDraft(latest.current);
     } finally {
       inFlight.current -= 1;
       if (success && syncOnSuccess && inFlight.current === 0 && !holding.current && revision.current === sentRevision) setDraft(latest.current);
     }
-  }), [data, pointer, resetOnFailure, syncOnSuccess, toJson]);
+  }), [data, pointer, resetOnFailure, syncOnSuccess, toJson, dispatch]);
   const enqueue = (value: T, coalesce: boolean) => serialSend({ value, revision: revision.current }, { coalesce });
   const throttled = useMemo(() => createThrottledSend((next: T) => enqueue(next, true), options.intervalMs ?? 100), [options.intervalMs, serialSend]);
   useEffect(() => () => throttled.flush(), [throttled]);

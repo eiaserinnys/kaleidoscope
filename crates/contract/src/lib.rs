@@ -312,7 +312,9 @@ pub const CONTRACT_VERSION: u32 = 40;
 /// - 45판: 창의 파일 드롭.
 /// - 46판: 목록 항목 아이콘과 격자 칸 최소 폭.
 /// - 47판: 기본 폴더 최초 허용 화면.
-pub const BLOCK_SET_VERSION: u32 = DEFAULT_FOLDER_BLOCK_SET_VERSION;
+/// - 48판: 목록 여러 선택과 항목 활성화.
+pub const BLOCK_SET_VERSION: u32 = LIST_MULTIPLE_BLOCK_SET_VERSION;
+pub const LIST_MULTIPLE_BLOCK_SET_VERSION: u32 = 48;
 /// 목록 항목 아이콘과 격자 칸 최소 폭.
 pub const LIST_ICON_WIDTH_BLOCK_SET_VERSION: u32 = 46;
 /// 목록 초점 이동 선택과 파일 동작 단축키의 첫 지원 판.
@@ -1983,12 +1985,18 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "is_false")]
         #[ts(optional, as = "Option<bool>")]
         select_on_focus: bool,
+        #[serde(default, skip_serializing_if = "ListSelection::is_single")]
+        #[ts(optional, as = "Option<ListSelection>")]
+        selection: ListSelection,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_activate: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         /// (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
@@ -2755,12 +2763,16 @@ enum RawBlock {
         grouped: bool,
         #[serde(default, skip_serializing_if = "is_false")]
         select_on_focus: bool,
+        #[serde(default, skip_serializing_if = "ListSelection::is_single")]
+        selection: ListSelection,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         disabled: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_activate: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_remove: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3414,9 +3426,11 @@ impl From<RawBlock> for Block {
                 item_width,
                 grouped,
                 select_on_focus,
+                selection,
                 selected,
                 disabled,
                 on_select,
+                on_activate,
                 on_remove,
                 group_actions,
                 item_menu,
@@ -3426,9 +3440,11 @@ impl From<RawBlock> for Block {
                 item_width,
                 grouped,
                 select_on_focus,
+                selection,
                 selected,
                 disabled,
                 on_select,
+                on_activate,
                 on_remove,
                 group_actions,
                 item_menu,
@@ -3800,6 +3816,7 @@ impl Block {
             } => 6,
             Block::Markdown { value: Some(_), .. } => 4,
             Block::Markdown { .. } => 1,
+            Block::List { selection: ListSelection::Multiple, .. } | Block::List { on_activate: Some(_), .. } => LIST_MULTIPLE_BLOCK_SET_VERSION,
             Block::List { select_on_focus: true, .. } => LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION,
             Block::List { group_actions: Some(_), .. } => LIST_GROUP_STATUS_BLOCK_SET_VERSION,
             Block::List { disabled: Some(_), .. } => LIST_DISABLED_BLOCK_SET_VERSION,
@@ -3978,6 +3995,12 @@ pub enum ListLayout {
     /// 작은 아이콘과 이름의 격자.
     Icons,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ListSelection { #[default] Single, Multiple }
+impl ListSelection { fn is_single(&self) -> bool { *self == Self::Single } }
 
 /// 표의 열 배열 또는 열 값을 내는 바인딩.
 #[derive(Debug, Clone, PartialEq, Serialize, TS, JsonSchema)]
