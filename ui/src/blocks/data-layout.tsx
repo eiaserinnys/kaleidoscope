@@ -29,6 +29,13 @@ function isFixedHeightControl(block: Block | undefined): boolean {
   return ["button", "select", "toggle", "slider", "color", "toolbar"].includes(block.type);
 }
 
+function isActionControl(block: Block | undefined): boolean {
+  if (!block) return false;
+  if (block.type === "when" || block.type === "anchor") return isActionControl(block.child);
+  if (block.type === "stack") return block.place !== "center" && block.children.length > 0 && block.children.every(isActionControl);
+  return block.type === "button" || block.type === "toolbar";
+}
+
 function isFixedWidthControl(block: Block | undefined): boolean {
   if (!block) return false;
   if (block.type === "when" || block.type === "anchor") return isFixedWidthControl(block.child);
@@ -71,11 +78,12 @@ export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const align = block.place === "center" || block.align === undefined ? "" : ` align-${block.align}`;
   const textareaFill = [...filled].some(index => block.children[index] && isTextarea(block.children[index]));
   let tail = block.children.length;
+  let lastFill = -1;
   if (direction === "column" && explicitFill && filled.size) {
-    const lastFill = Math.max(...filled);
-    while (tail > lastFill + 1 && isFixedHeightControl(block.children[tail - 1])) tail -= 1;
+    lastFill = Math.max(...filled);
+    while (tail > lastFill + 1 && isActionControl(block.children[tail - 1])) tail -= 1;
   }
-  const hasActions = tail < block.children.length;
+  const hasActions = lastFill >= 0 && (tail < block.children.length || tail > lastFill + 1);
   const classes = `ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${Array.isArray(block.fill) && block.place !== "center" ? " has-fill-list" : ""}${textareaFill ? " has-textarea-fill" : ""}${align}`;
   const items = block.children.map((child, index) => <div className={`ks-data-stack-item${filled.has(index) ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>);
   return <div {...blockRoot} className={`${classes}${hasActions ? " has-action-tail" : ""}`}>
