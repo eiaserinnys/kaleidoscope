@@ -41,7 +41,6 @@
   --ks-scrollbar-thumb-inset: 2px;
   --ks-focus-width: 2px;
   --ks-focus-offset: 2px;
-  --ks-focus-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset));
   --ks-workspace-label-max-width: 200px;
   --ks-desktop-tab-max-width: 160px;
   --ks-desktop-tab-min-width: 104px;

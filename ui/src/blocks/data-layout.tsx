@@ -78,16 +78,18 @@ export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const align = block.place === "center" || block.align === undefined ? "" : ` align-${block.align}`;
   const textareaFill = [...filled].some(index => block.children[index] && isTextarea(block.children[index]));
   let tail = block.children.length;
-  let lastFill = -1;
+  let wrapsScroll = false;
   if (direction === "column" && explicitFill && filled.size) {
-    lastFill = Math.max(...filled);
-    while (tail > lastFill + 1 && isActionControl(block.children[tail - 1])) tail -= 1;
+    const lastFill = Math.max(...filled);
+    let fixedFrom = block.children.length;
+    while (fixedFrom > lastFill + 1 && isFixedHeightControl(block.children[fixedFrom - 1])) fixedFrom -= 1;
+    wrapsScroll = fixedFrom < block.children.length;
+    while (tail > fixedFrom && isActionControl(block.children[tail - 1])) tail -= 1;
   }
-  const hasActions = lastFill >= 0 && (tail < block.children.length || tail > lastFill + 1);
   const classes = `ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${Array.isArray(block.fill) && block.place !== "center" ? " has-fill-list" : ""}${textareaFill ? " has-textarea-fill" : ""}${align}`;
   const items = block.children.map((child, index) => <div className={`ks-data-stack-item${filled.has(index) ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>);
-  return <div {...blockRoot} className={`${classes}${hasActions ? " has-action-tail" : ""}`}>
-    {hasActions ? <><div className="ks-data-stack-item is-fill ks-stack-scroll"><div className={`${classes} ks-stack-scroll-content`}>{items.slice(0, tail)}</div></div>{items.slice(tail)}</> : items}
+  return <div {...blockRoot} className={`${classes}${wrapsScroll ? " has-action-tail" : ""}`}>
+    {wrapsScroll ? <><div className="ks-data-stack-item is-fill ks-stack-scroll"><div className={`${classes} ks-stack-scroll-content`}>{items.slice(0, tail)}</div></div>{items.slice(tail)}</> : items}
   </div>;
 }
 

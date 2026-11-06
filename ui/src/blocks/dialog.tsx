@@ -36,7 +36,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   const titleText = title.status === "ready" && title.value !== null ? display(title.value) : "";
   const closeText = boundLabel(closeLabel, "닫기");
   const cancelText = boundLabel(cancelLabel, "취소");
-  const root = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
   const [host, setHost] = useState<HTMLElement | null>(null);
@@ -45,20 +45,23 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
 
   useDormant(childPointer, !isOpen);
 
+  const findWindow = useCallback(() => Array.from(document.querySelectorAll<HTMLElement>(".ks-data-window[data-window-id]"))
+    .find((element) => element.dataset.windowId === context.window.id) ?? null, [context.window.id]);
+
   useLayoutEffect(() => {
-    setHost(root.current?.closest<HTMLElement>(".ks-data-window") ?? null);
-  }, []);
+    if (isOpen) setHost(findWindow());
+  }, [isOpen, findWindow]);
 
   useEffect(() => {
     const rememberFocus = (event: FocusEvent) => {
       const target = event.target;
-      const windowHost = root.current?.closest<HTMLElement>(".ks-data-window");
+      const windowHost = findWindow();
       if (!(target instanceof HTMLElement) || !windowHost?.contains(target) || target.closest(".ks-dialog")) return;
       opener.current = target;
     };
     document.addEventListener("focusin", rememberFocus);
     return () => document.removeEventListener("focusin", rememberFocus);
-  }, []);
+  }, [findWindow]);
 
   useLayoutEffect(() => {
     if (isOpen) {
@@ -73,10 +76,11 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   const close = useCallback(() => { void data.act(`${pointer}/on_close`, null); }, [data, pointer]);
   const confirm = useCallback(() => { void data.act(`${pointer}/on_confirm`, null); }, [data, pointer]);
 
-  return <div ref={root} style={{ display: "contents" }}>
-    {isOpen && host ? <Dialog
+  if (!isOpen || !host) return null;
+  return <div ref={setAnchor} style={{ display: "contents" }}>
+    {anchor ? <Dialog
       rootProps={blockRoot}
-      ownerAnchor={root.current}
+      ownerAnchor={anchor}
       host={host}
       overlayClassName={hasPicker(block.child) ? "is-picker" : ""}
       title={titleText}
