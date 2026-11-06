@@ -43,6 +43,58 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport, originalCall };
 }
+it("누른 칸과 다른 빈 곳에 놓으면 선택을 지우지 않고 빈 곳을 누르면 초점을 유지한다", async () => {
+  const { calls } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },
+    items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: ["a"] }, 48);
+  const a = await screen.findByRole("option", { name: "a" });
+  const list = screen.getByRole("listbox");
+  fireEvent.mouseDown(a); fireEvent.click(list);
+  expect(calls.mock.calls.filter(([c]) => c.op === "data.act")).toHaveLength(0);
+  fireEvent.mouseDown(list); fireEvent.click(list);
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: [] })));
+  expect(document.activeElement).toBe(a);
+  fireEvent.keyDown(a, { key: "a", ctrlKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["a", "b"] })));
+});
+it.each(["single", "multiple"] as const)("%s에서 고를 수 없는 칸의 두 번째 누름은 열지 않는다", async (selection) => {
+  const { calls } = setup({ type: "list", selection, selected: { state: "choice" }, items: [{ key: "folder", title: "폴더", selectable: false }],
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null }, 48);
+  const folder = await screen.findByRole("option", { name: "폴더" });
+  fireEvent.click(folder, { detail: 1 }); fireEvent.click(folder, { detail: 2 });
+  await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate"))).toHaveLength(1));
+});
+it("앱이 선택을 바꾸면 이전 현재 칸 대신 남은 마지막 칸을 표시한다", async () => {
+  const { transport } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },
+    items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+  const a = await screen.findByRole("option", { name: "a" });
+  const b = screen.getByRole("option", { name: "b" });
+  fireEvent.click(a);
+  await waitFor(() => expect(a.classList.contains("is-current")).toBe(true));
+  await act(async () => { await transport.call({ op: "window.patch_state", window_id: "viewer-window", patch: { choice: ["b"] } }); });
+  await waitFor(() => expect(b.classList.contains("is-current")).toBe(true));
+  expect(a.classList.contains("is-current")).toBe(false);
+});
+it.each(["single", "multiple"] as const)("%s에서 고르기 뒤 활성화하며 수정 키와 이동은 활성화하지 않는다", async (selection) => {
+  const { calls, originalCall } = setup({ type: "list", selection, selected: { state: "choice" }, items: [{ key: "a", title: "a" }, { key: "b", title: "b" }],
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null }, 48);
+  const a = await screen.findByRole("option", { name: "a" });
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  calls.mockImplementationOnce(async (request) => { await pending; return originalCall(request); });
+  fireEvent.click(a, { detail: 1 });
+  await waitFor(() => expect(calls.mock.calls.flatMap(([c]) => c.op === "data.act" ? [c.pointer] : [])).toEqual(["/ui/on_select"]));
+  await act(async () => { release(); await pending; });
+  await waitFor(() => expect(calls.mock.calls.flatMap(([c]) => c.op === "data.act" ? [c.pointer] : [])).toEqual(["/ui/on_select", "/ui/on_activate"]));
+  fireEvent.click(a, { detail: 2 }); fireEvent.click(a, { ctrlKey: true, detail: 1 });
+  fireEvent.keyDown(a, { key: "ArrowDown" });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(calls.mock.calls.filter(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate"))).toHaveLength(1);
+  fireEvent.keyDown(a, { key: "Enter" });
+  await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate"))).toHaveLength(2));
+  act(() => a.focus());
+  await userEvent.keyboard(" ");
+  await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate"))).toHaveLength(3));
+});
 it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 쓴다", async () => {
   const app = JSON.parse(storeDefinitionText);
   const items = await jsonata(app.ui.children[1].children[1].items.expr).evaluate({}, {
@@ -91,6 +143,7 @@ it("여러 선택의 키 이동과 빈 배경은 선택을 바꾼다", async () 
   fireEvent.click(a);
   fireEvent.keyDown(a, { key: "ArrowDown", shiftKey: true });
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["a", "b"], item: items[1] })));
+  fireEvent.mouseDown(screen.getByRole("listbox"));
   fireEvent.click(screen.getByRole("listbox"));
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: [], item: null })));
 });
@@ -139,11 +192,12 @@ it("선택 불가 칸으로 범위를 옮기면 초점만 옮기고 활성화는
   fireEvent.click(first);
   fireEvent.keyDown(first, { key: "ArrowDown", shiftKey: true });
   await waitFor(() => expect(calls.mock.calls.filter(([call]) => call.op === "data.act" && call.pointer === "/ui/on_select")).toHaveLength(2));
-  expect(calls).toHaveBeenLastCalledWith(expect.objectContaining({ op: "data.act", event: ["a"], item: a }));
+  expect(calls.mock.calls.filter(([call]) => call.op === "data.act" && call.pointer === "/ui/on_select").at(-1)?.[0]).toEqual(expect.objectContaining({ event: ["a"], item: a }));
   const target = screen.getByRole("option", { name: "폴더" });
   expect(document.activeElement).toBe(target);
   fireEvent.click(target, { ctrlKey: true });
-  expect(calls.mock.calls.filter(([call]) => call.op === "data.act" && call.pointer === "/ui/on_activate")).toHaveLength(0);
+  const activations = calls.mock.calls.filter(([call]) => call.op === "data.act" && call.pointer === "/ui/on_activate").length;
+  expect(activations).toBe(1);
   fireEvent.keyDown(target, { key: "Enter" });
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_activate", event: "folder", item: folder })));
 });

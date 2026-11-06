@@ -155,8 +155,9 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   draftRef.current = draft.draft;
   const anchor = useRef<string | null>(null);
   const pointerFocus = useRef<string | null>(null);
+  const pointerTarget = useRef<EventTarget | null>(null);
   const [currentKey, setCurrentKey] = useState<string | null>(null);
-  const current = currentKey ?? items.filter((item) => item.selectable !== false && draft.draft.keys.includes(item.key)).at(-1)?.key ?? null;
+  const current = currentKey && draft.draft.keys.includes(currentKey) ? currentKey : items.filter((item) => item.selectable !== false && draft.draft.keys.includes(item.key)).at(-1)?.key ?? null;
   const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf);
   const selectable = items.filter((item) => item.selectable !== false);
   const orderedKeys = (keys: readonly string[]) => {
@@ -188,6 +189,13 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     }
   };
   keepRovingRow(virtual, rowOf(roving.focus));
+  const focusEntry = () => {
+    const row = virtual.getVirtualItems().find((entry) => entry.index === rowOf(roving.focus));
+    const offset = virtual.scrollOffset ?? 0;
+    if (row && scroll.current && row.start < offset + scroll.current.clientHeight && row.end > offset) {
+      scroll.current.querySelector<HTMLElement>(`[data-focus-index="${roving.focus}"]`)?.focus({ preventScroll: true });
+    }
+  };
   const handlers = useRef<ListHandlers>(null!);
   handlers.current = {
     focus: roving.setFocus,
@@ -202,14 +210,21 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     choose: (item, event) => {
       if (disabled) return;
       const mouse = event.type === "click";
+      const plain = !event.ctrlKey && !event.shiftKey;
+      const activate = plain && (mouse ? event.detail <= 1 : "key" in event && (event.key === "Enter" || event.key === " "));
+      if (mouse && plain && event.detail > 1 && (multiple || item.selectable === false)) return;
       if (item.selectable === false) {
-        if ((!mouse || (!event.ctrlKey && !event.shiftKey)) && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
+        if ((!mouse || plain) && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
       } else if (multiple) {
         if (mouse && event.shiftKey && anchor.current === null) anchor.current = pointerFocus.current ?? items[roving.focus]?.key ?? item.key;
         chooseMultiple(item, mouse && event.shiftKey ? "range" : mouse && event.ctrlKey ? "toggle" : "replace");
+        if (activate && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
       }
-      else if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
-      else if (isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger: event.currentTarget });
+      else if (block.on_select) {
+        const selection = data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
+        if (activate && block.on_activate) void selection.then(() => data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue));
+      } else if (activate && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
+      else if (!block.on_activate && isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger: event.currentTarget });
     },
     remove: (item) => { if (!disabled && block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
     menu: (event, item) => { if (disabled) { event.preventDefault(); return; } if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },
@@ -222,8 +237,13 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const currentHeading = block.grouped ? rows.slice(0, first + 1).reverse().find((row) => row.kind === "heading") : undefined;
   return <><div {...blockRoot} className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} style={block.item_width ? { "--ks-list-grid-width": `var(--ks-repeat-grid-item-width-${block.item_width})` } as React.CSSProperties : undefined} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-multiselectable={!block.on_remove && multiple ? true : undefined} aria-label="목록"
-    onMouseDownCapture={() => { pointerFocus.current = items[roving.focus]?.key ?? null; }}
-    onClick={(event) => { if (!multiple || disabled || !(event.target instanceof Element) || event.target.closest("[data-row-key], button")) return; anchor.current = null; submit([], null); }}
+    onMouseDownCapture={(event) => {
+      pointerFocus.current = items[roving.focus]?.key ?? null;
+      pointerTarget.current = event.target;
+      if (multiple && event.target instanceof Element && !event.target.closest("[data-row-key], button, input, textarea, select")) focusEntry();
+    }}
+    onMouseUp={(event) => { if (multiple && event.target instanceof Element && !event.target.closest("[data-row-key], button, input, textarea, select")) focusEntry(); }}
+    onClick={(event) => { if (!multiple || disabled || event.target !== pointerTarget.current || !(event.target instanceof Element) || event.target.closest("[data-row-key], button")) return; anchor.current = null; submit([], null); }}
     onKeyDown={(event) => {
       if (!multiple || disabled) return;
       if (event.ctrlKey && event.key.toLowerCase() === "a") {
