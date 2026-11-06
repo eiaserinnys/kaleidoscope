@@ -2,7 +2,7 @@
   "id": "block-gallery",
   "name": "블록 견본",
   "description": "블록을 탭마다 모아 보인다",
-  "requires": { "blocks": 37, "modules": { "files": 1 } },
+  "requires": { "blocks": 42, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
     { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }
@@ -185,6 +185,11 @@
               "end": [
                 { "type": "button", "label": "모두 지우기", "description": "현재 입력과 횟수를 모두 지우고 처음 상태로 되돌립니다.", "variant": "danger", "confirm": { "title": "모두 지울까요?", "body": { "expr": "'지금 ' & $string($state.count) & '번을 지웁니다.'" }, "ok": "지우기" }, "on_click": [{ "set_state": "count", "value": 0 }, { "set_state": "query", "value": "" }] }
               ]
+            },
+            {
+              "type": "section",
+              "title": "줄 단추",
+              "child": { "type": "button", "variant": "row", "icon": "copy", "label": "예시 글 복사", "on_click": { "copy_text": "예시 글" } }
             },
             {
               "type": "section",

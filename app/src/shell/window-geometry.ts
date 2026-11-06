@@ -1,4 +1,4 @@
-import { SHELL_WINDOW_GEOMETRY_TOKEN_INVALID, type Rect } from "@kaleidoscope/ui";
+import { SHELL_WINDOW_GEOMETRY_TOKEN_INVALID, type Rect, type ShellSnapshot, type WindowSize } from "@kaleidoscope/ui";
 
 const RESIZE_CORNER_SIZE = 12;
 export const TASKBAR_HEIGHT = 40;
@@ -28,6 +28,7 @@ export function fitWindowRect(rect: Rect, area: { width: number; height: number 
 export function makeNewWindowRect(
   area: { width: number; height: number },
   windowCount: number,
+  windowSize?: WindowSize,
 ): Rect {
   const usable = usableWindowArea(area);
   const style = getComputedStyle(document.documentElement);
@@ -42,8 +43,8 @@ export function makeNewWindowRect(
     return {
       x: position,
       y: position,
-      width: Math.min(880, usable.x + usable.width - position),
-      height: Math.min(600, usable.y + usable.height - position),
+      width: Math.min(windowSize?.width ?? 880, usable.x + usable.width - position),
+      height: Math.min(windowSize?.height ?? 600, usable.y + usable.height - position),
     };
   };
 
@@ -51,4 +52,9 @@ export function makeNewWindowRect(
   if (rect.width < minWidth || rect.height < minHeight) rect = rectFor(0);
   if (rect.width < minWidth || rect.height < minHeight) return usable;
   return rect;
+}
+
+export function windowSizeForApp(snapshot: ShellSnapshot, appId: string): WindowSize | undefined {
+  const app = snapshot.shared.apps.find((item) => item.id === appId);
+  return snapshot.shared.app_versions.find((version) => version.app_id === appId && version.version === app?.current_version)?.definition.window_size;
 }

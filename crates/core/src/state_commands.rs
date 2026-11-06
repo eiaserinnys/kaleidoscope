@@ -397,8 +397,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 Rect {
                     x,
                     y: x,
-                    width: 880,
-                    height: 600,
+                    width: definition.window_size.map_or(880, |size| size.width as u32),
+                    height: definition.window_size.map_or(600, |size| size.height as u32),
                 }
             });
             let now = timestamp();

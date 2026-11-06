@@ -207,6 +207,13 @@
 .ks-data-toggle[aria-checked="true"] .ks-data-toggle-thumb { transform: translateX(var(--ks-space-4)); }
 .ks-data-toggle:disabled { cursor: default; opacity: .56; }
 .ks-data-button > .ks-button { gap: var(--ks-space-2); }
+.ks-data-button.is-row { display: flex; width: 100%; min-width: 0; }
+.ks-data-button.is-row > .ks-button { display: flex; width: 100%; min-width: 0; justify-content: flex-start; padding-inline: var(--ks-space-2); border-color: transparent; background: transparent; }
+.ks-data-button.is-row > .ks-button svg { flex: none; color: var(--ks-color-muted); }
+.ks-data-button.is-row > .ks-button:hover:not(:disabled) { background: var(--ks-color-hover); }
+.ks-data-button.is-row.is-copied > .ks-button { background: var(--ks-color-selection); }
+.ks-data-button.is-row.is-copied > .ks-button:hover:not(:disabled) { background: var(--ks-color-selection); }
+.ks-data-button.is-row.is-copied > .ks-button svg { color: var(--ks-color-accent); }
 .ks-truncate-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-block: .25em; margin-block: -.25em; }
 .ks-select-button { max-width: 100%; min-width: 0; }
 .ks-data-button.is-chip > .ks-button,

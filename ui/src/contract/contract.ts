@@ -175,7 +175,11 @@ icon?: AppIconRef,
 /**
  * 창 없이 계산하는 앱 아이콘 숫자 배지.
  */
-badge?: AppBadge, requires: Requires, 
+badge?: AppBadge, 
+/**
+ * 앱을 새 창으로 열 때의 초기 크기. (블록 세트 42판)
+ */
+window_size?: WindowSize, requires: Requires, 
 /**
  * 앱이 참조할 수 있는 자산과 고정된 판.
  */
@@ -470,7 +474,12 @@ disabled?: Binding, } | { "type": "toggle", value: Binding, on_change: Actions, 
  */
 disabled?: Binding, } | { "type": "notice", message: Binding, error_id?: Binding, kind?: NoticeKind, actions: Array<NoticeAction>, } | { "type": "button", pressed?: Binding, label: Binding, description?: Binding, icon?: Binding, icon_only?: boolean, variant?: Binding, on_click: Actions, confirm?: Confirm, disabled?: Binding, preview?: Block, prefix?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
-export type ButtonVariant = "default" | "primary" | "danger" | "ghost" | "chip";
+/**
+ * 단추 격자 항목이 지원하는 변형.
+ */
+export type ButtonGridVariant = "default" | "primary" | "danger" | "ghost" | "chip";
+
+export type ButtonVariant = "default" | "primary" | "danger" | "ghost" | "chip" | "row";
 
 /**
  * 연결을 부른다. 응답이 2xx가 아니면 실패다. 응답 본문은 쓰지 않는다(바뀐 것은 `refresh`로 다시 받는다).
@@ -969,7 +978,7 @@ export type ItemRef = { item: string, };
 
 export type JsonValueType = "object" | "array" | "string" | "number" | "integer" | "boolean" | "null";
 
-export type KeypadButton = { key: string, label: string, sublabel?: string, icon?: string, variant?: ButtonVariant, span?: number, disabled?: boolean, shortcut?: string, };
+export type KeypadButton = { key: string, label: string, sublabel?: string, icon?: string, variant?: ButtonGridVariant, span?: number, disabled?: boolean, shortcut?: string, };
 
 /**
  * 컨트롤의 이름표 위치. 생략하면 인라인이다.
@@ -1690,6 +1699,11 @@ export type WindowControlToolOutput = { window_id: string, device_name: string, 
 export type WindowGeometry = { css_width: number, css_height: number, pixel_width: number, pixel_height: number, };
 
 export type WindowObservation = { view_id: string, app_name: string, window_title: string, text: string, settled: boolean, geometry?: WindowGeometry, image_base64?: string, };
+
+/**
+ * 앱의 초기 창 크기. 쉘 최소 크기 360×240 이상이어야 한다.
+ */
+export type WindowSize = { width: number, height: number, };
 
 /**
  * 앱 창의 데이터 바인딩 제목과 선택 메타 글.

@@ -27,7 +27,7 @@ export const AppWindowContent = memo(function AppWindowContent({
 }: {
   store: ShellStore;
   windowId: string;
-  newWindowRect?: () => Rect | undefined;
+  newWindowRect?: (appId: string) => Rect | undefined;
   settingsOpen?: boolean;
   settingsVisited?: boolean;
   onSettingsClose?: () => void;

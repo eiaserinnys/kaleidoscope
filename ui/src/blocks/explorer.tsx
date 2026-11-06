@@ -131,7 +131,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
         permission,
         path,
         app_id: app.id,
-        rect: context.newWindowRect?.(),
+        rect: context.newWindowRect?.(app.id),
       });
     } catch (error) {
       setActionError(toCoreError(error));

@@ -25,7 +25,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function setup({ legacy = false, folder = "", view = "icons", files, scope = "folder" }: { legacy?: boolean; folder?: string; view?: string; files?: Record<string, string>; scope?: "folder" | "pc" } = {}) {
+function setup({ legacy = false, folder = "", view = "icons", files, scope = "folder", newWindowRect }: { legacy?: boolean; folder?: string; view?: string; files?: Record<string, string>; scope?: "folder" | "pc"; newWindowRect?: (appId: string) => { x: number; y: number; width: number; height: number } } = {}) {
   const permission = scope === "pc" ? "pc" : "folder";
   const definition: AppDefinition = {
     ...(explorerJson as AppDefinition),
@@ -64,7 +64,7 @@ function setup({ legacy = false, folder = "", view = "icons", files, scope = "fo
   const transport = createFakeTransport(seed);
   const originalCall = transport.call;
   const calls = vi.spyOn(transport, "call");
-  const { container } = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  const { container } = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" newWindowRect={newWindowRect} />);
   return { calls, container, originalCall, seed, transport };
 }
 
@@ -129,7 +129,9 @@ describe("explorer block", () => {
   });
 
   it("labels PC root entries in details and opens a virtual path in the declared app", async () => {
-    const { calls, transport } = setup({ scope: "pc" });
+    const rect = { x: 48, y: 48, width: 480, height: 360 };
+    const newWindowRect = vi.fn(() => rect);
+    const { calls, transport } = setup({ scope: "pc", newWindowRect });
     await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" });
     await act(async () => { await transport.call({ op: "files.allow_pc", window_id: "viewer-window", permission: "pc" }); });
     const documents = await screen.findByRole("option", { name: "문서" });
@@ -158,8 +160,9 @@ describe("explorer block", () => {
     fireEvent.click(fileRow);
     fireEvent.doubleClick(fileRow);
     await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({
-      op: "files.open", path: "documents/notes/a.md", app_id: "md-editor",
+      op: "files.open", path: "documents/notes/a.md", app_id: "md-editor", rect,
     })));
+    expect(newWindowRect).toHaveBeenCalledWith("md-editor");
     const state = await transport.call({ op: "state.get" });
     // 시험 기본 상태에 편집기 창(editor-window)이 이미 있으므로, 열기가 넘긴 폴더 권한으로 새 창을 찾는다.
     const openedGrant = state.snapshot.device.grants.find((grant) => grant.root_path === "documents/notes");

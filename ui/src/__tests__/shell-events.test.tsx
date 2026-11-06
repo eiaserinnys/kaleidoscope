@@ -113,7 +113,7 @@ describe("shell core events", () => {
     const definitions = [
       calculatorJson, weatherJson, agentJson, explorerJson, mdEditorJson, htmlReportJson, webBrowserJson,
       { ...mdViewerJson, id: "custom-z", name: "가나다 커스텀" },
-      { ...mdViewerJson, id: "custom-a", name: "가나가 커스텀" },
+      { ...mdViewerJson, id: "custom-a", name: "가나가 커스텀", window_size: { width: 480, height: 360 } },
       { ...mdViewerJson, id: "custom-b", name: "가나가 커스텀" },
     ] as AppDefinition[];
     const snapshot = makeTestSnapshot({ definitions });
@@ -138,7 +138,7 @@ describe("shell core events", () => {
       op: "window.open",
       desktop_id: "desktop-1",
       app_id: "custom-a",
-      rect: { x: 112, y: 112, width: 836, height: 376 },
+      rect: { x: 112, y: 112, width: 480, height: 360 },
     }));
     const openedWindow = {
       ...snapshot.shared.windows[0],
@@ -363,6 +363,8 @@ describe("shell core events", () => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");
     const snapshot = makeTestSnapshot();
+    const viewerVersion = snapshot.shared.app_versions.find((version) => version.app_id === "md-viewer")!;
+    viewerVersion.definition = { ...viewerVersion.definition, window_size: { width: 480, height: 360 } } as AppDefinition;
     snapshot.shared.windows = snapshot.shared.windows.filter((window) => window.app_id !== "md-viewer");
     const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
     const spy = vi.spyOn(transport, "call");
@@ -376,7 +378,7 @@ describe("shell core events", () => {
       op: "window.open",
       desktop_id: "desktop-1",
       app_id: "md-viewer",
-      rect: { x: 80, y: 80, width: 868, height: 408 },
+      rect: { x: 80, y: 80, width: 480, height: 360 },
     }));
     store.dispose();
   });

@@ -1826,6 +1826,27 @@ fn open_window(core: &Core, desktop_id: &str, app_id: &str) -> String {
 }
 
 #[test]
+fn window_open_uses_app_window_size_or_default() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let (_, desktop_id) = active_ids(&core);
+    let mut definition: Value = serde_json::from_str(&test_definition(MD_EDITOR)).unwrap();
+    definition["requires"]["blocks"] = json!(kaleidoscope_contract::ROW_WINDOW_SIZE_BLOCK_SET_VERSION);
+    definition["window_size"] = json!({"width":480,"height":360});
+    import(&core, &definition.to_string());
+    let id = open_window(&core, &desktop_id, "test-md-editor");
+    let state = snapshot(&core);
+    let rect = &state.shared.windows.iter().find(|window| window.id == id).unwrap().rect;
+    assert_eq!((rect.width, rect.height), (480, 360));
+    definition.as_object_mut().unwrap().remove("window_size");
+    import(&core, &definition.to_string());
+    let id = open_window(&core, &desktop_id, "test-md-editor");
+    let state = snapshot(&core);
+    let rect = &state.shared.windows.iter().find(|window| window.id == id).unwrap().rect;
+    assert_eq!((rect.width, rect.height), (880, 600));
+}
+
+#[test]
 fn window_minimize_maximize_restore_preserve_rect_and_clear_on_resize() {
     let temp = TempDir::new().unwrap();
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
