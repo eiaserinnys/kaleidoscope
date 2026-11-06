@@ -177,18 +177,21 @@ impl AppState {
             device_id: device_id.clone(),
             registry_version,
         };
-        let first = stream::iter(
-            initial_events
-                .into_iter()
-                .map(|event| Ok(Event::default().data(serde_json::to_string(&event).unwrap()))),
-        );
+        let first = stream::iter(initial_events.into_iter().filter_map(move |mut event| {
+            if !project_layout_event(registry_version, &mut event) {
+                return None;
+            }
+            Some(Ok(Event::default().data(
+                serde_json::to_string(&event).unwrap(),
+            )))
+        }));
         let rest = stream::unfold(
             (rx, interval, state, device_id, Some(guard)),
             move |(mut rx, mut interval, state, device_id, guard)| async move {
                 loop {
                     tokio::select! {
                         received=rx.recv()=>match received {
-                            Ok(event)=>if !(matches!(event.event, DeviceEvent::WindowControl { .. }) && registry_version < 12) && !(matches!(event.event, DeviceEvent::PreferencesChanged { .. } | DeviceEvent::PreferencesSnapshot { .. }) && registry_version < registry::PREFERENCES_REGISTRY_VERSION) && !(matches!(event.event, DeviceEvent::AppCommentsChanged { .. } | DeviceEvent::AppCommentsSnapshot { .. }) && registry_version < registry::APP_COMMENTS_REGISTRY_VERSION) { if let Some(event) = state.event_for_broadcast(&device_id, event) { return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); } },
+                            Ok(event)=>if !(matches!(event.event, DeviceEvent::WindowControl { .. }) && registry_version < 12) && !(matches!(event.event, DeviceEvent::PreferencesChanged { .. } | DeviceEvent::PreferencesSnapshot { .. }) && registry_version < registry::PREFERENCES_REGISTRY_VERSION) && !(matches!(event.event, DeviceEvent::AppCommentsChanged { .. } | DeviceEvent::AppCommentsSnapshot { .. }) && registry_version < registry::APP_COMMENTS_REGISTRY_VERSION) { if let Some(mut event) = state.event_for_broadcast(&device_id, event) { if !project_layout_event(registry_version, &mut event) { continue; } return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); } },
                             Err(broadcast::error::RecvError::Closed)|Err(broadcast::error::RecvError::Lagged(_))=>{drop(guard);return None}
                         },
                         _=interval.tick()=>{
@@ -200,6 +203,32 @@ impl AppState {
             },
         );
         Ok(first.chain(rest))
+    }
+}
+
+/// 연결의 레지스트리 판에 맞춰 배치 이벤트의 데스크톱 바로가기를 투영한다.
+///
+/// 옛 판 연결에는 바로가기를 싣지 않는다. 새 필드만 있던 `LayoutChanged`는 그 연결에 보낼 것이
+/// 없으므로 false를 돌려준다. 초기 이벤트와 방송 이벤트가 모두 직렬화 직전에 이 함수를 탄다.
+fn project_layout_event(registry_version: u32, event: &mut DeviceEvent) -> bool {
+    match event {
+        DeviceEvent::LayoutSnapshot {
+            desktop_shortcuts, ..
+        } => {
+            super::layouts::project_shortcuts(registry_version, desktop_shortcuts, &mut Vec::new());
+            true
+        }
+        DeviceEvent::LayoutChanged { changes } => {
+            let has_shortcuts = !changes.desktop_shortcuts.is_empty()
+                || !changes.deleted_desktop_shortcuts.is_empty();
+            super::layouts::project_shortcuts(
+                registry_version,
+                &mut changes.desktop_shortcuts,
+                &mut changes.deleted_desktop_shortcuts,
+            );
+            !(has_shortcuts && changes.is_empty())
+        }
+        _ => true,
     }
 }
 

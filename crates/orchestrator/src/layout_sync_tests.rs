@@ -85,6 +85,326 @@ async fn next_sse_event(stream: &mut axum::body::BodyDataStream) -> Value {
     .expect("기기 이벤트를 받지 못했습니다")
 }
 
+async fn open_device_stream(
+    state: &AppState,
+    token: &str,
+    registry_version: u32,
+) -> axum::body::BodyDataStream {
+    let request = Request::builder()
+        .method("GET")
+        .uri("/api/device/events")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(registry::REGISTRY_HEADER, registry_version.to_string())
+        .body(Body::empty())
+        .unwrap();
+    router(state.clone())
+        .oneshot(request)
+        .await
+        .unwrap()
+        .into_body()
+        .into_data_stream()
+}
+
+async fn next_layout_snapshot(stream: &mut axum::body::BodyDataStream) -> Value {
+    loop {
+        let event = next_sse_event(stream).await;
+        if event["event"] == "layout.snapshot" {
+            return event;
+        }
+    }
+}
+
+#[test]
+fn shortcuts_survive_legacy_desktop_updates_and_parent_deletion_cascades() {
+    let state = AppState::in_memory("secret");
+    insert_device(&state, "legacy-report", "이전 기기");
+    let changes: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업"), workspace("w2", "다른 작업")],
+        "desktops":[desktop("d", "w")],
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":0, "row":0, "created_at":"now", "updated_at":"now"}]
+    })).unwrap();
+    state.apply_layout_changes(None, &changes).unwrap();
+    let app = json!({"id":"app", "name":"시험", "requires":{"blocks":4,"modules":{}}, "permissions":[], "state":{}, "ui":{"type":"text", "value":"시험"}}).to_string();
+    state.publish_app(&app, "test", false, None).unwrap();
+    state.delete_app("app", None, None).unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                desktops: vec![desktop("d", "w")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .save_layout(
+            "legacy-report",
+            &DeviceLayout {
+                workspaces: vec![workspace("w", "작업")],
+                desktops: vec![desktop("d", "w")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let account = state.mcp_account_id().unwrap();
+    assert_eq!(
+        state
+            .export_data(&account)
+            .unwrap()
+            .layout
+            .desktop_shortcuts
+            .len(),
+        1
+    );
+    let (reply, changed) = state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                deleted_desktops: vec!["d".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(reply.deleted_desktop_shortcuts, vec!["d/app"]);
+    assert_eq!(changed.deleted_desktop_shortcuts, vec!["d/app"]);
+    assert!(state
+        .export_data(&account)
+        .unwrap()
+        .layout
+        .desktop_shortcuts
+        .is_empty());
+}
+
+#[test]
+fn shortcuts_without_owned_parent_are_returned_as_deletions() {
+    let state = AppState::in_memory("secret");
+    let token = insert_device(&state, "foreign", "다른 계정");
+    let _ = token;
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES('other','다른 계정','now')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE devices SET account_id='other' WHERE id='foreign'",
+            [],
+        )
+        .unwrap();
+    }
+    let seed: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업")], "desktops":[desktop("d", "w")],
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":1, "row":0, "created_at":"now", "updated_at":"now"}]
+    })).unwrap();
+    state.apply_layout_changes(None, &seed).unwrap();
+    let mut foreign = seed.desktop_shortcuts[0].clone();
+    foreign.column = 9;
+    let (reply, changed) = state
+        .apply_layout_changes(
+            Some("foreign"),
+            &LayoutChanges {
+                desktop_shortcuts: vec![foreign],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(reply.deleted_desktop_shortcuts, vec!["d/app"]);
+    assert!(changed.is_empty());
+    let (reply, _) = state.apply_layout_changes(None, &LayoutChanges { desktop_shortcuts: vec![serde_json::from_value(json!({"id":"missing/app", "desktop_id":"missing", "app_id":"app", "column":0, "row":0, "created_at":"now", "updated_at":"now"})).unwrap()], ..Default::default() }).unwrap();
+    assert_eq!(reply.deleted_desktop_shortcuts, vec!["missing/app"]);
+    let account = state.mcp_account_id().unwrap();
+    assert_eq!(
+        state
+            .export_data(&account)
+            .unwrap()
+            .layout
+            .desktop_shortcuts[0]
+            .column,
+        1
+    );
+}
+
+// b77e6ed의 배치 DTO 필드와 unknown field 거부를 그대로 쓴다.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyChanges {
+    #[serde(default)]
+    workspaces: Vec<Workspace>,
+    #[serde(default)]
+    desktops: Vec<Desktop>,
+    #[serde(default)]
+    windows: Vec<AppWindow>,
+    #[serde(default)]
+    deleted_workspaces: Vec<String>,
+    #[serde(default)]
+    deleted_desktops: Vec<String>,
+    #[serde(default)]
+    deleted_windows: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "event", deny_unknown_fields)]
+enum LegacyLayoutEvent {
+    #[serde(rename = "layout.snapshot")]
+    Snapshot {
+        workspaces: Vec<Workspace>,
+        desktops: Vec<Desktop>,
+        windows: Vec<AppWindow>,
+    },
+    #[serde(rename = "layout.changed")]
+    Changed { changes: LegacyChanges },
+}
+
+#[tokio::test]
+async fn legacy_stream_and_post_project_shortcuts_without_losing_them() {
+    use http_body_util::BodyExt;
+    let state = AppState::in_memory("secret");
+    let token = insert_device(&state, "legacy", "옛 기기");
+    let initial: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업")], "desktops":[desktop("d", "w")],
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":0, "row":0, "created_at":"now", "updated_at":"now"}]
+    })).unwrap();
+    state.apply_layout_changes(None, &initial).unwrap();
+    let request = Request::builder()
+        .uri("/api/device/events")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(
+            registry::REGISTRY_HEADER,
+            registry::LAYOUT_SYNC_REGISTRY_VERSION.to_string(),
+        )
+        .body(Body::empty())
+        .unwrap();
+    let mut stream = router(state.clone())
+        .oneshot(request)
+        .await
+        .unwrap()
+        .into_body()
+        .into_data_stream();
+    assert_eq!(next_sse_event(&mut stream).await["event"], "apps.snapshot");
+    let snapshot = next_sse_event(&mut stream).await;
+    assert!(snapshot.get("desktop_shortcuts").is_none());
+    let old: LegacyLayoutEvent =
+        serde_json::from_slice(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
+    assert!(
+        matches!(old, LegacyLayoutEvent::Snapshot { workspaces, desktops, windows } if workspaces.len() == 1 && desktops.len() == 1 && windows.is_empty())
+    );
+    let changed: LayoutChanges = serde_json::from_value(json!({
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":2, "row":1, "created_at":"now", "updated_at":"later"}]
+    })).unwrap();
+    let (_, actual) = state.apply_layout_changes(None, &changed).unwrap();
+    let account = state.mcp_account_id().unwrap();
+    state.send_event_for_account(DeviceEvent::LayoutChanged { changes: actual }, &account);
+    let mut post_changes = changed.clone();
+    post_changes.desktop_shortcuts[0].column = 3;
+    post_changes.desktops.push(desktop("d", "w"));
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/device/layout/changes")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&post_changes).unwrap()))
+        .unwrap();
+    let response = router(state.clone()).oneshot(request).await.unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let old: LegacyChanges = serde_json::from_slice(&body).unwrap();
+    assert_eq!(old.desktops.len(), 1);
+    assert!(
+        old.workspaces.is_empty()
+            && old.windows.is_empty()
+            && old.deleted_workspaces.is_empty()
+            && old.deleted_desktops.is_empty()
+            && old.deleted_windows.is_empty()
+    );
+    let mut updated = desktop("d", "w");
+    updated.name = "변경".into();
+    let (_, actual) = state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                desktops: vec![updated],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state.send_event_for_account(DeviceEvent::LayoutChanged { changes: actual }, &account);
+    let event = next_sse_event(&mut stream).await;
+    let old: LegacyLayoutEvent =
+        serde_json::from_slice(&serde_json::to_vec(&event).unwrap()).unwrap();
+    assert!(
+        matches!(old, LegacyLayoutEvent::Changed { changes } if changes.desktops.len() == 1 && changes.desktops[0].name == "변경")
+    );
+    assert_eq!(
+        state
+            .export_data(&account)
+            .unwrap()
+            .layout
+            .desktop_shortcuts[0]
+            .column,
+        3
+    );
+}
+
+#[tokio::test]
+async fn transfer_layout_snapshot_projects_shortcuts_by_registry_version() {
+    let remote = AppState::in_memory("secret");
+    let old_token = insert_device(&remote, "old", "옛 기기");
+    let new_token = insert_device(&remote, "new", "새 기기");
+    let mut old_stream = open_device_stream(
+        &remote,
+        &old_token,
+        registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION - 1,
+    )
+    .await;
+    next_layout_snapshot(&mut old_stream).await;
+    let mut new_stream = open_device_stream(
+        &remote,
+        &new_token,
+        registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION,
+    )
+    .await;
+    next_layout_snapshot(&mut new_stream).await;
+
+    let local = AppState::in_memory("local");
+    let seed: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업")],
+        "desktops":[desktop("d", "w")],
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":0, "row":0, "created_at":"now", "updated_at":"now"}]
+    }))
+    .unwrap();
+    local.apply_layout_changes(None, &seed).unwrap();
+    let bundle = local.export_data(&local.mcp_account_id().unwrap()).unwrap();
+    let account = remote.mcp_account_id().unwrap();
+    remote.import_data(&account, bundle).unwrap();
+    assert_eq!(
+        remote
+            .export_data(&account)
+            .unwrap()
+            .layout
+            .desktop_shortcuts
+            .len(),
+        1
+    );
+
+    let old_snapshot = next_layout_snapshot(&mut old_stream).await;
+    assert!(old_snapshot.get("desktop_shortcuts").is_none());
+    let old: LegacyLayoutEvent =
+        serde_json::from_slice(&serde_json::to_vec(&old_snapshot).unwrap()).unwrap();
+    assert!(
+        matches!(old, LegacyLayoutEvent::Snapshot { ref desktops, .. } if desktops.len() == 1),
+        "옛 연결이 받은 이관 스냅샷이 옛 모양이 아닙니다"
+    );
+
+    let new_snapshot = next_layout_snapshot(&mut new_stream).await;
+    assert_eq!(
+        new_snapshot["desktop_shortcuts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
 #[test]
 fn layout_changes_report_skipped_upserts_delete_precedence_cascades_and_last_workspace() {
     let state = AppState::in_memory("secret");

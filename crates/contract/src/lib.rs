@@ -251,7 +251,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 42;
+pub const CONTRACT_VERSION: u32 = 43;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -532,6 +532,43 @@ pub struct Desktop {
     pub updated_at: String,
 }
 
+/// 데스크톱에 놓은 앱 아이콘. 앱을 지워도 배치는 남는다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(try_from = "RawDesktopShortcut")]
+#[ts(export, export_to = "contract.ts")]
+pub struct DesktopShortcut {
+    pub id: String,
+    pub desktop_id: String,
+    pub app_id: String,
+    pub column: u32,
+    pub row: u32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawDesktopShortcut {
+    id: String,
+    desktop_id: String,
+    app_id: String,
+    column: u32,
+    row: u32,
+    created_at: String,
+    updated_at: String,
+}
+
+impl TryFrom<RawDesktopShortcut> for DesktopShortcut {
+    type Error = &'static str;
+    fn try_from(value: RawDesktopShortcut) -> Result<Self, Self::Error> {
+        if value.id != format!("{}/{}", value.desktop_id, value.app_id) {
+            return Err("바로가기 id가 데스크톱과 앱의 조합과 다릅니다");
+        }
+        Ok(Self { id: value.id, desktop_id: value.desktop_id, app_id: value.app_id,
+            column: value.column, row: value.row, created_at: value.created_at, updated_at: value.updated_at })
+    }
+}
+
 /// 앱 하나의 실행. 데스크톱 위의 창 하나다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -637,6 +674,9 @@ pub struct SharedState {
     pub workspaces: Vec<Workspace>,
     pub desktops: Vec<Desktop>,
     pub windows: Vec<AppWindow>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<DesktopShortcut>>")]
+    pub desktop_shortcuts: Vec<DesktopShortcut>,
     /// None은 아직 서버에서 계정 설정을 받지 않은 상태다.
     #[serde(default)]
     #[ts(optional = nullable)]
@@ -4583,6 +4623,13 @@ pub enum CoreRequest {
     #[serde(rename = "desktop.activate")]
     DesktopActivate { desktop_id: String },
 
+    #[serde(rename = "desktop.shortcut.add")]
+    DesktopShortcutAdd { desktop_id: String, app_id: String },
+    #[serde(rename = "desktop.shortcut.move")]
+    DesktopShortcutMove { shortcut_id: String, #[ts(type = "number")] column: i64, #[ts(type = "number")] row: i64 },
+    #[serde(rename = "desktop.shortcut.remove")]
+    DesktopShortcutRemove { shortcut_id: String },
+
     /// 앱의 지금 버전으로 창을 연다. 창 상태는 정의의 `state` 기본값, z는 그 데스크톱 맨 위.
     /// `rect`가 없으면 코어가 정한 기본 위치와 크기로 연다.
     #[serde(rename = "window.open")]
@@ -5744,6 +5791,13 @@ pub enum CoreReply {
     DesktopDelete {},
     #[serde(rename = "desktop.activate")]
     DesktopActivate {},
+
+    #[serde(rename = "desktop.shortcut.add")]
+    DesktopShortcutAdd { shortcut: DesktopShortcut },
+    #[serde(rename = "desktop.shortcut.move")]
+    DesktopShortcutMove { shortcut: DesktopShortcut },
+    #[serde(rename = "desktop.shortcut.remove")]
+    DesktopShortcutRemove {},
 
     #[serde(rename = "window.open")]
     WindowOpen { window: AppWindow },

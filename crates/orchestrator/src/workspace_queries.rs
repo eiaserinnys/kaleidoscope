@@ -19,10 +19,13 @@ impl AppState {
             AppState::load_account_entities::<Workspace>(&db, "workspaces", &account_id)?;
         let desktops = AppState::load_account_entities::<Desktop>(&db, "desktops", &account_id)?;
         let windows = AppState::load_account_entities::<AppWindow>(&db, "windows", &account_id)?;
+        let desktop_shortcuts =
+            AppState::load_account_entities(&db, "desktop_shortcuts", &account_id)?;
         Ok(DeviceEvent::LayoutSnapshot {
             workspaces,
             desktops,
             windows,
+            desktop_shortcuts,
         })
     }
 

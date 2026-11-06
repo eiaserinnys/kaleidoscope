@@ -42,6 +42,7 @@ fn preferences_events_reject_stale_revisions_and_survive_layout_sync() {
             workspaces: vec![],
             desktops: vec![],
             windows: vec![],
+            desktop_shortcuts: vec![],
         },
     );
     crate::registry_events::apply_event(

@@ -53,6 +53,12 @@ pub(crate) fn batch(
                 Some(value) => changes.desktops.push(value.clone()),
                 None => changes.deleted_desktops.push(key.id.clone()),
             },
+            EntityKind::DesktopShortcut => {
+                match shared.desktop_shortcuts.iter().find(|v| v.id == key.id) {
+                    Some(value) => changes.desktop_shortcuts.push(value.clone()),
+                    None => changes.deleted_desktop_shortcuts.push(key.id.clone()),
+                }
+            }
             EntityKind::Window => match shared.windows.iter().find(|v| v.id == key.id) {
                 Some(value) => changes.windows.push(value.clone()),
                 None => changes.deleted_windows.push(key.id.clone()),
@@ -117,7 +123,9 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                     }
                     let before = crate::conversation_reconcile::workspace_names(state);
                     for (key, sent_seq) in &sent {
-                        if !valid || state.sync.pending.get(key) == Some(sent_seq) {
+                        if (!valid && key.kind != EntityKind::DesktopShortcut)
+                            || (valid && state.sync.pending.get(key) == Some(sent_seq))
+                        {
                             state.sync.pending.remove(key);
                         }
                     }
@@ -149,6 +157,13 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                         eprintln!("배치 동기화 상태를 저장할 수 없습니다: {}", error.message);
                         thread::sleep(Duration::from_secs(LAYOUT_RETRY_SECS));
                     }
+                }
+                if !valid
+                    && sent
+                        .keys()
+                        .any(|key| key.kind == EntityKind::DesktopShortcut)
+                {
+                    thread::sleep(Duration::from_secs(LAYOUT_RETRY_SECS));
                 }
             }
         }

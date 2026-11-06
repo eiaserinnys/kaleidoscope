@@ -43,6 +43,7 @@ fn app_comments_snapshots_changes_switch_and_restart() {
             workspaces: vec![],
             desktops: vec![],
             windows: vec![],
+            desktop_shortcuts: vec![],
         },
     );
     crate::registry_events::apply_event(

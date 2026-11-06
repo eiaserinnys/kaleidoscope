@@ -61,7 +61,7 @@ fn events_and_commands_keep_small_metadata_and_images_out_of_lists() {
         let event: DeviceEvent = serde_json::from_value(value.clone()).unwrap();
         assert_eq!(serde_json::to_value(event).unwrap(), value);
     }
-    assert_eq!(REGISTRY_VERSION, APP_COMMENTS_REGISTRY_VERSION);
+    assert!(REGISTRY_VERSION >= APP_COMMENTS_REGISTRY_VERSION);
     for value in [
         json!({"op":"comment.list","app_id":"app","cursor":"next"}),
         json!({"op":"comment.get","app_id":"app","id":"c1"}),

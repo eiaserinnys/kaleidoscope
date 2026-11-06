@@ -313,6 +313,7 @@ fn layout_changes_posts_and_classifies_responses() {
     );
     let request = worker.join().unwrap();
     assert!(request.starts_with(&format!("POST {DEVICE_LAYOUT_CHANGES_PATH} ")));
+    assert!(request.contains(&format!("{REGISTRY_HEADER}: {REGISTRY_VERSION}")));
     assert!(request.contains("\"deleted_windows\":[\"window\"]"));
     let expected_error = kaleidoscope_contract::errors::SERVER_LAYOUT_CHANGE_BODY_INVALID();
     let (url, worker) = server(
