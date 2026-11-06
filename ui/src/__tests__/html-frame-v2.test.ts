@@ -24,3 +24,10 @@ it("토큰 문서만 낮은 우선순위의 기본 색상 체계를 받고 작�
   const own = htmlViewSource('<style>:root{color-scheme:only light}</style><p style="color:var(--ks-color-text)">본문</p>');
   expect(own).toContain(":root{color-scheme:only light}");
 });
+
+
+it("meta로 직접 정한 색상 체계도 기본 주입보다 우선한다", () => {
+  const source = htmlViewSource('<meta name="color-scheme" content="only light"><p style="color:var(--ks-color-text)">본문</p>');
+  expect(source).not.toContain(":where(:root){color-scheme:light dark}");
+  expect(source).toContain('content="only light"');
+});
