@@ -12,7 +12,7 @@ export class BrowserFiles {
   private files = new Map<string, File>();
   private sinks = new Map<string, Sink>();
 
-  pick(accept: FileAccept[], multiple: boolean): Promise<{ cancelled: boolean; files: { id: string; name: string; size: number; mime: string }[] }> {
+  pick(accept: FileAccept[], multiple: boolean): Promise<{ cancelled: boolean; files: File[] }> {
     const input = document.createElement("input");
     input.type = "file"; input.multiple = multiple;
     input.accept = accept.flatMap((item) => [item.mime, ...(item.extensions ?? []).map((extension) => extension.startsWith(".") ? extension : `.${extension}`)]).filter(Boolean).join(",");
@@ -23,12 +23,14 @@ export class BrowserFiles {
         const selected = Array.from(input.files ?? []); input.remove();
         const oversized = selected.find((file) => file.size > FILE_LIMIT);
         if (oversized) { reject(shellErrors.SHELL_CLIENT_FILE_PICK_TOO_LARGE({ name: oversized.name, limit: formatByteLimit(FILE_LIMIT) })); return; }
-        const files = selected.map((file) => { const id = crypto.randomUUID(); this.files.set(id, file); return { id, name: file.name, size: file.size, mime: file.type || "application/octet-stream" }; });
-        resolve({ cancelled: !files.length, files });
+        resolve({ cancelled: !selected.length, files: selected });
       }, { once: true });
       input.click();
     });
   }
+
+  add(id: string, file: File) { this.files.set(id, file); }
+  remove(id: string) { this.files.delete(id); }
 
   async read(id: string): Promise<ArrayBuffer> {
     const file = this.files.get(id);
