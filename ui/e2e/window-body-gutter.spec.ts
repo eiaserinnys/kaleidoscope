@@ -127,3 +127,19 @@ test(`몸통이 스크롤하는 알림 상자가 몸통 보이는 영역 안에 
   expect(state.scrollWidth).toBe(0);
 });
 }
+
+test("최상위 가로 쌓기의 왼쪽 구역 오른쪽 패딩은 몸통이 스크롤해도 같다", async ({ page }) => {
+  const read = async (height: number) => {
+    const app = await open(page, "gutter-row", 880, height);
+    await expect(app.locator(".ks-data-window-body .ks-data-section").first()).toBeVisible();
+    return app.locator(".ks-data-window-body").evaluate((body) => ({
+      scrolls: body.scrollHeight > body.clientHeight,
+      sectionEnd: getComputedStyle(body.querySelector(".ks-data-section")!).paddingRight,
+    }));
+  };
+  const tall = await read(900);
+  const short = await read(360);
+  expect(tall.scrolls).toBe(false);
+  expect(short.scrolls).toBe(true);
+  expect(short.sectionEnd).toBe(tall.sectionEnd);
+});
