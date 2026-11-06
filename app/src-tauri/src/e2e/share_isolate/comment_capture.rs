@@ -55,9 +55,16 @@ pub(in crate::e2e) fn scenario(
     let window = app.get_window("main").ok_or("main window missing")?;
     let position = window.inner_position().map_err(|error| error.to_string())?;
     let size = window.inner_size().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    // 상단 글자의 LCD→회색 재래스터는 창 격리나 덮개 변화가 아니다.
+    let bar = ui::evaluate(app, "const e=document.querySelector('.ks-shell-bar');if(!e)throw new Error('shell bar missing');const r=e.getBoundingClientRect();return {x:r.left,y:r.top,width:r.width,height:r.height};")?;
+    let bar_x = position.x + (bar["x"].as_f64().ok_or("bar x missing")? * scale).round() as i32;
+    let bar_y = position.y + (bar["y"].as_f64().ok_or("bar y missing")? * scale).round() as i32;
+    let bar_width = (bar["width"].as_f64().ok_or("bar width missing")? * scale).round() as i32;
+    let bar_height = (bar["height"].as_f64().ok_or("bar height missing")? * scale).round() as i32;
     fs::write(out.join("protected.json"), json!({
         "client_x":position.x,"client_y":position.y,"client_width":size.width,"client_height":size.height,
-        "exclude_x":-1,"exclude_y":-1,"exclude_width":0,"exclude_height":0
+        "exclude_x":bar_x,"exclude_y":bar_y,"exclude_width":bar_width,"exclude_height":bar_height
     }).to_string()).map_err(|error| error.to_string())?;
     fs::write(out.join("record.phase"), "comment-capture\n").map_err(|error| error.to_string())?;
     fs::write(out.join("record.request"), "").map_err(|error| error.to_string())?;
@@ -131,13 +138,7 @@ pub(in crate::e2e) fn scenario(
         .map(|line| line.split(',').collect::<Vec<_>>())
         .filter(|row| row.get(6) == Some(&"comment-capture"))
         .collect();
-    if rows.is_empty()
-        || rows
-            .iter()
-            .any(|row| row.get(3).and_then(|v| v.parse::<usize>().ok()) != Some(0))
-    {
-        return Err("comment capture changed recorded screen or had no frames".into());
-    }
+    pixels::validate_frames(&rows)?;
     record(
         log,
         "check.result",
