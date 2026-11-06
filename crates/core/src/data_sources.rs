@@ -38,7 +38,7 @@ pub(crate) fn fetch_named(
     format: SourceFormat,
 ) -> Result<Value, RequestError> {
     match plan {
-        SourcePlan::StoreIndex { permission, server } | SourcePlan::StoreApp { permission, server, .. } => {
+        SourcePlan::StoreIndex { permission, .. } | SourcePlan::StoreApp { permission, .. } | SourcePlan::StoreIndexes { permission, .. } => {
             let state = inner.state.lock().unwrap();
             let allowed = state.shared.windows.iter().find(|w| w.id == window)
                 .and_then(|w| crate::app_commands::definition_for(&state.shared, &w.app_id, w.app_version))
@@ -46,6 +46,13 @@ pub(crate) fn fetch_named(
                     matches!(decl, kaleidoscope_contract::PermissionDecl::Store { id, .. } if id == permission)));
             drop(state);
             if !allowed { return Err(errors::STORECLIENT_SOURCE_PERMISSION_UNDECLARED(permission).into()); }
+            if let SourcePlan::StoreIndexes { servers, .. } = plan {
+                return Ok(serde_json::to_value(fetch_store_indexes(inner, permission, servers)).expect("스토어 목록 JSON"));
+            }
+            let server = match plan {
+                SourcePlan::StoreIndex { server, .. } | SourcePlan::StoreApp { server, .. } => server,
+                _ => unreachable!(),
+            };
             let client = crate::store::client(inner, server)?;
             let result = match plan {
                 SourcePlan::StoreIndex { .. } => {
@@ -190,6 +197,49 @@ pub(crate) fn fetch_named(
         SourcePlan::Invalid(reason) => Err(errors::DATA_SOURCE_PLAN_INVALID(source, reason).into()),
         SourcePlan::StoreInvalid(error) => Err(error.clone().into()),
     }
+}
+
+fn fetch_store_indexes(inner: &Arc<Inner>, permission: &str, servers: &[String]) -> kaleidoscope_contract::store::StoreIndexesValue {
+    use kaleidoscope_contract::store::{StoreIndexError, StoreIndexRow, StoreIndexState, StoreIndexesValue};
+    let mut seen = HashSet::new();
+    let mut stores = Vec::new();
+    for input in servers {
+        let parsed = crate::store::StoreUrl::parse(input);
+        let server = parsed.as_ref().map_or_else(|_| input.clone(), |url| url.as_str().to_owned());
+        if !seen.insert(server.clone()) { continue; }
+        let result = (|| -> Result<_, CoreError> {
+            let url = parsed?;
+            let gate = crate::store_latest::gate(inner, url.as_str());
+            let _guard = gate.lock().unwrap();
+            let key = crate::data_runtime::store_gate_key(url.as_str()).expect("정규화된 스토어 주소");
+            let client = crate::store::client(inner, url.as_str())?;
+            if let Some(until) = crate::data_runtime::gates::blocked(&inner.data_runtimes, &key) {
+                return Err(errors::STORECLIENT_FETCH_HTTP_REJECTED("index.json")
+                    .and_details(vec![format!("HTTP 429; 재시도 가능 시각: {until}")]));
+            }
+            match client.index(permission) {
+                Ok(value) => {
+                    crate::data_runtime::gates::release_expired(&inner.data_runtimes, &key);
+                    crate::store_latest::record(inner, &value);
+                    Ok(value)
+                }
+                Err(failure) => {
+                    if failure.status == Some(429) {
+                        crate::data_runtime::gates::record_limit(&inner.data_runtimes, &key, failure.rate_limit.and_then(|hint| hint.retry_after_secs));
+                    }
+                    Err(failure.error)
+                }
+            }
+        })();
+        stores.push(match result {
+            Ok(value) => StoreIndexRow { server, state: StoreIndexState::Ready, error: None, generated_at: Some(value.generated_at), items: value.items },
+            Err(error) => {
+                let state = if error.id.as_deref() == Some("STORECLIENT_SERVER_PERMISSION_REQUIRED") { StoreIndexState::PermissionRequired } else { StoreIndexState::Error };
+                StoreIndexRow { server, state, error: Some(StoreIndexError { id: error.id.expect("등록된 스토어 오류"), message: error.message, details: error.details }), generated_at: None, items: Vec::new() }
+            }
+        });
+    }
+    StoreIndexesValue { stores }
 }
 
 pub(crate) fn request_target(inner: &Inner, window_id: &str, permission: &str) -> Option<String> {

@@ -1,4 +1,5 @@
 error_catalog! { ENTRIES;
+    STORECLIENT_INDEXES_SERVERS_INVALID(position) { class: InvalidRequest, place: "여러 스토어 목록 원천 입력", cause: "서버 목록이 문자열 배열이 아니다", message: "스토어 서버 목록의 {position}은 문자열 배열 또는 그 항목이 아닙니다. 앱 작성자가 서버 목록 값을 확인해야 합니다.", fix: "앱 작성자가 서버 목록을 문자열 배열로 고쳐야 합니다" }
     STORECLIENT_SERVER_ALLOW_ADDRESS_INVALID() { class: InvalidRequest, place: "스토어 서버 허용 입력", cause: "서버 주소가 문자열이 아니다", message: "허용할 스토어 주소가 문자열이 아닙니다. 앱 작성자가 서버 값을 확인해야 합니다.", fix: "앱 작성자가 서버 값을 확인해야 합니다" }
     STORECLIENT_SERVER_ALLOW_WINDOW_MISSING() { class: NotFound, place: "스토어 서버 허용 창 검사", cause: "요청한 창을 찾을 수 없다", message: "스토어 연결을 요청한 창을 찾지 못했습니다. 앱 창을 다시 열고 연결하세요.", fix: "앱 창을 다시 여세요" }
     STORECLIENT_SERVER_ALLOW_PERMISSION_UNDECLARED(permission) { class: PermissionDenied, place: "스토어 서버 허용 권한 검사", cause: "스토어 권한이 선언되지 않았다", message: "스토어 연결 권한 {permission}이 선언되지 않았습니다. 앱 작성자가 스토어 권한을 선언해야 합니다.", fix: "앱 작성자가 스토어 권한을 선언해야 합니다" }

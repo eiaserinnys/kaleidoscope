@@ -369,7 +369,13 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
         }
     };
     for (name, source) in sources {
-        check_permission(&format!("/sources/{}", data::escape_pointer(name)), source.permission())?;
+        let location = format!("/sources/{}", data::escape_pointer(name));
+        if matches!(source, SourceDecl::Store(data::StoreSource::Indexes { .. }))
+            && definition.requires.modules.get("store").copied().unwrap_or(0) < 3
+        {
+            return Err(crate::errors::APP_STORE_INDEXES_VERSION_LOW(&location));
+        }
+        check_permission(&location, source.permission())?;
     }
     for (location, action) in actions {
         match action {

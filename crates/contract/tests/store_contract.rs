@@ -254,3 +254,33 @@ fn allow_server_requires_store_three_and_roundtrips_wire() {
     assert_eq!(serde_json::to_value(serde_json::from_value::<kaleidoscope_contract::CoreEvent>(event.clone()).unwrap()).unwrap(), event);
     assert_eq!(serde_json::to_value(serde_json::from_value::<kaleidoscope_contract::CoreRequest>(response.clone()).unwrap()).unwrap(), response);
 }
+
+#[test]
+fn indexes_requires_store_three_and_has_no_refresh_field() {
+    let mut value = definition();
+    value["requires"]["modules"]["store"] = json!(3);
+    value["sources"]["catalog"] = json!({"kind":"store","store":"indexes","permission":"catalog","servers":{"state":"servers"}});
+    value["state"]["servers"] = json!([]);
+    let parsed = parse_app_definition(&value.to_string()).unwrap();
+    assert_eq!(serde_json::to_value(&parsed).unwrap()["sources"]["catalog"], value["sources"]["catalog"]);
+    assert!(data::source_bindings(&parsed.sources["catalog"]).iter().any(|(name, _)| name == "servers"));
+    let mut old_shell = Supported::current();
+    old_shell.modules.insert("store".into(), 2);
+    assert!(parse_app_definition_with_supported(&value.to_string(), &old_shell).is_err());
+    value["requires"]["modules"]["store"] = json!(2);
+    assert_eq!(parse_app_definition(&value.to_string()).unwrap_err().id.as_deref(), Some("APP_STORE_INDEXES_VERSION_LOW"));
+    value["requires"]["modules"]["store"] = json!(3);
+    value["sources"]["catalog"]["refresh_secs"] = json!(60);
+    assert!(parse_app_definition(&value.to_string()).is_err());
+    fn find_indexes(value: &Value) -> Option<&Value> {
+        if value["properties"]["store"]["const"] == "indexes" { return Some(value); }
+        match value {
+            Value::Object(object) => object.values().find_map(find_indexes),
+            Value::Array(array) => array.iter().find_map(find_indexes),
+            _ => None,
+        }
+    }
+    let schema = app_definition_schema();
+    let indexes = find_indexes(&schema).expect("indexes schema");
+    assert!(indexes["properties"].get("refresh_secs").is_none());
+}

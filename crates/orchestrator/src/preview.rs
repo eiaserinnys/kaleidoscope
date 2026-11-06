@@ -193,7 +193,7 @@ impl McpServer {
                     preview_failure(&mut statuses, &mut source_results, name, error, None);
                 }
                 SourcePlan::StoreInvalid(error) => preview_failure(&mut statuses, &mut source_results, name, error, None),
-                SourcePlan::File { .. } | SourcePlan::Folder { .. } | SourcePlan::StoreIndex { .. } | SourcePlan::StoreApp { .. } => {
+                SourcePlan::File { .. } | SourcePlan::Folder { .. } | SourcePlan::StoreIndex { .. } | SourcePlan::StoreApp { .. } | SourcePlan::StoreIndexes { .. } => {
                     statuses.insert(name.clone(), SourceStatus::Idle {});
                     source_results.insert(name.clone(), json!({"state":"idle"}));
                     notes.push(format!(

@@ -57,6 +57,38 @@ pub struct StoreIndexValue {
     pub server: String,
     pub items: Vec<StoreIndexItem>,
 }
+
+/// 여러 스토어의 성공과 실패를 각각 보존한 목록.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreIndexesValue {
+    pub stores: Vec<StoreIndexRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreIndexRow {
+    pub server: String,
+    pub state: StoreIndexState,
+    pub error: Option<StoreIndexError>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub generated_at: Option<String>,
+    pub items: Vec<StoreIndexItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum StoreIndexState { Ready, PermissionRequired, Error }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreIndexError {
+    pub id: String,
+    pub message: String,
+    pub details: Vec<String>,
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
 pub struct StoreIndexItem {

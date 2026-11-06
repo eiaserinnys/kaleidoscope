@@ -1473,9 +1473,20 @@ export type StoreAllowServerSpec = { permission: string, server: Binding, };
 
 export type StoreDetailValue = { format: number, id: string, name: string, summary: string, description: string, category: string, publisher: string, release: number, icon: ResourceMediaRef | null, screenshots: Array<ResourceMediaRef>, releases: Array<StoreRelease>, server: string, compatible: boolean, requires: Requires, permissions: Array<PermissionDecl>, badges: Array<string>, };
 
+export type StoreIndexError = { id: string, message: string, details: Array<string>, };
+
 export type StoreIndexItem = { id: string, name: string, summary: string, category: string, publisher: string, release: number, icon: ResourceMediaRef | null, badges: Array<string>, requires: Requires, updated_at: string, compatible: boolean, };
 
+export type StoreIndexRow = { server: string, state: StoreIndexState, error: StoreIndexError | null, generated_at?: string, items: Array<StoreIndexItem>, };
+
+export type StoreIndexState = "ready" | "permission_required" | "error";
+
 export type StoreIndexValue = { format: number, generated_at: string, server: string, items: Array<StoreIndexItem>, };
+
+/**
+ * 여러 스토어의 성공과 실패를 각각 보존한 목록.
+ */
+export type StoreIndexesValue = { stores: Array<StoreIndexRow>, };
 
 export type StoreInstallAction = { "store.install": StoreInstallSpec, };
 
@@ -1494,7 +1505,7 @@ export type StoreRemoveSpec = { permission: string, id: Binding, };
 /**
  * 스토어 원천은 종류별로 필요한 값을 선언한다.
  */
-export type StoreSource = { "store": "index", permission: string, server: Binding, refresh_secs?: number, } | { "store": "app", permission: string, server: Binding, id: Binding, refresh_secs?: number, };
+export type StoreSource = { "store": "index", permission: string, server: Binding, refresh_secs?: number, } | { "store": "app", permission: string, server: Binding, id: Binding, refresh_secs?: number, } | { "store": "indexes", permission: string, servers: Binding, };
 
 /**
  * 문서 모음 주소의 고정 이름 또는 창 상태 참조.

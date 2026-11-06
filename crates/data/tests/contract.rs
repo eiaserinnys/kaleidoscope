@@ -51,6 +51,23 @@ fn store_sources_resolve_bindings_and_stay_idle_for_null() {
 }
 
 #[test]
+fn store_indexes_plan_validates_the_server_list() {
+    let mut value = serde_json::to_value(fixture()).unwrap();
+    value["sources"] = json!({"indexes":{"kind":"store","store":"indexes","permission":"catalog","servers":{"state":"servers"}}});
+    let app = CompiledApp::compile(&serde_json::from_value(value).unwrap());
+    for servers in [Value::Null, json!([])] {
+        assert_eq!(app.plan_source("indexes", &map(json!({"servers":servers}))), SourcePlan::Idle);
+    }
+    for (servers, position) in [(json!(42), "servers"), (json!(["https://example.com", 42]), "servers[1]")] {
+        let plan = app.plan_source("indexes", &map(json!({"servers":servers})));
+        assert!(matches!(plan, SourcePlan::StoreInvalid(error) if error.id.as_deref() == Some("STORECLIENT_INDEXES_SERVERS_INVALID") && error.message.contains(position)));
+    }
+    let plan = app.plan_source("indexes", &map(json!({"servers":["https://example.com"]})));
+    assert_ne!(plan, SourcePlan::Idle);
+    assert!(!matches!(plan, SourcePlan::StoreInvalid(_)));
+}
+
+#[test]
 fn store_actions_resolve_event_and_state_bindings() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["ui"]["children"][0]["on_select"] = json!([
