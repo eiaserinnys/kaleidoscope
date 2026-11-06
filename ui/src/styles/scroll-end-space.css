@@ -9,3 +9,7 @@
 .ks-stack-scroll-content:has(> .ks-data-stack-item:last-child > .ks-field),
 .ks-stack-scroll-content .ks-data-stack-item.is-fill > .ks-data-stack.is-column:has(> .ks-data-stack-item:last-child > .ks-field),
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-data-stack-item:last-child > .ks-field) { padding-block-end: var(--ks-space-3); }
+
+/* 결정 줄의 표지 때문에 0이 된 구역 여백을 내부 스크롤 끝에서 돌린다.
+   안쪽에 채움 영역이 있으면 그 영역이 끝 여백을 소유한다. */
+.ks-stack-scroll-content > .ks-data-stack-item.is-fill:nth-last-child(1 of :not(:empty)) > .ks-data-section:has(.ks-field):not(:has(.ks-data-stack-item.is-fill)) { padding-block-end: var(--ks-space-3); }
