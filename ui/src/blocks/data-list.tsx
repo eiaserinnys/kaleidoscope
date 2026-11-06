@@ -100,6 +100,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const grid = block.layout === "grid";
   const icons = block.layout === "icons";
   const [columns, setColumns] = useState(1);
+  const measuredColumns = useRef<number | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const iconColumns = useIconGridColumns(scroll, icons && (items.length > 0 || !!more));
   const activeColumns = icons ? iconColumns : grid ? columns : 1;
@@ -122,7 +123,9 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       if (!pane) return;
       const gap = parseFloat(style.getPropertyValue("--ks-space-3")) || 12;
       const width = element.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
-      setColumns(Math.max(1, Math.floor((width + gap) / (pane + gap))));
+      const next = Math.max(1, Math.floor((width + gap) / (pane + gap)));
+      measuredColumns.current = next;
+      setColumns(next);
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe?.remove(); };
   }, [grid, block.item_width]);
@@ -190,6 +193,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     if (revealed.current === boundCurrent) return;
     if (draft.isSending() || localCurrent?.key === boundCurrent) { revealed.current = boundCurrent; return; }
     if (current !== boundCurrent) return;
+    // 격자는 실제 열 수로 행을 나눈 뒤에 스크롤한다.
+    if (grid && measuredColumns.current !== activeColumns) return;
     revealed.current = boundCurrent;
     const index = items.findIndex((item) => item.key === boundCurrent);
     roving.setFocus(index);
