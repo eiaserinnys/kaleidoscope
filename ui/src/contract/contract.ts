@@ -434,7 +434,11 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, select_on_focus?: boolean, selected?: Binding, on_select?: Actions, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, 
+/**
+ * 격자 칸의 최소 폭. 생략하면 medium이다.
+ */
+item_width?: RepeatGridItemWidth, grouped?: boolean, select_on_focus?: boolean, selected?: Binding, on_select?: Actions, 
 /**
  * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
  */
@@ -1035,7 +1039,11 @@ export type ListItem = {
 /**
  * 고르기와 비교에 쓰는 열쇠. 목록 안에서 겹치지 않는다. 고르면 `$event`가 이 값이다.
  */
-key: string, title: string, subtitle?: string, 
+key: string, title: string, 
+/**
+ * 쉘이 제공하는 아이콘 이름. 목록 줄에서는 그림보다 먼저 표시한다.
+ */
+icon?: string, subtitle?: string, 
 /**
  * 오른쪽에 작게 보이는 부가 정보(시각, 개수).
  */

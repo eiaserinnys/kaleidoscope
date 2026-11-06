@@ -68,7 +68,7 @@
 .ks-media-thumbnail img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .ks-media-thumbnail.is-asset { background: transparent; border-radius: 0; }
 .ks-media-thumbnail.is-asset img { object-fit: contain; }
-.ks-list-grid-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--ks-pane-min-size), 1fr)); gap: var(--ks-space-3); padding-block-end: var(--ks-space-3); }
+.ks-list-grid-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--ks-list-grid-width, var(--ks-pane-min-size)), 1fr)); gap: var(--ks-space-3); padding-block-end: var(--ks-space-3); }
 .ks-list.is-grid { padding-inline: var(--ks-space-3); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list.is-grid { padding-inline: 0; }
 .ks-list.is-icons { padding: var(--ks-space-2); }
@@ -86,6 +86,8 @@
 .ks-list-card.is-selected { border-color: var(--ks-color-accent); }
 .ks-list-card:hover:not([aria-disabled="true"]) { background: var(--ks-color-hover); }
 .ks-list-card .ks-media-thumbnail { flex: none; width: 100%; height: auto; aspect-ratio: 4 / 3; }
+.ks-list-card .ks-list-grid-icon { color: inherit; }
+.ks-list-row > svg { flex: none; }
 .ks-list-card .ks-view-badges { align-self: flex-start; }
 .ks-table-inner { display: grid; min-width: max-content; width: 100%; }
 .ks-table-inner:has(> .ks-empty-state) { min-height: 100%; grid-template-rows: auto 1fr; }

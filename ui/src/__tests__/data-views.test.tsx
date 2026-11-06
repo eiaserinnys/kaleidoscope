@@ -9,6 +9,8 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { mockVirtualLayout } from "./virtual-layout";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
+import { DataIcon } from "../components/data-icons";
+import { ICON_NAMES } from "../contract/limits";
 
 beforeEach(mockVirtualLayout);
 afterEach(() => {
@@ -24,6 +26,28 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport };
 }
+it("허용된 모든 아이콘 이름은 접근성 트리에서 숨긴 SVG를 그린다", () => {
+  const { container } = render(<>{ICON_NAMES.map(name => <DataIcon key={name} name={name} />)}</>);
+  expect(container.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(ICON_NAMES.length);
+  for (const name of ["scaling", "rotate-cw-square", "crop", "grid-2x2", "shrink", "package", "image-down", "file-output", "arrow-right-left", "pipette", "paint-bucket", "blend", "stamp", "scan-text", "qr-code"]) {
+    expect(ICON_NAMES).toContain(name);
+  }
+});
+it.each(["rows", "grid", "icons"] as const)("%s 목록은 아이콘을 해당 배치에 그린다", async (layout) => {
+  setup({ type: "list", layout, items: [{ key: "a", title: "자르기", icon: "crop" }] } as unknown as Block);
+  const row = await screen.findByRole("option", { name: "자르기" });
+  const svg = row.querySelector(".lucide-crop");
+  expect(svg?.getAttribute("aria-hidden")).toBe("true");
+  if (layout === "grid") expect(svg?.closest(".ks-media-thumbnail")).not.toBeNull();
+  if (layout === "rows") expect(svg?.closest(".ks-media-thumbnail")).toBeNull();
+});
+it.each(["rows", "grid", "icons"] as const)("%s의 그림과 아이콘 우선순위를 지킨다", async (layout) => {
+  setup({ type: "list", layout, items: [{ key: "a", title: "그림과 아이콘", icon: "crop", image: { asset: "photo" }, color: "#abcdef" }] } as unknown as Block);
+  const row = await screen.findByRole("option", { name: "그림과 아이콘" });
+  expect(Boolean(row.querySelector(".lucide-crop"))).toBe(layout === "rows");
+  expect(Boolean(row.querySelector(".ks-media-thumbnail"))).toBe(layout !== "rows");
+  expect(row.querySelector(".ks-list-color")).toBeNull();
+});
 it.each(["rows", "grid", "icons"] as const)("%s의 SVG는 아이콘 배치에서만 테마색으로 칠한다", async (layout) => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 32, 32));
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"><path d="M0 0h24"/></svg>';

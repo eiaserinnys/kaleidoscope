@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 
 fn app() -> Value {
     json!({"id":"folder-test", "name":"폴더 시험",
-        "requires":{"blocks":46,"modules":{"files":4}},
+        "requires":{"blocks":47,"modules":{"files":4}},
         "permissions":[{"module":"files","id":"docs","access":"read","label":"폴더","default_folder":"pictures"}],
         "state":{}, "ui":{"type":"text","value":"시험"}})
 }
@@ -12,7 +12,7 @@ fn parse(
     value: &Value,
 ) -> Result<kaleidoscope_contract::AppDefinition, kaleidoscope_contract::CoreError> {
     let mut supported = Supported::current();
-    supported.blocks = 46;
+    supported.blocks = 47;
     supported.modules.insert("files".into(), 4);
     parse_app_definition_with_supported(&value.to_string(), &supported)
 }
@@ -26,7 +26,7 @@ fn default_folder_contract_and_version_gates() {
     );
     for (field, value, code) in [
         ("scope", json!("pc"), "APP_FILES_DEFAULT_SCOPE_INVALID"),
-        ("blocks", json!(45), "APP_FILES_DEFAULT_VERSION_LOW"),
+        ("blocks", json!(46), "APP_FILES_DEFAULT_VERSION_LOW"),
         ("files", json!(3), "APP_FILES_DEFAULT_VERSION_LOW"),
         (
             "default_folder",
