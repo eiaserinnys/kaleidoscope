@@ -48,3 +48,7 @@ it("외부 스타일은 정화와 CSP로 차단하고 인라인 색 토큰은 �
   expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content")).toContain("style-src 'unsafe-inline'");
   expect(source).toContain(":where(:root){color-scheme:light dark}");
 });
+
+it('강조색만 토큰인 고정 글자 문서는 원래 캔버스를 유지한다', () => {
+  expect(htmlViewSource('<p style="color:#222;border-color:var(--ks-color-accent)">본문</p>')).not.toContain(':where(:root){color-scheme:light dark}');
+});

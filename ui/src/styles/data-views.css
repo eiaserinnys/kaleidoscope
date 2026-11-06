@@ -286,5 +286,6 @@
   .ks-table-row-notice > .ks-notice { padding-block: var(--ks-space-1); }
   .ks-table-row-notice .ks-notice-message { max-height: 1lh; overflow-y: auto; }
 }
-.ks-data-window-body > .ks-table-with-notice > .ks-table-row-notice { padding-block-start: var(--ks-space-2); }
+.ks-data-window-body > .ks-table-with-notice > .ks-table-row-notice,
+.ks-data-window-body :is(.ks-data-stack-item:first-child, .ks-split-pane) > .ks-table-with-notice > .ks-table-row-notice { padding-block-start: var(--ks-space-2); }
 .ks-table-with-notice > .ks-data-view { flex: 1 1 auto; height: auto; min-height: 0; }

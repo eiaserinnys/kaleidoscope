@@ -239,3 +239,30 @@ it("직접 다시 받으면 닫은 같은 실패도 다시 보인다", async () 
   await act(async () => { await data.refresh(["feed"]); });
   expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
 });
+
+
+it.each([[{ refresh: ['feed'] }], [{ set_state: 'x', value: null }, { refresh: ['feed'] }]])('앱 단계의 다시 받기도 닫힌 실패를 연다: %j', async (...steps) => {
+  cleanup();
+  const def = { ...definition, ui: { type: 'button', label: '새로 받기', on_click: steps } } as AppDefinition;
+  data = new windowData.WindowData(store, 'viewer-window', def);
+  vi.mocked(windowData.useWindowData).mockReturnValue(data);
+  render(<WindowNotice />);
+  act(() => (data as any).merge({ sources: { feed: { state: 'failed', has_value: true, message: '읽기 실패' } }, values: {} }));
+  fireEvent.click(screen.getByRole('button', { name: '닫기' }));
+  vi.spyOn(store, 'call').mockResolvedValue({} as never);
+  await act(async () => { await data.act('/ui/on_click', null); });
+  expect(screen.getByRole('alert')).toBeTruthy();
+});
+
+it('실제 재수신 중 다시 받기는 진행 표시와 잠금을 유지한다', () => {
+  const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
+  const fail = { state: 'failed', has_value: true, message: '읽기 실패' };
+  merge(fail);
+  merge({ state: 'loading', has_value: true });
+  const button = screen.getByRole('button', { name: '다시 받기' });
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect(button.getAttribute('aria-busy')).toBe('true');
+  expect(button.querySelector('.ks-button-progress')).toBeTruthy();
+  merge(fail);
+  expect((screen.getByRole('button', { name: '다시 받기' }) as HTMLButtonElement).disabled).toBe(false);
+});

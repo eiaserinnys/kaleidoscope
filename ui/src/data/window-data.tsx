@@ -685,6 +685,10 @@ export class WindowData {
         return true;
       }
       await this.ready;
+      const steps = this.definitionAt(pointer);
+      for (const step of Array.isArray(steps) ? steps : [steps]) {
+        if (step && typeof step === "object" && "refresh" in step) this.reopenSourceFailure((step as { refresh: string[] }).refresh);
+      }
       const reply = await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
       if (options?.input) this.inputSequence = Math.max(this.inputSequence, reply.sequence);
       return true;
@@ -694,10 +698,13 @@ export class WindowData {
       return false;
     }
   };
-  refresh = async (sources: string[], manual = true) => {
+  private reopenSourceFailure(sources: string[]) {
     const retriedFailure = Object.entries(this.noticeSources).some(([name, source]) =>
       source.state === "failed" && source.has_value && (!sources.length || sources.includes(name)));
-    if (manual && retriedFailure) { this.sourceRetrySequence += 1; this.sourceListeners.forEach((listener) => listener()); }
+    if (retriedFailure) { this.sourceRetrySequence += 1; this.sourceListeners.forEach((listener) => listener()); }
+  }
+  refresh = async (sources: string[], manual = true) => {
+    if (manual) this.reopenSourceFailure(sources);
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }
     catch (error) { this.setNotice(toCoreError(error)); }
   };

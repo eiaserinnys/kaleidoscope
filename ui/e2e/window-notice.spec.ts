@@ -284,3 +284,11 @@ test("높은 표 경고는 문구와 코드를 모두 보이고 낮은 창에만
   await app.evaluate(e=>{e.style.height="180px";});
   expect(await app.getByRole("alert").evaluate(e=>e.getBoundingClientRect().top-e.closest(".ks-data-window")!.querySelector(".ks-data-window-body")!.getBoundingClientRect().top)).toBe(8);
 });
+
+test('낮은 쌓인 칸 첫 표의 경고도 몸통 위 여백을 둔다', async ({ page }) => {
+  await page.goto('/?preview=data-views-test&warning-layout=other-fill');
+  const app = page.getByTestId('app-window-data-views-test');
+  await app.evaluate(e => { e.style.width='360px'; e.style.height='240px'; });
+  await expect(app.getByRole('alert')).toBeVisible();
+  expect(await app.getByRole('alert').evaluate(e => e.getBoundingClientRect().top-e.closest('.ks-data-window')!.querySelector('.ks-data-window-body')!.getBoundingClientRect().top)).toBe(8);
+});

@@ -81,7 +81,7 @@ export function htmlViewSource(html: string): string {
   const style = doc.createElement("style");
   style.dataset.ksInjected = "";
   const tokens = htmlViewTokens();
-  style.textContent = (/var\(\s*--ks-color-/.test(html) && !doc.querySelector('meta[name="color-scheme" i]') ? ":where(:root){color-scheme:light dark}" : "") + `:root{${Object.entries(tokens).map(([name, value]) => `${name}:${value};`).join("")}}` +
+  style.textContent = (/var\(\s*--ks-color-text\s*[,)]/.test(html) && !doc.querySelector('meta[name="color-scheme" i]') ? ":where(:root){color-scheme:light dark}" : "") + `:root{${Object.entries(tokens).map(([name, value]) => `${name}:${value};`).join("")}}` +
     "*::-webkit-scrollbar{width:var(--ks-space-2);height:var(--ks-space-2)}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:var(--ks-color-scroll-thumb);border-radius:var(--ks-radius-large);border:calc(var(--ks-line-width) * 2) solid transparent;background-clip:padding-box}*::-webkit-scrollbar-button{display:none}*:focus-visible{outline:var(--ks-focus-width) solid var(--ks-color-focus);outline-offset:var(--ks-focus-offset)}" +
     ":root[data-ks-pending] ::selection{background:transparent;color:inherit}" +
     "::highlight(ks-comment){background-color:color-mix(in srgb,color-mix(in srgb,var(--ks-color-accent),var(--ks-color-accent-contrast)) 40%,transparent);text-decoration:underline solid var(--ks-color-accent) var(--ks-focus-width)}" +
