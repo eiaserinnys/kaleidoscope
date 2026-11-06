@@ -9,6 +9,97 @@ import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("설명 없는 행에서 설명 있는 행으로 옮기면 높이를 다시 잰다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  const css = document.documentElement.style;
+  for (const [name, value] of Object.entries({ "--ks-space-1": "4px", "--ks-space-2": "8px", "--ks-space-3": "12px", "--ks-pane-min-size": "160px", "--ks-control-height": "32px", "--ks-type-body": "14px", "--ks-line-body": "1.5", "--ks-line-width": "1px" })) css.setProperty(name, value);
+  vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return (this.classList.contains("ks-data-window") ? { left: 40, right: 400, top: 100, bottom: 500, width: 360, height: 400 } : { left: 80, right: 280, top: 250, bottom: 282, width: 200, height: 32 }) as DOMRect;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(79);
+  const options = ["사과", "배"].map((value, index) => ({ value, label: value, index, searchLabel: value, searchValue: value, ...(index ? { description: "배 설명" } : {}) }));
+  render(<div className="ks-data-window" data-window-id="description"><Combobox inputRef={createRef<HTMLInputElement>()} inputProps={{ value: "사과" }} ready visible options={options} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} /></div>);
+  const input = screen.getByRole("combobox");
+  fireEvent.focus(input);
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(Number.parseFloat((document.querySelector(".ks-combobox-popup") as HTMLElement).style.getPropertyValue("--ks-combobox-description-limit"))).toBeGreaterThan(0);
+  cleanup(); css.cssText = "";
+});
+
+it.each(["Enter", "Escape"])("없는 이름의 %s는 값과 목록을 함께 되돌린다", async (key) => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "없는 이름" } });
+  fireEvent.keyDown(input, { key });
+  expect(input.value).toBe("value-1");
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+});
+
+it("한 행만 남으면 일부 이름 Enter도 고르고 선택한 글 전체를 고른다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus();
+  fireEvent.change(input, { target: { value: "zom" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.value).toBe("value-503");
+  expect(input.selectionStart).toBe(0);
+  expect(input.selectionEnd).toBe(input.value.length);
+});
+
+it("쉘이 초점을 돌려주면 목록을 열지 않고 고른 값만 전체 선택한다", async () => {
+  const { focusRescued } = await import("../components/focus-rescue");
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  act(() => focusRescued(input));
+  expect(document.activeElement).toBe(input);
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
+  fireEvent.click(input);
+  expect(input.getAttribute("aria-expanded")).toBe("true");
+});
+
+it("자유 입력도 Enter 확정에 목록을 닫는다", async () => {
+  setup();
+  const input = await screen.findByRole("combobox");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "항목" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+});
+
+it("목록 전용은 고른 글을 전체 선택하고 이름 Enter 확정 뒤 닫는다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus();
+  expect(input.selectionStart).toBe(0);
+  expect(input.selectionEnd).toBe(input.value.length);
+  expect(document.querySelector(".ks-combobox-indicator")).toBeTruthy();
+  fireEvent.change(input, { target: { value: "Zombie 마지막" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  expect(input.value).toBe("value-503");
+});
+
+it("쉘 안의 좁은 앱 창에서는 설명을 목록 아래로 놓는다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return (this.classList.contains("ks-data-window")
+      ? { left: 100, right: 460, top: 40, bottom: 740, width: 360, height: 700 }
+      : { left: 120, right: 320, top: 100, bottom: 140, width: 200, height: 40 }) as DOMRect;
+  });
+  const css = document.documentElement.style;
+  css.setProperty("--ks-pane-min-size", "160px");
+  vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
+  render(<div className="ks-data-window" data-window-id="narrow"><Combobox inputRef={createRef<HTMLInputElement>()} inputProps={{ value: "a" }} ready visible options={[{ value: "a", label: "a", description: "설명", index: 0, searchValue: "a", searchLabel: "a" }]} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} /></div>);
+  fireEvent.focus(screen.getByRole("combobox"));
+  expect(document.querySelector(".ks-combobox-popup")?.classList.contains("is-far")).toBe(true);
+  cleanup(); css.cssText = "";
+});
+
 function setup(optionsOnly = false) {
   const choices = Array.from({ length: 504 }, (_, index) => ({ value: `value-${index}`, label: index === 503 ? "Zombie 마지막" : `항목 ${index}`, ...(index === 0 ? {} : { description: `설명 ${index}` }) }));
   const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 33, modules: {} }, state: { draft: "value-1", saved: "" }, ui: { type: "stack", direction: "column", children: [
@@ -134,12 +225,15 @@ it.each([false, true])("불일치 시 목록 전용 %s에 맞는 팝업을 보�
   expect(screen.getByText("Zombie 마지막")).toBeTruthy();
 });
 
-it("활성 선택지에 설명이 없으면 설명 칸과 구분선을 숨긴다", async () => {
+it("활성 선택지에 설명이 없거나 일치가 없으면 설명과 구분선을 그리지 않는다", async () => {
   setup(true);
   const input = await screen.findByRole("combobox") as HTMLInputElement;
   fireEvent.focus(input);
   expect(document.querySelector(".ks-combobox-description")).toBeTruthy();
   fireEvent.keyDown(input, { key: "ArrowUp" });
+  expect(document.querySelector(".ks-combobox-description")).toBeNull();
+  expect(document.querySelector(".ks-combobox-separator")).toBeNull();
+  fireEvent.change(input, { target: { value: "없는 이름" } });
   expect(document.querySelector(".ks-combobox-description")).toBeNull();
   expect(document.querySelector(".ks-combobox-separator")).toBeNull();
 });
@@ -213,4 +307,72 @@ it("불러오는 중에도 열면 목록 자리에 뼈대 세 줄을 보인다",
   fireEvent.focus(screen.getByRole("combobox"));
   expect(within(screen.getByRole("listbox")).getByRole("status")).toBeTruthy();
   expect(document.querySelectorAll(".ks-combobox-list .ks-data-skeleton i")).toHaveLength(3);
+});
+
+it.each(["Enter", "Escape"])("%s 되돌림도 반영된 값 전체를 선택한다", async key => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus(); fireEvent.change(input, { target: { value: "없는 이름" } }); fireEvent.keyDown(input, { key });
+  expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
+});
+
+it.each([false, true])("닫힌 Enter 뒤 첫 입력은 선택 예약이 없고 조합 %s도 가로채지 않는다", async composing => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus(); fireEvent.keyDown(input, { key: "Escape" });
+  fireEvent.keyDown(input, { key: "Enter" });
+  if (composing) fireEvent.compositionStart(input);
+  fireEvent.change(input, { target: { value: "x", selectionStart: 1, selectionEnd: 1 } });
+  expect([input.selectionStart, input.selectionEnd]).toEqual([1, 1]);
+  if (composing) {
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.compositionEnd(input);
+  }
+});
+
+it("조합을 시작하면 클릭 뒤 프레임의 전체 선택 예약도 취소한다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus(); fireEvent.keyDown(input, { key: "Escape" });
+  input.setSelectionRange(2, 2);
+  fireEvent.click(input);
+  fireEvent.compositionStart(input);
+  await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+  expect([input.selectionStart, input.selectionEnd]).toEqual([2, 2]);
+  fireEvent.compositionEnd(input);
+});
+
+it("설명 공간을 처음부터 예약하고 세 행 여유가 없으면 쉘을 쓴다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  const css = document.documentElement.style;
+  for (const [name, value] of Object.entries({ "--ks-space-1": "4px", "--ks-space-2": "8px", "--ks-space-3": "12px", "--ks-pane-min-size": "160px", "--ks-control-height": "32px", "--ks-type-body": "14px", "--ks-line-body": "1.5", "--ks-line-width": "1px" })) css.setProperty(name, value);
+  vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
+  let hostWidth = 360;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return (this.classList.contains("ks-data-window") ? { left: 40, right: 40 + hostWidth, top: 100, bottom: 500, width: hostWidth, height: 400 } : { left: 80, right: 400, top: 250, bottom: 282, width: 320, height: 32 }) as DOMRect;
+  });
+  const measurement = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(79);
+  const options = Array.from({ length: 10 }, (_, index) => ({ value: String(index), label: String(index), index, searchLabel: String(index), searchValue: String(index), ...(index ? { description: "설명" } : {}) }));
+  const ref = createRef<HTMLInputElement>();
+  const tree = (items: typeof options) => <div className="ks-data-window" data-window-id="reserve"><Combobox inputRef={ref} inputProps={{ value: "0" }} ready visible options={items} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} /></div>;
+  const view = render(tree(options));
+  fireEvent.focus(screen.getByRole("combobox"));
+  const popup = document.querySelector(".ks-combobox-popup") as HTMLElement;
+  expect(Number.parseFloat(popup.style.getPropertyValue("--ks-combobox-description-limit"))).toBe(79);
+  expect(Number.parseFloat(popup.style.maxHeight)).toBeGreaterThan(206);
+  // 가상 목록도 scrollHeight를 읽으므로 설명 측정 노드만 센다.
+  const reads = () => measurement.mock.contexts.filter(element => element instanceof HTMLElement && element.classList.contains("ks-combobox-description") && element.getAttribute("aria-hidden") === "true").length;
+  const initialReads = reads();
+  fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
+  fireEvent.focus(screen.getByRole("combobox"));
+  expect(reads()).toBe(initialReads);
+  view.rerender(tree(options.map(option => ({ ...option, description: "바뀐 설명" }))));
+  expect(reads()).toBeGreaterThan(initialReads);
+  const changedReads = reads();
+  hostWidth = 340;
+  fireEvent(window, new Event("resize"));
+  await waitFor(() => expect(reads()).toBeGreaterThan(changedReads));
+  cleanup(); css.cssText = "";
 });

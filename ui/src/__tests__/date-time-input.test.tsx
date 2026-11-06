@@ -111,6 +111,15 @@ it("시간 목록은 표시 시각만 한 줄로 보여 준다", async () => {
   expect(selected.textContent).toContain("3:30");
   expect(selected.querySelector(".ks-menu-item-description")).toBeNull();
 });
+it("시간 입력은 Enter로 ISO 시각을 확정하고 목록을 닫는다", async () => {
+  const { store } = setup("time", "09:00");
+  const input = await screen.findByRole("combobox", { name: "입력" });
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "10:30" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe("10:30"));
+});
 it("지연된 날짜 입력을 받은 뒤 외부 단추가 새 값을 읽는다", async () => {
   const { store, spy, originalCall } = setup("date", "2026-11-20");
   let release!: () => void;
