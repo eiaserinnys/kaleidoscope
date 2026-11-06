@@ -52,6 +52,24 @@ test("구역 머리는 동작 종류에 관계없이 같은 높이다", async ({
   expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
 });
 
+test("탭 안 가로 분할의 첫 묶음과 구역 제목을 맞춘다", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?preview=pane-tab-alignment-1015");
+  const app = page.getByTestId("app-window-pane-tab-alignment-1015");
+  for (const tab of ["직접 분할", "첫 세로 칸", "둘째 세로 칸"]) {
+    await app.getByRole("tab", { name: tab, exact: true }).click();
+    const split = app.locator(".ks-data-tab-panel:visible .ks-split-row").first();
+    await expect(split.locator(".ks-list-row").first()).toBeVisible();
+    const centers = await split.evaluate(root => {
+      const group = root.querySelector<HTMLElement>(".ks-list .ks-view-group strong")!.getBoundingClientRect();
+      const title = root.querySelector<HTMLElement>(".ks-data-section-title")!.getBoundingClientRect();
+      return { group: group.top + group.height / 2, title: title.top + title.height / 2 };
+    });
+    console.log(`탭 안 ${tab}: ${JSON.stringify(centers)}`);
+    expect(Math.abs(centers.group - centers.title)).toBeLessThanOrEqual(1);
+  }
+});
+
 test("스크롤된 묶음 머리는 고른 행의 양 끝과 곡률을 따른다", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/?preview=pane-alignment-1015");

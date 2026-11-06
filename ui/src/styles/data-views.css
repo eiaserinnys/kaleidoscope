@@ -56,6 +56,13 @@
 .ks-split-row > .ks-split-pane > .ks-list > div:not(.ks-view-sticky) > [data-index="0"] > .ks-view-group {
   padding-block-start: calc(var(--ks-space-2) + (var(--ks-control-height) - var(--ks-type-meta) * var(--ks-line-body)) / 2);
 }
+.ks-data-tab-panel .ks-split-row > :is(
+  .ks-split.is-stacked > .ks-split-pane:not(:first-child),
+  .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
+) > .ks-list > div:not(.ks-view-sticky) > [data-index="0"] > .ks-view-group {
+  padding-block-start: calc((var(--ks-control-height) - var(--ks-type-meta) * var(--ks-line-body)) / 2);
+}
 .ks-list:not(.is-grid):not(.is-icons) { padding-inline: var(--ks-space-1); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list:not(.is-grid):not(.is-icons) { padding-inline: 0; }
 .ks-list-row .ks-list-content { flex: 1 1 0; min-width: min(100%, 6.5em); }

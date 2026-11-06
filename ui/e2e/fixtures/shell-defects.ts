@@ -4,6 +4,10 @@ import stackContexts, { bottomPaddingCases } from "./stack-contexts";
 
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
+const tabbedPanePair = () => ({ type: "split", direction: "row", children: [
+  { type: "list", grouped: true, items: [{ title: "첫 묶음", items: [{ key: "a", title: "첫 행" }] }] },
+  { type: "section", title: "구역 제목", child: { type: "text", value: "내용" } },
+] });
 export const shellDefectFixtures = [
   ...stackFillRegressions,
   ...stackContexts,
@@ -23,6 +27,13 @@ export const shellDefectFixtures = [
       { type: "section", title: "단추 없음", child: { type: "text", value: "내용" } },
       { type: "section", title: "아이콘", actions: [{ type: "button", icon: "plus", icon_only: true, label: "더하기", on_click: [] }], child: { type: "text", value: "내용" } },
       { type: "section", title: "고르기", actions: [{ type: "select", style: "segmented", label: "보기", label_position: "hidden", value: { state: "view" }, on_change: { set_state: "view" }, options: ["before", "after"] }], child: { type: "text", value: "내용" } },
+    ],
+  } },
+  { ...base, requires: { blocks: 37, modules: {} }, id: "pane-tab-alignment-1015", name: "탭 안 칸 정렬", state: {}, ui: {
+    type: "tabs", tabs: [
+      { label: "직접 분할", child: tabbedPanePair() },
+      { label: "첫 세로 칸", child: { type: "split", direction: "column", children: [tabbedPanePair(), { type: "text", value: "아래 내용" }] } },
+      { label: "둘째 세로 칸", child: { type: "split", direction: "column", children: [{ type: "text", value: "위 내용" }, tabbedPanePair()] } },
     ],
   } },
   { ...base, requires: { blocks: 37, modules: {} }, id: "pane-nested-1015", name: "겹친 분할", state: { view: "after" }, ui: {
