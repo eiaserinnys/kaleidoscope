@@ -20,6 +20,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     const windowContent = content.closest<HTMLElement>(".ks-window-content") ?? content;
     const commenting = () => isCommenting(windowId) || Boolean(content.closest(".ks-window[data-commenting]"));
     let focused: HTMLElement | null = null;
+    let focusedDialog = false;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
@@ -60,6 +61,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       });
       if (target === content || target.classList.contains("ks-window-content")) return;
       focused = target;
+      focusedDialog = Boolean(target.closest(".ks-dialog-overlay"));
       focusedRemove = target.classList.contains("ks-list-remove");
       inContent = body.contains(target);
       if (!inContent) return;
@@ -127,9 +129,9 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     const observer = new MutationObserver((changes) => {
       if (commenting()) { stopWaiting(); return; }
       const active = document.activeElement;
-      const unavailable = focused && (!focused.isConnected || !body.contains(focused)
+      const unavailable = focused && (!focused.isConnected || !scope.contains(focused)
         || focused.matches(":disabled") || focused.closest("[hidden], [inert]"));
-      if (onTop && focused && inContent && unavailable) {
+      if (onTop && focused && !focusedDialog && unavailable) {
         const lost = active === document.body || active === focused || (active instanceof Element && scope.contains(active) && isUnclaimedFocus(active));
         if (lost && !preserveWindowActionFocus(windowId)) {
           const target = collectionTarget(changes) ?? bookmarkTarget(bookmark, body);

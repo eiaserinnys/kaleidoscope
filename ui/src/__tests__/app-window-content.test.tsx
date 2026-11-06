@@ -7,6 +7,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import type { WindowData } from "../data/window-data";
 import { normalizeBlock } from "../render/render-block";
 import { focusRescued, isUnclaimedFocus, restoreWindowFocus } from "../components/focus-rescue";
 import { commentSession, forgetCommentSession } from "../comments/session";
@@ -136,6 +137,59 @@ describe("app definition renderer", () => {
     body.append(fixture);
     return fixture;
   }
+
+  async function noticeFocusFixture() {
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    const definition: AppDefinition = {
+      id: "notice-focus", name: "알림 초점", requires: { blocks: 14, modules: {} },
+      permissions: [], state: {}, ui: { type: "list", items: [{ key: "a", title: "첫 내용" }, { key: "b", title: "다음 내용" }] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    let data: WindowData | null = null;
+    const view = render(<AppWindowContent store={store} windowId="viewer-window" onWindowData={(value) => { data = value; }} />);
+    const row = await screen.findByRole("option", { name: "첫 내용" });
+    await waitFor(() => expect(data).not.toBeNull());
+    return { ...view, row, showNotice: () => act(() => data!.setNotice("동작을 처리하지 못했습니다")) };
+  }
+
+  it("알림을 닫으면 마지막으로 고른 본문 행으로 초점을 돌린다", async () => {
+    const { container, row, showNotice } = await noticeFocusFixture();
+    row.focus();
+    showNotice();
+    container.querySelector(".ks-data-window-notice")!.setAttribute("data-ks-overlay", "");
+    const close = screen.getByRole("button", { name: "닫기" });
+    close.focus();
+    const update = document.createElement("span");
+    container.querySelector(".ks-data-window-notice")!.append(update);
+    await act(async () => { await Promise.resolve(); });
+    expect(document.activeElement).toBe(close);
+    update.remove();
+    fireEvent.click(close);
+    await waitFor(() => expect(document.activeElement).toBe(row));
+  });
+
+  it("본문 초점 기록 없이 알림을 닫으면 첫 내용으로 초점을 옮긴다", async () => {
+    const { row, showNotice } = await noticeFocusFixture();
+    showNotice();
+    const close = screen.getByRole("button", { name: "닫기" });
+    close.focus();
+    fireEvent.click(close);
+    await waitFor(() => expect(document.activeElement).toBe(row));
+  });
+
+  it("대화상자 안의 초점 요소가 제거될 때 창의 복구가 개입하지 않는다", async () => {
+    const { container, row } = await noticeFocusFixture();
+    row.focus();
+    const overlay = document.createElement("div");
+    overlay.className = "ks-dialog-overlay";
+    const button = document.createElement("button");
+    overlay.append(button);
+    container.querySelector(".ks-data-window")!.append(overlay);
+    button.focus();
+    button.remove();
+    await act(async () => { await Promise.resolve(); });
+    expect(document.activeElement).toBe(document.body);
+  });
 
   it("포인터로 repeat 줄을 지우면 이웃 줄의 같은 자리에 초점을 둔다", async () => {
     await focusFixture('<div class="ks-repeat-content"><div><button>첫 행</button><button>첫 해제</button></div><div><button>둘째 행</button><button>둘째 해제</button></div></div>');
