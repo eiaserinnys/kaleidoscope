@@ -1,5 +1,20 @@
 import { expect, test } from "@playwright/test";
 
+test("열린 HTML 값 프레임은 테마와 본문 글자 크기를 받는다", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/window-control.html?frames");
+  await page.evaluate(() => (window as any).controlHarness.chooseFrame("html"));
+  const text = page.frameLocator('iframe[title="실제 HTML"]').locator("#target");
+  await expect(text).toBeVisible();
+  const light = await text.evaluate((el) => getComputedStyle(el).color);
+  const bodySize = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ks-type-body").trim());
+  await expect(text).toHaveCSS("font-size", bodySize);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect.poll(() => text.evaluate((el) => getComputedStyle(el).color)).not.toBe(light);
+  const parentColor = await page.evaluate(() => { const el = document.createElement("span"); el.style.color = "var(--ks-color-text)"; document.body.append(el); const color = getComputedStyle(el).color; el.remove(); return color; });
+  await expect(text).toHaveCSS("color", parentColor);
+});
+
 test("다른 창의 초안과 선택을 유지하며 입력, 메뉴와 탭을 조작한다", async ({ page }) => {
   await page.goto("/window-control.html");
   await expect(page.getByRole("button", { name: "실행" })).toBeVisible();

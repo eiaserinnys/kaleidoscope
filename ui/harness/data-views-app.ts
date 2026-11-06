@@ -74,5 +74,6 @@ export const dataViewsApp: AppDefinition = {
     { label: "칸 오류", child: { type: "table", rows: [{ key: "a", label: "제작", day: ["잘못된 내용"], next: { title: "정상 일정" } }], columns: [{ field: "label", label: "항목" }, { field: "day", label: "첫째 날", format: "content" }, { field: "next", label: "둘째 날", format: "content" }], selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
     { label: "아이콘 시험", child: { type: "list", layout: "icons", items: icons, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }] } },
     { label: "빈 아이콘", child: { type: "list", layout: "icons", items: [] } },
+    { label: "잘못된 행 시험", child: { type: "table", rows: [{ key: "good", label: "정상 행" }, { label: "빠진 행" }], columns: [{ field: "label", label: "이름" }] } },
   ] },
 };

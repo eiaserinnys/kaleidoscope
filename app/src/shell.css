@@ -408,6 +408,7 @@
 }
 
 .ks-window-title-actions { display: flex; flex: 0 0 auto; }
+.ks-window-title-actions > .ks-icon-button:not(.ks-icon-button-share[aria-pressed="true"]) { color: var(--ks-color-text); }
 
 .ks-window-title-group { display: flex; min-width: 0; flex: 1 1 auto; align-items: baseline; gap: var(--ks-space-2); }
 

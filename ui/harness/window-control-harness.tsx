@@ -83,7 +83,7 @@ function Harness() {
 }
 
 const sandboxFixture: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 11, modules: {} }, permissions: [], ui: { type: "sandbox", title: "실제 샌드박스", value: `<button id="counter">횟수 0</button><input id="check" type="checkbox"><label for="check" id="label">체크</label><details><summary>펼치기</summary>내용</details><script>let n=0;document.querySelector('#counter').addEventListener('click',()=>{document.querySelector('#counter').textContent='횟수 '+(++n)});document.querySelector('#check').addEventListener('change',()=>{document.querySelector('#label').textContent=document.querySelector('#check').checked?'켜짐':'꺼짐'})</script>` } };
-const htmlFixture: AppDefinition = { ...mdViewerDefinition, name: "실제 HTML", requires: { blocks: 11, modules: {} }, permissions: [], ui: { type: "html_view", value: '<p data-ks-n="1" id="target">편집할 글</p>' } };
+const htmlFixture: AppDefinition = { ...mdViewerDefinition, name: "실제 HTML", requires: { blocks: 11, modules: {} }, permissions: [], ui: { type: "html_view", value: '<p data-ks-n="1" id="target" style="color:var(--ks-color-text);font-size:var(--ks-type-body)">편집할 글</p>' } };
 const sandboxStore = createShellStore(createFakeTransport(makeTestSeed({ definitions: [sandboxFixture] })));
 const htmlStore = createShellStore(createFakeTransport(makeTestSeed({ definitions: [htmlFixture] })));
 

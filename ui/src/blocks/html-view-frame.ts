@@ -1,8 +1,20 @@
 /// <reference path="../iife.d.ts" />
 import bridgeSource from "./html-bridge/main.ts?iife";
 import { sourceHash } from "./html-bridge/identity";
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { registerFramePointHandler } from "../share/frame-point";
+import type { ParentToFrame } from "./html-bridge/frame-protocol";
+
+export function useHtmlThemeResend(send: (message: ParentToFrame) => void): void {
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!media) return;
+    let scheduled = 0;
+    const update = () => { if (scheduled) cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(() => send({ type: "ks-html-theme", tokens: htmlViewTokens() })); };
+    media.addEventListener("change", update);
+    return () => { media.removeEventListener("change", update); if (scheduled) cancelAnimationFrame(scheduled); };
+  }, [send]);
+}
 
 export function useHtmlFramePoint(frame: RefObject<HTMLIFrameElement | null>, source: string | null): void {
   const points = useRef(new Map<string, () => void>());
@@ -28,7 +40,7 @@ export function useHtmlFramePoint(frame: RefObject<HTMLIFrameElement | null>, so
   }, [frame, source]);
 }
 
-const tokenNames = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-color-warning", "--ks-type-meta", "--ks-line-body", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
+const tokenNames = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-color-warning", "--ks-type-meta", "--ks-type-body", "--ks-line-body", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
 
 export function htmlViewTokens(): Record<string, string> {
   const styles = getComputedStyle(document.documentElement);

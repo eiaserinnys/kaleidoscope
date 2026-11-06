@@ -8,6 +8,11 @@
 }
 .ks-data-window-notice:has(> .ks-window-status) { position: absolute; left: 50%; bottom: var(--ks-space-3); transform: translateX(-50%); z-index: 1; width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); pointer-events: none; }
 .ks-window-status > .ks-notice { background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
+.ks-data-window-notice:has(> .ks-notice) { position: absolute; inset-inline: var(--ks-space-2); bottom: var(--ks-space-2); z-index: 1; }
+.ks-data-window-notice > .ks-notice { flex-wrap: nowrap; background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
+.ks-data-window-notice > .ks-notice > .ks-notice-message,
+.ks-data-window-notice > .ks-notice.has-multiple-actions > .ks-notice-message { min-width: 0; flex: 1 1 0; max-height: calc(100cqh - 4 * var(--ks-space-2) - 2 * var(--ks-line-width)); overflow-y: auto; }
+.ks-data-window-notice > .ks-notice[role="alert"] { background: linear-gradient(var(--ks-color-danger-surface), var(--ks-color-danger-surface)), var(--ks-color-surface-solid); }
 .ks-data-tabs { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
 .ks-data-tab-header { container-type: inline-size; display: flex; width: 100%; min-width: 0; flex: 0 0 auto; align-items: center; gap: var(--ks-space-2); padding-inline: var(--ks-space-3); }
 .ks-data-tab-list { position: relative; display: flex; min-width: 0; flex: 1 1 auto; gap: var(--ks-space-1); overflow: hidden; padding-block: var(--ks-space-2); padding-inline: var(--ks-space-1); margin-inline: calc(-1 * var(--ks-space-1)); }
@@ -414,7 +419,7 @@
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
 .ks-dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
 .ks-tour-overlay { position: absolute; inset: var(--ks-space-3); z-index: 2; pointer-events: none; }
-.ks-tour-spotlight { position: absolute; z-index: 0; border-radius: var(--ks-radius-small); outline: var(--ks-focus-width) solid var(--ks-color-accent); box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--ks-color-text) 35%, transparent); pointer-events: none; }
+.ks-tour-spotlight { position: absolute; z-index: 0; border-radius: var(--ks-radius-small); outline: var(--ks-focus-width) solid var(--ks-color-accent); box-shadow: 0 0 0 100vmax light-dark(color-mix(in srgb, var(--ks-color-text) 35%, transparent), color-mix(in srgb, var(--ks-color-background) 55%, transparent)); pointer-events: none; }
 .ks-tour-card { position: absolute; z-index: 1; display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; flex-direction: column; gap: var(--ks-space-2); overflow: auto; padding: var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-glass-edge); border-radius: var(--ks-radius-window); background: var(--ks-material-dialog); box-shadow: var(--ks-shadow-popover); color: var(--ks-color-text); pointer-events: auto; backdrop-filter: blur(var(--ks-blur-popover)); }
 .ks-tour-step-count { color: var(--ks-color-muted); font-size: var(--ks-type-meta); font-variant-numeric: tabular-nums; }
 .ks-tour-title { margin: 0; font-size: var(--ks-type-title); font-weight: 600; }

@@ -54,6 +54,7 @@ error_catalog! { ENTRIES;
     SHELL_TABLE_COLUMNS_FIELD_DUPLICATE(field) { class: InvalidRequest, place: "표 열 식별자", cause: "열 field가 중복됐다", message: "표의 열 {field}가 중복됩니다. 앱의 columns 출력을 고치세요.", fix: "앱의 columns 출력을 고치세요" }
     SHELL_TABLE_ROW_HEADER_INVALID(field) { class: InvalidRequest, place: "표 행 머리", cause: "행 머리가 첫 text 열이 아니다", message: "표의 행 머리 {field}를 찾지 못했습니다. 앱의 columns 출력을 고치세요.", fix: "앱의 columns 출력을 고치세요" }
     SHELL_TABLE_DATA_COLUMNS_EMPTY() { class: InvalidRequest, place: "표 데이터 열", cause: "행 머리 외 데이터 열이 없다", message: "표에 고를 데이터 열이 없습니다. 앱의 columns 출력을 고치세요.", fix: "앱의 columns 출력을 고치세요" }
+    SHELL_TABLE_ROW_KEY_MISSING(count) { class: InvalidRequest, place: "표 행 식별자", cause: "rows 항목에 문자열 key가 없다", message: "표 행 {count}개에 문자열 key가 없어 보이지 않습니다. 앱 정의의 rows에 행마다 key를 넣으세요.", fix: "앱 정의의 rows에 행마다 key를 넣으세요" }
     SHELL_TABLE_CELL_CONTENT_INVALID(field) { class: InvalidRequest, place: "표 칸 내용", cause: "칸 내용의 형태가 올바르지 않다", message: "표의 {field} 칸 내용을 읽지 못했습니다. 앱의 칸 출력을 고치세요.", fix: "앱의 칸 출력을 고치세요" }
     SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 지침 요청", cause: "앱이 지침 기능을 선언하지 않았다", message: "앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 instructions를 선언하세요" }
     SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 같이 보기 요청", cause: "앱이 같이 보기 기능을 선언하지 않았다", message: "앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 context_capture를 선언하세요" }
@@ -705,8 +706,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "화면 글 복사",
         cause: "copy_text 바인딩이 빈 문자열이다",
-        message: "복사할 글이 없습니다. 앱 정의의 copy_text 값이 빈 글이 아닌지 확인하세요.",
-        fix: "앱 정의의 copy_text 값에 복사할 글을 넣으세요"
+        message: "복사할 글이 아직 없습니다. 글이 나온 뒤 다시 누르세요.",
+        fix: "빈 글일 때 단추를 disabled로 잠그면 이 알림이 뜨지 않습니다"
     }
     SHELL_COPY_TEXT_NOT_TEXT() {
         class: InvalidRequest,

@@ -351,7 +351,7 @@ if (!coreUrl) {
       return state ? { loading: state.loading, busy: state.busy, items: state.items.length, queued: state.queued.length, attachments: state.attachments.size } : null;
     },
   } });
-  Object.assign(window, { noticeFixture: { show: () => noticeFixtureData?.setStatus("저장했습니다") } });
+  Object.assign(window, { noticeFixture: { show: () => noticeFixtureData?.setStatus("저장했습니다"), alert: (message = "파일을 받을 수 없습니다") => noticeFixtureData?.setNotice({ id: "TEST_ERROR", code: "invalid_request", message, details: [] }), read: () => { const root = document.querySelector<HTMLElement>('[data-testid="app-window-notice-fixture"] .ks-data-window'); return root ? describeVisible(root).text : ""; } } });
   exposeDocsHarness(fakeTransport, store);
   Object.assign(window, { conversationHarness: {
     emit: fakeTransport.emit,

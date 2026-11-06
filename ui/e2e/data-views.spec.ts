@@ -4,6 +4,14 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { selectTab } from "./tab-helper";
 
+test("key가 빠진 표 행을 알리면서 정상 행은 보인다", async ({ page }) => {
+  await page.goto("/?preview=data-views-test");
+  const app = page.getByTestId("app-window-data-views-test");
+  await selectTab(app, "잘못된 행 시험");
+  await expect(app.getByRole("alert")).toContainText("표 행 1개에 문자열 key가 없어");
+  await expect(app.getByRole("table")).toContainText("정상 행");
+});
+
 const output = process.env.KS_DATA_CAPTURE_DIR;
 async function capture(page: Page, name: string) {
   if (!output) return;

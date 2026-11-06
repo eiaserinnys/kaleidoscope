@@ -6,6 +6,7 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
 import { DataState } from "../components/data-state";
+import { Notice } from "../components/primitives";
 import { useBinding, useWindowData, type WindowData } from "../data/window-data";
 import { useWindowVisible } from "../data/window-state";
 import { useLoadMore } from "./load-more";
@@ -97,6 +98,8 @@ function TableReady({ block, context, pointer, value, columnsValue, more }: { bl
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const rows = useMemo(() => asArray(value).filter(validRow), [value]);
+  const missingCount = asArray(value).length - rows.length;
+  const rowError = missingCount ? shellErrors.SHELL_TABLE_ROW_KEY_MISSING({ count: String(missingCount) }) : null;
   const result = useMemo(() => normalizeColumns(columnsValue, block.row_header, block.selection === "cell"), [columnsValue, block.row_header, block.selection]);
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
@@ -104,8 +107,9 @@ function TableReady({ block, context, pointer, value, columnsValue, more }: { bl
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
   const selectedCell = isObject(selected) && typeof selected.row === "string" && typeof selected.column === "string" ? { row: selected.row, column: selected.column } : null;
   if (result.error) return <DataState rootProps={blockRoot} value={{ status: "failed", message: result.error.message, id: result.error.id, retry: [] }} />;
+  if (rowError && !rows.length) return <DataState rootProps={blockRoot} value={{ status: "failed", message: rowError.message, id: rowError.id, retry: [] }} />;
   if (!result.columns.length) return <NoItems rootProps={blockRoot} />;
-  return <><TableView rootProps={blockRoot} columns={result.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} selection={block.selection} selectedCell={selectedCell} rowHeader={block.row_header} onChooseCell={(row, column) => { if (block.on_select) void data.act(`${pointer}/on_select`, { row: row.key, column }, row); }} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from((anchor.closest('[role="row"]') ?? anchor).querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
+  return <>{rowError && <Notice role="alert" errorId={rowError.id}>{rowError.message}</Notice>}<TableView rootProps={blockRoot} columns={result.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} selection={block.selection} selectedCell={selectedCell} rowHeader={block.row_header} onChooseCell={(row, column) => { if (block.on_select) void data.act(`${pointer}/on_select`, { row: row.key, column }, row); }} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from((anchor.closest('[role="row"]') ?? anchor).querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
 }
 
 export interface TableViewProps {

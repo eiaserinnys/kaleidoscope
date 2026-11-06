@@ -30,6 +30,21 @@ it("정보 알림은 잠시 보인 뒤 사라진다", () => {
   expect(screen.queryByRole("status")).toBeNull();
 });
 
+it("빈 글 복사는 일시 상태로 알리고 5초 뒤 사라진다", async () => {
+  const copyDefinition = { ...definition, ui: { type: "button", label: "번역", on_click: { copy_text: "" } } } as AppDefinition;
+  data = new windowData.WindowData(store, "viewer-window", copyDefinition);
+  cleanup();
+  vi.mocked(windowData.useWindowData).mockReturnValue(data);
+  render(<WindowNotice />);
+  let result: boolean | undefined;
+  await act(async () => { result = await data.act("/ui/on_click", null); });
+  expect(result).toBe(false);
+  expect(screen.getByRole("status").textContent).toBe("번역: 복사할 글이 아직 없습니다. 글이 나온 뒤 다시 누르세요.");
+  expect(screen.queryByRole("alert")).toBeNull();
+  tick(5000);
+  expect(screen.queryByRole("status")).toBeNull();
+});
+
 it("마우스를 올려도 정보 알림은 사라진다", () => {
   act(() => data.setStatus("작업을 마쳤습니다"));
   const notice = screen.getByRole("status");

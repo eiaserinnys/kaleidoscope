@@ -6,7 +6,7 @@ import { openFrameContextMenu } from "../../components/context-menu";
 import { toCoreError } from "../../core/core-transport";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../../data/window-state";
 import type { BlockContext } from "../block-context";
-import { htmlViewSource, htmlViewTokens, sanitizeFragment, useHtmlFramePoint } from "../html-view-frame";
+import { htmlViewSource, sanitizeFragment, useHtmlFramePoint, useHtmlThemeResend } from "../html-view-frame";
 import { applyEdit, findNumber, invertEdit, numberElements, serializeOriginal, type HtmlEdit } from "../html-bridge/edit";
 import type { AnchorStatus, FrameSelection, FrameToParent, ParentToFrame } from "../html-bridge/frame-protocol";
 import { emptyThread, readThread, writeThreadChange } from "./storage";
@@ -80,14 +80,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
     : null);
   const previousLinkTarget = useRef(linkTarget);
   const send = useCallback((message: ParentToFrame) => frame.current?.contentWindow?.postMessage(message, "*"), []);
-  useEffect(() => {
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!media) return;
-    let scheduled = 0;
-    const update = () => { if (scheduled) cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(() => send({ type: "ks-html-theme", tokens: htmlViewTokens() })); };
-    media.addEventListener("change", update);
-    return () => { media.removeEventListener("change", update); if (scheduled) cancelAnimationFrame(scheduled); };
-  }, [send]);
+  useHtmlThemeResend(send);
   const patchState = useCallback((name: string, rev: number | null) => {
     const changes: Record<string, JsonValue> = {};
     if (block.on_select_doc) changes[block.on_select_doc.set_state] = name;

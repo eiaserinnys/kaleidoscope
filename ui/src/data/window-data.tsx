@@ -633,7 +633,11 @@ export class WindowData {
           const arrayPrefix = Array.isArray(this.definitionAt(pointer)) ? "/0" : "";
           const raw = this.localBinding(`${pointer}${arrayPrefix}/copy_text`, action.copy_text as Binding, scope, read);
           if (typeof raw !== "string") throw shellErrors.SHELL_COPY_TEXT_NOT_TEXT();
-          if (raw.length === 0) throw shellErrors.SHELL_COPY_TEXT_EMPTY();
+          if (raw.length === 0) {
+            const message = shellErrors.SHELL_COPY_TEXT_EMPTY().message;
+            this.setStatus(label ? `${label}: ${message}` : message);
+            return false;
+          }
           try {
             await navigator.clipboard.writeText(raw);
           } catch (error) {
