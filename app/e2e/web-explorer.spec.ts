@@ -60,10 +60,11 @@ async function expectWebAligned(page: Page) {
   })).toBe(true);
 }
 
-async function raiseExplorer(page: Page, explorer: Locator) {
-  const bounds = await explorer.boundingBox();
-  if (!bounds) throw new Error("탐색기 창 위치를 읽지 못했습니다");
-  await page.mouse.click(bounds.x + bounds.width * 0.8, bounds.y + 16);
+async function raiseExplorer(page: Page) {
+  const item = page.getByRole("toolbar", { name: "작업 표시줄" }).getByRole("button", { name: "탐색기" });
+  await expect(item).toHaveAttribute("aria-pressed", "false");
+  await item.click();
+  await expect(item).toHaveAttribute("aria-pressed", "true");
 }
 
 async function explorerHeaderMetrics(page: Page) {
@@ -97,7 +98,7 @@ test("centers the PC permission action in wide and narrow windows, including fai
 
   await allow.click();
   const alert = explorer.getByRole("alert");
-  await expect(alert).toHaveText("허용할 수 없습니다");
+  await expect(alert).toHaveText("허용할 수 없습니다 FILE_ACCESS_PERMISSION_UNDECLARED");
   const wideFailed = await permissionCenterMetrics(page);
   expect(Math.abs(wideFailed.delta)).toBeLessThanOrEqual(8);
   const failurePlacement = await page.evaluate(() => {
@@ -225,7 +226,7 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await expect(fakeWebView).toBeVisible();
   await expect(surface.locator(".ks-web-frozen-image")).toHaveCount(0);
 
-  await raiseExplorer(page, explorer);
+  await raiseExplorer(page);
   await expect(fakeWebView).toHaveCount(0);
   await expect(surface.locator(".ks-web-frozen-image")).toBeVisible();
   const surfaceBounds = await surface.boundingBox();
@@ -268,7 +269,7 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await page.setViewportSize({ width: 1440, height: 900 });
   await expectWebAligned(page);
 
-  await raiseExplorer(page, explorer);
+  await raiseExplorer(page);
   await expect(explorer.getByRole("button", { name: "이 PC의 파일 읽기 허용" })).toBeVisible();
   await screenshot(page, "explorer-permission-1440x900.png");
   await explorer.getByRole("button", { name: "이 PC의 파일 읽기 허용" }).click();
@@ -349,7 +350,7 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await screenshot(page, "md-editor-invariant-narrow-before-others.png");
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await raiseExplorer(page, explorer);
+  await raiseExplorer(page);
   await explorer.locator('[data-file-path="documents/notes/b.md"]').dblclick();
   await expect(editor.getByText("두 번째 노트")).toBeVisible();
   const afterB = (await controls(page)).snapshot?.shared.windows.filter((item) => item.app_id === "md-editor") ?? [];
@@ -359,7 +360,7 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await editor.locator(".ks-window-titlebar").click();
   const invariantBefore = await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-before.png") });
 
-  await raiseExplorer(page, explorer);
+  await raiseExplorer(page);
   await folders.getByRole("button", { name: "문서" }).click();
   await folders.getByRole("button", { name: "images" }).click();
   await explorer.locator('[data-file-path="documents/images/cover.png"]').dblclick();
@@ -433,7 +434,7 @@ test("web view overlap and explorer open behavior in the shell harness", async (
 test("shows the unavailable state when the shell cannot attach a web view", async ({ page }) => {
   await page.goto("/harness.html?web=unavailable");
   const browser = page.getByTestId("app-window-web-browser");
-  await expect(browser.getByText("이 쉘에서는 웹 화면을 열 수 없습니다")).toBeVisible();
+  await expect(browser.getByText("가짜 쉘에서 웹 화면을 사용할 수 없습니다")).toBeVisible();
   await expect(page.getByTestId("fake-webview-web-browser-window")).toHaveCount(0);
 });
 
