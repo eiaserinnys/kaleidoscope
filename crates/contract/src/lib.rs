@@ -304,11 +304,12 @@ pub const CONTRACT_VERSION: u32 = 40;
 /// - 38판: chat의 불러오는 중 바인딩.
 /// - 39판: 앱 아이콘 숫자 배지.
 /// - 40판: list 행 잠금 바인딩.
-/// - 41판: 창의 파일 드롭 선언.
+/// - 41판: 파일 드롭 계약 선언(창 드롭 구현은 45판부터).
 /// - 42판: 줄 단추와 앱의 초기 창 크기.
 /// - 43판: 목록 묶음 상태와 동작.
 /// - 44판: 목록 초점 이동 선택과 파일 동작 단축키.
-pub const BLOCK_SET_VERSION: u32 = LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION;
+/// - 45판: 창의 파일 드롭.
+pub const BLOCK_SET_VERSION: u32 = FILE_DROP_BLOCK_SET_VERSION;
 /// 목록 초점 이동 선택과 파일 동작 단축키의 첫 지원 판.
 pub const LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION: u32 = 44;
 /// 기본 폴더 선언을 처음 지원하는 블록 세트 판. 화면 연결은 다음 단계에서 지원한다.
@@ -316,7 +317,7 @@ pub const DEFAULT_FOLDER_BLOCK_SET_VERSION: u32 = 46;
 /// 목록 묶음의 상태와 동작.
 pub const LIST_GROUP_STATUS_BLOCK_SET_VERSION: u32 = 43;
 /// 창 파일 드롭 선언과 권한 파일 열기의 첫 지원 판.
-pub const FILE_DROP_BLOCK_SET_VERSION: u32 = 41;
+pub const FILE_DROP_BLOCK_SET_VERSION: u32 = 45;
 pub const CLIENT_FILE_OPEN_VERSION: u32 = 7;
 /// 줄 단추와 앱의 초기 창 크기를 처음 지원하는 블록 세트 판.
 pub const ROW_WINDOW_SIZE_BLOCK_SET_VERSION: u32 = 42;

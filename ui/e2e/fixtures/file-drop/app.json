@@ -1,7 +1,7 @@
 {
   "id": "file-drop-fixture",
   "name": "파일 입력 시험",
-  "requires": { "blocks": 41, "modules": { "assets": 1, "client": 7 } },
+  "requires": { "blocks": 45, "modules": { "assets": 1, "client": 7 } },
   "permissions": [],
   "state": {},
   "assets": [{ "id": "file-drop-fixture-client", "version": 1 }],
