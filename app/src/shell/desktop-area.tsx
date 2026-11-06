@@ -168,8 +168,8 @@ function Taskbar({ activeDesktopId, desktopCount, launcherOpen, onOpenApps, onCa
     const list = listRef.current;
     if (!list) return;
     const updateFade = () => {
-      list.dataset.fadeStart = String(list.scrollLeft > 0);
-      list.dataset.fadeEnd = String(list.scrollLeft + list.clientWidth < list.scrollWidth);
+      list.dataset.fadeStart = String(list.scrollLeft > 1);
+      list.dataset.fadeEnd = String(list.scrollWidth - list.clientWidth - list.scrollLeft > 1);
     };
     updateFade();
     list.addEventListener("scroll", updateFade);

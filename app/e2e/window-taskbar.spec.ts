@@ -4,6 +4,45 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/?core=http://127.0.0.1:7420");
 });
 
+test.describe("125% 화면 배율", () => {
+  test.use({ deviceScaleFactor: 1.25, viewport: { width: 600, height: 900 } });
+
+  test("목록 끝까지 스크롤하면 오른쪽 페이드가 꺼진다", async ({ page }, testInfo) => {
+    test.setTimeout(60_000);
+    const bar = page.locator(".ks-taskbar");
+    const list = bar.locator(".ks-taskbar-windows");
+    const windows = page.getByTestId("app-window-calculator");
+    for (let count = 1; count <= 5; count += 1) {
+      await bar.getByRole("button", { name: "앱 열기" }).click();
+      await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기", exact: true }).click();
+      await expect(windows).toHaveCount(count);
+    }
+    await list.hover();
+    await page.mouse.wheel(0, -10000);
+    await expect(list).toHaveAttribute("data-fade-start", "false");
+    await expect(list).toHaveAttribute("data-fade-end", "true");
+    await page.mouse.wheel(0, 10000);
+    await expect(list).toHaveAttribute("data-fade-start", "true");
+    await expect(list).toHaveAttribute("data-fade-end", "false");
+    const metrics = await list.evaluate((element) => ({
+      deviceScaleFactor: window.devicePixelRatio, scrollLeft: element.scrollLeft,
+      clientWidth: element.clientWidth, scrollWidth: element.scrollWidth,
+      remaining: element.scrollWidth - element.clientWidth - element.scrollLeft,
+      fadeEnd: element.getAttribute("data-fade-end"),
+    }));
+    expect(metrics.deviceScaleFactor).toBe(1.25);
+    expect(metrics.scrollLeft).toBeGreaterThan(1);
+    expect(Math.abs(metrics.remaining)).toBeLessThanOrEqual(1);
+    console.log("125% 목록 끝 측정", JSON.stringify(metrics));
+    await testInfo.attach("125-percent-end", { body: JSON.stringify(metrics), contentType: "application/json" });
+    await page.screenshot({ path: testInfo.outputPath("125-percent-end.png") });
+    for (let count = 5; count > 0; count -= 1) {
+      await windows.last().getByRole("button", { name: "창 닫기" }).click();
+      await expect(windows).toHaveCount(count - 1);
+    }
+  });
+});
+
 test("목록 가장자리 페이드는 실제 스크롤과 폭과 창 수를 따른다", async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   const bar = page.locator(".ks-taskbar");
