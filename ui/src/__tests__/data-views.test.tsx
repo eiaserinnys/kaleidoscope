@@ -58,6 +58,43 @@ it("다중 선택의 현재 칸은 바인딩에서 복원하고 바뀐 값이 �
   await act(async () => { await transport.call({ op: "window.patch_state", window_id: "viewer-window", patch: { current: "c" } }); });
   await waitFor(() => expect(b.classList.contains("is-current")).toBe(true));
 });
+it("느린 선택 응답이 뒤에서 고른 현재 칸을 덮지 않고 전송 뒤 외부 변경은 반영한다", async () => {
+  const items = ["a", "b"].map(key => ({ key, title: key }));
+  const { calls, transport, originalCall } = setup({ type: "list", layout: "grid", selection: "multiple",
+    selected: { state: "choice" }, current: { state: "current" }, items,
+    on_select: [{ set_state: "choice", value: { expr: "$event" } }, { set_state: "current", value: { expr: "$item.key" } }] } as unknown as Block,
+    { choice: [], current: null }, 50);
+  const a = await screen.findByRole("option", { name: "a" });
+  const b = screen.getByRole("option", { name: "b" });
+  let releaseA!: () => void, releaseB!: () => void;
+  const pendingA = new Promise<void>(resolve => { releaseA = resolve; });
+  const pendingB = new Promise<void>(resolve => { releaseB = resolve; });
+  calls.mockImplementation(async request => {
+    if (request.op === "data.act" && request.pointer.endsWith("on_select")) {
+      if ((request.item as { key?: string } | undefined)?.key === "a") await pendingA;
+      else await pendingB;
+    }
+    return originalCall(request);
+  });
+  fireEvent.click(a, { ctrlKey: true });
+  fireEvent.click(b, { ctrlKey: true });
+  expect(b.classList.contains("is-current")).toBe(true);
+  await act(async () => { releaseA(); });
+  await waitFor(async () => {
+    const state = await originalCall({ op: "state.get" });
+    expect(state.op === "state.get" && state.snapshot.shared.windows[0].state.current).toBe("a");
+    expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", item: items[1] }));
+  });
+  expect(b.classList.contains("is-current")).toBe(true);
+  await act(async () => { releaseB(); });
+  await waitFor(async () => {
+    const state = await originalCall({ op: "state.get" });
+    expect(state.op === "state.get" && state.snapshot.shared.windows[0].state.current).toBe("b");
+  });
+  await waitFor(() => expect(b.classList.contains("is-current")).toBe(true));
+  await act(async () => { await transport.call({ op: "window.patch_state", window_id: "viewer-window", patch: { current: "a" } }); });
+  await waitFor(() => expect(a.classList.contains("is-current")).toBe(true));
+});
 it("다중 선택 목록을 다시 열면 현재 칸을 바인딩에서 복원한다", async () => {
   const ui = { type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, current: { state: "current" },
     items: ["a", "b"].map(key => ({ key, title: key })), on_select: { set_state: "choice" } } as unknown as Block;

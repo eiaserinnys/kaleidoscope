@@ -177,8 +177,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const pointerTarget = useRef<EventTarget | null>(null);
   const boundCurrent = currentValue.status === "ready" ? currentValue.value : null;
   const [localCurrent, setLocalCurrent] = useState<{ key: string | null; binding: unknown } | null>(null);
-  useEffect(() => { setLocalCurrent(null); }, [boundCurrent]);
-  const localKey = localCurrent && Object.is(localCurrent.binding, boundCurrent) ? localCurrent.key : null;
+  useEffect(() => { if (!draft.isSending()) setLocalCurrent(null); }, [boundCurrent]);
+  const localKey = localCurrent && (draft.isSending() || Object.is(localCurrent.binding, boundCurrent)) ? localCurrent.key : null;
   const validCurrent = (key: unknown): key is string => typeof key === "string" && draft.draft.keys.includes(key) && items.some(item => item.key === key && item.selectable !== false);
   const current = validCurrent(localKey) ? localKey : validCurrent(boundCurrent) ? boundCurrent : [...draft.draft.keys].reverse().find(validCurrent) ?? null;
   const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf, multiple, !multiple || currentValue.status !== "loading");
