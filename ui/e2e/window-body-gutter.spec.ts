@@ -23,33 +23,40 @@ async function edges(app: Locator) {
       ends: [...body.querySelectorAll("textarea, .ks-data-button.is-row > button")].map((element) => right - element.getBoundingClientRect().right),
       overflow: body.scrollHeight > body.clientHeight,
       horizontalBar: body.offsetHeight - body.clientHeight,
+      scrollWidth: body.scrollWidth,
+      clientWidth: body.clientWidth,
       gutter: body.getBoundingClientRect().width - body.clientWidth,
     };
   });
 }
 
-for (const [width, height] of [[480, 360], [880, 600]]) {
-  test(`입력 길이가 달라도 몸통 끝선 유지 ${width}x${height}`, async ({ page }) => {
+for (const [width, height] of [[480, 360], [880, 360]]) {
+  test(`키 입력으로 줄을 늘려 스크롤바가 생겨도 몸통 끝선 유지 ${width}x${height}`, async ({ page }) => {
     const app = await open(page, "deco-letters", width, height);
     const input = app.getByPlaceholder("영문 입력");
-    await input.fill("Hello");
+    await input.click();
+    await page.keyboard.type("Hello");
     await expect(app.locator(".ks-data-button.is-row")).toHaveCount(6);
     const short = await edges(app);
     await capture(app, `deco-${width}-short`);
-    await input.fill(Array.from({ length: 8 }, () => "Kaleidoscope letters ".repeat(12)).join("\n"));
-    await expect.poll(async () => (await input.boundingBox())!.height).toBeGreaterThan(100);
-    const long = await edges(app);
-    await capture(app, `deco-${width}-long`);
-    console.log(JSON.stringify({ width, height, short, long }));
     expect(short.overflow).toBe(false);
-    if (width === 480) expect(long.overflow).toBe(true);
     expect(short.ends).toHaveLength(7);
-    for (const [index, end] of short.ends.entries()) {
-      expect(end).toBeCloseTo(12, 0);
-      expect(Math.abs(end - long.ends[index])).toBeLessThanOrEqual(1);
+    for (const end of short.ends) expect(end).toBeCloseTo(12, 0);
+    let crossed = false;
+    for (let line = 0; line < 24 && !(crossed && line > 0); line += 1) {
+      await page.keyboard.type(`${"Kaleidoscope letters ".repeat(3)}`);
+      await page.keyboard.press("Shift+Enter");
+      const now = await edges(app);
+      expect(now.ends).toHaveLength(7);
+      for (const [index, end] of now.ends.entries()) expect(Math.abs(end - short.ends[index]), `줄 ${line} 단추 ${index}`).toBeLessThanOrEqual(1);
+      expect(now.scrollWidth).toBe(now.clientWidth);
+      expect(now.horizontalBar).toBe(0);
+      if (now.overflow && !crossed) { crossed = true; await capture(app, `deco-${width}-crossed`); }
     }
-    expect(short.horizontalBar).toBe(0);
-    expect(long.horizontalBar).toBe(0);
+    expect(crossed, "스크롤바가 생기는 경계를 지나야 한다").toBe(true);
+    const long = await edges(app);
+    expect(long.gutter).toBe(8);
+    await capture(app, `deco-${width}-long`);
     await app.locator(".ks-data-button.is-row > button").last().focus();
     expect(await app.locator(".ks-data-window-body").evaluate((body) => body.scrollLeft)).toBe(0);
   });
@@ -70,12 +77,14 @@ for (const id of ["md-editor", "profiler"]) {
   }
 }
 
-test("스크롤하는 몸통의 목록과 표 글은 스크롤바에 가려지지 않는다", async ({ page }) => {
-  const app = await open(page, "gutter-lists", 480, 360);
+for (const width of [480, 880]) {
+test(`몸통 바로 아래 목록과 표의 선택 행과 초점 행이 몸통 보이는 영역 안에 있다 ${width}`, async ({ page }) => {
+  const app = await open(page, "gutter-lists", width, 360);
   const body = app.locator(".ks-data-window-body");
   await expect(app.locator(".ks-row").first()).toBeVisible();
   const read = () => body.evaluate((element) => {
     const clientRight = element.getBoundingClientRect().left + element.clientLeft + element.clientWidth;
+    const over = [...element.querySelectorAll(".ks-row, .ks-table-row, .ks-notice")].map((row) => row.getBoundingClientRect()).filter((rect) => rect.width && rect.right > clientRight + 0.5).length;
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     let glyphOverlap = 0;
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -84,16 +93,37 @@ test("스크롤하는 몸통의 목록과 표 글은 스크롤바에 가려지�
       range.selectNodeContents(node);
       for (const rect of range.getClientRects()) if (rect.width && rect.right > clientRight + 0.5) glyphOverlap += 1;
     }
-    return { scrolls: element.scrollHeight > element.clientHeight, glyphOverlap, horizontalBar: element.offsetHeight - element.clientHeight };
+    return { scrolls: element.scrollHeight > element.clientHeight, over, glyphOverlap, scrollWidth: element.scrollWidth - element.clientWidth, horizontalBar: element.offsetHeight - element.clientHeight };
   });
-  await capture(app, "lists-top");
-  const state = await read();
-  expect(state.scrolls).toBe(true);
-  expect(state.glyphOverlap).toBe(0);
-  expect(state.horizontalBar).toBe(0);
+  expect((await read()).scrolls).toBe(true);
+  await app.locator(".ks-row").nth(1).click();
+  await page.keyboard.press("ArrowDown");
+  await capture(app, `lists-row-focus-${width}`);
+  expect(await read()).toMatchObject({ over: 0, glyphOverlap: 0, scrollWidth: 0, horizontalBar: 0 });
+  await app.locator(".ks-table-row").nth(1).scrollIntoViewIfNeeded();
+  await app.locator(".ks-table-row").nth(1).click();
+  await page.keyboard.press("ArrowDown");
+  await capture(app, `lists-table-focus-${width}`);
+  expect(await read()).toMatchObject({ over: 0, glyphOverlap: 0, scrollWidth: 0, horizontalBar: 0 });
   for (let index = 0; index < 20; index += 1) await page.keyboard.press("Tab");
   expect(await body.evaluate((element) => element.scrollLeft)).toBe(0);
   await body.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-  await capture(app, "lists-end");
-  expect((await read()).glyphOverlap).toBe(0);
+  await capture(app, `lists-end-${width}`);
+  expect(await read()).toMatchObject({ over: 0, glyphOverlap: 0, scrollWidth: 0 });
 });
+
+test(`몸통이 스크롤하는 알림 상자가 몸통 보이는 영역 안에 있다 ${width}`, async ({ page }) => {
+  const app = await open(page, "input-options-fixture", width, 360);
+  const notice = app.locator(".ks-notice").first();
+  await expect(notice).toBeVisible();
+  const state = await app.locator(".ks-data-window-body").evaluate((body) => {
+    const clientRight = body.getBoundingClientRect().left + body.clientLeft + body.clientWidth;
+    const rect = body.querySelector(".ks-notice")!.getBoundingClientRect();
+    return { scrolls: body.scrollHeight > body.clientHeight, overflow: rect.right - clientRight, scrollWidth: body.scrollWidth - body.clientWidth };
+  });
+  await capture(app, `notice-${width}`);
+  expect(state.scrolls).toBe(true);
+  expect(state.overflow).toBeLessThanOrEqual(0.5);
+  expect(state.scrollWidth).toBe(0);
+});
+}

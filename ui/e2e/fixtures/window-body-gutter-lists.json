@@ -7,7 +7,10 @@
     "modules": {}
   },
   "permissions": [],
-  "state": {},
+  "state": {
+    "sel": "",
+    "row": ""
+  },
   "window_size": {
     "width": 480,
     "height": 360
@@ -131,7 +134,13 @@
               "배지"
             ]
           }
-        ]
+        ],
+        "selected": {
+          "state": "sel"
+        },
+        "on_select": {
+          "set_state": "sel"
+        }
       },
       {
         "type": "table",
@@ -272,7 +281,13 @@
               "배지"
             ]
           }
-        ]
+        ],
+        "selected": {
+          "state": "row"
+        },
+        "on_select": {
+          "set_state": "row"
+        }
       },
       {
         "type": "button",
