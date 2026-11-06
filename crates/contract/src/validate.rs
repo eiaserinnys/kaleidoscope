@@ -2436,10 +2436,14 @@ fn validate_client_action(
     file: bool,
 ) {
     let click = at.ends_with("/on_click") || at.ends_with("/on_click/0");
+    let shortcut = at.starts_with("/shortcuts/");
+    if file && shortcut && definition.requires.blocks < crate::LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION {
+        details.push(format!("{at}: 파일 동작 단축키는 블록 세트 {}판이 필요합니다", crate::LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION));
+    }
     if !(at.starts_with("/ui/")
         || at.starts_with("/settings/ui/")
-        || (!file && at.starts_with("/shortcuts/")))
-        || (file && !click)
+        || shortcut)
+        || (file && !click && !shortcut)
         || definition.requires.blocks < 12
         || definition
             .requires

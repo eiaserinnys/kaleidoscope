@@ -306,7 +306,11 @@ pub const CONTRACT_VERSION: u32 = 39;
 /// - 40판: list 행 잠금 바인딩.
 /// - 41판: 창의 파일 드롭 선언.
 /// - 42판: 줄 단추와 앱의 초기 창 크기.
-pub const BLOCK_SET_VERSION: u32 = LIST_GROUP_STATUS_BLOCK_SET_VERSION;
+/// - 43판: 목록 묶음 상태와 동작.
+/// - 44판: 목록 초점 이동 선택과 파일 동작 단축키.
+pub const BLOCK_SET_VERSION: u32 = LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION;
+/// 목록 초점 이동 선택과 파일 동작 단축키의 첫 지원 판.
+pub const LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION: u32 = 44;
 /// 목록 묶음의 상태와 동작.
 pub const LIST_GROUP_STATUS_BLOCK_SET_VERSION: u32 = 43;
 /// 창 파일 드롭 선언과 권한 파일 열기의 첫 지원 판.
@@ -1922,6 +1926,10 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         grouped: bool,
+        #[schemars(description = "(44판) 키보드로 다른 항목에 초점을 옮길 때 on_select를 실행한다.")]
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        select_on_focus: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<Binding>,
@@ -2690,6 +2698,8 @@ enum RawBlock {
         layout: ListLayout,
         #[serde(default)]
         grouped: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        select_on_focus: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3347,6 +3357,7 @@ impl From<RawBlock> for Block {
                 items,
                 layout,
                 grouped,
+                select_on_focus,
                 selected,
                 disabled,
                 on_select,
@@ -3357,6 +3368,7 @@ impl From<RawBlock> for Block {
                 items,
                 layout,
                 grouped,
+                select_on_focus,
                 selected,
                 disabled,
                 on_select,
@@ -3731,6 +3743,7 @@ impl Block {
             } => 6,
             Block::Markdown { value: Some(_), .. } => 4,
             Block::Markdown { .. } => 1,
+            Block::List { select_on_focus: true, .. } => LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION,
             Block::List { group_actions: Some(_), .. } => LIST_GROUP_STATUS_BLOCK_SET_VERSION,
             Block::List { disabled: Some(_), .. } => LIST_DISABLED_BLOCK_SET_VERSION,
             Block::Chat { loading: Some(_), .. } => CHAT_LOADING_BLOCK_SET_VERSION,

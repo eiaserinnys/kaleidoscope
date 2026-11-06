@@ -70,6 +70,7 @@ it("moves through grouped list entries and selects the focused item", async () =
   first.focus();
   fireEvent.keyDown(first, { key: "ArrowDown" });
   expect(document.activeElement?.textContent).toContain("둘");
+  expect(calls.mock.calls.filter(([call]) => call.op === "data.act")).toHaveLength(0);
   fireEvent.keyDown(document.activeElement!, { key: "Enter" });
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_select", event: "b", item: { key: "b", title: "둘" } })));
 });
@@ -93,6 +94,52 @@ it("항목이 없는 상태 묶음은 남고 알 수 없는 동작은 실행되�
   expect(screen.queryByText("이전 빈 묶음")).toBeNull();
   expect(screen.getByText("자료 없음")).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
+});
+it("초점 이동 선택은 묶음 경계를 넘어 다음 항목을 한 번 고른다", async () => {
+  const item = { key: "b", title: "둘", subtitle: "다음 묶음" };
+  const { calls } = setup({ type: "list", grouped: true, select_on_focus: true, items: [
+    { title: "첫 묶음", items: [{ key: "a", title: "하나" }] },
+    { title: "빈 묶음", items: [], status: { state: "empty", message: "자료 없음" } },
+    { title: "둘째 묶음", items: [item] },
+  ], group_actions: [], on_select: { set_state: "choice" } } as unknown as Block, { choice: null }, 44);
+  const first = await screen.findByRole("option", { name: "하나" });
+  expect(screen.getByText("자료 없음")).toBeTruthy();
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowUp" });
+  expect(calls.mock.calls.filter(([call]) => call.op === "data.act")).toHaveLength(0);
+  fireEvent.keyDown(first, { key: "ArrowDown" });
+  await waitFor(() => expect(calls.mock.calls.filter(([call]) => call.op === "data.act")).toHaveLength(1));
+  expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_select", event: "b", item }));
+});
+it("잠긴 목록의 초점 이동은 고르지 않는다", async () => {
+  const { calls } = setup({ type: "list", select_on_focus: true, disabled: true, items: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: null }, 44);
+  const first = await screen.findByRole("option", { name: "하나" });
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowDown" });
+  expect(calls.mock.calls.filter(([call]) => call.op === "data.act")).toHaveLength(0);
+});
+it("초점 이동 선택은 Home과 End에서 가상 목록의 해당 항목을 고른다", async () => {
+  const items = Array.from({ length: 100 }, (_, index) => ({ key: String(index), title: `항목 ${index}` }));
+  const { calls } = setup({ type: "list", select_on_focus: true, items, on_select: { set_state: "choice" } } as unknown as Block, { choice: null }, 44);
+  const first = await screen.findByRole("option", { name: "항목 0" });
+  first.focus();
+  fireEvent.keyDown(first, { key: "End" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "99", item: items[99] })));
+  const last = await screen.findByRole("option", { name: "항목 99" });
+  fireEvent.keyDown(last, { key: "Home" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "0", item: items[0] })));
+});
+it("격자의 좌우 화살표도 이동한 항목을 고른다", async () => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+  const { calls } = setup({ type: "list", layout: "grid", select_on_focus: true,
+    items: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: null }, 44);
+  const first = await screen.findByRole("option", { name: "하나" });
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowRight" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "b" })));
+  const second = screen.getByRole("option", { name: "둘" });
+  fireEvent.keyDown(second, { key: "ArrowLeft" });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a" })));
 });
 it("cycles table sort and exposes its direction", async () => {
   setup({ type: "table", rows: [{ key: "a", n: 2 }, { key: "b", n: 1 }], columns: [{ field: "n", label: "숫자", format: "number" }] });

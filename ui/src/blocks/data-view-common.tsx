@@ -131,7 +131,7 @@ export function useRoving<T extends { key: string }>(items: T[], selected: unkno
     const target = scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${next}"]`);
     if (target) { target.focus(); pending.current = null; }
   };
-  const keyDown = (event: KeyboardEvent, index: number, select: () => void, columns = 1) => {
+  const keyDown = (event: KeyboardEvent, index: number, select: () => void, columns = 1, selectMoved?: (index: number) => void) => {
     let next = index;
     if (event.key === "ArrowDown") next += columns;
     else if (event.key === "ArrowUp") next -= columns;
@@ -141,7 +141,10 @@ export function useRoving<T extends { key: string }>(items: T[], selected: unkno
     else if (event.key === "End") next = items.length - 1;
     else if (event.key === "Enter") { event.preventDefault(); select(); return; }
     else return;
-    event.preventDefault(); move(next);
+    event.preventDefault();
+    next = Math.max(0, Math.min(items.length - 1, next));
+    move(next);
+    if (next !== index) selectMoved?.(next);
   };
   return { focus: entryIndex, setFocus, keyDown };
 }
