@@ -43,6 +43,7 @@ mod server_switch_tests;
 mod share_capture_tests;
 mod shared_state_recovery_tests;
 mod startup_readiness_tests;
+mod store_allow_tests;
 mod store_runtime_tests;
 mod window_control_tests;
 

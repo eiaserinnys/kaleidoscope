@@ -617,6 +617,9 @@ pub struct DeviceState {
     pub pc_access: Vec<PcAccess>,
     #[serde(default)]
     pub process_access: Vec<process::ProcessAccess>,
+    // 이 기기에서 접근을 허용한 정규화된 스토어 주소.
+    #[serde(default)]
+    pub store_servers: Vec<String>,
 }
 
 /// (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
@@ -7253,6 +7256,7 @@ mod tests {
         )
         .unwrap();
         assert!(device.pc_access.is_empty());
+        assert!(device.store_servers.is_empty());
     }
 
     #[test]

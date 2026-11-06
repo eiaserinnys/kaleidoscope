@@ -3,6 +3,7 @@ pub(crate) mod bundle;
 pub(crate) mod fetch;
 pub(crate) mod install;
 mod media;
+mod transport;
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -15,12 +16,35 @@ pub(crate) use fetch::StoreClient;
 pub(crate) use media::{media_key, read_media};
 
 pub(crate) fn client(inner: &crate::Inner, server: &str) -> Result<StoreClient<std::sync::Arc<dyn fetch::Transport>>, CoreError> {
+    let server = StoreUrl::parse(server)?;
+    let allowed = authorize(&server, &inner.state.lock().unwrap().device.store_servers)?;
     #[cfg(test)]
     if let Some(transport) = inner.store_transport.lock().unwrap().clone() {
-        return StoreClient::with_transport(server, transport);
+        return Ok(StoreClient::new(server, transport));
     }
-    let _ = inner;
-    StoreClient::with_transport(server, std::sync::Arc::new(fetch::PublicTransport))
+    let transport: std::sync::Arc<dyn fetch::Transport> = if allowed {
+        std::sync::Arc::new(transport::AllowedServerTransport)
+    } else {
+        std::sync::Arc::new(fetch::PublicTransport)
+    };
+    Ok(StoreClient::new(server, transport))
+}
+
+/// 목록에 있으면 전용 전송, 공개 형식이면 기존 공개 전송을 고른다.
+pub(crate) fn authorize(server: &StoreUrl, allowed: &[String]) -> Result<bool, CoreError> {
+    if allowed.iter().any(|item| item == server.as_str()) {
+        return Ok(true);
+    }
+    let url = Url::parse(server.as_str()).expect("정규화된 스토어 주소");
+    let private_host = match url.host().expect("스토어 주소의 호스트") {
+        Host::Domain(host) => host.eq_ignore_ascii_case("localhost") || host.to_ascii_lowercase().ends_with(".localhost"),
+        Host::Ipv4(ip) => !kaleidoscope_data::public_http::is_public_ip(ip.into()),
+        Host::Ipv6(ip) => !kaleidoscope_data::public_http::is_public_ip(ip.into()),
+    };
+    if url.scheme() == "http" || url.port().is_some() || private_host {
+        return Err(errors::STORECLIENT_SERVER_PERMISSION_REQUIRED(server.as_str()));
+    }
+    Ok(false)
 }
 
 #[derive(Debug, Clone)]
@@ -33,32 +57,18 @@ pub(crate) struct StoreUrl {
 impl StoreUrl {
     pub(crate) fn parse(input: &str) -> Result<Self, CoreError> {
         let url = Url::parse(input).map_err(|_| errors::STORECLIENT_URL_COMPONENT_INVALID())?;
-        if url.scheme() != "https" {
-            return Err(errors::STORECLIENT_URL_HTTPS_REQUIRED("입력한 주소"));
-        }
-        if input.chars().any(char::is_whitespace)
+        if !matches!(url.scheme(), "http" | "https")
+            || input.chars().any(char::is_whitespace)
             || input.contains('\\')
             || !url.username().is_empty()
             || url.password().is_some()
             || url.query().is_some()
             || url.fragment().is_some()
-            || url.port().is_some()
         {
             return Err(errors::STORECLIENT_URL_COMPONENT_INVALID());
         }
-        match url.host() {
-            Some(Host::Domain(host))
-                if !host.eq_ignore_ascii_case("localhost")
-                    && !host.to_ascii_lowercase().ends_with(".localhost") => {}
-            Some(Host::Ipv4(ip)) if !kaleidoscope_data::public_http::is_public_ip(ip.into()) => {
-                return Err(errors::STORECLIENT_URL_PRIVATE_ADDRESS())
-            }
-            Some(Host::Ipv6(ip)) if !kaleidoscope_data::public_http::is_public_ip(ip.into()) => {
-                return Err(errors::STORECLIENT_URL_PRIVATE_ADDRESS())
-            }
-            Some(Host::Ipv4(_) | Host::Ipv6(_)) => {}
-            Some(Host::Domain(_)) => return Err(errors::STORECLIENT_URL_PRIVATE_ADDRESS()),
-            _ => return Err(errors::STORECLIENT_URL_COMPONENT_INVALID()),
+        if url.host().is_none() {
+            return Err(errors::STORECLIENT_URL_COMPONENT_INVALID());
         }
         // URL 파서가 점 경로를 정규화하기 전의 원문도 검사한다.
         let authority = input

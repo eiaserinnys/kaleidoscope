@@ -100,17 +100,13 @@ error_catalog! { ENTRIES;
         class: PermissionDenied, place: "스토어 원천 읽기", cause: "스토어 권한이 선언되지 않았다",
         message: "스토어 원천의 권한 {permission}이 선언되지 않았습니다. 앱 작성자가 스토어 권한을 선언해야 합니다.", fix: "앱 작성자가 스토어 권한을 선언해야 합니다"
     }
-    STORECLIENT_URL_HTTPS_REQUIRED(server) {
-        class: InvalidRequest, place: "스토어 주소 검사", cause: "HTTPS 주소가 아니다",
-        message: "스토어 주소 {server}는 HTTPS가 아닙니다. HTTPS 주소를 입력하세요.", fix: "HTTPS 주소를 입력하세요"
-    }
     STORECLIENT_URL_COMPONENT_INVALID() {
         class: InvalidRequest, place: "스토어 주소 검사", cause: "주소에 허용하지 않는 구성 요소가 있다",
         message: "스토어 주소에 사용할 수 없는 구성 요소가 있습니다. 인증정보와 쿼리를 빼고 기준 주소를 입력하세요.", fix: "기준 주소만 입력하세요"
     }
-    STORECLIENT_URL_PRIVATE_ADDRESS() {
-        class: PermissionDenied, place: "스토어 주소 검사", cause: "공개 인터넷 주소가 아니다",
-        message: "스토어가 공개 인터넷 주소가 아닙니다. 공개 HTTPS 주소를 입력하세요.", fix: "공개 HTTPS 주소를 입력하세요"
+    STORECLIENT_SERVER_PERMISSION_REQUIRED(server) {
+        class: PermissionDenied, place: "스토어 서버 접근 검사", cause: "이 기기에서 주소 접근을 허용하지 않았다",
+        message: "스토어 {server}에 접근하려면 이 기기에서 주소를 허용해야 합니다. 스토어 접근 허용을 확인하세요.", fix: "스토어 접근을 허용하세요"
     }
     STORECLIENT_PATH_OUTSIDE_STORE(path) {
         class: PermissionDenied, place: "스토어 경로 검사", cause: "경로가 허용된 스토어 범위를 벗어났다",

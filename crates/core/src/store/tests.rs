@@ -25,20 +25,11 @@ fn store_address_and_relative_paths_are_checked() {
             Some("STORECLIENT_PATH_OUTSIDE_STORE")
         );
     }
-    assert_eq!(
-        StoreUrl::parse("http://example.com")
-            .unwrap_err()
-            .id
-            .as_deref(),
-        Some("STORECLIENT_URL_HTTPS_REQUIRED")
-    );
-    assert_eq!(
-        StoreUrl::parse("https://127.0.0.1")
-            .unwrap_err()
-            .id
-            .as_deref(),
-        Some("STORECLIENT_URL_PRIVATE_ADDRESS")
-    );
+    assert_eq!(StoreUrl::parse("http://EXAMPLE.com:80/appstore/").unwrap().as_str(), "http://example.com/appstore");
+    assert_eq!(StoreUrl::parse("https://127.0.0.1:8443/").unwrap().as_str(), "https://127.0.0.1:8443");
+    for bad in ["ftp://example.com", "https://user@example.com", "https://example.com/a/../b", "https://example.com/a%2fb", "https://example.com/?key=x", "https://example.com/#part", "https://example.com/has space"] {
+        assert_eq!(StoreUrl::parse(bad).unwrap_err().id.as_deref(), Some("STORECLIENT_URL_COMPONENT_INVALID"));
+    }
     assert_eq!(
         StoreUrl::parse("https://example.com\\appstore")
             .unwrap_err()
@@ -56,6 +47,19 @@ fn store_address_and_relative_paths_are_checked() {
         .path("https://user:secret@other.example/file")
         .unwrap_err();
     assert!(!error.message.contains("secret"));
+}
+
+#[test]
+fn store_transport_permission_is_scoped_to_normalized_address() {
+    for input in ["http://example.com", "https://example.com:8443", "https://localhost", "https://shop.localhost", "https://192.168.1.2", "https://[::1]"] {
+        let url = StoreUrl::parse(input).unwrap();
+        assert_eq!(super::authorize(&url, &[]).unwrap_err().id.as_deref(), Some("STORECLIENT_SERVER_PERMISSION_REQUIRED"));
+        assert!(super::authorize(&url, &[url.as_str().to_owned()]).unwrap());
+    }
+    let public = StoreUrl::parse("https://EXAMPLE.com:443/shop/").unwrap();
+    assert!(!super::authorize(&public, &[]).unwrap());
+    assert!(super::authorize(&public, &["https://example.com/shop".into()]).unwrap());
+    assert!(!super::authorize(&public, &["https://example.com/other".into()]).unwrap());
 }
 
 use super::{
@@ -319,7 +323,7 @@ fn rejects_distinct_fetch_and_bundle_failures() {
             .index("catalog")
             .err()
             .unwrap()),
-        "STORECLIENT_URL_PRIVATE_ADDRESS"
+        "STORECLIENT_SERVER_PERMISSION_REQUIRED"
     );
 }
 
