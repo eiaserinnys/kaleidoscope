@@ -178,7 +178,8 @@
 }
 .ks-empty-state-action:has(> .ks-file-grant-actions) { max-width: 100%; min-width: 0; }
 .ks-file-grant-actions { min-width: 0; justify-content: center; }
-.ks-file-grant-actions > .ks-button { flex-shrink: 1; max-width: 100%; height: auto; white-space: normal; line-height: var(--ks-line-body); padding-block: var(--ks-space-1); }
+.ks-file-grant-actions > .ks-button { flex-shrink: 1; max-width: 100%; height: auto; white-space: normal; word-break: keep-all; line-height: var(--ks-line-body); padding-block: var(--ks-space-1); }
+.ks-data-state-compact .ks-empty-state:has(> .ks-empty-state-action > .ks-file-grant-actions) { flex-wrap: nowrap; }
 .ks-data-state-compact .ks-empty-state-action:has(> .ks-file-grant-actions) { flex: 0 1 auto; min-width: 0; white-space: normal; }
 .ks-notice-details { flex: 1 0 100%; max-height: calc(var(--ks-control-height) * 6); overflow-y: auto; }
 .ks-notice-details > div + div { margin-block-start: var(--ks-space-1); }
