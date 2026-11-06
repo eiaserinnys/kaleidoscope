@@ -8,10 +8,6 @@ use kaleidoscope_contract::{CoreError, CoreReply, CoreRequest, ErrorCode, LinkSt
 use serde_json::Value;
 use std::sync::Arc;
 
-fn wait_for_connection(inner: &Inner) {
-    crate::startup_readiness::wait(inner, crate::startup_readiness::WaitFor::Server);
-}
-
 pub(crate) struct Context {
     pub(crate) app: String,
     pub(crate) workspace: String,
@@ -34,7 +30,7 @@ pub(crate) fn context(
     window_id: &str,
     entry: Option<&str>,
 ) -> Result<Context, CoreError> {
-    wait_for_connection(inner);
+    crate::startup_readiness::wait_for_workspace(inner, window_id);
     let state = inner.state.lock().unwrap();
     let window = state
         .shared

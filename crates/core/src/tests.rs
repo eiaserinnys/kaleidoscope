@@ -2428,6 +2428,16 @@ fn mark_connected(core: &Core) {
     };
 }
 
+fn mark_layout_synced(core: &Core) {
+    let device_id = core.inner.link_file.lock().unwrap().as_ref().unwrap().device_id.clone();
+    let mut state = core.inner.state.lock().unwrap();
+    state.sync.device_id = Some(device_id);
+    state.sync.merged = true;
+    state.sync.pending.clear();
+    drop(state);
+    core.inner.layout_signal.notify();
+}
+
 #[test]
 fn builtin_raw_storage_uses_declarations_and_translates_change_events() {
     use kaleidoscope_contract::app_storage::{
@@ -2441,6 +2451,7 @@ fn builtin_raw_storage_uses_declarations_and_translates_change_events() {
     let (_, desktop) = active_ids(&core);
     let window = open_window(&core, &desktop, "agent");
     mark_connected(&core);
+    mark_layout_synced(&core);
     let default = crate::app_storage::read(&core.inner, &window, "agents").unwrap();
     assert!(!default.exists);
     assert!(default

@@ -25,6 +25,92 @@ fn apps(core: &Core) {
     ));
 }
 
+fn storage_read_after_workspace_push(
+    reply: Result<kaleidoscope_contract::registry::LayoutChanges, RegistryError>,
+) {
+    use crate::sync_state::EntityKind;
+
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let client = registry_client();
+    let core = Arc::new(open_core_with_client(
+        temp.path(),
+        vec![runtime_app()],
+        &host,
+        client.clone(),
+    ));
+    let (workspace, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "startup-runtime");
+    set_starting(&core);
+    let (release_tx, release_rx) = mpsc::channel();
+    *client.layout_change_pause.lock().unwrap() = Some(release_rx);
+    client
+        .layout_change_replies
+        .lock()
+        .unwrap()
+        .push_back(reply);
+    apps(&core);
+    assert!(crate::registry_events::apply_event(
+        &core.inner,
+        0,
+        DeviceEvent::LayoutSnapshot {
+            workspaces: vec![],
+            desktops: vec![],
+            windows: vec![],
+        },
+    ));
+    wait_until(|| !client.layout_changes.lock().unwrap().is_empty());
+    assert!(core
+        .inner
+        .state
+        .lock()
+        .unwrap()
+        .sync
+        .contains(EntityKind::Workspace, &workspace));
+
+    let (tx, rx) = mpsc::channel();
+    let task_core = core.clone();
+    let task = thread::spawn(move || {
+        tx.send(crate::app_storage::read(
+            &task_core.inner,
+            &window,
+            "choice",
+        ))
+        .unwrap();
+    });
+    let before = rx.recv_timeout(Duration::from_millis(100));
+    let reads_before_push = client.storage_reads.load(Ordering::SeqCst);
+    release_tx.send(()).unwrap();
+    let result = match before {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+        Err(error) => panic!("저장소 읽기 스레드 종료: {error}"),
+    };
+    task.join().unwrap();
+    assert_eq!(reads_before_push, 0, "작업 전송 전에 저장소를 읽었다");
+    assert!(result.is_ok());
+    assert_eq!(client.storage_reads.load(Ordering::SeqCst), 1);
+    assert!(!core
+        .inner
+        .state
+        .lock()
+        .unwrap()
+        .sync
+        .contains(EntityKind::Workspace, &workspace));
+}
+
+#[test]
+fn storage_read_waits_until_workspace_push_is_applied() {
+    storage_read_after_workspace_push(Ok(kaleidoscope_contract::registry::LayoutChanges::default()));
+}
+
+#[test]
+fn storage_read_resumes_when_workspace_push_is_rejected() {
+    storage_read_after_workspace_push(Err(RegistryError::Validation(
+        kaleidoscope_contract::errors::SERVER_PREFERENCES_APP_NOT_FOUND(),
+    )));
+}
+
 fn connections(core: &Core, connections: Vec<ConnectionInfo>) {
     assert!(crate::registry_events::apply_event(
         &core.inner,
@@ -139,6 +225,7 @@ fn runtime_waits_for_both_events_and_fetches_once() {
     assert!(client.storage_workspace.lock().unwrap().is_empty());
     assert_eq!(client.storage_reads.load(Ordering::SeqCst), 0);
     apps(&core);
+    mark_layout_synced(&core);
     wait_until(|| {
         matches!(
             crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value"),
@@ -462,6 +549,7 @@ fn startup_storage_waits_before_the_connecting_thread_starts() {
             deleted: vec![]
         }
     ));
+    mark_layout_synced(&core);
     task.join().unwrap();
     assert!(matches!(before, Err(mpsc::RecvTimeoutError::Timeout)));
     assert!(matches!(

@@ -1613,6 +1613,7 @@ fn app_storage_list_and_get_wait_for_apps_snapshot_during_startup() {
             deleted: vec![]
         },
     ));
+    mark_layout_synced(&core);
     let first = finished_rx
         .recv_timeout(Duration::from_secs(1))
         .unwrap()
@@ -1664,6 +1665,7 @@ fn storage_failed_while_offline_is_reloaded_after_connecting() {
         )
     });
     mark_connected(&core);
+    mark_layout_synced(&core);
     crate::data_runtime::state_changed(&core.inner);
     wait_until(
         || matches!(crate::data_runtime::binding_value(&core.inner, &window, "/ui/value"), Some(BindingValue::Ready { value, .. }) if value == "one.json"),
@@ -1707,6 +1709,7 @@ fn hidden_window_reloads_failed_storage_when_it_becomes_visible() {
     })
     .unwrap();
     mark_connected(&core);
+    mark_layout_synced(&core);
     crate::data_runtime::state_changed(&core.inner);
     thread::sleep(Duration::from_millis(100));
     assert!(client.storage_workspace.lock().unwrap().is_empty());
@@ -1944,6 +1947,7 @@ fn storage_actions_and_remote_change_replan_file_source() {
     let window = open_window(&core, &desktop, "storage-flow");
     pick_folder(&core, &window);
     mark_connected(&core);
+    mark_layout_synced(&core);
     core.handle(CoreRequest::DataAttach {
         window_id: window.clone(),
         dormant: vec![],
@@ -2059,6 +2063,7 @@ fn storage_change_recalculates_source_metadata_bindings() {
     let window = open_window(&core, &desktop, "metadata-storage");
     pick_folder(&core, &window);
     mark_connected(&core);
+    mark_layout_synced(&core);
     let (sender, receiver) = mpsc::channel();
     core.subscribe(Box::new(move |event| {
         let _ = sender.send(event.clone());
