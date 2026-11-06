@@ -88,6 +88,9 @@ for(const width of [880,360]) for(const items of [['잘 알려진 포트','등�
  await expect(app.locator('.ks-data-segmented')).toBeVisible();
  const cuts=await app.locator('.ks-data-segmented .ks-truncate-label').evaluateAll(els=>els.filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent));
  expect(cuts).toEqual([]);
+ const spacing=await app.locator('.ks-select-field').evaluate(el=>{const label=el.querySelector('.ks-field-label')!.getBoundingClientRect();const control=el.querySelector('.ks-data-segmented')!.getBoundingClientRect();return {below:control.top>=label.bottom,gap:control.top-label.bottom,space:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-1'))};});
+ if(items.length===4)expect(spacing.below).toBe(true);
+ if(spacing.below)expect(spacing.gap).toBeCloseTo(spacing.space,0);
 });
 test('짧은 두 칸과 입력의 시작선 유지',async({page})=>{
  const app=await open(page,S([I,seg(['너비','높이'])]),360);
