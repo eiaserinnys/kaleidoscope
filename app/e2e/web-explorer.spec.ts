@@ -98,7 +98,7 @@ test("centers the PC permission action in wide and narrow windows, including fai
 
   await allow.click();
   const alert = explorer.getByRole("alert");
-  await expect(alert).toHaveText("허용할 수 없습니다 FILE_ACCESS_PERMISSION_UNDECLARED");
+  await expect(alert).toHaveText("파일 권한 pc: 앱 정의 permissions에 scope pc로 선언되지 않았습니다. 앱 정의에서 이 권한의 scope를 pc로 고치세요. DESK_PC_ACCESS_PERMISSION_UNDECLARED");
   const wideFailed = await permissionCenterMetrics(page);
   expect(Math.abs(wideFailed.delta)).toBeLessThanOrEqual(8);
   const failurePlacement = await page.evaluate(() => {
@@ -275,7 +275,7 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await explorer.getByRole("button", { name: "이 PC의 파일 읽기 허용" }).click();
   const folders = explorer.getByRole("tree", { name: "폴더 목록" });
   const contents = explorer.getByRole("listbox", { name: "폴더 내용" });
-  await expect(folders.getByRole("button", { name: "문서" })).toBeVisible();
+  await expect(folders.getByRole("treeitem", { name: "문서" })).toBeVisible();
   await expect(contents.getByRole("option", { name: "문서" })).toBeVisible();
   await expect(contents.getByRole("option", { name: "다운로드" })).toBeVisible();
   await expect(contents.getByRole("option", { name: "로컬 디스크 (C:)" })).toBeVisible();
@@ -292,9 +292,9 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await page.setViewportSize({ width: 1440, height: 900 });
   await screenshot(page, "explorer-pc-details-wide-1440x900.png");
   await explorer.getByRole("button", { name: "아이콘 보기" }).click();
-  await folders.getByRole("button", { name: "문서" }).click();
-  await expect(folders.getByRole("button", { name: "notes" })).toBeVisible();
-  await folders.getByRole("button", { name: "notes" }).click();
+  await folders.getByRole("treeitem", { name: "문서" }).click();
+  await expect(folders.getByRole("treeitem", { name: "notes" })).toBeVisible();
+  await folders.getByRole("treeitem", { name: "notes" }).click();
   await expect(explorer.getByRole("button", { name: "새 파일" })).toHaveCount(0);
   await expect(explorer.locator('[data-file-path="documents/notes/a.md"]')).toBeVisible();
   await expect(explorer.locator(".ks-explorer-crumb-button")).toHaveText(["내 PC", "문서"]);
@@ -361,16 +361,16 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   const invariantBefore = await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-before.png") });
 
   await raiseExplorer(page);
-  await folders.getByRole("button", { name: "문서" }).click();
-  await folders.getByRole("button", { name: "images" }).click();
+  await folders.getByRole("treeitem", { name: "문서" }).click();
+  await folders.getByRole("treeitem", { name: "images" }).click();
   await explorer.locator('[data-file-path="documents/images/cover.png"]').dblclick();
   const noOpeners = page.getByRole("menuitem", { name: "열 수 있는 앱이 없습니다" });
   await expect(noOpeners).toBeVisible();
   await expect(noOpeners).toBeDisabled();
   await page.keyboard.press("Escape");
 
-  await folders.getByRole("button", { name: "문서" }).click();
-  await folders.getByRole("button", { name: "notes" }).click();
+  await folders.getByRole("treeitem", { name: "문서" }).click();
+  await folders.getByRole("treeitem", { name: "notes" }).click();
   await expect(explorer.locator('[data-file-path="documents/notes/a.md"]')).toBeVisible();
   await explorer.locator('[data-file-path="documents/notes/a.md"]').click({ button: "right" });
   const appOpenMenu = page.getByRole("menu");

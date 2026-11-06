@@ -616,7 +616,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const existing = candidates[0];
         let opened: AppWindow;
         if (existing) {
-          const state = { ...existing.state, [opens.state]: currentFile };
+          const state = { ...existing.state, [opens.state]: currentFile, ...clone(opens.set_state ?? {}) };
           const topZ = Math.max(0, ...snapshot.shared.windows
             .filter((item) => item.desktop_id === explorerWindow.desktop_id)
             .map((item) => item.z));
@@ -650,7 +650,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
             app_version: app.current_version,
             rect: clone(request.rect ?? { x: 48, y: 48, width: 720, height: 520 }),
             z: topZ + 1,
-            state: { ...clone(targetDefinition.state), [opens.state]: currentFile },
+            state: { ...clone(targetDefinition.state), [opens.state]: currentFile, ...clone(opens.set_state ?? {}) },
             created_at: at,
             updated_at: at,
           };

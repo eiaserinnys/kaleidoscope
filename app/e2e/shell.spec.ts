@@ -291,7 +291,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
 
   await editorWindow.getByRole("tab", { name: "내 폴더" }).click();
   await editorWindow.getByRole("button", { name: "문서 폴더 고르기" }).click();
-  await editorWindow.getByRole("button", { name: "a.md" }).click();
+  await editorWindow.getByRole("treeitem", { name: "a.md" }).click();
   await page.setViewportSize({ width: 1440, height: 900 });
   const editor = editorWindow.getByRole("textbox", { name: "마크다운 편집기" });
   await editor.click();
@@ -343,7 +343,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await expect(viewerWindow.locator(".ks-markdown-view")).toHaveCount(0);
   await captureThemePair("viewer-empty-path");
   await viewerWindow.getByRole("button", { name: "읽을 폴더 고르기" }).click();
-  await viewerWindow.getByRole("button", { name: "a.md" }).click();
+  await viewerWindow.getByRole("treeitem", { name: "a.md" }).click();
   await expect(viewerWindow.locator(".ks-markdown-view")).toContainText("E2E saved");
 
   const typography = await Promise.all([
@@ -411,7 +411,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
 
   const crlfPath = path.join(docsDir, "crlf.md");
   const crlfBefore = await readFile(crlfPath, "utf8");
-  await editorWindow.getByRole("button", { name: "crlf.md" }).click();
+  await editorWindow.getByRole("treeitem", { name: "crlf.md" }).click();
   await editor.click();
   await page.keyboard.press("Control+Home");
   await page.keyboard.press("ArrowRight");
@@ -442,9 +442,13 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.setViewportSize({ width: 960, height: 600 });
   const narrowArea = await page.locator(".ks-desktop-area").boundingBox();
   const wideClose = viewerWindow.getByRole("button", { name: "창 닫기" });
+  if (!narrowArea) throw new Error("데스크톱 영역을 찾지 못했습니다");
+  await expect.poll(async () => {
+    const bounds = await wideClose.boundingBox();
+    return bounds ? bounds.x + bounds.width : Number.POSITIVE_INFINITY;
+  }).toBeLessThanOrEqual(narrowArea.x + narrowArea.width - 12);
   const wideCloseBounds = await wideClose.boundingBox();
-  if (!narrowArea || !wideCloseBounds) throw new Error("뷰어 닫기 단추를 찾지 못했습니다");
-  expect(wideCloseBounds.x + wideCloseBounds.width).toBeLessThanOrEqual(narrowArea.x + narrowArea.width - 12);
+  if (!wideCloseBounds) throw new Error("뷰어 닫기 단추를 찾지 못했습니다");
   measurements.wideWindowClose = { area: narrowArea, close: wideCloseBounds };
   await captureThemePair("wide-viewer-close-960");
   await wideClose.click();
@@ -452,7 +456,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await page.setViewportSize({ width: 1440, height: 900 });
 
   const longDocument = "긴 문서.md";
-  await editorWindow.getByRole("button", { name: longDocument }).click();
+  await editorWindow.getByRole("treeitem", { name: longDocument }).click();
   await expect(editor).toContainText("세라피엘 검수용 긴 문서");
   await editor.click();
   const scroller = editorWindow.locator(".cm-scroller");
@@ -507,7 +511,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.editorScrollbar = { ...scrollMetrics, scrollTopAfterDrag };
   await captureThemePair("editor-scrollbar-after-drag");
 
-  await editorWindow.getByRole("button", { name: "notes", exact: true }).click();
+  await editorWindow.getByRole("treeitem", { name: "notes", exact: true }).click();
   const treeList = editorWindow.locator(".ks-file-tree-list");
   const treeScrollbar = await treeList.evaluate((element) => {
     const node = element as HTMLElement;
@@ -557,8 +561,8 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     },
   });
 
-  await editorWindow.getByRole("button", { name: "notes", exact: true }).click();
-  const selectedTreeRow = editorWindow.getByRole("button", { name: longDocument });
+  await editorWindow.getByRole("treeitem", { name: "notes", exact: true }).click();
+  const selectedTreeRow = editorWindow.getByRole("treeitem", { name: longDocument });
   const selectedTab = page.getByRole("button", { name: "데스크톱 2" });
   for (const [name, locator] of [["tree", selectedTreeRow], ["tab", selectedTab]] as const) {
     for (const scheme of ["light", "dark"] as const) {
@@ -578,8 +582,8 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     }
   }
   await page.emulateMedia({ colorScheme: "light" });
-  await editorWindow.getByRole("button", { name: "a.md" }).hover();
-  measurements.hoverFileRow = await editorWindow.getByRole("button", { name: "a.md" }).evaluate((element) => getComputedStyle(element).backgroundColor);
+  await editorWindow.getByRole("treeitem", { name: "a.md" }).hover();
+  measurements.hoverFileRow = await editorWindow.getByRole("treeitem", { name: "a.md" }).evaluate((element) => getComputedStyle(element).backgroundColor);
   await captureThemePair("hover-file-row");
   await page.getByRole("button", { name: "데스크톱 2" }).hover();
   await captureThemePair("hover-desktop-tab");
