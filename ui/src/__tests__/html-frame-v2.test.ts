@@ -15,3 +15,40 @@ it("문서를 정화하고 nonce가 붙은 브리지만 실행하도록 만든�
   expect(scripts[0].getAttribute("src")).toMatch(/^data:text\/javascript;base64,/);
   expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content")).toContain(`script-src 'nonce-${nonce}'`);
 });
+
+
+it("토큰 문서만 낮은 우선순위의 기본 색상 체계를 받고 작성자 선언은 보존한다", () => {
+  const token = htmlViewSource('<p style="color:var(--ks-color-text)">본문</p>');
+  expect(token).toContain(":where(:root){color-scheme:light dark}");
+  expect(htmlViewSource('<p style="color:black;background:white">본문</p>')).not.toContain(":where(:root){color-scheme:light dark}");
+  const own = htmlViewSource('<style>:root{color-scheme:only light}</style><p style="color:var(--ks-color-text)">본문</p>');
+  expect(own).toContain(":root{color-scheme:only light}");
+});
+
+
+it("meta로 직접 정한 색상 체계도 기본 주입보다 우선한다", () => {
+  const source = htmlViewSource('<meta name="color-scheme" content="only light"><p style="color:var(--ks-color-text)">본문</p>');
+  expect(source).not.toContain(":where(:root){color-scheme:light dark}");
+  expect(source).toContain('content="only light"');
+});
+
+
+it.each([
+  '<body style="background:white;font-size:var(--ks-type-body)">본문</body>',
+  '<p style="color:#222;font-size:var(--ks-type-body)">본문</p>',
+  '<p style="color:#333;font-family:var(--ks-font-family)">본문</p>',
+])("색이 고정된 글꼴 토큰 문서에는 색상 체계를 주입하지 않는다: %s", (html) => {
+  expect(htmlViewSource(html)).not.toContain(":where(:root){color-scheme:light dark}");
+});
+
+it("외부 스타일은 정화와 CSP로 차단하고 인라인 색 토큰은 인식한다", () => {
+  const source = htmlViewSource('<link rel="stylesheet" href="https://example.com/colors.css"><style>@import "https://example.com/type.css";</style><p style="color:var(--ks-color-text)">본문</p>');
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  expect(doc.querySelector('link')?.hasAttribute("href")).toBe(false);
+  expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content")).toContain("style-src 'unsafe-inline'");
+  expect(source).toContain(":where(:root){color-scheme:light dark}");
+});
+
+it('강조색만 토큰인 고정 글자 문서는 원래 캔버스를 유지한다', () => {
+  expect(htmlViewSource('<p style="color:#222;border-color:var(--ks-color-accent)">본문</p>')).not.toContain(':where(:root){color-scheme:light dark}');
+});

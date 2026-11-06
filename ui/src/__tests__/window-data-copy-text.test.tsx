@@ -78,8 +78,8 @@ it("빈 글은 SHELL_COPY_TEXT_EMPTY로 알린다", async () => {
 
   await userEvent.click(screen.getByRole("button", { name: "실행" }));
   expect(screen.getByTestId("result").textContent).toBe("false");
-  expect(screen.getByTestId("notice").textContent).toBe("SHELL_COPY_TEXT_EMPTY");
-  expect(screen.getByTestId("notice-text").textContent).toMatch(/^복사: /);
+  expect(screen.getByTestId("notice").textContent).toBe("");
+  expect(screen.getByTestId("notice-text").textContent).toBe("복사: 복사할 글이 아직 없습니다. 글이 나온 뒤 다시 누르세요.");
   store.dispose();
 });
 
@@ -93,9 +93,10 @@ it("행 메뉴 이름은 알림에 넣고 이름 없는 단축키는 생략한�
   const data = new WindowData(store, "viewer-window", definition);
   await data.act("/ui/item_menu/0/on_select", null);
   expect(data.getNotice()).toMatch(/^번역: /);
-  expect(data.getNoticeId()).toBe("SHELL_COPY_TEXT_EMPTY");
+  expect(data.getNoticeRole()).toBe("status");
+  expect(data.getNoticeId()).toBeNull();
   await data.act("/shortcuts/0/action", null);
-  expect(data.getNotice()).toMatch(/^복사할 글이 없습니다/);
+  expect(data.getNotice()).toMatch(/^복사할 글이 아직 없습니다/);
   store.dispose();
 });
 

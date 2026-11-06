@@ -33,6 +33,19 @@ afterEach(() => {
   mediaRenders.clear();
   vi.restoreAllMocks();
 });
+it("문자열 key가 없는 표 행만 제외하고 개수를 알린다", async () => {
+  setup({ type: "table", rows: [{ key: "good", name: "보이는 행" }, { name: "빠진 행" }, { key: 3, name: "잘못된 행" }], columns: [{ field: "name", label: "이름" }] } as unknown as Block);
+  expect((await screen.findByRole("alert")).textContent).toContain("표 행 2개에 문자열 key가 없어 보이지 않습니다.");
+  expect(screen.getByRole("alert").textContent).toContain("SHELL_TABLE_ROW_KEY_MISSING");
+  expect(screen.getByRole("table")).toBeTruthy();
+  expect(screen.getByText("보이는 행")).toBeTruthy();
+});
+it("모든 표 행에 key가 없으면 빈 표 대신 오류를 보인다", async () => {
+  setup({ type: "table", rows: [{ name: "빠진 행" }], columns: [{ field: "name", label: "이름" }] } as unknown as Block);
+  expect(await screen.findByText(/표 행 1개에 문자열 key가 없어/)).toBeTruthy();
+  expect(screen.getByText("SHELL_TABLE_ROW_KEY_MISSING")).toBeTruthy();
+  expect(screen.queryByText("없음")).toBeNull();
+});
 function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?: Record<string, string>) {
   const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks, modules: {} }, permissions: [], state, ui };
   const seed = makeTestSeed({ definitions: [definition] });

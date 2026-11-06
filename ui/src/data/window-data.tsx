@@ -169,6 +169,8 @@ export class WindowData {
   private chatDrafts = new Map<string, ChatDraft>();
   private chatDraftListeners = new Map<string, Set<() => void>>();
   private sources: DataView["sources"] = emptySources;
+  private noticeSources: DataView["sources"] = emptySources;
+  private sourceRetrySequence = 0;
   private sourceMeta: NonNullable<DataView["source_meta"]> = {};
   private listeners = new Map<string, Set<() => void>>();
   private sourceListeners = new Set<() => void>();
@@ -307,13 +309,16 @@ export class WindowData {
   };
   subscribeSources = (listener: () => void) => { this.sourceListeners.add(listener); return () => this.sourceListeners.delete(listener); };
   getSources = () => this.sources;
+  getNoticeSources = () => this.noticeSources;
+  getSourceRetrySequence = () => this.sourceRetrySequence;
   getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
-  getNotice = () => this.notice;
-  getNoticeId = () => this.noticeId;
+  getNotice = () => this.noticeRole === "status" ? this.statusMessage : this.notice;
+  getNoticeId = () => this.noticeRole === "status" ? null : this.noticeId;
   getNoticeRole = () => this.noticeRole;
   getStatusSequence = () => this.statusSequence;
   setNotice = (problem: CoreError | string | null, owner: object | null = null) => {
+    this.statusMessage = null;
     this.noticeProblem = problem;
     this.noticeOwner = owner;
     this.notice = typeof problem === "string" ? problem : problem?.message ?? null;
@@ -322,10 +327,26 @@ export class WindowData {
     this.noticeListeners.forEach((listener) => listener());
   };
   setOwnedNotice = (problem: CoreError | string, owner: object) => {
-    if (this.notice === null || this.noticeOwner === owner) this.setNotice(problem, owner);
+    if (this.notice !== null && this.noticeOwner !== owner) return;
+    if (this.noticeRole !== "status") { this.setNotice(problem, owner); return; }
+    this.noticeProblem = problem; this.noticeOwner = owner;
+    this.notice = typeof problem === "string" ? problem : problem.message;
+    this.noticeId = typeof problem === "string" ? null : problem.id ?? null;
+    this.noticeListeners.forEach((listener) => listener());
   };
-  clearNoticeIf = (problem: CoreError | string, owner?: object) => { if (this.noticeProblem === problem && (!owner || this.noticeOwner === owner)) this.setNotice(null); };
-  setStatus = (message: string) => { this.noticeProblem = null; this.noticeOwner = null; this.notice = message; this.noticeId = null; this.noticeRole = "status"; this.statusSequence += 1; this.noticeListeners.forEach((listener) => listener()); };
+  clearNoticeIf = (problem: CoreError | string, owner?: object) => {
+    if (this.noticeProblem !== problem || (owner && this.noticeOwner !== owner)) return;
+    this.noticeProblem = null; this.noticeOwner = null; this.notice = null; this.noticeId = null;
+    this.noticeListeners.forEach((listener) => listener());
+  };
+  private statusMessage: string | null = null;
+  clearStatus = (sequence: number) => {
+    if (this.statusSequence !== sequence) return;
+    this.statusMessage = null;
+    this.noticeRole = "alert";
+    this.noticeListeners.forEach((listener) => listener());
+  };
+  setStatus = (message: string) => { this.statusMessage = message; this.noticeRole = "status"; this.statusSequence += 1; this.noticeListeners.forEach((listener) => listener()); };
   getClientFailed = () => this.clientFailed;
   failClient = (problem: CoreError) => { this.clientFailed = true; this.setNotice(problem); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };
@@ -366,6 +387,14 @@ export class WindowData {
     }
     if (Object.keys(view.sources).length || Object.keys(view.source_meta ?? {}).length) {
       this.sources = { ...this.sources, ...view.sources };
+      const noticeSources = { ...this.noticeSources };
+      for (const [name, source] of Object.entries(view.sources)) {
+        const previous = noticeSources[name];
+        // 받은 값으로 화면을 유지하는 재수신 중에는 실패 안내도 유지한다.
+        noticeSources[name] = source.state === "loading" && source.has_value
+          && previous?.state === "failed" && previous.has_value ? previous : source;
+      }
+      this.noticeSources = noticeSources;
       this.sourceMeta = { ...this.sourceMeta, ...view.source_meta };
       this.sourceListeners.forEach((listener) => listener());
     }
@@ -425,7 +454,7 @@ export class WindowData {
     });
     const onFocus = () => {
       const names = Object.entries(this.definition.sources ?? {}).filter(([, source]) => source.kind === "file" || source.kind === "folder").map(([name]) => name);
-      if (names.length) void this.refresh(names);
+      if (names.length) void this.refresh(names, false);
     };
     globalThis.window.addEventListener("focus", onFocus);
     return () => {
@@ -633,7 +662,11 @@ export class WindowData {
           const arrayPrefix = Array.isArray(this.definitionAt(pointer)) ? "/0" : "";
           const raw = this.localBinding(`${pointer}${arrayPrefix}/copy_text`, action.copy_text as Binding, scope, read);
           if (typeof raw !== "string") throw shellErrors.SHELL_COPY_TEXT_NOT_TEXT();
-          if (raw.length === 0) throw shellErrors.SHELL_COPY_TEXT_EMPTY();
+          if (raw.length === 0) {
+            const message = shellErrors.SHELL_COPY_TEXT_EMPTY().message;
+            this.setStatus(label ? `${label}: ${message}` : message);
+            return false;
+          }
           try {
             await navigator.clipboard.writeText(raw);
           } catch (error) {
@@ -652,6 +685,10 @@ export class WindowData {
         return true;
       }
       await this.ready;
+      const steps = this.definitionAt(pointer);
+      for (const step of Array.isArray(steps) ? steps : [steps]) {
+        if (step && typeof step === "object" && "refresh" in step) this.reopenSourceFailure((step as { refresh: string[] }).refresh);
+      }
       const reply = await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
       if (options?.input) this.inputSequence = Math.max(this.inputSequence, reply.sequence);
       return true;
@@ -661,7 +698,13 @@ export class WindowData {
       return false;
     }
   };
-  refresh = async (sources: string[]) => {
+  private reopenSourceFailure(sources: string[]) {
+    const retriedFailure = Object.entries(this.noticeSources).some(([name, source]) =>
+      source.state === "failed" && source.has_value && (!sources.length || sources.includes(name)));
+    if (retriedFailure) { this.sourceRetrySequence += 1; this.sourceListeners.forEach((listener) => listener()); }
+  }
+  refresh = async (sources: string[], manual = true) => {
+    if (manual) this.reopenSourceFailure(sources);
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }
     catch (error) { this.setNotice(toCoreError(error)); }
   };

@@ -1,4 +1,4 @@
-import type { AppDefinition } from "../src/contract/contract";
+import type { AppDefinition, Block } from "../src/contract/contract";
 
 const entries = Array.from({ length: 35 }, (_, index) => ({ key: String(index), name: "기록", body: `내용 ${index + 1}` }));
 const items = Array.from({ length: 1000 }, (_, index) => ({ key: String(index), title: `항목 ${index + 1}`, url: `https://example.com/${index + 1}` }));
@@ -74,5 +74,19 @@ export const dataViewsApp: AppDefinition = {
     { label: "칸 오류", child: { type: "table", rows: [{ key: "a", label: "제작", day: ["잘못된 내용"], next: { title: "정상 일정" } }], columns: [{ field: "label", label: "항목" }, { field: "day", label: "첫째 날", format: "content" }, { field: "next", label: "둘째 날", format: "content" }], selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
     { label: "아이콘 시험", child: { type: "list", layout: "icons", items: icons, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }] } },
     { label: "빈 아이콘", child: { type: "list", layout: "icons", items: [] } },
+    { label: "잘못된 행 시험", child: { type: "table", rows: [{ key: "good", label: "정상 행" }, { label: "빠진 행" }], columns: [{ field: "label", label: "이름" }] } },
   ] },
 };
+
+// 표 경고의 자연 높이와 채움 높이를 같은 자료로 비교한다.
+const warningLayout = new URLSearchParams(window.location.search).get("warning-layout");
+if (warningLayout && dataViewsApp.ui.type === "tabs") {
+  const table: Block = { type: "table", rows: [...rows.slice(0, 40), { name: "빠진 행" }], columns: [{ field: "name", label: "이름" }] };
+  const text: Block = { type: "text", value: "본문" };
+  const child: Block = warningLayout === "section" ? { type: "section", title: "자료", child: table }
+    : warningLayout === "middle" ? { type: "stack", direction: "column", children: [text, table, text] }
+    : warningLayout === "other-fill" ? { type: "stack", direction: "column", fill: 1, children: [table, text] }
+    : warningLayout === "fill" ? { type: "stack", direction: "column", fill: 1, children: [{ type: "toolbar", start: [{ type: "button", label: "위 단추", on_click: [{ set_state: "choice", value: null }] }] }, table, { type: "toolbar", start: [{ type: "button", label: "아래 단추", on_click: [{ set_state: "choice", value: null }] }] }] }
+    : table;
+  dataViewsApp.ui = child;
+}

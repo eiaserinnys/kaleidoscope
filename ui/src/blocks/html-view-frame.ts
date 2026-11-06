@@ -1,8 +1,20 @@
 /// <reference path="../iife.d.ts" />
 import bridgeSource from "./html-bridge/main.ts?iife";
 import { sourceHash } from "./html-bridge/identity";
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { registerFramePointHandler } from "../share/frame-point";
+import type { ParentToFrame } from "./html-bridge/frame-protocol";
+
+export function useHtmlThemeResend(send: (message: ParentToFrame) => void): void {
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!media) return;
+    let scheduled = 0;
+    const update = () => { if (scheduled) cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(() => send({ type: "ks-html-theme", tokens: htmlViewTokens() })); };
+    media.addEventListener("change", update);
+    return () => { media.removeEventListener("change", update); if (scheduled) cancelAnimationFrame(scheduled); };
+  }, [send]);
+}
 
 export function useHtmlFramePoint(frame: RefObject<HTMLIFrameElement | null>, source: string | null): void {
   const points = useRef(new Map<string, () => void>());
@@ -28,7 +40,7 @@ export function useHtmlFramePoint(frame: RefObject<HTMLIFrameElement | null>, so
   }, [frame, source]);
 }
 
-const tokenNames = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-color-warning", "--ks-type-meta", "--ks-line-body", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
+const tokenNames = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-color-warning", "--ks-type-meta", "--ks-type-body", "--ks-line-body", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
 
 export function htmlViewTokens(): Record<string, string> {
   const styles = getComputedStyle(document.documentElement);
@@ -69,7 +81,7 @@ export function htmlViewSource(html: string): string {
   const style = doc.createElement("style");
   style.dataset.ksInjected = "";
   const tokens = htmlViewTokens();
-  style.textContent = `:root{${Object.entries(tokens).map(([name, value]) => `${name}:${value};`).join("")}}` +
+  style.textContent = (/var\(\s*--ks-color-text\s*[,)]/.test(html) && !doc.querySelector('meta[name="color-scheme" i]') ? ":where(:root){color-scheme:light dark}" : "") + `:root{${Object.entries(tokens).map(([name, value]) => `${name}:${value};`).join("")}}` +
     "*::-webkit-scrollbar{width:var(--ks-space-2);height:var(--ks-space-2)}*::-webkit-scrollbar-track{background:transparent}*::-webkit-scrollbar-thumb{background:var(--ks-color-scroll-thumb);border-radius:var(--ks-radius-large);border:calc(var(--ks-line-width) * 2) solid transparent;background-clip:padding-box}*::-webkit-scrollbar-button{display:none}*:focus-visible{outline:var(--ks-focus-width) solid var(--ks-color-focus);outline-offset:var(--ks-focus-offset)}" +
     ":root[data-ks-pending] ::selection{background:transparent;color:inherit}" +
     "::highlight(ks-comment){background-color:color-mix(in srgb,color-mix(in srgb,var(--ks-color-accent),var(--ks-color-accent-contrast)) 40%,transparent);text-decoration:underline solid var(--ks-color-accent) var(--ks-focus-width)}" +

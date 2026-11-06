@@ -11,7 +11,8 @@ import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { FileGrant } from "./file-grant";
-import { htmlViewSource, useHtmlFramePoint } from "./html-view-frame";
+import { htmlViewSource, useHtmlFramePoint, useHtmlThemeResend } from "./html-view-frame";
+import type { ParentToFrame } from "./html-bridge/frame-protocol";
 import { htmlText } from "./html-view-model";
 import { HtmlDocumentViewBlock } from "./html-document/view";
 import * as shellErrors from "../contract/shell-errors";
@@ -30,6 +31,8 @@ function BoundHtmlViewBlock({ binding, pointer, context }: { binding: Binding; p
   const value = useBinding(`${pointer}/value`, binding);
   const root = useRef<HTMLElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
+  const send = useCallback((message: ParentToFrame) => frame.current?.contentWindow?.postMessage(message, "*"), []);
+  useHtmlThemeResend(send);
   const [visibleText, setVisibleText] = useState("");
   const rawHtml = value.status === "ready" && typeof value.value === "string" ? value.value : "";
   const source = useMemo(() => htmlViewSource(rawHtml), [rawHtml]);
@@ -63,6 +66,8 @@ function FileHtmlViewBlock({ file, context }: { file: FileRef; context: BlockCon
   const version = useRef(0);
   const root = useRef<HTMLElement>(null);
   const frame = useRef<HTMLIFrameElement>(null);
+  const send = useCallback((message: ParentToFrame) => frame.current?.contentWindow?.postMessage(message, "*"), []);
+  useHtmlThemeResend(send);
   useHtmlFramePoint(frame, rootPath && !loading && !error ? source : null);
   useLayoutEffect(() => { setVisibleText(""); }, [rawHtml]);
   useLayoutEffect(() => {
