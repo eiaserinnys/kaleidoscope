@@ -50,6 +50,26 @@ async fn preview_evaluates_sample_apps_and_defaults_to_empty() {
 }
 
 #[tokio::test]
+async fn preview_indexes_sample_and_unsampled_device_source() {
+    let server = McpServer::new(AppState::in_memory("secret"));
+    let definition = json!({"id":"indexes-preview","name":"스토어 미리보기","requires":{"blocks":4,"modules":{"store":3}},
+        "permissions":[{"module":"store","id":"catalog","label":"스토어"}],
+        "state":{"servers":["https://store.example"]},
+        "sources":{"catalog":{"kind":"store","store":"indexes","permission":"catalog","servers":{"state":"servers"}}},
+        "ui":{"type":"text","value":{"expr":"$data.catalog.stores.state"}}});
+    let idle = result_value(server.preview_app_result(args(definition.clone())).await.unwrap());
+    assert_eq!(idle["sources"]["catalog"]["state"], "idle");
+    let mut input = args(definition);
+    input.data = Some([("catalog".into(), json!({"stores":[
+        {"server":"https://store.example","state":"ready","error":null,"generated_at":"2026-11-06T00:00:00Z","items":[]},
+        {"server":"http://192.168.1.10:8080","state":"permission_required","error":{"id":"STORECLIENT_SERVER_PERMISSION_REQUIRED","message":"이 PC에서 스토어 연결을 허용하세요.","details":[]},"items":[]}
+    ]}))].into());
+    let result = result_value(server.preview_app_result(input).await.unwrap());
+    assert_eq!(result["sources"]["catalog"]["state"], "ready");
+    assert!(result["values"][0]["value"].as_str().unwrap().contains("permission_required"));
+}
+
+#[tokio::test]
 async fn preview_badge_uses_latest_and_warns_for_non_integer() {
     let server = McpServer::new(AppState::in_memory("secret"));
     let mut definition = json!({"id":"badge-preview","name":"배지 미리보기","requires":{"blocks":39,"modules":{"store":2}},

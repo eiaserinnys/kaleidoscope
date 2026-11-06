@@ -97,3 +97,15 @@ fn default_tab_and_collapsed_section_determine_live_sources() {
     assert_eq!(default, 1.0);
     assert_eq!(all, 4.0);
 }
+
+#[test]
+fn dynamic_store_indexes_have_no_automatic_host_budget() {
+    let definition = parse(json!({
+        "id":"stores", "name":"스토어", "requires":{"blocks":4,"modules":{"store":3}},
+        "permissions":[{"module":"store","id":"catalog","label":"목록"}],
+        "state":{"servers":["https://one.example", "https://two.example"]},
+        "sources":{"catalog":{"kind":"store","store":"indexes","permission":"catalog","servers":{"state":"servers"}}},
+        "ui":{"type":"text","value":{"expr":"$data.catalog"}}
+    }));
+    assert!(call_budget(&definition).is_empty());
+}

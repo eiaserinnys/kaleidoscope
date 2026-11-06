@@ -322,6 +322,7 @@ pub enum SourceDecl {
 pub enum StoreSource {
     Index { permission: String, server: Binding, #[serde(default, skip_serializing_if = "Option::is_none")] #[ts(optional)] refresh_secs: Option<u32> },
     App { permission: String, server: Binding, id: Binding, #[serde(default, skip_serializing_if = "Option::is_none")] #[ts(optional)] refresh_secs: Option<u32> },
+    Indexes { permission: String, servers: Binding },
 }
 
 /// 한 앱이 한 호스트에 보내는 원천의 분당 호출 계산값.
@@ -342,8 +343,10 @@ pub fn call_budget(definition: &AppDefinition) -> Vec<HostCallBudget> {
 
     for (name, source) in &definition.sources {
         let host = match source {
+            SourceDecl::Store(StoreSource::Indexes { .. }) => None,
             SourceDecl::Store(store) => Some(format!("store:{}", match store {
                 StoreSource::Index { permission, .. } | StoreSource::App { permission, .. } => permission,
+                StoreSource::Indexes { .. } => unreachable!(),
             })),
             SourceDecl::Request { permission, .. } => definition
                 .permissions
@@ -461,7 +464,7 @@ fn reads_all_data(expr: &str, variable: &str) -> bool {
 impl SourceDecl {
     pub fn permission(&self) -> &str {
         match self {
-            SourceDecl::Store(StoreSource::Index { permission, .. } | StoreSource::App { permission, .. }) => permission,
+            SourceDecl::Store(StoreSource::Index { permission, .. } | StoreSource::App { permission, .. } | StoreSource::Indexes { permission, .. }) => permission,
             SourceDecl::Request { permission, .. }
             | SourceDecl::File { permission, .. }
             | SourceDecl::Folder { permission, .. } => permission,
@@ -471,6 +474,7 @@ impl SourceDecl {
     pub fn refresh_secs(&self) -> Option<u32> {
         match self {
             SourceDecl::Store(StoreSource::Index { refresh_secs, .. } | StoreSource::App { refresh_secs, .. }) => *refresh_secs,
+            SourceDecl::Store(StoreSource::Indexes { .. }) => None,
             SourceDecl::Request { refresh_secs, .. }
             | SourceDecl::File { refresh_secs, .. }
             | SourceDecl::Folder { refresh_secs, .. } => *refresh_secs,
@@ -2180,6 +2184,7 @@ pub fn source_bindings(source: &SourceDecl) -> Vec<(String, &Binding)> {
         }
         SourceDecl::Store(StoreSource::Index { server, .. }) => vec![("server".into(), server)],
         SourceDecl::Store(StoreSource::App { server, id, .. }) => vec![("server".into(), server), ("id".into(), id)],
+        SourceDecl::Store(StoreSource::Indexes { servers, .. }) => vec![("servers".into(), servers)],
         SourceDecl::File { path, .. } => vec![("path".to_string(), path)],
         SourceDecl::Folder { dir, .. } => dir.iter().map(|dir| ("dir".to_string(), dir)).collect(),
     }

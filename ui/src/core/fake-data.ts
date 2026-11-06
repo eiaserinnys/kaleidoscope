@@ -180,7 +180,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       for (const [name, source] of Object.entries(definition.sources ?? {})) {
         context.inputs[name] = await sourceInputs(context, name);
         context.view.sources[name] = { state: "loading", has_value: false };
-        if (source.refresh_secs) context.timers.push(setInterval(() => { if ((context.pages[name]?.received ?? 0) < 2) void refresh(context, [name]); }, source.refresh_secs * 1000));
+        if ("refresh_secs" in source && source.refresh_secs) context.timers.push(setInterval(() => { if ((context.pages[name]?.received ?? 0) < 2) void refresh(context, [name]); }, source.refresh_secs * 1000));
       }
       await recalculate(context);
       const view = structuredClone(context.view);

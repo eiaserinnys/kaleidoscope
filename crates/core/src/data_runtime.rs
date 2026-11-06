@@ -644,7 +644,7 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
 fn gate_key(runtime: &Runtime, name: &str) -> Option<String> {
     let permission = runtime.definition.sources[name].permission();
     if let SourcePlan::StoreIndex { server, .. } | SourcePlan::StoreApp { server, .. } = &runtime.sources[name].plan {
-        return url::Url::parse(server).ok()?.host_str().map(str::to_owned);
+        return store_gate_key(server);
     }
     runtime
         .definition
@@ -666,6 +666,10 @@ fn gate_key(runtime: &Runtime, name: &str) -> Option<String> {
             }
             _ => None,
         })
+}
+
+pub(crate) fn store_gate_key(server: &str) -> Option<String> {
+    crate::store::StoreUrl::parse(server).ok().map(|url| format!("store:{}", url.as_str()))
 }
 
 fn prepare(

@@ -86,6 +86,7 @@ pub enum SourcePlan {
         extensions: Vec<String>,
     },
     StoreIndex { permission: String, server: String },
+    StoreIndexes { permission: String, servers: Vec<String> },
     StoreApp { permission: String, server: String, id: String },
     Invalid(String),
     StoreInvalid(kaleidoscope_contract::CoreError),
@@ -228,9 +229,26 @@ impl CompiledApp {
             match source {
                 SourceDecl::Store(store) => {
                     use data::StoreSource;
+                    if let StoreSource::Indexes { permission, servers } = store {
+                        let value = self.binding(servers, &format!("{base}/servers"), state, &vars)?;
+                        if value.is_null() { return Ok(SourcePlan::Idle); }
+                        let Some(values) = value.as_array() else {
+                            return Ok(SourcePlan::StoreInvalid(kaleidoscope_contract::errors::STORECLIENT_INDEXES_SERVERS_INVALID("servers")));
+                        };
+                        if values.is_empty() { return Ok(SourcePlan::Idle); }
+                        let mut servers = Vec::with_capacity(values.len());
+                        for (index, value) in values.iter().enumerate() {
+                            let Some(server) = value.as_str() else {
+                                return Ok(SourcePlan::StoreInvalid(kaleidoscope_contract::errors::STORECLIENT_INDEXES_SERVERS_INVALID(format!("servers[{index}]"))));
+                            };
+                            servers.push(server.to_owned());
+                        }
+                        return Ok(SourcePlan::StoreIndexes { permission: permission.clone(), servers });
+                    }
                     let (permission, server, id) = match store {
                         StoreSource::Index { permission, server, .. } => (permission, server, None),
                         StoreSource::App { permission, server, id, .. } => (permission, server, Some(id)),
+                        StoreSource::Indexes { .. } => unreachable!(),
                     };
                     let server = self.binding(server, &format!("{base}/server"), state, &vars)?;
                     if server.is_null() { return Ok(SourcePlan::Idle); }
