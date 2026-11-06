@@ -4337,7 +4337,7 @@ pub enum CoreRequest {
     #[serde(rename = "comment.capture")]
     CommentCapture {
         window_id: String,
-        /// 창 본문(.ks-window-content)의 왼쪽 위를 기준으로 한 CSS 픽셀 대상 상자 또는 점.
+        // 창 본문(.ks-window-content)의 왼쪽 위를 기준으로 한 CSS 픽셀 대상 상자 또는 점.
         target_rect: app_comments::AppCommentRect,
     },
     /// 계정의 기본 메시지 수신 앱을 바꾼다. None은 기본 앱 묶음의 초기 수신 앱을 뜻한다.
