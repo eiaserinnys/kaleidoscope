@@ -253,8 +253,9 @@ for (const width of [360, 1000]) test(`${width} 폭에서 가로 채움 칸의 �
   for (const selector of [".ks-slider-field", ".ks-select-field", ".ks-input-field"]) {
     const field = app.locator(`${selector}.is-label-hidden`);
     await expect(field).toBeVisible();
-    const widths = await field.evaluate((el) => ({ field: el.getBoundingClientRect().width, control: el.querySelector<HTMLElement>(".ks-slider, .ks-button, .ks-data-input")!.getBoundingClientRect().width, item: el.parentElement!.getBoundingClientRect().width }));
-    expect(Math.abs(widths.item - widths.field)).toBeLessThanOrEqual(1);
+    const widths = await field.evaluate((el) => ({ field: el.getBoundingClientRect().width, control: el.querySelector<HTMLElement>(".ks-slider, .ks-button, .ks-data-input")!.getBoundingClientRect().width, item: el.parentElement!.getBoundingClientRect().width, margin: parseFloat(getComputedStyle(el).marginLeft) + parseFloat(getComputedStyle(el).marginRight) }));
+    // 이름 없는 입력처럼 입력 칸은 항목 안쪽 여백을 두므로, 마진까지 합쳐 항목을 채우면 된다(카드 #1051).
+    expect(Math.abs(widths.item - widths.field - widths.margin)).toBeLessThanOrEqual(1);
     expect(Math.abs(widths.field - widths.control)).toBeLessThanOrEqual(4);
   }
   const inline = app.locator(".ks-slider-field:not(.is-label-hidden)");

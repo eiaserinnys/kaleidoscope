@@ -3567,6 +3567,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             value,
             read_only,
             rows,
+            max_rows,
             columns,
             label,
             ..
@@ -3591,6 +3592,9 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 if definition.requires.blocks < 11 {
                     details.push(format!("{at}: input.rows는 blocks 11 이상이 필요합니다"));
                 }
+            }
+            if max_rows.is_some_and(|rows| !(1..=20).contains(&rows)) {
+                details.push(format!("{at}: input의 max_rows는 1부터 20까지입니다"));
             }
             if columns.is_some_and(|columns| columns == 0) {
                 details.push(format!("{at}: input.columns는 양수여야 합니다"));

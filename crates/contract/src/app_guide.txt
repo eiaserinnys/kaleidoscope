@@ -76,6 +76,7 @@ client 2의 files.save_prompt({suggested_name,mime})는 선언한 client 동작 
 18판부터 stack.place:"center"는 창 가운데에 쉘이 정한 폭의 세로 기둥을 놓고 넘치면 그 안에서 스크롤합니다. stack.fill이 min_width나 max_width를 가진 when을 가리키면 바로 이웃한 폭 조건 when들도 채움 자리가 되어 창 폭으로 배치를 바꿔 끼울 때 보이는 쪽이 남은 공간을 채웁니다. 19판 stack.align은 교차축을 start, center, end, baseline으로 정합니다. place:"center"와 함께 쓰면 가운데 배치가 align보다 우선합니다. notice는 message, 선택 error_id, kind(info, error, loading), 선택 actions를 받습니다. loading은 글 없이 스켈레톤을 보이고 error_id는 공용 오류 코드 표시와 복사를 제공합니다. select.disabled와 toggle.disabled는 참일 때 조작을 막는 바인딩입니다.
 input.read_only는 select.disabled와 같은 바인딩을 받아 참일 때 입력칸을 그 자리에 둔 채 편집만 막고, 글은 고르고 복사할 수 있으며 blocks 25 이상이 필요합니다.
 input.disabled는 리터럴 boolean 또는 바인딩을 받아 참일 때 입력과 부속 조작을 잠그며 blocks 48 이상이 필요합니다.
+input.max_rows는 자동으로 늘어나는 여러 줄 입력의 최대 줄 수(1~20)를 정하며 생략하면 8줄입니다. multiline이 아니거나 rows가 2 이상인 고정 높이 입력에는 효과가 없으며 blocks 51 이상이 필요합니다.
 list.layout은 rows(기본), grid, icons입니다. 항목의 icon은 쉘 아이콘 이름이고 requires.blocks 46 이상이 필요합니다. rows는 icon, image, color 순으로 하나를 보이고 grid와 icons는 image, icon 순으로 보입니다. icons는 둘 다 없으면 기본 아이콘을 쓰며 subtitle, meta, color, badges는 표시하지 않지만 선택 동작에는 원래 항목을 전달합니다. icons 배치는 requires.blocks 30 이상이 필요하며 다른 목록과 같이 쪽 넘김을 지원합니다. grid의 item_width는 repeat.grid.item_width와 같은 small(128px), medium(160px, 생략 기본), large(240px)이며 requires.blocks 46 이상이 필요합니다.
 number는 화살표 키로 증감합니다. spin:true면 누르고 있을 수 있는 위아래 단추도 보입니다. min/max에서 멈추며 step 기본은 1입니다. spin을 지정하면 requires.blocks는 31 이상이어야 합니다.
 19판부터 dialog.on_confirm은 확인 단추 동작이고 dialog.danger는 확인 단추를 위험 표시로 그립니다.

@@ -315,7 +315,10 @@ pub const CONTRACT_VERSION: u32 = 41;
 /// - 48판: input 잠금 바인딩.
 /// - 49판: 목록 여러 선택과 항목 활성화.
 /// - 50판: 목록 현재 칸과 스택 스크롤 초기화.
-pub const BLOCK_SET_VERSION: u32 = LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION;
+/// - 51판: input 자동 높이의 최대 줄 수.
+pub const BLOCK_SET_VERSION: u32 = INPUT_MAX_ROWS_BLOCK_SET_VERSION;
+/// input.max_rows를 처음 지원하는 블록 세트 판.
+pub const INPUT_MAX_ROWS_BLOCK_SET_VERSION: u32 = 51;
 pub const LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION: u32 = 50;
 pub const LIST_MULTIPLE_BLOCK_SET_VERSION: u32 = 49;
 /// input.disabled를 처음 지원하는 블록 세트 판.
@@ -2121,7 +2124,7 @@ pub enum Block {
     // ----- 블록 세트 4판: 입력과 동작 -----
     /// (4판) 글 입력. `value`의 상태를 보이고, 입력이 멈추고 0.3초 뒤와 포커스를 잃을 때 `on_change`가 `$event`
     /// (입력한 글, `number`면 숫자나 null)로 돈다. 입력 중에는 상태가 바뀌어도 글을 덮지 않는다. `search`는 앞에
-    /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다(최대 8줄).
+    /// 돋보기, 글이 있으면 끝에 지우기 단추가 붙는다. `multiline`이면 한 줄로 시작해 글을 따라 자란다.
     /// Enter는 `on_submit`이 있으면 그것을 부른다(`multiline`에서는 Ctrl+Enter). 한글 조합 중의 Enter는 보내지 않는다.
     /// (19판) `columns`는 보일 문자 수로 폭을 정하며, 양수여야 하고 지정한 폭보다 줄어들지 않는다.
     /// (31판) `spin`은 숫자 입력에 위아래 단추를 보인다.
@@ -2183,6 +2186,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         rows: Option<u8>,
+        /// (51판) 자동으로 늘어나는 여러 줄 입력의 최대 줄 수(기본 8, 1~20). `multiline`이 아니거나 `rows`가 2 이상이면 효과가 없다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        max_rows: Option<u8>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         columns: Option<u16>,
@@ -2916,6 +2923,8 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rows: Option<u8>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        max_rows: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         columns: Option<u16>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         placeholder: Option<Binding>,
@@ -3552,6 +3561,7 @@ impl From<RawBlock> for Block {
                 kind,
                 multiline,
                 rows,
+                max_rows,
                 columns,
                 placeholder,
                 on_submit,
@@ -3575,6 +3585,7 @@ impl From<RawBlock> for Block {
                 kind,
                 multiline,
                 rows,
+                max_rows,
                 columns,
                 placeholder,
                 on_submit,
@@ -3607,6 +3618,7 @@ impl From<RawBlock> for Block {
                 kind,
                 multiline: true,
                 rows,
+                max_rows: None,
                 columns: None,
                 placeholder,
                 on_submit,
@@ -3851,6 +3863,7 @@ impl Block {
             Block::List { select_on_focus: true, .. } => LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION,
             Block::List { group_actions: Some(_), .. } => LIST_GROUP_STATUS_BLOCK_SET_VERSION,
             Block::List { disabled: Some(_), .. } => LIST_DISABLED_BLOCK_SET_VERSION,
+            Block::Input { max_rows: Some(_), .. } => INPUT_MAX_ROWS_BLOCK_SET_VERSION,
             Block::Input { disabled: Some(_), .. } => INPUT_DISABLED_BLOCK_SET_VERSION,
             Block::Chat { loading: Some(_), .. } => CHAT_LOADING_BLOCK_SET_VERSION,
             Block::Chat {
