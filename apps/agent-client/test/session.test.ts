@@ -575,6 +575,19 @@ for (const hasGuide of [true, false]) {
   });
 }
 
+test("Codex 꼴 리플레이에서 같이 보기와 데이터 그림만 지우고 사용자 말과 주소 그림은 보존한다", async () => {
+  const { f, session } = await readyWithHistory();
+  await session.loadSession("chosen");
+  const id = f.writes.at(-1).id;
+  const chunk = (messageId: string, text: string) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "user_message_chunk", messageId, content: { type: "text", text } } } });
+  await f.emit(chunk("one", "  사용자 말\n<kaleidoscope-share>화면 글</kaleidoscope-share>\n![화면](data:image/png;base64,QUJD)\n![링크](https://example.com/image.png)  "));
+  await f.emit(chunk("two", "다른 말<kaleidoscope-share>닫히지 않은 화면 글"));
+  await f.emit(chunk("three", "<kaleidoscope-share>화면만</kaleidoscope-share>\n![화면](data:image/png;base64,QUJD)"));
+  await f.emit({ jsonrpc: "2.0", id, result: {} });
+  assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["사용자 말\n\n\n![링크](https://example.com/image.png)", "다른 말"]);
+  assert.equal((f.getCheckpoint() as any).guideSent, false);
+});
+
 for (const toolLine of ["MCP 도구가 연결되어 있습니다.", "현재 MCP 도구를 사용할 수 없습니다."]) {
   test(`옛 지침과 ${toolLine} 뒤에 이어 붙은 사용자 말만 복원한다`, async () => {
     const { f, session } = await readyWithHistory();
