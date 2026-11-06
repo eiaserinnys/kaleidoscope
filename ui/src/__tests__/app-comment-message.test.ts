@@ -18,11 +18,11 @@ describe("앱 커멘트 전송 글", () => {
   it("사람이 읽는 앱, 판, 번호와 자리만 보내고 내부 값은 숨긴다", () => {
     const item = comment({ id: "a11fa111-1111-4111-8111-111111111111", anchor: { schema_version: 1, kind: "row", pointer: "/ui/children/1", row_identity: "secret-row", element: { tag: "div", description: "표 4행 “Goodbye from Salon”" } } });
     const result = commentMessage("앱", [item]);
-    expect(result).toBe('[앱 화면 커멘트] 앱(개인 앱) 2판\n\n3번, 표 4행 “Goodbye from Salon” : 고쳐 주세요\n나: 덧붙임\n\n자리와 그림은 list_app_comments(app_id="app-id")로 읽습니다.');
+    expect(result).toBe('[앱 화면 커멘트] 앱(개인 앱) 2판\n\n3번, 표 4행 “Goodbye from Salon” : 고쳐 주세요\n나: 덧붙임\n\n자리와 그림은 list_app_comments(app_id="app-id")로 읽습니다. 고친 뒤 reply_app_comment로 답하고 resolve_app_comment로 닫습니다.');
     for (const value of [item.id, "sha256:", "/ui/", "secret-row", "get_app_comment"]) expect(result).not.toContain(value);
     expect(result.match(/app-id/g)).toHaveLength(1);
     const reply = replyMessage("앱", item, "답글");
-    expect(reply).toBe('[앱 화면 커멘트 답글] 앱 3번 : 답글\n\n자리와 그림은 list_app_comments(app_id="app-id")로 읽습니다.');
+    expect(reply).toBe('[앱 화면 커멘트 답글] 앱 3번 : 답글\n\n자리와 그림은 list_app_comments(app_id="app-id")로 읽습니다. 고친 뒤 reply_app_comment로 답하고 resolve_app_comment로 닫습니다.');
     for (const value of [item.id, "sha256:", "/ui/", "secret-row", "get_app_comment"]) expect(reply).not.toContain(value);
   });
   it("긴 요청은 500자로 자르고 잘림을 알린다", () => {

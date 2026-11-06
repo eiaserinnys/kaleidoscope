@@ -27,4 +27,4 @@ export function replyMessage(appName: string, item: AppCommentSummary, text: str
   return result;
 }
 
-function readHint(appId: string): string { return `자리와 그림은 list_app_comments(app_id="${appId}")로 읽습니다.`; }
+function readHint(appId: string): string { return `자리와 그림은 list_app_comments(app_id="${appId}")로 읽습니다. 고친 뒤 reply_app_comment로 답하고 resolve_app_comment로 닫습니다.`; }
