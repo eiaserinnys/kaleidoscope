@@ -45,7 +45,7 @@ describe("스냅샷에서 사라진 창의 커멘트 정리", () => {
     const id = seed.snapshot.shared.windows[0].id;
     const session = commentSession(id);
     session.set(true);
-    session.pick(1, { element: document.createElement("div") } as TargetDescription);
+    session.pick(1, { anchor: { schema_version: 1, kind: "block" }, path: "블록", rect: null, element: document.createElement("div") });
     session.updateDraft({ text: "남긴 글" });
     const changed = structuredClone(seed.snapshot);
     changed.shared.windows[0].app_version += 1;
