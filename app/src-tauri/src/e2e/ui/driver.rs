@@ -18,6 +18,7 @@ pub(super) fn observe(request: &CoreRequest) {
             | CoreRequest::FilesAllowPc { .. }
             | CoreRequest::FilesOpen { .. }
             | CoreRequest::WindowRaise { .. }
+            | CoreRequest::DesktopActivate { .. }
             | CoreRequest::ShareView { .. }
             | CoreRequest::ShareFreeze { .. }
             | CoreRequest::ShareCapture { .. }
@@ -287,6 +288,16 @@ pub(super) fn require_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn 쉘_전환_명령을_각각_한_번_기록한다() {
+        let mark = request_mark();
+        observe(&CoreRequest::DesktopActivate { desktop_id: "shortcut-observer-desktop".into() });
+        observe(&CoreRequest::WindowRaise { window_id: "shortcut-observer-window".into() });
+        let requests = requests_since(mark);
+        assert_eq!(requests.iter().filter(|request| matches!(request, CoreRequest::DesktopActivate { desktop_id } if desktop_id == "shortcut-observer-desktop")).count(), 1);
+        assert_eq!(requests.iter().filter(|request| matches!(request, CoreRequest::WindowRaise { window_id } if window_id == "shortcut-observer-window")).count(), 1);
+    }
 
     #[test]
     fn distinguishes_placing_and_hiding_the_right_window() {
