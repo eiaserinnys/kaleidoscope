@@ -3,6 +3,7 @@ import { ICON_SIZE, type IconSize } from "./icons";
 import { Power, Volume2, VolumeX } from "lucide-react";
 import { Film, ImagePlay, Sticker } from "lucide-react";
 import { Scaling, RotateCwSquare, Crop, Grid2X2, Shrink, Package, ImageDown, FileOutput, ArrowRightLeft, Pipette, PaintBucket, Blend, Stamp, ScanText, QrCode } from "lucide-react";
+import { Scissors, FlipHorizontal2, Gauge, Repeat, ListVideo, Music2, Images, Timer, AudioLines, ScissorsLineDashed, FastForward, Repeat2, ListMusic } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
   "scaling": Scaling,
@@ -20,6 +21,19 @@ const icons: Record<string, LucideIcon> = {
   "stamp": Stamp,
   "scan-text": ScanText,
   "qr-code": QrCode,
+  "scissors": Scissors,
+  "flip-horizontal-2": FlipHorizontal2,
+  "gauge": Gauge,
+  "repeat": Repeat,
+  "list-video": ListVideo,
+  "music-2": Music2,
+  "images": Images,
+  "timer": Timer,
+  "audio-lines": AudioLines,
+  "scissors-line-dashed": ScissorsLineDashed,
+  "fast-forward": FastForward,
+  "repeat-2": Repeat2,
+  "list-music": ListMusic,
   "volume-2": Volume2,
   "volume-x": VolumeX,
   "arrow-down": ArrowDownIcon,

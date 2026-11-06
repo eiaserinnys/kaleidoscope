@@ -81,6 +81,9 @@ pub const ICON_NAMES: &[&str] = &[
     "scaling", "rotate-cw-square", "crop", "grid-2x2", "shrink", "package",
     "image-down", "file-output", "arrow-right-left", "pipette", "paint-bucket",
     "blend", "stamp", "scan-text", "qr-code",
+    "scissors", "flip-horizontal-2", "gauge", "repeat", "list-video", "music-2",
+    "images", "timer", "audio-lines", "scissors-line-dashed", "fast-forward",
+    "repeat-2", "list-music",
     "arrow-down",
     "arrow-left",
     "arrow-right",
@@ -156,6 +159,23 @@ pub const ICON_NAMES: &[&str] = &[
     "x",
     "zoom-in",
     "zoom-out",
+];
+
+/// 53판부터 쓸 수 있는 아이콘 이름. 목록, `button`, `button_grid`에서 `requires.blocks` 53 이상이 필요하다.
+pub(crate) const EXTENDED_ICONS: &[&str] = &[
+    "scissors",
+    "flip-horizontal-2",
+    "gauge",
+    "repeat",
+    "list-video",
+    "music-2",
+    "images",
+    "timer",
+    "audio-lines",
+    "scissors-line-dashed",
+    "fast-forward",
+    "repeat-2",
+    "list-music",
 ];
 
 // ---------------------------------------------------------------------------

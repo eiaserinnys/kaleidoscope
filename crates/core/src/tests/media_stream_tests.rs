@@ -224,6 +224,23 @@ fn loopback_ranges_origins_and_grant_changes() {
 }
 
 #[test]
+fn aac_file_opens_as_audio_stream() {
+    let data = TempDir::new().unwrap();
+    let folder = TempDir::new().unwrap();
+    fs::write(folder.path().join("sound.aac"), b"test").unwrap();
+    let (core, _, window) = setup(data.path(), folder.path());
+    pick_folder(&core, &window);
+    let CoreReply::DataMediaOpen {
+        playback: MediaPlayback::Stream { mime, .. },
+    } = open(&core, &window, "sound.aac").unwrap()
+    else {
+        panic!("stream")
+    };
+    assert_eq!(mime, "audio/aac");
+    core.shutdown();
+}
+
+#[test]
 fn modified_file_invalidates_lease() {
     let data = TempDir::new().unwrap();
     let folder = TempDir::new().unwrap();
