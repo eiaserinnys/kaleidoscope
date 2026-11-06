@@ -8,9 +8,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 mod checks;
 
-const WATCH: &str = r#"window.__ksAppKeys=0;
+const WATCH: &str = r#"window.__ksAppKeys=0;window.__ksRawKeys=[];
 window.addEventListener('message',e=>{if(e.data==='ks-e2e-app-key')window.__ksAppKeys++});
-window.addEventListener('keydown',e=>{if(!['F8','ArrowRight','PageDown','Tab'].includes(e.code))return;if(window===top)window.__ksAppKeys++;else top.postMessage('ks-e2e-app-key','*')});"#;
+window.addEventListener('keydown',e=>{window.__ksRawKeys.push({key:e.key,code:e.code,keyCode:e.keyCode,trusted:e.isTrusted});if(![119,39,34,9].includes(e.keyCode))return;if(window===top)window.__ksAppKeys++;else top.postMessage('ks-e2e-app-key','*')},true);"#;
 const HTML: &str =
     "<input autofocus style='width:95%;height:120px' aria-label='키 입력'><p>네이티브 키 시험</p>";
 
@@ -66,10 +66,20 @@ fn focus(
     // 같은 표면에 정상 키가 도착하는지 먼저 증명한다.
     eval(view, "window.__ksAppKeys=0")?;
     native_input::chord(&[], 0x77)?; // F8
-    thread::sleep(Duration::from_millis(200));
-    if eval(view, "window.__ksAppKeys")?.as_u64().unwrap_or(0) == 0 {
-        return Err("F8이 포커스 표면에 도착하지 않음: 대화형 데스크톱/포커스 확인 필요".into());
-    }
+    ui::driver::wait_until("F8의 실제 포커스 표면 도착", || {
+        Ok(eval(view, "window.__ksAppKeys")?.as_u64().unwrap_or(0) > 0)
+    })
+    .map_err(|error| {
+        format!(
+            "{error}; 이벤트={:?}; 포커스={:?}; foreground={:?}; 누름 위치={point}",
+            eval(view, "window.__ksRawKeys"),
+            eval(
+                view,
+                "({tag:document.activeElement?.tagName,focused:document.hasFocus()})"
+            ),
+            unsafe { super::native_target::describe(GetForegroundWindow()) }
+        )
+    })?;
     eval(view, "window.__ksAppKeys=0")?;
     Ok(())
 }
@@ -228,6 +238,16 @@ pub(super) fn scenario(
             let before = state(core, &workspace)?;
             let mark = ui::mark_requests();
             native_input::chord(&[0x11, 0x12], key)?;
+            if key != 0x09 {
+                let _ = ui::driver::wait_until("단축키 전환 또는 앱 도착", || {
+                    let current = state(core, &workspace)?;
+                    Ok((if key == 0x27 {
+                        current.0 == other
+                    } else {
+                        current.1 == b
+                    }) || eval(&view, "window.__ksAppKeys")?.as_u64().unwrap_or(0) > 0)
+                });
+            }
             thread::sleep(Duration::from_millis(700));
             let after = state(core, &workspace)?;
             let commands = ui::requests_since(mark)

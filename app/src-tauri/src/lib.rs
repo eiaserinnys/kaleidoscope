@@ -368,6 +368,8 @@ pub fn run() {
         .expect("error while building kaleidoscope application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                #[cfg(windows)]
+                shell_shortcuts::clear();
                 if let Some(core) = app.try_state::<Arc<Core>>() {
                     core.shutdown();
                 }

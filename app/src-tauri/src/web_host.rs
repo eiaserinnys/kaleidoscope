@@ -471,7 +471,13 @@ impl WebHost for TauriWebHost {
         self.controls.lock().unwrap().remove(id);
         if let Some(view) = self.app.get_webview(&format!("web-{id}")) {
             let label = format!("web-{id}");
-            self.on_main(move |_| { crate::shell_shortcuts::unregister(&label); Ok(()) }, |_| errors::WEB_HOST_DETACH_FAILED())?;
+            self.on_main(
+                move |_| {
+                    crate::shell_shortcuts::unregister(&label);
+                    Ok(())
+                },
+                |_| errors::WEB_HOST_DETACH_FAILED(),
+            )?;
             view.close().map_err(|error| {
                 with_detail(
                     error,
