@@ -7,6 +7,24 @@ const client = { runtime: "javascript", entry: { id: "view", version: 1 }, input
 const http = (id: string, host: string, label: string, paths: string[]): PermissionDecl => ({ module: "http", id, label, base_url: `https://${host}/`, paths });
 
 describe("설치 권한 설명", () => {
+  it("기본 폴더 종류와 접근 범위마다 설치 동의를 나눈다", () => {
+    const permissions: PermissionDecl[] = [
+      { module: "files", id: "p", label: "사진", access: "read", default_folder: "pictures" },
+      { module: "files", id: "d", label: "문서", access: "readwrite", default_folder: "documents" },
+      { module: "files", id: "f", label: "기타", access: "read" },
+      { module: "store", id: "store", label: "스토어" },
+      { module: "profiler", id: "perf", label: "측정" },
+    ];
+    const groups = describeInstallScope({ ...base, permissions }, "unknown");
+    expect(groups.map((item) => item.sentence)).toEqual([
+      "내가 고른 폴더의 파일을 읽습니다",
+      "사진 폴더나 내가 고른 폴더의 파일을 읽습니다",
+      "문서 폴더나 내가 고른 폴더의 파일을 읽고 고칩니다",
+      "스토어에서 앱을 설치하고 지웁니다",
+      "이 기기에서 쉘의 성능을 재고 기록을 봅니다",
+    ]);
+    expect(groups.find((item) => item.sentence.includes("사진 폴더"))?.notes).toEqual([]);
+  });
   it("권한이 없는 클라이언트는 창 밖에 닿지 않는다", () => {
     expect(describeInstallScope({ ...base, client }, "unknown")).toEqual([]);
   });

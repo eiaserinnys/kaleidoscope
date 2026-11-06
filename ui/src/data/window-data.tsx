@@ -13,6 +13,7 @@ import { isWindowVisible, useWindowStateValue } from "./window-state";
 import { itemPath, useItemScope, type ItemScope } from "./item-scope";
 import { trackWindowAction } from "../share/action-context";
 import { checkAppLink } from "./app-link";
+import { DefaultFolderPreparation } from "./default-folder";
 
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
@@ -123,6 +124,7 @@ function enqueue(store: ShellStore, id: string, task: () => Promise<void>) {
 }
 
 export class WindowData {
+  readonly defaultFolders = new DefaultFolderPreparation();
   clientHost: HTMLElement | null = null;
   clientDormant = false;
   setClientHost = (host: HTMLElement | null) => { this.clientHost = host; this.runtime?.observeHost(host); };
@@ -403,6 +405,8 @@ export class WindowData {
     this.ready = enqueue(this.store, this.windowId, async () => {
       if (!this.active || mount !== this.mounts) return;
       try {
+        await this.defaultFolders.prepare(this.store, this.windowId, this.definition, () => this.active && mount === this.mounts);
+        if (!this.active || mount !== this.mounts) return;
         const reply = await this.store.call({ op: "data.attach", window_id: this.windowId, dormant: [...this.dormantPointers] });
         if (!this.active || mount !== this.mounts) return;
         this.attached = true;

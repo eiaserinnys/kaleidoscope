@@ -1,7 +1,7 @@
 error_catalog! { ENTRIES;
     DESK_DEFAULT_FOLDER_PERMISSION_INVALID(permission) { class: InvalidRequest, place: "기본 폴더 권한 검사", cause: "파일 권한에 기본 폴더가 선언되지 않았다", message: "파일 권한 {permission}에 사용할 기본 폴더가 없습니다. 앱 작성자에게 폴더 범위와 default_folder 선언을 확인해 달라고 요청하세요.", fix: "앱 정의의 파일 권한을 확인하세요" }
-    DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder) { class: Io, place: "기본 폴더 경로 확인", cause: "기본 폴더의 경로를 읽지 못했다", message: "기본 폴더 {folder}의 경로를 읽지 못했습니다. 파일 관리자에서 폴더가 열리는지 확인하세요.", fix: "파일 관리자에서 폴더를 확인하세요" }
-    DESK_DEFAULT_FOLDER_NOT_DIRECTORY(folder) { class: Io, place: "기본 폴더 종류 확인", cause: "기본 경로가 폴더가 아니다", message: "기본 폴더 {folder}의 경로가 폴더가 아닙니다. 기기의 해당 폴더 설정을 확인하세요.", fix: "기기의 폴더 설정을 확인하세요" }
+    DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder) { class: Io, place: "기본 폴더 경로 확인", cause: "기본 폴더의 경로를 읽지 못했다", message: "{folder} 폴더의 경로를 읽지 못했습니다. 파일 관리자에서 폴더가 열리는지 확인하거나 다른 폴더를 선택하세요.", fix: "파일 관리자에서 폴더를 확인하거나 다른 폴더를 선택하세요" }
+    DESK_DEFAULT_FOLDER_NOT_DIRECTORY(folder) { class: Io, place: "기본 폴더 종류 확인", cause: "기본 경로가 폴더가 아니다", message: "{folder} 폴더의 경로가 폴더가 아닙니다. 기기의 폴더 설정을 확인하거나 다른 폴더를 선택하세요.", fix: "기기의 폴더 설정을 확인하거나 다른 폴더를 선택하세요" }
     DESK_CLIENT_HTTP_REQUEST_HEADER_MISSING() { class: InvalidRequest, place: "HTTP 이진 요청 머리 읽기", cause: "메타 길이가 없다", message: "HTTP 요청의 메타 길이가 없습니다. 앱의 HTTP 요청 코드를 확인하세요.", fix: "앱의 HTTP 요청 코드를 확인하세요" }
     DESK_CLIENT_HTTP_REQUEST_META_TRUNCATED() { class: InvalidRequest, place: "HTTP 이진 요청 메타 읽기", cause: "메타 데이터가 잘렸다", message: "HTTP 요청의 메타 데이터가 잘렸습니다. 앱의 HTTP 요청 코드를 확인하세요.", fix: "앱의 HTTP 요청 코드를 확인하세요" }
     DESK_CLIENT_HTTP_REQUEST_META_INVALID() { class: InvalidRequest, place: "HTTP 이진 요청 메타 해석", cause: "메타 형식이 올바르지 않다", message: "HTTP 요청의 메타 형식이 올바르지 않습니다. 앱의 HTTP 요청 코드를 확인하세요.", fix: "앱의 HTTP 요청 코드를 확인하세요" }

@@ -311,7 +311,8 @@ pub const CONTRACT_VERSION: u32 = 40;
 /// - 44판: 목록 초점 이동 선택과 파일 동작 단축키.
 /// - 45판: 창의 파일 드롭.
 /// - 46판: 목록 항목 아이콘과 격자 칸 최소 폭.
-pub const BLOCK_SET_VERSION: u32 = LIST_ICON_WIDTH_BLOCK_SET_VERSION;
+/// - 47판: 기본 폴더 최초 허용 화면.
+pub const BLOCK_SET_VERSION: u32 = DEFAULT_FOLDER_BLOCK_SET_VERSION;
 /// 목록 항목 아이콘과 격자 칸 최소 폭.
 pub const LIST_ICON_WIDTH_BLOCK_SET_VERSION: u32 = 46;
 /// 목록 초점 이동 선택과 파일 동작 단축키의 첫 지원 판.
