@@ -35,8 +35,8 @@ function scrollClip(element: HTMLElement, content: HTMLElement) {
 export function isCommentAnchorVisible(content: HTMLElement, element: HTMLElement, kind: string, rect: Pick<DOMRect, "left" | "right" | "top" | "height">, clip: { left: number; right: number; top: number; bottom: number }, firstLineHeight: number): boolean {
   if (kind === "point") {
     const surface = element.getBoundingClientRect();
-    return rect.left >= Math.max(surface.left, clip.left) && rect.left <= Math.min(surface.right, clip.right)
-      && rect.top >= Math.max(surface.top, clip.top) && rect.top <= Math.min(surface.bottom, clip.bottom);
+    return rect.left > Math.max(surface.left, clip.left) && rect.left < Math.min(surface.right, clip.right)
+      && rect.top > Math.max(surface.top, clip.top) && rect.top < Math.min(surface.bottom, clip.bottom);
   }
   const x = Math.max(clip.left, Math.min((rect.left + rect.right) / 2, clip.right));
   const y = rect.top + Math.min(rect.height, firstLineHeight) / 2;

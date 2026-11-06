@@ -24,7 +24,7 @@ it("프레임 점은 표면과 스크롤 칸의 교집합 밖이면 숨긴다", 
   const { content, target, hit, restore } = prepare();
   vi.spyOn(target, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 0, 100, 100));
   try {
-    for (const [x, y, visible] of [[40, 20, true], [40, -1, false], [40, 81, false], [20, 20, false], [91, 20, false]]) {
+    for (const [x, y, visible] of [[40, 20, true], [40, -1, false], [40, 10, false], [40, 80, false], [40, 81, false], [20, 20, false], [91, 20, false]]) {
       expect(isCommentAnchorVisible(content, target, "point", new DOMRect(x as number, y as number, 0, 0), clip, 40)).toBe(visible);
     }
     expect(hit).not.toHaveBeenCalled();
