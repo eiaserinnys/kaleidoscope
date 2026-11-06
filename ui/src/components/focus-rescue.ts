@@ -26,12 +26,12 @@ function restorableFocus(element: HTMLElement | null): element is HTMLElement {
 
 export function firstContentFocus(within: HTMLElement): HTMLElement | undefined {
   return Array.from(within.querySelectorAll<HTMLElement>(contentSelector)).find((element) =>
-    usableFocus(element) && !element.matches('.ks-split-handle, [role="separator"]') && !element.closest('.ks-toolbar, .ks-data-toolbar, [role="toolbar"]'));
+    usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-split-handle, [role="separator"]') && !element.closest('.ks-toolbar, .ks-data-toolbar, [role="toolbar"]'));
 }
 
 export function firstFocus(within: HTMLElement): HTMLElement | undefined {
   return firstContentFocus(within) ?? Array.from(within.querySelectorAll<HTMLElement>(controlSelector))
-    .find((element) => usableFocus(element) && !element.matches('.ks-split-handle, [role="separator"]') && (element.tabIndex >= 0 || element.isContentEditable));
+    .find((element) => usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-split-handle, [role="separator"]') && (element.tabIndex >= 0 || element.isContentEditable));
 }
 
 export function focusContainer(element: HTMLElement): HTMLElement {

@@ -163,7 +163,8 @@ def main():
                 received = page.get_by_test_id("app-window-comment-receiver").get_by_text("[앱 화면 커멘트]", exact=False)
                 received.wait_for(timeout=30000)
                 message = received.inner_text()
-                assert item["id"] in message and "calculator" in message and "계산 결과가 잘 보이게 해 주세요" in message
+                assert item["id"] not in message
+                assert f'{item["number"]}번' in message and 'list_app_comments(app_id="calculator")' in message and item["text"] in message
                 wait(lambda: mcp.call("get_app_comment", {"comment_id": item["id"]})["data"]["thread"].get("sent_at"), "보냄 상태가 서버에 저장되지 않았습니다")
                 page.screenshot(path=str(OUT / "s1-h-sent.png"))
                 receiver_view = page.get_by_test_id("app-window-comment-receiver")
