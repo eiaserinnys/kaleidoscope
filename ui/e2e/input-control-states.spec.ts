@@ -2,6 +2,32 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+test("분할 선택은 남는 자리에서 여백을 유지하고 좁은 칸에서는 여백부터 줄인다", async ({ page }) => {
+  await page.goto("/?preview=input-control-states");
+  const app = page.getByTestId("app-window-input-control-states");
+  const group = app.getByRole("group", { name: "긴 이름표 테스트" });
+  // 창 폭과 독립적으로 이름표가 붙은 실제 필드의 칸을 좁힌다.
+  const resize = async (width: number) => group.evaluate((el, width) => {
+    (el.parentElement as HTMLElement).style.width = `${width}px`;
+  }, width);
+  const measure = () => group.getByRole("button").evaluateAll((buttons) => buttons.map((button) => {
+    const label = button.querySelector(".ks-truncate-label")!;
+    return { inset: label.getBoundingClientRect().left - button.getBoundingClientRect().left,
+      visible: label.clientWidth, full: label.scrollWidth };
+  }));
+  await resize(400);
+  const wide = await measure();
+  for (const label of wide) { expect(label.inset).toBeCloseTo(13, 0); expect(label.visible).toBeGreaterThanOrEqual(label.full); }
+  const natural = await group.evaluate((el) => el.getBoundingClientRect().width);
+  const fieldWidth = await group.evaluate((el) => el.parentElement!.getBoundingClientRect().width);
+  await resize(fieldWidth - 16);
+  const narrow = await measure();
+  for (const label of narrow) { expect(label.inset).toBeLessThan(13); expect(label.visible).toBeGreaterThanOrEqual(label.full); }
+  expect(await group.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThan(natural);
+  await resize(136);
+  for (const label of await measure()) expect(label.visible).toBeGreaterThan(0);
+});
+
 test("입력 상태와 고르기 및 분할선이 구분되고 잠긴 조작은 실행되지 않는다", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/?preview=input-control-states");
