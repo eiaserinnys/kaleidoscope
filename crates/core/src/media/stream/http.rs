@@ -1,5 +1,5 @@
 //! HTTP 요청의 출처와 권한, 범위를 확인하고 파일을 전송한다.
-use super::{authorization, open_error, read_error, Lease};
+use super::{authorization, open_error, read_error, seek_error, Lease, LeaseSource};
 use crate::{
     media::range::{self, Range},
     Inner,
@@ -40,29 +40,49 @@ fn fail(lease: &Lease, status: StatusCode, error: CoreError) -> Response {
     *lease.error.lock().unwrap() = Some(error.clone());
     rejected(status, error)
 }
-fn authorized(inner: &Arc<Inner>, lease: &Lease) -> Result<authorization::FileAccess, CoreError> {
-    let state = inner.state.lock().unwrap();
-    if authorization::identity(&state, &lease.window, &lease.media.permission).as_ref()
-        != Some(&lease.identity)
-        || inner.generation.load(Ordering::SeqCst) != lease.generation
-    {
-        return Err(errors::MEDIA_STREAM_AUTHORITY_CHANGED());
+fn authorized(inner: &Arc<Inner>, lease: &Lease) -> Result<(), CoreError> {
+    match &lease.source {
+        LeaseSource::Folder { media, identity } => {
+            let state = inner.state.lock().unwrap();
+            if authorization::identity(&state, &lease.window, &media.permission).as_ref()
+                != Some(identity)
+                || inner.generation.load(Ordering::SeqCst) != lease.generation
+            {
+                return Err(errors::MEDIA_STREAM_AUTHORITY_CHANGED());
+            }
+            drop(state);
+            let file = authorization::file(inner, &lease.window, media)?;
+            if file.identity != *identity {
+                return Err(errors::MEDIA_STREAM_AUTHORITY_CHANGED());
+            }
+            if !file.metadata.is_file() {
+                return Err(errors::MEDIA_STREAM_FILE_NOT_REGULAR(&media.path));
+            }
+            if file.path != lease.path
+                || file.metadata.len() != lease.len
+                || authorization::modified(&file.metadata, &media.path)? != lease.modified
+            {
+                return Err(errors::MEDIA_STREAM_FILE_CHANGED(&media.path));
+            }
+            Ok(())
+        }
+        LeaseSource::Blob { media, identity } => {
+            if inner.generation.load(Ordering::SeqCst) != lease.generation {
+                return Err(errors::MEDIA_BLOB_AUTHORITY_CHANGED());
+            }
+            let access = authorization::blob(inner, &lease.window, media)?;
+            if access.identity != *identity {
+                return Err(errors::MEDIA_BLOB_AUTHORITY_CHANGED());
+            }
+            if access.path != lease.path
+                || access.metadata.len() != lease.len
+                || authorization::blob_modified(&access.metadata, &media.blob)? != lease.modified
+            {
+                return Err(errors::MEDIA_STREAM_FILE_CHANGED(&media.blob));
+            }
+            Ok(())
+        }
     }
-    drop(state);
-    let file = authorization::file(inner, &lease.window, &lease.media)?;
-    if file.identity != lease.identity {
-        return Err(errors::MEDIA_STREAM_AUTHORITY_CHANGED());
-    }
-    if !file.metadata.is_file() {
-        return Err(errors::MEDIA_STREAM_FILE_NOT_REGULAR(&lease.media.path));
-    }
-    if file.path != lease.path
-        || file.metadata.len() != lease.len
-        || authorization::modified(&file.metadata, &lease.media.path)? != lease.modified
-    {
-        return Err(errors::MEDIA_STREAM_FILE_CHANGED(&lease.media.path));
-    }
-    Ok(file)
 }
 fn failure_status(error: &CoreError) -> StatusCode {
     use kaleidoscope_contract::ErrorCode;
@@ -201,7 +221,7 @@ pub(super) async fn serve(
             let mut response = fail(
                 &lease,
                 StatusCode::RANGE_NOT_SATISFIABLE,
-                errors::MEDIA_STREAM_RANGE_UNSATISFIABLE(&lease.media.path),
+                errors::MEDIA_STREAM_RANGE_UNSATISFIABLE(lease.source.label()),
             );
             response.headers_mut().insert(
                 header::CONTENT_RANGE,
@@ -246,7 +266,7 @@ pub(super) async fn serve(
     let file = match tokio::fs::File::open(&lease.path).await {
         Ok(file) => file,
         Err(err) => {
-            let error = open_error(&lease.media.path, err);
+            let error = open_error(&lease.source, err);
             return fail(&lease, failure_status(&error), error);
         }
     };
@@ -255,7 +275,7 @@ pub(super) async fn serve(
         return fail(
             &lease,
             StatusCode::INTERNAL_SERVER_ERROR,
-            errors::MEDIA_STREAM_SEEK_FAILED(&lease.media.path, err),
+            seek_error(&lease.source, err),
         );
     }
     let stream = futures_util::stream::unfold(
@@ -272,7 +292,7 @@ pub(super) async fn serve(
                         io::ErrorKind::UnexpectedEof,
                         "파일을 끝까지 읽지 못했습니다",
                     );
-                    *lease.error.lock().unwrap() = Some(read_error(&lease.media.path, &err));
+                    *lease.error.lock().unwrap() = Some(read_error(&lease.source, &err));
                     Some((Err(err), (file, 0, cancel, lease)))
                 }
                 Ok(n) => {
@@ -280,7 +300,7 @@ pub(super) async fn serve(
                     Some((Ok(bytes), (file, remaining - n as u64, cancel, lease)))
                 }
                 Err(err) => {
-                    *lease.error.lock().unwrap() = Some(read_error(&lease.media.path, &err));
+                    *lease.error.lock().unwrap() = Some(read_error(&lease.source, &err));
                     Some((Err(err), (file, 0, cancel, lease)))
                 }
             }

@@ -7,6 +7,7 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { EmptyState } from "../components/primitives";
 import { grantFor, makeTestSeed } from "./fixtures";
+import { mockVirtualLayout } from "./virtual-layout";
 
 function setup(block: Block) {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: block };
@@ -392,4 +393,58 @@ it("앞 원본의 늦은 재생 실패는 새 원본에 오류를 보이지 않�
   await act(async () => { rejectFirst(new DOMException("bad", "NotSupportedError")); await first.catch(() => undefined); });
   expect(screen.queryByText("SHELL_MEDIA_PLAYBACK_UNSUPPORTED")).toBeNull();
   expect((screen.getByRole("button", { name: /재생|일시 정지/ }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("기기 저장소의 그림을 image와 list 그림에 표시한다", async () => {
+  mockVirtualLayout();
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal("devicePixelRatio", 1);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const photo = { blob: "media/photo.png" };
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 52, modules: {} }, permissions: [], state: {}, ui: {
+    type: "stack", direction: "column", children: [
+      { type: "image", src: photo },
+      { type: "list", items: [{ key: "a", title: "사진", image: photo }] },
+    ],
+  } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 160, height: 90 } }) as never
+    : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  await waitFor(() => expect(view.container.querySelector(".ks-media-thumbnail img")).toBeTruthy());
+  expect(transport.call).toHaveBeenCalledWith(expect.objectContaining({ op: "data.media", media: photo }));
+});
+
+it("기기 저장소 그림의 대기·실패·자르기를 기존 표시로 보여 준다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("devicePixelRatio", 1);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 52, modules: {} }, permissions: [], state: {}, ui: {
+    type: "image", src: { blob: "media/photo.png", crop: { x: 0, y: 0, w: 0.5, h: 0.75 } },
+  } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  let fail: (reason: unknown) => void = () => {};
+  let requested = false;
+  let calls = 0;
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? (++calls === 1 ? new Promise((_resolve, reject) => { fail = reject; requested = true; }) : Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 512, height: 384 } })) as never
+    : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(requested).toBe(true));
+  expect(view.container.querySelector(".ks-image-view .ks-data-progress.is-indeterminate")).toBeTruthy();
+  await act(async () => fail({ id: "MEDIA_BLOB_PATH_NOT_FOUND", code: "not_found", message: "기기 저장소에 파일이 없습니다", details: [] }));
+  expect(await screen.findByText("기기 저장소에 파일이 없습니다")).toBeTruthy();
+  expect(view.container.querySelector(".ks-image-view")?.classList.contains("is-failed")).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  const image = view.container.querySelector<HTMLImageElement>(".ks-image-frame img")!;
+  expect(image.style.width).toBe("200%");
+  Object.defineProperties(image, { naturalWidth: { value: 512 }, naturalHeight: { value: 384 } });
+  fireEvent.load(image);
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view")!;
+  expect(Number(host.style.getPropertyValue("--ks-image-ratio"))).toBeCloseTo(256 / 288);
 });

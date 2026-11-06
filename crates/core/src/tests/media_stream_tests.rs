@@ -1,5 +1,5 @@
 use super::*;
-use kaleidoscope_contract::data::{MediaPlayback, MediaRef, ResourceMediaRef};
+use kaleidoscope_contract::data::{BlobMediaRef, MediaPlayback, MediaRef, ResourceMediaRef};
 
 const ORIGIN: &str = "http://localhost:1420";
 fn media(path: &str) -> MediaRef {
@@ -471,6 +471,455 @@ fn opening_a_stream_removes_closed_window_leases() {
         .id
         .as_deref(),
         Some("MEDIA_STREAM_HANDLE_INVALID")
+    );
+    core.shutdown();
+}
+
+fn blob_definition(id: &str, scope: Option<&str>, blocks: u32, storage: bool) -> String {
+    let mut client = json!({"runtime":"javascript","entry":{"id":"entry","version":1}});
+    if storage {
+        client["device_storage"] = json!({"prefixes":["media/"]});
+        if let Some(scope) = scope {
+            client["device_storage"]["scope"] = json!(scope);
+        }
+    }
+    json!({"id":id,"name":"기기 미디어 시험","requires":{"blocks":blocks,"modules":{"assets":1,"client":4}},
+        "assets":[{"id":"entry","version":1}],"client":client,"state":{},
+        "ui":{"type":"text","value":"시험"}})
+    .to_string()
+}
+fn blob_setup(data: &Path, definitions: Vec<String>) -> Core {
+    Core::open(
+        CoreConfig {
+            media_origin: Some(ORIGIN.into()),
+            embedded_server: None,
+            data_dir: data.to_path_buf(),
+            seed_definitions: definitions,
+            server_url: "http://127.0.0.1:4219".into(),
+            device_name: "시험".into(),
+        },
+        Arc::new(FakeHost::default()),
+    )
+    .unwrap()
+}
+fn blob_put(core: &Core, window: &str, key: &str, bytes: Vec<u8>) -> Result<CoreReply, CoreError> {
+    core.handle(CoreRequest::ClientBlobPut {
+        window_id: window.into(),
+        key: key.into(),
+        file_id: None,
+        bytes: Some(bytes),
+    })
+}
+fn blob_media(key: &str) -> MediaRef {
+    MediaRef::Blob(BlobMediaRef {
+        blob: key.into(),
+        crop: None,
+    })
+}
+fn blob_open(core: &Core, window: &str, key: &str) -> Result<CoreReply, CoreError> {
+    core.handle(CoreRequest::DataMediaOpen {
+        window_id: window.into(),
+        media: blob_media(key),
+    })
+}
+fn blob_data(
+    core: &Core,
+    window: &str,
+    key: &str,
+    max_px: Option<u32>,
+) -> Result<CoreReply, CoreError> {
+    core.handle(CoreRequest::DataMedia {
+        window_id: window.into(),
+        media: blob_media(key),
+        max_px,
+    })
+}
+fn blob_status(core: &Core, window: &str, handle: &str) -> Option<CoreError> {
+    match core
+        .handle(CoreRequest::DataMediaStatus {
+            window_id: window.into(),
+            handle: handle.into(),
+        })
+        .unwrap()
+    {
+        CoreReply::DataMediaStatus { error } => error,
+        other => panic!("unexpected: {other:?}"),
+    }
+}
+
+#[test]
+fn blob_audio_streams_with_range_in_app_and_window_scope() {
+    for scope in [None, Some("window")] {
+        let data = TempDir::new().unwrap();
+        let core = blob_setup(data.path(), vec![blob_definition("blob-app", scope, 52, true)]);
+        let (_, desktop) = active_ids(&core);
+        let window = open_window(&core, &desktop, "blob-app");
+        let bytes: Vec<u8> = (0..100).collect();
+        blob_put(&core, &window, "media/sound.wav", bytes.clone()).unwrap();
+        let CoreReply::DataMediaOpen {
+            playback: MediaPlayback::Stream { url, mime, .. },
+        } = blob_open(&core, &window, "media/sound.wav").unwrap()
+        else {
+            panic!("stream")
+        };
+        assert_eq!(mime, "audio/wav");
+        let response = client()
+            .get(&url)
+            .header("Origin", ORIGIN)
+            .header("Range", "bytes=20-29")
+            .send()
+            .unwrap();
+        assert_eq!(response.status(), 206);
+        assert_eq!(response.headers()["content-range"], "bytes 20-29/100");
+        assert_eq!(response.bytes().unwrap().as_ref(), &bytes[20..30]);
+        core.shutdown();
+    }
+}
+
+#[test]
+fn large_blob_audio_streams_while_images_keep_the_inline_limit() {
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(data.path(), vec![blob_definition("blob-app", None, 52, true)]);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "blob-app");
+    let size = 20 * 1024 * 1024 + 1;
+    blob_put(&core, &window, "media/large.wav", vec![7; size]).unwrap();
+    let CoreReply::DataMediaOpen {
+        playback: MediaPlayback::Stream { url, .. },
+    } = blob_open(&core, &window, "media/large.wav").unwrap()
+    else {
+        panic!("stream")
+    };
+    let response = client()
+        .get(&url)
+        .header("Origin", ORIGIN)
+        .header("Range", format!("bytes={}-{}", size - 2, size - 1))
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), 206);
+    assert_eq!(response.bytes().unwrap().len(), 2);
+    blob_put(&core, &window, "media/large.png", vec![7; size]).unwrap();
+    assert_eq!(
+        blob_data(&core, &window, "media/large.png", None)
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("MEDIA_LOAD_DATA_TOO_LARGE")
+    );
+    core.shutdown();
+}
+
+#[test]
+fn blob_png_shrinks_through_data_media() {
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(data.path(), vec![blob_definition("blob-app", None, 52, true)]);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "blob-app");
+    let mut bytes = Vec::new();
+    image::RgbaImage::from_pixel(80, 40, image::Rgba([255, 0, 0, 128]))
+        .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png)
+        .unwrap();
+    blob_put(&core, &window, "media/photo.png", bytes).unwrap();
+    let CoreReply::DataMedia { media } = blob_data(&core, &window, "media/photo.png", Some(20)).unwrap()
+    else {
+        panic!("data.media")
+    };
+    assert_eq!(media.mime, "image/png");
+    assert_eq!(media.width, Some(20));
+    assert_eq!(media.height, Some(10));
+    assert!(!media.data_base64.is_empty());
+    core.shutdown();
+}
+
+#[test]
+fn blob_media_respects_window_app_and_prefix_boundaries() {
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(
+        data.path(),
+        vec![
+            blob_definition("blob-app", None, 52, true),
+            blob_definition("blob-other", None, 52, true),
+            blob_definition("blob-plain", None, 52, false),
+        ],
+    );
+    let (_, desktop) = active_ids(&core);
+    let one = open_window(&core, &desktop, "blob-app");
+    let two = open_window(&core, &desktop, "blob-app");
+    let other = open_window(&core, &desktop, "blob-other");
+    let plain = open_window(&core, &desktop, "blob-plain");
+    blob_put(&core, &one, "media/share.wav", vec![1; 8]).unwrap();
+    assert!(matches!(
+        blob_open(&core, &two, "media/share.wav").unwrap(),
+        CoreReply::DataMediaOpen {
+            playback: MediaPlayback::Stream { .. }
+        }
+    ));
+    assert_eq!(
+        blob_open(&core, &other, "media/share.wav").unwrap_err().code,
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        blob_open(&core, &plain, "media/share.wav")
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("DATA_CLIENT_BLOB_STORAGE_NOT_DECLARED")
+    );
+    assert_eq!(
+        blob_put(&core, &one, "other/key.wav", vec![1])
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("DATA_CLIENT_BLOB_PREFIX_DENIED")
+    );
+    assert_eq!(
+        blob_open(&core, &one, "other/key.wav")
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("DATA_CLIENT_BLOB_PREFIX_DENIED")
+    );
+    assert_eq!(
+        blob_put(&core, &one, "media/../escape.wav", vec![1])
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("DATA_CLIENT_BLOB_KEY_INVALID")
+    );
+    core.shutdown();
+
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(
+        data.path(),
+        vec![blob_definition("blob-app", Some("window"), 52, true)],
+    );
+    let (_, desktop) = active_ids(&core);
+    let one = open_window(&core, &desktop, "blob-app");
+    let two = open_window(&core, &desktop, "blob-app");
+    blob_put(&core, &one, "media/window.wav", vec![1; 8]).unwrap();
+    assert!(matches!(
+        blob_open(&core, &one, "media/window.wav").unwrap(),
+        CoreReply::DataMediaOpen {
+            playback: MediaPlayback::Stream { .. }
+        }
+    ));
+    assert_eq!(
+        blob_open(&core, &two, "media/window.wav").unwrap_err().code,
+        ErrorCode::NotFound
+    );
+    core.shutdown();
+}
+
+#[test]
+fn blob_stream_rejects_foreign_origins_and_expires_on_remove_or_replace() {
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(data.path(), vec![blob_definition("blob-app", None, 52, true)]);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "blob-app");
+    blob_put(&core, &window, "media/clip.wav", vec![9; 64]).unwrap();
+    let CoreReply::DataMediaOpen {
+        playback: MediaPlayback::Stream { url, handle, .. },
+    } = blob_open(&core, &window, "media/clip.wav").unwrap()
+    else {
+        panic!("stream")
+    };
+    for origin in [None, Some("null"), Some("https://other.test")] {
+        let mut request = client().get(&url);
+        if let Some(origin) = origin {
+            request = request.header("Origin", origin);
+        }
+        assert_eq!(request.send().unwrap().status(), 403);
+    }
+    assert_eq!(
+        client()
+            .get(&url)
+            .header("Origin", ORIGIN)
+            .send()
+            .unwrap()
+            .status(),
+        200
+    );
+    core.handle(CoreRequest::ClientBlobRemove {
+        window_id: window.clone(),
+        key: "media/clip.wav".into(),
+    })
+    .unwrap();
+    let response = client().get(&url).header("Origin", ORIGIN).send().unwrap();
+    assert_eq!(response.status(), 404);
+    assert_eq!(
+        response.json::<Value>().unwrap()["id"],
+        "MEDIA_BLOB_PATH_NOT_FOUND"
+    );
+    assert_eq!(
+        blob_status(&core, &window, &handle).unwrap().id.as_deref(),
+        Some("MEDIA_BLOB_PATH_NOT_FOUND")
+    );
+    blob_put(&core, &window, "media/clip.wav", vec![1; 32]).unwrap();
+    let CoreReply::DataMediaOpen {
+        playback: MediaPlayback::Stream {
+            url: replaced,
+            handle: replaced_handle,
+            ..
+        },
+    } = blob_open(&core, &window, "media/clip.wav").unwrap()
+    else {
+        panic!("stream")
+    };
+    blob_put(&core, &window, "media/clip.wav", vec![2; 128]).unwrap();
+    assert_eq!(
+        client()
+            .get(&replaced)
+            .header("Origin", ORIGIN)
+            .send()
+            .unwrap()
+            .status(),
+        409
+    );
+    assert_eq!(
+        blob_status(&core, &window, &replaced_handle)
+            .unwrap()
+            .id
+            .as_deref(),
+        Some("MEDIA_STREAM_FILE_CHANGED")
+    );
+    core.shutdown();
+}
+
+#[test]
+fn blob_stream_lifetime_follows_window_and_owner() {
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(data.path(), vec![blob_definition("blob-app", None, 52, true)]);
+    let (_, desktop) = active_ids(&core);
+    let one = open_window(&core, &desktop, "blob-app");
+    let two = open_window(&core, &desktop, "blob-app");
+    blob_put(&core, &one, "media/lifetime.wav", vec![3; 16]).unwrap();
+    let CoreReply::DataMediaOpen {
+        playback: MediaPlayback::Stream { handle, .. },
+    } = blob_open(&core, &one, "media/lifetime.wav").unwrap()
+    else {
+        panic!("stream")
+    };
+    for request in [
+        CoreRequest::DataMediaStatus {
+            window_id: two.clone(),
+            handle: handle.clone(),
+        },
+        CoreRequest::DataMediaClose {
+            window_id: two.clone(),
+            handle: handle.clone(),
+        },
+    ] {
+        assert_eq!(
+            core.handle(request).unwrap_err().id.as_deref(),
+            Some("MEDIA_STREAM_HANDLE_OWNER_MISMATCH")
+        );
+    }
+    for _ in 0..2 {
+        core.handle(CoreRequest::DataMediaClose {
+            window_id: one.clone(),
+            handle: handle.clone(),
+        })
+        .unwrap();
+    }
+    let CoreReply::DataMediaOpen {
+        playback: MediaPlayback::Stream { url, handle, .. },
+    } = blob_open(&core, &two, "media/lifetime.wav").unwrap()
+    else {
+        panic!("stream")
+    };
+    core.handle(CoreRequest::WindowClose {
+        window_id: two.clone(),
+    })
+    .unwrap();
+    assert_eq!(
+        client()
+            .get(&url)
+            .header("Origin", ORIGIN)
+            .send()
+            .unwrap()
+            .status(),
+        404
+    );
+    assert_eq!(
+        core.handle(CoreRequest::DataMediaStatus {
+            window_id: two,
+            handle
+        })
+        .unwrap_err()
+        .id
+        .as_deref(),
+        Some("MEDIA_STREAM_HANDLE_INVALID")
+    );
+    core.shutdown();
+}
+
+#[test]
+fn blob_media_rejects_old_block_sets_symlinks_and_stale_grants() {
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(data.path(), vec![blob_definition("blob-app", None, 51, true)]);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "blob-app");
+    blob_put(&core, &window, "media/old.wav", vec![1; 8]).unwrap();
+    assert_eq!(
+        blob_open(&core, &window, "media/old.wav")
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("MEDIA_BLOB_VERSION_LOW")
+    );
+    core.shutdown();
+
+    #[cfg(unix)]
+    {
+        let data = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let core = blob_setup(data.path(), vec![blob_definition("blob-app", None, 52, true)]);
+        let (_, desktop) = active_ids(&core);
+        let window = open_window(&core, &desktop, "blob-app");
+        let root = crate::client_blobs::location(&core.inner, &window, "media/")
+            .unwrap()
+            .root;
+        fs::create_dir_all(root.join("media")).unwrap();
+        fs::write(outside.path().join("secret.wav"), b"secret").unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("secret.wav"),
+            root.join("media/escape.wav"),
+        )
+        .unwrap();
+        assert_eq!(
+            blob_open(&core, &window, "media/escape.wav")
+                .unwrap_err()
+                .id
+                .as_deref(),
+            Some("MEDIA_BLOB_PATH_OUTSIDE_ROOT")
+        );
+        core.shutdown();
+    }
+
+    let data = TempDir::new().unwrap();
+    let core = blob_setup(data.path(), vec![blob_definition("blob-app", None, 52, true)]);
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "blob-app");
+    blob_put(&core, &window, "media/stale.wav", vec![5; 32]).unwrap();
+    let CoreReply::DataMediaOpen {
+        playback: MediaPlayback::Stream { url, handle, .. },
+    } = blob_open(&core, &window, "media/stale.wav").unwrap()
+    else {
+        panic!("stream")
+    };
+    core.inner.generation.fetch_add(1, Ordering::SeqCst);
+    assert_eq!(
+        client()
+            .get(&url)
+            .header("Origin", ORIGIN)
+            .send()
+            .unwrap()
+            .status(),
+        409
+    );
+    assert_eq!(
+        blob_status(&core, &window, &handle).unwrap().id.as_deref(),
+        Some("MEDIA_BLOB_AUTHORITY_CHANGED")
     );
     core.shutdown();
 }

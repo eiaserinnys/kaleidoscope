@@ -22,6 +22,7 @@ use kaleidoscope_contract::{
 mod app_icon;
 pub(crate) use app_icon::get as app_icon;
 mod authorization;
+mod blob;
 mod range;
 pub(crate) mod stream;
 mod transform;
@@ -202,12 +203,14 @@ pub(crate) fn get(
     let target = match media {
         MediaRef::Resource(media) => media.path.clone(),
         MediaRef::Asset(media) => media.asset.clone(),
+        MediaRef::Blob(media) => media.blob.clone(),
     };
     if max_px == Some(0) {
         return Err(errors::MEDIA_LOAD_OPTIONS_INVALID(&target));
     }
     let media = match media {
         MediaRef::Resource(media) => media,
+        MediaRef::Blob(media) => return blob::get(inner, window, media, max_px),
         MediaRef::Asset(media) => {
             let version = {
                 let state = inner.state.lock().unwrap();

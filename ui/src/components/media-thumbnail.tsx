@@ -6,7 +6,7 @@ import { IconImage, iconImageFromData } from "./app-icon";
 import { ICON_SIZE, ImageOff } from "./icons";
 
 export function isMedia(value: unknown): value is MediaRef {
-  return typeof value === "object" && value !== null && (("asset" in value && typeof value.asset === "string") || ("permission" in value && typeof value.permission === "string" && "path" in value && typeof value.path === "string"));
+  return typeof value === "object" && value !== null && (("asset" in value && typeof value.asset === "string") || ("blob" in value && typeof value.blob === "string") || ("permission" in value && typeof value.permission === "string" && "path" in value && typeof value.path === "string"));
 }
 export function cropStyle(crop: Crop | undefined) {
   return crop && crop.w > 0 && crop.h > 0 ? { width: `${100 / crop.w}%`, height: `${100 / crop.h}%`, left: `${-100 * crop.x / crop.w}%`, top: `${-100 * crop.y / crop.h}%` } : undefined;

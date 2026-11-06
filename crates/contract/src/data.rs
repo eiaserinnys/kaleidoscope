@@ -780,12 +780,14 @@ impl HttpMethod {
 /// 이미지와 소리 원본 하나. 식이 이 모양의 객체를 내면 블록이 `data.media`로 받아 그린다.
 /// `permission`의 모듈이 `connection`이면 `path`는 연결의 주소 아래 경로(`/`로 시작)이고 `query`를 붙인다.
 /// `files`면 `path`는 고른 폴더 기준 상대 경로다. `crop`은 그리는 방법이라 원본을 가르지 않는다.
+/// `blob`은 이 기기의 앱 저장소(`client.device_storage`)에 든 파일의 키다. 블록 세트 52판이 필요하다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export, export_to = "contract.ts")]
 pub enum MediaRef {
     Resource(ResourceMediaRef),
     Asset(AssetMediaRef),
+    Blob(BlobMediaRef),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -810,6 +812,18 @@ pub struct AssetMediaRef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub crop: Option<Crop>,
+}
+
+/// 기기 저장소에 든 파일을 미디어로 쓴다. `blob`은 앱 정의 `client.device_storage.prefixes`에 든 키이며,
+/// 파일 확장자가 MIME을 정한다. 앱은 저장할 때 실제 확장자를 보존한다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct BlobMediaRef {
+    pub blob: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub crop: Option<Crop>,
