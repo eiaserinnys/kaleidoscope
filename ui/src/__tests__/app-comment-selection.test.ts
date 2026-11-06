@@ -5,7 +5,7 @@ import { registerOverlay } from "../share/overlay-owner";
 
 const rect = { x: 10, y: 10, left: 10, top: 10, right: 210, bottom: 110, width: 200, height: 100, toJSON: () => ({}) } as DOMRect;
 const geometry = (root: HTMLElement) => {
-  for (const el of [document.documentElement, document.body, root, ...root.querySelectorAll<HTMLElement>("*")]) Object.defineProperty(el, "getBoundingClientRect", { configurable: true, value: () => rect });
+  for (const el of [document.documentElement, document.body, root, ...root.querySelectorAll<HTMLElement>("*")]) { Object.defineProperty(el, "getBoundingClientRect", { configurable: true, value: () => rect }); Object.defineProperty(el, "getClientRects", { configurable: true, value: () => [rect] }); }
 };
 afterEach(() => { document.getSelection()?.removeAllRanges(); document.body.replaceChildren(); });
 
@@ -28,6 +28,36 @@ describe("화면에서 커멘트 자리 고르기", () => {
     expect(picked.anchor).toMatchObject({ kind: "text", quote: { exact: "고른 글", prefix: "앞 문맥 ", suffix: " 뒤 문맥" } });
     Object.defineProperty(Range.prototype, "getBoundingClientRect", { configurable: true, value: () => rect });
     expect(resolveScreen(picked.anchor, { kind: "exact", pointer: "/ui" }, root, { windowId: "w", sourceWindowId: "w" }).kind).toBe("exact");
+  });
+  it("상자 없는 anchor는 자식 상자를 합쳐 고르고 화면에 찾는다", () => {
+    const root = document.createElement("div");
+    root.innerHTML = '<div data-ks-block="/ui" data-ks-block-type="anchor" style="display: contents"><span>첫째</span><span>둘째</span></div>';
+    document.body.append(root); geometry(root);
+    const anchor = root.firstElementChild as HTMLElement;
+    const children = [...anchor.children] as HTMLElement[];
+    Object.defineProperty(anchor, "getClientRects", { configurable: true, value: () => [] });
+    Object.defineProperty(anchor, "getBoundingClientRect", { configurable: true, value: () => new DOMRect(0, 0, 0, 0) });
+    Object.defineProperty(children[0], "getBoundingClientRect", { configurable: true, value: () => new DOMRect(20, 30, 40, 20) });
+    Object.defineProperty(children[1], "getBoundingClientRect", { configurable: true, value: () => new DOMRect(80, 50, 30, 20) });
+    for (const child of children) Object.defineProperty(child, "getClientRects", { configurable: true, value: () => [child.getBoundingClientRect()] });
+    const picked = describeTarget(anchor, root)!;
+    expect(picked.rect).toMatchObject({ left: 20, top: 30, right: 110, bottom: 70 });
+    const result = resolveScreen(picked.anchor, { kind: "exact", pointer: "/ui" }, root, { windowId: "w", sourceWindowId: "w" });
+    expect(result.kind).toBe("exact");
+    if (result.kind === "exact") expect(result.rect).toMatchObject({ left: 20, top: 30, right: 110, bottom: 70 });
+    anchor.replaceChildren();
+    expect(resolveScreen(picked.anchor, { kind: "exact", pointer: "/ui" }, root, { windowId: "w", sourceWindowId: "w" }).kind).toBe("not_visible");
+  });
+  it.each([["toggle", "switch"], ["select", null]])("%s의 표식 단추 자체를 컨트롤로 찾아낸다", (type, role) => {
+    const root = document.createElement("div");
+    const button = document.createElement("button"); button.dataset.ksBlock = "/ui"; button.dataset.ksBlockType = type;
+    if (role) button.setAttribute("role", role);
+    button.setAttribute("aria-label", "선택"); root.append(button); document.body.append(root); geometry(root);
+    const picked = describeTarget(button, root)!;
+    expect(picked.anchor.kind).toBe("control");
+    const result = resolveScreen(picked.anchor, { kind: "exact", pointer: "/ui" }, root, { windowId: "w", sourceWindowId: "w" });
+    expect(result.kind).toBe("exact");
+    if (result.kind === "exact") expect(result.element).toBe(button);
   });
   it("다른 위치에 열린 소유 겹침도 반복 키의 조상을 따라간다", () => {
     const root = document.createElement("div"); root.dataset.windowId = "w";

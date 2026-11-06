@@ -5,6 +5,7 @@ import { decodeCommentKey } from "./key";
 import type { DefinitionResult } from "./definition";
 import { frameSurfaces } from "./frame";
 import { commentAncestors } from "./ancestry";
+import { measureTarget } from "./measure";
 
 export type ScreenContext = { windowId: string; sourceWindowId: string };
 export type ScreenResult = { kind: "orphan" | "not_visible" } | { kind: "exact" | "moved"; rect: DOMRect; element: HTMLElement; range?: Range };
@@ -22,7 +23,10 @@ function visible(element: HTMLElement, rect: DOMRect): boolean {
     const style = getComputedStyle(node);
     if (node.hidden || node.getAttribute("aria-hidden") === "true" || style.display === "none" || style.visibility === "hidden") return false;
   }
-  const clip = visibleClip(element);
+  let clipElement: HTMLElement | null = element;
+  while (clipElement && !clipElement.getClientRects().length) clipElement = clipElement.parentElement;
+  if (!clipElement) return false;
+  const clip = visibleClip(clipElement);
   return rect.width > 0 && rect.height > 0 && rect.right > clip.left && rect.left < clip.right && rect.bottom > clip.top && rect.top < clip.bottom;
 }
 function exactQuote(root: HTMLElement, quote: AppCommentQuote): Range | "ambiguous" | null {
@@ -60,9 +64,9 @@ export function resolveScreen(anchor: AppCommentAnchor, definition: DefinitionRe
     const { element, range } = found[0]; const rect = range.getBoundingClientRect();
     return visible(element, rect) ? { kind: definition.kind, element, range, rect } : { kind: "not_visible" };
   }
-  const shown = targets.filter((element) => visible(element, element.getBoundingClientRect()));
+  const shown = targets.flatMap((element) => { const rect = measureTarget(element); return rect && visible(element, rect) ? [{ element, rect }] : []; });
   if (!shown.length || (anchor.row_identity !== undefined && shown.length !== 1) || ((anchor.kind === "control" || anchor.kind === "point") && shown.length !== 1)) return { kind: "not_visible" };
-  const rects = shown.map((element) => element.getBoundingClientRect()); const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top)), right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
-  if (anchor.kind === "point" && anchor.frame_rel) return { kind: definition.kind, element: shown[0], rect: new DOMRect(left + (right - left) * anchor.frame_rel.x, top + (bottom - top) * anchor.frame_rel.y, 0, 0) };
-  return { kind: definition.kind, element: shown[0], rect: new DOMRect(left, top, right - left, bottom - top) };
+  const rects = shown.map(({ rect }) => rect); const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top)), right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
+  if (anchor.kind === "point" && anchor.frame_rel) return { kind: definition.kind, element: shown[0].element, rect: new DOMRect(left + (right - left) * anchor.frame_rel.x, top + (bottom - top) * anchor.frame_rel.y, 0, 0) };
+  return { kind: definition.kind, element: shown[0].element, rect: new DOMRect(left, top, right - left, bottom - top) };
 }

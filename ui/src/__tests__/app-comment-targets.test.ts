@@ -70,7 +70,7 @@ describe("화면 범위와 프레임", () => {
   const rect = (width = 200, height = 100) => ({ x: 10, y: 10, left: 10, top: 10, right: 10 + width, bottom: 10 + height, width, height, toJSON: () => ({}) }) as DOMRect;
   function windowWith(contents: string) {
     const root = document.createElement("div"); root.innerHTML = contents; document.body.append(root);
-    for (const el of [document.documentElement, document.body, root, ...root.querySelectorAll<HTMLElement>("*")]) Object.defineProperty(el, "getBoundingClientRect", { configurable: true, value: () => rect() });
+    for (const el of [document.documentElement, document.body, root, ...root.querySelectorAll<HTMLElement>("*")]) { Object.defineProperty(el, "getBoundingClientRect", { configurable: true, value: () => rect() }); Object.defineProperty(el, "getClientRects", { configurable: true, value: () => [rect()] }); }
     return root;
   }
   it("프레임은 같은 창과 반올림한 프레임 크기에서만 보인다", () => {
