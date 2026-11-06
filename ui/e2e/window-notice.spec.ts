@@ -233,7 +233,8 @@ for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아�
   await app.getByRole("button", { name: "닫기", exact: true }).focus();
   await page.keyboard.press("Enter");
   await expect(app.getByRole("alert")).toHaveCount(0);
-  expect(await app.locator(".ks-data-window-body").evaluate(e => document.activeElement === e)).toBe(true);
+  // 초점 복구는 창 초점 코드가 맡는다. 알림 자리에 초점이 남거나 몸통 동작 단추로 가지 않는다.
+  await expect(app.getByRole("button", { name: "시작 단추" })).not.toBeFocused();
   await page.keyboard.press("Enter");
   await expect(app.getByText("시작 누름", { exact: true })).toHaveCount(0);
  });

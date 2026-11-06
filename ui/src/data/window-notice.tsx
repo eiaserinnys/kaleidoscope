@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { LoaderCircle, X } from "../components/icons";
 import { Button, IconButton, Notice } from "../components/primitives";
 import { useWindowData } from "./window-data";
@@ -28,7 +28,6 @@ export function WindowNotice() {
     return source.state === "failed" ? [name, source.id, source.message] : [];
   }));
   useEffect(() => { setDismissed(false); }, [failureKey, retrySequence]);
-  const safeFocus = useRef<HTMLDivElement>(null);
   const sourceErrorId = failed
     .map((name) => {
       const source = sources[name];
@@ -40,24 +39,15 @@ export function WindowNotice() {
     ? `${failed.length > 1 ? `화면 ${failed.length}곳이 이전에 받은 내용을 보이고 있습니다.` : "이전에 받은 내용을 보이고 있습니다."} ${firstFailed.message}`
     : "";
   if (!message && (!failed.length || dismissed)) return null;
-  const focusBody = () => {
-    // 사라지는 단추 대신 동작 없는 창 본문에 초점을 둔다.
-    const body = safeFocus.current?.closest(".ks-data-window")?.querySelector<HTMLElement>(".ks-data-window-body");
-    if (body && !body.closest("[inert]")) {
-      body.tabIndex = -1;
-      body.focus({ preventScroll: true });
-    }
-  };
   const close = () => {
-    focusBody();
     if (message) data.setNotice(null); else setDismissed(true);
   };
   const closeButton = <IconButton key="close" aria-label="닫기" onClick={close}><X size="inline" /></IconButton>;
   const actions: [ReactNode] | [ReactNode, ReactNode] = message
-    ? clientFailed ? [<Button key="restart" onClick={() => { focusBody(); void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
-    : [<Button key="retry" aria-label="다시 받기" disabled={retrying} aria-busy={retrying || undefined} className={retrying ? "is-progress" : undefined} onClick={() => { focusBody(); void data.refresh(failed); }}><span>다시 받기</span>{retrying && <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>}</Button>, closeButton];
+    ? clientFailed ? [<Button key="restart" onClick={() => { void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
+    : [<Button key="retry" aria-label="다시 받기" disabled={retrying} aria-busy={retrying || undefined} className={retrying ? "is-progress" : undefined} onClick={() => { void data.refresh(failed); }}><span>다시 받기</span>{retrying && <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>}</Button>, closeButton];
   if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} />;
-  return <><div ref={safeFocus} hidden /><Notice role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice></>;
+  return <Notice role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
 }
 
 const STATUS_NOTICE_DURATION_MS = 5000;

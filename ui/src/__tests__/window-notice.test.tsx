@@ -217,17 +217,16 @@ it("처음부터 값 없는 원천 실패는 블록에서 다루고 창 알림�
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-it.each(["다시 받기", "다시 시작"])("%s 전에 안전한 본문으로 초점을 옮긴다", (label) => {
+it.each(["다시 받기", "다시 시작"])("%s를 누르면 그 동작을 한 번 부른다", (label) => {
   cleanup();
   const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
   const restart = vi.spyOn(data, "restartClient").mockResolvedValue(undefined);
-  const host = render(<div className="ks-data-window"><div className="ks-data-window-body" /><WindowNotice /></div>);
+  render(<div className="ks-data-window"><div className="ks-data-window-body" /><WindowNotice /></div>);
   if (label === "다시 받기") act(() => (data as any).merge({ sources: { feed: { state: "failed", has_value: true, message: "읽기 실패" } }, values: {} }));
   else act(() => data.failClient({ id: "TEST_ERROR", code: "server", message: "실행 실패", details: [] }));
   const button = screen.getByRole("button", { name: label });
-  button.focus();fireEvent.click(button);
-  expect(document.activeElement).toBe(host.container.querySelector(".ks-data-window-body"));
-  expect(label === "다시 받기" ? refresh : restart).toHaveBeenCalled();
+  fireEvent.click(button);
+  expect(label === "다시 받기" ? refresh : restart).toHaveBeenCalledTimes(1);
 });
 
 it("직접 다시 받으면 닫은 같은 실패도 다시 보인다", async () => {
