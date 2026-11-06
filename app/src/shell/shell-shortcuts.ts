@@ -41,7 +41,7 @@ export function installShellShortcuts(actions: ShellWindowActions): () => void {
   let cancelled = false;
   let unlisten: (() => void) | undefined;
   if (isTauri()) {
-    void getCurrentWebview().listen<{ code: string; shift: boolean }>("shell.shortcut", ({ payload }) => {
+    void getCurrentWebview().listen<{ code: string; shift: boolean }>("shell-shortcut", ({ payload }) => {
       if (cancelled) return;
       const shortcut = shellShortcut({ code: payload.code, shiftKey: payload.shift, ctrlKey: true, altKey: true, metaKey: false });
       if (shortcut) execute(shortcut);

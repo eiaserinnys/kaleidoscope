@@ -63,55 +63,6 @@ jobs:
           Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object {
             Write-Host "$($_.ProcessName): $($_.MainWindowTitle)"
           }
-      - name: 네이티브 쉘 단축키 판정 자체 시험
-        shell: pwsh
-        run: |
-          rustc --edition 2021 --test app/src-tauri/src/e2e/shell_shortcuts/checks.rs -o "$env:RUNNER_TEMP/shortcut-checks.exe"
-          if ($LASTEXITCODE -ne 0) { throw '단축키 판정 시험 컴파일 실패' }
-          & "$env:RUNNER_TEMP/shortcut-checks.exe"
-          if ($LASTEXITCODE -ne 0) { throw '단축키 판정 자체 시험 실패' }
-      - name: 네이티브 쉘 단축키 실측
-        shell: pwsh
-        run: |
-          ./app/e2e-windows/reset-app-data.ps1
-          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-shortcut-webview'
-          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/shell-shortcuts'
-          New-Item -ItemType Directory -Force $env:KALEIDOSCOPE_E2E_OUT | Out-Null
-          $app = Start-Process (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe') -ArgumentList @('--e2e-scenario=shell-shortcuts', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -RedirectStandardOutput (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stdout.log') -RedirectStandardError (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stderr.log') -PassThru
-          try {
-            $captured = @{}
-            $deadline = (Get-Date).AddMinutes(3)
-            while ((Get-Date) -lt $deadline) {
-              foreach ($surface in @('main','html','sandbox','client','web')) {
-                $name = "tab-$surface"
-                if ((Test-Path (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.request")) -and -not $captured.ContainsKey($name)) {
-                  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./app/e2e-windows/capture.ps1 (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.png")
-                  if ($LASTEXITCODE -ne 0) { throw "Windows 전환 화면 캡처 실패: $surface" }
-                  New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.done") | Out-Null
-                  $captured[$name] = $true
-                }
-              }
-              $app.Refresh()
-              if ($app.HasExited) { break }
-              Start-Sleep -Milliseconds 100
-            }
-            $app.Refresh()
-            if (-not $app.HasExited) { throw '네이티브 단축키 실측 시간 초과' }
-            $events = @(Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
-            if ($app.ExitCode -ne 0) { throw "네이티브 단축키 실측 실패: $($app.ExitCode)" }
-            foreach ($surface in @('main','html','sandbox','client','web')) {
-              foreach ($code in @('ArrowRight','PageDown','Tab')) {
-                $rows = @($events | Where-Object { $_.step -eq 'shortcut.measure' -and $_.data.surface -eq $surface -and $_.data.code -eq $code })
-                if ($rows.Count -ne 1) { throw "단축키 실측 행 누락/중복: $surface $code" }
-                Write-Host ($rows[0].data | ConvertTo-Json -Compress)
-                if ($code -ne 'Tab' -and -not $rows[0].data.passed) { throw "단축키 실측 실패: $surface $code" }
-              }
-            }
-            if (@($events | Where-Object { $_.step -eq 'shortcut.other-foreground' -and $_.data.passed }).Count -ne 1) { throw '다른 앱 포커스 검사 누락' }
-            if (@($events | Where-Object { $_.step -eq 'complete' -and $_.data.passed }).Count -ne 1) { throw '단축키 실측 완료 누락' }
-          } finally {
-            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
-          }
       - name: 미디어 전송 실측 데이터 초기화
         shell: pwsh
         run: ./app/e2e-windows/reset-app-data.ps1
@@ -459,6 +410,58 @@ jobs:
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
             if (-not $app.WaitForExit(10000)) { throw '실시간 앱 종료 시간 초과' }
             $app.Dispose()
+          }
+      - name: 네이티브 쉘 단축키 판정 자체 시험
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          rustc --edition 2021 --test app/src-tauri/src/e2e/shell_shortcuts/checks.rs -o "$env:RUNNER_TEMP/shortcut-checks.exe"
+          if ($LASTEXITCODE -ne 0) { throw '단축키 판정 시험 컴파일 실패' }
+          & "$env:RUNNER_TEMP/shortcut-checks.exe"
+          if ($LASTEXITCODE -ne 0) { throw '단축키 판정 자체 시험 실패' }
+      - name: 네이티브 쉘 단축키 실측
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          ./app/e2e-windows/reset-app-data.ps1
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-shortcut-webview'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/shell-shortcuts'
+          New-Item -ItemType Directory -Force $env:KALEIDOSCOPE_E2E_OUT | Out-Null
+          $app = Start-Process (Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe') -ArgumentList @('--e2e-scenario=shell-shortcuts', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -RedirectStandardOutput (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stdout.log') -RedirectStandardError (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stderr.log') -PassThru
+          try {
+            $captured = @{}
+            $deadline = (Get-Date).AddMinutes(3)
+            while ((Get-Date) -lt $deadline) {
+              foreach ($surface in @('main','html','sandbox','client','web')) {
+                $name = "tab-$surface"
+                if ((Test-Path (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.request")) -and -not $captured.ContainsKey($name)) {
+                  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./app/e2e-windows/capture.ps1 (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.png")
+                  if ($LASTEXITCODE -ne 0) { throw "Windows 전환 화면 캡처 실패: $surface" }
+                  New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.done") | Out-Null
+                  $captured[$name] = $true
+                }
+              }
+              $app.Refresh()
+              if ($app.HasExited) { break }
+              Start-Sleep -Milliseconds 100
+            }
+            $app.Refresh()
+            if (-not $app.HasExited) { throw '네이티브 단축키 실측 시간 초과' }
+            $events = @(Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            Get-Content -Raw (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'shortcut-results.json') | Write-Host
+            if ($app.ExitCode -ne 0) { throw "네이티브 단축키 실측 실패: $($app.ExitCode)" }
+            foreach ($surface in @('main','html','sandbox','client','web')) {
+              foreach ($code in @('ArrowRight','PageDown','Tab')) {
+                $rows = @($events | Where-Object { $_.step -eq 'shortcut.measure' -and $_.data.surface -eq $surface -and $_.data.code -eq $code })
+                if ($rows.Count -ne 1) { throw "단축키 실측 행 누락/중복: $surface $code" }
+                Write-Host ($rows[0].data | ConvertTo-Json -Compress)
+                if ($code -ne 'Tab' -and -not $rows[0].data.passed) { throw "단축키 실측 실패: $surface $code" }
+              }
+            }
+            if (@($events | Where-Object { $_.step -eq 'shortcut.other-foreground' -and $_.data.passed }).Count -ne 1) { throw '다른 앱 포커스 검사 누락' }
+            if (@($events | Where-Object { $_.step -eq 'complete' -and $_.data.passed }).Count -ne 1) { throw '단축키 실측 완료 누락' }
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
           }
       - name: 캡처와 로그 보존
         if: always()

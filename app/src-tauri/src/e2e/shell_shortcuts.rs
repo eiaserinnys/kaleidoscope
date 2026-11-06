@@ -90,6 +90,39 @@ pub(super) fn scenario(
     out: &Path,
     log: &mut File,
 ) -> Result<(), String> {
+    let result = run(app, core, out, log);
+    let events = fs::read_to_string(out.join("events.jsonl")).map_err(|e| e.to_string())?;
+    let events: Vec<Value> = events
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+    let mut rows = Vec::new();
+    for surface in ["main", "html", "sandbox", "client", "web"] {
+        for code in ["ArrowRight", "PageDown", "Tab"] {
+            let row = events.iter().find(|event| {
+                event["step"] == "shortcut.measure"
+                    && event["data"]["surface"] == surface
+                    && event["data"]["code"] == code
+            });
+            rows.push(row.map(|event| event["data"].clone()).unwrap_or_else(|| json!({"surface":surface,"code":code,"status":"not_measured","reason":result.as_ref().err()})));
+        }
+    }
+    let foreground = events
+        .iter()
+        .find(|event| event["step"] == "shortcut.other-foreground")
+        .map(|event| event["data"].clone())
+        .unwrap_or_else(|| json!({"status":"not_measured","reason":result.as_ref().err()}));
+    let report = json!({"rows":rows,"other_foreground":foreground,"passed":result.is_ok(),"error":result.as_ref().err()});
+    fs::write(
+        out.join("shortcut-results.json"),
+        serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    record(log, "shortcut.summary", report)?;
+    result
+}
+
+fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), String> {
     use std::io::Read;
     use std::net::TcpListener;
     record(log, "start", json!({"scenario":"shell-shortcuts"}))?;
@@ -301,6 +334,10 @@ pub(super) fn scenario(
         return Err("다른 앱(Windows 바탕화면)을 앞으로 가져오지 못함".into());
     }
     thread::sleep(Duration::from_millis(300));
+    let foreground = unsafe { super::native_target::describe(GetForegroundWindow()) };
+    let other_process = foreground["pid"]
+        .as_u64()
+        .is_some_and(|pid| pid != std::process::id() as u64);
     let mark = ui::mark_requests();
     native_input::chord(&[0x11, 0x12], 0x27)?;
     thread::sleep(Duration::from_millis(500));
@@ -317,9 +354,9 @@ pub(super) fn scenario(
     record(
         log,
         "shortcut.other-foreground",
-        json!({"before":before,"after":after,"commands":commands,"passed":before==after && commands==0}),
+        json!({"before":before,"after":after,"commands":commands,"foreground":foreground,"passed":other_process && before==after && commands==0}),
     )?;
-    if before != after || commands != 0 {
+    if !other_process || before != after || commands != 0 {
         return Err("다른 앱 포커스에서 쉘이 바뀜".into());
     }
     record(

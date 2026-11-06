@@ -12,6 +12,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
 
+const EVENT: &str = "shell-shortcut";
 const KEYS: &[(u32, &str, bool)] = &[
     (0x25, "ArrowLeft", false),
     (0x27, "ArrowRight", false),
@@ -86,7 +87,7 @@ pub(crate) unsafe fn register(
             if let Err(error) = app.run_on_main_thread(move || {
                 if let Err(error) = target.emit_to(
                     EventTarget::webview("main"),
-                    "shell.shortcut",
+                    EVENT,
                     serde_json::json!({"code":code,"shift":shift}),
                 ) {
                     eprintln!("쉘 단축키 전달 실패: {error}");
@@ -117,6 +118,7 @@ mod tests {
     #[test]
     fn 예약_키는_쉘_표에도_있다() {
         let shell = include_str!("../../src/shell/shell-shortcuts.ts");
+        assert!(shell.contains(&format!("\"{EVENT}\"")));
         for &(_, code, _) in KEYS {
             assert!(shell.contains(&format!("\"{code}\"")), "{code}");
         }
