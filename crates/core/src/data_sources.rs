@@ -216,8 +216,8 @@ fn fetch_store_indexes(inner: &Arc<Inner>, permission: &str, servers: &[String])
                 let key = crate::data_runtime::store_gate_key(url.as_str()).expect("정규화된 스토어 주소");
                 let client = crate::store::client(inner, url.as_str())?;
                 if let Some(until) = crate::data_runtime::gates::blocked(&inner.data_runtimes, &key) {
-                    return Err(errors::STORECLIENT_FETCH_HTTP_REJECTED("index.json")
-                        .and_details(vec![format!("HTTP 429; 재시도 가능 시각: {until}")]));
+                    return Err(errors::STORECLIENT_FETCH_HTTP_REJECTED()
+                        .and_details(vec!["파일: index.json".into(), format!("HTTP 429; 재시도 가능 시각: {until}")]));
                 }
                 match client.index(permission) {
                     Ok(value) => {

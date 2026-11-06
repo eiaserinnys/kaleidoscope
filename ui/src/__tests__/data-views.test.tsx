@@ -12,6 +12,8 @@ import { mockVirtualLayout } from "./virtual-layout";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import { DataIcon } from "../components/data-icons";
 import { ICON_NAMES } from "../contract/limits";
+import storeDefinitionText from "../../../apps/store.json?raw";
+import jsonata from "jsonata";
 
 beforeEach(mockVirtualLayout);
 afterEach(() => {
@@ -27,6 +29,18 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport };
 }
+it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 쓴다", async () => {
+  const app = JSON.parse(storeDefinitionText);
+  const items = await jsonata(app.ui.children[1].children[1].items.expr).evaluate({}, {
+    state: { category: "__installed", query: "" }, data: { catalog: { stores: [] } },
+    apps: [{ id: "notes", name: "남은 앱", icon: { asset: "other-app-icon", version: 1 }, origin: { store_url: "http://removed" } }],
+  });
+  expect(items[0].items[0].image).toBeUndefined();
+  setup({ type: "list", layout: "icons", grouped: true, items }, {}, 43);
+  const tile = await screen.findByRole("option", { name: "남은 앱" });
+  expect(tile.querySelector(".is-failed")).toBeNull();
+  expect(tile.querySelector(".ks-media-thumbnail.is-asset")).toBeNull();
+});
 it("허용된 모든 아이콘 이름은 접근성 트리에서 숨긴 SVG를 그린다", () => {
   const { container } = render(<>{ICON_NAMES.map(name => <DataIcon key={name} name={name} />)}</>);
   expect(container.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(ICON_NAMES.length);

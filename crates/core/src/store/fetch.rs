@@ -99,7 +99,8 @@ impl<T: Transport> StoreClient<T> {
             let mut error = match status {
                 300..=399 => errors::STORECLIENT_FETCH_REDIRECT_REJECTED(relative),
                 404 => errors::STORECLIENT_FETCH_NOT_FOUND(relative),
-                _ => errors::STORECLIENT_FETCH_HTTP_REJECTED(relative),
+                _ => errors::STORECLIENT_FETCH_HTTP_REJECTED()
+                    .and_details(vec![format!("파일: {relative}")]),
             };
             let host = url::Url::parse(&self.server.origin)
                 .ok()
