@@ -31,3 +31,12 @@ it("meta로 직접 정한 색상 체계도 기본 주입보다 우선한다", ()
   expect(source).not.toContain(":where(:root){color-scheme:light dark}");
   expect(source).toContain('content="only light"');
 });
+
+
+it.each([
+  '<body style="background:white;font-size:var(--ks-type-body)">본문</body>',
+  '<p style="color:#222;font-size:var(--ks-type-body)">본문</p>',
+  '<p style="color:#333;font-family:var(--ks-font-family)">본문</p>',
+])("색이 고정된 글꼴 토큰 문서에는 색상 체계를 주입하지 않는다: %s", (html) => {
+  expect(htmlViewSource(html)).not.toContain(":where(:root){color-scheme:light dark}");
+});

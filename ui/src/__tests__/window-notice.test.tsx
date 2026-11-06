@@ -189,3 +189,43 @@ it("상태 알림이 끝나면 해결하지 않은 동작 실패를 다시 보�
   expect(screen.getByRole("alert").textContent).toContain("동작 실패");
   expect(screen.getByRole("button", { name: "다시 시작" })).toBeTruthy();
 });
+
+
+it("자기 원천의 자동 갱신 중에도 실패 DOM과 닫힘을 유지한다", () => {
+  const failure = { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" };
+  const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
+  merge(failure);
+  const notice = screen.getByRole("alert");
+  merge({ state: "loading", has_value: true });
+  expect(screen.getByRole("alert")).toBe(notice);
+  merge(failure);
+  expect(screen.getByRole("alert")).toBe(notice);
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  merge({ state: "loading", has_value: true });
+  merge(failure);
+  expect(screen.queryByRole("alert")).toBeNull();
+  merge({ ...failure, message: "다른 오류" });
+  expect(screen.getByRole("alert").textContent).toContain("다른 오류");
+});
+
+it("처음부터 값 없는 원천 실패는 블록에서 다루고 창 알림에 남기지 않는다", () => {
+  const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
+  merge({ state: "failed", has_value: false, message: "첫 읽기 실패" });
+  expect(screen.queryByRole("alert")).toBeNull();
+  merge({ state: "loading", has_value: false });
+  merge({ state: "failed", has_value: false, message: "첫 읽기 실패" });
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it.each(["다시 받기", "다시 시작"])("%s 전에 안전한 본문으로 초점을 옮긴다", (label) => {
+  cleanup();
+  const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
+  const restart = vi.spyOn(data, "restartClient").mockResolvedValue(undefined);
+  const host = render(<div className="ks-data-window"><div className="ks-data-window-body" /><WindowNotice /></div>);
+  if (label === "다시 받기") act(() => (data as any).merge({ sources: { feed: { state: "failed", has_value: true, message: "읽기 실패" } }, values: {} }));
+  else act(() => data.failClient({ id: "TEST_ERROR", code: "server", message: "실행 실패", details: [] }));
+  const button = screen.getByRole("button", { name: label });
+  button.focus();fireEvent.click(button);
+  expect(document.activeElement).toBe(host.container.querySelector(".ks-data-window-body"));
+  expect(label === "다시 받기" ? refresh : restart).toHaveBeenCalled();
+});

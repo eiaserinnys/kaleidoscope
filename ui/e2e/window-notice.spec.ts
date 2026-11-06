@@ -255,3 +255,29 @@ for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아�
   expect(metrics.overflow).toBeLessThanOrEqual(1);
   expect(metrics.visibleRow).toBeGreaterThan(10);
  });
+
+
+for (const layout of ["section", "middle", "other-fill"]) test(`비채움 ${layout}의 표 경고는 정상 행을 접지 않는다`, async ({ page }) => {
+  await page.goto(`/?preview=data-views-test&warning-layout=${layout}`);
+  const app = page.getByTestId("app-window-data-views-test");
+  await expect(app.getByRole("alert")).toBeVisible();
+  for (const [width,height] of [[880,600],[360,180]]) {
+    await app.evaluate((e,[w,h]) => {e.style.width=`${w}px`;e.style.height=`${h}px`;},[width,height]);
+    await expect.poll(() => app.getByRole("table").evaluate(e=>e.getBoundingClientRect().height)).toBeGreaterThan(100);
+    await app.getByRole("table").getByText("행 40", {exact:true}).scrollIntoViewIfNeeded();
+    await expect(app.getByRole("table").getByText("행 40",{exact:true})).toBeVisible();
+  }
+});
+
+test("높은 표 경고는 문구와 코드를 모두 보이고 낮은 창에만 한 줄을 쓴다", async ({ page }) => {
+  await page.goto("/?preview=data-views-test&warning-layout=root");
+  const app = page.getByTestId("app-window-data-views-test");
+  await expect(app.getByRole("alert")).toBeVisible();
+  await app.evaluate(e=>{e.style.width="360px";e.style.height="600px";});
+  const metrics = await app.getByRole("alert").evaluate(e=>{
+    const m=e.querySelector(".ks-notice-message")!,b=e.closest(".ks-data-window")!.querySelector(".ks-data-window-body")!;
+    return {client:m.clientHeight,scroll:m.scrollHeight,top:e.getBoundingClientRect().top-b.getBoundingClientRect().top};
+  });
+  expect(metrics.client).toBe(metrics.scroll);
+  expect(metrics.top).toBe(8);
+});
