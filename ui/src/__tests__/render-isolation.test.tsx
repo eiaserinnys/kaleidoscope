@@ -1317,7 +1317,8 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
-  it("긴 목록은 가상화가 그린 항목보다 많은 이미지를 미리 받지 않는다", async () => {
+  // 실제 코어의 400개 항목 실측: 요청 88건은 모두 마운트된 행에서 났고, 그중 뷰포트 밖 overscan 행이 32건이었다.
+  it.each([false, true])("긴 목록(grouped=%s)은 가상화가 그린 항목보다 많은 이미지를 받지 않는다", async (grouped) => {
     mockVirtualLayout();
     const originalRect = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
@@ -1325,7 +1326,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
         ? { width: 32, height: 32, top: 0, left: 0, right: 32, bottom: 32, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
         : originalRect.call(this);
     });
-    const list: AppDefinition = { ...definition, ui: { type: "list", layout: "icons", items: { expr: "$data.sample" } } };
+    const list: AppDefinition = { ...definition, ui: { type: "list", layout: "icons", grouped, items: { expr: "$data.sample" } } };
     const { store, transport } = await setup([list]);
     const original = store.call.bind(store);
     const mediaCalls: string[] = [];
@@ -1336,12 +1337,14 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       }
       return original(request);
     }) as typeof store.call);
-    const items = Array.from({ length: 200 }, (_, i) => ({ key: String(i), title: `앱 ${i}`, image: { permission: "catalog", path: `apps/${i}.png`, query: { server: "https://store.example" } } }));
-    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: { "/ui/items": { status: "ready", value: items } } } }));
+    const items = Array.from({ length: 400 }, (_, i) => ({ key: String(i), title: `앱 ${i}`, image: { permission: "catalog", path: `apps/${i}.png`, query: { server: "https://store.example" } } }));
+    const groups = [{ title: "자료", items }, { title: "빈 자료", items: [], status: { state: "empty", message: "없음" } }];
+    await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: { "/ui/items": { status: "ready", value: grouped ? groups : items } } } }));
     await waitFor(() => expect(mediaCalls.length).toBeGreaterThan(0));
     await settleRenders();
     const window = document.querySelector('[data-window-id="window-a"]')!;
     const rendered = window.querySelectorAll('[role="option"]').length;
+    console.log(JSON.stringify({ grouped, totalItems: items.length, renderedItems: rendered, mediaRequests: mediaCalls.length }));
     expect(rendered).toBeLessThan(items.length);
     expect(mediaCalls.length).toBeLessThanOrEqual(rendered);
     store.dispose();
