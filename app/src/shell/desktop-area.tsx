@@ -4,10 +4,10 @@ import {
   AppIcon,
   ChevronLeft,
   ChevronRight,
+  ChevronsUp,
   CountBadge,
   IconButton,
   LayoutGrid,
-  Maximize2,
   Menu,
   Minus,
   Settings,
@@ -163,7 +163,7 @@ function Taskbar({ activeDesktopId, desktopCount, launcherOpen, onOpenApps, onCa
     if (op === "window.raise" || op === "window.minimize" || op === "window.maximize" || op === "window.restore" || op === "window.close") void onCall({ op, window_id: windowId });
   }, [onCall, setWindowMenu]);
   const canMinimize = windows.some((window) => !window.minimized) || Boolean(systemWindow && !systemWindow.minimized);
-  const canMaximize = windows.length > 0 || Boolean(systemWindow);
+  const canRestore = windows.some((window) => window.minimized) || Boolean(systemWindow?.minimized);
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const list = listRef.current;
@@ -189,7 +189,7 @@ function Taskbar({ activeDesktopId, desktopCount, launcherOpen, onOpenApps, onCa
       {systemWindow ? <SystemTaskbarItem state={systemWindow} setWindowMenu={setWindowMenu} /> : null}
     </div>
     <IconButton variant="taskbar" aria-label="모든 창 최소화" title="모든 창 최소화 (Ctrl+Alt+Shift+↓)" disabled={!canMinimize} onClick={() => void windowActions.minimizeAll()}><Minus /></IconButton>
-    <IconButton variant="taskbar" aria-label="모든 창 최대화" title="모든 창 최대화 (Ctrl+Alt+Shift+↑)" disabled={!canMaximize} onClick={() => void windowActions.maximizeAll()}><Maximize2 /></IconButton>
+    <IconButton variant="taskbar" aria-label="모든 창 다시 열기" title="모든 창 다시 열기 (Ctrl+Alt+Shift+↑)" disabled={!canRestore} onClick={() => void windowActions.restoreAll()}><ChevronsUp /></IconButton>
     <IconButton variant="taskbar" aria-label="다음 데스크톱" title="다음 데스크톱 (Ctrl+Alt+→)" disabled={!activeDesktopId || desktopCount < 2} onClick={() => void windowActions.desktop(1)}><ChevronRight /></IconButton>
   </nav>;
 }
@@ -226,6 +226,7 @@ function TaskbarButton({ ref, title, icon, minimized, isTop, onClick, onContextM
   const state = minimized ? "minimized" : isTop ? "active" : "inactive";
   return <button
     ref={ref}
+    aria-label={title}
     aria-pressed={!minimized && isTop}
     className="ks-taskbar-item ks-taskbar-window"
     data-state={state}
@@ -238,8 +239,10 @@ function TaskbarButton({ ref, title, icon, minimized, isTop, onClick, onContextM
     title={title}
     type="button"
   >
-    {icon}
-    <span className="ks-taskbar-item-label">{title}</span>
+    <span className="ks-taskbar-item-content">
+      {icon}
+      <span className="ks-taskbar-item-label">{title}</span>
+    </span>
   </button>;
 }
 

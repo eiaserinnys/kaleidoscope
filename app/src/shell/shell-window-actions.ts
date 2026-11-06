@@ -50,9 +50,9 @@ export function createShellWindowActions(store: ShellStore, call: Call, getSyste
       const { windows, system } = current();
       for (const target of targets(windows, system).filter(visible)) if (!await apply(target, "minimize")) return;
     },
-    async maximizeAll() {
+    async restoreAll() {
       const { windows, system } = current();
-      const ordered = targets(windows, system).sort((a, b) => {
+      const ordered = targets(windows, system).filter((target) => !visible(target)).sort((a, b) => {
         const az = a.kind === "app" ? a.window.z : a.state.z;
         const bz = b.kind === "app" ? b.window.z : b.state.z;
         return az - bz || (a.kind === b.kind ? 0 : a.kind === "system" ? -1 : 1);
@@ -67,11 +67,10 @@ export function createShellWindowActions(store: ShellStore, call: Call, getSyste
               const unsubscribe = store.subscribe(() => { if (reached()) { unsubscribe(); resolve(); } });
             });
           }
-          target.state.maximize();
           target.state.raise();
         } else {
-          const reply = await call({ op: "window.maximize", window_id: target.window.id });
-          if (!reply || reply.op !== "window.maximize") return;
+          const reply = await call({ op: "window.raise", window_id: target.window.id });
+          if (!reply || reply.op !== "window.raise") return;
           previous = reply.window;
         }
       }

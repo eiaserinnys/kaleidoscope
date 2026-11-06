@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { useShellSelector, type ShellStore } from "../core/shell-store";
-import { ICON_SIZE, LayoutGrid, type IconSize } from "./icons";
+import { AppWindow, ICON_SIZE, type IconSize } from "./icons";
 
 type IconImageData = { url: string; mask: boolean };
 
@@ -75,5 +75,5 @@ export const AppIcon = memo(function AppIcon({ store, appId, appVersion, size, p
     return () => { active = false; };
   }, [store, key, appId, appVersion, icon]);
   if (placeholder === "skeleton" && icon && result.key !== key) return <i aria-hidden="true" className={`ks-icon-skeleton-icon${size === "chrome" ? " ks-icon-skeleton-chrome" : ""}`} style={{ width: ICON_SIZE[size], height: ICON_SIZE[size], flexShrink: 0 }} />;
-  return result.key === key && result.image ? <IconImage image={result.image} size={size} /> : <LayoutGrid className="ks-app-icon" size={size} />;
+  return result.key === key && result.image ? <IconImage image={result.image} size={size} /> : <AppWindow className="ks-app-icon" size={size} />;
 });

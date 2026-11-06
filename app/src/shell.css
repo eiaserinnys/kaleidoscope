@@ -283,22 +283,31 @@
 
 .ks-taskbar-item {
   display: inline-flex;
-  min-width: var(--ks-desktop-tab-min-width);
+  min-width: var(--ks-control-height);
   max-width: var(--ks-desktop-tab-max-width);
   height: var(--ks-control-height);
   flex: 0 1 var(--ks-desktop-tab-max-width);
   align-items: center;
-  gap: var(--ks-space-2);
   overflow: hidden;
   border: var(--ks-line-width) solid transparent;
   border-radius: calc(var(--ks-radius-bar) - var(--ks-space-1));
-  background: transparent;
+  background: var(--ks-color-hover);
   color: var(--ks-color-text);
   cursor: pointer;
   font-family: var(--ks-font-family);
   font-size: var(--ks-type-body);
   font-weight: 500;
   line-height: var(--ks-line-body);
+  padding: 0;
+  container-type: inline-size;
+}
+
+.ks-taskbar-item-content {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ks-space-2);
   padding: 0 var(--ks-space-3);
 }
 
@@ -308,13 +317,13 @@
 }
 
 .ks-taskbar-item:hover {
-  background: var(--ks-color-hover);
+  background: var(--ks-color-taskbar-hover);
 }
 
 .ks-taskbar-item[data-state="active"] {
   border-color: transparent;
-  background: var(--ks-color-selected-surface);
-  box-shadow: var(--ks-shadow-selected);
+  background: var(--ks-color-taskbar-active);
+  box-shadow: var(--ks-shadow-taskbar-active);
   color: var(--ks-color-text);
 }
 
@@ -327,6 +336,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 아이콘과 간격, 여백 뒤에 세 글자 안팎만 남으면 이름을 숨긴다. */
+@container (max-width: 88px) {
+  .ks-taskbar-item-label { display: none; }
+  .ks-taskbar-item-content { justify-content: center; padding: 0; }
 }
 
 .ks-taskbar-item[data-state="minimized"] .ks-app-icon {

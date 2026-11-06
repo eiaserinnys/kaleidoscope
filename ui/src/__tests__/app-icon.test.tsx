@@ -40,6 +40,15 @@ if (!globalThis.ResizeObserver) {
 afterEach(cleanup);
 
 describe("쉘 앱 아이콘", () => {
+  it("아이콘이 없는 앱은 앱 열기와 다른 창 모양의 기본 아이콘을 쓴다", async () => {
+    const snapshot = makeTestSnapshot();
+    const version = snapshot.shared.app_versions[0];
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    await store.ready;
+    const { container } = render(<AppIcon store={store} appId={version.app_id} appVersion={version.version} size="chrome" />);
+    expect(container.querySelector("svg.ks-app-icon.lucide-app-window")).not.toBeNull();
+    store.dispose();
+  });
   it("창 아이콘을 불러오는 동안 14px 뼈대를 보여 주고 격자 뼈대는 32px을 유지한다", async () => {
     const snapshot = makeTestSnapshot({ definitions: [{ ...mdViewerDefinition, icon: { asset: "logo", version: 1 } }] });
     const transport = createFakeTransport({ ...makeTestSeed(), snapshot });

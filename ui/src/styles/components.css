@@ -67,7 +67,12 @@
   height: var(--ks-control-height);
   flex: 0 0 var(--ks-control-height);
   border-radius: calc(var(--ks-radius-bar) - var(--ks-space-1));
+  background: var(--ks-color-hover);
   outline-offset: 0;
+}
+
+.ks-icon-button.is-taskbar:hover:not(:disabled) {
+  background: var(--ks-color-taskbar-hover);
 }
 
 .ks-button.is-progress, .ks-icon-button.is-progress { position: relative; }

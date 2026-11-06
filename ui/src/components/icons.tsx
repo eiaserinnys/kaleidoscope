@@ -1,4 +1,5 @@
 import {
+  AppWindow as AppWindowIcon,
   ArrowUp as ArrowUpIcon,
   ArrowDown as ArrowDownIcon,
   Settings as SettingsIcon,
@@ -8,6 +9,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronUp as ChevronUpIcon,
   ChevronRight as ChevronRightIcon,
+  ChevronsUp as ChevronsUpIcon,
   CircleArrowUp as CircleArrowUpIcon,
   Cloud as CloudIcon,
   CloudOff as CloudOffIcon,
@@ -101,6 +103,7 @@ export const ChevronLeft = (props: IconProps) => renderIcon(ChevronLeftIcon, pro
 export const UpdateReady = (props: IconProps) => renderIcon(CircleArrowUpIcon, props);
 export const ChevronDown = (props: IconProps) => renderIcon(ChevronDownIcon, props);
 export const ChevronUp = (props: IconProps) => renderIcon(ChevronUpIcon, props);
+export const ChevronsUp = (props: IconProps) => renderIcon(ChevronsUpIcon, props);
 export const PanelLeftOpen = (props: IconProps) => renderIcon(PanelLeftOpenIcon, props);
 export const PanelLeftClose = (props: IconProps) => renderIcon(PanelLeftCloseIcon, props);
 export const FileText = (props: IconProps) => renderIcon(FileTextIcon, props);
@@ -128,6 +131,7 @@ export const Download = (props: IconProps) => renderIcon(DownloadIcon, props);
 export const Video = (props: IconProps) => renderIcon(VideoIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
+export const AppWindow = (props: IconProps) => renderIcon(AppWindowIcon, props);
 export const List = (props: IconProps) => renderIcon(ListIcon, props);
 export const Maximize2 = (props: IconProps) => renderIcon(Maximize2Icon, props);
 export const Minus = (props: IconProps) => renderIcon(MinusIcon, props);
