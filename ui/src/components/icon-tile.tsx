@@ -37,8 +37,8 @@ export function useIconGridColumns(ref: RefObject<HTMLDivElement | null>, enable
   return columns;
 }
 
-export function IconTileSkeleton({ count }: { count: number }) {
-  return <div className="ks-icon-grid ks-icon-skeleton-grid" role="status" aria-label="불러오는 중">
+export function IconTileSkeleton({ count, status = true }: { count: number; status?: boolean }) {
+  return <div className="ks-icon-grid ks-icon-skeleton-grid" role={status ? "status" : undefined} aria-label={status ? "불러오는 중" : undefined} aria-hidden={status ? undefined : true}>
     {Array.from({ length: count }, (_, index) => <div className="ks-icon-tile ks-icon-tile-skeleton" aria-hidden="true" key={index}>
       <i className="ks-icon-skeleton-icon" style={{ width: ICON_SIZE.tile, height: ICON_SIZE.tile }} /><span className="ks-icon-skeleton-name"><i /></span>
     </div>)}

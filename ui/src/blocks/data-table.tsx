@@ -89,9 +89,8 @@ export function TableBlock({ block, context, pointer }: { block: Extract<Block, 
   const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/rows`, block.rows);
   const columnsValue = useBinding(`${pointer}/columns`, block.columns);
-  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
-  if (columnsValue.status !== "ready") return <DataState rootProps={blockRoot} value={columnsValue} />;
-  return <TableReady block={block} context={context} pointer={pointer} value={value.value} columnsValue={columnsValue.value} more={value.more} />;
+  if (value.status === "ready" && columnsValue.status === "ready") return <TableReady block={block} context={context} pointer={pointer} value={value.value} columnsValue={columnsValue.value} more={value.more} />;
+  return <DataState rootProps={blockRoot} value={(value.status !== "ready" ? value : columnsValue) as Exclude<typeof value, { status: "ready" }>} loading={block.selection === "cell" ? "table-grid" : "table"} />;
 }
 function TableReady({ block, context, pointer, value, columnsValue, more }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string; value: unknown; columnsValue: unknown; more?: BindingMore }) {
   const blockRoot = useBlockRootProps();

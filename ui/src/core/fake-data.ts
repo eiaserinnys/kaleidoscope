@@ -3,7 +3,7 @@ import type { Actions, AppDefinition, AppWindow, Binding, BindingMore, BindingVa
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 
 export interface FakePageSeed { value?: JsonValue; error?: string; id?: string; delayMs?: number }
-export interface FakeSourceSeed { value?: JsonValue; error?: string; login?: string; delayMs?: number; pages?: FakePageSeed[] }
+export interface FakeSourceSeed { value?: JsonValue; error?: string; login?: string; delayMs?: number; waitForFirstPage?: () => Promise<void>; pages?: FakePageSeed[] }
 export interface FakeDataSeed { sources?: Record<string, FakeSourceSeed>; callError?: string }
 type Context = { window: AppWindow; definition: AppDefinition; view: DataView; values: Record<string, JsonValue>; inputs: Record<string, string>; pages: Record<string, { next: number; received: number; more?: BindingMore }>; timers: Array<ReturnType<typeof setInterval>>; attached: boolean };
 
@@ -145,7 +145,8 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       }
       publish(context, { sources: { [name]: context.view.sources[name] }, values: await recalculate(context) });
       if (context.view.sources[name].state === "idle") return;
-      if (sourceSeed.delayMs) await new Promise((resolve) => setTimeout(resolve, sourceSeed.delayMs));
+      if (sourceSeed.waitForFirstPage) await sourceSeed.waitForFirstPage();
+      else if (sourceSeed.delayMs) await new Promise((resolve) => setTimeout(resolve, sourceSeed.delayMs));
       if (!context.attached) return;
       const hasValue = Object.hasOwn(context.values, name);
       let status: SourceStatus;

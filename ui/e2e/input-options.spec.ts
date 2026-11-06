@@ -128,6 +128,7 @@ test("원천 선택지를 기다리는 화면과 잘못된 선택지 오류를 �
   await loadingField.getByRole("combobox").focus();
   await expect(page.getByRole("listbox").getByRole("status")).toBeVisible();
   expect(await page.locator(".ks-combobox-skeleton i").count()).toBe(3);
+  expect((await page.locator(".ks-combobox-skeleton").boundingBox())!.height).toBeCloseTo(111, 0);
   if (output) await page.screenshot({ path: join(output, "원천-뼈대.png") });
   await expect(page.getByRole("option", { name: "첫째" })).toBeVisible();
   expect((await next.boundingBox())!.y).toBe(before!.y);

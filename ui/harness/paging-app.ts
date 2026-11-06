@@ -62,7 +62,8 @@ export const pagingSplitApp: AppDefinition = {
 };
 
 export const pagingSeeds: Record<string, FakeSourceSeed> = {
-  ...Object.fromEntries(["grid_items", "icon_items"].map((source) => [source, { delayMs: source === "icon_items" ? 1200 : 0, pages: [
+  ...Object.fromEntries(["grid_items", "icon_items"].map((source) => [source, { delayMs: source === "icon_items" ? 1200 : 0,
+    waitForFirstPage: source === "icon_items" ? (window as unknown as { pagingIconGate?: { wait: () => Promise<void> } }).pagingIconGate?.wait : undefined, pages: [
     { value: { items: [{ key: "1", title: "첫 칸" }], next: "2" } },
     { value: { items: [{ key: "2", title: "둘째 칸" }], next: "3" }, delayMs: 1200 },
     { value: { items: [{ key: "3", title: "셋째 칸" }], next: null }, delayMs: 500 },

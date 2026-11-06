@@ -3,9 +3,10 @@ import { Profiler } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { TimelineBlock } from "../blocks/timeline";
 
-const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), bindings: {} as Record<string, unknown>, loadingTracks: false }));
+const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), bindings: {} as Record<string, unknown>, loadingTracks: false, definition: { permissions: [], sources: {} } }));
 vi.mock("../data/window-data", () => ({
   useWindowData: () => runtime,
+  useOptionalWindowData: () => runtime,
   useBinding: (pointer: string, value: unknown) => pointer === "/ui/tracks" && runtime.loadingTracks
     ? { status: "loading" }
     : { status: "ready", value: runtime.bindings[pointer] ?? value },

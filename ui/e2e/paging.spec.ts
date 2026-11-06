@@ -14,12 +14,25 @@ async function capture(page: import("@playwright/test").Page, name: string) {
 for (const [tab, source] of [["격자 목록", "grid_items"], ["아이콘 목록", "icon_items"]] as const) {
   test(`${tab}은 다음 쪽이 마지막 줄만 채워도 자동으로 이어 받는다`, async ({ page }) => {
     await page.setViewportSize({ width: 1200, height: 800 });
+    if (tab === "아이콘 목록") {
+      await page.addInitScript(() => {
+        let release!: () => void;
+        const held = new Promise<void>(resolve => { release = resolve; });
+        const gate = { started: false, wait: () => { gate.started = true; return held; }, release: () => release() };
+        Object.assign(window, { pagingIconGate: gate });
+      });
+    }
     await page.goto("/?preview=paging-test");
     const app = page.getByTestId("app-window-paging-test");
+    if (tab === "아이콘 목록") {
+      await expect.poll(() => page.evaluate(() => (window as any).pagingIconGate.started)).toBe(true);
+    }
     await app.getByRole("tab", { name: tab, exact: true }).click();
     if (tab === "아이콘 목록") {
       await expect(app.locator(".ks-list.is-icons > .ks-icon-skeleton-grid")).toBeVisible();
+      await expect(app.getByRole("option", { name: "첫 칸" })).toHaveCount(0);
       await capture(page, "icons-initial-loading");
+      await page.evaluate(() => (window as any).pagingIconGate.release());
     }
     const list = app.getByRole("listbox");
     await expect(list.getByRole("option", { name: "첫 칸" })).toBeVisible();

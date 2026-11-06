@@ -155,7 +155,7 @@
   border-block-width: 0;
 }
 
-.ks-file-tree-create-row:hover { background-image: none; cursor: default; }
+.ks-file-tree-create-row:hover, .ks-file-tree-create-row:active { background-image: none; cursor: default; }
 
 .ks-file-tree-empty {
   display: flex;
