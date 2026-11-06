@@ -157,3 +157,37 @@ test("좁은 칸에서 줄바꿈한 긴 머리와 본문이 겹치지 않는다"
   expect(boxes.header.bottom).toBeGreaterThanOrEqual(Math.max(boxes.title.bottom, boxes.meta.bottom));
   expect(boxes.child.top).toBeGreaterThanOrEqual(boxes.header.bottom);
 });
+
+for (const context of ["direct", "section", "tab", "dialog"]) {
+  test(`격자 글 시작선과 붙는 띠 여백: ${context}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 800 });
+    await page.goto(`/?preview=pane-bands-1015-${context}`);
+    const root = context === "dialog" ? page.locator('.ks-dialog') : page.getByTestId(`app-window-pane-bands-1015-${context}`);
+    const grid = root.locator('.ks-list.is-grid');
+    await expect(grid.locator('.ks-list-card').first()).toBeVisible();
+    const metrics = await grid.evaluate(el => {
+      const textLeft = (e: Element) => { const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect().left; };
+      const title = el.querySelector('.ks-list-title')!;
+      const meta = el.querySelector('.ks-list-card > .ks-view-meta')!;
+      return { group: textLeft(el.querySelector('.ks-view-group strong')!), title: textLeft(title), meta: textLeft(meta), letter: getComputedStyle(el.querySelector('.ks-view-group strong')!).letterSpacing };
+    });
+    expect(Math.abs(metrics.group - metrics.title)).toBeLessThanOrEqual(1);
+    expect(Math.abs(metrics.meta - metrics.title)).toBeLessThanOrEqual(1);
+    expect(metrics.letter).toBe("normal");
+    await grid.evaluate(el => { el.scrollTop = 200; });
+    const band = grid.locator('.ks-view-sticky .ks-view-group');
+    await expect(band).toBeVisible();
+    await expect(band).toHaveCSS('border-top-left-radius', '0px');
+    await expect(band).toHaveCSS('border-top-right-radius', '0px');
+    if (context === "section" || context === "tab") {
+      const feed = root.locator('.ks-feed');
+      await feed.evaluate(el => { el.scrollTop = 200; });
+      const padding = await feed.locator('.ks-view-sticky .ks-view-group').evaluate(el => {
+        const s = getComputedStyle(el);
+        return { left: parseFloat(s.paddingLeft), right: parseFloat(s.paddingRight), space: parseFloat(s.getPropertyValue('--ks-space-2')) };
+      });
+      expect(padding.left).toBe(padding.space);
+      expect(padding.right).toBe(padding.space);
+    }
+  });
+}

@@ -12,6 +12,14 @@ export const shellDefectFixtures = [
   ...stackFillRegressions,
   ...stackContexts,
   ...bottomPaddingCases,
+  ...(["direct", "section", "tab", "dialog"] as const).map(context => {
+    const grid = { type: "list", layout: "grid", grouped: true, items: [{ title: "pictures", items: Array.from({ length: 30 }, (_, i) => ({ key: String(i), title: `사진 ${i}`, meta: "2 MB" })) }] };
+    const feed = { type: "feed", grouped: true, entries: [{ title: "pictures", meta: "30", items: Array.from({ length: 30 }, (_, i) => ({ key: String(i), name: "작성자", body: `댓글 ${i}` })) }] };
+    const wrap = (child: unknown) => context === "section" ? { type: "section", title: "내용", child }
+      : context === "tab" ? { type: "tabs", tabs: [{ label: "내용", child }] }
+      : context === "dialog" ? { type: "dialog", title: "내용", open: true, on_close: [], child } : child;
+    return { ...base, requires: { blocks: 37, modules: {} }, id: `pane-bands-1015-${context}`, name: "머리 여백", state: {}, ui: context === "section" ? { type: "split", direction: "row", children: [wrap(grid), wrap(feed)] } : wrap({ type: "split", direction: "row", children: [grid, feed] }) };
+  }),
   { ...base, requires: { blocks: 37, modules: {} }, id: "pane-alignment-1015", name: "칸 정렬", state: { selected: "a", view: "after" }, ui: {
     type: "split", direction: "row", children: [
       { type: "list", grouped: true, selected: { state: "selected" }, on_select: { set_state: "selected" }, items: [
