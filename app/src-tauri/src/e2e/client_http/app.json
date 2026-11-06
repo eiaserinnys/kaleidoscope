@@ -1,0 +1,17 @@
+{
+  "id": "client-http-fixture",
+  "name": "HTTP 요청 시험",
+  "requires": { "blocks": 14, "modules": { "assets": 1, "client": 2, "http": 3 } },
+  "permissions": [
+    { "module": "http", "id": "site", "label": "시험 주소", "base_url": "https://kaleidoscope.eiaserinnys.me", "paths": ["/releases/latest.json"], "access": "readwrite" },
+    { "module": "http", "id": "other", "label": "다른 권한", "base_url": "https://kaleidoscope.eiaserinnys.me", "paths": ["/releases/latest.json"] }
+  ],
+  "assets": [{ "id": "client-http-fixture-client", "version": 1 }],
+  "client": {
+    "runtime": "javascript",
+    "entry": { "id": "client-http-fixture-client", "version": 1 },
+    "http_permissions": ["site"],
+    "outputs": { "result": { "default": "준비 중" } }
+  },
+  "ui": { "type": "text", "value": { "client": "result" } }
+}

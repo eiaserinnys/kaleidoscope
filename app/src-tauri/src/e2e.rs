@@ -14,6 +14,7 @@ use kaleidoscope_core::Core;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+mod client_http;
 mod files_write;
 #[cfg(windows)]
 mod media_stream;
@@ -43,6 +44,7 @@ enum ScenarioKind {
     #[cfg(windows)]
     MediaStream,
     Realtime,
+    ClientHttp,
 }
 
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
@@ -58,6 +60,7 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
         #[cfg(windows)]
         Some("media-stream") => ScenarioKind::MediaStream,
         Some("realtime") => ScenarioKind::Realtime,
+        Some("client-http") => ScenarioKind::ClientHttp,
         _ => ScenarioKind::WebView,
     }
 }
@@ -92,6 +95,7 @@ pub(crate) fn observe_ui(request: &CoreRequest) {
 
 pub(crate) fn observe_bytes(operation: &str) {
     realtime::observe_bytes(operation);
+    client_http::observe_bytes(operation);
 }
 
 pub(crate) fn complete_ui(request: &CoreRequest, elapsed_ms: u128) {
@@ -544,6 +548,7 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 }
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Realtime => realtime::scenario(&app, &core, &out, &mut log),
+                ScenarioKind::ClientHttp => client_http::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::FilesWrite => match setting("PICK_FOLDER") {
                     Some(folder) => {
@@ -581,6 +586,7 @@ mod tests {
     fn scenario_setting_selects_file_and_update_scenarios() {
         assert_eq!(scenario_kind(Some("files-write")), ScenarioKind::FilesWrite);
         assert_eq!(scenario_kind(Some("realtime")), ScenarioKind::Realtime);
+        assert_eq!(scenario_kind(Some("client-http")), ScenarioKind::ClientHttp);
         assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
         #[cfg(windows)]
         assert_eq!(
