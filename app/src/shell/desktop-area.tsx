@@ -9,7 +9,7 @@ import {
   LayoutGrid,
   Maximize2,
   Menu,
-  Minimize2,
+  Minus,
   Settings,
   useShellSelector,
   type AppWindow,
@@ -144,7 +144,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
 
 function AppLauncherButton({ store, expanded, disabled, onClick }: { store: ShellStore; expanded: boolean; disabled: boolean; onClick: (anchor: HTMLElement) => void }) {
   const count = useShellSelector(store, (snapshot) => Object.values(snapshot?.app_badges ?? {}).reduce((sum, value) => sum + value, 0));
-  return <IconButton className="ks-app-launcher-button" disabled={disabled} aria-label={count ? `앱 열기, 알림 ${count}개` : "앱 열기"} aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onClick(event.currentTarget)} title="앱 열기">
+  return <IconButton variant="taskbar" className="ks-app-launcher-button" disabled={disabled} aria-label={count ? `앱 열기, 알림 ${count}개` : "앱 열기"} aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onClick(event.currentTarget)} title="앱 열기">
     <span className="ks-badge-anchor"><LayoutGrid /><CountBadge count={count} dot /></span>
   </IconButton>;
 }
@@ -164,15 +164,15 @@ function Taskbar({ activeDesktopId, desktopCount, launcherOpen, onOpenApps, onCa
   const canMinimize = windows.some((window) => !window.minimized) || Boolean(systemWindow && !systemWindow.minimized);
   const canMaximize = windows.length > 0 || Boolean(systemWindow);
   return <nav aria-label="작업 표시줄" className="ks-taskbar" role="toolbar">
-    <IconButton aria-label="이전 데스크톱" title="이전 데스크톱 (Ctrl+Alt+←)" disabled={!activeDesktopId || desktopCount < 2} onClick={() => void windowActions.desktop(-1)}><ChevronLeft /></IconButton>
+    <IconButton variant="taskbar" aria-label="이전 데스크톱" title="이전 데스크톱 (Ctrl+Alt+←)" disabled={!activeDesktopId || desktopCount < 2} onClick={() => void windowActions.desktop(-1)}><ChevronLeft /></IconButton>
     <AppLauncherButton store={store} expanded={launcherOpen} disabled={!activeDesktopId} onClick={onOpenApps} />
-    <div className="ks-taskbar-windows">
+    <div className="ks-taskbar-windows" onWheel={(event) => { event.currentTarget.scrollLeft += event.deltaY; }}>
       {windows.map((window) => <TaskbarItem key={window.id} window={window} isTop={window.id === topWindowId} store={store} onAct={act} setWindowMenu={setWindowMenu} />)}
       {systemWindow ? <SystemTaskbarItem state={systemWindow} setWindowMenu={setWindowMenu} /> : null}
     </div>
-    <IconButton aria-label="모든 창 최소화" title="모든 창 최소화 (Ctrl+Alt+Shift+↓)" disabled={!canMinimize} onClick={() => void windowActions.minimizeAll()}><Minimize2 /></IconButton>
-    <IconButton aria-label="모든 창 최대화" title="모든 창 최대화 (Ctrl+Alt+Shift+↑)" disabled={!canMaximize} onClick={() => void windowActions.maximizeAll()}><Maximize2 /></IconButton>
-    <IconButton aria-label="다음 데스크톱" title="다음 데스크톱 (Ctrl+Alt+→)" disabled={!activeDesktopId || desktopCount < 2} onClick={() => void windowActions.desktop(1)}><ChevronRight /></IconButton>
+    <IconButton variant="taskbar" aria-label="모든 창 최소화" title="모든 창 최소화 (Ctrl+Alt+Shift+↓)" disabled={!canMinimize} onClick={() => void windowActions.minimizeAll()}><Minus /></IconButton>
+    <IconButton variant="taskbar" aria-label="모든 창 최대화" title="모든 창 최대화 (Ctrl+Alt+Shift+↑)" disabled={!canMaximize} onClick={() => void windowActions.maximizeAll()}><Maximize2 /></IconButton>
+    <IconButton variant="taskbar" aria-label="다음 데스크톱" title="다음 데스크톱 (Ctrl+Alt+→)" disabled={!activeDesktopId || desktopCount < 2} onClick={() => void windowActions.desktop(1)}><ChevronRight /></IconButton>
   </nav>;
 }
 
@@ -184,21 +184,30 @@ const TaskbarItem = memo(function TaskbarItem({ window, isTop, store, onAct, set
   setWindowMenu: (menu: { anchor: HTMLElement; entries: MenuEntry[] } | null) => void;
 }) {
   const title = useShellSelector(store, (snapshot) => windowTitle(window, snapshot));
+  const itemRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (isTop) itemRef.current?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+  }, [isTop]);
   const toggle = () => onAct(window.id, !window.minimized && isTop ? "window.minimize" : "window.raise");
-  return <TaskbarButton title={title} icon={<AppIcon store={store} appId={window.app_id} appVersion={window.app_version} size="chrome" />} minimized={Boolean(window.minimized)} isTop={isTop} onClick={toggle} windowId={window.id} onContextMenu={(anchor) => setWindowMenu({
+  return <TaskbarButton ref={itemRef} title={title} icon={<AppIcon store={store} appId={window.app_id} appVersion={window.app_version} size="chrome" />} minimized={Boolean(window.minimized)} isTop={isTop} onClick={toggle} windowId={window.id} onContextMenu={(anchor) => setWindowMenu({
     anchor,
     entries: windowMenuEntries(window, { minimize: () => onAct(window.id, "window.minimize"), raise: () => onAct(window.id, "window.raise"), maximize: () => onAct(window.id, "window.maximize"), restore: () => onAct(window.id, "window.restore"), close: () => onAct(window.id, "window.close") }),
   })} />;
 });
 
 function SystemTaskbarItem({ state, setWindowMenu }: { state: SystemWindowState; setWindowMenu: (menu: { anchor: HTMLElement; entries: MenuEntry[] } | null) => void }) {
-  return <TaskbarButton title="설정" icon={<Settings className="ks-app-icon" size="chrome" />} minimized={state.minimized} isTop={state.isTop} onClick={!state.minimized && state.isTop ? state.minimize : state.raise}
+  const itemRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (state.isTop) itemRef.current?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+  }, [state.isTop]);
+  return <TaskbarButton ref={itemRef} title="설정" icon={<Settings className="ks-app-icon" size="chrome" />} minimized={state.minimized} isTop={state.isTop} onClick={!state.minimized && state.isTop ? state.minimize : state.raise}
     onContextMenu={(anchor) => setWindowMenu({ anchor, entries: systemWindowMenu(state) })} />;
 }
 
-function TaskbarButton({ title, icon, minimized, isTop, onClick, onContextMenu, windowId }: { title: string; icon: ReactNode; minimized: boolean; isTop: boolean; onClick: () => void; onContextMenu: (anchor: HTMLElement) => void; windowId?: string }) {
+function TaskbarButton({ ref, title, icon, minimized, isTop, onClick, onContextMenu, windowId }: { ref?: React.Ref<HTMLButtonElement>; title: string; icon: ReactNode; minimized: boolean; isTop: boolean; onClick: () => void; onContextMenu: (anchor: HTMLElement) => void; windowId?: string }) {
   const state = minimized ? "minimized" : isTop ? "active" : "inactive";
   return <button
+    ref={ref}
     aria-pressed={!minimized && isTop}
     className="ks-taskbar-item ks-taskbar-window"
     data-state={state}

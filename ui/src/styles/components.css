@@ -62,6 +62,13 @@
   padding: 0;
 }
 
+.ks-icon-button.is-taskbar {
+  width: var(--ks-control-height);
+  height: var(--ks-control-height);
+  flex: 0 0 var(--ks-control-height);
+  border-radius: calc(var(--ks-radius-bar) - var(--ks-space-1));
+}
+
 .ks-button.is-progress, .ks-icon-button.is-progress { position: relative; }
 .ks-button.is-progress > :not(.ks-button-progress), .ks-icon-button.is-progress > :not(.ks-button-progress) { visibility: hidden; }
 .ks-button-progress { position: absolute; inset: 0; display: grid; place-items: center; }

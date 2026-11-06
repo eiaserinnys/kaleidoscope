@@ -4,6 +4,114 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/?core=http://127.0.0.1:7420");
 });
 
+test("창 수가 달라도 같은 자리를 연속으로 눌러 데스크톱을 순환한다", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const bar = page.locator(".ks-taskbar");
+  const launcher = bar.getByRole("button", { name: "앱 열기" });
+  for (let index = 0; index < 3; index += 1) {
+    await launcher.click();
+    await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기" }).click();
+    await expect(page.getByTestId("app-window-calculator")).toHaveCount(index + 1);
+  }
+  await page.getByRole("button", { name: "데스크톱 추가" }).click();
+  const first = page.getByRole("button", { name: "데스크톱 1", exact: true });
+  const second = page.getByRole("button", { name: "데스크톱 2", exact: true });
+  await expect(second).toHaveAttribute("aria-pressed", "true");
+  const next = bar.getByRole("button", { name: "다음 데스크톱" });
+  const nextBefore = await next.boundingBox();
+  const launchBefore = await launcher.boundingBox();
+  if (!nextBefore || !launchBefore) throw new Error("작업 표시줄 단추를 찾지 못했습니다");
+  await page.screenshot({ path: testInfo.outputPath("two-desktops-empty.png") });
+  await page.mouse.move(nextBefore.x + nextBefore.width / 2, nextBefore.y + nextBefore.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  const nextAfter = await next.boundingBox();
+  const launchAfter = await launcher.boundingBox();
+  if (!nextAfter || !launchAfter) throw new Error("전환 후 작업 표시줄 단추를 찾지 못했습니다");
+  await page.screenshot({ path: testInfo.outputPath("two-desktops-three-windows.png") });
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(second).toHaveAttribute("aria-pressed", "true");
+  expect(nextAfter.x).toBe(nextBefore.x);
+  expect(launchAfter.x).toBe(launchBefore.x);
+  await first.click();
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  const windows = page.getByTestId("app-window-calculator");
+  for (let remaining = 3; remaining > 0; remaining -= 1) {
+    await expect(windows.last()).toHaveAttribute("data-minimized", "false");
+    await windows.last().getByRole("button", { name: "창 닫기" }).click();
+    await expect(windows).toHaveCount(remaining - 1);
+  }
+});
+
+test("팔레트 간격과 막대 단추를 맞추고 넘치는 창은 세로 휠로 스크롤한다", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const bar = page.locator(".ks-taskbar");
+  const launcher = bar.getByRole("button", { name: "앱 열기" });
+  const defaultIcon = page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true });
+  const defaultStyle = await defaultIcon.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { width: style.width, height: style.height, radius: style.borderRadius };
+  });
+  expect(defaultStyle).toEqual({ width: "28px", height: "28px", radius: "8px" });
+  await launcher.click();
+  const popup = page.getByRole("dialog", { name: "앱 열기" });
+  const [barRect, popupRect, launcherRect] = await Promise.all([bar.boundingBox(), popup.boundingBox(), launcher.boundingBox()]);
+  if (!barRect || !popupRect || !launcherRect) throw new Error("팔레트나 작업 표시줄을 찾지 못했습니다");
+  expect.soft(barRect.y - popupRect.y - popupRect.height).toBe(8);
+  expect.soft(popupRect.x).toBe(launcherRect.x);
+  await page.screenshot({ path: testInfo.outputPath("palette.png") });
+  await page.keyboard.press("Escape");
+  await expect(launcher).toBeFocused();
+  for (let index = 0; index < 5; index += 1) {
+    await launcher.click();
+    await popup.getByRole("button", { name: "계산기" }).click();
+    await expect(page.getByTestId("app-window-calculator")).toHaveCount(index + 1);
+  }
+  expect.soft(await bar.getByRole("button", { name: "모든 창 최소화" }).locator("svg").getAttribute("class")).toContain("lucide-minus");
+  for (const width of [600, 360]) {
+    await page.setViewportSize({ width, height: 900 });
+    const metrics = await bar.evaluate((element) => {
+      const list = element.querySelector<HTMLElement>(".ks-taskbar-windows")!;
+      const item = list.querySelector<HTMLElement>(".ks-taskbar-item")!;
+      const icon = element.querySelector<HTMLElement>(".ks-app-launcher-button")!;
+      const itemRect = item.getBoundingClientRect();
+      const iconRect = icon.getBoundingClientRect();
+      return {
+        itemCenter: itemRect.top + itemRect.height / 2,
+        iconCenter: iconRect.top + iconRect.height / 2,
+        itemHeight: itemRect.height,
+        iconHeight: iconRect.height,
+        itemRadius: getComputedStyle(item).borderRadius,
+        iconRadius: getComputedStyle(icon).borderRadius,
+        itemWidth: itemRect.width,
+        scrollbar: getComputedStyle(list).scrollbarWidth,
+        scrollbarDisplay: getComputedStyle(list, "::-webkit-scrollbar").display,
+      };
+    });
+    expect.soft(metrics.itemCenter).toBe(metrics.iconCenter);
+    expect.soft(metrics.itemHeight).toBe(metrics.iconHeight);
+    expect.soft(metrics.itemRadius).toBe(metrics.iconRadius);
+    expect.soft(metrics.itemWidth).toBeGreaterThanOrEqual(104);
+    expect.soft(metrics.itemWidth).toBeLessThan(160);
+    expect.soft(metrics.scrollbar).toBe("none");
+    expect.soft(metrics.scrollbarDisplay).toBe("none");
+    await page.screenshot({ path: testInfo.outputPath(`five-windows-${width}.png`) });
+    const list = bar.locator(".ks-taskbar-windows");
+    await list.hover();
+    await page.mouse.wheel(0, -5000);
+    await expect.poll(() => list.evaluate((element) => element.scrollLeft)).toBe(0);
+    await page.mouse.wheel(0, 120);
+    await expect.poll(() => list.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+  }
+  const windows = page.getByTestId("app-window-calculator");
+  for (let remaining = 5; remaining > 0; remaining -= 1) {
+    await windows.last().getByRole("button", { name: "창 닫기" }).click();
+    await expect(windows).toHaveCount(remaining - 1);
+  }
+});
+
 test("많은 창에서도 양 끝 조작을 고정하고 창 목록만 스크롤한다", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   for (let index = 0; index < 20; index += 1) {
@@ -17,17 +125,40 @@ test("많은 창에서도 양 끝 조작을 고정하고 창 목록만 스크롤
     const metrics = await page.locator(".ks-taskbar").evaluate((bar) => {
       const list = bar.querySelector<HTMLElement>(".ks-taskbar-windows")!;
       const buttons = [...bar.querySelectorAll<HTMLElement>(":scope > .ks-icon-button")];
-      return { overflow: list.scrollWidth > list.clientWidth, fixed: buttons.every((button) => {
+      const item = list.querySelector<HTMLElement>(".ks-taskbar-item")!.getBoundingClientRect();
+      return { overflow: list.scrollWidth > list.clientWidth, aligned: buttons.every((button) => {
+        const rect = button.getBoundingClientRect();
+        return Math.abs((rect.top + rect.height / 2) - (item.top + item.height / 2)) <= 1;
+      }), scrollbar: getComputedStyle(list).scrollbarWidth, fixed: buttons.every((button) => {
         const rect = button.getBoundingClientRect();
         return rect.left >= 0 && rect.right <= window.innerWidth;
       }) };
     });
-    expect(metrics).toEqual({ overflow: true, fixed: true });
+    expect(metrics).toEqual({ overflow: true, aligned: true, scrollbar: "none", fixed: true });
     await page.screenshot({ path: testInfo.outputPath(`taskbar-many-${width}.png`) });
   }
-  for (let index = 0; index < 20; index += 1) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
+  await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기" }).click();
+  await expect(page.getByTestId("app-window-calculator")).toHaveCount(21);
+  const list = page.locator(".ks-taskbar-windows");
+  const activeItemVisible = () => list.evaluate((element) => {
+    const active = element.querySelector<HTMLElement>('[data-state="active"]');
+    if (!active) return false;
+    const row = element.getBoundingClientRect();
+    const item = active.getBoundingClientRect();
+    return item.left >= row.left && item.right <= row.right;
+  });
+  await expect.poll(activeItemVisible).toBe(true);
+  await page.keyboard.press("Control+Alt+Tab");
+  await expect(list.locator(".ks-taskbar-item").first()).toHaveAttribute("data-state", "active");
+  await expect.poll(activeItemVisible).toBe(true);
+  for (let index = 0; index < 21; index += 1) {
+    const lastItem = list.locator(".ks-taskbar-item").last();
+    if (await lastItem.getAttribute("data-state") !== "active") await lastItem.click();
+    await expect(lastItem).toHaveAttribute("data-state", "active");
     await page.getByTestId("app-window-calculator").last().getByRole("button", { name: "창 닫기" }).click();
-    await expect(page.getByTestId("app-window-calculator")).toHaveCount(19 - index);
+    await expect(page.getByTestId("app-window-calculator")).toHaveCount(20 - index);
   }
 });
 
@@ -128,7 +259,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await page.screenshot({ path: testInfo.outputPath("window-maximized-1440x900.png") });
 
   await page.setViewportSize({ width: 960, height: 600 });
-  const wideNarrowMetrics = await page.evaluate(() => {
+  const wideNarrowMetrics = () => page.evaluate(() => {
     const area = document.querySelector(".ks-desktop-area")?.getBoundingClientRect();
     const appWindow = document.querySelector<HTMLElement>('[data-testid="app-window-calculator"]')?.getBoundingClientRect();
     const taskbar = document.querySelector<HTMLElement>(".ks-taskbar")?.getBoundingClientRect();
@@ -140,7 +271,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
       taskbarGap: taskbar.top - appWindow.bottom,
     };
   });
-  expect(wideNarrowMetrics).toEqual({ left: 12, top: 12, right: 12, taskbarGap: 12 });
+  await expect.poll(wideNarrowMetrics).toEqual({ left: 12, top: 12, right: 12, taskbarGap: 12 });
   await page.screenshot({ path: testInfo.outputPath("window-maximized-960x600.png") });
 
   await window.getByRole("button", { name: "이전 크기로 복원" }).click();
@@ -159,7 +290,7 @@ test("작업 표시줄에서 창을 복원하고 최대화와 이전 크기로 �
   await expect(taskbarItem).toHaveAttribute("data-state", "active");
 });
 
-test("작업 표시줄 창 항목은 공통 스크롤바와 탭 너비 토큰을 쓴다", async ({ page }) => {
+test("작업 표시줄 창 항목은 탭 너비 토큰과 높이를 차지하지 않는 스크롤을 쓴다", async ({ page }) => {
   await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
   await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기" }).click();
 
@@ -175,7 +306,7 @@ test("작업 표시줄 창 항목은 공통 스크롤바와 탭 너비 토큰을
       scrollbarDisplay: getComputedStyle(row, "::-webkit-scrollbar").display,
     };
   });
-  expect(taskbarStyles.scrollbarWidth).not.toBe("none");
-  expect(taskbarStyles.scrollbarDisplay).not.toBe("none");
+  expect(taskbarStyles.scrollbarWidth).toBe("none");
+  expect(taskbarStyles.scrollbarDisplay).toBe("none");
   expect(taskbarStyles.maxWidth).toBe(taskbarStyles.expectedMaxWidth);
 });

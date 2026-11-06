@@ -266,29 +266,27 @@
 .ks-taskbar {
   position: absolute;
   z-index: 9000;
-  left: 50%;
+  left: var(--ks-space-3);
+  right: var(--ks-space-3);
   bottom: var(--ks-space-3);
   display: flex;
-  width: max-content;
-  max-width: calc(100% - var(--ks-space-6));
   height: calc(var(--ks-control-height) + var(--ks-space-1) * 2);
   align-items: center;
   gap: var(--ks-space-1);
-  transform: translateX(-50%);
   border: var(--ks-line-width) solid var(--ks-color-glass-edge);
   border-radius: var(--ks-radius-bar);
   background: var(--ks-material-bar);
   box-shadow: var(--ks-shadow-bar);
-  padding: 0 var(--ks-space-1);
+  padding: 0 calc(var(--ks-space-1) - var(--ks-line-width));
   backdrop-filter: blur(var(--ks-blur-bar));
 }
 
 .ks-taskbar-item {
   display: inline-flex;
-  min-width: 0;
+  min-width: var(--ks-desktop-tab-min-width);
   max-width: var(--ks-desktop-tab-max-width);
   height: var(--ks-control-height);
-  flex: 0 0 auto;
+  flex: 0 1 var(--ks-desktop-tab-max-width);
   align-items: center;
   gap: var(--ks-space-2);
   overflow: hidden;
@@ -343,6 +341,12 @@
   align-items: center;
   gap: var(--ks-space-1);
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.ks-taskbar-windows::-webkit-scrollbar {
+  display: none;
 }
 
 .ks-window-frame {

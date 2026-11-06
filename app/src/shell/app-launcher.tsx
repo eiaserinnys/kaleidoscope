@@ -15,16 +15,17 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
   const panel = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const tiles = useRef<Array<HTMLButtonElement | null>>([]);
+  const taskbar = anchor.closest<HTMLElement>(".ks-taskbar")!;
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [space, setSpace] = useState(() => availableSpace(anchor));
+  const [space, setSpace] = useState(() => availableSpace(anchor, taskbar));
   useLayoutEffect(() => {
-    const measure = () => setSpace(availableSpace(anchor));
+    const measure = () => setSpace(availableSpace(anchor, taskbar));
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [anchor]);
+  }, [anchor, taskbar]);
   const columns = useIconGridColumns(grid, !!apps?.length);
-  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true, preferAbove: true, offsetToken: "--ks-space-2" });
+  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true, preferAbove: true, offsetToken: "--ks-space-2", verticalAnchor: taskbar });
   const { groups, all } = useMemo(() => {
     const builtins = new Set<string>(BUILTIN_APP_IDS);
     const sorted = (apps ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
@@ -134,8 +135,8 @@ const LauncherTile = memo(function LauncherTile({ store, app, ...props }: {
   return <IconTile {...props} name={app.name} badge={badge} icon={<AppIcon store={store} appId={app.id} appVersion={app.current_version} size="tile" placeholder="skeleton" />} />;
 });
 
-function availableSpace(anchor: HTMLElement) {
-  const rect = anchor.getBoundingClientRect();
+function availableSpace(anchor: HTMLElement, taskbar: HTMLElement) {
+  const rect = taskbar.getBoundingClientRect();
   const barBottom = document.querySelector(".ks-shell-bar")?.getBoundingClientRect().bottom ?? 0;
   const style = getComputedStyle(anchor);
   const inset = Number.parseFloat(style.getPropertyValue("--ks-space-3")) || 0;

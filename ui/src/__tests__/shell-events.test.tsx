@@ -33,6 +33,18 @@ if (!globalThis.ResizeObserver) {
 afterEach(() => cleanup());
 
 describe("shell core events", () => {
+  it("맨 위로 올린 창 항목을 목록 안으로 보이게 한다", async () => {
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    render(<Shell store={store} />);
+    await store.ready;
+    const item = document.querySelector<HTMLElement>('.ks-taskbar-window[data-window-id="editor-window"]')!;
+    const scroll = vi.fn();
+    Object.defineProperty(item, "scrollIntoView", { configurable: true, value: scroll });
+    fireEvent.click(item);
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ inline: "nearest", block: "nearest" }));
+    store.dispose();
+  });
+
   it("빈 데스크톱에서도 고정 조작이 순서대로 있고 상단에는 앱 열기가 없다", async () => {
     const snapshot = makeTestSnapshot();
     snapshot.shared.windows = [];
@@ -476,6 +488,8 @@ describe("shell core events", () => {
     let anchorTop = 478;
     const anchorRect = vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => new DOMRect(500, anchorTop, 66, 32));
     const barRect = vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 1440, 49));
+    const taskbar = document.querySelector<HTMLElement>(".ks-taskbar")!;
+    const taskbarRect = vi.spyOn(taskbar, "getBoundingClientRect").mockImplementation(() => new DOMRect(450, anchorTop - 6, 600, 40));
     const surfaceRect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       this.style.setProperty("--ks-space-2", "8px");
       return this.classList.contains("ks-app-launcher") ? new DOMRect(0, 0, 410, 300) : new DOMRect();
@@ -485,17 +499,18 @@ describe("shell core events", () => {
     try {
       fireEvent.click(trigger);
       const panel = screen.getByRole("dialog", { name: "앱 열기" });
-      await waitFor(() => expect(panel.style.maxHeight).toContain("409px"));
-      await waitFor(() => expect(panel.style.top).toBe("170px"));
+      await waitFor(() => expect(panel.style.maxHeight).toContain("403px"));
+      await waitFor(() => expect(panel.style.top).toBe("164px"));
       anchorTop = 240;
       window.innerHeight = 600;
       fireEvent(window, new Event("resize"));
-      await waitFor(() => expect(panel.style.maxHeight).toContain("171px"));
+      await waitFor(() => expect(panel.style.maxHeight).toContain("165px"));
       fireEvent.keyDown(panel, { key: "Escape" });
     } finally {
       surfaceRect.mockRestore();
       anchorRect.mockRestore();
       barRect.mockRestore();
+      taskbarRect.mockRestore();
       Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: previousHeight });
       store.dispose();
     }
