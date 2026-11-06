@@ -100,7 +100,7 @@
   .ks-explorer, .ks-file-tree, .ks-code-view, .ks-markdown-editor, .ks-markdown-view,
   .ks-agent-chat, .ks-html-view, .ks-web-view, .ks-canvas, .ks-map, .ks-chart, .ks-timeline,
   .ks-split:not(.is-stacked)
-)) { --ks-fill-list-basis: 0; --ks-fill-list-height: 100%; height: calc(var(--ks-pane-min-size) * 2); }
+)) { --ks-fill-list-basis: 0; --ks-fill-list-height: 100%; flex: 1 0 calc(var(--ks-pane-min-size) * 2); }
 .ks-split.is-stacked > .ks-split-pane > .ks-split.is-stacked { height: auto; }
 .ks-split.is-stacked > .ks-split-handle { display: none; }
 .ks-split.is-stacked > .ks-split-pane:not(:last-child) { padding-bottom: var(--ks-space-2); }
