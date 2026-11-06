@@ -29,8 +29,9 @@ function acceptsFile(spec: PickFilesSpec, file: File): boolean {
   });
 }
 function acceptedFormats(spec: PickFilesSpec): string {
+  if (spec.accept.some((item) => item.extensions.length === 0)) return "이 앱이 받는";
   const extensions = [...new Set(spec.accept.flatMap((item) => item.extensions.map((extension) => extension.replace(/^\./, "").toUpperCase())))];
-  return (extensions.length ? extensions : [...new Set(spec.accept.map((item) => item.mime))]).join(", ");
+  return extensions.join(", ");
 }
 const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
 const runtimes = new WeakMap<ShellStore, Map<string, ClientRuntime>>();
