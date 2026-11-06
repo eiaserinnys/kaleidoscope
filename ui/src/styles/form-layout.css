@@ -52,8 +52,11 @@
 
 /* 내용 칸으로 옮긴 입력 여백은 자식에 다시 더하지 않는다. */
 .ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item > .ks-input-field.is-label-hidden { width: 100%; margin-inline: 0; }
+.ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item:has(> .ks-data-stack.is-row > .ks-data-stack-item > :is(.ks-data-text, .ks-data-button, .ks-field, .ks-data-input, .ks-select-button, .ks-data-toggle, .ks-data-segmented)):not(:has(> .ks-data-stack.is-row > .ks-data-stack-item > :is(.ks-data-stack, .ks-data-section, .ks-list, .ks-table-scroll, .ks-split, .ks-data-tabs))) > .ks-data-stack.is-row > .ks-data-stack-item > :is(.ks-data-input, .ks-input-field.is-label-hidden) { width: 100%; margin-inline: 0; }
 
 /* 스크롤 보정도 같은 내용 칸이 맡으며 기본 padding 다음에 적용한다. */
 @container ks-window-body scroll-state(scrollable: block) {
   .ks-data-window-body > .ks-data-stack.is-column > .ks-data-stack-item:has(> :is(.ks-data-text, .ks-data-input, .ks-input-field.is-label-hidden, .ks-field, .ks-select-button, .ks-data-segmented)) { padding-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); }
+  /* 가로 줄 여백 규칙과 특이성을 맞추려 몸통 선택자를 겹쳐 쓴다. */
+  .ks-data-window-body.ks-data-window-body > .ks-data-stack.is-column > .ks-data-stack-item:has(> .ks-data-stack.is-row > .ks-data-stack-item > :is(.ks-data-text, .ks-data-button, .ks-field, .ks-data-input, .ks-select-button, .ks-data-toggle, .ks-data-segmented)):not(:has(> .ks-data-stack.is-row > .ks-data-stack-item > :is(.ks-data-stack, .ks-data-section, .ks-list, .ks-table-scroll, .ks-split, .ks-data-tabs))) { padding-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); }
 }
