@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test('가로 쌓기의 앞 칸도 창 바닥 여백을 갖는다', async ({ page }) => {
   await page.goto('/?preview=bottom-horizontal-stack');
@@ -91,4 +91,53 @@ test('창 본문이 스크롤하는 쌓기의 마지막 글 아래에 여백을 
     return body.getBoundingClientRect().bottom - el.getBoundingClientRect().bottom + parseFloat(getComputedStyle(el).paddingBottom);
   });
   expect(space).toBeCloseTo(12, 0);
+});
+
+async function openBottom(page: Page, ui: object, width = 880, height = 600) {
+  await page.setViewportSize({ width, height });
+  await page.goto("/?preview=data-controls");
+  await page.evaluate(async (layout) => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const version = snapshot.shared.app_versions.find((v: any) => v.app_id === "data-controls");
+    version.definition.state = { value: "", on: true, dialogOpen: false };
+    version.definition.ui = layout;
+    version.version += 1;
+    const win = snapshot.shared.windows.find((w: any) => w.app_id === "data-controls");
+    win.app_version = version.version;
+    win.state = { value: "", on: true, dialogOpen: false };
+    harness.emit({ event: "state.changed", snapshot });
+  }, ui);
+  return page.getByTestId("app-window-data-controls");
+}
+
+const bottomRows = Array.from({length:80},(_,i)=>({key:String(i),title:`항목 ${i+1}`}));
+const bottomList = (layout='rows', grouped=false, count=80) => ({type:'list',layout,grouped,items:grouped?[{title:'도구',items:bottomRows.slice(0,count)}]:bottomRows.slice(0,count)});
+for(const layout of ['rows','grouped','grid','icons']) test(`칸 직속 ${layout} 목록의 스크롤 안쪽 끝 여백`,async({page})=>{
+ const app=await openBottom(page,{type:'split',direction:'row',children:[bottomList(layout==='grouped'?'rows':layout,layout==='grouped'),{type:'text',value:'그림'}]});
+ const list=app.locator('.ks-list');await expect(list).toBeVisible();
+ const height=await list.evaluate(el=>el.clientHeight);
+ await list.evaluate(el=>el.scrollTop=el.scrollHeight);await expect(list.getByText('항목 80',{exact:true})).toBeVisible();await list.evaluate(el=>el.scrollTop=el.scrollHeight);
+ const m=await list.evaluate(el=>{const last=[...el.querySelectorAll('[data-focus-index]')].at(-1)!;return {gap:el.getBoundingClientRect().bottom-last.getBoundingClientRect().bottom,space:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3')),height:el.clientHeight,pane:el.parentElement!.clientHeight};});
+ expect(m.gap).toBeCloseTo(m.space,0);expect(m.height).toBe(height);expect(m.height).toBe(m.pane);
+});
+for(const place of ['tab','section','dialog','stacked','short']) test(`목록 끝 여백 소유: ${place}`,async({page})=>{
+ let ui:any=bottomList('rows',true,place==='short'?1:80);
+ if(place==='tab') ui={type:'tabs',tabs:[{label:'도구',child:ui}]};
+ if(place==='section') ui={type:'section',title:'도구',child:ui};
+ if(place==='dialog') ui={type:'dialog',title:'도구',open:true,on_close:[],child:ui};
+ ui={type:'split',direction:'row',column_below:640,children:[{type:'text',value:'앞'},ui]};
+ const app=await openBottom(page,ui,place==='stacked'?360:880);
+ const list=app.locator('.ks-list');await expect(list).toBeVisible();
+ const m=await list.evaluate(el=>{const s=getComputedStyle(el);return {pad:parseFloat(s.paddingBottom),space:parseFloat(s.getPropertyValue('--ks-space-3')),scroll:el.scrollHeight,client:el.clientHeight};});
+ if(['tab','section','dialog'].includes(place)) expect(m.pad).toBe(0);
+ else expect(m.pad).toBe(m.space);
+ if(place==='short')expect(m.scroll).toBe(m.client);
+});
+for(const state of ['loading','failed']) for(const layout of ['rows','grid','icons']) test(`목록 끝 ${state} 표시 뒤 여백: ${layout}`,async({page})=>{
+ const app=await openBottom(page,{type:'split',direction:'row',children:[{...bottomList(layout),items:{expr:'$data.fixture'}},{type:'text',value:'옆'}]});
+ await expect(app.locator('.ks-split-row')).toBeVisible();
+ await page.evaluate(async({value,state})=>{const h=(window as any).__ksHarness;const {snapshot}=await h.call({op:'state.get'});const win=snapshot.shared.windows.find((w:any)=>w.app_id==='data-controls');h.emit({event:'data.update',window_id:win.id,view:{sources:{},values:{'/ui/children/0/items':{status:'ready',value,more:{source:'fixture',state,retry:false,message:'목록을 읽지 못했습니다.',id:'DATA_SOURCE_MORE_REQUEST_FAILED'}}}}});},{value:bottomRows,state});
+ const list=app.locator('.ks-list'),footer=list.locator(':scope > .ks-load-more');await expect(footer).toBeVisible();await list.evaluate(el=>el.scrollTop=el.scrollHeight);
+ const m=await list.evaluate(el=>{const f=el.querySelector('.ks-load-more')!;const content=f.firstElementChild!;return {gap:el.getBoundingClientRect().bottom-content.getBoundingClientRect().bottom,space:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3'))};});expect(Math.abs(m.gap-m.space)).toBeLessThanOrEqual(1);
 });

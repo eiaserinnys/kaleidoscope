@@ -34,6 +34,24 @@ test("중첩 구역의 끝 채움 칸은 바깥 구역의 바닥 여백만 쓴�
   expect(await sections.evaluateAll(els => els.map(el => getComputedStyle(el).paddingBottom))).toEqual(["12px", "0px"]);
 });
 
+for(const place of ['direct','section','tab','dialog','natural']) test(`결정 줄 앞 마지막 채움 구역의 자연 높이 양식 여백: ${place}`,async({page})=>{
+ const form={type:'stack',direction:'column',gap:'small',children:Array.from({length:30},(_,i)=>input(`구역 값 ${i+1}`))};
+ let ui:any={type:'stack',direction:'column',gap:'none',fill:[0,1],children:[
+  {type:'when',value:false,child:{type:'section',title:'쉬는 구역',child:form}},
+  {type:'when',value:true,child:{type:'section',title:'옵션',child:{type:'stack',direction:'column',children:[{type:'text',value:'입력'},form]}}},
+  {type:'toolbar',start:[],end:[{type:'button',label:'적용',on_click:[]}]},
+ ]};
+ if(place==='natural')ui={type:'stack',direction:'column',gap:'none',fill:0,children:[{...ui,fill:undefined}]};
+ if(place==='section')ui={type:'section',title:'바깥',child:ui};
+ if(place==='tab')ui={type:'tabs',tabs:[{label:'옵션',child:ui}]};
+ // 채움 영역은 실제 목록·표 대화상자의 고정 높이 안에서 검증한다.
+ if(place==='dialog')ui={type:'dialog',title:'옵션',open:true,on_close:[],child:{type:'split',direction:'row',children:[{type:'list',layout:'grid',items:[{key:'a',title:'그림'}]},ui]}};
+ const app=await open(page,{type:'split',direction:'row',children:[{type:'text',value:'그림'},ui]});
+ const last=app.getByLabel('구역 값 30',{exact:true});await expect(last).toBeAttached();
+ const m=await last.evaluate(el=>{let p=el.parentElement;while(p){if(p.clientHeight&&/(auto|scroll)/.test(getComputedStyle(p).overflowY))p.scrollTop=p.scrollHeight;p=p.parentElement;}const bar=el.closest('.ks-data-window')!.querySelector('.ks-data-toolbar')!;return {gap:bar.getBoundingClientRect().top-el.getBoundingClientRect().bottom,space:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3'))};});
+ expect(Math.abs(m.gap-m.space)).toBeLessThanOrEqual(1);
+});
+
 test("대화상자의 끝 채움 칸 구역은 대화상자의 바닥 간격만 쓴다", async ({ page }) => {
   const app = await open(page, { type: "dialog", title: "고르기", open: true, on_close: [{ set_state: "dialogOpen", value: false }], child: {
     type: "stack", direction: "column", fill: 0, children: [
@@ -213,4 +231,19 @@ test("보완 3: 대화상자를 열고 닫아도 뒤의 분할과 여백을 유�
   expect(closedGeometry).toEqual(geometry);
   const closedSectionGap = await split.locator(".ks-data-section").first().evaluate(el => el.getBoundingClientRect().bottom - el.querySelector(".ks-data-section-child")!.getBoundingClientRect().bottom);
   expect(closedSectionGap).toBeCloseTo(sectionGap, 0);
+});
+
+for(const owner of ['direct','tail','section','tab','dialog','section-tail','tab-tail','dialog-tail']) test(`채움 양식 스크롤 끝 여백: ${owner}`,async({page})=>{
+ const fields={type:'stack',direction:'column',gap:'small',children:Array.from({length:30},(_,i)=>input(`값 ${i+1}`))};
+ let ui:any={type:'stack',direction:'column',fill:0,children:[fields]};
+ if(owner.endsWith('tail'))ui.children.push({type:'toolbar',start:[],end:[{type:'button',label:'적용',on_click:[]}]});
+ if(owner.startsWith('section'))ui={type:'section',title:'옵션',child:ui};
+ if(owner.startsWith('tab'))ui={type:'tabs',tabs:[{label:'옵션',child:ui}]};
+ if(owner.startsWith('dialog'))ui={type:'dialog',title:'옵션',open:true,on_close:[],child:ui};
+ const app=await open(page,{type:'split',direction:'row',children:[{type:'text',value:'그림'},ui]});
+ const last=app.getByLabel('값 30',{exact:true});await expect(last).toBeAttached();
+ const m=await last.evaluate(el=>{const parents:HTMLElement[]=[];let p=el.parentElement;while(p){if(p.clientHeight>0 && /(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight>p.clientHeight+1)parents.push(p);p=p.parentElement;}for(const p of parents)p.scrollTop=p.scrollHeight;const sc=parents[0];const pane=el.closest('.ks-split-pane')!;const bar=el.closest('.ks-data-window')!.querySelector('.ks-data-toolbar');return {gap:(bar ? bar.getBoundingClientRect().top : (sc??pane).getBoundingClientRect().bottom)-el.getBoundingClientRect().bottom,space:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3')),scrolls:parents.map(p=>({cls:p.className,pad:getComputedStyle(p).paddingBottom}))};});
+ console.log(owner,m);
+ if(owner==='direct'||owner.endsWith('tail'))expect(m.gap).toBeCloseTo(m.space,0);
+ else {expect(m.gap).toBeGreaterThanOrEqual(0);expect(m.gap).toBeLessThanOrEqual(m.space);}
 });

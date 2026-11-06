@@ -288,7 +288,7 @@ for (const id of ["columns-plain", "columns-tabs"]) test(`${id}에서 위 이름
     expect(Math.abs(button!.y + button!.height / 2 - (b.input.top + b.input.height / 2))).toBeLessThanOrEqual(1);
     const inline = app.locator(".ks-input-field:not(.is-label-top)").filter({ hasText: "기본" });
     const inlineGeometry = await inline.evaluate((el) => ({ label: el.querySelector(".ks-field-label")!.getBoundingClientRect().toJSON(), input: el.querySelector("input")!.getBoundingClientRect().toJSON() }));
-    if (id === "columns-tabs" && width === 360) expect(inlineGeometry.label.bottom).toBeLessThanOrEqual(inlineGeometry.input.top);
+    if (width === 360) expect(inlineGeometry.label.bottom).toBeLessThanOrEqual(inlineGeometry.input.top);
     else expect(inlineGeometry.label.right).toBeLessThan(inlineGeometry.input.left);
     await capture(page, `${id}-${width}`);
   }

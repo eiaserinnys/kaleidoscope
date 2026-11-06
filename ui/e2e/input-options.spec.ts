@@ -2,6 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+// 몸통 여백이 실제 스크롤바 폭을 전제하므로 운영처럼 스크롤바를 띄운다.
+test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
 const run = (page: Page, label: string, action: Record<string, unknown>) => page.evaluate(async ({ label, action }) => {
   const api = (window as any).inputOptionsHarness;
   const view = api.read();
@@ -70,9 +73,11 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
       const description = document.querySelector(".ks-combobox-description")!.getBoundingClientRect();
       const input = document.querySelector<HTMLInputElement>('[role="combobox"]')!.getBoundingClientRect();
       const popup = document.querySelector(".ks-combobox-popup")!.getBoundingClientRect();
-      return { list: { x: list.x, y: list.y, width: list.width, right: list.right, bottom: list.bottom }, description: { x: description.x, y: description.y, width: description.width, right: description.right, bottom: description.bottom }, input: { x: input.x, width: input.width, right: input.right }, popup: { x: popup.x, y: popup.y, bottom: popup.bottom } };
+      const style = getComputedStyle(document.querySelector(".ks-combobox-popup")!);
+      const roomForDescription = input.left + input.width + parseFloat(style.getPropertyValue("--ks-line-width")) + 2 * parseFloat(style.getPropertyValue("--ks-pane-min-size")) <= window.innerWidth - parseFloat(style.getPropertyValue("--ks-space-2"));
+      return { roomForDescription, list: { x: list.x, y: list.y, width: list.width, right: list.right, bottom: list.bottom }, description: { x: description.x, y: description.y, width: description.width, right: description.right, bottom: description.bottom }, input: { x: input.x, width: input.width, right: input.right }, popup: { x: popup.x, y: popup.y, bottom: popup.bottom } };
     });
-    expect(width === 360 ? layout.description.y >= layout.list.bottom : layout.description.x >= layout.list.right).toBe(true);
+    expect(layout.roomForDescription ? layout.description.x >= layout.list.right : layout.description.y >= layout.list.bottom).toBe(true);
     expect(Math.abs(layout.popup.x - layout.input.x)).toBeLessThan(1);
     expect(Math.abs(layout.list.width - layout.input.width)).toBeLessThan(1);
     metrics[`${width}-${theme}`] = layout;

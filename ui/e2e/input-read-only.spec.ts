@@ -16,9 +16,14 @@ test("읽기 전용 입력은 두 테마에서 글을 선택하고 편집을 다
     for (const field of [title, body]) {
       const box = await field.boundingBox();
       expect(box).not.toBeNull();
-      await page.mouse.move(box!.x + 10, box!.y + box!.height / 2);
+      // 넓은 세 줄 입력의 빈 가운데 줄 대신 실제 첫 글줄을 끈다.
+      const textY = await field.evaluate(node => {
+        const style = getComputedStyle(node);
+        return node.getBoundingClientRect().top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop) + parseFloat(style.lineHeight) / 2;
+      });
+      await page.mouse.move(box!.x + 10, textY);
       await page.mouse.down();
-      await page.mouse.move(box!.x + box!.width - 15, box!.y + box!.height / 2, { steps: 8 });
+      await page.mouse.move(box!.x + box!.width - 15, textY, { steps: 8 });
       await page.mouse.up();
       const selected = await field.evaluate((node: HTMLInputElement | HTMLTextAreaElement) => ({
         start: node.selectionStart ?? 0, end: node.selectionEnd ?? 0, userSelect: getComputedStyle(node).userSelect,

@@ -3,8 +3,6 @@
 /* 몸통이 세로로 스크롤할 때만 몸통 최상위 여백 소유자의 오른쪽 여백을 스크롤바 폭만큼 줄여, 스크롤바가 생겨도 입력과 단추의 끝선이 움직이지 않게 한다. 내용을 넓히지 않으니 넘치는 폭이 없다. */
 @container ks-window-body scroll-state(scrollable: block) {
   :is(.ks-data-window-body > .ks-data-section, .ks-data-window-body > .ks-data-stack.is-column > .ks-data-stack-item > .ks-data-section) { padding-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); }
-  .ks-data-window-body > .ks-data-stack.is-column > .ks-data-stack-item > .ks-data-text { padding-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); }
-  .ks-data-window-body > .ks-data-stack.is-column > .ks-data-stack-item > :is(.ks-data-input, .ks-input-field.is-label-hidden) { margin-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); width: calc(100% - var(--ks-space-3) - (var(--ks-space-3) - var(--ks-space-2))); }
 }
 .ks-data-window-notice:has(> .ks-window-status) { position: absolute; left: 50%; bottom: var(--ks-space-3); transform: translateX(-50%); z-index: 1; width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); pointer-events: none; }
 .ks-window-status > .ks-notice { background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
@@ -100,7 +98,7 @@
   .ks-explorer, .ks-file-tree, .ks-code-view, .ks-markdown-editor, .ks-markdown-view,
   .ks-agent-chat, .ks-html-view, .ks-web-view, .ks-canvas, .ks-map, .ks-chart, .ks-timeline,
   .ks-split:not(.is-stacked)
-)) { --ks-fill-list-basis: 0; --ks-fill-list-height: 100%; height: calc(var(--ks-pane-min-size) * 2); }
+)) { --ks-fill-list-basis: 0; --ks-fill-list-height: 100%; flex: 1 0 calc(var(--ks-pane-min-size) * 2); }
 .ks-split.is-stacked > .ks-split-pane > .ks-split.is-stacked { height: auto; }
 .ks-split.is-stacked > .ks-split-handle { display: none; }
 .ks-split.is-stacked > .ks-split-pane:not(:last-child) { padding-bottom: var(--ks-space-2); }
@@ -238,8 +236,8 @@
 .ks-data-segmented .ks-button:last-child { border-radius: 0 var(--ks-radius-small) var(--ks-radius-small) 0; }
 .ks-data-segmented > .ks-button + .ks-button { margin-inline-start: calc(-1 * var(--ks-line-width)); }
 .ks-data-segmented > .ks-button:focus-visible, .ks-data-segmented > .ks-button[aria-pressed="true"], .ks-data-segmented > .ks-button.is-selected { position: relative; z-index: 1; }
-.ks-data-toggle { min-height: var(--ks-control-height); display: inline-flex; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; cursor: pointer; }
-.ks-data-toggle-track { width: var(--ks-space-6); height: var(--ks-space-4); padding: var(--ks-line-width); border-radius: var(--ks-space-4); background: var(--ks-color-muted); }
+.ks-data-toggle { text-align: start; min-height: var(--ks-control-height); display: inline-flex; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; cursor: pointer; }
+.ks-data-toggle-track { flex: none; width: var(--ks-space-6); height: var(--ks-space-4); padding: var(--ks-line-width); border-radius: var(--ks-space-4); background: var(--ks-color-muted); }
 .ks-data-toggle-thumb { display: block; width: calc(var(--ks-space-4) - 2 * var(--ks-line-width)); height: calc(var(--ks-space-4) - 2 * var(--ks-line-width)); border-radius: 50%; background: var(--ks-color-surface-solid); }
 .ks-data-toggle[aria-checked="true"] .ks-data-toggle-track { background: var(--ks-color-accent); }
 .ks-data-toggle[aria-checked="true"] .ks-data-toggle-thumb { transform: translateX(var(--ks-space-4)); }
