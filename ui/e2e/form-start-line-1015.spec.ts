@@ -59,7 +59,7 @@ test('위·숨김 이름표와 가로 쌓기 배치는 유지한다',async({page
  await expect(app.getByLabel('위',{exact:true})).toBeVisible();
  await expect(app.locator('.is-label-top')).toHaveCSS('flex-direction','column');
  await expect(app.locator('.is-label-hidden .ks-field-label')).toHaveCount(0);
- await expect(app.locator('.is-row .ks-field')).toHaveCSS('display','inline-flex');
+ await expect(app.locator('.is-row .ks-field')).toHaveCSS('grid-template-columns','none');
 });
 test('최소 높이 합이 넘치면 쌓인 칸 바깥이 스크롤한다',async({page})=>{
  const list={type:'list',items:Array.from({length:40},(_,i)=>({key:String(i),title:`행 ${i}`}))};
