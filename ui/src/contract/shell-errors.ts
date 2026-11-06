@@ -1,7 +1,7 @@
 // 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
-export const SHELL_FILE_DROP_TYPE_REJECTED = (args: { name: string }): CoreError => ({ id: "SHELL_FILE_DROP_TYPE_REJECTED", code: "invalid_request", message: `${args.name}은 이 앱에서 받지 않는 파일 형식입니다. 지원하는 파일을 다시 놓으세요.`, details: [] });
+export const SHELL_FILE_DROP_TYPE_REJECTED = (args: { name: string; formats: string }): CoreError => ({ id: "SHELL_FILE_DROP_TYPE_REJECTED", code: "invalid_request", message: `${args.name} 파일은 이 앱에서 받지 않습니다. ${args.formats} 파일을 놓으세요.`, details: [] });
 export const SHELL_FILE_DROP_MULTIPLE_REJECTED = (): CoreError => ({ id: "SHELL_FILE_DROP_MULTIPLE_REJECTED", code: "invalid_request", message: `이 앱은 파일 하나만 받습니다. 파일 하나를 다시 놓으세요.`, details: [] });
 export const SHELL_FILE_DROP_DIRECTORY_REJECTED = (): CoreError => ({ id: "SHELL_FILE_DROP_DIRECTORY_REJECTED", code: "invalid_request", message: `폴더는 파일로 열 수 없습니다. 폴더 안의 파일을 다시 놓으세요.`, details: [] });
 export const SHELL_FILE_DROP_TOO_LARGE = (args: { name: string; limit: string }): CoreError => ({ id: "SHELL_FILE_DROP_TOO_LARGE", code: "invalid_request", message: `${args.name}의 크기가 ${args.limit}를 넘어 열 수 없습니다. 더 작은 파일을 다시 놓으세요.`, details: [] });

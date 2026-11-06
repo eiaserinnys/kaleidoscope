@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 
 fn app() -> Value {
     json!({"id":"file-input-test","name":"파일 입력 시험",
-        "requires":{"blocks":41,"modules":{"assets":1,"client":7}},
+        "requires":{"blocks":45,"modules":{"assets":1,"client":7}},
         "permissions":[],"state":{},"assets":[{"id":"entry","version":1}],
         "client":{"runtime":"javascript","entry":{"id":"entry","version":1},"actions":["load"]},
         "file_drop":{"accept":[{"mime":"image/*","extensions":["png"]}],"multiple":false,"client":"load"},
@@ -14,7 +14,7 @@ fn parse(
     value: &Value,
 ) -> Result<kaleidoscope_contract::AppDefinition, kaleidoscope_contract::CoreError> {
     let mut supported = Supported::current();
-    supported.blocks = 41;
+    supported.blocks = 45;
     supported.modules.insert("client".into(), 7);
     parse_app_definition_with_supported(&value.to_string(), &supported)
 }
@@ -35,7 +35,7 @@ fn file_drop_validates_versions_and_client_action() {
     ] {
         let mut value = original.clone();
         match change {
-            "blocks" => value["requires"]["blocks"] = json!(40),
+            "blocks" => value["requires"]["blocks"] = json!(44),
             "version" => value["requires"]["modules"]["client"] = json!(6),
             "client" => {
                 value.as_object_mut().unwrap().remove("client");
@@ -48,6 +48,24 @@ fn file_drop_validates_versions_and_client_action() {
             "{change}"
         );
     }
+}
+
+#[test]
+fn file_drop_requires_the_implemented_shell_version() {
+    for old in [41, 43, 44] {
+        let mut definition = app();
+        definition["requires"]["blocks"] = json!(old);
+        assert_eq!(
+            parse(&definition).unwrap_err().id.as_deref(),
+            Some("APP_FILE_DROP_BLOCK_SET_VERSION_LOW"),
+            "요구 판 {old}"
+        );
+        let mut supported = Supported::current();
+        supported.blocks = old;
+        assert!(parse_app_definition_with_supported(&app().to_string(), &supported).is_err(),
+            "쉘 판 {old}은 새 파일 드롭 앱을 받아서는 안 된다");
+    }
+    assert!(parse(&app()).is_ok());
 }
 
 #[test]

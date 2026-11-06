@@ -1,0 +1,18 @@
+{
+  "id": "file-drop-fixture",
+  "name": "파일 입력 시험",
+  "requires": { "blocks": 45, "modules": { "assets": 1, "client": 7 } },
+  "permissions": [],
+  "state": {},
+  "assets": [{ "id": "file-drop-fixture-client", "version": 1 }],
+  "client": {
+    "runtime": "javascript", "entry": { "id": "file-drop-fixture-client", "version": 1 },
+    "outputs": { "status": { "default": "준비 중" } }, "actions": ["open"]
+  },
+  "file_drop": { "accept": [{ "mime": "text/plain", "extensions": ["txt"] }], "multiple": false, "client": "open" },
+  "settings": { "ui": { "type": "text", "value": "설정" } },
+  "ui": { "type": "stack", "direction": "column", "children": [
+    { "type": "text", "value": { "client": "status" } },
+    { "type": "button", "label": "파일 선택", "on_click": { "pick_files": { "accept": [], "multiple": false, "client": "open" } } }
+  ] }
+}

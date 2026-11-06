@@ -448,6 +448,7 @@
   color: var(--ks-color-danger);
 }
 .ks-window-content:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-window-file-drop { position: absolute; inset: 0; border-bottom-left-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); border-bottom-right-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); background: color-mix(in srgb, var(--ks-color-focus) 14%, transparent); pointer-events: none; }
 
 
 .ks-window-resize-east,

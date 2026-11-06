@@ -38,7 +38,7 @@ fn post(
     Ok((session, messages))
 }
 
-fn mcp(app: &AppHandle, name: &str, arguments: Value) -> Result<(), String> {
+pub(super) fn mcp(app: &AppHandle, name: &str, arguments: Value) -> Result<(), String> {
     let server = app.state::<kaleidoscope_orchestrator::EmbeddedServer>();
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(20))

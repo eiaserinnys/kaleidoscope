@@ -29,7 +29,7 @@ pub(super) fn scenario(
         errors.push(error);
     }
     #[cfg(windows)]
-    if let Err(error) = super::folder_drag::external_drop_guard(app, log) {
+    if let Err(error) = super::folder_drag::external_drop_guard(app, core, log) {
         record(
             log,
             "files-write.external-drop-guard",

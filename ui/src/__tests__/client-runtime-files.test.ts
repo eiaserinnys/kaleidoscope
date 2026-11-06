@@ -3,12 +3,96 @@ import { File as NodeFile } from "node:buffer";
 import type { AppDefinition, Grant, ShellSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import type { WindowData } from "../data/window-data";
-import { ClientRuntime } from "../runtime/client-runtime";
+import { ClientRuntime, clientFileDropReady, deliverClientFiles } from "../runtime/client-runtime";
+import { CLIENT_PICK_FILE_MAX_BYTES } from "../contract/limits";
 
 afterEach(() => {
   document.querySelector(".ks-client-frames")?.remove();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+it("드롭은 전체 파일을 검사하고 준비된 창의 기존 동작에 파일 핸들을 전달한다", async () => {
+  vi.stubGlobal("File", NodeFile);
+  const call = vi.fn(async (request: any) => request.op === "data.media"
+    ? { op: "data.media", media: { mime: "text/javascript", data_base64: "" } }
+    : request.op === "files.pick" ? { op: "files.pick", cancelled: true, files: [] } : { op: request.op });
+  const store = { getSnapshot: () => ({ device: {}, shared: { windows: [], desktops: [] } }), subscribe: () => () => undefined, subscribeEvents: () => () => undefined, nativeFiles: true, call } as unknown as ShellStore;
+  let notice: any = null;
+  const act = vi.fn(async () => true), setNotice = vi.fn((problem: any) => { notice = problem; });
+  const clearNoticeIf = vi.fn((problem: any) => { if (notice === problem) notice = null; });
+  const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["open"], commands: {} };
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, clearNoticeIf, act } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  await runtime.start();
+  const frame = document.querySelector("iframe")!;
+  expect(clientFileDropReady(store, "window-1")).toBe(false);
+  window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type: "ks-sandbox-ready" } }));
+  expect(clientFileDropReady(store, "window-1")).toBe(true);
+  const spec = { client: "open", multiple: false, accept: [{ mime: "image/*", extensions: ["png"] }] };
+  const file = new NodeFile(["원본"], "사진.PNG", { type: "" }) as unknown as File;
+  const read = vi.spyOn(file, "arrayBuffer");
+  const transfer = (files: File[], directory = false) => ({ files, items: files.map(() => ({ kind: "file", webkitGetAsEntry: () => ({ isDirectory: directory }) })) }) as unknown as DataTransfer;
+  deliverClientFiles(store, "window-1", spec, transfer([file]));
+  expect(read).not.toHaveBeenCalled();
+  expect(act).toHaveBeenCalledWith("/file_drop", expect.objectContaining({ cancelled: false, files: [expect.objectContaining({ name: "사진.PNG" })] }));
+  const count = act.mock.calls.length;
+  const bad = new NodeFile(["x"], "bad.txt", { type: "text/plain" }) as unknown as File;
+  const large = new NodeFile([], "big.png", { type: "image/png" }) as unknown as File;
+  Object.defineProperty(large, "size", { value: CLIENT_PICK_FILE_MAX_BYTES + 1, configurable: true });
+  for (const [input, id] of [
+    [transfer([file], true), "SHELL_FILE_DROP_DIRECTORY_REJECTED"],
+    [transfer([file, file]), "SHELL_FILE_DROP_MULTIPLE_REJECTED"],
+    [transfer([large]), "SHELL_FILE_DROP_TOO_LARGE"],
+    [transfer([bad]), "SHELL_FILE_DROP_TYPE_REJECTED"],
+  ] as const) {
+    deliverClientFiles(store, "window-1", spec, input);
+    expect(setNotice).toHaveBeenLastCalledWith(expect.objectContaining({ id }));
+    expect(act).toHaveBeenCalledTimes(count);
+  }
+  Object.defineProperty(large, "size", { value: CLIENT_PICK_FILE_MAX_BYTES });
+  deliverClientFiles(store, "window-1", spec, transfer([large]));
+  expect(act).toHaveBeenCalledTimes(count + 1);
+  const mimeOnly = new NodeFile([], "파일", { type: "image/jpeg" }) as unknown as File;
+  deliverClientFiles(store, "window-1", spec, transfer([mimeOnly]));
+  deliverClientFiles(store, "window-1", { ...spec, multiple: true, accept: [] }, transfer([file, bad]));
+  deliverClientFiles(store, "window-1", { ...spec, accept: [{ mime: "text/plain", extensions: [".md"] }] }, transfer([bad]));
+  expect(act).toHaveBeenCalledTimes(count + 4);
+  deliverClientFiles(store, "window-1", { ...spec, multiple: true }, transfer([file, bad]));
+  expect(setNotice).toHaveBeenLastCalledWith(expect.objectContaining({ id: "SHELL_FILE_DROP_TYPE_REJECTED", message: "bad.txt 파일은 이 앱에서 받지 않습니다. PNG 파일을 놓으세요." }));
+  expect(act).toHaveBeenCalledTimes(count + 4);
+  deliverClientFiles(store, "window-1", spec, transfer([file]));
+  expect(notice).toBeNull();
+  const formats = { ...spec, accept: [{ mime: "image/png", extensions: [".png", "jpg"] }, { mime: "image/jpeg", extensions: ["JPG"] }] };
+  deliverClientFiles(store, "window-1", formats, transfer([bad]));
+  expect(notice.message).toBe("bad.txt 파일은 이 앱에서 받지 않습니다. PNG, JPG 파일을 놓으세요.");
+  deliverClientFiles(store, "window-1", { ...spec, accept: [{ mime: "image/png", extensions: [] }, { mime: "image/jpeg", extensions: [] }] }, transfer([bad]));
+  expect(notice.message).toBe("bad.txt 파일은 이 앱에서 받지 않습니다. 이 앱이 받는 파일을 놓으세요.");
+  const other = { id: "APP_OTHER", code: "invalid_request", message: "다른 오류", details: [] };
+  setNotice(other);
+  deliverClientFiles(store, "window-1", spec, transfer([file]));
+  expect(notice).toBe(other);
+  deliverClientFiles(store, "window-1", spec, transfer([bad]));
+  await runtime.pick(spec);
+  expect(notice).toBeNull();
+  await runtime.stop();
+  expect(clientFileDropReady(store, "window-1")).toBe(false);
+});
+
+it("확장자 없는 수락 항목이 섞이면 거절 안내에서 형식 일부만 나열하지 않는다", async () => {
+  const call = vi.fn(async (request: any) => request.op === "data.media"
+    ? { op: "data.media", media: { mime: "text/javascript", data_base64: "" } } : { op: request.op });
+  const store = { getSnapshot: () => ({ device: {}, shared: { windows: [], desktops: [] } }), subscribe: () => () => undefined, subscribeEvents: () => () => undefined, call } as unknown as ShellStore;
+  const setNotice = vi.fn(), act = vi.fn();
+  const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["open"], commands: {} };
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, act } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  await runtime.start();
+  const frame = document.querySelector("iframe")!;
+  window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type: "ks-sandbox-ready" } }));
+  const bad = new NodeFile(["x"], "bad.bin", { type: "application/octet-stream" }) as unknown as File;
+  deliverClientFiles(store, "window-1", { client: "open", multiple: false, accept: [{ mime: "text/plain", extensions: ["txt"] }, { mime: "image/*", extensions: [] }] }, { files: [bad], items: [] } as unknown as DataTransfer);
+  expect(setNotice).toHaveBeenLastCalledWith(expect.objectContaining({ id: "SHELL_FILE_DROP_TYPE_REJECTED", message: "bad.bin 파일은 이 앱에서 받지 않습니다. 이 앱이 받는 파일을 놓으세요." }));
+  expect(act).not.toHaveBeenCalled();
+  await runtime.stop();
 });
 
 it("네이티브 창의 브라우저 파일은 읽기, 공유, blob 저장에서 같은 바이트를 쓰고 다른 창에는 보이지 않는다", async () => {

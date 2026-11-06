@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppIcon, IconButton, ScreenShare, Settings, forgetNumbered, useShareView, windowActionActive, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow } from "@kaleidoscope/ui";
+import { createPortal } from "react-dom";
+import { AppIcon, IconButton, ScreenShare, Settings, forgetNumbered, useShareView, windowActionActive, clientFileDropReady, deliverClientFiles, registerFileDropTarget, type PickFilesSpec, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow } from "@kaleidoscope/ui";
 import { ProcessConsent } from "./process-consent";
 import { InstallationConsent } from "./installation-consent";
 import { windowMenuEntries } from "./window-menu";
@@ -8,6 +9,7 @@ import { WindowChrome } from "./window-chrome";
 export interface WindowFrameProps {
   area: { width: number; height: number };
   appName: string;
+  fileDrop?: PickFilesSpec;
   isTop: boolean;
   sharing: boolean;
   shareable: boolean;
@@ -22,10 +24,11 @@ export interface WindowFrameProps {
   children: ReactNode | ((settingsOpen: boolean, closeSettings: () => void, reportProblem: (problem: CoreError | string | null) => void, visited: boolean, reportWindowHeader: (title: string, meta: string | null) => void, reportSettingsAvailable: (available: boolean) => void) => ReactNode);
 }
 
-export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSettings, settingsAvailableInitially = true, store, onCall, onMinimize, onMaximize, onRestore, window: appWindow, children }: WindowFrameProps) {
+export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable, hasSettings, settingsAvailableInitially = true, store, onCall, onMinimize, onMaximize, onRestore, window: appWindow, children }: WindowFrameProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [frameHost, setFrameHost] = useState<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
   const [settingsVisited, setSettingsVisited] = useState(false);
   const [settingsProblem, setSettingsProblem] = useState<CoreError | string | null>(null);
   const [settingsAvailable, setSettingsAvailable] = useState(settingsAvailableInitially);
@@ -43,6 +46,18 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
   const isMinimized = Boolean(appWindow.minimized);
   useShareView({ windowId: appWindow.id, root: contentRef, enabled: sharing && !settingsOpen, store });
   useEffect(() => () => forgetNumbered(appWindow.id), [appWindow.id]);
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !fileDrop || settingsOpen || isMinimized) return;
+    return registerFileDropTarget(content, {
+      canDrop: () => clientFileDropReady(store, appWindow.id),
+      hover: setDropActive,
+      drop: (transfer) => {
+        void onCall({ op: "window.raise", window_id: appWindow.id });
+        deliverClientFiles(store, appWindow.id, fileDrop, transfer);
+      },
+    });
+  }, [appWindow.id, fileDrop, isMinimized, onCall, settingsOpen, store]);
   const toggleShare = () => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing });
   const toggleSettings = () => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } };
   const closeWindow = () => void onCall({ op: "window.close", window_id: appWindow.id });
@@ -69,5 +84,6 @@ export function WindowFrame({ area, appName, isTop, sharing, shareable, hasSetti
     pointerGuard={(event) => !event.nativeEvent.isTrusted && windowActionActive(appWindow.id)}
     overlays={<><ProcessConsent store={store} windowId={appWindow.id} host={frameHost} /><InstallationConsent store={store} windowId={appWindow.id} host={frameHost} /></>}>
     {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited, reportWindowHeader, reportSettingsAvailable) : children}
+    {dropActive && contentRef.current ? createPortal(<div className="ks-window-file-drop" aria-hidden="true" />, contentRef.current) : null}
   </WindowChrome>;
 }

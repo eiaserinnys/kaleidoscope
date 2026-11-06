@@ -75,6 +75,7 @@ export type {
   CoreEvent,
   CoreReply,
   CoreRequest,
+  PickFilesSpec,
   Desktop,
   Rect,
   ShellSnapshot,
@@ -91,7 +92,8 @@ export { describeNumbered, resolveNumbered, forgetNumbered } from "./share/numbe
 export { windowActionActive } from "./share/action-context";
 export { readWindowView, executeWindowAction, setWindowViewGeometry } from "./share/window-control";
 export type { ResolveResult } from "./share/numbered";
-export { installShellDragGuard } from "./shell-drag-guard";
+export { installShellDragGuard, registerFileDropTarget } from "./shell-drag-guard";
+export { clientFileDropReady, deliverClientFiles } from "./runtime/client-runtime";
 export * from "./contract/shell-errors";
 export { AppIcon } from "./components/app-icon";
 
