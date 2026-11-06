@@ -54,6 +54,13 @@
   padding-inline: var(--ks-space-2);
   border-radius: var(--ks-radius-small);
 }
+.ks-list .ks-view-group,
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list .ks-view-group { padding-inline: var(--ks-row-text-inset); }
+.ks-split-row > .ks-split-pane > .ks-list > div:not(.ks-view-sticky) > [data-index="0"] > .ks-view-group {
+  padding-block-start: calc(var(--ks-space-2) + (var(--ks-control-height) - var(--ks-type-meta) * var(--ks-line-body)) / 2);
+}
+.ks-list:not(.is-grid):not(.is-icons) { padding-inline: var(--ks-space-1); }
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list:not(.is-grid):not(.is-icons) { padding-inline: 0; }
 .ks-list-row .ks-list-content { flex: 1 1 0; min-width: min(100%, 6.5em); }
 .ks-list-row > .ks-view-meta, .ks-list-row > .ks-view-badges { flex: none; }
 .ks-list-item { position: relative; display: flex; align-items: center; min-width: 0; }
