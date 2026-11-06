@@ -95,6 +95,64 @@ it.each(["single", "multiple"] as const)("%s에서 고르기 뒤 활성화하며
   await userEvent.keyboard(" ");
   await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate"))).toHaveLength(3));
 });
+it.each(["single", "multiple"] as const)("%s의 느린 열기는 다음 선택보다 먼저 끝나고 일반 단추도 기다린다", async (selection) => {
+  const items = ["a", "b", "c"].map(key => ({ key, title: key }));
+  const { calls, originalCall } = setup({ type: "stack", children: [
+    { type: "list", selection, selected: { state: "choice" }, items, on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } },
+    { type: "button", label: "확인", on_click: { set_state: "confirmed" } },
+  ] } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null, confirmed: null }, 48);
+  const a = await screen.findByRole("option", { name: "a" });
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  calls.mockImplementation(async request => {
+    if (request.op === "data.act" && request.pointer.endsWith("on_activate") && request.event === "a") await pending;
+    return originalCall(request);
+  });
+  fireEvent.click(a);
+  await waitFor(() => expect(calls.mock.calls.some(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate"))).toBe(true));
+  fireEvent.click(screen.getByRole("option", { name: "b" }));
+  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
+  expect(calls.mock.calls.filter(([c]) => c.op === "data.act")).toHaveLength(2);
+  await act(async () => { release(); });
+  await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act")).toHaveLength(5));
+  expect(calls.mock.calls.flatMap(([c]) => c.op === "data.act" ? [c.pointer.split("/").at(-1)] : [])).toEqual(["on_select", "on_activate", "on_select", "on_activate", "on_click"]);
+});
+it("합친 키 이동 사이의 열기는 남겨 둔다", async () => {
+  const items = ["a", "b", "c", "d"].map(key => ({ key, title: key }));
+  const { calls, originalCall } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 48);
+  const a = await screen.findByRole("option", { name: "a" });
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  calls.mockImplementationOnce(async request => { await pending; return originalCall(request); });
+  fireEvent.click(a);
+  fireEvent.keyDown(a, { key: "ArrowDown" });
+  fireEvent.click(screen.getByRole("option", { name: "c" }));
+  fireEvent.keyDown(screen.getByRole("option", { name: "c" }), { key: "ArrowDown" });
+  await act(async () => { release(); });
+  await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act")).toHaveLength(6));
+  expect(calls.mock.calls.flatMap(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate") ? [c.event] : [])).toEqual(["a", "c"]);
+});
+it("열기 없는 single은 앞 응답을 기다리지 않고 원래대로 선택을 보낸다", async () => {
+  const { calls, originalCall } = setup({ type: "list", items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as Block, { choice: null });
+  const a = await screen.findByRole("option", { name: "a" });
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  calls.mockImplementationOnce(async request => { await pending; return originalCall(request); });
+  fireEvent.click(a); fireEvent.click(screen.getByRole("option", { name: "b" }));
+  await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act")).toHaveLength(2));
+  await act(async () => { release(); });
+});
+it("화면 밖에 유지된 초점 칸으로 배경 누름 뒤 돌아간다", async () => {
+  setup({ type: "list", selection: "multiple", items: Array.from({ length: 80 }, (_, i) => ({ key: String(i), title: `항목 ${i}` })), selected: { state: "choice" }, on_select: { set_state: "choice" } } as unknown as Block, { choice: ["0"] }, 48);
+  const first = await screen.findByRole("option", { name: "항목 0" });
+  const list = screen.getByRole("listbox");
+  act(() => { list.scrollTop = 2000; fireEvent.scroll(list); });
+  fireEvent.mouseDown(list); fireEvent.mouseUp(list);
+  expect(document.activeElement).toBe(first);
+  expect(list.scrollTop).toBe(2000);
+});
 it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 쓴다", async () => {
   const app = JSON.parse(storeDefinitionText);
   const items = await jsonata(app.ui.children[1].children[1].items.expr).evaluate({}, {

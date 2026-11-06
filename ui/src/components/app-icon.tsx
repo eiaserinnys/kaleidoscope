@@ -45,7 +45,7 @@ export function iconImageFromData(mime: string, base64: string): IconImageData {
 export const IconImage = memo(function IconImage({ image, size }: { image: IconImageData; size: IconSize }) {
   const dimensions = { width: ICON_SIZE[size], height: ICON_SIZE[size], flexShrink: 0 };
   if (image.mask) return <span aria-hidden="true" className="ks-app-icon" style={{ ...dimensions, display: "inline-block", backgroundColor: "currentColor", mask: `url("${image.url}") center / contain no-repeat` }} />;
-  return <img alt="" aria-hidden="true" className="ks-app-icon" src={image.url} style={{ ...dimensions, objectFit: "contain" }} />;
+  return <img draggable={false} alt="" aria-hidden="true" className="ks-app-icon" src={image.url} style={{ ...dimensions, objectFit: "contain" }} />;
 });
 
 function serverContext(link: NonNullable<ReturnType<ShellStore["getSnapshot"]>>["link"]): string {

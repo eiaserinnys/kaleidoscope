@@ -139,7 +139,18 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     return result;
   }, [grouped, items.length, block.grouped, activeColumns]);
   const rowKeys = useMemo(() => rows.map((row) => row.kind === "items" ? row.items.map((item) => item.key) : []), [rows]);
-  const { virtual } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys);
+  const [headingHeight, setHeadingHeight] = useState(0);
+  useLayoutEffect(() => {
+    if (!block.grouped || !scroll.current) return;
+    const heading = scroll.current.querySelector<HTMLElement>(".ks-view-group");
+    if (!heading) return;
+    const measure = () => setHeadingHeight(heading.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(heading);
+    return () => observer.disconnect();
+  }, [block.grouped, rows]);
+  const { virtual } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 });
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const disabledValue = useBinding(`${pointer}/disabled`, block.disabled ?? false);
@@ -147,9 +158,16 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
   const multiple = block.selection === "multiple";
   const selectedKeys = useMemo(() => Array.isArray(selected) ? selected.filter((key): key is string => typeof key === "string") : [], [selected]);
-  type SelectionDraft = { keys: string[]; item: JsonValue };
+  type SelectionDraft = { keys: string[]; item: JsonValue; activate?: string; select?: boolean };
   const initialDraft = useMemo<SelectionDraft>(() => ({ keys: selectedKeys, item: null }), [selectedKeys]);
-  const dispatch = useCallback((next: SelectionDraft) => data.act(`${pointer}/on_select`, next.keys, next.item, undefined, undefined, { input: true }), [data, pointer]);
+  const dispatch = useCallback(async (next: SelectionDraft) => {
+    // 같은 입력 줄 안에서는 정산을 다시 기다리지 않는다.
+    if (next.select !== false && block.on_select) {
+      const success = await data.act(`${pointer}/on_select`, multiple ? next.keys : next.keys[0], next.item, undefined, undefined, { input: true });
+      if (!success) return false;
+    }
+    return next.activate === undefined || await data.act(`${pointer}/on_activate`, next.activate, next.item, undefined, undefined, { input: true });
+  }, [data, pointer, multiple, block.on_select]);
   const draft = useLocalDraft(initialDraft, pointer, { sendOnChange: false, dispatch });
   const draftRef = useRef(draft.draft);
   draftRef.current = draft.draft;
@@ -166,14 +184,14 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     for (const item of selectable) if (wanted.delete(item.key)) result.push(item.key);
     return result;
   };
-  const submit = (keys: string[], item: ListItem | null, coalesce = false) => {
-    const next = { keys: orderedKeys(keys), item: item as unknown as JsonValue };
+  const submit = (keys: string[], item: ListItem | null, coalesce = false, activate?: string) => {
+    const next = { keys: orderedKeys(keys), item: item as unknown as JsonValue, ...(activate === undefined ? {} : { activate }) };
     draftRef.current = next;
     draft.change(next);
     void draft.send(next, coalesce);
     setCurrentKey(item?.key ?? null);
   };
-  const chooseMultiple = (item: ListItem, mode: "replace" | "toggle" | "range", coalesce = false, focusIndex = roving.focus) => {
+  const chooseMultiple = (item: ListItem, mode: "replace" | "toggle" | "range", coalesce = false, focusIndex = roving.focus, activate?: string) => {
     const previous = orderedKeys(draftRef.current.keys);
     if (mode === "range") {
       anchor.current ??= items[focusIndex]?.key ?? item.key;
@@ -185,16 +203,12 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       anchor.current = item.key;
       const keys = mode === "toggle" ? orderedKeys(toggleSelection(previous, item.key)) : [item.key];
       const focused = mode === "toggle" && !keys.includes(item.key) ? selectable.find((entry) => entry.key === keys.at(-1)) ?? null : item;
-      submit(keys, focused, coalesce);
+      submit(keys, focused, coalesce, activate);
     }
   };
   keepRovingRow(virtual, rowOf(roving.focus));
   const focusEntry = () => {
-    const row = virtual.getVirtualItems().find((entry) => entry.index === rowOf(roving.focus));
-    const offset = virtual.scrollOffset ?? 0;
-    if (row && scroll.current && row.start < offset + scroll.current.clientHeight && row.end > offset) {
-      scroll.current.querySelector<HTMLElement>(`[data-focus-index="${roving.focus}"]`)?.focus({ preventScroll: true });
-    }
+    scroll.current?.querySelector<HTMLElement>(`[data-focus-index="${roving.focus}"]`)?.focus({ preventScroll: true });
   };
   const handlers = useRef<ListHandlers>(null!);
   handlers.current = {
@@ -214,16 +228,15 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       const activate = plain && (mouse ? event.detail <= 1 : "key" in event && (event.key === "Enter" || event.key === " "));
       if (mouse && plain && event.detail > 1 && (multiple || item.selectable === false)) return;
       if (item.selectable === false) {
-        if ((!mouse || plain) && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
+        if ((!mouse || plain) && block.on_activate) void draft.send({ keys: [], item: item as unknown as JsonValue, select: false, activate: item.key });
       } else if (multiple) {
         if (mouse && event.shiftKey && anchor.current === null) anchor.current = pointerFocus.current ?? items[roving.focus]?.key ?? item.key;
-        chooseMultiple(item, mouse && event.shiftKey ? "range" : mouse && event.ctrlKey ? "toggle" : "replace");
-        if (activate && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
+        chooseMultiple(item, mouse && event.shiftKey ? "range" : mouse && event.ctrlKey ? "toggle" : "replace", false, roving.focus, activate && block.on_activate ? item.key : undefined);
       }
       else if (block.on_select) {
-        const selection = data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
-        if (activate && block.on_activate) void selection.then(() => data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue));
-      } else if (activate && block.on_activate) void data.act(`${pointer}/on_activate`, item.key, item as unknown as JsonValue);
+        if (block.on_activate) void draft.send({ keys: [item.key], item: item as unknown as JsonValue, ...(activate ? { activate: item.key } : {}) });
+        else void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
+      } else if (activate && block.on_activate) void draft.send({ keys: [], item: item as unknown as JsonValue, select: false, activate: item.key });
       else if (!block.on_activate && isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger: event.currentTarget });
     },
     remove: (item) => { if (!disabled && block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
