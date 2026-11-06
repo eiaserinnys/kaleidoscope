@@ -258,10 +258,21 @@ it('실제 재수신 중 다시 받기는 진행 표시와 잠금을 유지한�
   const fail = { state: 'failed', has_value: true, message: '읽기 실패' };
   merge(fail);
   merge({ state: 'loading', has_value: true });
-  const button = screen.getByRole('button', { name: '다시 받기' });
-  expect((button as HTMLButtonElement).disabled).toBe(true);
+  const refresh = vi.spyOn(data, 'refresh').mockResolvedValue(undefined);
+  const button = screen.getByRole('button', { name: '다시 받기' }) as HTMLButtonElement;
+  button.focus();
+  // 정기 갱신으로도 잠길 수 있으니 초점을 빼앗지 않게 disabled를 쓰지 않는다.
+  expect(button.disabled).toBe(false);
+  expect(document.activeElement).toBe(button);
+  expect(button.getAttribute('aria-disabled')).toBe('true');
   expect(button.getAttribute('aria-busy')).toBe('true');
   expect(button.querySelector('.ks-button-progress')).toBeTruthy();
+  fireEvent.click(button);
+  expect(refresh).not.toHaveBeenCalled();
   merge(fail);
-  expect((screen.getByRole('button', { name: '다시 받기' }) as HTMLButtonElement).disabled).toBe(false);
+  const ready = screen.getByRole('button', { name: '다시 받기' });
+  expect(ready.getAttribute('aria-disabled')).toBeNull();
+  expect(document.activeElement).toBe(ready);
+  fireEvent.click(ready);
+  expect(refresh).toHaveBeenCalledTimes(1);
 });
