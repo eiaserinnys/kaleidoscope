@@ -122,3 +122,4 @@ input.kind=date는 YYYY-MM-DD, time은 HH:mm 문자열을 쓰며 빈 값은 null
 스토어 서버 연결 허용 (store 3판): {"store.allow_server":{"permission":"catalog","server":{"state":"server"}}}는 기기에서 주소 접근 동의를 요청합니다. 사용자가 허용하면 정규화한 주소를 이 PC에 저장하고 스토어 원천을 다시 받습니다. 이미 허용한 주소는 다시 묻지 않습니다. 취소하면 뒤 동작을 실행하지 않습니다. HTTP 주소는 암호화되지 않는다고 표시합니다. 이 동작은 requires.modules.store 3 이상과 store 권한 선언이 필요합니다.
 
 files 4판의 폴더 범위 권한에는 default_folder로 desktop, documents, downloads, pictures, music, videos 중 하나를 지정할 수 있습니다. requires.blocks는 47 이상이어야 하며 scope pc와 함께 쓸 수 없습니다. 기본 폴더는 folder 원천이나 파일 블록이 있는 앱에서 씁니다. 이 기기에서 처음 사용할 때 허용하거나 다른 폴더를 고를 수 있습니다. 기본 폴더를 찾을 수 없으면 폴더를 직접 고릅니다. 한 번 허용한 기본 폴더는 새 창에 적용되며, 창에 이미 고른 폴더가 있으면 그 폴더가 먼저입니다.
+기본 폴더 허용 화면은 원천이나 파일 블록(list, table, folder 등)에 그려집니다. image, media 블록만 쓰는 앱에는 나오지 않습니다.

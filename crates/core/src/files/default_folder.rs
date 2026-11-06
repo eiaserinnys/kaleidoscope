@@ -4,7 +4,7 @@ use std::sync::{Arc, MutexGuard};
 
 use kaleidoscope_contract::{
     errors, CoreError, DefaultFolderAccess, DefaultFolderResult, FileAccess, FilesScope, Grant,
-    KnownFolder, PcRootKind, PermissionDecl,
+    KnownFolder, PcRootKind, PermissionDecl, PC_KNOWN_FOLDERS,
 };
 
 use crate::{data_runtime, state_commands, CoreState, Inner};
@@ -71,11 +71,19 @@ fn root(inner: &Inner, folder: KnownFolder) -> Result<Option<crate::PcRoot>, Cor
     };
     match fs::metadata(&root.path) {
         Ok(metadata) if metadata.is_dir() => Ok(Some(root)),
-        Ok(_) => Err(errors::DESK_DEFAULT_FOLDER_NOT_DIRECTORY(folder.as_str())),
+        Ok(_) => Err(errors::DESK_DEFAULT_FOLDER_NOT_DIRECTORY(folder_name(folder))),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(errors::DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder.as_str())
+        Err(error) => Err(errors::DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder_name(folder))
             .and_details(vec![error.to_string()])),
     }
+}
+
+fn folder_name(folder: KnownFolder) -> &'static str {
+    PC_KNOWN_FOLDERS
+        .iter()
+        .find(|(id, _)| *id == folder.as_str())
+        .expect("알려진 폴더 이름이 있어야 합니다")
+        .1
 }
 
 fn resolved(
@@ -87,7 +95,7 @@ fn resolved(
         Ok(path) => path,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
-            return Err(errors::DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder.as_str())
+            return Err(errors::DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder_name(folder))
                 .and_details(vec![error.to_string()]))
         }
     };

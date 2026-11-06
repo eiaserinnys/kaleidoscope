@@ -20,8 +20,24 @@ const folderApp: AppDefinition = {
 };
 const failed = { status: "failed" as const, id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "이 기기에서 폴더를 골라야 합니다", retry: ["pictures"] };
 
+it("기본 폴더 준비가 실패해도 원천을 붙이고 오류와 폴더 선택을 보인다", async () => {
+  const definition: AppDefinition = { ...folderApp, requires: { blocks: 47, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "read", label: "자료", default_folder: "pictures" }] };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  const error = { code: "io", id: "DESK_DEFAULT_FOLDER_NOT_DIRECTORY", message: "사진 폴더의 경로가 폴더가 아닙니다.", details: [] };
+  const calls = vi.spyOn(transport, "call").mockImplementation((request) => request.op === "files.prepare_default_folder"
+    ? Promise.reject(error) : request.op === "data.attach"
+      ? Promise.resolve({ op: "data.attach", view: { sources: {}, values: { "/ui/items": failed } } } as CoreReply) as never
+      : original(request as never));
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  expect(await screen.findByText(error.message)).toBeTruthy();
+  expect(screen.getByText(error.id)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "폴더 선택" })).toBeTruthy();
+  expect(calls.mock.calls.some(([request]) => request.op === "data.attach")).toBe(true);
+});
+
 it("기본 폴더를 준비한 뒤 원천을 붙이고 첫 허용을 보여 준다", async () => {
-  const definition: AppDefinition = { ...folderApp, requires: { blocks: 46, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "read", label: "자료", default_folder: "pictures" }] };
+  const definition: AppDefinition = { ...folderApp, requires: { blocks: 47, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "read", label: "자료", default_folder: "pictures" }] };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
   const calls = vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.attach"
@@ -37,7 +53,7 @@ it("기본 폴더를 준비한 뒤 원천을 붙이고 첫 허용을 보여 준�
 });
 
 it("기본 폴더가 없으면 기존 폴더 선택을 보여 준다", async () => {
-  const definition: AppDefinition = { ...folderApp, requires: { blocks: 46, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "read", label: "자료", default_folder: "pictures" }] };
+  const definition: AppDefinition = { ...folderApp, requires: { blocks: 47, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "read", label: "자료", default_folder: "pictures" }] };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
   const original = transport.call.bind(transport);
   vi.spyOn(transport, "call").mockImplementation((request) => request.op === "files.prepare_default_folder"
@@ -49,7 +65,7 @@ it("기본 폴더가 없으면 기존 폴더 선택을 보여 준다", async () 
 });
 
 it("폴더 블록도 같은 기본 폴더 허용을 보여 준다", async () => {
-  const definition: AppDefinition = { ...folderApp, requires: { blocks: 46, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "readwrite", label: "자료", default_folder: "pictures" }], state: { selected: null }, ui: { type: "folder", root: { permission: "media" }, extensions: [], selected: { state: "selected" }, on_select: { set_state: "selected" } } };
+  const definition: AppDefinition = { ...folderApp, requires: { blocks: 47, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "readwrite", label: "자료", default_folder: "pictures" }], state: { selected: null }, ui: { type: "folder", root: { permission: "media" }, extensions: [], selected: { state: "selected" }, on_select: { set_state: "selected" } } };
   render(<AppWindowContent store={createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })))} windowId="viewer-window" />);
   expect(await screen.findByRole("button", { name: "사진 폴더 읽고 고치기 허용" })).toBeTruthy();
   expect(screen.queryByText("사진 폴더의 파일을 읽고 고치도록 허용")).toBeNull();

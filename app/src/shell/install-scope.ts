@@ -82,7 +82,7 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
           const key = `${permission.default_folder}:${permission.access}`;
           let item = defaultFolders.get(key);
           if (!item) {
-            item = { tone: "normal", sentence: `이 기기에서 허용한 ${knownFolderNames[permission.default_folder]} 폴더 또는 내가 고른 폴더의 파일을 ${permission.access === "read" ? "읽습니다" : "읽고 고칩니다"}`, rows: [], notes: ["기본 폴더는 이 기기에서 처음 사용할 때 허용합니다"] };
+            item = { tone: "normal", sentence: `${knownFolderNames[permission.default_folder]} 폴더나 내가 고른 폴더의 파일을 ${permission.access === "read" ? "읽습니다" : "읽고 고칩니다"}`, rows: [], notes: [] };
             defaultFolders.set(key, item);
           }
           item.rows.push({ reason: permission.label });
@@ -135,5 +135,5 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
       group(11, "화면이 꺼지지 않게 합니다");
     }
   }
-  return [...groups.filter((item): item is ConsentGroup => item !== undefined), ...defaultFolders.values()];
+  return [...groups.slice(0, 4).filter((item): item is ConsentGroup => item !== undefined), ...defaultFolders.values(), ...groups.slice(4).filter((item): item is ConsentGroup => item !== undefined)];
 }
