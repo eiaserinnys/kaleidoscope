@@ -327,7 +327,7 @@ export class WindowData {
     if (this.noticeRole !== "status") { this.setNotice(problem, owner); return; }
     this.noticeProblem = problem; this.noticeOwner = owner;
     this.notice = typeof problem === "string" ? problem : problem.message;
-    this.noticeId = typeof problem === "string" ? null : problem.id;
+    this.noticeId = typeof problem === "string" ? null : problem.id ?? null;
     this.noticeListeners.forEach((listener) => listener());
   };
   clearNoticeIf = (problem: CoreError | string, owner?: object) => {
