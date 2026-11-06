@@ -35,6 +35,14 @@ export const shellDefectFixtures = [
       { type: "section", title: "속성", child: { type: "text", value: "속성 내용" } },
     ],
   } },
+  { ...base, requires: { blocks: 37, modules: {} }, id: "pane-long-heading-1015", name: "긴 머리", state: {}, ui: {
+    type: "split", direction: "row", sizes: [40, 60], children: [
+      { type: "list", items: [{ key: "a", title: "첫 글" }] },
+      { type: "section", title: "Claude Code sends your email address to websites", meta: "작성자 2026-11-05 22:17", child: {
+        type: "feed", entries: Array.from({ length: 60 }, (_, i) => ({ key: String(i), name: "작성자", body: `댓글 ${i + 1}` })),
+      } },
+    ],
+  } },
   { ...base, id: "list-row-fit-940", name: "목록 줄 축소", state: {}, ui: { type: "list", grouped: true, items: [{ title: "묶음", items: Array.from({ length: 20 }, (_, i) => ({ key: String(i), title: `@작성자_${i}`, subtitle: "말줄임으로 표시할 아주 긴 부제입니다. ".repeat(8), color: "#804080", meta: "11/03", badges: ["고치는 중"] })) }] } },
   ...(["grid", "icons"] as const).map((layout) => ({ ...base, requires: { blocks: 30, modules: {} }, id: `layout-940-${layout}`, name: "그림 목록", state: {}, ui: { type: "tabs", tabs: [
     { label: "그림", child: { type: "stack", direction: "column", children: [

@@ -77,3 +77,22 @@ test("미리보기 이름은 기본 굵기다", async ({ page }) => {
   await expect(label).toBeVisible();
   await expect(label).not.toHaveClass(/is-emphasized/);
 });
+
+test("좁은 칸에서 줄바꿈한 긴 머리와 본문이 겹치지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 600 });
+  await page.goto("/?preview=pane-long-heading-1015");
+  const app = page.getByTestId("app-window-pane-long-heading-1015");
+  const section = app.locator('.ks-data-section');
+  await expect(section.locator('.ks-feed-entry').first()).toBeVisible();
+  const boxes = await section.evaluate(el => {
+    const header = el.querySelector<HTMLElement>(':scope > .ks-data-section-header')!;
+    const title = header.querySelector<HTMLElement>('.ks-data-section-title')!;
+    const meta = header.querySelector<HTMLElement>('.ks-data-section-meta')!;
+    const child = el.querySelector<HTMLElement>(':scope > .ks-data-section-child')!;
+    return { title: title.getBoundingClientRect().toJSON(), meta: meta.getBoundingClientRect().toJSON(),
+      header: header.getBoundingClientRect().toJSON(), child: child.getBoundingClientRect().toJSON(), lineHeight: parseFloat(getComputedStyle(title).lineHeight) };
+  });
+  expect(boxes.title.height).toBeGreaterThan(boxes.lineHeight);
+  expect(boxes.header.bottom).toBeGreaterThanOrEqual(Math.max(boxes.title.bottom, boxes.meta.bottom));
+  expect(boxes.child.top).toBeGreaterThanOrEqual(boxes.header.bottom);
+});
