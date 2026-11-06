@@ -23,6 +23,7 @@ import {
   FolderOpen as FolderOpenIcon,
   Globe as GlobeIcon,
   Image as ImageIcon,
+  ImageOff as ImageOffIcon,
   Import as ImportIcon,
   LayoutGrid as LayoutGridIcon,
   List as ListIcon,
@@ -125,6 +126,7 @@ export const RotateCw = (props: IconProps) => renderIcon(RotateCwIcon, props);
 export const RotateCcw = (props: IconProps) => renderIcon(RotateCcwIcon, props);
 export const Globe = (props: IconProps) => renderIcon(GlobeIcon, props);
 export const Image = (props: IconProps) => renderIcon(ImageIcon, props);
+export const ImageOff = (props: IconProps) => renderIcon(ImageOffIcon, props);
 export const Monitor = (props: IconProps) => renderIcon(MonitorIcon, props);
 export const Music = (props: IconProps) => renderIcon(MusicIcon, props);
 export const Download = (props: IconProps) => renderIcon(DownloadIcon, props);

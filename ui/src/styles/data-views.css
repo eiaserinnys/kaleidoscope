@@ -96,7 +96,10 @@
 /* 머리와 위쪽 패딩을 한 유리 층으로 덮어 틈과 겹친 재질 경계를 없앤다. */
 .ks-list.is-icons > .ks-view-sticky .ks-view-group::before { content: ""; position: absolute; inset: calc(-1 * var(--ks-space-2)) 0 0; z-index: -1; background: var(--ks-material-window-body); backdrop-filter: blur(var(--ks-blur-window)); }
 .ks-icon-tile .ks-media-thumbnail { background: transparent; border-radius: 0; }
-.ks-icon-tile .ks-media-thumbnail img { object-fit: contain; }
+.ks-icon-tile .ks-media-thumbnail.is-icon-image img { object-fit: contain; }
+.ks-icon-tile .ks-media-thumbnail.is-loading { background: transparent; }
+.ks-icon-tile .ks-media-thumbnail.is-ready:not(.is-icon-image) { background: var(--ks-color-hover); border-radius: var(--ks-radius-small); }
+.ks-icon-tile .ks-media-thumbnail.is-failed { background: var(--ks-color-hover); border-radius: var(--ks-radius-small); }
 .ks-list-icon-row { padding-block-end: var(--ks-space-1); }
 .ks-list.is-icons > .ks-load-more { padding: 0; }
 .ks-icon-skeleton-grid { width: 100%; }
@@ -112,6 +115,7 @@
 .ks-list-card.is-current:hover:not([aria-disabled="true"]) { background: var(--ks-color-accent); color: var(--ks-color-accent-contrast); }
 .ks-list-card.is-current .ks-view-meta { color: inherit; }
 .ks-list-card.is-current .ks-badge { background: var(--ks-color-surface-solid); color: var(--ks-color-text); }
+.ks-list-card.is-current .ks-media-thumbnail:not(.is-ready) { background: var(--ks-color-accent-contrast); color: var(--ks-color-accent); }
 .ks-list-card:focus-visible { outline-style: dashed; }
 .ks-list-card.is-selected:focus-visible { outline-color: var(--ks-color-accent-contrast); }
 .ks-list-card .ks-media-thumbnail { border-radius: calc(var(--ks-radius-small) - var(--ks-focus-width)); }
@@ -268,6 +272,7 @@
 
 .ks-media-thumbnail.is-loading, .ks-media-skeleton { background: var(--ks-color-hover); }
 .ks-media-thumbnail.is-failed { background: var(--ks-color-surface-raised); color: var(--ks-color-muted); }
+.ks-media-thumbnail.is-failed > svg { width: min(var(--ks-space-6), 60%); height: auto; }
 .ks-media-failed { background: var(--ks-color-surface-solid); color: var(--ks-color-danger); }
 .ks-media-skeleton, .ks-media-failed { display: grid; width: 100%; height: 100%; place-content: center; gap: var(--ks-space-2); border-radius: inherit; }
 .ks-media-failed > svg { justify-self: center; }

@@ -7,7 +7,7 @@ import { DataState } from "../components/data-state";
 import { validColor } from "../components/badge";
 import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
 import { IconTile, IconTileSkeleton, useIconGridColumns } from "../components/icon-tile";
-import { ICON_SIZE, LayoutGrid } from "../components/icons";
+import { LayoutGrid } from "../components/icons";
 import { useBinding, useWindowData } from "../data/window-data";
 import { useWindowVisible } from "../data/window-state";
 import { useLoadMore } from "./load-more";
@@ -67,10 +67,10 @@ const ListRow = memo(function ListRow({ item, index, length, active, current, fo
     return () => observer.disconnect();
   }, [item, grid, icons]);
   const icon = typeof item.icon === "string" && (ICON_NAMES as readonly string[]).includes(item.icon) ? item.icon : undefined;
-  const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} selected={active}
+  const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} icon /> : icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} selected={active}
     role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable || item.selectable === false ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
     onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable || item.selectable === false ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}${grid && current ? " is-current" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event)} onContextMenu={(event) => handlers.current.menu(event, item)}>
-    {grid ? isMedia(item.image) || !icon ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : <span className="ks-media-thumbnail ks-list-grid-icon"><DataIcon name={icon} size="empty" /></span> : icon ? <DataIcon name={icon} size="inline" /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
+    {grid ? isMedia(item.image) || !icon ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} /> : <span className="ks-media-thumbnail ks-list-grid-icon"><DataIcon name={icon} size="empty" /></span> : icon ? <DataIcon name={icon} size="inline" /> : isMedia(item.image) ? <MediaThumbnail media={item.image} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
