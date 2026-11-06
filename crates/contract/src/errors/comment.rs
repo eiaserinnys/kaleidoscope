@@ -1,4 +1,8 @@
 error_catalog! { ENTRIES;
+    COMMENT_CLIENT_NOT_CONNECTED() { class: Unavailable, place: "커멘트 서버 연결", cause: "서버에 연결되지 않았다", message: "서버에 연결되어 있지 않아 커멘트를 사용할 수 없습니다. 서버에 연결한 뒤 다시 시도하세요.", fix: "서버에 연결한 뒤 다시 시도하세요" }
+    COMMENT_CLIENT_REQUEST_SEND_FAILED() { class: Server, place: "커멘트 서버 요청 전송", cause: "서버에 요청을 보내지 못했다", message: "커멘트 요청을 서버에 보내지 못했습니다. 서버 연결을 확인한 뒤 다시 시도하세요.", fix: "서버 연결을 확인한 뒤 다시 시도하세요" }
+    COMMENT_CLIENT_RESPONSE_STATUS_FAILED() { class: Server, place: "커멘트 서버 응답 확인", cause: "서버가 요청을 처리하지 못했다", message: "서버가 커멘트 요청을 처리하지 못했습니다. 서버 상태를 확인한 뒤 다시 시도하세요.", fix: "서버 상태를 확인한 뒤 다시 시도하세요" }
+    COMMENT_CLIENT_RESPONSE_READ_FAILED() { class: Server, place: "커멘트 서버 응답 읽기", cause: "서버 응답을 읽지 못했다", message: "서버의 커멘트 응답을 읽지 못했습니다. 서버와 쉘을 확인한 뒤 다시 시도하세요.", fix: "서버와 쉘을 확인한 뒤 다시 시도하세요" }
     COMMENT_CREATE_APP_ID_EMPTY() { class: InvalidRequest, place: "커멘트 생성 앱 식별", cause: "앱 이름표가 비었다", message: "커멘트를 저장할 앱 이름표가 비어 있습니다. 앱 창을 다시 열고 남겨 주세요.", fix: "앱 창을 다시 여세요" }
     COMMENT_CREATE_TEXT_EMPTY() { class: InvalidRequest, place: "커멘트 생성 본문 검사", cause: "커멘트 내용이 비었다", message: "커멘트 내용이 비어 있습니다. 고칠 내용을 적어 주세요.", fix: "고칠 내용을 적어 주세요" }
     COMMENT_CREATE_TEXT_TOO_LONG(limit) { class: InvalidRequest, place: "커멘트 생성 본문 검사", cause: "커멘트가 글자 수 한도를 넘었다", message: "커멘트가 {limit}를 넘습니다. 내용을 줄여 주세요.", fix: "내용을 줄여 주세요" }

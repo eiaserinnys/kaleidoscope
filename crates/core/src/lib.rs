@@ -1,5 +1,6 @@
 // 기존 코어의 상태와 명령 진입점이 한 파일에 모여 있어 500줄을 넘는다.
 mod app_commands;
+mod app_comments;
 mod app_storage;
 mod attachment;
 pub mod builtin;
@@ -397,6 +398,8 @@ impl Core {
             share: share::ShareState::default(),
             update: UpdateStatus::Unavailable {},
         };
+        // 이전 실행의 서버 지원 여부는 현재 연결의 스냅샷으로 다시 확인한다.
+        state.shared.app_comments = None;
         layout_apply::reconcile(&mut state);
         let before_builtin = state.shared.clone();
         app_commands::ensure_builtin(&mut state);
@@ -687,6 +690,15 @@ impl Core {
             CoreRequest::LinkSyncLocalToRemote {} => server_switch::sync(&self.inner),
             CoreRequest::LinkCancel {} => link::cancel(&self.inner),
             CoreRequest::LinkUnlink {} => link::unlink(&self.inner),
+            request @ (CoreRequest::CommentList { .. }
+            | CoreRequest::CommentGet { .. }
+            | CoreRequest::CommentCreate { .. }
+            | CoreRequest::CommentReply { .. }
+            | CoreRequest::CommentResolve { .. }
+            | CoreRequest::CommentDelete { .. }
+            | CoreRequest::CommentMarkSent { .. }
+            | CoreRequest::CommentMarkRead { .. }
+            | CoreRequest::CommentImage { .. }) => app_comments::handle(&self.inner, request),
             request @ (CoreRequest::ShellPreferencesSetDefault { .. }
             | CoreRequest::ShellPreferencesAnswer { .. }) => {
                 shell_preferences::handle(&self.inner, request)

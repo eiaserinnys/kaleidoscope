@@ -13,8 +13,20 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
         return false;
     }
     match event {
-        // 커멘트 코어 PR에서 메타 반영을 구현한다.
-        DeviceEvent::AppCommentsSnapshot { .. } | DeviceEvent::AppCommentsChanged { .. } => {}
+        DeviceEvent::AppCommentsSnapshot { apps } => {
+            match crate::app_comments::apply_snapshot(inner, generation, apps) {
+                Ok(true) => {},
+                Ok(false) => return false,
+                Err(error) => link::set_offline(inner, generation, &link::load_link(inner), error),
+            }
+        }
+        DeviceEvent::AppCommentsChanged { meta } => {
+            match crate::app_comments::apply_changed(inner, generation, meta) {
+                Ok(true) => {},
+                Ok(false) => return false,
+                Err(error) => link::set_offline(inner, generation, &link::load_link(inner), error),
+            }
+        }
         DeviceEvent::PreferencesSnapshot { preferences }
         | DeviceEvent::PreferencesChanged { preferences } => {
             if let Err(error) = crate::shell_preferences::apply(inner, generation, preferences) {
