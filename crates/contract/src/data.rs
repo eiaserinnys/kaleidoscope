@@ -2018,6 +2018,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             value,
             options,
             read_only,
+            disabled,
             on_change,
             on_submit,
             min,
@@ -2034,6 +2035,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(read_only) = read_only {
                 bind!("read_only", read_only);
+            }
+            if let Some(disabled) = disabled {
+                bind!("disabled", disabled);
             }
             for (name, value) in [("min", min), ("max", max), ("step", step), ("focus", focus)] {
                 if let Some(value) = value {

@@ -1,6 +1,31 @@
 import type { AppDefinition } from "../../src/contract/contract";
+import contractSource from "../../../crates/contract/src/lib.rs?raw";
+
+const inputDisabledVersion = Number(contractSource.match(/pub const INPUT_DISABLED_BLOCK_SET_VERSION: u32 = (\d+);/)![1]);
 
 const definitions = [
+  {
+    id: "input-control-states", name: "입력 상태 시험",
+    requires: { blocks: inputDisabledVersion, modules: {} }, permissions: [],
+    state: { value: "같은 값", empty: "", choice: "나이", blankChoice: null, selected: "중복 제거", number: 3, date: "2026-11-06", search: "찾기" },
+    ui: { type: "split", direction: "row", children: [
+      { type: "stack", direction: "column", gap: "small", children: [
+        { type: "input", label: "열림", value: { state: "value" }, on_change: { set_state: "value" } },
+        { type: "input", label: "결과", value: { state: "value" }, read_only: true, on_change: { set_state: "value" } },
+        { type: "input", label: "잠김", value: { state: "value" }, disabled: true, on_change: { set_state: "value" } },
+        { type: "input", label: "빈 열림", value: { state: "empty" }, on_change: { set_state: "empty" } },
+        { type: "input", label: "빈 잠김", value: { state: "empty" }, disabled: true, on_change: { set_state: "empty" } },
+        { type: "input", kind: "number", spin: true, label: "잠긴 숫자", value: { state: "number" }, disabled: true, on_change: { set_state: "number" } },
+        { type: "input", kind: "date", label: "잠긴 날짜", value: { state: "date" }, disabled: true, on_change: { set_state: "date" } },
+        { type: "input", kind: "search", label: "잠긴 검색", value: { state: "search" }, disabled: true, on_change: { set_state: "search" } },
+      ] },
+      { type: "stack", direction: "column", gap: "small", children: [
+        { type: "select", label: "긴 이름표 테스트", value: { state: "selected" }, on_change: { set_state: "selected" }, style: "segmented", options: ["중복 제거", "연속 중복 제거", "고유 줄", "관계"] },
+        { type: "select", label: "선택됨", value: { state: "choice" }, on_change: { set_state: "choice" }, options: ["나이", "이름"] },
+        { type: "select", label: "선택 전", value: { state: "blankChoice" }, on_change: { set_state: "blankChoice" }, options: ["나이", "이름"] },
+      ] },
+    ] },
+  },
   {
     id: "input-read-only",
     name: "입력 읽기 전용",
