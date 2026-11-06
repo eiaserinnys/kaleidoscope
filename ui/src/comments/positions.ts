@@ -31,14 +31,6 @@ function scrollClip(element: HTMLElement, content: HTMLElement) {
   return { left, top, right, bottom };
 }
 
-function belowStickyHeader(element: HTMLElement, pinTop: number): boolean {
-  const scroll = element.closest<HTMLElement>(".ks-table-scroll");
-  const header = scroll?.querySelector<HTMLElement>(".ks-table-header");
-  if (!scroll || !header || header.contains(element) || scroll.scrollTop <= 0) return true;
-  const bounds = header.getBoundingClientRect();
-  return pinTop >= bounds.bottom;
-}
-
 export function useCommentPositions(content: HTMLElement | null, windowId: string, enabled: boolean, definition: AppDefinition | undefined, items: AppCommentSummary[], railOpen: boolean, selectedId: string | null, target: TargetDescription | null, hover: HTMLElement | null, onPinsPositioned: () => boolean) {
   const [index, setIndex] = useState<Index>();
   const [statuses, setStatuses] = useState<Record<string, PositionStatus>>({});
@@ -78,10 +70,15 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
       const surfaceRect = surface?.getBoundingClientRect();
       const barRect = win.querySelector<HTMLElement>(".ks-comment-bar.is-inside")?.getBoundingClientRect();
       const overlapsSurface = (rect: { left: number; right: number; top: number; bottom: number }) => !!surfaceRect && rect.left < surfaceRect.right && rect.right > surfaceRect.left && rect.top < surfaceRect.bottom && rect.bottom > surfaceRect.top;
+      const expands = (element: HTMLElement, kind: string) => {
+        if (kind !== "row") return true;
+        const padding = getComputedStyle(element);
+        return parseFloat(padding.paddingInlineStart) === 0 && parseFloat(padding.paddingInlineEnd) === 0;
+      };
       const showBox = (box: HTMLElement | null, element: HTMLElement, rect: DOMRect, expand = false) => {
         const clip = scrollClip(element, content), extra = expand ? small : 0;
-        const left = Math.max(clip.left, rect.left - extra), top = Math.max(clip.top, rect.top - extra);
-        const right = Math.min(clip.right, rect.right + extra), bottom = Math.min(clip.bottom, rect.bottom + extra);
+        const left = Math.max(contentRect.left, clip.left - extra, rect.left - extra), top = Math.max(clip.top, rect.top - extra);
+        const right = Math.min(contentRect.right, clip.right + extra, rect.right + extra), bottom = Math.min(clip.bottom, rect.bottom + extra);
         if (!box || right <= left || bottom <= top || overlapsSurface({ left, right, top, bottom })) return;
         box.style.display = "block";
         box.style.transform = `translate(${left - origin.left}px, ${top - origin.top}px)`;
@@ -91,20 +88,22 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
       if (hoverBox.current) hoverBox.current.style.display = "none";
       if (hover && content.contains(hover)) {
         const hovered = describeTarget(hover, content);
-        if (hovered) showBox(hoverBox.current, hovered.element, hovered.element.getBoundingClientRect(), hovered.anchor.kind !== "row");
+        if (hovered) showBox(hoverBox.current, hovered.element, hovered.element.getBoundingClientRect(), expands(hovered.element, hovered.anchor.kind));
       }
-      if (target && target.anchor.kind !== "text" && target.anchor.kind !== "point") showBox(selectedBox.current, target.element, target.element.getBoundingClientRect(), target.anchor.kind !== "row");
+      if (target && target.anchor.kind !== "text" && target.anchor.kind !== "point") showBox(selectedBox.current, target.element, target.element.getBoundingClientRect(), expands(target.element, target.anchor.kind));
       const place = (id: string, kind: string, element: HTMLElement, rect: DOMRect) => {
         const clip = scrollClip(element, content);
         const center = rect.top + Math.min(rect.height, size * 5 / 3) / 2;
         const y = kind === "point" ? rect.top - size : kind === "control" ? rect.top - size + inset : center - size / 2;
-        if (kind !== "point" && (center < clip.top || center > clip.bottom || !belowStickyHeader(element, y))) return false;
+        if (kind !== "point" && (center < clip.top || center > clip.bottom)) return false;
         if (rail && (rail.width >= contentRect.width || rect.left >= rail.left)) return true;
         const rightLimit = Math.min(area ? area.right - size : Infinity, rail ? rail.left - size / 2 : Infinity);
         const bounds = element.getBoundingClientRect();
         const ownRight = kind === "block" && element.clientWidth ? bounds.left + element.clientLeft + element.clientWidth : bounds.right;
         const edge = Math.min(kind === "text" ? bounds.right : rect.right, clip.right, ownRight);
         const x = kind === "point" ? Math.min(rect.left, rightLimit) : Math.min(edge - inset, rightLimit);
+        const top = element.ownerDocument.elementsFromPoint(kind === "point" ? rect.left : edge - inset, kind === "point" ? rect.top : center).find((candidate) => !candidate.closest(".ks-comment-layer"));
+        if (!top || !element.contains(top)) return false;
         if (!overlapsSurface({ left: x, right: x + size, top: y, bottom: y + size }) && !(barRect && x < barRect.right && x + size > barRect.left && y < barRect.bottom && y + size > barRect.top)) placed.push({ id, x: x - origin.left, y: y - origin.top });
         return true;
       };
@@ -117,7 +116,7 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
         if (item.resolved || !("rect" in result)) continue;
         const rect = result.range?.getClientRects()[0] ?? result.rect;
         if (item.id === selectedId && item.anchor.kind !== "point" && item.anchor.kind !== "text" && selectedBox.current) {
-          showBox(selectedBox.current, result.element, rect, item.anchor.kind !== "row");
+          showBox(selectedBox.current, result.element, rect, expands(result.element, item.anchor.kind));
         }
         if (!place(item.id, item.anchor.kind, result.element, rect)) next[item.id] = "not_visible";
       }

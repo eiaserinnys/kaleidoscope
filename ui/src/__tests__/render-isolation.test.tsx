@@ -499,6 +499,9 @@ it("커멘트 상태와 입력 및 앱 메타 변경은 어느 창의 앱 블록
   fireEvent.click(within(first).getByRole("button", { name: "커멘트" }));
   await waitFor(() => expect(commentCalls).toContain("comment.list"));
   const target = first.querySelector<HTMLElement>('[data-ks-block="/ui/children/0"]')!;
+  // JSDOM에는 브라우저 적중 검사 API가 없어 이 시험의 고른 대상을 돌려준다.
+  const hitTestDescriptor = Object.getOwnPropertyDescriptor(document, "elementsFromPoint");
+  Object.defineProperty(document, "elementsFromPoint", { configurable: true, value: () => [target] });
   dispatchPointer(target, "pointermove", 1, 20, 20);
   await act(async () => { dispatchPointer(target, "pointerdown", 1, 20, 20); dispatchPointer(target, "pointerup", 1, 20, 20); });
   const input = await within(first).findByRole("textbox", { name: "커멘트" });
@@ -530,6 +533,8 @@ it("커멘트 상태와 입력 및 앱 메타 변경은 어느 창의 앱 블록
   expect(commentCalls).toHaveLength(callsBeforeHiddenChange);
   store.dispose();
   resizeObserve.mockRestore(); resizeDisconnect.mockRestore(); mutationObserve.mockRestore(); mutationDisconnect.mockRestore();
+  if (hitTestDescriptor) Object.defineProperty(document, "elementsFromPoint", hitTestDescriptor);
+  else delete (document as Partial<Document>).elementsFromPoint;
 });
 
 describe("실제 Shell의 블록 렌더 격리", () => {

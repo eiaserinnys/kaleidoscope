@@ -39,7 +39,8 @@ export function describeTarget(element: HTMLElement, windowRoot: HTMLElement, fr
   const primary = row?.querySelector<HTMLElement>(".ks-feed-body")?.textContent?.trim() ?? cells.sort((a, b) => b.length - a.length)[0];
   const position = row?.getAttribute("aria-rowindex") ?? row?.getAttribute("aria-posinset");
   const blockName = nameOfBlock(type);
-  const name = row && primary ? `“${primary.slice(0, 200)}”` : target.getAttribute("aria-label") ?? target.getAttribute("title") ?? (target.textContent?.trim() || "").slice(0, 200);
+  const rawName = (row ? primary : undefined) ?? target.getAttribute("aria-label") ?? target.getAttribute("title") ?? target.textContent?.trim() ?? "";
+  const name = row ? `“${rawName.slice(0, 200)}”` : rawName.slice(0, 200);
   const path = `${blockName}${row ? ` › ${position ? `${position}행` : "행"}` : ""}`;
   const description = row ? `${path.replace(" › ", " ")}${range ? ` “${range.toString()}”` : name ? ` ${name}` : ""}` : name;
   const anchor: AppCommentAnchor = { schema_version: 1, kind, pointer, normalized_type: type,

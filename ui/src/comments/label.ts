@@ -7,6 +7,6 @@ export function commentLabel(anchor: AppCommentAnchor, detailOnly = false): stri
   if (anchor.kind === "text" && anchor.row_identity == null && anchor.quote?.exact) return `${blockName(anchor.normalized_type)} “${anchor.quote.exact}”`;
   if (anchor.row_identity != null || anchor.kind === "text") return anchor.element?.description || (anchor.quote?.exact ? `“${anchor.quote.exact}”` : blockName(anchor.normalized_type));
   const description = anchor.element?.description?.replace(/\s+/g, " ").trim();
-  const text = description ? `“${description.length > 48 ? `${description.slice(0, 48)}…` : description}”` : "";
+  const text = description && description !== blockName(anchor.normalized_type) ? `“${description.length > 48 ? `${description.slice(0, 48)}…` : description}”` : "";
   return [detailOnly ? "" : blockName(anchor.normalized_type), text].filter(Boolean).join(" ");
 }

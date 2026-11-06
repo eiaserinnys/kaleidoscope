@@ -45,4 +45,11 @@ describe("앱 커멘트 전송 글", () => {
     expect(commentLabel({ schema_version: 1, kind: "block", normalized_type: "section" })).toBe("구역");
   });
 
+  it("설명이 블록 이름과 같으면 쓰는 칸은 비우고 전달 글은 이름만 쓴다", () => {
+    const anchor = { schema_version: 1, kind: "block" as const, normalized_type: "table", element: { tag: "div", description: "표" } };
+    expect(commentLabel(anchor)).toBe("표");
+    expect(commentLabel(anchor, true)).toBe("");
+    expect(commentMessage("앱", [comment({ anchor })])).toContain("3번 · 표 :");
+  });
+
 });
