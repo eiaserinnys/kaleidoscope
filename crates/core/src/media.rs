@@ -245,6 +245,7 @@ pub(crate) fn get(
     let module = authorization::permission(&inner.state.lock().unwrap(), window_id, &media.permission)?;
     if matches!(&module, PermissionDecl::Store { .. }) {
         let (server, key) = crate::store::media_key(media)?;
+        let client = crate::store::client(inner, server.as_str())?;
         let variant = format!("{key}|{:?}", max_px);
         if let Some(entry) = inner.media_cache.get(&variant) {
             return Ok(as_data(&entry));
@@ -253,7 +254,6 @@ pub(crate) fn get(
         let original = if let Some(entry) = inner.media_cache.get(&original_key) {
             entry
         } else {
-            let client = crate::store::client(inner, server.as_str())?;
             let (bytes, mime) =
                 crate::store::read_media(&client, &media.path).map_err(|e| e.error)?;
             let (width, height) = dimensions(&bytes, &mime);

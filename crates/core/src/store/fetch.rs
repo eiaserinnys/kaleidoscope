@@ -62,11 +62,12 @@ pub(crate) struct StoreClient<T = PublicTransport> {
     pub(super) transport: T,
 }
 impl<T: Transport> StoreClient<T> {
+    #[cfg(test)]
     pub(crate) fn with_transport(server: &str, transport: T) -> Result<Self, CoreError> {
-        Ok(Self {
-            server: StoreUrl::parse(server)?,
-            transport,
-        })
+        Ok(Self::new(StoreUrl::parse(server)?, transport))
+    }
+    pub(super) fn new(server: StoreUrl, transport: T) -> Self {
+        Self { server, transport }
     }
     pub(super) fn bytes(&self, relative: &str, limit: u64) -> Result<PublicResponse, StoreFailure> {
         let path = self.server.path(relative)?;
@@ -81,7 +82,7 @@ impl<T: Transport> StoreClient<T> {
             .map_err(|error| {
                 let err = match error {
                     PublicHttpError::InvalidAddress => super::path_error(relative),
-                    PublicHttpError::PrivateAddress => errors::STORECLIENT_URL_PRIVATE_ADDRESS(),
+                    PublicHttpError::PrivateAddress => errors::STORECLIENT_SERVER_PERMISSION_REQUIRED(self.server.as_str()),
                     PublicHttpError::TooLarge => errors::STORECLIENT_FETCH_TOO_LARGE(
                         relative,
                         kaleidoscope_contract::size::format_byte_limit(limit),

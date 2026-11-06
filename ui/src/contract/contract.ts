@@ -672,7 +672,7 @@ active_desktop_ids: { [key in string]: string }, grants: Array<Grant>,
  * (계약 14판) 이 기기에서 `scope: pc` 권한을 허용한 앱과 권한. 앱마다 한 번이고 그 앱의 모든 창이 쓴다.
  * 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
  */
-pc_access: Array<PcAccess>, process_access: Array<ProcessAccess>, };
+pc_access: Array<PcAccess>, process_access: Array<ProcessAccess>, store_servers: Array<string>, };
 
 export type DeviceStorage = { prefixes: Array<string>, 
 /**

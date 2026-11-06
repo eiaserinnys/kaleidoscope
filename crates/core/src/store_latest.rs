@@ -47,10 +47,14 @@ pub(crate) fn tick(inner: &Arc<Inner>) {
 
 pub(crate) fn tick_at(inner: &Arc<Inner>, now: Instant) {
     if now.duration_since(inner.store_latest.started) < Duration::from_secs(STORE_LATEST_FIRST_CHECK_DELAY_SECS) { return; }
-    let urls: HashSet<String> = inner.state.lock().unwrap().shared.apps.iter()
+    let state = inner.state.lock().unwrap();
+    let urls: HashSet<String> = state.shared.apps.iter()
         .filter_map(|app| app.origin.as_ref())
-        .filter_map(|origin| crate::store::StoreUrl::parse(&origin.store_url).ok().map(|url| url.as_str().to_owned()))
+        .filter_map(|origin| crate::store::StoreUrl::parse(&origin.store_url).ok())
+        .filter(|url| crate::store::authorize(url, &state.device.store_servers).is_ok())
+        .map(|url| url.as_str().to_owned())
         .collect();
+    drop(state);
     let mut schedule = inner.store_latest.data.lock().unwrap();
     let due: Vec<_> = urls.into_iter().filter(|url| {
         !schedule.inflight.contains(url) && schedule.attempted.get(url).is_none_or(|at| now.duration_since(*at) >= Duration::from_secs(STORE_LATEST_CHECK_INTERVAL_SECS))

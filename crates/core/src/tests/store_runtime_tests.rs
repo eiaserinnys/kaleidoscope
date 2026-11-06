@@ -85,7 +85,7 @@ fn latest_index_updates_apps_and_badge_without_an_open_store_window() {
     core.handle(CoreRequest::WindowClose { window_id: window }).unwrap();
 }
 
-fn store_caller() -> (TempDir, Arc<Core>, Arc<FakeRegistryClient>, String) {
+pub(super) fn store_caller() -> (TempDir, Arc<Core>, Arc<FakeRegistryClient>, String) {
     let temp = TempDir::new().unwrap();
     let definition = json!({"id":"store-caller","name":"스토어 호출자","requires":{"blocks":4,"modules":{"store":1}},
         "permissions":[{"module":"store","id":"catalog","label":"스토어"}],"ui":{"type":"text","value":"시험"}}).to_string();
