@@ -78,6 +78,7 @@ export type {
   TransferResult,
   UpdateStatus,
   Workspace,
+  WindowSize,
 } from "./contract/contract";
 export { prepareShareForSend, useShareView } from "./share/share-view";
 export { useWindowControlHost } from "./share/window-control";

@@ -935,6 +935,19 @@ fn default_span() -> u32 {
     1
 }
 
+/// 단추 격자 항목이 지원하는 변형.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ButtonGridVariant {
+    #[default]
+    Default,
+    Primary,
+    Danger,
+    Ghost,
+    Chip,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]
 pub struct KeypadButton {
@@ -947,8 +960,8 @@ pub struct KeypadButton {
     #[ts(optional)]
     pub icon: Option<String>,
     #[serde(default)]
-    #[ts(optional, as = "Option<crate::ButtonVariant>")]
-    pub variant: crate::ButtonVariant,
+    #[ts(optional, as = "Option<ButtonGridVariant>")]
+    pub variant: ButtonGridVariant,
     #[serde(default = "default_span")]
     #[ts(optional, as = "Option<u32>")]
     pub span: u32,

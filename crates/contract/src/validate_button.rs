@@ -4,6 +4,22 @@ use data::Binding;
 const NEW_ICONS: &[&str] = &["film", "sticker", "image-play"];
 
 pub(crate) fn validate_button_extensions(definition: &AppDefinition) -> Result<(), CoreError> {
+    let mut row_error = None;
+    data::walk_definition_blocks(definition, &mut |pointer, block| {
+        if row_error.is_some() { return; }
+        if let Block::Button { variant: Binding::Literal(value), icon_only, preview, .. } = block {
+            if value.as_str() == Some("row") {
+                row_error = if definition.requires.blocks < crate::ROW_WINDOW_SIZE_BLOCK_SET_VERSION {
+                    Some(crate::errors::APP_BUTTON_ROW_VERSION_LOW(pointer, crate::ROW_WINDOW_SIZE_BLOCK_SET_VERSION))
+                } else if *icon_only {
+                    Some(crate::errors::APP_BUTTON_ROW_ICON_ONLY(pointer))
+                } else if preview.is_some() {
+                    Some(crate::errors::APP_BUTTON_ROW_PREVIEW(pointer))
+                } else { None };
+            }
+        }
+    });
+    if let Some(error) = row_error { return Err(error); }
     if definition.requires.blocks >= BUTTON_VARIANT_ICON_BLOCK_SET_VERSION {
         return Ok(());
     }

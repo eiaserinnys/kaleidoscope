@@ -7,5 +7,5 @@ export interface BlockContext {
   store: ShellStore;
   window: WindowIdentity;
   definition: AppDefinition;
-  newWindowRect?: () => Rect | undefined;
+  newWindowRect?: (appId: string) => Rect | undefined;
 }

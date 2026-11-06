@@ -175,7 +175,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     ? [labelText, bindingFailure.id].filter(Boolean).join(": ")
     : labelLoading ? "불러오는 중" : prefixText ? `${prefixText}: ${labelText}` : labelText;
   const iconText = icon.status === "ready" && typeof icon.value === "string" ? icon.value : "";
-  const variant = variantBinding.status === "ready" && typeof variantBinding.value === "string" && ["default", "primary", "danger", "ghost", "chip"].includes(variantBinding.value) ? variantBinding.value : "default";
+  const variant = variantBinding.status === "ready" && typeof variantBinding.value === "string" && ["default", "primary", "danger", "ghost", "chip", "row"].includes(variantBinding.value) ? variantBinding.value : "default";
   const pressedValue = block.pressed !== undefined && pressed.status === "ready" ? Boolean(pressed.value) : undefined;
   useEffect(() => {
     mounted.current = true;
@@ -239,7 +239,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
   const dialog = confirm && block.confirm && host
     ? <Dialog host={host} title={block.confirm.title} ok={block.confirm.ok ?? labelText} danger={variant === "danger"} onCancel={close} onConfirm={() => void run(true, confirmModifiers.current)} body={block.confirm.body === undefined ? undefined : body.status === "ready" ? display(body.value) : <DataState value={body} compact />} />
     : null;
-  const className = `ks-data-button is-${variant}`;
+  const className = `ks-data-button is-${variant}${copied ? " is-copied" : ""}`;
   if (block.preview) return <div {...blockRoot} ref={setOpener} className={`${className} has-preview`}>
     <div className={`ks-data-button-card${pressedValue ? " is-selected" : ""}${showProgress || unavailable ? " is-disabled" : ""}`} title={previewError ?? undefined}>
       <div className="ks-data-button-card-content">

@@ -31,6 +31,7 @@ import {
   type ShellStore,
   type Workspace,
   type Rect,
+  type WindowSize,
 } from "@kaleidoscope/ui";
 import { AppLauncher, type LauncherSpacing } from "./app-launcher";
 import { serverLabel } from "./server-label";
@@ -41,7 +42,7 @@ import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { SystemWindow, type SystemWindowState } from "./system-window";
 import { importAppDefinition } from "./import-definition";
-import { makeNewWindowRect } from "./window-geometry";
+import { makeNewWindowRect, windowSizeForApp } from "./window-geometry";
 
 type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
 
@@ -73,9 +74,9 @@ export function Shell({ store }: { store: ShellStore }) {
   const reportArea = useCallback((area: { width: number; height: number }) => {
     desktopAreaRef.current = area;
   }, []);
-  const newWindowRect = useCallback((desktopId: string, current: ShellSnapshot) => {
+  const newWindowRect = useCallback((desktopId: string, current: ShellSnapshot, size?: WindowSize) => {
     const count = current.shared.windows.filter((window) => window.desktop_id === desktopId).length;
-    return makeNewWindowRect(desktopAreaRef.current, count);
+    return makeNewWindowRect(desktopAreaRef.current, count, size);
   }, []);
 
   const activeWorkspace = snapshot ? selectWorkspace(snapshot) : undefined;
@@ -151,7 +152,7 @@ export function Shell({ store }: { store: ShellStore }) {
         op: "window.open",
         desktop_id: desktop.id,
         app_id: event.app_id,
-        rect: newWindowRect(desktop.id, latest),
+        rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, event.app_id)),
       });
     }
   }), [newWindowRect, runCommand, store]);
@@ -231,7 +232,7 @@ export function Shell({ store }: { store: ShellStore }) {
     const workspace = latest ? selectWorkspace(latest) : undefined;
     const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
     if (!latest || !desktop) return;
-    void runCommand({ op: "window.open", desktop_id: desktop.id, app_id: appId, rect: newWindowRect(desktop.id, latest) });
+    void runCommand({ op: "window.open", desktop_id: desktop.id, app_id: appId, rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, appId)) });
   };
 
   const openWorkspaceMenu = (anchor: HTMLElement) => {
@@ -309,7 +310,7 @@ export function Shell({ store }: { store: ShellStore }) {
       const workspace = latest ? selectWorkspace(latest) : undefined;
       const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
       if (!desktop) return;
-      await importAppDefinition(store, desktop.id, definition, newWindowRect(desktop.id, latest!));
+      await importAppDefinition(store, desktop.id, definition, (size) => newWindowRect(desktop.id, latest!, size));
     } catch (reason) {
       setNotice(toCoreError(reason));
     }

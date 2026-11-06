@@ -80,6 +80,15 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
     crate::validate_button::validate_button_extensions(&definition)?;
     crate::validate_file_input::validate_file_drop(&definition)?;
 
+    if let Some(size) = definition.window_size {
+        if definition.requires.blocks < crate::ROW_WINDOW_SIZE_BLOCK_SET_VERSION {
+            return Err(crate::errors::APP_WINDOW_SIZE_VERSION_LOW(crate::ROW_WINDOW_SIZE_BLOCK_SET_VERSION));
+        }
+        if size.width < 360 || size.height < 240 {
+            return Err(crate::errors::APP_WINDOW_SIZE_TOO_SMALL(size.width, size.height));
+        }
+    }
+
     if let Some(badge) = &definition.badge {
         if definition.requires.blocks < crate::APP_BADGE_BLOCK_SET_VERSION {
             return Err(crate::errors::APP_BADGE_VERSION_LOW(crate::APP_BADGE_BLOCK_SET_VERSION, crate::APP_BADGE_BLOCK_SET_VERSION));

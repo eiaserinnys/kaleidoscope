@@ -15,10 +15,12 @@ import {
   type ShellSnapshot,
   type ShellStore,
   type Rect,
+  type WindowSize,
 } from "@kaleidoscope/ui";
 import { WindowFrame } from "./window-frame";
 import { windowMenuEntries } from "./window-menu";
 import { systemWindowMenu, type SystemWindowState } from "./system-window";
+import { windowSizeForApp } from "./window-geometry";
 
 export interface DesktopAreaProps {
   activeDesktopId?: string;
@@ -30,7 +32,7 @@ export interface DesktopAreaProps {
   onAreaChange: (area: { width: number; height: number }) => void;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   onOpenApps: (anchor: HTMLElement) => void;
-  getNewWindowRect?: (desktopId: string, snapshot: ShellSnapshot) => Rect | undefined;
+  getNewWindowRect?: (desktopId: string, snapshot: ShellSnapshot, size?: WindowSize) => Rect | undefined;
   store: ShellStore;
 }
 
@@ -237,9 +239,9 @@ const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCa
     };
   }, sameDetails);
   const sharing = useShellSelector(store, (snapshot) => snapshot?.sharing.includes(appWindow.id) ?? false);
-  const newWindowRect = useMemo(() => () => {
+  const newWindowRect = useMemo(() => (appId: string) => {
     const snapshot = store.getSnapshot();
-    return snapshot ? getNewWindowRect?.(appWindow.desktop_id, snapshot) : undefined;
+    return snapshot ? getNewWindowRect?.(appWindow.desktop_id, snapshot, windowSizeForApp(snapshot, appId)) : undefined;
   }, [appWindow.desktop_id, getNewWindowRect, store]);
 
   return <WindowFrame

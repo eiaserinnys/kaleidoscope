@@ -33,3 +33,15 @@ it("성공한 아이콘 복사 단추는 1.5초 동안 확인 아이콘과 읽�
   expect(screen.getByRole("button", { name: "링크 복사" }).querySelector("[data-icon-name]")?.getAttribute("data-icon-name")).toBe("copy");
   expect(screen.getByRole("status").textContent).toBe("");
 });
+
+it("줄 단추는 복사 성공 동안 줄에 표시를 붙인다", async () => {
+  vi.useFakeTimers();
+  render(<ButtonBlock block={{ type: "button", label: "결과", icon: "copy", variant: "row", on_click: { copy_text: "값" } } as never} context={{} as never} pointer="/button" />);
+  const button = screen.getByRole("button", { name: "결과" });
+  expect(button.closest(".ks-data-button")?.classList.contains("is-row")).toBe(true);
+  await act(async () => { fireEvent.click(button); });
+  expect(button.closest(".ks-data-button")?.classList.contains("is-copied")).toBe(true);
+  expect(button.querySelector("[data-icon-name]")?.getAttribute("data-icon-name")).toBe("check");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+  expect(button.closest(".ks-data-button")?.classList.contains("is-copied")).toBe(false);
+});

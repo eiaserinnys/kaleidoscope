@@ -305,10 +305,13 @@ pub const CONTRACT_VERSION: u32 = 39;
 /// - 39판: 앱 아이콘 숫자 배지.
 /// - 40판: list 행 잠금 바인딩.
 /// - 41판: 창의 파일 드롭 선언.
-pub const BLOCK_SET_VERSION: u32 = FILE_DROP_BLOCK_SET_VERSION;
+/// - 42판: 줄 단추와 앱의 초기 창 크기.
+pub const BLOCK_SET_VERSION: u32 = ROW_WINDOW_SIZE_BLOCK_SET_VERSION;
 /// 창 파일 드롭 선언과 권한 파일 열기의 첫 지원 판.
 pub const FILE_DROP_BLOCK_SET_VERSION: u32 = 41;
 pub const CLIENT_FILE_OPEN_VERSION: u32 = 7;
+/// 줄 단추와 앱의 초기 창 크기를 처음 지원하는 블록 세트 판.
+pub const ROW_WINDOW_SIZE_BLOCK_SET_VERSION: u32 = 42;
 /// 앱 아이콘의 숫자 배지를 처음 지원하는 블록 세트 판.
 pub const APP_BADGE_BLOCK_SET_VERSION: u32 = 39;
 /// list.disabled를 처음 지원하는 블록 세트 판.
@@ -865,6 +868,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub badge: Option<AppBadge>,
+    /// 앱을 새 창으로 열 때의 초기 크기. (블록 세트 42판)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub window_size: Option<WindowSize>,
     pub requires: Requires,
     /// 앱이 참조할 수 있는 자산과 고정된 판.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -929,6 +936,15 @@ pub struct AppDefinition {
     pub window_title: Option<WindowTitleDecl>,
     /// 창 안을 채우는 블록 트리의 뿌리.
     pub ui: Block,
+}
+
+/// 앱의 초기 창 크기. 쉘 최소 크기 360×240 이상이어야 한다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct WindowSize {
+    pub width: i32,
+    pub height: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -4126,6 +4142,8 @@ pub enum ButtonVariant {
     /// 테두리 없는 가벼운 단추.
     Ghost,
     Chip,
+    /// 폭을 채우고 아이콘과 글을 앞에 붙이는 줄 단추.
+    Row,
 }
 
 fn default_button_variant() -> Binding {

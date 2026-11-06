@@ -305,24 +305,21 @@ describe("app definition import", () => {
     const store = makeStore(snapshot, calls);
 
     const rect = { x: 48, y: 48, width: 880, height: 480 };
-    await importAppDefinition(store, "desktop-1", JSON.stringify(mdViewerDefinition), rect);
+    const makeRect = vi.fn(() => rect);
+    await importAppDefinition(store, "desktop-1", JSON.stringify(mdViewerDefinition), makeRect);
 
     expect(calls).toEqual([
       { op: "app.import", definition_json: JSON.stringify(mdViewerDefinition) },
       { op: "window.open", desktop_id: "desktop-1", app_id: "md-viewer", rect },
     ]);
+    expect(makeRect).toHaveBeenCalledWith({ width: 480, height: 360 });
   });
 
   it("keeps an already open app window instead of opening a duplicate", async () => {
     const snapshot = makeTestSnapshot();
     const calls: CoreRequest[] = [];
 
-    await importAppDefinition(makeStore(snapshot, calls), "desktop-1", JSON.stringify(mdViewerDefinition), {
-      x: 48,
-      y: 48,
-      width: 880,
-      height: 480,
-    });
+    await importAppDefinition(makeStore(snapshot, calls), "desktop-1", JSON.stringify(mdViewerDefinition), () => ({ x: 48, y: 48, width: 880, height: 480 }));
 
     expect(calls).toEqual([{ op: "app.import", definition_json: JSON.stringify(mdViewerDefinition) }]);
   });
@@ -366,6 +363,11 @@ describe("app definition import", () => {
     });
   });
 
+  it("앱이 지정한 창 크기를 쓰고 작은 영역에서는 줄인다", () => {
+    expect(makeNewWindowRect({ width: 1440, height: 852 }, 0, { width: 480, height: 360 })).toEqual({ x: 48, y: 48, width: 480, height: 360 });
+    expect(makeNewWindowRect({ width: 420, height: 700 }, 0, { width: 480, height: 360 })).toEqual({ x: 48, y: 48, width: 360, height: 360 });
+  });
+
   it("restarts the cascade when the next position would make a window too small", () => {
     expect(makeNewWindowRect({ width: 500, height: 300 }, 1)).toEqual({
       x: 12, y: 12, width: 476, height: 224,
@@ -396,7 +398,7 @@ function makeStore(snapshot: ShellSnapshot, calls: CoreRequest[]): ShellStore {
   return {
     call: vi.fn(async (request: CoreRequest) => {
       calls.push(request);
-      if (request.op === "app.import") return { op: "app.import", app: { id: "md-viewer" } };
+      if (request.op === "app.import") return { op: "app.import", app: { id: "md-viewer" }, version: { definition: { ...mdViewerDefinition, window_size: { width: 480, height: 360 } } } };
       return { op: "window.open", window: {} };
     }),
     getSnapshot: () => snapshot,
