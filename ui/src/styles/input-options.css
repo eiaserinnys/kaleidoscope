@@ -43,10 +43,10 @@
 .ks-combobox-popup.is-far.is-above { flex-direction: column-reverse; }
 .ks-combobox-popup.is-far .ks-combobox-list { flex: 0 1 auto; }
 .ks-combobox-popup.is-far .ks-combobox-description {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: var(--ks-combobox-list-width);
   min-height: 0;
-  max-height: var(--ks-pane-min-size);
+  max-height: min(var(--ks-pane-min-size), var(--ks-combobox-description-limit));
   padding-inline: calc(var(--ks-space-1) + var(--ks-space-3));
 }
 

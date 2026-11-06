@@ -97,6 +97,11 @@ test("팝업은 세로 창 안에서 줄어든다", async ({ page }) => {
   const host = await app.locator(".ks-data-window").boundingBox(); const box = await popup.boundingBox();
   expect(box!.y).toBeGreaterThanOrEqual(host!.y);
   expect(box!.y + box!.height).toBeLessThanOrEqual(host!.y + host!.height);
+  const description = await page.locator(".ks-combobox-description").evaluate(e => {
+    const css = getComputedStyle(e);
+    return { height: e.getBoundingClientRect().height, line: parseFloat(css.lineHeight) + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom) };
+  });
+  expect(description.height).toBeGreaterThanOrEqual(description.line);
 });
 
 test("칸이 스크롤로 사라지면 목록을 닫는다", async ({ page }) => {

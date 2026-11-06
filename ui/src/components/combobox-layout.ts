@@ -12,6 +12,7 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
     if (!anchor) { setLayout(null); return; }
     const host = anchor.closest<HTMLElement>(".ks-data-window[data-window-id]");
     let openedAbove: boolean | undefined;
+    let openedGeometry = "";
     const measure = () => {
       const rect = anchor.getBoundingClientRect();
       // 스크롤 영역을 벗어난 입력에 포털 목록만 남기지 않는다.
@@ -54,13 +55,19 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
       const bottom = Math.min(useWindow ? bounds.bottom : window.innerHeight, window.innerHeight) - inset;
       const below = Math.max(bottom - rect.bottom - offset, 0);
       const aboveSpace = Math.max(rect.top - offset - top, 0);
+      const geometry = [rect.top, rect.bottom, top, bottom, width].join(":");
+      // 검색 결과만 바뀌면 방향을 지키고, 칸이 움직이면 새 여유로 다시 고른다.
+      if (geometry !== openedGeometry) { openedAbove = undefined; openedGeometry = geometry; }
       const above = openedAbove ?? (below < required && aboveSpace > below);
       openedAbove = above;
+      const available = above ? aboveSpace : below;
+      const descriptionLimit = Math.max(0, Math.min(descriptionHeight, available - Math.min(listHeight, rowHeight() + padding) - line));
       setLayout({ far, above, style: {
         left: position.left,
         top: above ? undefined : Math.max(rect.bottom + offset, top),
         bottom: above ? window.innerHeight - Math.min(rect.top - offset, bottom) : undefined,
-        maxHeight: above ? aboveSpace : below,
+        maxHeight: available,
+        "--ks-combobox-description-limit": descriptionLimit + "px",
         "--ks-combobox-list-width": width + "px",
       } as CSSProperties });
     };
