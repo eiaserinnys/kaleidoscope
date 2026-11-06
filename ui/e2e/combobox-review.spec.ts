@@ -102,6 +102,9 @@ test("팝업은 세로 창 안에서 줄어든다", async ({ page }) => {
     return { height: e.getBoundingClientRect().height, line: parseFloat(css.lineHeight) + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom) };
   });
   expect(description.height).toBeGreaterThanOrEqual(description.line);
+  await f.fill("entry-0"); await f.press("Enter"); await f.click(); await f.press("ArrowDown");
+  const changed = await page.locator(".ks-combobox-description").boundingBox();
+  expect(changed!.height).toBeGreaterThanOrEqual(description.line);
 });
 
 test("칸이 스크롤로 사라지면 목록을 닫는다", async ({ page }) => {

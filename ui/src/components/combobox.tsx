@@ -56,7 +56,6 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   const popupVisible = open && (loading || optionsOnly || filtered.length > 0);
   const position = useAnchoredOverlay(popupVisible ? anchor : null, surface, { offsetToken: "--ks-space-2", alignEndOnOverflow: true });
   const close = useCallback(() => { setOpen(false); setQuery(""); setActive(null); }, []);
-  const layout = useComboboxLayout(open ? anchor : null, surface, options, loading, close);
   const optionKey = useCallback((index: number) => filtered[index].index, [filtered]);
   const [listInset] = useState(() => typeof document === "undefined" ? 0 : Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--ks-space-1")) || 0);
   const { scroll, virtual } = useVirtualRows(filtered.length, DEFAULT_VIRTUAL_ROW_ESTIMATE, undefined, false, optionKey, undefined, undefined, { start: 0, end: listInset * 2 });
@@ -64,6 +63,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   keepRovingRow(virtual, index);
   const rows = virtual.getVirtualItems();
   const activeOption = index < 0 ? undefined : filtered[index];
+  const layout = useComboboxLayout(open ? anchor : null, surface, options, loading, close, activeOption?.description);
   const activeId = activeOption && rows.some((row) => row.index === index) ? `${id}-option-${activeOption.index}` : undefined;
   useLayoutEffect(() => { if (open && index >= 0) virtual.scrollToIndex(index, { align: "auto" }); }, [open, index, virtual]);
   const choose = useCallback((option: InputOption) => { selectAfterChoose.current = optionsOnly; chooseRef.current(option.value); close(); }, [optionsOnly, close]);

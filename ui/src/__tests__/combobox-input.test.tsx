@@ -9,6 +9,25 @@ import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("설명 없는 행에서 설명 있는 행으로 옮기면 높이를 다시 잰다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  const css = document.documentElement.style;
+  for (const [name, value] of Object.entries({ "--ks-space-1": "4px", "--ks-space-2": "8px", "--ks-space-3": "12px", "--ks-pane-min-size": "160px", "--ks-control-height": "32px", "--ks-type-body": "14px", "--ks-line-body": "1.5", "--ks-line-width": "1px" })) css.setProperty(name, value);
+  vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return (this.classList.contains("ks-data-window") ? { left: 40, right: 400, top: 100, bottom: 500, width: 360, height: 400 } : { left: 80, right: 280, top: 250, bottom: 282, width: 200, height: 32 }) as DOMRect;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(79);
+  const options = ["사과", "배"].map((value, index) => ({ value, label: value, index, searchLabel: value, searchValue: value, ...(index ? { description: "배 설명" } : {}) }));
+  render(<div className="ks-data-window" data-window-id="description"><Combobox inputRef={createRef<HTMLInputElement>()} inputProps={{ value: "사과" }} ready visible options={options} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} /></div>);
+  const input = screen.getByRole("combobox");
+  fireEvent.focus(input);
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(Number.parseFloat((document.querySelector(".ks-combobox-popup") as HTMLElement).style.getPropertyValue("--ks-combobox-description-limit"))).toBeGreaterThan(0);
+  cleanup(); css.cssText = "";
+});
+
 it.each(["Enter", "Escape"])("없는 이름의 %s는 값과 목록을 함께 되돌린다", async (key) => {
   setup(true);
   const input = await screen.findByRole("combobox") as HTMLInputElement;

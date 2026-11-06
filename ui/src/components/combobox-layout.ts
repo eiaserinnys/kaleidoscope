@@ -4,9 +4,10 @@ import { computeAnchoredPosition } from "./anchored-overlay";
 
 type Layout = { far: boolean; above: boolean; style: CSSProperties };
 
-export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject<HTMLDivElement | null>, options: InputOption[], loading: boolean, close: () => void): Layout | null {
+export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject<HTMLDivElement | null>, options: InputOption[], loading: boolean, close: () => void, description: string | undefined): Layout | null {
   const [layout, setLayout] = useState<Layout | null>(null);
   const choices = useRef({ options, loading });
+  const measureNow = useRef<(() => void) | null>(null);
   choices.current = { options, loading };
   useLayoutEffect(() => {
     if (!anchor) { setLayout(null); return; }
@@ -71,7 +72,7 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
         "--ks-combobox-list-width": width + "px",
       } as CSSProperties });
     };
-    measure();
+    measureNow.current = measure;
     let frame = 0;
     const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); }); };
     window.addEventListener("resize", schedule);
@@ -81,11 +82,13 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
     if (host) observer.observe(host);
     if (surface.current) observer.observe(surface.current);
     return () => {
+      measureNow.current = null;
       observer.disconnect();
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
       if (frame) cancelAnimationFrame(frame);
     };
   }, [anchor, surface, close]);
+  useLayoutEffect(() => { measureNow.current?.(); }, [anchor, description, options, loading]);
   return layout;
 }
