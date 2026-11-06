@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import type { ShellStore } from "../core/shell-store";
 import { useShellSelector } from "../core/shell-store";
 import { isWindowTop } from "../data/window-state";
-import { bookmarkTarget, clearRescuedFocus, firstContentFocus, firstFocus, focusBookmark, focusContainer, focusRescued, isUnclaimedFocus, rememberWindowFocus, usableFocus, writableControlSelector } from "../components/focus-rescue";
+import { bookmarkTarget, clearRescuedFocus, contentRescueTarget, firstContentFocus, firstFocus, focusBookmark, focusContainer, focusRescued, isContentFocus, isUnclaimedFocus, rememberWindowFocus, usableFocus, writableControlSelector } from "../components/focus-rescue";
 import { preserveWindowActionFocus } from "../share/action-context";
 import { revealStackControl } from "./focus-scroll";
 import { isCommenting } from "../comments/session";
@@ -26,6 +26,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let focusedRemove = false;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
     let bookmark = focusBookmark(null, body);
+    let lastContent: HTMLElement | null = null;
     let inContent = false;
     let pointer = false;
     let focusFrame = 0;
@@ -66,6 +67,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       focusedRemove = target.classList.contains("ks-list-remove");
       inContent = body.contains(target);
       if (!inContent) return;
+      if (isContentFocus(target)) lastContent = target;
       rememberWindowFocus(windowContent, target);
       bookmark = focusBookmark(target, body);
       focusedItem = null;
@@ -135,7 +137,9 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       if (onTop && focused && !focusedDialog && unavailable && !bodyUnavailable()) {
         const lost = active === document.body || active === focused || (active instanceof Element && scope.contains(active) && isUnclaimedFocus(active));
         if (lost && !preserveWindowActionFocus(windowId)) {
-          const target = collectionTarget(changes) ?? bookmarkTarget(bookmark, body);
+          const target = inContent
+            ? collectionTarget(changes) ?? bookmarkTarget(bookmark, body)
+            : contentRescueTarget(lastContent, bookmark, body);
           focused = null;
           move(target);
           if (bookmark.pane?.isConnected && !firstContentFocus(bookmark.pane)) waiting.current = { pane: bookmark.pane, kind: "restore" };

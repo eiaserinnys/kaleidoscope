@@ -9,7 +9,7 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import type { WindowData } from "../data/window-data";
 import { normalizeBlock } from "../render/render-block";
-import { focusRescued, isUnclaimedFocus, restoreWindowFocus } from "../components/focus-rescue";
+import { bookmarkTarget, focusBookmark, focusRescued, isUnclaimedFocus, restoreWindowFocus } from "../components/focus-rescue";
 import { commentSession, forgetCommentSession } from "../comments/session";
 import { grantFor, makeTestSeed, mdEditorDefinition, mdViewerDefinition } from "./fixtures";
 
@@ -177,6 +177,73 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(row));
   });
 
+  async function noticeFixture(markup: string) {
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    const definition: AppDefinition = {
+      id: "notice-fixture", name: "알림 초점", requires: { blocks: 14, modules: {} },
+      permissions: [], state: {}, ui: { type: "text", value: "시험" },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    let data: WindowData | null = null;
+    const { container } = render(<AppWindowContent store={store} windowId="viewer-window" onWindowData={(value) => { data = value; }} />);
+    await screen.findByText("시험");
+    const body = container.querySelector(".ks-data-window-body")!;
+    const fixture = document.createElement("div");
+    fixture.innerHTML = markup;
+    body.append(fixture);
+    await waitFor(() => expect(data).not.toBeNull());
+    return { container, fixture, showNotice: () => act(() => data!.setNotice("동작을 처리하지 못했습니다")) };
+  }
+
+  it("본문 밖 알림 단추를 닫으면 마지막 단추가 아니라 쓰던 글칸으로 돌아간다", async () => {
+    const { showNotice } = await noticeFixture('<textarea aria-label="메모"></textarea><button>올리기</button>');
+    const memo = screen.getByRole("textbox", { name: "메모" });
+    const submit = screen.getByRole("button", { name: "올리기" });
+    memo.focus();
+    submit.focus();
+    showNotice();
+    const close = screen.getByRole("button", { name: "닫기" });
+    close.focus();
+    fireEvent.click(close);
+    await waitFor(() => expect(document.activeElement).toBe(memo));
+  });
+
+  it("본문 밖 알림을 닫으면 글칸이 없을 때 마지막 내용 행으로 돌아간다", async () => {
+    const { showNotice } = await noticeFixture('<div role="listbox"><div role="option" tabindex="0">첫 행</div></div><button>올리기</button>');
+    const row = screen.getByRole("option", { name: "첫 행" });
+    row.focus();
+    screen.getByRole("button", { name: "올리기" }).focus();
+    showNotice();
+    const close = screen.getByRole("button", { name: "닫기" });
+    close.focus();
+    fireEvent.click(close);
+    await waitFor(() => expect(document.activeElement).toBe(row));
+  });
+
+  it("강조 단추만 있는 창은 열 때 강조 단추 대신 창 본문에 초점을 둔다", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const definition: AppDefinition = {
+      id: "focus-emphasis-only", name: "강조뿐", requires: { blocks: 14, modules: {} }, permissions: [], state: {},
+      ui: { type: "button", label: "올리기", variant: "primary", on_click: { set_state: "sent" } },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
+    expect(document.activeElement?.classList.contains("ks-button-emphasis")).toBe(false);
+  });
+
+  it("분할 손잡이는 책갈피 복귀 대상이 아니다", () => {
+    const content = document.createElement("div");
+    content.className = "ks-data-window-body";
+    content.innerHTML = '<div class="ks-split-pane"><div role="separator" tabindex="0"></div><input aria-label="메모" /></div>';
+    document.body.append(content);
+    const handle = content.querySelector<HTMLElement>('[role="separator"]')!;
+    const target = bookmarkTarget(focusBookmark(handle, content), content);
+    expect(target).not.toBe(handle);
+    expect(target.getAttribute("aria-label")).toBe("메모");
+    content.remove();
+  });
+
   it("대화상자 안의 초점 요소가 제거될 때 창의 복구가 개입하지 않는다", async () => {
     const { container, row } = await noticeFocusFixture();
     row.focus();
@@ -331,7 +398,7 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "앞 조작" })));
   });
 
-  it("repeat 항목이 남은 채 when 안의 단추만 바뀌면 화면 전환 규칙을 쓴다", async () => {
+  it("repeat 항목이 남은 채 when 안의 단추만 바뀌면 강조 단추가 아닌 창 본문으로 초점을 옮긴다", async () => {
     const definition: AppDefinition = {
       id: "focus-repeat-when", name: "반복 초점", requires: { blocks: 14, modules: {} }, permissions: [],
       state: { items: [{ id: "a" }, { id: "b" }], visible: true },
@@ -349,10 +416,12 @@ describe("app definition renderer", () => {
     fireEvent.keyDown(first, { key: "Enter" });
     const replacement = definition.state!.items;
     await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { items: replacement, visible: false } }); });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음 화면" })));
+    // 강조 단추는 자동 선택하지 않는다. 남은 조작이 강조 단추뿐이면 창 본문에 임시 초점을 두고 Tab으로 가게 한다.
+    await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "다음 화면" }));
   });
 
-  it("모음이 when으로 사라지고 다른 형제에 단추가 생기면 화면 전환 규칙을 쓴다", async () => {
+  it("모음이 when으로 사라지고 강조 단추만 남으면 창 본문으로 초점을 옮긴다", async () => {
     const definition: AppDefinition = {
       id: "focus-sibling-when", name: "전환 초점", requires: { blocks: 14, modules: {} }, permissions: [],
       state: { items: [{ id: "a" }], choosing: true, next: false },
@@ -373,10 +442,11 @@ describe("app definition renderer", () => {
     first.focus();
     fireEvent.keyDown(first, { key: "Enter" });
     await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { choosing: false, next: true } }); });
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "폴더 선택" })));
+    await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "폴더 선택" }));
   });
 
-  it("같은 부모에서 가지가 바뀌면 새 화면의 강조 단추로 초점을 옮긴다", async () => {
+  it("같은 부모에서 가지가 바뀌면 강조 단추가 아닌 일반 단추로 초점을 옮긴다", async () => {
     const fixture = await focusFixture('<div><div role="list"><button>에이전트 하나</button></div><button>뒤로</button></div>');
     const parent = fixture.firstElementChild!;
     const first = screen.getByRole("button", { name: "에이전트 하나" });
@@ -386,7 +456,7 @@ describe("app definition renderer", () => {
     next.className = "ks-button-emphasis";
     next.textContent = "폴더 선택";
     parent.replaceChild(next, first.parentElement!);
-    await waitFor(() => expect(document.activeElement).toBe(next));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "뒤로" })));
   });
 
   it("모음에 새 조작이 함께 들어오면 문서 순서의 첫 조작으로 옮긴다", async () => {
