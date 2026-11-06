@@ -22,8 +22,8 @@ import { renderBlock } from "../render/render-block";
 import { PreviewContext } from "./preview-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
-const BUTTON_PROGRESS_DELAY_MS = 250;
-const BUTTON_PROGRESS_MIN_MS = 400;
+export const BUTTON_PROGRESS_DELAY_MS = 250;
+export const BUTTON_PROGRESS_MIN_MS = 400;
 const fieldPosition = (position: "inline" | "top" | "hidden" | undefined) => position && position !== "inline" ? ` is-label-${position}` : "";
 function bindingText(value: ReturnType<typeof useBinding>): string {
   return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";

@@ -4,7 +4,7 @@ import { Button } from "./primitives";
 import { LoaderCircle } from "./icons";
 import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
-import { bookmarkTarget, focusBookmark, focusRescued, lastFocusInWindow, writableControlSelector, type FocusBookmark } from "./focus-rescue";
+import { bookmarkTarget, dialogActionFocus, dialogFirstFocus, focusBookmark, focusRescued, lastFocusInWindow, type FocusBookmark } from "./focus-rescue";
 
 export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, windowId, busy = false, rootProps, ownerAnchor, noticeSlotRef }: { ownerAnchor?: Element | null; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; windowId?: string; busy?: boolean }) {
   const titleId = useId();
@@ -42,10 +42,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     background.forEach((element) => { element.setAttribute("inert", ""); });
     const owner = windowId ?? ownerOf(host);
     if (!windowModal && (!owner || !preserveWindowActionFocus(owner))) {
-      const input = [...(root.current?.querySelectorAll<HTMLElement>(`.ks-dialog-body :is(${writableControlSelector})`) ?? [])]
-        .find((element) => !element.closest("[hidden], [inert]")
-          && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
-      const target = input ?? root.current?.querySelector<HTMLElement>(showCancel ? ".ks-dialog-actions > button" : ".ks-dialog-confirm button");
+      const target = root.current ? dialogFirstFocus(root.current) : null;
       if (target) focusRescued(target);
     }
     if (!windowModal) document.addEventListener("keydown", onKey);
@@ -71,9 +68,9 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const finished = wasBusy.current && !busy;
     wasBusy.current = busy;
     if (finished && !windowModal && !root.current?.contains(document.activeElement)) {
-      root.current?.querySelector<HTMLElement>(showCancel ? ".ks-dialog-actions > button" : ".ks-dialog-confirm button")?.focus();
+      if (root.current) dialogActionFocus(root.current)?.focus();
     }
-  }, [busy, showCancel, windowModal]);
+  }, [busy, windowModal]);
   const heading = <div className="ks-dialog-title" id={titleId} title={windowModal ? title : undefined}>{title}</div>;
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
   return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay} onMouseDown={(event) => { if (!busy && !windowModal && event.target === event.currentTarget) { event.preventDefault(); onCancel(); } }}>

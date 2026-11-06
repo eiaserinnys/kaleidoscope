@@ -182,6 +182,7 @@ export class WindowData {
   private noticeOwner: object | null = null;
   private noticeId: string | null = null;
   private noticeRole: "alert" | "status" = "alert";
+  private actionFailure: { pointer: string; problem: CoreError } | null = null;
   private statusSequence = 0;
   private unsubscribe?: () => void;
   private unsubscribeLink?: () => void;
@@ -347,6 +348,13 @@ export class WindowData {
     if (this.noticeProblem !== problem || (owner && this.noticeOwner !== owner)) return;
     this.noticeProblem = null; this.noticeOwner = null; this.notice = null; this.noticeId = null;
     this.noticeListeners.forEach((listener) => listener());
+  };
+  /** 같은 동작을 다시 실행할 때 지난 실패 알림을 거둔다. 그 사이에 다른 알림이 올라왔으면 그대로 둔다. */
+  clearActionFailure = (pointer: string) => {
+    const failure = this.actionFailure;
+    if (!failure || failure.pointer !== pointer) return;
+    this.actionFailure = null;
+    this.clearNoticeIf(failure.problem);
   };
   private statusMessage: string | null = null;
   clearStatus = (sequence: number) => {
@@ -637,6 +645,8 @@ export class WindowData {
   private actInternal = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
     const label = this.actionLabel(pointer, scope);
     try {
+      // 입력 동작은 글자마다 알림을 거뒀다 다시 띄우지 않는다. 그 밖의 동작은 시작할 때 지난 실패를 거둔다.
+      if (!options?.input) this.clearActionFailure(pointer);
       if (!options?.input) {
         const pending: Promise<void>[] = [];
         for (const settle of this.inputSettlers) {
@@ -700,10 +710,13 @@ export class WindowData {
       }
       const reply = await this.store.call({ op: "data.act", window_id: this.windowId, pointer, event, ...(item === undefined ? {} : { item }), ...(modifiers === undefined ? {} : { modifiers }) });
       if (options?.input) this.inputSequence = Math.max(this.inputSequence, reply.sequence);
+      if (options?.input) this.clearActionFailure(pointer);
       return true;
     } catch (error) {
       const problem = toCoreError(error);
-      this.setNotice(label ? { ...problem, message: `${label}: ${problem.message}` } : problem);
+      const shown = label ? { ...problem, message: `${label}: ${problem.message}` } : problem;
+      this.actionFailure = { pointer, problem: shown };
+      this.setNotice(shown);
       return false;
     }
   };

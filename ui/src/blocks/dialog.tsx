@@ -1,10 +1,11 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
 import { Dialog } from "../components/dialog";
 import { BindingFailureNotice } from "../components/data-state";
+import { BUTTON_PROGRESS_DELAY_MS, BUTTON_PROGRESS_MIN_MS } from "./data-input";
 import { renderBlock } from "../render/render-block";
 
 export type DialogBlockData = Extract<Block, { type: "dialog" }>;
@@ -40,6 +41,12 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   const [host, setHost] = useState<HTMLElement | null>(null);
   const childPointer = `${pointer}/child`;
   const hasConfirm = block.on_confirm !== undefined;
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const progressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressShownAt = useRef<number | null>(null);
+  const runId = useRef(0);
+  const mounted = useRef(true);
 
   useDormant(childPointer, !isOpen);
 
@@ -47,8 +54,49 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
     setHost(root.current?.closest<HTMLElement>(".ks-data-window") ?? null);
   }, []);
 
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; if (progressTimer.current) clearTimeout(progressTimer.current); };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (busy) progressShownAt.current = performance.now();
+  }, [busy]);
+
+  // 대화상자가 닫히면 진행 표시를 거둔다. 다음에 열 때 busy가 남아 있으면 안 된다.
+  useEffect(() => {
+    if (isOpen) return;
+    runId.current += 1;
+    if (progressTimer.current) { clearTimeout(progressTimer.current); progressTimer.current = null; }
+    progressShownAt.current = null;
+    busyRef.current = false;
+    setBusy(false);
+  }, [isOpen]);
+
   const close = useCallback(() => { void data.act(`${pointer}/on_close`, null); }, [data, pointer]);
-  const confirm = useCallback(() => { void data.act(`${pointer}/on_confirm`, null); }, [data, pointer]);
+  const confirm = useCallback(() => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    const id = ++runId.current;
+    progressShownAt.current = null;
+    progressTimer.current = setTimeout(() => { progressTimer.current = null; setBusy(true); }, BUTTON_PROGRESS_DELAY_MS);
+    void (async () => {
+      try {
+        await data.act(`${pointer}/on_confirm`, null);
+      } finally {
+        if (!mounted.current || runId.current !== id) return;
+        if (progressTimer.current) { clearTimeout(progressTimer.current); progressTimer.current = null; }
+        const finish = () => {
+          progressTimer.current = null;
+          busyRef.current = false;
+          setBusy(false);
+        };
+        const remaining = progressShownAt.current === null ? 0 : BUTTON_PROGRESS_MIN_MS - (performance.now() - progressShownAt.current);
+        if (remaining > 0) progressTimer.current = setTimeout(finish, remaining);
+        else finish();
+      }
+    })();
+  }, [data, pointer]);
 
   return <div ref={root} style={{ display: "contents" }}>
     {isOpen && host ? <Dialog
@@ -65,6 +113,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
       cancelLabel={cancelText}
       onCancel={close}
       onConfirm={hasConfirm ? confirm : close}
+      busy={busy}
     /> : null}
   </div>;
 }
