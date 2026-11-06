@@ -1,14 +1,14 @@
 /* 세로 양식은 데이터 원천이나 이름표 길이와 무관하게 같은 열을 쓴다.
    top/hidden과 가로 쌓기의 필드는 각자의 배치를 유지한다. */
 .ks-data-stack.is-column { --ks-field-label-width: calc(var(--ks-space-6) * 4); }
-.ks-data-stack.is-column > .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden) {
+:where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-field:not(.is-label-top, .is-label-hidden) {
   display: grid; width: 100%; min-width: 0;
   grid-template-columns: var(--ks-field-label-width) minmax(0, 1fr);
 }
-.ks-data-stack.is-column > .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden) > :is(.ks-data-input, .ks-select-button, .ks-data-segmented, .ks-color-control) { grid-column: 2 / -1; width: 100%; min-width: 0; }
-.ks-data-stack.is-column > .ks-data-stack-item > .ks-slider-field:not(.is-label-top, .is-label-hidden, .is-value-hidden) { grid-template-columns: var(--ks-field-label-width) minmax(0, 1fr) minmax(var(--ks-space-6), auto); }
-.ks-data-stack.is-column > .ks-data-stack-item > .ks-slider-field:not(.is-label-top, .is-label-hidden) > .ks-slider { min-width: 0; width: 100%; margin: 0; }
-.ks-data-stack.is-column:has(> .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden) > .ks-field-label) > .ks-data-stack-item > .ks-data-toggle { margin-inline-start: calc(var(--ks-field-label-width) + var(--ks-space-2)); }
+:where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-field:not(.is-label-top, .is-label-hidden) > :is(.ks-data-input, .ks-select-button, .ks-data-segmented, .ks-color-control) { grid-column: 2 / -1; width: 100%; min-width: 0; }
+:where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-slider-field:not(.is-label-top, .is-label-hidden, .is-value-hidden) { grid-template-columns: var(--ks-field-label-width) minmax(0, 1fr) minmax(var(--ks-space-6), auto); }
+:where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-slider-field:not(.is-label-top, .is-label-hidden) > .ks-slider { min-width: 0; width: 100%; margin: 0; }
+:where(.ks-data-stack.is-column:has(> .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden) > .ks-field-label)) > .ks-data-stack-item > .ks-data-toggle { margin-inline-start: calc(var(--ks-field-label-width) + var(--ks-space-2)); }
 
 /* 구역·탭·대화상자는 이미 좌우 여백을 소유한다. 그 밖의 세로
    쌓기에서는 내용 칸이 여백을 맡아 입력과 글의 폭을 함께 줄인다. */

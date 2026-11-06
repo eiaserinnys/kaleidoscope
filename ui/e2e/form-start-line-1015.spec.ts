@@ -68,3 +68,11 @@ test('최소 높이 합이 넘치면 쌓인 칸 바깥이 스크롤한다',async
  const m=await split.evaluate(el=>({scroll:el.scrollHeight,client:el.clientHeight,panes:[...el.querySelectorAll(':scope > .ks-split-pane')].map(p=>p.getBoundingClientRect().height)}));
  expect(m.scroll).toBeGreaterThan(m.client);expect(m.panes.every(h=>h>=320)).toBe(true);
 });
+test('좁은 탭은 기존 위아래 양식과 슬라이더 열을 유지한다',async({page})=>{
+ const app=await open(page,{type:'tabs',tabs:[{label:'옵션',child:form()}]},300);
+ const slider=app.locator('.ks-slider-field');await expect(slider).toBeVisible();
+ expect(await app.locator('.ks-data-tab-panel').evaluate(el=>el.clientWidth-parseFloat(getComputedStyle(el).paddingLeft)-parseFloat(getComputedStyle(el).paddingRight))).toBeLessThanOrEqual(319);
+ const m=await slider.evaluate(el=>{const label=el.querySelector('.ks-field-label')!.getBoundingClientRect();const control=el.querySelector('.ks-slider')!.getBoundingClientRect();return {label:label.toJSON(),control:control.toJSON(),width:el.getBoundingClientRect().width};});
+ expect(m.control.top).toBeGreaterThanOrEqual(m.label.bottom);expect(m.control.width).toBeGreaterThan(m.width/2);
+ const toggle=app.getByRole('switch');expect(await toggle.evaluate(el=>parseFloat(getComputedStyle(el).marginInlineStart))).toBe(0);
+});

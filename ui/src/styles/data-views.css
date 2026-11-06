@@ -199,6 +199,7 @@
 .ks-property-swatches { display: inline-flex; flex-wrap: wrap; gap: var(--ks-space-1); }
 .ks-property-swatch { display: block; flex: 0 0 var(--ks-space-4); width: var(--ks-space-4); height: var(--ks-space-4); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); }
 @container ks-fields (max-width: 319px) {
+  .ks-data-tab-panel .ks-data-toggle { margin-inline-start: 0; }
   .ks-properties:not(.is-rows) { display: block; }
   .ks-properties:not(.is-rows) dt:not(:first-child) { margin-top: var(--ks-space-3); }
   .ks-properties:not(.is-rows) dd { margin-top: var(--ks-space-1); }
