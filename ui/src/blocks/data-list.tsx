@@ -17,6 +17,7 @@ import { useItemMenu } from "./item-menu";
 import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, listGroups, isObject, keepRovingRow, useRoving, useVirtualRows, type ListGroup } from "./data-view-common";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
+import { ICON_NAMES } from "../contract/limits";
 import { useItemScope } from "../data/item-scope";
 import { X } from "../components/icons";
 import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
@@ -63,10 +64,11 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
     update();
     return () => observer.disconnect();
   }, [item, grid, icons]);
-  const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : <LayoutGrid size="tile" />} selected={active}
+  const icon = typeof item.icon === "string" && (ICON_NAMES as readonly string[]).includes(item.icon) ? item.icon : undefined;
+  const row = icons ? <IconTile name={item.title} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} size={ICON_SIZE.tile} icon /> : icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} selected={active}
     role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
     onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event.currentTarget)} onContextMenu={(event) => handlers.current.menu(event, item)}>
-    {grid ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
+    {grid ? isMedia(item.image) || !icon ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} size={160} /> : <span className="ks-media-thumbnail ks-list-grid-icon"><DataIcon name={icon} size="empty" /></span> : icon ? <DataIcon name={icon} size="inline" /> : isMedia(item.image) ? <MediaThumbnail media={item.image} size={32} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
     <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
@@ -102,15 +104,26 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   useEffect(() => {
     if (!grid || !scroll.current) return;
     const element = scroll.current;
+    const probe = block.item_width ? element.ownerDocument.createElement("span") : null;
+    if (probe) {
+      probe.setAttribute("aria-hidden", "true");
+      probe.style.position = "absolute";
+      probe.style.visibility = "hidden";
+      probe.style.pointerEvents = "none";
+      probe.style.width = `var(--ks-repeat-grid-item-width-${block.item_width})`;
+      probe.style.height = "0";
+      element.append(probe);
+    }
     const resize = () => {
       const style = getComputedStyle(element);
-      const pane = parseFloat(style.getPropertyValue("--ks-pane-min-size")) || 160;
+      const pane = probe ? probe.getBoundingClientRect().width : parseFloat(style.getPropertyValue("--ks-pane-min-size")) || 160;
+      if (!pane) return;
       const gap = parseFloat(style.getPropertyValue("--ks-space-3")) || 12;
       const width = element.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
       setColumns(Math.max(1, Math.floor((width + gap) / (pane + gap))));
     };
-    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
-  }, [grid, scroll]);
+    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe?.remove(); };
+  }, [grid, block.item_width]);
   const rows = useMemo(() => {
     const result: Row[] = []; let start = 0;
     for (const group of grouped) {
@@ -151,7 +164,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   if (!items.length && !more && !hasStatus) return <NoItems rootProps={blockRoot} />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const currentHeading = block.grouped ? rows.slice(0, first + 1).reverse().find((row) => row.kind === "heading") : undefined;
-  return <><div {...blockRoot} className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-label="목록">
+  return <><div {...blockRoot} className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} style={block.item_width ? { "--ks-list-grid-width": `var(--ks-repeat-grid-item-width-${block.item_width})` } as React.CSSProperties : undefined} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-label="목록">
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
     {!items.length && !hasStatus ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
       const entry = rows[row.index];

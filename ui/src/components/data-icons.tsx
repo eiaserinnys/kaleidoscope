@@ -2,8 +2,24 @@ import { ArrowDown as ArrowDownIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as A
 import { ICON_SIZE, type IconSize } from "./icons";
 import { Power, Volume2, VolumeX } from "lucide-react";
 import { Film, ImagePlay, Sticker } from "lucide-react";
+import { Scaling, RotateCwSquare, Crop, Grid2X2, Shrink, Package, ImageDown, FileOutput, ArrowRightLeft, Pipette, PaintBucket, Blend, Stamp, ScanText, QrCode } from "lucide-react";
 
 const icons: Record<string, LucideIcon> = {
+  "scaling": Scaling,
+  "rotate-cw-square": RotateCwSquare,
+  "crop": Crop,
+  "grid-2x2": Grid2X2,
+  "shrink": Shrink,
+  "package": Package,
+  "image-down": ImageDown,
+  "file-output": FileOutput,
+  "arrow-right-left": ArrowRightLeft,
+  "pipette": Pipette,
+  "paint-bucket": PaintBucket,
+  "blend": Blend,
+  "stamp": Stamp,
+  "scan-text": ScanText,
+  "qr-code": QrCode,
   "volume-2": Volume2,
   "volume-x": VolumeX,
   "arrow-down": ArrowDownIcon,

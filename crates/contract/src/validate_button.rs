@@ -2,6 +2,7 @@ use crate::{data, AppDefinition, Block, CoreError, BUTTON_VARIANT_ICON_BLOCK_SET
 use data::Binding;
 
 const NEW_ICONS: &[&str] = &["film", "sticker", "image-play"];
+const LIST_ICONS: &[&str] = &["scaling", "rotate-cw-square", "crop", "grid-2x2", "shrink", "package", "image-down", "file-output", "arrow-right-left", "pipette", "paint-bucket", "blend", "stamp", "scan-text", "qr-code"];
 
 pub(crate) fn validate_button_extensions(definition: &AppDefinition) -> Result<(), CoreError> {
     let mut row_error = None;
@@ -20,24 +21,32 @@ pub(crate) fn validate_button_extensions(definition: &AppDefinition) -> Result<(
         }
     });
     if let Some(error) = row_error { return Err(error); }
-    if definition.requires.blocks >= BUTTON_VARIANT_ICON_BLOCK_SET_VERSION {
-        return Ok(());
-    }
     let mut error = None;
     data::walk_definition_blocks(definition, &mut |pointer, block| {
         if error.is_some() { return; }
         match block {
             Block::Button { variant, icon, .. } => {
-                if !matches!(variant, Binding::Literal(_)) {
+                if definition.requires.blocks < BUTTON_VARIANT_ICON_BLOCK_SET_VERSION && !matches!(variant, Binding::Literal(_)) {
                     error = Some(crate::errors::APP_BUTTON_VARIANT_VERSION_LOW(pointer, BUTTON_VARIANT_ICON_BLOCK_SET_VERSION));
-                } else if matches!(icon, Some(Binding::Literal(value)) if value.as_str().is_some_and(|name| NEW_ICONS.contains(&name))) {
-                    error = Some(crate::errors::APP_BUTTON_ICON_VERSION_LOW(pointer, BUTTON_VARIANT_ICON_BLOCK_SET_VERSION));
+                } else if let Some(Binding::Literal(value)) = icon {
+                    if let Some(name) = value.as_str() {
+                        let version = if LIST_ICONS.contains(&name) { crate::LIST_ICON_WIDTH_BLOCK_SET_VERSION }
+                            else if NEW_ICONS.contains(&name) { BUTTON_VARIANT_ICON_BLOCK_SET_VERSION } else { 0 };
+                        if definition.requires.blocks < version {
+                            error = Some(crate::errors::APP_BUTTON_ICON_VERSION_LOW(pointer, version));
+                        }
+                    }
                 }
             }
             Block::ButtonGrid { buttons: Binding::Literal(value), .. } => {
-                let has_new_icon = |item: &serde_json::Value| item.get("icon").and_then(serde_json::Value::as_str).is_some_and(|name| NEW_ICONS.contains(&name));
-                if value.as_array().map_or_else(|| has_new_icon(value), |items| items.iter().any(has_new_icon)) {
-                    error = Some(crate::errors::APP_BUTTON_GRID_ICON_VERSION_LOW(pointer, BUTTON_VARIANT_ICON_BLOCK_SET_VERSION));
+                let version = |item: &serde_json::Value| match item.get("icon").and_then(serde_json::Value::as_str) {
+                    Some(name) if LIST_ICONS.contains(&name) => crate::LIST_ICON_WIDTH_BLOCK_SET_VERSION,
+                    Some(name) if NEW_ICONS.contains(&name) => BUTTON_VARIANT_ICON_BLOCK_SET_VERSION,
+                    _ => 0,
+                };
+                let required = value.as_array().map_or_else(|| version(value), |items| items.iter().map(version).max().unwrap_or(0));
+                if definition.requires.blocks < required {
+                    error = Some(crate::errors::APP_BUTTON_GRID_ICON_VERSION_LOW(pointer, required));
                 }
             }
             _ => {}

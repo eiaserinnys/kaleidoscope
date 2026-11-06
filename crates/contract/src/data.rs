@@ -78,6 +78,9 @@ pub const LOGIN_TIMEOUT_SECS: u64 = 300;
 
 /// 버튼 아이콘으로 쓸 수 있는 이름. Lucide(<https://lucide.dev>) 아이콘 이름이고 쉘이 이 목록만 싣는다.
 pub const ICON_NAMES: &[&str] = &[
+    "scaling", "rotate-cw-square", "crop", "grid-2x2", "shrink", "package",
+    "image-down", "file-output", "arrow-right-left", "pipette", "paint-bucket",
+    "blend", "stamp", "scan-text", "qr-code",
     "arrow-down",
     "arrow-left",
     "arrow-right",
@@ -1078,6 +1081,10 @@ pub struct ListItem {
     /// 고르기와 비교에 쓰는 열쇠. 목록 안에서 겹치지 않는다. 고르면 `$event`가 이 값이다.
     pub key: String,
     pub title: String,
+    /// 쉘이 제공하는 아이콘 이름. 목록 줄에서는 그림보다 먼저 표시한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub icon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub subtitle: Option<String>,

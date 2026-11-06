@@ -230,6 +230,7 @@ pub mod size;
 pub mod validate;
 mod validate_input;
 mod validate_button;
+mod validate_list;
 mod validate_file_input;
 pub mod window_control;
 pub mod worker;
@@ -309,11 +310,14 @@ pub const CONTRACT_VERSION: u32 = 40;
 /// - 43판: 목록 묶음 상태와 동작.
 /// - 44판: 목록 초점 이동 선택과 파일 동작 단축키.
 /// - 45판: 창의 파일 드롭.
-pub const BLOCK_SET_VERSION: u32 = FILE_DROP_BLOCK_SET_VERSION;
+/// - 46판: 목록 항목 아이콘과 격자 칸 최소 폭.
+pub const BLOCK_SET_VERSION: u32 = LIST_ICON_WIDTH_BLOCK_SET_VERSION;
+/// 목록 항목 아이콘과 격자 칸 최소 폭.
+pub const LIST_ICON_WIDTH_BLOCK_SET_VERSION: u32 = 46;
 /// 목록 초점 이동 선택과 파일 동작 단축키의 첫 지원 판.
 pub const LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION: u32 = 44;
 /// 기본 폴더 선언을 처음 지원하는 블록 세트 판. 화면 연결은 다음 단계에서 지원한다.
-pub const DEFAULT_FOLDER_BLOCK_SET_VERSION: u32 = 46;
+pub const DEFAULT_FOLDER_BLOCK_SET_VERSION: u32 = 47;
 /// 목록 묶음의 상태와 동작.
 pub const LIST_GROUP_STATUS_BLOCK_SET_VERSION: u32 = 43;
 /// 창 파일 드롭 선언과 권한 파일 열기의 첫 지원 판.
@@ -1967,6 +1971,10 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<ListLayout>")]
         layout: ListLayout,
+        /// 격자 칸의 최소 폭. 생략하면 medium이다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        item_width: Option<RepeatGridItemWidth>,
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         grouped: bool,
@@ -2740,6 +2748,8 @@ enum RawBlock {
         items: Binding,
         #[serde(default)]
         layout: ListLayout,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        item_width: Option<RepeatGridItemWidth>,
         #[serde(default)]
         grouped: bool,
         #[serde(default, skip_serializing_if = "is_false")]
@@ -3400,6 +3410,7 @@ impl From<RawBlock> for Block {
             RawBlock::List {
                 items,
                 layout,
+                item_width,
                 grouped,
                 select_on_focus,
                 selected,
@@ -3411,6 +3422,7 @@ impl From<RawBlock> for Block {
             } => Block::List {
                 items,
                 layout,
+                item_width,
                 grouped,
                 select_on_focus,
                 selected,

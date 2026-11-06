@@ -449,6 +449,34 @@ error_catalog! { ENTRIES;
         message: "{pointer}: repeat.grid.item_width는 grid.columns가 auto일 때만 쓸 수 있습니다. 고정 열 수를 유지하려면 item_width를 지우세요.",
         fix: "{pointer}/grid/item_width를 지우거나 {pointer}/grid/columns를 auto로 바꾸세요"
     }
+    APP_LIST_ICON_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "목록 아이콘 판 검사",
+        cause: "목록 아이콘을 지원하지 않는 블록 판",
+        message: "{pointer}: 목록 항목의 icon은 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
+    APP_LIST_ICON_NAME_INVALID(pointer, name) {
+        class: InvalidAppDefinition,
+        place: "목록 아이콘 이름 검사",
+        cause: "목록 아이콘 이름이 쉘에 없다",
+        message: "{pointer}: 목록 아이콘 {name}은 쉘에 없습니다. 지원하는 아이콘 이름으로 고치세요.",
+        fix: "지원하는 아이콘 이름으로 고치세요"
+    }
+    APP_LIST_ITEM_WIDTH_LAYOUT_INVALID(pointer) {
+        class: InvalidAppDefinition,
+        place: "목록 칸 폭 배치 검사",
+        cause: "목록 칸 폭을 격자가 아닌 배치에 썼다",
+        message: "{pointer}: list.item_width는 grid 배치에서만 쓸 수 있습니다. layout을 grid로 바꾸거나 item_width를 지우세요.",
+        fix: "layout을 grid로 바꾸거나 item_width를 지우세요"
+    }
+    APP_LIST_ITEM_WIDTH_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "목록 칸 폭 판 검사",
+        cause: "목록 칸 폭을 지원하지 않는 블록 판",
+        message: "{pointer}: list.item_width는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
     APP_SPLIT_COLUMN_BELOW_DIRECTION_INVALID(pointer) {
         class: InvalidAppDefinition,
         place: "split 반응형 방향 검사",
