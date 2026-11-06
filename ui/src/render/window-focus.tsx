@@ -16,6 +16,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     const content = host.current;
     if (!content) return;
     const body = content.querySelector<HTMLElement>(".ks-data-window-body") ?? content;
+    const bodyUnavailable = () => Boolean(body.closest("[hidden], [inert]"));
     const scope = content.closest<HTMLElement>(".ks-window-frame") ?? content;
     const windowContent = content.closest<HTMLElement>(".ks-window-content") ?? content;
     const commenting = () => isCommenting(windowId) || Boolean(content.closest(".ks-window[data-commenting]"));
@@ -118,7 +119,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     };
     const start = () => {
       const active = document.activeElement;
-      if (!onTop || commenting() || !document.hasFocus() || preserveWindowActionFocus(windowId) || (active instanceof Element && scope.contains(active))) return;
+      if (!onTop || commenting() || bodyUnavailable() || !document.hasFocus() || preserveWindowActionFocus(windowId) || (active instanceof Element && scope.contains(active))) return;
       if (active instanceof HTMLElement && ((active.matches(writableControlSelector) && usableFocus(active))
         || (active.matches("iframe") && usableFocus(active)) || active.closest("[data-ks-overlay]"))) return;
       const target = usableFocus(focused) && !focused.matches('.ks-split-handle, [role="separator"]') && body.contains(focused) ? focused : firstFocus(body) ?? focusContainer(body);
@@ -131,7 +132,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       const active = document.activeElement;
       const unavailable = focused && (!focused.isConnected || !scope.contains(focused)
         || focused.matches(":disabled") || focused.closest("[hidden], [inert]"));
-      if (onTop && focused && !focusedDialog && unavailable) {
+      if (onTop && focused && !focusedDialog && unavailable && !bodyUnavailable()) {
         const lost = active === document.body || active === focused || (active instanceof Element && scope.contains(active) && isUnclaimedFocus(active));
         if (lost && !preserveWindowActionFocus(windowId)) {
           const target = collectionTarget(changes) ?? bookmarkTarget(bookmark, body);
@@ -140,7 +141,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
           if (bookmark.pane?.isConnected && !firstContentFocus(bookmark.pane)) waiting.current = { pane: bookmark.pane, kind: "restore" };
         }
       }
-      if (waiting.current && onTop && isUnclaimedFocus(document.activeElement)) {
+      if (waiting.current && onTop && !bodyUnavailable() && isUnclaimedFocus(document.activeElement)) {
         const target = firstContentFocus(waiting.current.pane);
         if (target) { stopWaiting(); move(target); }
         else if (waiting.current.kind === "entry" && document.activeElement === waiting.current.pane) {
