@@ -10,6 +10,7 @@ import { isWindowVisible } from "../data/window-state";
 import { clientSource, sandboxErrors } from "../blocks/sandbox-frame";
 import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
+import { ClientFileRegistry } from "./client-file-registry";
 import { ClientHostServices } from "./client-host-services";
 import { processRequest } from "./client-process";
 import { ClientRealtime } from "./client-realtime";
@@ -111,8 +112,8 @@ export class ClientRuntime {
   private previousGrants = "";
   private surfaces = new Map<string, { message: Record<string, unknown>; sent: boolean; sentVisible?: boolean }>();
   private files = new BrowserFiles();
+  private fileRegistry: ClientFileRegistry;
   private hostServices: ClientHostServices;
-  private blobFiles = new Set<string>();
   private stopping?: Promise<void>;
   private shareText = "";
   private shareImage = "";
@@ -125,8 +126,11 @@ export class ClientRuntime {
   private realtime?: ClientRealtime;
 
   constructor(private store: ShellStore, private data: WindowData, private definition: AppDefinition, private client: Client) {
-    this.hostServices = new ClientHostServices(client, store, data.windowId, this.files, () => this.isHostVisible());
+    this.fileRegistry = new ClientFileRegistry(store, data.windowId, this.files);
+    this.hostServices = new ClientHostServices(client, this.fileRegistry, () => this.isHostVisible());
   }
+
+  registerBrowserFile(file: File) { return this.fileRegistry.registerBrowserFile(file); }
 
   async start() {
     try {
@@ -345,9 +349,11 @@ export class ClientRuntime {
   async pick(spec: PickFilesSpec, scope?: ItemScope): Promise<boolean> {
     try {
       const result = this.store.nativeFiles
-        ? await this.store.call({ op: "files.pick", window_id: this.data.windowId, accept: spec.accept, multiple: spec.multiple ?? false })
-        : await this.files.pick(spec.accept, spec.multiple ?? false);
-      for (const file of result.files) this.hostServices.registerFile(file);
+        ? await this.store.call({ op: "files.pick", window_id: this.data.windowId, accept: spec.accept, multiple: spec.multiple ?? false }).then((picked) => {
+          for (const file of picked.files) this.fileRegistry.register(file, "core");
+          return picked;
+        })
+        : await this.files.pick(spec.accept, spec.multiple ?? false).then((picked) => ({ ...picked, files: picked.files.map((file) => this.registerBrowserFile(file)) }));
       return this.action(spec.client, { cancelled: result.cancelled, files: result.files } as unknown as JsonValue, scope?.item, undefined, scope);
     } catch (error) { this.data.setNotice(toCoreError(error)); return false; }
   }
@@ -517,7 +523,7 @@ export class ClientRuntime {
           const result = await this.files.savePrompt(message.suggested_name, message.mime);
           fileId = result.cancelled ? null : result.sink ?? null;
         }
-        if (fileId) this.hostServices.registerFile({ id: fileId, name: message.suggested_name, mime: message.mime });
+        if (fileId) this.fileRegistry.register({ id: fileId, name: message.suggested_name, mime: message.mime }, this.store.nativeFiles ? "core" : "browser");
         this.reply(message.requestId, fileId);
       };
       void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
@@ -586,11 +592,11 @@ export class ClientRuntime {
     } else if (message.type === "ks-client-blob-put") {
       const task = async () => {
         if ((typeof message.fileId === "string") === (message.bytes instanceof ArrayBuffer)) throw shellErrors.SHELL_CLIENT_BLOB_INPUT_INVALID();
-        if (typeof message.fileId === "string" && this.store.nativeFiles) {
+        if (typeof message.fileId === "string" && this.fileRegistry.usesCore(message.fileId)) {
           await this.store.call({ op: "client.blob_put", window_id: this.data.windowId, key: message.key, file_id: message.fileId });
         } else {
           if (!this.store.bytes) throw shellErrors.SHELL_CLIENT_BLOB_TRANSPORT_UNAVAILABLE();
-          const bytes = typeof message.fileId === "string" ? await (this.blobFiles.has(message.fileId) ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.fileId }) : this.files.read(message.fileId)) : message.bytes;
+          const bytes = typeof message.fileId === "string" ? await this.fileRegistry.read(message.fileId) : message.bytes;
           if (!(bytes instanceof ArrayBuffer)) throw shellErrors.SHELL_CLIENT_BLOB_BYTES_REQUIRED();
           await this.store.bytes({ op: "client.blob_put", window_id: this.data.windowId, handle: message.key }, bytes);
         }
@@ -598,13 +604,13 @@ export class ClientRuntime {
       };
       void task().catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-open") {
-      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) { this.blobFiles.add(file.id); this.hostServices.registerFile(file); } this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+      void this.store.call({ op: "client.blob_open", window_id: this.data.windowId, key: message.key }).then(({ file }) => { if (file) this.fileRegistry.register(file, "core"); this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-remove") {
       void this.store.call({ op: "client.blob_remove", window_id: this.data.windowId, key: message.key }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-list") {
       void this.store.call({ op: "client.blob_list", window_id: this.data.windowId, prefix: message.prefix }).then(({ keys }) => this.reply(message.requestId, keys)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-file-read") {
-      const result = (this.store.nativeFiles || this.blobFiles.has(message.id)) && this.store.bytes ? this.store.bytes({ op: "files.read_bytes", window_id: this.data.windowId, handle: message.id }) : this.files.read(message.id);
+      const result = this.fileRegistry.read(message.id);
       void result.then((bytes) => this.reply(message.requestId, bytes, undefined, [bytes])).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-file-write") {
       const result = this.store.nativeFiles && this.store.bytes ? this.store.bytes({ op: "export.write", window_id: this.data.windowId, handle: message.sink, offset: message.offset }, message.bytes) : this.files.write(message.sink, message.offset, message.bytes);
@@ -619,7 +625,7 @@ export class ClientRuntime {
       const result = this.store.nativeFiles
         ? this.store.call({ op: message.type === "ks-client-file-close" ? "export.close" : "export.abort", window_id: this.data.windowId, sink_id: message.sink })
         : message.type === "ks-client-file-close" ? this.files.close(message.sink) : this.files.abort(message.sink);
-      void result.then(() => { if (message.type === "ks-client-file-abort") this.hostServices.removeFile(message.sink); this.reply(message.requestId, null); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+      void result.then(() => { if (message.type === "ks-client-file-abort") this.fileRegistry.remove(message.sink); this.reply(message.requestId, null); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     }
   };
 
@@ -684,7 +690,8 @@ export class ClientRuntime {
     this.hostServices.dispose();
     await this.realtime?.stop().catch((error) => this.data.setNotice(toCoreError(error)));
     await this.files.dispose().catch((error) => this.data.setNotice(toCoreError(error)));
-    if (this.store.nativeFiles || this.blobFiles.size) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error)));
+    if (this.store.nativeFiles || this.fileRegistry.hasCoreFiles()) await this.store.call({ op: "client.release", window_id: this.data.windowId }).catch((error) => this.data.setNotice(toCoreError(error)));
+    this.fileRegistry.clear();
     this.unregister?.();
     this.unsubscribeStorage?.();
     this.unsubscribeVisibility?.();

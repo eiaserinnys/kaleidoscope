@@ -1,6 +1,5 @@
-import type { AppDefinition, ClientCapability, ClientFile } from "../contract/contract";
-import type { ShellStore } from "../core/shell-store";
-import { BrowserFiles } from "./client-files";
+import type { AppDefinition, ClientCapability } from "../contract/contract";
+import { ClientFileRegistry } from "./client-file-registry";
 
 type Client = NonNullable<AppDefinition["client"]>;
 type HostWakeLockSentinel = { released: boolean; release(): Promise<void>; addEventListener(type: "release", listener: () => void): void };
@@ -9,18 +8,14 @@ type HostNavigator = Navigator & {
   share?: (data: ShareData) => Promise<void>;
   wakeLock?: { request(type: "screen"): Promise<HostWakeLockSentinel> };
 };
-type ClientFileInfo = Pick<ClientFile, "name" | "mime">;
 
 export class ClientHostServices {
-  private filesById = new Map<string, ClientFileInfo>();
   private wakeLock: HostWakeLockSentinel | null = null;
   private wakeLockGeneration = 0;
 
   constructor(
     private client: Client,
-    private store: ShellStore,
-    private windowId: string,
-    private files: BrowserFiles,
+    private files: ClientFileRegistry,
     private isVisible: () => boolean,
   ) {}
 
@@ -28,23 +23,13 @@ export class ClientHostServices {
     return this.client.capabilities?.includes(capability) === true;
   }
 
-  registerFile(file: Pick<ClientFile, "id" | "name" | "mime">) {
-    this.filesById.set(file.id, { name: file.name, mime: file.mime });
-  }
-
-  removeFile(fileId: string) {
-    this.filesById.delete(fileId);
-  }
-
   private async hostFile(fileId: unknown): Promise<File | null> {
     if (typeof fileId !== "string" || typeof File === "undefined") return null;
-    const info = this.filesById.get(fileId);
+    const info = this.files.get(fileId);
     if (!info) return null;
     try {
-      const bytes = this.store.nativeFiles
-        ? this.store.bytes ? await this.store.bytes({ op: "files.read_bytes", window_id: this.windowId, handle: fileId }) : null
-        : await this.files.read(fileId);
-      return bytes === null ? null : new File([bytes], info.name, { type: info.mime });
+      const bytes = await this.files.read(fileId);
+      return new File([bytes], info.name, { type: info.mime });
     } catch { return null; }
   }
 
@@ -107,6 +92,5 @@ export class ClientHostServices {
 
   dispose() {
     this.releaseWakeLock();
-    this.filesById.clear();
   }
 }
