@@ -29,7 +29,7 @@ export function MetricsBlock({ block, pointer }: { block: Extract<Block, { type:
     const featured = Boolean(item.featured) || items.length === 1;
     const hasMedia = isMedia(item.image);
     return <div key={typeof item.key === "string" ? item.key : index} className={`ks-metric-card tone-${item.tone ?? "default"}${item.align === "end" ? " is-align-end" : ""}${featured ? " is-featured" : ""}${hasMedia ? " has-media" : ""}`}>
-      {hasMedia && <MediaThumbnail className="ks-metric-media" media={item.image!} size={featured ? 48 : 32} />}
+      {hasMedia && <MediaThumbnail className="ks-metric-media" media={item.image!} />}
       <div className="ks-metric-content">
         <div className="ks-metric-label">{item.label}</div>
         <div className="ks-metric-value-row"><span className="ks-metric-value">{String(item.value)}{typeof item.unit === "string" && <span className="ks-metric-unit">{item.unit}</span>}</span>{isBadge(item.badge) && <Badge value={item.badge} />}</div>

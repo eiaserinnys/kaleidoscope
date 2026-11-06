@@ -11,7 +11,7 @@ export function isMedia(value: unknown): value is MediaRef {
 export function cropStyle(crop: Crop | undefined) {
   return crop && crop.w > 0 && crop.h > 0 ? { width: `${100 / crop.w}%`, height: `${100 / crop.h}%`, left: `${-100 * crop.x / crop.w}%`, top: `${-100 * crop.y / crop.h}%` } : undefined;
 }
-export function MediaThumbnail({ media, className = "", icon = false }: { media: MediaRef | null; size: number; className?: string; icon?: boolean }) {
+export function MediaThumbnail({ media, className = "", icon = false }: { media: MediaRef | null; className?: string; icon?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const asset = !!media && "asset" in media;
   const [measured, setMeasured] = useState({ size: 0, asset });
@@ -31,7 +31,7 @@ export function MediaThumbnail({ media, className = "", icon = false }: { media:
     observer.observe(element);
     return () => observer.disconnect();
   }, [asset]);
-  const result = useMedia(media, measured.asset === asset ? measured.size / (globalThis.devicePixelRatio || 1) : 0);
+  const result = useMedia(media, measured.asset === asset ? measured.size / (globalThis.devicePixelRatio || 1) : 0, { showSmaller: true });
   const url = result.status === "ready" ? result.url : null;
   const image = useMemo(() => {
     if (!icon || !url || !media) return null;

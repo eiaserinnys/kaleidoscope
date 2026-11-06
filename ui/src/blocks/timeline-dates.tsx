@@ -382,7 +382,7 @@ function DatesReady({ block, pointer, tracksValue, markerValue, daysValue, selec
         {!tracks.length && <><div className="ks-dates-track-header" style={{ width: metrics.left, pointerEvents: "none" }} aria-hidden="true" /><div className="ks-dates-empty" style={{ left: metrics.left + offset.x, width: lineWidth, height: Math.max(metrics.row, metrics.height - metrics.header) }}><NoItems /></div></>}
         {tracks.filter((track) => track.first < rows.end && track.first + track.rows.length > rows.start).map((track) => <div className="ks-dates-track" key={track.id} style={{ top: track.first * metrics.row, height: track.rows.length * metrics.row, width: metrics.left + totalWidth }}>
           <div className="ks-dates-track-header" style={{ width: metrics.left }} onPointerDown={(event) => event.stopPropagation()}><div className="ks-dates-track-name" style={{ top: metrics.header }}>
-            {track.image && <MediaThumbnail media={track.image} size={32} />}<span className="ks-list-content"><span className="ks-list-title">{track.label}</span></span>{track.meta && <span className="ks-view-meta">{track.meta}</span>}
+            {track.image && <MediaThumbnail media={track.image} />}<span className="ks-list-content"><span className="ks-list-title">{track.label}</span></span>{track.meta && <span className="ks-view-meta">{track.meta}</span>}
           </div></div>
           <div className="ks-dates-track-rows" style={{ left: metrics.left, width: totalWidth }}>{track.rows.map((row, index) => {
             const absolute = track.first + index; if (absolute < rows.start || absolute >= rows.end) return null;

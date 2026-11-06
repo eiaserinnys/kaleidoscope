@@ -9,7 +9,8 @@ type MediaResult = { status: "loading" } | { status: "ready"; url: string } | { 
 // 실패 표시는 재요청 중에도 남으므로, 실패한 요청과 진행 중인 요청을 구분한다.
 const failedRequests = new WeakSet<Promise<string>>();
 
-export function useMedia(media: MediaRef | null, maxPx: number): MediaResult & { retry: () => void } {
+export function useMedia(media: MediaRef | null, maxPx: number, options?: { showSmaller?: boolean }): MediaResult & { retry: () => void } {
+  const showSmaller = options?.showSmaller ?? false;
   const data = useWindowData();
   const identity = useContext(BlockRenderContext);
   const visible = useShellSelector(data.store, (snapshot) => recoveryVisible(snapshot, data.windowId));
@@ -57,17 +58,17 @@ export function useMedia(media: MediaRef | null, maxPx: number): MediaResult & {
       (error: unknown) => { if (active) {
         failedOnMount.current = failureKey;
         const ready = data.mediaCache.get(key)?.ready;
-        setResult((old) => old.key === key && old.attempt === attempt && old.value.status === "ready" ? old
-          : ready ? { key, attempt, size: ready.size, value: { status: "ready", url: ready.url } }
+        setResult((old) => old.key === key && old.attempt === attempt && old.value.status === "ready" && (showSmaller || old.size >= requestSize) ? old
+          : ready && (showSmaller || ready.size >= requestSize) ? { key, attempt, size: ready.size, value: { status: "ready", url: ready.url } }
           : { key, attempt, size, value: { status: "failed", error: toCoreError(error) } });
       } },
     );
     return () => { active = false; };
-  }, [data, key, requestSize, attempt, generation, visible, dormant]);
+  }, [data, key, requestSize, attempt, generation, visible, dormant, showSmaller]);
   const cached = data.mediaCache.get(key);
-  const value = result.key === key && result.attempt === attempt ? result.value
+  const value = result.key === key && result.attempt === attempt ? result.value.status === "ready" && !showSmaller && result.size < requestSize ? { status: "loading" as const } : result.value
     : result.key === key && result.attempt !== attempt ? { status: "loading" as const }
-    : cached?.ready ? { status: "ready" as const, url: cached.ready.url }
+    : cached?.ready && (showSmaller || cached.ready.size >= requestSize) ? { status: "ready" as const, url: cached.ready.url }
     : cached?.failed ? { status: "failed" as const, error: cached.failed }
     : { status: "loading" as const };
   return { ...value, retry: () => setAttempt((current) => current + 1) };
