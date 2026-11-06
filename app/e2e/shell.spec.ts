@@ -80,7 +80,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
     const windows = page.getByTestId("app-window-md-editor");
     for (let index = 0; index < 4; index += 1) {
-      await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
+      await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
       await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "마크다운 편집기" }).click();
       await expect(windows).toHaveCount(index + 1);
     }
@@ -106,7 +106,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   };
 
   await expect(page.getByText("열린 앱이 없습니다")).toHaveCount(0);
-  await expect(page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" })).toBeVisible();
+  await expect(page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" })).toBeVisible();
   await captureCascade(960, 600);
   await captureCascade(1440, 900);
   await captureMatrix("empty-desktop");
@@ -179,13 +179,13 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.tabsWithOverflow = tenTabMetrics;
 
   await page.getByRole("button", { name: "데스크톱 2" }).click();
-  await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).click();
+  await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
   const appMenu = page.getByRole("dialog", { name: "앱 열기" });
-  const launcherBounds = await page.locator(".ks-shell-bar").getByRole("button", { name: "앱 열기" }).boundingBox();
+  const launcherBounds = await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).boundingBox();
   const appMenuBounds = await appMenu.boundingBox();
   if (!appMenuBounds || !launcherBounds) throw new Error("앱 격자의 위치를 확인하지 못했습니다");
-  expect(Math.abs(appMenuBounds.y - launcherBounds.y - launcherBounds.height)).toBeLessThanOrEqual(1);
-  expect(Math.abs(appMenuBounds.x + appMenuBounds.width - launcherBounds.x - launcherBounds.width)).toBeLessThanOrEqual(1);
+  expect(appMenuBounds.y + appMenuBounds.height).toBeLessThanOrEqual(launcherBounds.y);
+  expect(Math.abs(appMenuBounds.x - launcherBounds.x)).toBeLessThanOrEqual(1);
   expect(appMenuBounds.x + appMenuBounds.width).toBeLessThanOrEqual(960);
   await page.screenshot({ path: testInfo.outputPath("apps-menu-960x600-light.png") });
   await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "마크다운 편집기" }).click();

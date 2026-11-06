@@ -36,14 +36,18 @@ function matches(event: KeyboardEvent, shortcut: Shortcut): boolean {
   return event.shiftKey === required.has("shift") && event.altKey === required.has("alt") && event.ctrlKey === required.has("ctrl") && event.metaKey === required.has("meta");
 }
 
+export function hasVisibleShortcutOverlay(owner?: string, controlled = false): boolean {
+  const overlays = document.querySelectorAll('[role="dialog"], [role="menu"], dialog[open]');
+  return [...overlays].some((overlay) => (!controlled || ownerOf(overlay) === owner) && !overlay.closest('[hidden], [inert], [aria-hidden="true"]'));
+}
+
 function onKeyDown(event: KeyboardEvent) {
   const targetOwner = event.target instanceof Element ? ownerOf(event.target) : undefined;
   const controlled = !event.isTrusted && !!targetOwner && windowActionActive(targetOwner);
   if (event.key === "Tab") grids.forEach((entry) => { if (!controlled || entry.context.window.id === targetOwner) entry.clearFocus(); });
   const target = event.target instanceof Element ? event.target : null;
   if (event.defaultPrevented || event.isComposing || typing(target)) return;
-  const overlays = document.querySelectorAll('[role="dialog"], [role="menu"], dialog[open]');
-  if ([...overlays].some((overlay) => (!controlled || ownerOf(overlay) === targetOwner) && !overlay.closest('[hidden], [inert], [aria-hidden="true"]'))) return;
+  if (hasVisibleShortcutOverlay(targetOwner, controlled)) return;
   for (const tour of tours) {
     if (controlled ? tour.context.window.id !== targetOwner : !topWindow(tour.context)) continue;
     if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {

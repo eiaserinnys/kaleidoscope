@@ -14,6 +14,7 @@ import { mdViewerDefinition as mdViewerJson } from "./fixtures";
 import htmlReportJson from "../../../apps/html-report.json";
 import webBrowserJson from "../../../apps/web-browser.json";
 import type { AppDefinition } from "../contract/contract";
+import { registerAppShortcuts } from "../runtime/shortcuts";
 
 if (!globalThis.ResizeObserver) {
   Object.defineProperty(globalThis, "ResizeObserver", {
@@ -32,7 +33,231 @@ if (!globalThis.ResizeObserver) {
 afterEach(() => cleanup());
 
 describe("shell core events", () => {
-  it("빈 데스크톱은 작업 표시줄을 숨기고 최소화된 창의 작업 표시줄은 유지한다", async () => {
+  it("맨 위로 올린 창 항목을 목록 안으로 보이게 한다", async () => {
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    render(<Shell store={store} />);
+    await store.ready;
+    const item = document.querySelector<HTMLElement>('.ks-taskbar-window[data-window-id="editor-window"]')!;
+    const scroll = vi.fn();
+    Object.defineProperty(item, "scrollIntoView", { configurable: true, value: scroll });
+    fireEvent.click(item);
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ inline: "nearest", block: "nearest" }));
+    store.dispose();
+  });
+
+  it("빈 데스크톱에서도 고정 조작이 순서대로 있고 상단에는 앱 열기가 없다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.windows = [];
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />);
+    await store.ready;
+    const taskbar = screen.getByRole("toolbar", { name: "작업 표시줄" });
+    expect(within(taskbar).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
+      "이전 데스크톱", "앱 열기", "모든 창 최소화", "모든 창 최대화", "다음 데스크톱",
+    ]);
+    expect(within(document.querySelector(".ks-shell-bar") as HTMLElement).queryByRole("button", { name: "앱 열기" })).toBeNull();
+    expect((within(taskbar).getByRole("button", { name: "이전 데스크톱" }) as HTMLButtonElement).disabled).toBe(true);
+    store.dispose();
+  });
+
+  it("단축키는 입력 중에도 데스크톱을 순환하고 열린 팔레트에서는 동작하지 않는다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.desktops.push({ ...snapshot.shared.desktops[0], id: "desktop-2", position: 1 }, { ...snapshot.shared.desktops[0], id: "desktop-3", position: 2 });
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    fireEvent.keyDown(input, { code: "ArrowLeft", key: "ArrowLeft", ctrlKey: true, altKey: true, isComposing: true });
+    await waitFor(() => expect(calls).toHaveBeenCalledWith({ op: "desktop.activate", desktop_id: "desktop-3" }));
+    fireEvent.click(screen.getByRole("button", { name: "앱 열기" }));
+    calls.mockClear();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "앱 열기" }), { code: "ArrowRight", key: "ArrowRight", ctrlKey: true, altKey: true });
+    expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "desktop.activate" }));
+    input.remove();
+    store.dispose();
+  });
+
+  it("데스크톱 단추와 단축키는 position 순서 끝에서 순환한다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.desktops.push({ ...snapshot.shared.desktops[0], id: "desktop-3", position: 2 }, { ...snapshot.shared.desktops[0], id: "desktop-2", position: 1 });
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />);
+    await store.ready;
+    const next = screen.getByRole("button", { name: "다음 데스크톱" });
+    for (const id of ["desktop-2", "desktop-3", "desktop-1"]) {
+      fireEvent.click(next);
+      await waitFor(() => expect(store.getSnapshot()?.device.active_desktop_ids["workspace-1"]).toBe(id));
+    }
+    fireEvent.keyDown(window, { code: "ArrowLeft", key: "ArrowLeft", ctrlKey: true, altKey: true });
+    await waitFor(() => expect(store.getSnapshot()?.device.active_desktop_ids["workspace-1"]).toBe("desktop-3"));
+    store.dispose();
+  });
+
+  it("전체 최대화는 최소화된 창을 포함해 z 순으로 펼치고 전체 최소화 후 비활성화한다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.windows[0].minimized = true;
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
+    await waitFor(() => expect(calls.mock.calls.filter(([request]) => request.op === "window.maximize").map(([request]) => request)).toEqual([
+      { op: "window.maximize", window_id: "editor-window" }, { op: "window.maximize", window_id: "viewer-window" },
+    ]));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최소화" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "모든 창 최소화" }) as HTMLButtonElement).disabled).toBe(true));
+    store.dispose();
+  });
+
+  it("창 전환은 막대 순서로 돌고 반복 입력과 같은 앱 단축키는 실행하지 않는다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.windows.push({ ...snapshot.shared.windows[0], id: "third-window", z: 3 });
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const appShortcut = vi.fn();
+    const remove = registerAppShortcuts({ store, window: snapshot.shared.windows[2] } as never, [{ code: "Tab", modifiers: ["ctrl", "alt"], action: { client: "test" } }], appShortcut);
+    fireEvent.keyDown(window, { code: "Tab", key: "Tab", ctrlKey: true, altKey: true });
+    await waitFor(() => expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "editor-window" }));
+    fireEvent.keyDown(window, { code: "Tab", key: "Tab", ctrlKey: true, altKey: true });
+    await waitFor(() => expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "viewer-window" }));
+    calls.mockClear();
+    fireEvent.keyDown(window, { code: "Tab", key: "Tab", ctrlKey: true, altKey: true, repeat: true });
+    expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "window.raise" }));
+    expect(appShortcut).not.toHaveBeenCalled();
+    remove();
+    store.dispose();
+  });
+
+  it("대체 키로 창을 전환하고 현재 창을 최대화, 복원, 최소화한다", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const key = (code: string, extra: KeyboardEventInit = {}) => fireEvent.keyDown(window, { code, key: code, ctrlKey: true, altKey: true, ...extra });
+    key("PageUp");
+    const editor = screen.getByTestId("app-window-md-editor");
+    await waitFor(() => expect(editor.querySelector(".ks-window-frame-active")).toBeTruthy());
+    key("ArrowUp");
+    await waitFor(() => expect(editor.getAttribute("data-maximized")).toBe("true"));
+    key("ArrowUp");
+    await waitFor(() => expect(editor.getAttribute("data-maximized")).toBe("false"));
+    key("ArrowDown", { metaKey: true });
+    expect(editor.getAttribute("data-minimized")).toBe("false");
+    key("ArrowDown");
+    await waitFor(() => expect(editor.getAttribute("data-minimized")).toBe("true"));
+    store.dispose();
+  });
+
+  it("데스크톱이 없어도 설정 항목과 전체 창 조작은 살아 있다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.workspaces = [];
+    snapshot.shared.desktops = [];
+    snapshot.shared.windows = [];
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />);
+    await store.ready;
+    const bar = screen.getByRole("toolbar", { name: "작업 표시줄" });
+    expect((within(bar).getByRole("button", { name: "앱 열기" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(bar).getByRole("button", { name: "이전 데스크톱" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    expect(within(bar).getByRole("button", { name: "설정" })).toBeTruthy();
+    fireEvent.click(within(bar).getByRole("button", { name: "모든 창 최소화" }));
+    await waitFor(() => expect((within(bar).getByRole("button", { name: "모든 창 최소화" }) as HTMLButtonElement).disabled).toBe(true));
+    fireEvent.click(within(bar).getByRole("button", { name: "모든 창 최대화" }));
+    await waitFor(() => expect(screen.getByTestId("system-window-settings").getAttribute("data-minimized")).toBe("false"));
+    store.dispose();
+  });
+
+  it("설정 창만 있어도 전체 최대화로 최소화된 설정을 펼친다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.windows = [];
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />);
+    await store.ready;
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최소화" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "모든 창 최소화" }) as HTMLButtonElement).disabled).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
+    await waitFor(() => expect(screen.getByTestId("system-window-settings").getAttribute("data-minimized")).toBe("false"));
+    expect(screen.getByTestId("system-window-settings").getAttribute("data-maximized")).toBe("true");
+    store.dispose();
+  });
+
+  it.each([
+    { settingsOnTop: false, minimized: false },
+    { settingsOnTop: false, minimized: true },
+    { settingsOnTop: true, minimized: false },
+  ])("전체 최대화는 설정이 맨 위인지 $settingsOnTop, 최소화 창이 있는지 $minimized일 때 겹침 순서를 유지한다", async ({ settingsOnTop, minimized }) => {
+    document.documentElement.style.setProperty("--ks-window-min-width", "360px");
+    document.documentElement.style.setProperty("--ks-window-min-height", "240px");
+    const transport = createFakeTransport(makeTestSeed());
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    const a = screen.getByTestId("app-window-md-editor");
+    const b = screen.getByTestId("app-window-md-viewer");
+    const settings = screen.getByTestId("system-window-settings");
+    if (!settingsOnTop) {
+      fireEvent.pointerDown(b);
+      await waitFor(() => expect(b.querySelector(".ks-window-frame-active")).toBeTruthy());
+    }
+    if (minimized) await act(async () => { await transport.call({ op: "window.minimize", window_id: "editor-window" }); });
+    const order = () => [a, settings, b].sort((left, right) => {
+      const difference = Number(left.style.zIndex) - Number(right.style.zIndex);
+      return difference || (left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    });
+    expect(order()).toEqual(settingsOnTop ? [a, b, settings] : [a, settings, b]);
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
+    await waitFor(() => expect([a, b, settings].every((element) => element.getAttribute("data-maximized") === "true" && element.getAttribute("data-minimized") === "false")).toBe(true));
+    expect(order()).toEqual(settingsOnTop ? [a, b, settings] : [a, settings, b]);
+    store.dispose();
+  });
+
+  it("최대화 응답이 상태 이벤트보다 먼저 와도 설정을 올리기 전 상태 반영을 기다린다", async () => {
+    document.documentElement.style.setProperty("--ks-window-min-width", "360px");
+    document.documentElement.style.setProperty("--ks-window-min-height", "240px");
+    const transport = createFakeTransport(makeTestSeed());
+    const subscribe = transport.subscribe.bind(transport);
+    let hold = false;
+    let deliver: (() => void) | undefined;
+    transport.subscribe = (listener) => subscribe((event) => {
+      if (hold && event.event === "state.changed") { hold = false; deliver = () => listener(event); }
+      else listener(event);
+    });
+    const original = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) => {
+      if (request.op === "window.maximize" && request.window_id === "editor-window") hold = true;
+      return original(request);
+    }) as typeof transport.call);
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
+    const b = screen.getByTestId("app-window-md-viewer");
+    fireEvent.pointerDown(b);
+    await waitFor(() => expect(b.querySelector(".ks-window-frame-active")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
+    await waitFor(() => expect(deliver).toBeDefined());
+    expect(screen.getByTestId("system-window-settings").getAttribute("data-maximized")).toBe("false");
+    await act(async () => deliver?.());
+    await waitFor(() => expect(b.getAttribute("data-maximized")).toBe("true"));
+    const a = screen.getByTestId("app-window-md-editor");
+    const settings = screen.getByTestId("system-window-settings");
+    expect(Number(a.style.zIndex)).toBeLessThan(Number(settings.style.zIndex));
+    expect(Number(settings.style.zIndex)).toBe(Number(b.style.zIndex));
+    store.dispose();
+  });
+
+  it("빈 데스크톱과 최소화된 창에서 작업 표시줄을 유지한다", async () => {
     const snapshot = makeTestSnapshot();
     const window = snapshot.shared.windows[0];
     snapshot.shared.windows = [];
@@ -41,7 +266,7 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
 
-    expect(document.querySelector(".ks-taskbar")).toBeNull();
+    expect(document.querySelector(".ks-taskbar")).not.toBeNull();
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] } } });
     await waitFor(() => expect(document.querySelector(".ks-taskbar")).not.toBeNull());
 
@@ -196,7 +421,7 @@ describe("shell core events", () => {
     });
     render(<Shell store={store} />);
     await store.ready;
-    const trigger = within(document.querySelector(".ks-shell-actions") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    const trigger = within(document.querySelector(".ks-taskbar") as HTMLElement).getByRole("button", { name: "앱 열기" });
     fireEvent.click(trigger);
     const dialog = screen.getByRole("dialog", { name: "앱 열기" });
     const tiles = [...dialog.querySelectorAll<HTMLButtonElement>(".ks-icon-tile")];
@@ -250,7 +475,7 @@ describe("shell core events", () => {
     store.dispose();
   });
 
-  it("남은 공간이 큰 쪽에 패널을 열고 창 크기 변경 때 다시 고른다", async () => {
+  it("팔레트를 단추 위에 열고 창 크기 변경 때 위 공간을 다시 잰다", async () => {
     const snapshot = makeTestSnapshot({ definitions: [calculatorJson] as AppDefinition[] });
     snapshot.shared.windows = [];
     const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
@@ -263,6 +488,8 @@ describe("shell core events", () => {
     let anchorTop = 478;
     const anchorRect = vi.spyOn(trigger, "getBoundingClientRect").mockImplementation(() => new DOMRect(500, anchorTop, 66, 32));
     const barRect = vi.spyOn(bar, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 1440, 49));
+    const taskbar = document.querySelector<HTMLElement>(".ks-taskbar")!;
+    const taskbarRect = vi.spyOn(taskbar, "getBoundingClientRect").mockImplementation(() => new DOMRect(450, anchorTop - 6, 600, 40));
     const surfaceRect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       this.style.setProperty("--ks-space-2", "8px");
       return this.classList.contains("ks-app-launcher") ? new DOMRect(0, 0, 410, 300) : new DOMRect();
@@ -272,36 +499,24 @@ describe("shell core events", () => {
     try {
       fireEvent.click(trigger);
       const panel = screen.getByRole("dialog", { name: "앱 열기" });
-      await waitFor(() => expect(panel.style.maxHeight).toContain("409px"));
-      await waitFor(() => expect(panel.style.top).toBe("170px"));
+      await waitFor(() => expect(panel.style.maxHeight).toContain("403px"));
+      await waitFor(() => expect(panel.style.top).toBe("164px"));
       anchorTop = 240;
       window.innerHeight = 600;
       fireEvent(window, new Event("resize"));
-      await waitFor(() => expect(panel.style.maxHeight).toContain("308px"));
-      await waitFor(() => expect(panel.style.top).toBe("280px"));
+      await waitFor(() => expect(panel.style.maxHeight).toContain("165px"));
       fireEvent.keyDown(panel, { key: "Escape" });
-      const headerTrigger = within(bar).getByRole("button", { name: "앱 열기" });
-      headerTrigger.style.setProperty("--ks-space-3", "12px");
-      headerTrigger.style.setProperty("--ks-space-2", "8px");
-      const headerRect = vi.spyOn(headerTrigger, "getBoundingClientRect").mockReturnValue(new DOMRect(1300, 8, 32, 32));
-      try {
-        fireEvent.click(headerTrigger);
-        const headerPanel = screen.getByRole("dialog", { name: "앱 열기" });
-        await waitFor(() => expect(headerPanel.style.top).toBe("40px"));
-        expect(headerPanel.style.maxHeight).toContain("548px");
-      } finally {
-        headerRect.mockRestore();
-      }
     } finally {
       surfaceRect.mockRestore();
       anchorRect.mockRestore();
       barRect.mockRestore();
+      taskbarRect.mockRestore();
       Object.defineProperty(window, "innerHeight", { configurable: true, writable: true, value: previousHeight });
       store.dispose();
     }
   });
 
-  it("빈 데스크톱에서 앱을 열어 단추가 사라지면 우상단 단추에 초점을 보존한다", async () => {
+  it("빈 데스크톱에서 앱을 열어도 실행 단추에 초점을 보존한다", async () => {
     const snapshot = makeTestSnapshot({ definitions: [calculatorJson] as AppDefinition[] });
     const openedWindow = { ...snapshot.shared.windows[0], id: "opened-calculator", app_id: "calculator" };
     snapshot.shared.windows = [];
@@ -318,11 +533,11 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
     const desktopTrigger = within(document.querySelector(".ks-desktop-area") as HTMLElement).getByRole("button", { name: "앱 열기" });
-    const headerTrigger = within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기" });
     fireEvent.click(desktopTrigger);
     fireEvent.click(within(screen.getByRole("dialog", { name: "앱 열기" })).getByRole("button", { name: "계산기" }));
-    await waitFor(() => expect(desktopTrigger.isConnected).toBe(false));
-    expect(document.activeElement).toBe(headerTrigger);
+    await waitFor(() => expect(document.querySelector('[data-window-id="opened-calculator"]')).not.toBeNull());
+    expect(desktopTrigger.isConnected).toBe(true);
+    expect(document.activeElement).toBe(desktopTrigger);
     store.dispose();
   });
 
@@ -330,7 +545,7 @@ describe("shell core events", () => {
     const store = createShellStore(createFakeTransport(makeTestSeed()));
     render(<Shell store={store} />);
     await store.ready;
-    const trigger = within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    const trigger = within(document.querySelector(".ks-taskbar") as HTMLElement).getByRole("button", { name: "앱 열기" });
     fireEvent.click(trigger);
     fireEvent.pointerDown(document.body);
     await waitFor(() => expect(document.activeElement).toBe(trigger));
@@ -487,7 +702,7 @@ describe("shell server link control", () => {
     const items = within(taskbar).getAllByRole("button");
     const settingsItem = within(taskbar).getByRole("button", { name: "설정" });
     expect(settingsItem.getAttribute("aria-pressed")).toBe("true");
-    const appItems = items.filter((item) => item !== settingsItem);
+    const appItems = items.filter((item) => item.classList.contains("ks-taskbar-window") && item !== settingsItem);
     expect(appItems.length).toBeGreaterThan(0);
     expect(appItems.map((item) => item.getAttribute("aria-pressed"))).toEqual(appItems.map(() => "false"));
     store.dispose();

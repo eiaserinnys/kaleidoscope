@@ -59,7 +59,7 @@ The shell starts its built-in server on launch. Its database and token are kept 
 
 ### 2. Start the Agent app
 
-Open **에이전트** (Agent) from the app grid (`앱 열기` at the top right), pick an agent and a working folder, and approve its command the first time on that PC. The defaults are Claude Code, Codex, Gemini CLI, and Antigravity, launched through the Agent Client Protocol. If the command's program is missing, the window offers to install it and then starts the agent. Sign in once with each agent CLI you plan to use.
+Open **에이전트** (Agent) from the app grid (`앱 열기` at the left of the bottom bar), pick an agent and a working folder, and approve its command the first time on that PC. The defaults are Claude Code, Codex, Gemini CLI, and Antigravity, launched through the Agent Client Protocol. If the command's program is missing, the window offers to install it and then starts the agent. Sign in once with each agent CLI you plan to use.
 
 The approval lets that command run with your account's permissions; the working folder is not a sandbox. Agents that accept HTTP MCP servers receive the shell's MCP tools, so you can ask one to build an app and it opens as a new window. The list of agents is stored in the Agent app's `agents` storage entry; change it with the MCP tool `write_app_storage`. The defaults are in [`apps/agent.json`](apps/agent.json).
 

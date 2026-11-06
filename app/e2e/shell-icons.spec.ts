@@ -19,7 +19,7 @@ test("런처와 창의 앱 아이콘이 테마와 앱 판을 따른다", async (
       const color = await bar.evaluate((element) => getComputedStyle(element).color);
       await expect(icon).toHaveCSS("background-color", color);
       await page.screenshot({ path: path.join(output, `shell-icons-closed-${width}-${theme}.png`) });
-      await page.locator(".ks-shell-actions").getByRole("button", { name: "앱 열기" }).click();
+      await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
       const menu = page.getByRole("dialog", { name: "앱 열기" });
       await expect(menu.getByRole("button", { name: "탐색기" }).locator("img.ks-app-icon")).toBeVisible();
       await expect(menu.getByRole("button", { name: "계산기" }).locator("svg.ks-app-icon")).toBeVisible();
@@ -83,7 +83,7 @@ test("아이콘을 기다리는 동안에도 창 머리와 메뉴의 자리를 �
   const bar = page.getByTestId("app-window-web-browser").locator(".ks-window-titlebar");
   await expect(bar.locator(".ks-icon-skeleton-chrome")).toBeVisible();
   const before = await bar.locator(".ks-window-title").boundingBox();
-  await page.locator(".ks-shell-actions").getByRole("button", { name: "앱 열기" }).click();
+  await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
   const output = process.env.KS_ICON_CAPTURE_DIR ?? "/tmp/ks-icon-979/captures";
   mkdirSync(output, { recursive: true });
   await page.screenshot({ path: path.join(output, "shell-icons-loading.png") });

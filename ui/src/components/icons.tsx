@@ -5,6 +5,7 @@ import {
   ArrowLeft as ArrowLeftIcon,
   ArrowRight as ArrowRightIcon,
   ChevronDown as ChevronDownIcon,
+  ChevronLeft as ChevronLeftIcon,
   ChevronUp as ChevronUpIcon,
   ChevronRight as ChevronRightIcon,
   CircleArrowUp as CircleArrowUpIcon,
@@ -96,6 +97,7 @@ function renderIcon(
 }
 
 export const ChevronRight = (props: IconProps) => renderIcon(ChevronRightIcon, props);
+export const ChevronLeft = (props: IconProps) => renderIcon(ChevronLeftIcon, props);
 export const UpdateReady = (props: IconProps) => renderIcon(CircleArrowUpIcon, props);
 export const ChevronDown = (props: IconProps) => renderIcon(ChevronDownIcon, props);
 export const ChevronUp = (props: IconProps) => renderIcon(ChevronUpIcon, props);

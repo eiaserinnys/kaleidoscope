@@ -22,9 +22,9 @@ export function computeAnchoredPosition({ rect, width, height, viewportWidth, vi
   };
 }
 
-export function useAnchoredOverlay(anchor: HTMLElement | null, surface: RefObject<HTMLElement | null>, options: { anchorPoint?: Point; keyboardRect?: KeyboardRect; preferAbove?: boolean; observe?: boolean; offsetToken?: string; alignEndOnOverflow?: boolean } = {}) {
+export function useAnchoredOverlay(anchor: HTMLElement | null, surface: RefObject<HTMLElement | null>, options: { anchorPoint?: Point; keyboardRect?: KeyboardRect; preferAbove?: boolean; observe?: boolean; offsetToken?: string; alignEndOnOverflow?: boolean; verticalAnchor?: HTMLElement } = {}) {
   const [position, setPosition] = useState({ left: 0, top: 0 });
-  const { anchorPoint, keyboardRect, preferAbove, observe, offsetToken, alignEndOnOverflow } = options;
+  const { anchorPoint, keyboardRect, preferAbove, observe, offsetToken, alignEndOnOverflow, verticalAnchor } = options;
   useLayoutEffect(() => {
     const element = surface.current;
     if (!anchor || !element) return;
@@ -35,7 +35,10 @@ export function useAnchoredOverlay(anchor: HTMLElement | null, surface: RefObjec
       const style = getComputedStyle(element);
       const inset = Number.parseFloat(style.getPropertyValue("--ks-space-3")) || 0;
       const offset = offsetToken ? Number.parseFloat(style.getPropertyValue(offsetToken)) || 0 : 0;
-      setPosition(computeAnchoredPosition({ rect: anchor.getBoundingClientRect(), width: bounds.width, height: bounds.height, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, inset, anchorPoint, keyboardRect, preferAbove, offset, alignEndOnOverflow }));
+      const rect = anchor.getBoundingClientRect();
+      const verticalRect = verticalAnchor?.getBoundingClientRect();
+      const positionRect = verticalRect ? { left: rect.left, right: rect.right, top: verticalRect.top, bottom: verticalRect.bottom } : rect;
+      setPosition(computeAnchoredPosition({ rect: positionRect, width: bounds.width, height: bounds.height, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, inset, anchorPoint, keyboardRect, preferAbove, offset, alignEndOnOverflow }));
     };
     measure();
     let frame = 0;
@@ -43,6 +46,7 @@ export function useAnchoredOverlay(anchor: HTMLElement | null, surface: RefObjec
     const observer = observe && typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
     if (observe) {
       observer?.observe(anchor); observer?.observe(element);
+      if (verticalAnchor && verticalAnchor !== anchor) observer?.observe(verticalAnchor);
       window.addEventListener("resize", schedule);
       window.addEventListener("scroll", schedule, true);
     }
@@ -51,7 +55,7 @@ export function useAnchoredOverlay(anchor: HTMLElement | null, surface: RefObjec
       window.removeEventListener("resize", schedule); window.removeEventListener("scroll", schedule, true);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [anchor, surface, anchorPoint, keyboardRect, preferAbove, observe, offsetToken, alignEndOnOverflow]);
+  }, [anchor, surface, anchorPoint, keyboardRect, preferAbove, observe, offsetToken, alignEndOnOverflow, verticalAnchor]);
   return position;
 }
 

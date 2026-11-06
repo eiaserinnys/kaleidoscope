@@ -85,7 +85,7 @@ export interface IconButtonProps {
   pressed?: boolean;
   tone?: "share";
   className?: string;
-  variant?: "embedded";
+  variant?: "embedded" | "taskbar";
   tabIndex?: number;
   onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
   onPointerUp?: React.PointerEventHandler<HTMLButtonElement>;
@@ -111,7 +111,7 @@ export function IconButton({ "aria-label": label, children, disabled, onClick, t
       aria-expanded={expanded}
       aria-controls={controls}
       data-ks-user-consent={userConsent || undefined}
-      className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${variant === "embedded" ? " is-embedded" : ""}${className ? ` ${className}` : ""}`}
+      className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${variant ? ` is-${variant}` : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
       tabIndex={tabIndex}
       onClick={onClick}
