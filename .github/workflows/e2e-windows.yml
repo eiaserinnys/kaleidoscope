@@ -317,6 +317,42 @@ jobs:
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
             Stop-Process -Id $recorder.Id -Force -ErrorAction SilentlyContinue
           }
+      - name: 클라이언트 HTTP 판정 자체 시험
+        shell: pwsh
+        run: |
+          rustc --edition 2021 --test app/src-tauri/src/e2e/client_http/checks.rs -o "$env:RUNNER_TEMP/client-http-checks.exe"
+          if ($LASTEXITCODE -ne 0) { throw '클라이언트 HTTP 판정 시험 컴파일 실패' }
+          & "$env:RUNNER_TEMP/client-http-checks.exe"
+          if ($LASTEXITCODE -ne 0) { throw '클라이언트 HTTP 판정 시험 실패' }
+      - name: 클라이언트 HTTP 시나리오 데이터 초기화
+        shell: pwsh
+        run: ./app/e2e-windows/reset-app-data.ps1
+      - name: 클라이언트 HTTP 시나리오
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-client-http-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-client-http-localappdata'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/client-http'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-client-http-webview'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT | Out-Null
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=client-http', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -PassThru
+          try {
+            if (-not $app.WaitForExit(240000)) { throw '클라이언트 HTTP E2E 시간 초과' }
+            $eventsPath = Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl'
+            if (-not (Test-Path $eventsPath)) { throw '클라이언트 HTTP 이벤트 파일 누락' }
+            $events = @(Get-Content $eventsPath | ForEach-Object { $_ | ConvertFrom-Json })
+            foreach ($event in $events) { Write-Host "$($event.step) : $($event.data | ConvertTo-Json -Compress)" }
+            if ($app.ExitCode -ne 0) { throw "클라이언트 HTTP E2E 실패: $($app.ExitCode)" }
+            foreach ($step in @('client-http.result', 'complete')) {
+              $matches = @($events | Where-Object { $_.step -eq $step })
+              if ($matches.Count -ne 1) { throw "클라이언트 HTTP 검사 누락 또는 중복: $step" }
+            }
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            if (-not $app.WaitForExit(10000)) { throw '클라이언트 HTTP 앱 종료 시간 초과' }
+            $app.Dispose()
+          }
       - name: 실시간 연결 판정 자체 시험
         shell: pwsh
         run: |

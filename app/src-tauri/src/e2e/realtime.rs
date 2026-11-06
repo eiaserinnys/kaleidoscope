@@ -6,7 +6,7 @@ use std::sync::{
 };
 
 mod checks;
-mod fixture;
+pub(super) mod fixture;
 mod server;
 
 #[cfg(windows)]

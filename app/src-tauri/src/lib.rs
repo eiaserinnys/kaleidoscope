@@ -206,13 +206,16 @@ async fn core_bytes(
             .ok_or_else(|| match name {
                 "x-ks-operation" => errors::SHELL_IPC_OPERATION_HEADER_INVALID(),
                 "x-ks-window" => errors::SHELL_IPC_WINDOW_HEADER_INVALID(),
-                "x-ks-handle" => errors::SHELL_IPC_HANDLE_HEADER_INVALID(),
-                _ => unreachable!("core_bytes only reads its three required headers"),
+                _ => unreachable!("core_bytes only reads its two required headers"),
             })
     };
     let operation = header("x-ks-operation")?;
     let window = header("x-ks-window")?;
-    let handle = header("x-ks-handle")?;
+    // WebView2는 값이 빈 헤더를 버리므로 없는 handle은 빈 값으로 읽는다.
+    let handle = match request.headers().get("x-ks-handle") {
+        Some(value) => value.to_str().map_err(|_| errors::SHELL_IPC_HANDLE_HEADER_INVALID())?,
+        None => "",
+    };
     let handle = percent_encoding::percent_decode_str(&handle)
         .decode_utf8_lossy()
         .into_owned();
