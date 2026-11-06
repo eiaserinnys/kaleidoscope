@@ -18,20 +18,28 @@
 :where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-select-field:where(:not(.is-label-top, .is-label-hidden):has(> .ks-field-label)):has(> .ks-data-segmented) > .ks-field-label { flex: 0 0 var(--ks-field-label-width); }
 :where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-select-field:where(:not(.is-label-top, .is-label-hidden):has(> .ks-field-label)) > .ks-data-segmented { width: auto; flex: 1 1 max-content; }
 
-/* 탭의 기존 위아래 배치를 세로 양식으로 공유한다. */
+/* 탭은 기존 선택자 우선순위를 유지한다. 새 세로 양식과 :is()나
+   내포 규칙으로 합치면 탭의 textarea 배치까지 바뀌므로 평평하게 둔다. */
 @container ks-fields (max-width: 319px) {
   :is(.ks-data-tab-panel, .ks-data-stack.is-column > .ks-data-stack-item) > .ks-data-toggle { margin-inline-start: 0; }
-  :is(.ks-data-tab-panel .ks-field, .ks-data-stack.is-column > .ks-data-stack-item > .ks-field):not(.is-label-top, .is-label-hidden):has(> .ks-field-label) {
-    display: flex; flex-direction: column; align-items: stretch; gap: var(--ks-space-1);
-    > .ks-field-label { flex-basis: auto; }
-    > :not(.ks-field-label) { width: 100%; }
-    &.ks-slider-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-    &.ks-slider-field > .ks-field-label { grid-column: 1 / -1; }
-    &.ks-slider-field > .ks-slider-value { width: auto; }
-    &.ks-slider-field.is-value-hidden { grid-template-columns: minmax(0, 1fr); }
-    &.ks-input-field > .ks-field-label { margin-block-start: 0; }
-  }
-  :is(.ks-data-tab-panel, .ks-data-stack.is-column) .ks-data-stack-item.is-fill > .ks-input-field:not(.is-label-top, .is-label-hidden) > .ks-data-input:has(> textarea) { flex: 1 1 auto; height: auto; min-height: var(--ks-control-height); }
+  .ks-data-tab-panel .ks-field:not(.is-label-top):not(.is-label-hidden),
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) { display: flex; flex-direction: column; align-items: stretch; gap: var(--ks-space-1); }
+  .ks-data-tab-panel .ks-field:not(.is-label-top):not(.is-label-hidden) > .ks-field-label,
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) > .ks-field-label { flex-basis: auto; }
+  .ks-data-tab-panel .ks-field:not(.is-label-top):not(.is-label-hidden) > :not(.ks-field-label),
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) > :not(.ks-field-label) { width: 100%; }
+  .ks-data-tab-panel .ks-slider-field:not(.is-label-top):not(.is-label-hidden),
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field.ks-slider-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .ks-data-tab-panel .ks-slider-field:not(.is-label-top):not(.is-label-hidden) > .ks-field-label,
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field.ks-slider-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) > .ks-field-label { grid-column: 1 / -1; }
+  .ks-data-tab-panel .ks-slider-field:not(.is-label-top):not(.is-label-hidden) > .ks-slider-value,
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field.ks-slider-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) > .ks-slider-value { width: auto; }
+  .ks-data-tab-panel .ks-slider-field.is-value-hidden:not(.is-label-top):not(.is-label-hidden),
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field.ks-slider-field.is-value-hidden:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) { grid-template-columns: minmax(0, 1fr); }
+  .ks-data-tab-panel .ks-input-field:not(.is-label-top):not(.is-label-hidden) > .ks-field-label,
+  .ks-data-stack.is-column > .ks-data-stack-item > .ks-field.ks-input-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *):has(> .ks-field-label) > .ks-field-label { margin-block-start: 0; }
+  .ks-data-tab-panel .ks-data-stack-item.is-fill > .ks-input-field:not(.is-label-top):not(.is-label-hidden) > .ks-data-input:has(> textarea),
+  .ks-data-stack.is-column .ks-data-stack-item.is-fill > .ks-input-field:not(.is-label-top, .is-label-hidden, .ks-data-tab-panel *) > .ks-data-input:has(> textarea) { flex: 1 1 auto; height: auto; min-height: var(--ks-control-height); }
 }
 
 /* 구역·탭·대화상자는 이미 좌우 여백을 소유한다. 그 밖의 세로

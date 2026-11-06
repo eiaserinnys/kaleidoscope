@@ -23,6 +23,18 @@ const S=(children:object[])=>({type:'stack',direction:'column',gap:'small',child
 const R=(children:object[])=>({type:'stack',direction:'row',children});
 const B={type:'button',label:'단추',on_click:[]};
 const T={type:'text',value:'글'};
+
+test('기존 좁은 탭 안 채움 textarea의 이름표 배치는 보존한다',async({page})=>{
+ const input=(label:string)=>({type:'input',label,multiline:true,value:{state:'value'},on_change:[]});
+ const app=await open(page,{type:'tabs',tabs:[{label:'답글',child:{type:'stack',direction:'column',gap:'small',fill:[0,1],children:[input('한국어'),input('영어')]}},{label:'분할',child:S([seg(['A','B'])])}]},360);
+ await expect(app.getByLabel('한국어',{exact:true})).toBeVisible();
+ const m=await app.locator('.ks-input-field').first().evaluate(el=>{const s=getComputedStyle(el);const label=el.querySelector('.ks-field-label')!;return {offset:label.getBoundingClientRect().top-el.getBoundingClientRect().top,legacy:parseFloat(s.getPropertyValue('--ks-line-width'))+(parseFloat(s.getPropertyValue('--ks-control-height'))-parseFloat(s.getPropertyValue('--ks-type-body'))*parseFloat(s.getPropertyValue('--ks-line-body')))/2};});
+ expect(m.offset).toBeCloseTo(m.legacy,0);
+ await app.getByRole('tab',{name:'분할',exact:true}).click();
+ const label=app.locator('.ks-select-field > .ks-field-label');await expect(label).toBeVisible();
+ const size=await label.evaluate(el=>({height:el.getBoundingClientRect().height,line:parseFloat(getComputedStyle(el).lineHeight)}));
+ expect(size.height).toBeCloseTo(size.line,0);
+});
 const seg=(items:string[])=>({type:'select',label:'방식',style:'segmented',options:items,value:items[0],on_change:[]});
 for(const kind of ['pane','row','center']) for(const width of [880,480,360]) test(`좁은 양식 컨트롤: ${kind} ${width}`,async({page})=>{
  let ui:any=S([I,{type:'slider',label:'정도',value:10,min:0,max:100,on_change:[]}]);
