@@ -29,9 +29,13 @@ mod ui;
 mod update;
 #[cfg(windows)]
 mod web_control_probe;
+#[cfg(windows)]
+mod shell_shortcuts;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ScenarioKind {
+    #[cfg(windows)]
+    ShellShortcuts,
     WebView,
     #[cfg(windows)]
     ShareIsolate,
@@ -49,6 +53,8 @@ enum ScenarioKind {
 
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
     match name {
+        #[cfg(windows)]
+        Some("shell-shortcuts") => ScenarioKind::ShellShortcuts,
         #[cfg(windows)]
         Some("share-isolate") => ScenarioKind::ShareIsolate,
         #[cfg(windows)]
@@ -538,6 +544,8 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
             }
         }) {
             Ok(mut log) => match match selected {
+                #[cfg(windows)]
+                ScenarioKind::ShellShortcuts => shell_shortcuts::scenario(&app, &core, &out, &mut log),
                 #[cfg(windows)]
                 ScenarioKind::ShareIsolate => share_isolate::scenario(&app, &core, &out, &mut log),
                 #[cfg(windows)]
