@@ -31,6 +31,7 @@ test("좁은 앱 창의 설명 경계와 이름 확정, 다시 입력을 지킨�
 });
 
 test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨다", async ({ page }) => {
+  await page.clock.install();
   const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
   const metrics: Record<string, unknown> = {};
   if (output) mkdirSync(output, { recursive: true });
@@ -88,11 +89,17 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     await input.blur();
     await expect(input).toHaveValue("entry-503");
     const free = app.getByRole("combobox", { name: "자유 입력" });
+    // 도구 왕복이 300ms를 넘어도 같은 브라우저 시각에서 지연 계약을 잰다.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10_000));
     const callsBeforeFree = await page.evaluate(() => (window as any).inputOptionsHarness.calls().length);
     await free.fill("임의의 이름");
     await expect(page.getByRole("listbox")).toHaveCount(0);
     expect(await page.evaluate(() => (window as any).inputOptionsHarness.calls().length)).toBe(callsBeforeFree);
+    await page.clock.runFor(299);
+    expect(await page.evaluate(() => (window as any).inputOptionsHarness.calls().length)).toBe(callsBeforeFree);
+    await page.clock.runFor(1);
     await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.calls().length)).toBe(callsBeforeFree + 1);
+    await page.clock.resume();
     await free.blur();
     const select = app.getByRole("button", { name: "표시" });
     await select.click();
