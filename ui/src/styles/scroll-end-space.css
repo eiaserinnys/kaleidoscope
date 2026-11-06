@@ -12,4 +12,5 @@
 
 /* 결정 줄의 표지 때문에 0이 된 구역 여백을 내부 스크롤 끝에서 돌린다.
    안쪽에 채움 영역이 있으면 그 영역이 끝 여백을 소유한다. */
-.ks-stack-scroll-content > .ks-data-stack-item.is-fill:nth-last-child(1 of :not(:empty)) > .ks-data-section:has(.ks-field):not(:has(.ks-data-stack-item.is-fill)) { padding-block-end: var(--ks-space-3); }
+.ks-stack-scroll-content > .ks-data-stack-item.is-fill:nth-last-child(1 of :not(:empty)) > .ks-data-section:has(.ks-field):not(:has(.ks-data-stack-item.is-fill)),
+.ks-data-stack-item.is-fill .ks-data-stack.is-column > .ks-data-stack-item:nth-last-child(2 of :not(:empty)):has(~ .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > .ks-data-toolbar) > .ks-data-section:has(.ks-field):not(:has(.ks-data-stack-item.is-fill)) { padding-block-end: var(--ks-space-3); }

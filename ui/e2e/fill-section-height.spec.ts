@@ -34,13 +34,14 @@ test("중첩 구역의 끝 채움 칸은 바깥 구역의 바닥 여백만 쓴�
   expect(await sections.evaluateAll(els => els.map(el => getComputedStyle(el).paddingBottom))).toEqual(["12px", "0px"]);
 });
 
-for(const place of ['direct','section','tab','dialog']) test(`결정 줄 앞 마지막 채움 구역의 자연 높이 양식 여백: ${place}`,async({page})=>{
+for(const place of ['direct','section','tab','dialog','natural']) test(`결정 줄 앞 마지막 채움 구역의 자연 높이 양식 여백: ${place}`,async({page})=>{
  const form={type:'stack',direction:'column',gap:'small',children:Array.from({length:30},(_,i)=>input(`구역 값 ${i+1}`))};
  let ui:any={type:'stack',direction:'column',gap:'none',fill:[0,1],children:[
   {type:'when',value:false,child:{type:'section',title:'쉬는 구역',child:form}},
   {type:'when',value:true,child:{type:'section',title:'옵션',child:{type:'stack',direction:'column',children:[{type:'text',value:'입력'},form]}}},
   {type:'toolbar',start:[],end:[{type:'button',label:'적용',on_click:[]}]},
  ]};
+ if(place==='natural')ui={type:'stack',direction:'column',gap:'none',fill:0,children:[{...ui,fill:undefined}]};
  if(place==='section')ui={type:'section',title:'바깥',child:ui};
  if(place==='tab')ui={type:'tabs',tabs:[{label:'옵션',child:ui}]};
  // 채움 영역은 실제 목록·표 대화상자의 고정 높이 안에서 검증한다.
