@@ -28,8 +28,8 @@ it("기본 폴더를 준비한 뒤 원천을 붙이고 첫 허용을 보여 준�
     ? Promise.resolve({ op: "data.attach", view: { sources: {}, values: { "/ui/items": failed } } } as CoreReply) as never
     : original(request as never));
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  expect(await screen.findByText("사진 폴더의 파일을 읽도록 허용")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "사진 폴더 허용" }).hasAttribute("data-ks-user-consent")).toBe(true);
+  expect((await screen.findByRole("button", { name: "사진 폴더 읽기 허용" })).hasAttribute("data-ks-user-consent")).toBe(true);
+  expect(screen.queryByText("사진 폴더의 파일을 읽도록 허용")).toBeNull();
   expect(screen.getByRole("button", { name: "다른 폴더 선택" })).toBeTruthy();
   const operations = calls.mock.calls.map(([request]) => request.op);
   expect(operations.indexOf("files.prepare_default_folder")).toBeLessThan(operations.indexOf("data.attach"));
@@ -45,14 +45,14 @@ it("기본 폴더가 없으면 기존 폴더 선택을 보여 준다", async () 
     : request.op === "data.attach" ? Promise.resolve({ op: "data.attach", view: { sources: {}, values: { "/ui/items": failed } } } as CoreReply) as never : original(request as never));
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   expect(await screen.findByRole("button", { name: "폴더 선택" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "사진 폴더 허용" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "사진 폴더 읽기 허용" })).toBeNull();
 });
 
 it("폴더 블록도 같은 기본 폴더 허용을 보여 준다", async () => {
   const definition: AppDefinition = { ...folderApp, requires: { blocks: 46, modules: { files: 4 } }, permissions: [{ module: "files", id: "media", access: "readwrite", label: "자료", default_folder: "pictures" }], state: { selected: null }, ui: { type: "folder", root: { permission: "media" }, extensions: [], selected: { state: "selected" }, on_select: { set_state: "selected" } } };
   render(<AppWindowContent store={createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })))} windowId="viewer-window" />);
-  expect(await screen.findByText("사진 폴더의 파일을 읽고 고치도록 허용")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "사진 폴더 허용" })).toBeTruthy();
+  expect(await screen.findByRole("button", { name: "사진 폴더 읽고 고치기 허용" })).toBeTruthy();
+  expect(screen.queryByText("사진 폴더의 파일을 읽고 고치도록 허용")).toBeNull();
 });
 
 it("폴더를 고르지 않은 원천의 합성 폴더 선택을 막는다", async () => {

@@ -18,7 +18,7 @@ export function FileGrant({ context, permission, rootProps, compact = false, onG
   if (hasDefault && !state) return <div {...rootProps} className="ks-data-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div>;
   const consent = state?.status === "consent_required" ? state : null;
   const name = consent ? knownFolderNames[consent.folder] : "";
-  const text = error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : consent ? `${name} 폴더의 파일을 ${consent.access === "read" ? "읽도록" : "읽고 고치도록"} 허용` : "폴더를 선택해 주세요";
+  const text = error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : consent ? undefined : "폴더를 선택해 주세요";
   const pick = () => {
     setError(null);
     void context.store.call({ op: "files.pick_folder", window_id: context.window.id, permission })
@@ -33,6 +33,6 @@ export function FileGrant({ context, permission, rootProps, compact = false, onG
   };
   const pickButton = <Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) pick(); }}>{consent ? "다른 폴더 선택" : pickerLabel ?? "폴더 선택"}</Button>;
   if (!consent && pickerLabel) return <div {...rootProps} className="ks-file-tree-ungranted">{pickButton}{error ? <span className="ks-inline-error" role="alert">{text}</span> : null}</div>;
-  const content = <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={text} action={consent ? <span className="ks-notice-actions"><Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) allow(); }}>{name} 폴더 허용</Button>{pickButton}</span> : pickButton} />;
+  const content = <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={text} action={consent ? <span className="ks-notice-actions"><Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) allow(); }}>{name} 폴더 {consent.access === "read" ? "읽기" : "읽고 고치기"} 허용</Button>{pickButton}</span> : pickButton} />;
   return contentsOnly ? content : <div {...rootProps} className="ks-file-tree-ungranted">{content}</div>;
 }
