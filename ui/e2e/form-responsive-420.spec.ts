@@ -9,12 +9,12 @@ async function open(page: Page, ui: object, width = 880, height = 600) {
     const harness = (window as any).__ksHarness;
     const { snapshot } = await harness.call({ op: "state.get" });
     const version = snapshot.shared.app_versions.find((v: any) => v.app_id === "data-controls");
-    version.definition.state = { value: "", on: true, dialogOpen: false };
+    version.definition.state = { value: "", on: true, dialogOpen: false, dlg: true };
     version.definition.ui = layout;
     version.version += 1;
     const win = snapshot.shared.windows.find((w: any) => w.app_id === "data-controls");
     win.app_version = version.version;
-    win.state = { value: "", on: true, dialogOpen: false };
+    win.state = { value: "", on: true, dialogOpen: false, dlg: true };
     harness.emit({ event: "state.changed", snapshot });
   }, ui);
   return page.getByTestId("app-window-data-controls");
@@ -36,7 +36,7 @@ for(const gap of ['none','small','medium','large']) for(const last of ['input','
  expect(m.gap).toBeCloseTo(gap==='small'?8:gap==='large'?24:12,0);
 });
 
-for(const [name,ui] of Object.entries(contexts.ctx).filter(([name])=>/^c[1-9]-|^c1[4589]-|^c21-/.test(name))) for(const width of [880,360]) test(`내용 폭 양식 접힘 방지 ${name} ${width}`,async({page})=>{
+for(const [name,ui] of Object.entries(contexts.ctx).filter(([name])=>/^c[1-9]-|^c1[4589]-|^c21-|^r/.test(name))) for(const width of [880,360]) test(`내용 폭 양식 접힘 방지 ${name} ${width}`,async({page})=>{
  const app=await open(page,ui,width);
  await expect(app.locator('.ks-data-stack').first()).toBeVisible();
  for(const field of await app.locator('.ks-input-field').all()) {
@@ -96,7 +96,7 @@ test('짧은 두 칸과 입력의 시작선 유지',async({page})=>{
  const app=await open(page,S([I,seg(['너비','높이'])]),360);
  const x=await app.locator('.ks-field > .ks-data-input,.ks-field > .ks-data-segmented').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().left));expect(Math.abs(x[0]-x[1])).toBeLessThanOrEqual(1);
 });
-for(const child of [S([T,B]),{type:'section',title:'구역',child:T},{type:'list',items:[{key:'1',title:'목록'}]},{type:'table',columns:[{field:'x',label:'값'}],rows:[{x:'값'}]}]) test(`가로 줄 안 ${child.type} 여백 중복 없음`,async({page})=>{
+for(const child of [S([T,B]),{type:'section',title:'구역',child:T},{type:'list',items:[{key:'1',title:'목록'}]},{type:'table',columns:[{field:'x',label:'값'}],rows:[{key:'1',x:'값'}]}]) test(`가로 줄 안 ${child.type} 여백 중복 없음`,async({page})=>{
  const app=await open(page,S([R([child])]),880);
  const row=app.locator('.ks-data-window-body > .ks-data-stack > .ks-data-stack-item').first();
  expect(await row.evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft))).toBe(0);
@@ -112,4 +112,20 @@ test('긴 토글 트랙은 줄어들지 않고 글은 시작 정렬',async({page
  const app=await open(page,S([I,{type:'toggle',label:'아주 긴 이름표가 붙은 토글로 설명까지 들어감',value:true,on_change:[]}]),360);
  await expect(app.getByRole('switch')).toBeVisible();
  const m=await app.locator('.ks-data-toggle-track').evaluate(el=>({width:el.getBoundingClientRect().width,expected:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-6')),align:getComputedStyle(el.parentElement!).textAlign}));expect(m.width).toBe(m.expected);expect(m.align).toBe('start');
+});
+
+for(const width of [880,360]) test(`모든 필드의 스크롤 오른쪽 끝선 ${width}`,async({page})=>{
+ const app=await open(page,contexts.end['s1-body-scroll'],width);
+ const ends=await app.locator('.ks-data-window-body > .ks-data-stack > .ks-data-stack-item > :is(.ks-data-input,.ks-field,.ks-data-text)').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().right));
+ expect(ends.length).toBeGreaterThan(6);expect(Math.max(...ends)-Math.min(...ends)).toBeLessThanOrEqual(1);
+});
+for(const name of ['k1-tail-text','k2-tail-text-small','k3-tail-list','h7-none-section-text']) test(`꼬리 내용과 끝 여백 ${name}`,async({page})=>{
+ const app=await open(page,contexts.end[name]);
+ if(name.startsWith('k')){
+  const form=app.locator('.ks-data-stack-item.is-fill > .ks-data-stack').first();
+  expect(await form.evaluate(el=>getComputedStyle(el).paddingBottom)).toBe('0px');
+ }else{
+  const section=app.locator('.ks-data-section');
+  expect(await section.evaluate(el=>parseFloat(getComputedStyle(el).paddingBottom))).toBe(12);
+ }
 });
