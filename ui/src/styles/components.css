@@ -24,6 +24,11 @@
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
+.ks-button:active:not(:disabled),
+.ks-icon-button:active:not(:disabled) {
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover)), linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
+}
+
 .ks-button-emphasis {
   border-color: var(--ks-color-accent);
   background: var(--ks-color-accent);

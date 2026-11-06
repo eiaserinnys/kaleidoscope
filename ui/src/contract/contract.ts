@@ -484,7 +484,11 @@ read_only?: Binding,
 /**
  * (48판) 참이면 입력과 부속 조작을 잠근다.
  */
-disabled?: Binding, spin?: boolean, min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, label_position?: LabelPosition, style?: SelectStyle, placeholder?: Binding, 
+disabled?: Binding, spin?: boolean, min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, kind?: InputKind, multiline?: boolean, rows?: number, 
+/**
+ * (51판) 자동으로 늘어나는 여러 줄 입력의 최대 줄 수(기본 8, 1~20). `multiline`이 아니거나 `rows`가 2 이상이면 효과가 없다.
+ */
+max_rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, label_position?: LabelPosition, style?: SelectStyle, placeholder?: Binding, 
 /**
  * (18판) 참이면 이 고르기를 사용할 수 없다.
  */

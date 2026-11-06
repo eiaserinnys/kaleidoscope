@@ -38,3 +38,20 @@ fn textarea_alias_is_multiline_without_rows() {
         }
     ));
 }
+
+#[test]
+fn max_rows_requires_new_block_set_and_matches_rows_range() {
+    let mut value: serde_json::Value = serde_json::from_str(&app(51, 1, "input")).unwrap();
+    value["ui"]["multiline"] = json!(true);
+    value["ui"]["max_rows"] = json!(4);
+    let definition = parse_app_definition(&value.to_string()).expect("새 판에서 최대 줄 수 허용");
+    assert_eq!(serde_json::to_value(&definition).unwrap()["ui"]["max_rows"], 4);
+    value["requires"]["blocks"] = json!(50);
+    assert!(parse_app_definition(&value.to_string()).is_err());
+    value["requires"]["blocks"] = json!(51);
+    for max in [0, 21] {
+        value["ui"]["max_rows"] = json!(max);
+        assert!(parse_app_definition(&value.to_string()).is_err());
+    }
+    assert!(kaleidoscope_contract::app_definition_schema().to_string().contains("max_rows"));
+}
