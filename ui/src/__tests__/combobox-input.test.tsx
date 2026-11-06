@@ -49,6 +49,18 @@ it("한 행만 남으면 일부 이름 Enter도 고르고 선택한 글 전체�
   expect(input.selectionEnd).toBe(input.value.length);
 });
 
+it("쉘이 초점을 돌려주면 목록을 열지 않고 고른 값만 전체 선택한다", async () => {
+  const { focusRescued } = await import("../components/focus-rescue");
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  act(() => focusRescued(input));
+  expect(document.activeElement).toBe(input);
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
+  fireEvent.click(input);
+  expect(input.getAttribute("aria-expanded")).toBe("true");
+});
+
 it("자유 입력도 Enter 확정에 목록을 닫는다", async () => {
   setup();
   const input = await screen.findByRole("combobox");

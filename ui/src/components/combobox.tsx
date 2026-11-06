@@ -7,6 +7,7 @@ import { windowActionActive } from "../share/action-context";
 import { registerSelectOptions } from "../share/select-options";
 import { useAnchoredOverlay } from "./anchored-overlay";
 import { useComboboxLayout } from "./combobox-layout";
+import { isUnclaimedFocus } from "./focus-rescue";
 import { ChevronDown } from "./icons";
 
 type Props = {
@@ -125,7 +126,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
       onPointerDown={(event) => { if (event.button === 0) { cancelClickSelection(); const element = event.currentTarget; if (autoSelected.current && element.selectionStart === 0 && element.selectionEnd === element.value.length) element.setSelectionRange(element.value.length, element.value.length); autoSelected.current = false; } pointer.current = true; clickedClosed.current = !open; inputProps.onPointerDown?.(event); }}
       onPointerUp={(event) => { pointer.current = false; inputProps.onPointerUp?.(event); }}
       onPointerCancel={() => { pointer.current = false; clickedClosed.current = false; }}
-      onFocus={(event) => { inputProps.onFocus?.(event); if (!suppressFocus.current) { if (optionsOnly && !inputProps.readOnly && !pointer.current) selectAll(event.currentTarget); show(); } }}
+      onFocus={(event) => { inputProps.onFocus?.(event); if (!suppressFocus.current) { if (optionsOnly && !inputProps.readOnly && !pointer.current) selectAll(event.currentTarget); if (!isUnclaimedFocus(event.currentTarget)) show(); } }}
       onClick={(event) => {
         inputProps.onClick?.(event);
         const element = event.currentTarget;
