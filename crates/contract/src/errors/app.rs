@@ -449,6 +449,27 @@ error_catalog! { ENTRIES;
         message: "{pointer}: repeat.grid.item_width는 grid.columns가 auto일 때만 쓸 수 있습니다. 고정 열 수를 유지하려면 item_width를 지우세요.",
         fix: "{pointer}/grid/item_width를 지우거나 {pointer}/grid/columns를 auto로 바꾸세요"
     }
+    APP_LIST_MULTIPLE_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "목록 여러 선택 판 검사",
+        cause: "여러 선택을 지원하지 않는 블록 판",
+        message: "{pointer}: 목록 여러 선택에는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
+    APP_LIST_MULTIPLE_SELECTED_INVALID(pointer) {
+        class: InvalidAppDefinition,
+        place: "목록 여러 선택 상태 검사",
+        cause: "선택할 상태 키나 고르기 동작이 없다",
+        message: "{pointer}: 목록 여러 선택에는 선언된 state 키를 가리키는 selected와 on_select가 필요합니다. 앱 정의를 고치세요.",
+        fix: "선언된 state 키를 selected에 지정하고 on_select를 추가하세요"
+    }
+    APP_LIST_ACTIVATE_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "목록 항목 열기 판 검사",
+        cause: "항목 열기 또는 선택 가능 여부를 지원하지 않는 블록 판",
+        message: "{pointer}: 목록의 on_activate와 selectable에는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
     APP_LIST_ICON_VERSION_LOW(pointer, version) {
         class: InvalidAppDefinition,
         place: "목록 아이콘 판 검사",

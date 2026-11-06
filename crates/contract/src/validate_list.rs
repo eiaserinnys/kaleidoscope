@@ -1,11 +1,25 @@
-use crate::{data::{self, Binding}, AppDefinition, Block, CoreError, ListLayout, LIST_ICON_WIDTH_BLOCK_SET_VERSION};
+use crate::{data::{self, Binding}, AppDefinition, Block, CoreError, ListLayout, ListSelection, LIST_ICON_WIDTH_BLOCK_SET_VERSION, LIST_MULTIPLE_BLOCK_SET_VERSION};
 use serde_json::Value;
 
 pub(crate) fn validate_list_extensions(definition: &AppDefinition) -> Result<(), CoreError> {
     let mut error = None;
     data::walk_definition_blocks(definition, &mut |pointer, block| {
         if error.is_some() { return; }
-        let Block::List { items, grouped, layout, item_width, .. } = block else { return; };
+        let Block::List { items, grouped, layout, item_width, selection, selected, on_select, on_activate, .. } = block else { return; };
+        if *selection == ListSelection::Multiple {
+            if definition.requires.blocks < LIST_MULTIPLE_BLOCK_SET_VERSION {
+                error = Some(crate::errors::APP_LIST_MULTIPLE_VERSION_LOW(pointer, LIST_MULTIPLE_BLOCK_SET_VERSION));
+                return;
+            }
+            if !matches!(selected, Some(Binding::State(state)) if definition.state.contains_key(&state.state)) || on_select.is_none() {
+                error = Some(crate::errors::APP_LIST_MULTIPLE_SELECTED_INVALID(pointer));
+                return;
+            }
+        }
+        if on_activate.is_some() && definition.requires.blocks < LIST_MULTIPLE_BLOCK_SET_VERSION {
+            error = Some(crate::errors::APP_LIST_ACTIVATE_VERSION_LOW(pointer, LIST_MULTIPLE_BLOCK_SET_VERSION));
+            return;
+        }
         if item_width.is_some() {
             if *layout != ListLayout::Grid {
                 error = Some(crate::errors::APP_LIST_ITEM_WIDTH_LAYOUT_INVALID(pointer));
@@ -18,6 +32,10 @@ pub(crate) fn validate_list_extensions(definition: &AppDefinition) -> Result<(),
         }
         let Binding::Literal(value) = items else { return; };
         let mut check_item = |item: &Value| {
+            if item.get("selectable").is_some() && definition.requires.blocks < LIST_MULTIPLE_BLOCK_SET_VERSION {
+                error = Some(crate::errors::APP_LIST_ACTIVATE_VERSION_LOW(pointer, LIST_MULTIPLE_BLOCK_SET_VERSION));
+                return;
+            }
             let Some(icon) = item.get("icon") else { return; };
             if error.is_some() { return; }
             if definition.requires.blocks < LIST_ICON_WIDTH_BLOCK_SET_VERSION {

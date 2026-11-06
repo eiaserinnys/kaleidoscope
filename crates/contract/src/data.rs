@@ -1081,6 +1081,9 @@ pub struct ListItem {
     /// 고르기와 비교에 쓰는 열쇠. 목록 안에서 겹치지 않는다. 고르면 `$event`가 이 값이다.
     pub key: String,
     pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub selectable: Option<bool>,
     /// 쉘이 제공하는 아이콘 이름. 목록 줄에서는 그림보다 먼저 표시한다.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -1930,6 +1933,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             selected,
             disabled,
             on_select,
+            on_activate,
             on_remove,
             group_actions,
             ..
@@ -1943,6 +1947,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
+            }
+            if let Some(on_activate) = on_activate {
+                act!("on_activate", on_activate);
             }
             if let Some(on_remove) = on_remove {
                 act!("on_remove", on_remove);

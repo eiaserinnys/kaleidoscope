@@ -37,7 +37,7 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
     case "timeline": for (const field of ["on_select", "on_edit", "on_viewport"] as const) add(field, block[field] !== undefined); break;
     case "tree": if (block.items !== undefined) add("on_select", block.on_select !== undefined); break;
     case "folder": add("on_select", block.on_select !== undefined); break;
-    case "list": add("on_select", block.on_select !== undefined); add("on_remove", block.on_remove !== undefined); block.group_actions?.forEach((_, index) => add(`group_actions/${index}/on_click`)); break;
+    case "list": add("on_select", block.on_select !== undefined); add("on_activate", block.on_activate !== undefined); add("on_remove", block.on_remove !== undefined); block.group_actions?.forEach((_, index) => add(`group_actions/${index}/on_click`)); break;
     case "map": case "chart": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
     case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); add("on_cancel", block.on_cancel !== undefined); break;
     case "text": add("on_click", block.on_click !== undefined); add("on_double_click", block.on_double_click !== undefined); break;
