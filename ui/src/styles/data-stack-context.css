@@ -1,16 +1,13 @@
 /* 쌓기의 내용은 직접 자식 또는 결정 줄 앞 스크롤 본문에 있다.
    맥락은 바깥 쌓기가 정하고 두 위치에 같은 규칙을 적용한다. */
-.ks-split.is-stacked > .ks-split-pane > .ks-data-stack.is-column.has-fill-list {
-  :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 1 1 auto; }
-}
 :is(.ks-data-tab-panel, .ks-data-section-child) > .ks-data-stack.is-column {
   &:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-markdown-view, .ks-timeline, .ks-chart, .ks-map)) {
     height: auto;
     :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 0 0 auto; overflow: visible; }
   }
   &.has-fill-list {
-    height: 100%;
-    :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 1 1 0; overflow: auto; }
+    height: var(--ks-fill-list-height, 100%);
+    :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 1 1 var(--ks-fill-list-basis, 0); overflow: auto; }
   }
   &.has-textarea-fill { height: 100%; }
   :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll):has(> :is(.ks-data-input, .ks-input-field) textarea) { flex: 1 1 0; overflow: auto; }
