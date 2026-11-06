@@ -88,6 +88,26 @@ test("목록 가장자리 페이드는 실제 스크롤과 폭과 창 수를 따
   await page.keyboard.press("Control+Alt+Shift+Tab");
   await expect(list.locator(".ks-taskbar-item").last()).toHaveAttribute("data-state", "active");
   await fade(true, false);
+  const activeOutsideFade = () => list.evaluate((element) => {
+    const row = element.getBoundingClientRect();
+    const active = element.querySelector<HTMLElement>('[data-state="active"]')!.getBoundingClientRect();
+    const padding = parseFloat(getComputedStyle(element).getPropertyValue("--ks-space-5"));
+    const atStart = element.scrollLeft <= 1;
+    const atEnd = element.scrollWidth - element.clientWidth - element.scrollLeft <= 1;
+    return {
+      left: atStart || active.left - row.left >= padding - 1,
+      right: atEnd || row.right - active.right >= padding - 1,
+    };
+  });
+  // 양 끝 항목은 예외이고, 중간 항목은 페이드가 켜진 쪽에서 토큰 폭만큼 떨어진다.
+  for (const direction of ["Control+Alt+Tab", "Control+Alt+Shift+Tab"]) {
+    for (let step = 0; step < 20; step += 1) {
+      await page.keyboard.press(direction);
+      const index = direction === "Control+Alt+Tab" ? step : 18 - step;
+      await expect(list.locator(".ks-taskbar-item").nth((index + 20) % 20)).toHaveAttribute("data-state", "active");
+      await expect.poll(activeOutsideFade).toEqual({ left: true, right: true });
+    }
+  }
   await page.emulateMedia({ colorScheme: "dark" });
   await shot("fade-twenty-dark-active-end");
   await page.emulateMedia({ colorScheme: "light" });

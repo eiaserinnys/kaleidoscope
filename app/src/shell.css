@@ -343,6 +343,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  scroll-padding-inline: var(--ks-space-5);
 }
 
 .ks-taskbar-windows::-webkit-scrollbar {
