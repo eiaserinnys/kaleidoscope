@@ -4,6 +4,91 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/?core=http://127.0.0.1:7420");
 });
 
+test("목록 가장자리 페이드는 실제 스크롤과 폭과 창 수를 따른다", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const bar = page.locator(".ks-taskbar");
+  const list = bar.locator(".ks-taskbar-windows");
+  const windows = page.getByTestId("app-window-calculator");
+  const fade = async (start: boolean, end: boolean) => {
+    await expect(list).toHaveAttribute("data-fade-start", String(start));
+    await expect(list).toHaveAttribute("data-fade-end", String(end));
+    expect(await list.evaluate((element) => getComputedStyle(element).maskImage === "none")).toBe(!start && !end);
+  };
+  const shot = async (name: string) => {
+    await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
+  };
+  for (let count = 1; count <= 20; count += 1) {
+    await bar.getByRole("button", { name: "앱 열기" }).click();
+    await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "계산기", exact: true }).click();
+    await expect(windows).toHaveCount(count);
+    if (count === 5 || count === 20) {
+      for (const width of count === 5 ? [600, 360] : [1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await list.hover();
+        await page.mouse.wheel(0, -10000);
+        await fade(false, true);
+        await shot(`fade-${count}-${width}-start`);
+        await page.mouse.wheel(0, 60);
+        await fade(true, true);
+        await shot(`fade-${count}-${width}-middle`);
+        await page.mouse.wheel(0, 10000);
+        await fade(true, false);
+        await shot(`fade-${count}-${width}-end`);
+      }
+      if (count === 5) {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await fade(false, false);
+        await shot("fade-five-no-overflow");
+      }
+    }
+  }
+  // 맨 위 창 변경의 scrollIntoView 뒤에도 끝의 알약은 마스크되지 않는다.
+  await page.keyboard.press("Control+Alt+Tab");
+  await expect(list.locator(".ks-taskbar-item").first()).toHaveAttribute("data-state", "active");
+  await fade(false, true);
+  await page.keyboard.press("Control+Alt+Shift+Tab");
+  await expect(list.locator(".ks-taskbar-item").last()).toHaveAttribute("data-state", "active");
+  await fade(true, false);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await shot("fade-twenty-dark-active-end");
+  await page.emulateMedia({ colorScheme: "light" });
+  for (let count = 20; count > 0; count -= 1) {
+    const lastItem = list.locator(".ks-taskbar-item").last();
+    if (await lastItem.getAttribute("data-state") !== "active") await lastItem.click();
+    await expect(lastItem).toHaveAttribute("data-state", "active");
+    await windows.last().getByRole("button", { name: "창 닫기" }).click();
+    await expect(windows).toHaveCount(count - 1);
+  }
+  await fade(false, false);
+});
+
+test("막대 단추에 Tab으로 들어가면 초점 고리가 안쪽 여백에 들어간다", async ({ page }, testInfo) => {
+  const settings = page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true });
+  await settings.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(settings).toBeFocused();
+  await expect(settings).toHaveCSS("outline-offset", "2px");
+  const launcher = page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" });
+  await launcher.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(launcher).toBeFocused();
+  const metrics = await launcher.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const button = element.getBoundingClientRect();
+    const bar = element.closest(".ks-taskbar")!.getBoundingClientRect();
+    const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+    return { visible: element.matches(":focus-visible"), offset: style.outlineOffset,
+      top: button.top - ring - bar.top, bottom: bar.bottom - button.bottom - ring };
+  });
+  expect(metrics).toEqual({ visible: true, offset: "0px", top: 2, bottom: 2 });
+  await page.screenshot({ path: testInfo.outputPath("focus-taskbar.png") });
+  const bar = await page.locator(".ks-taskbar").boundingBox();
+  if (!bar) throw new Error("작업 표시줄을 찾지 못했습니다");
+  await page.screenshot({ path: testInfo.outputPath("focus-taskbar-detail.png"), clip: { x: bar.x, y: bar.y - 4, width: 120, height: bar.height + 8 } });
+});
+
 test("창 수가 달라도 같은 자리를 연속으로 눌러 데스크톱을 순환한다", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const bar = page.locator(".ks-taskbar");

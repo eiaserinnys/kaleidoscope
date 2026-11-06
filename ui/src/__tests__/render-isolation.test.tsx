@@ -411,6 +411,50 @@ afterEach(() => {
   fallbackProbe.current = null;
 });
 
+it("작업 표시줄의 스크롤과 목록 크기 변경은 React를 다시 그리지 않는다", async () => {
+  const observers: { target: Element; callback: ResizeObserverCallback }[] = [];
+  const original = globalThis.ResizeObserver;
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(target: Element) { observers.push({ target, callback: this.callback }); }
+    disconnect() {}
+    unobserve() {}
+  });
+  const transport = createFakeTransport({ ...makeTestSeed(), snapshot: testSnapshot([definition], {}) });
+  const store = createShellStore(transport);
+  let commits = 0;
+  try {
+    render(<Profiler id="shell-fade" onRender={() => { commits += 1; }}><Shell store={store} /></Profiler>);
+    await store.ready;
+    const list = await waitFor(() => {
+      const element = document.querySelector<HTMLElement>(".ks-taskbar-windows");
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    await settleRenders();
+    Object.defineProperties(list, { clientWidth: { value: 100, configurable: true }, scrollWidth: { value: 300 } });
+    commits = 0;
+    await act(async () => {
+      list.scrollLeft = 50;
+      fireEvent.scroll(list);
+    });
+    expect(list.dataset.fadeStart).toBe("true");
+    expect(list.dataset.fadeEnd).toBe("true");
+    await act(async () => {
+      Object.defineProperty(list, "clientWidth", { value: 300 });
+      list.scrollLeft = 0;
+      observers.filter(({ target }) => target === list).forEach(({ callback }) => callback([], {} as ResizeObserver));
+    });
+    expect(list.dataset.fadeStart).toBe("false");
+    expect(list.dataset.fadeEnd).toBe("false");
+    expect(commits).toBe(0);
+  } finally {
+    store.dispose();
+    cleanup();
+    vi.stubGlobal("ResizeObserver", original);
+  }
+});
+
 it("앱 배지 변경은 해당 타일과 앱 열기 단추만 갱신한다", async () => {
   const { store, transport } = await setup([definition, whenDefinition]);
   fireEvent.click(within(document.querySelector(".ks-taskbar") as HTMLElement).getByRole("button", { name: "앱 열기" }));

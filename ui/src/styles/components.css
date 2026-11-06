@@ -67,6 +67,7 @@
   height: var(--ks-control-height);
   flex: 0 0 var(--ks-control-height);
   border-radius: calc(var(--ks-radius-bar) - var(--ks-space-1));
+  outline-offset: 0;
 }
 
 .ks-button.is-progress, .ks-icon-button.is-progress { position: relative; }

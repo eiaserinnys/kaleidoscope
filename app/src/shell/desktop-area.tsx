@@ -163,10 +163,27 @@ function Taskbar({ activeDesktopId, desktopCount, launcherOpen, onOpenApps, onCa
   }, [onCall, setWindowMenu]);
   const canMinimize = windows.some((window) => !window.minimized) || Boolean(systemWindow && !systemWindow.minimized);
   const canMaximize = windows.length > 0 || Boolean(systemWindow);
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const updateFade = () => {
+      list.dataset.fadeStart = String(list.scrollLeft > 0);
+      list.dataset.fadeEnd = String(list.scrollLeft + list.clientWidth < list.scrollWidth);
+    };
+    updateFade();
+    list.addEventListener("scroll", updateFade);
+    const observer = new ResizeObserver(updateFade);
+    observer.observe(list);
+    return () => {
+      list.removeEventListener("scroll", updateFade);
+      observer.disconnect();
+    };
+  }, [windows.length, Boolean(systemWindow)]);
   return <nav aria-label="작업 표시줄" className="ks-taskbar" role="toolbar">
     <IconButton variant="taskbar" aria-label="이전 데스크톱" title="이전 데스크톱 (Ctrl+Alt+←)" disabled={!activeDesktopId || desktopCount < 2} onClick={() => void windowActions.desktop(-1)}><ChevronLeft /></IconButton>
     <AppLauncherButton store={store} expanded={launcherOpen} disabled={!activeDesktopId} onClick={onOpenApps} />
-    <div className="ks-taskbar-windows" onWheel={(event) => { event.currentTarget.scrollLeft += event.deltaY; }}>
+    <div ref={listRef} className="ks-taskbar-windows" onWheel={(event) => { event.currentTarget.scrollLeft += event.deltaY; }}>
       {windows.map((window) => <TaskbarItem key={window.id} window={window} isTop={window.id === topWindowId} store={store} onAct={act} setWindowMenu={setWindowMenu} />)}
       {systemWindow ? <SystemTaskbarItem state={systemWindow} setWindowMenu={setWindowMenu} /> : null}
     </div>

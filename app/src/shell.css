@@ -349,6 +349,18 @@
   display: none;
 }
 
+.ks-taskbar-windows[data-fade-start="true"] {
+  mask-image: linear-gradient(to right, transparent, black var(--ks-space-5));
+}
+
+.ks-taskbar-windows[data-fade-end="true"] {
+  mask-image: linear-gradient(to left, transparent, black var(--ks-space-5));
+}
+
+.ks-taskbar-windows[data-fade-start="true"][data-fade-end="true"] {
+  mask-image: linear-gradient(to right, transparent, black var(--ks-space-5), black calc(100% - var(--ks-space-5)), transparent);
+}
+
 .ks-window-frame {
   position: absolute;
   inset: 0;
