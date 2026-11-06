@@ -129,7 +129,7 @@ export class WindowData {
   clientDormant = false;
   setClientHost = (host: HTMLElement | null) => { this.clientHost = host; this.runtime?.observeHost(host); };
   setClientDormant = (dormant: boolean) => { this.clientDormant = dormant; this.runtime?.scheduleLifecycle(); };
-  readonly mediaCache = new Map<string, { size: number; request: Promise<string> }>();
+  readonly mediaCache = new Map<string, { size: number; request: Promise<string>; ready?: { url: string; size: number }; failed?: CoreError }>();
   private readonly playbackCache = new Map<string, PlaybackLease>();
   acquirePlayback = (media: MediaRef, generation: number) => {
     const key = JSON.stringify([media, generation]);

@@ -7,6 +7,7 @@ import { WindowDataProvider } from "../data/window-data";
 import { useMedia } from "../data/use-media";
 import { MediaThumbnail } from "../components/media-thumbnail";
 import { makeTestSeed } from "./fixtures";
+import { useLayoutEffect } from "react";
 
 const definition: AppDefinition = { id: "media-test", name: "미디어 시험", requires: { blocks: 12, modules: { assets: 1 } }, permissions: [], state: {}, assets: [], ui: { type: "text", value: "시험" } };
 const photo: MediaRef = { permission: "files", path: "photo.jpg" };
@@ -52,14 +53,14 @@ it("불러오기, 실패, 미디어 없음은 서로 다른 표시를 쓴다", a
 it("썸네일 크기 단계 안에서는 호출하지 않고 커진 뒤 줄여도 다시 호출하지 않는다", async () => {
   const s = setup();
   const view = render(s.wrap(<MediaThumbnail media={photo} size={160} />));
-  await waitFor(() => expect(s.requests.map((r) => r.size)).toEqual([128]));
+  await waitFor(() => expect(s.requests.map((r) => r.size)).toEqual([256]));
   await s.reply(0, "small");
   const img = () => view.container.querySelector("img")?.getAttribute("src");
   expect(img()).toContain(btoa("small"));
-  width = 120; act(() => resize());
+  width = 150; act(() => resize());
   expect(s.requests).toHaveLength(1);
-  width = 129; act(() => resize());
-  await waitFor(() => expect(s.requests.map((r) => r.size)).toEqual([128, 256]));
+  width = 171; act(() => resize());
+  await waitFor(() => expect(s.requests.map((r) => r.size)).toEqual([256, 512]));
   expect(img()).toContain(btoa("small"));
   await s.reply(1, "large");
   expect(img()).toContain(btoa("large"));
@@ -107,7 +108,87 @@ it("소수 배율에서도 크기 단계를 정확히 요청한다", async () =>
   vi.stubGlobal("devicePixelRatio", 1.1);
   const s = setup();
   render(s.wrap(<MediaThumbnail media={photo} size={160} />));
-  await waitFor(() => expect(s.requests.map((request) => request.size)).toEqual([128]));
+  await waitFor(() => expect(s.requests.map((request) => request.size)).toEqual([256]));
+  s.store.dispose();
+});
+
+it("다시 붙은 칸은 큰 요청이 끝나기 전 첫 렌더부터 캐시 그림을 보인다", async () => {
+  const s = setup();
+  const frames: string[] = [];
+  function Image({ size }: { size: number }) {
+    const r = useMedia(photo, size);
+    useLayoutEffect(() => { frames.push(r.status === "ready" ? r.url : r.status); });
+    return <div>{r.status === "ready" ? r.url : r.status}</div>;
+  }
+  const draw = (key: string, size: number) => s.wrap(<Image key={key} size={size} />);
+  const view = render(draw("first", 64));
+  await waitFor(() => expect(s.requests).toHaveLength(1));
+  await s.reply(0, "small");
+  view.rerender(draw("first", 128));
+  await waitFor(() => expect(s.requests).toHaveLength(2));
+  frames.length = 0;
+  view.rerender(draw("second", 128));
+  expect(frames[0]).toContain(btoa("small"));
+  expect(s.requests).toHaveLength(2);
+  await act(async () => s.requests[1].reject({ code: "unavailable", message: "실패", details: [] }));
+  frames.length = 0;
+  view.rerender(draw("third", 64));
+  expect(frames[0]).toContain(btoa("small"));
+  expect(s.requests).toHaveLength(2);
+  s.store.dispose();
+});
+
+it("실패 칸은 재마운트 첫 렌더에 실패를 보이고 한 번 다시 읽는다", async () => {
+  const s = setup();
+  const frames: string[] = [];
+  function Image() {
+    const r = useMedia(photo, 64);
+    useLayoutEffect(() => { frames.push(r.status); });
+    return <div>{r.status}</div>;
+  }
+  const draw = (key: string) => s.wrap(<Image key={key} />);
+  const view = render(draw("first"));
+  await waitFor(() => expect(s.requests).toHaveLength(1));
+  await act(async () => s.requests[0].reject({ code: "unavailable", message: "실패", details: [] }));
+  frames.length = 0;
+  view.rerender(draw("second"));
+  expect(frames[0]).toBe("failed");
+  await waitFor(() => expect(s.requests).toHaveLength(2));
+  await act(async () => s.requests[1].reject({ code: "unavailable", message: "실패", details: [] }));
+  expect(screen.getByText("failed")).toBeTruthy();
+  expect(s.requests).toHaveLength(2);
+  s.store.dispose();
+});
+
+it("다시 받기는 로딩으로 전환한 뒤 새 요청을 보낸다", async () => {
+  const s = setup();
+  function Image() {
+    const r = useMedia(photo, 64);
+    return <button onClick={r.retry}>{r.status}</button>;
+  }
+  render(s.wrap(<Image />));
+  await waitFor(() => expect(s.requests).toHaveLength(1));
+  await act(async () => s.requests[0].reject({ code: "unavailable", message: "실패", details: [] }));
+  act(() => screen.getByText("failed").click());
+  expect(screen.getByText("loading")).toBeTruthy();
+  await waitFor(() => expect(s.requests).toHaveLength(2));
+  await s.reply(1, "retried");
+  expect(screen.getByText("ready")).toBeTruthy();
+  s.store.dispose();
+});
+
+it("썸네일 재마운트는 측정 전 첫 렌더부터 캐시 그림을 쓴다", async () => {
+  const s = setup();
+  const view = render(s.wrap(<MediaThumbnail key="first" media={photo} size={160} />));
+  await waitFor(() => expect(s.requests).toHaveLength(1));
+  await s.reply(0, "small");
+  const observed: string[] = [];
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains("ks-media-thumbnail")) observed.push(this.querySelector("img")?.getAttribute("src") ?? "blank");
+    return { width, height: width } as DOMRect;
+  });
+  view.rerender(s.wrap(<MediaThumbnail key="second" media={photo} size={160} />));
+  expect(observed[0]).toContain(btoa("small"));
   s.store.dispose();
 });
 

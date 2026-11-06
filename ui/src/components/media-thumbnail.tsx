@@ -11,23 +11,27 @@ export function isMedia(value: unknown): value is MediaRef {
 export function cropStyle(crop: Crop | undefined) {
   return crop && crop.w > 0 && crop.h > 0 ? { width: `${100 / crop.w}%`, height: `${100 / crop.h}%`, left: `${-100 * crop.x / crop.w}%`, top: `${-100 * crop.y / crop.h}%` } : undefined;
 }
-export function MediaThumbnail({ media, size, className = "", icon = false }: { media: MediaRef | null; size: number; className?: string; icon?: boolean }) {
+export function MediaThumbnail({ media, className = "", icon = false }: { media: MediaRef | null; size: number; className?: string; icon?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const [measured, setMeasured] = useState(0);
+  const asset = !!media && "asset" in media;
+  const [measured, setMeasured] = useState({ size: 0, asset });
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
     const measure = () => {
       const rect = element.getBoundingClientRect();
-      const pixels = Math.ceil(Math.max(rect.width, rect.height) * (globalThis.devicePixelRatio || 1));
-      setMeasured(pixels ? [64, 128, 256, 512, 1024].find((step) => step >= pixels) ?? pixels : 0);
+      const dpr = globalThis.devicePixelRatio || 1;
+      let pixels = Math.ceil(Math.max(rect.width, rect.height) * dpr);
+      if (pixels && !asset) pixels = Math.max(Math.ceil(pixels * 1.5), Math.ceil(128 * dpr));
+      const size = pixels ? [64, 128, 256, 512, 1024].find((step) => step >= pixels) ?? pixels : 0;
+      setMeasured((old) => old.size === size && old.asset === asset ? old : { size, asset });
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
-  const result = useMedia(measured ? media : null, measured ? measured / (globalThis.devicePixelRatio || 1) : size);
+  }, [asset]);
+  const result = useMedia(media, measured.asset === asset ? measured.size / (globalThis.devicePixelRatio || 1) : 0);
   const url = result.status === "ready" ? result.url : null;
   const image = useMemo(() => {
     if (!icon || !url || !media) return null;
