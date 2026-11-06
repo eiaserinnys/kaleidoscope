@@ -249,3 +249,26 @@ test("설명 없는 활성·검색·일치 없음에는 빈 설명 칸이 없다
     await expect(page.locator(".ks-combobox-separator")).toHaveCount(0);
   }
 });
+
+test("처음 재는 순간에도 목록 높이를 제한해 가상 행을 전부 그리지 않는다", async ({ page }) => {
+  await page.evaluate(() => {
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, "clientHeight")!;
+    (window as any).comboboxPeak = { height: 0, rows: 0 };
+    Object.defineProperty(Element.prototype, "clientHeight", { ...original, get(this: Element) {
+      const height = original.get!.call(this);
+      if (this.matches(".ks-combobox-list")) {
+        const peak = (window as any).comboboxPeak;
+        peak.height = Math.max(peak.height, height);
+        peak.rows = Math.max(peak.rows, this.querySelectorAll('[role="option"]').length);
+      }
+      return height;
+    } });
+  });
+  const f = page.getByRole("combobox", { name: "목록 전용" });
+  for (let i = 0; i < 2; i++) { await f.focus(); await expect(page.getByRole("listbox")).toBeVisible(); await f.press("Escape"); await f.blur(); }
+  const peak = await page.evaluate(() => (window as any).comboboxPeak);
+  console.log("초기 목록 측정", peak);
+  const limit = await f.evaluate(e => 2 * parseFloat(getComputedStyle(e).getPropertyValue("--ks-pane-min-size")));
+  expect(peak.height, JSON.stringify(peak)).toBeLessThanOrEqual(limit);
+  expect(peak.rows, JSON.stringify(peak)).toBeLessThan(100);
+});
