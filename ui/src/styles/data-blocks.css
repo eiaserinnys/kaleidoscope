@@ -423,6 +423,9 @@
 .ks-dialog-title { flex: 0 0 auto; font-size: var(--ks-type-title); font-weight: 600; }
 .ks-dialog-scroll { --ks-dialog-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); min-height: 0; flex: 1 100000 auto; overflow: auto; padding: 0 var(--ks-dialog-ring) var(--ks-dialog-ring); margin: 0 calc(-1 * var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring)); scroll-padding: var(--ks-dialog-ring); }
 .ks-dialog-scroll:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+/* 알림이 있으면 스크롤 칸의 초점 고리 자리를 본문 안쪽으로 옮겨 스크롤 칸이 0까지 줄어들게 한다. 그 자리는 스크롤 내용이 되어 알림이 있는 동안 본문 띠가 남지 않는다. */
+.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll { padding-block-end: 0; }
+.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll > .ks-dialog-body { padding-block-end: var(--ks-dialog-ring); }
 .ks-dialog-confirm.is-danger .ks-button { border-color: var(--ks-color-danger); background-color: var(--ks-color-danger); color: var(--ks-color-danger-contrast); }
 .ks-dialog-confirm.is-danger .ks-button:active:not(:disabled) { background-image: linear-gradient(color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent), color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent)), linear-gradient(var(--ks-color-hover), var(--ks-color-hover)); }
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
