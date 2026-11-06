@@ -194,7 +194,7 @@ test("설명 없는 행과 있는 행을 오가도 목록 상자와 세 줄 여�
 
 test("설명 칸에서 편집을 취소한 직후에도 교체한다", async ({ page }) => {
   const f = page.getByRole("combobox", { name: "목록 전용" });
-  await f.fill("항목"); await f.press("ArrowDown");
+  await f.fill("항목 1"); await f.press("ArrowDown");
   await page.locator(".ks-combobox-description").click(); await page.keyboard.press("Escape");
   await page.keyboard.type("배"); await expect(f).toHaveValue("배");
 });
