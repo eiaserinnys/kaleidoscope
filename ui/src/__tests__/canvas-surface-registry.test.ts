@@ -5,6 +5,7 @@ import { WindowData } from "../data/window-data";
 import { ClientRuntime } from "../runtime/client-runtime";
 
 const definition = {
+  permissions: [],
   client: {
     runtime: "javascript",
     entry: { id: "runtime", version: 1 },
