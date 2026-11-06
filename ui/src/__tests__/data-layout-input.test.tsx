@@ -14,6 +14,24 @@ import blockGallery from "../../../examples/block-gallery.json";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
+it("stack의 값이 바뀔 때만 가장 가까운 세로 스크롤을 처음으로 돌린다", async () => {
+  const definition: AppDefinition = { ...mdEditorDefinition, state: { page: "a" }, ui: {
+    type: "stack", direction: "column", scroll_reset: { state: "page" }, children: [{ type: "text", value: "내용" }],
+  } as unknown as Block };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { page: "a" };
+  const transport = createFakeTransport(seed);
+  const host = document.createElement("div");
+  host.style.overflowY = "auto"; host.scrollTop = 80;
+  document.body.append(host);
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />, { container: host });
+  await screen.findByText("내용");
+  expect(host.scrollTop).toBe(80);
+  await act(async () => { await transport.call({ op: "window.patch_state", window_id: "editor-window", patch: { page: "b" } }); });
+  await waitFor(() => expect(host.scrollTop).toBe(0));
+  view.unmount(); host.remove();
+});
+
 it("가짜 코어가 when 안의 식과 입력 동작을 처리한다", async () => {
   const definition: AppDefinition = { ...mdEditorDefinition, state: { query: "처음" }, ui: {
     type: "when", value: true, child: { type: "stack", direction: "column", children: [

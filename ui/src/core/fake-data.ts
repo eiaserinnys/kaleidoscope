@@ -57,7 +57,8 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
   const add = (name: string, value: Binding | undefined) => { if (value !== undefined) slots.push([`${pointer}/${name}`, value]); };
   switch (block.type) {
     case "section": add("title", block.title); add("meta", block.meta); break;
-    case "list": add("items", block.items); break;
+    case "list": add("items", block.items); add("current", block.current); break;
+    case "stack": add("scroll_reset", block.scroll_reset); break;
     case "tree": if (block.items !== undefined) add("items", block.items); break;
     case "table": add("rows", block.rows); if (!Array.isArray(block.columns)) add("columns", block.columns); break;
     case "properties": block.fields.forEach((field, index) => add(`fields/${index}/value`, field.value)); break;

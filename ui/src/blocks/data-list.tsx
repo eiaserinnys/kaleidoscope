@@ -153,6 +153,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const { virtual } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 });
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
+  const currentValue = useBinding(`${pointer}/current`, block.current ?? null);
   const disabledValue = useBinding(`${pointer}/disabled`, block.disabled ?? false);
   const disabled = disabledValue.status === "ready" && disabledValue.value === true;
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
@@ -174,9 +175,13 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const anchor = useRef<string | null>(null);
   const pointerFocus = useRef<string | null>(null);
   const pointerTarget = useRef<EventTarget | null>(null);
-  const [currentKey, setCurrentKey] = useState<string | null>(null);
-  const current = currentKey && draft.draft.keys.includes(currentKey) ? currentKey : items.filter((item) => item.selectable !== false && draft.draft.keys.includes(item.key)).at(-1)?.key ?? null;
-  const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf);
+  const boundCurrent = currentValue.status === "ready" ? currentValue.value : null;
+  const [localCurrent, setLocalCurrent] = useState<{ key: string | null; binding: unknown } | null>(null);
+  useEffect(() => { setLocalCurrent(null); }, [boundCurrent]);
+  const localKey = localCurrent && Object.is(localCurrent.binding, boundCurrent) ? localCurrent.key : null;
+  const validCurrent = (key: unknown): key is string => typeof key === "string" && draft.draft.keys.includes(key) && items.some(item => item.key === key && item.selectable !== false);
+  const current = validCurrent(localKey) ? localKey : validCurrent(boundCurrent) ? boundCurrent : [...draft.draft.keys].reverse().find(validCurrent) ?? null;
+  const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf, multiple, !multiple || currentValue.status !== "loading");
   const selectable = items.filter((item) => item.selectable !== false);
   const orderedKeys = (keys: readonly string[]) => {
     const wanted = new Set(keys);
@@ -189,7 +194,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     draftRef.current = next;
     draft.change(next);
     void draft.send(next, coalesce);
-    setCurrentKey(item?.key ?? null);
+    setLocalCurrent({ key: item?.key ?? null, binding: boundCurrent });
   };
   const chooseMultiple = (item: ListItem, mode: "replace" | "toggle" | "range", coalesce = false, focusIndex = roving.focus, activate?: string) => {
     const previous = orderedKeys(draftRef.current.keys);

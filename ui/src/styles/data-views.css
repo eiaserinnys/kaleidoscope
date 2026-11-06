@@ -111,6 +111,7 @@
 .ks-list-card.is-current,
 .ks-list-card.is-current:hover:not([aria-disabled="true"]) { background: var(--ks-color-accent); color: var(--ks-color-accent-contrast); }
 .ks-list-card.is-current .ks-view-meta { color: inherit; }
+.ks-list-card.is-current .ks-badge { background: var(--ks-color-surface-solid); color: var(--ks-color-text); }
 .ks-list-card:focus-visible { outline-style: dashed; }
 .ks-list-card.is-selected:focus-visible { outline-color: var(--ks-color-accent-contrast); }
 .ks-list-card .ks-media-thumbnail { border-radius: calc(var(--ks-radius-small) - var(--ks-focus-width)); }

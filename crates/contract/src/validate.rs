@@ -78,6 +78,19 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
     crate::validate_input::validate_input_extensions(&definition)?;
     crate::validate_button::validate_button_extensions(&definition)?;
+    let mut new_block_error = None;
+    if definition.requires.blocks < crate::LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION {
+        data::walk_definition_blocks(&definition, &mut |pointer, block| {
+            if new_block_error.is_some() { return; }
+            let version = crate::LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION;
+            new_block_error = match block {
+                Block::List { current: Some(_), .. } => Some(crate::errors::APP_LIST_CURRENT_VERSION_LOW(pointer, version)),
+                Block::Stack { scroll_reset: Some(_), .. } => Some(crate::errors::APP_STACK_SCROLL_RESET_VERSION_LOW(pointer, version)),
+                _ => None,
+            };
+        });
+    }
+    if let Some(error) = new_block_error { return Err(error); }
     crate::validate_list::validate_list_extensions(&definition)?;
     crate::validate_file_input::validate_file_drop(&definition)?;
 

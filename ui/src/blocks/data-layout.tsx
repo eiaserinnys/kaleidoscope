@@ -56,6 +56,7 @@ function isTextarea(block: Block): boolean {
 
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const blockRoot = useBlockRootProps();
+  const root = useRef<HTMLDivElement>(null);
   const last = block.children.length - 1;
   const fill = block.place === "center" ? [] : block.fill === undefined
     ? ((block.direction === "column" ? isFixedHeightControl(block.children[last]) : isFixedWidthControl(block.children[last])) ? [] : [last])
@@ -94,9 +95,28 @@ export function StackBlock({ block, context, pointer }: Props<"stack">) {
   }
   const classes = `ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${Array.isArray(block.fill) && block.place !== "center" ? " has-fill-list" : ""}${textareaFill ? " has-textarea-fill" : ""}${align}`;
   const items = block.children.map((child, index) => <div className={`ks-data-stack-item${filled.has(index) ? " is-fill" : ""}${isDialogOnly(child) ? " is-dialog" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>);
-  return <div {...blockRoot} className={`${classes}${wrapsScroll ? " has-action-tail" : ""}`}>
+  return <div {...blockRoot} ref={root} className={`${classes}${wrapsScroll ? " has-action-tail" : ""}`}>
+    {block.scroll_reset !== undefined && <StackScrollReset root={root} binding={block.scroll_reset} pointer={`${pointer}/scroll_reset`} />}
     {wrapsScroll ? <><div className="ks-data-stack-item is-fill ks-stack-scroll"><div className={`${classes} ks-stack-scroll-content`}>{items.slice(0, tail)}</div></div>{items.slice(tail)}</> : items}
   </div>;
+}
+
+function StackScrollReset({ root, binding, pointer }: { root: React.RefObject<HTMLDivElement | null>; binding: NonNullable<Extract<Block, { type: "stack" }>["scroll_reset"]> | null; pointer: string }) {
+  const value = useBinding(pointer, binding);
+  const serialized = value.status === "ready" ? JSON.stringify(value.value) : undefined;
+  const previous = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (serialized === undefined) return;
+    if (previous.current !== undefined && previous.current !== serialized) {
+      let ancestor = root.current?.parentElement;
+      while (ancestor) {
+        if (/^(auto|scroll)$/.test(getComputedStyle(ancestor).overflowY)) { ancestor.scrollTop = 0; break; }
+        ancestor = ancestor.parentElement;
+      }
+    }
+    previous.current = serialized;
+  }, [serialized, root]);
+  return null;
 }
 
 export function TabsBlock({ block, context, pointer }: Props<"tabs">) {

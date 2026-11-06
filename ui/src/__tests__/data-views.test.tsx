@@ -43,6 +43,49 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport, originalCall };
 }
+it("다중 선택의 현재 칸은 바인딩에서 복원하고 바뀐 값이 지역 선택보다 우선한다", async () => {
+  const { transport } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, current: { state: "current" },
+    items: ["a", "b", "c"].map(key => ({ key, title: key })), on_select: { set_state: "choice" } } as unknown as Block,
+    { choice: ["a", "b"], current: "a" }, 50);
+  const a = await screen.findByRole("option", { name: "a" });
+  const b = screen.getByRole("option", { name: "b" });
+  expect(a.classList.contains("is-current")).toBe(true);
+  expect(a.tabIndex).toBe(0);
+  fireEvent.click(b, { ctrlKey: true });
+  await waitFor(() => expect(b.classList.contains("is-current")).toBe(false));
+  await act(async () => { await transport.call({ op: "window.patch_state", window_id: "viewer-window", patch: { choice: ["a", "b"], current: "b" } }); });
+  await waitFor(() => expect(b.classList.contains("is-current")).toBe(true));
+  await act(async () => { await transport.call({ op: "window.patch_state", window_id: "viewer-window", patch: { current: "c" } }); });
+  await waitFor(() => expect(b.classList.contains("is-current")).toBe(true));
+});
+it("다중 선택 목록을 다시 열면 현재 칸을 바인딩에서 복원한다", async () => {
+  const ui = { type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, current: { state: "current" },
+    items: ["a", "b"].map(key => ({ key, title: key })), on_select: { set_state: "choice" } } as unknown as Block;
+  const state = { choice: ["a", "b"], current: "a" };
+  setup(ui, state, 50);
+  expect((await screen.findByRole("option", { name: "a" })).classList.contains("is-current")).toBe(true);
+  cleanup();
+  setup(ui, state, 50);
+  const restored = await screen.findByRole("option", { name: "a" });
+  expect(restored.classList.contains("is-current")).toBe(true);
+  expect(restored.tabIndex).toBe(0);
+});
+it("식으로 받은 현재 칸도 초기 키보드 진입점이 된다", async () => {
+  setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, current: { expr: "$state.current" },
+    items: ["a", "b"].map(key => ({ key, title: key })), on_select: { set_state: "choice" } } as unknown as Block,
+    { choice: ["a", "b"], current: "a" }, 50);
+  const a = await screen.findByRole("option", { name: "a" });
+  await waitFor(() => expect(a.classList.contains("is-current")).toBe(true));
+  await waitFor(() => expect(a.tabIndex).toBe(0));
+});
+it("선택 밖의 현재 키는 무시하고 선택 배열의 마지막 키를 쓴다", async () => {
+  setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, current: { state: "current" },
+    items: ["a", "b", "c"].map(key => ({ key, title: key })), on_select: { set_state: "choice" } } as unknown as Block,
+    { choice: ["b", "a"], current: "c" }, 50);
+  const a = await screen.findByRole("option", { name: "a" });
+  expect(a.classList.contains("is-current")).toBe(true);
+  expect(a.tabIndex).toBe(0);
+});
 it("누른 칸과 다른 빈 곳에 놓으면 선택을 지우지 않고 빈 곳을 누르면 초점을 유지한다", async () => {
   const { calls } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },
     items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: ["a"] }, 49);

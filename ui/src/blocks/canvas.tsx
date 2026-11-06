@@ -1,5 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type PointerEvent } from "react";
 import type { Block } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
 import { createSerialSend } from "../data/throttled-send";
@@ -40,6 +40,8 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
   const rect = useRef<Rect>({ x: 0, y: 0, width: 0, height: 0 });
   const ratio = useBinding(`${pointer}/aspect_ratio`, block.aspect_ratio ?? null);
   const aspect = ratio.status === "ready" && typeof ratio.value === "number" && Number.isFinite(ratio.value) && ratio.value > 0 ? ratio.value : undefined;
+  const aspectRef = useRef(aspect);
+  const updateSurface = useRef<(() => void) | null>(null);
   const moveFrame = useRef<number | null>(null);
   const pendingMove = useRef<Record<string, string | number | boolean> | null>(null);
   const description = useBinding(`${pointer}/description`, block.description ?? null);
@@ -67,7 +69,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     const update = () => {
       const bounds = host.getBoundingClientRect();
       if (bounds.width <= 0 || bounds.height <= 0) return;
-      const next = canvasRect(bounds.width, bounds.height, aspect, block.fit ?? "contain");
+      const next = canvasRect(bounds.width, bounds.height, aspectRef.current, block.fit ?? "contain");
       rect.current = next;
       Object.assign(element.style, { left: `${next.x}px`, top: `${next.y}px`, width: `${next.width}px`, height: `${next.height}px` });
       const dpr = surfaceDpr(next.width, next.height, window.devicePixelRatio || 1);
@@ -78,6 +80,7 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
         attachedGeneration = data.attachSurface(surface, element.transferControlToOffscreen(), next.width, next.height, dpr, intersecting);
       } else if (attachedGeneration !== undefined) data.resizeSurface(surface, attachedGeneration, next.width, next.height, dpr);
     };
+    updateSurface.current = update;
     update();
     const observer = new ResizeObserver(update);
     observer.observe(host);
@@ -86,8 +89,13 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
       if (attachedGeneration !== undefined) data.setSurfaceVisible(surface, attachedGeneration, intersecting);
     });
     intersection?.observe(host);
-    return () => { observer.disconnect(); intersection?.disconnect(); if (attachedGeneration !== undefined) data.detachSurface(surface, attachedGeneration); element.remove(); };
-  }, [surface, aspect, block.fit, data, generation]);
+    return () => { updateSurface.current = null; observer.disconnect(); intersection?.disconnect(); if (attachedGeneration !== undefined) data.detachSurface(surface, attachedGeneration); element.remove(); };
+  }, [surface, block.fit, data, generation]);
+  useLayoutEffect(() => {
+    if (aspectRef.current === aspect) return;
+    aspectRef.current = aspect;
+    updateSurface.current?.();
+  }, [aspect]);
 
   const pointerEvent = (phase: "down" | "move" | "up" | "cancel", event: PointerEvent<HTMLDivElement>) => {
     if (!block.on_pointer || !root.current) return;

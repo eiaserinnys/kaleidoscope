@@ -449,6 +449,20 @@ error_catalog! { ENTRIES;
         message: "{pointer}: repeat.grid.item_width는 grid.columns가 auto일 때만 쓸 수 있습니다. 고정 열 수를 유지하려면 item_width를 지우세요.",
         fix: "{pointer}/grid/item_width를 지우거나 {pointer}/grid/columns를 auto로 바꾸세요"
     }
+    APP_LIST_CURRENT_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "목록 현재 칸 판 검사",
+        cause: "현재 칸 바인딩을 지원하지 않는 블록 판",
+        message: "{pointer}: 목록의 current는 블록 세트 {version}판부터입니다. 앱 정의의 requires.blocks를 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
+    APP_STACK_SCROLL_RESET_VERSION_LOW(pointer, version) {
+        class: InvalidAppDefinition,
+        place: "스택 스크롤 초기화 판 검사",
+        cause: "스크롤 초기화 바인딩을 지원하지 않는 블록 판",
+        message: "{pointer}: 스택의 scroll_reset은 블록 세트 {version}판부터입니다. 앱 정의의 requires.blocks를 고치세요.",
+        fix: "requires.blocks를 필요한 판 이상으로 고치세요"
+    }
     APP_LIST_MULTIPLE_VERSION_LOW(pointer, version) {
         class: InvalidAppDefinition,
         place: "목록 여러 선택 판 검사",

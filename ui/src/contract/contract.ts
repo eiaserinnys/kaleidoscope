@@ -418,7 +418,11 @@ view?: StateRef,
 /**
  * (5판) 보기 방식을 바꾸면 그 값을 쓸 상태 키.
  */
-on_view?: SetState, } | { "type": "stack", direction: SplitDirection, gap?: Gap, fill?: StackFill, wrap?: boolean, 
+on_view?: SetState, } | { "type": "stack", direction: SplitDirection, 
+/**
+ * (50판) 값이 바뀌면 가장 가까운 세로 스크롤을 처음으로 돌린다.
+ */
+scroll_reset?: Binding, gap?: Gap, fill?: StackFill, wrap?: boolean, 
 /**
  * (18판) 창 가운데 세로 기둥에 자식을 놓는다. 폭과 넘침 처리는 쉘이 정한다.
  */
@@ -438,7 +442,11 @@ meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Bloc
 /**
  * 격자 칸의 최소 폭. 생략하면 medium이다.
  */
-item_width?: RepeatGridItemWidth, grouped?: boolean, select_on_focus?: boolean, selection?: ListSelection, selected?: Binding, on_select?: Actions, on_activate?: Actions, 
+item_width?: RepeatGridItemWidth, grouped?: boolean, select_on_focus?: boolean, selection?: ListSelection, 
+/**
+ * (50판) 다중 선택에서 현재 칸의 키. 선택된 키 안에서만 쓴다.
+ */
+current?: Binding, selected?: Binding, on_select?: Actions, on_activate?: Actions, 
 /**
  * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
  */
