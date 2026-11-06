@@ -135,9 +135,7 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                 });
                 match applied {
                     Ok(((workspace_changed, waited), event)) => {
-                        if valid {
-                            inner.layout_signal.notify();
-                        }
+                        inner.layout_signal.notify();
                         if let Some(event) = event {
                             inner.emit_state(&event);
                         }

@@ -25,10 +25,10 @@ fn apps(core: &Core) {
     ));
 }
 
-#[test]
-fn storage_read_waits_until_workspace_push_is_applied() {
+fn storage_read_after_workspace_push(
+    reply: Result<kaleidoscope_contract::registry::LayoutChanges, RegistryError>,
+) {
     use crate::sync_state::EntityKind;
-    use kaleidoscope_contract::registry::LayoutChanges;
 
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
@@ -48,7 +48,7 @@ fn storage_read_waits_until_workspace_push_is_applied() {
         .layout_change_replies
         .lock()
         .unwrap()
-        .push_back(Ok(LayoutChanges::default()));
+        .push_back(reply);
     apps(&core);
     assert!(crate::registry_events::apply_event(
         &core.inner,
@@ -97,6 +97,18 @@ fn storage_read_waits_until_workspace_push_is_applied() {
         .unwrap()
         .sync
         .contains(EntityKind::Workspace, &workspace));
+}
+
+#[test]
+fn storage_read_waits_until_workspace_push_is_applied() {
+    storage_read_after_workspace_push(Ok(kaleidoscope_contract::registry::LayoutChanges::default()));
+}
+
+#[test]
+fn storage_read_resumes_when_workspace_push_is_rejected() {
+    storage_read_after_workspace_push(Err(RegistryError::Validation(
+        kaleidoscope_contract::errors::SERVER_PREFERENCES_APP_NOT_FOUND(),
+    )));
 }
 
 fn connections(core: &Core, connections: Vec<ConnectionInfo>) {
