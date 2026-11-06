@@ -317,9 +317,12 @@ pub const CONTRACT_VERSION: u32 = 42;
 /// - 50판: 목록 현재 칸과 스택 스크롤 초기화.
 /// - 51판: input 자동 높이의 최대 줄 수.
 /// - 52판: 기기 저장소에 든 파일을 그리는 미디어 참조 `blob`.
-pub const BLOCK_SET_VERSION: u32 = BLOB_MEDIA_BLOCK_SET_VERSION;
+/// - 53판: 확장 아이콘 13개.
+pub const BLOCK_SET_VERSION: u32 = EXTENDED_ICON_BLOCK_SET_VERSION;
 /// 기기 저장소 미디어 참조를 처음 지원하는 블록 세트 판.
 pub const BLOB_MEDIA_BLOCK_SET_VERSION: u32 = 52;
+/// 목록, `button`, `button_grid`가 함께 쓰는 확장 아이콘 이름을 처음 지원하는 블록 세트 판.
+pub const EXTENDED_ICON_BLOCK_SET_VERSION: u32 = 53;
 /// input.max_rows를 처음 지원하는 블록 세트 판.
 pub const INPUT_MAX_ROWS_BLOCK_SET_VERSION: u32 = 51;
 pub const LIST_CURRENT_STACK_SCROLL_BLOCK_SET_VERSION: u32 = 50;

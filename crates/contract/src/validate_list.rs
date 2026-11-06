@@ -38,8 +38,13 @@ pub(crate) fn validate_list_extensions(definition: &AppDefinition) -> Result<(),
             }
             let Some(icon) = item.get("icon") else { return; };
             if error.is_some() { return; }
-            if definition.requires.blocks < LIST_ICON_WIDTH_BLOCK_SET_VERSION {
-                error = Some(crate::errors::APP_LIST_ICON_VERSION_LOW(pointer, LIST_ICON_WIDTH_BLOCK_SET_VERSION));
+            let version = if icon.as_str().is_some_and(|name| data::EXTENDED_ICONS.contains(&name)) {
+                crate::EXTENDED_ICON_BLOCK_SET_VERSION
+            } else {
+                LIST_ICON_WIDTH_BLOCK_SET_VERSION
+            };
+            if definition.requires.blocks < version {
+                error = Some(crate::errors::APP_LIST_ICON_VERSION_LOW(pointer, version));
             } else if icon.as_str().is_none_or(|name| !data::ICON_NAMES.contains(&name)) {
                 error = Some(crate::errors::APP_LIST_ICON_NAME_INVALID(pointer, icon));
             }

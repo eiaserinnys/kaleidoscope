@@ -86,7 +86,7 @@ fn blob_reference_round_trips_with_crop_and_rejects_unknown_fields() {
 #[test]
 fn schema_lists_blob_variant_and_versions_advance() {
     assert_eq!(BLOB_MEDIA_BLOCK_SET_VERSION, 52);
-    assert_eq!(BLOCK_SET_VERSION, BLOB_MEDIA_BLOCK_SET_VERSION);
+    assert!(BLOCK_SET_VERSION >= BLOB_MEDIA_BLOCK_SET_VERSION);
     assert_eq!(CONTRACT_VERSION, 42);
     let text = serde_json::to_string(&schemars::schema_for!(kaleidoscope_contract::data::MediaRef))
         .expect("schema serializes");

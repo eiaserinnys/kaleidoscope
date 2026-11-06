@@ -31,7 +31,8 @@ pub(crate) fn validate_button_extensions(definition: &AppDefinition) -> Result<(
                 } else if let Some(Binding::Literal(value)) = icon {
                     if let Some(name) = value.as_str() {
                         let version = if LIST_ICONS.contains(&name) { crate::LIST_ICON_WIDTH_BLOCK_SET_VERSION }
-                            else if NEW_ICONS.contains(&name) { BUTTON_VARIANT_ICON_BLOCK_SET_VERSION } else { 0 };
+                            else if NEW_ICONS.contains(&name) { BUTTON_VARIANT_ICON_BLOCK_SET_VERSION }
+                            else if data::EXTENDED_ICONS.contains(&name) { crate::EXTENDED_ICON_BLOCK_SET_VERSION } else { 0 };
                         if definition.requires.blocks < version {
                             error = Some(crate::errors::APP_BUTTON_ICON_VERSION_LOW(pointer, version));
                         }
@@ -42,6 +43,7 @@ pub(crate) fn validate_button_extensions(definition: &AppDefinition) -> Result<(
                 let version = |item: &serde_json::Value| match item.get("icon").and_then(serde_json::Value::as_str) {
                     Some(name) if LIST_ICONS.contains(&name) => crate::LIST_ICON_WIDTH_BLOCK_SET_VERSION,
                     Some(name) if NEW_ICONS.contains(&name) => BUTTON_VARIANT_ICON_BLOCK_SET_VERSION,
+                    Some(name) if data::EXTENDED_ICONS.contains(&name) => crate::EXTENDED_ICON_BLOCK_SET_VERSION,
                     _ => 0,
                 };
                 let required = value.as_array().map_or_else(|| version(value), |items| items.iter().map(version).max().unwrap_or(0));

@@ -108,9 +108,43 @@ pub(super) fn mime_for_path(path: &str) -> &'static str {
         "wav" => "audio/wav",
         "ogg" => "audio/ogg",
         "m4a" => "audio/mp4",
+        "aac" => "audio/aac",
+        "flac" => "audio/flac",
+        "opus" => "audio/ogg",
+        "wma" => "audio/x-ms-wma",
         "mp4" | "m4v" => "video/mp4",
         "mov" => "video/quicktime",
         "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "ogv" => "video/ogg",
+        "avi" => "video/x-msvideo",
+        "mpeg" | "mpg" => "video/mpeg",
+        "bmp" => "image/bmp",
         _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mime_for_path;
+
+    #[test]
+    fn mime_for_path_covers_media_extensions() {
+        for (path, expected) in [
+            ("sound.aac", "audio/aac"),
+            ("sound.flac", "audio/flac"),
+            ("sound.opus", "audio/ogg"),
+            ("sound.wma", "audio/x-ms-wma"),
+            ("sound.mkv", "video/x-matroska"),
+            ("sound.ogv", "video/ogg"),
+            ("sound.avi", "video/x-msvideo"),
+            ("sound.mpeg", "video/mpeg"),
+            ("sound.mpg", "video/mpeg"),
+            ("picture.bmp", "image/bmp"),
+            ("SOUND.AAC", "audio/aac"),
+            ("no-extension", "application/octet-stream"),
+        ] {
+            assert_eq!(mime_for_path(path), expected, "{path}");
+        }
     }
 }
