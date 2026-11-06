@@ -18,7 +18,7 @@ function repeatChain(element: Element): unknown[] {
   }
   return keys;
 }
-function visible(element: HTMLElement, rect: DOMRect): boolean {
+function visible(element: HTMLElement, rect: DOMRect, includeOffscreen = false): boolean {
   for (let node: HTMLElement | null = element; node; node = node.parentElement) {
     const style = getComputedStyle(node);
     if (node.hidden || node.getAttribute("aria-hidden") === "true" || style.display === "none" || style.visibility === "hidden") return false;
@@ -27,7 +27,7 @@ function visible(element: HTMLElement, rect: DOMRect): boolean {
   while (clipElement && !clipElement.getClientRects().length) clipElement = clipElement.parentElement;
   if (!clipElement) return false;
   const clip = visibleClip(clipElement);
-  return rect.width > 0 && rect.height > 0 && rect.right > clip.left && rect.left < clip.right && rect.bottom > clip.top && rect.top < clip.bottom;
+  return rect.width > 0 && rect.height > 0 && (includeOffscreen || (rect.right > clip.left && rect.left < clip.right && rect.bottom > clip.top && rect.top < clip.bottom));
 }
 function exactQuote(root: HTMLElement, quote: AppCommentQuote): Range | "ambiguous" | null {
   if (!quote.exact) return null;
@@ -44,7 +44,7 @@ function exactQuote(root: HTMLElement, quote: AppCommentQuote): Range | "ambiguo
   if (!first || !last) return null;
   const range = root.ownerDocument.createRange(); range.setStart(first, a); range.setEnd(last, b); return range;
 }
-export function resolveScreen(anchor: AppCommentAnchor, definition: DefinitionResult, windowRoot: HTMLElement, context: ScreenContext): ScreenResult {
+export function resolveScreen(anchor: AppCommentAnchor, definition: DefinitionResult, windowRoot: HTMLElement, context: ScreenContext, options?: { includeOffscreen?: boolean }): ScreenResult {
   if (definition.kind === "orphan") return { kind: "orphan" };
   const blocks = scopeRoots(windowRoot, context.windowId).flatMap((root) => [root, ...root.querySelectorAll<HTMLElement>("[data-ks-block]")]).filter((el) => el.getAttribute("data-ks-block") === definition.pointer && (!overlayOwner(el) || overlayOwner(el)?.windowId === context.windowId) && same(repeatChain(el), anchor.repeat_chain ?? []));
   let targets: HTMLElement[] = blocks;
@@ -62,9 +62,9 @@ export function resolveScreen(anchor: AppCommentAnchor, definition: DefinitionRe
     const found = results.filter((item): item is { element: HTMLElement; range: Range } => item.range instanceof Range);
     if (found.length !== 1) return { kind: "not_visible" };
     const { element, range } = found[0]; const rect = range.getBoundingClientRect();
-    return visible(element, rect) ? { kind: definition.kind, element, range, rect } : { kind: "not_visible" };
+    return visible(element, rect, options?.includeOffscreen) ? { kind: definition.kind, element, range, rect } : { kind: "not_visible" };
   }
-  const shown = targets.flatMap((element) => { const rect = measureTarget(element); return rect && visible(element, rect) ? [{ element, rect }] : []; });
+  const shown = targets.flatMap((element) => { const rect = measureTarget(element); return rect && visible(element, rect, options?.includeOffscreen) ? [{ element, rect }] : []; });
   if (!shown.length || (anchor.row_identity !== undefined && shown.length !== 1) || ((anchor.kind === "control" || anchor.kind === "point") && shown.length !== 1)) return { kind: "not_visible" };
   const rects = shown.map(({ rect }) => rect); const left = Math.min(...rects.map((r) => r.left)), top = Math.min(...rects.map((r) => r.top)), right = Math.max(...rects.map((r) => r.right)), bottom = Math.max(...rects.map((r) => r.bottom));
   if (anchor.kind === "point" && anchor.frame_rel) return { kind: definition.kind, element: shown[0].element, rect: new DOMRect(left + (right - left) * anchor.frame_rel.x, top + (bottom - top) * anchor.frame_rel.y, 0, 0) };

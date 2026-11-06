@@ -120,9 +120,9 @@ export type AppCommentReplyRequest = { id: string, text: string, };
 
 export type AppCommentResolveRequest = { resolved: boolean, fixed_app_version?: number, };
 
-export type AppCommentSummary = { id: string, app_id: string, number: number, created_app_version: number, created_definition_digest: string, created_shell_version: string, origin: AppCommentOrigin, source_window_id: string, anchor: AppCommentAnchor, text: string, reply_count: number, image?: AppCommentImageMeta, resolved: boolean, resolved_app_version?: number, sent_at?: string, unread_reply: boolean, created_at: string, updated_at: string, revision: number, };
+export type AppCommentSummary = { id: string, app_id: string, number: number, created_app_version: number, created_definition_digest: string, created_shell_version: string, origin: AppCommentOrigin, source_window_id: string, anchor: AppCommentAnchor, text: string, reply_count: number, last_reply?: AppCommentReply, image?: AppCommentImageMeta, resolved: boolean, resolved_app_version?: number, sent_at?: string, unread_reply: boolean, created_at: string, updated_at: string, revision: number, };
 
-export type AppCommentThread = { replies: Array<AppCommentReply>, id: string, app_id: string, number: number, created_app_version: number, created_definition_digest: string, created_shell_version: string, origin: AppCommentOrigin, source_window_id: string, anchor: AppCommentAnchor, text: string, reply_count: number, image?: AppCommentImageMeta, resolved: boolean, resolved_app_version?: number, sent_at?: string, unread_reply: boolean, created_at: string, updated_at: string, revision: number, };
+export type AppCommentThread = { replies: Array<AppCommentReply>, id: string, app_id: string, number: number, created_app_version: number, created_definition_digest: string, created_shell_version: string, origin: AppCommentOrigin, source_window_id: string, anchor: AppCommentAnchor, text: string, reply_count: number, last_reply?: AppCommentReply, image?: AppCommentImageMeta, resolved: boolean, resolved_app_version?: number, sent_at?: string, unread_reply: boolean, created_at: string, updated_at: string, revision: number, };
 
 /**
  * 앱 정의. 에이전트가 쓰는 JSON 문서이고, 가져오면 앱 버전 하나가 된다.

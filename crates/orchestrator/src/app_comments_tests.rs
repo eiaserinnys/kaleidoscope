@@ -57,6 +57,8 @@ async fn app_comments_device_contract_and_account_isolation() {
     assert_eq!(first["thread"]["number"], 1);
     assert_eq!(first["meta"]["open_count"], 1);
     assert_eq!(first["meta"]["unsent_count"], 1);
+    let (_, empty_list) = request(&state, &token, "GET", root, json!(null)).await;
+    assert!(empty_list["items"][0].get("last_reply").is_none());
     let (_, duplicate) = request(&state, &token, "POST", root, create("one")).await;
     assert_eq!(duplicate, first);
     let mut changed = create("one");
@@ -128,6 +130,9 @@ async fn app_comments_device_contract_and_account_isolation() {
     assert!(reopened["thread"].get("resolved_app_version").is_none());
     let (_, list) = request(&state, &token, "GET", root, json!(null)).await;
     assert_eq!(list["items"].as_array().unwrap().len(), 1);
+    assert_eq!(list["items"][0]["last_reply"]["id"], "r2");
+    assert_eq!(list["items"][0]["last_reply"]["author"], "user");
+    assert_eq!(list["items"][0]["last_reply"]["text"], "r2");
     assert!(list.to_string().find("image_base64").is_none());
     let (_, _) = request(
         &state,

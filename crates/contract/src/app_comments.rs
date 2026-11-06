@@ -172,6 +172,9 @@ pub struct AppCommentSummary {
     pub reply_count: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    pub last_reply: Option<AppCommentReply>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub image: Option<AppCommentImageMeta>,
     pub resolved: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

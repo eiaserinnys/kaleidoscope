@@ -323,7 +323,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
         send({ type: "ks-html-lock", locked: lockedRef.current });
       }
       else if (data.type === "ks-html-visible-text") setText(data.text);
-      else if (data.type === "ks-html-context-menu" && !lockedRef.current && frame.current && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string" && (data.text || data.editable)) openFrameContextMenu(frame.current, data, (command) => send({ type: "ks-html-context-command", ...command }));
+      else if (data.type === "ks-html-context-menu" && !lockedRef.current && frame.current && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string") openFrameContextMenu(frame.current, data, (command) => send({ type: "ks-html-context-command", ...command }));
       else if (data.type === "ks-html-select") {
         if (lockedRef.current) return;
         setSelection(data.selection);

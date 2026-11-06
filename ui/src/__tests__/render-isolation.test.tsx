@@ -472,6 +472,63 @@ it("앱 배지 변경은 해당 타일과 앱 열기 단추만 갱신한다", as
   store.dispose();
 });
 
+it("커멘트 상태와 입력 및 앱 메타 변경은 어느 창의 앱 블록도 다시 그리지 않는다", async () => {
+  const resizeObserve = vi.spyOn(ResizeObserver.prototype, "observe");
+  const resizeDisconnect = vi.spyOn(ResizeObserver.prototype, "disconnect");
+  const mutationObserve = vi.spyOn(MutationObserver.prototype, "observe");
+  const mutationDisconnect = vi.spyOn(MutationObserver.prototype, "disconnect");
+  const { store, transport } = await setup();
+  const original = store.call.bind(store);
+  const commentCalls: string[] = [];
+  let revision = 0;
+  vi.spyOn(store, "call").mockImplementation(((request: { op: string }) => {
+    if (request.op === "comment.list") { commentCalls.push(request.op); return Promise.resolve({ op: "comment.list", items: [], app_revision: revision }); }
+    if (request.op === "comment.capture") { commentCalls.push(request.op); return Promise.reject({ id: "COMMENT_CAPTURE_UNAVAILABLE", code: "unavailable", message: "그림을 찍을 수 없습니다", details: [] }); }
+    return original(request as never);
+  }) as typeof store.call);
+  const first = document.querySelector<HTMLElement>('[data-window-id="window-a"]')!.closest<HTMLElement>(".ks-window")!;
+  const content = first.querySelector<HTMLElement>(".ks-window-content")!;
+  await settleRenders();
+  expect(commentCalls).toEqual([]);
+  expect(resizeObserve.mock.calls.some(([node]) => node === content)).toBe(false);
+  expect(mutationObserve.mock.calls.some(([node]) => node === content)).toBe(false);
+  calls.length = 0;
+  fireEvent.click(within(first).getByRole("button", { name: "커멘트" }));
+  await waitFor(() => expect(commentCalls).toContain("comment.list"));
+  const target = first.querySelector<HTMLElement>('[data-ks-block="/ui/children/0"]')!;
+  dispatchPointer(target, "pointermove", 1, 20, 20);
+  await act(async () => { dispatchPointer(target, "pointerdown", 1, 20, 20); dispatchPointer(target, "pointerup", 1, 20, 20); });
+  const input = await within(first).findByRole("textbox", { name: "커멘트" });
+  fireEvent.change(input, { target: { value: "고쳐 주세요" } });
+  fireEvent.scroll(first.querySelector(".ks-window-content")!);
+  const current = store.getSnapshot()!;
+  revision = 1;
+  await act(async () => transport.emit({ event: "state.changed", snapshot: { ...current, shared: { ...current.shared, app_comments: { [definition.id]: { app_id: definition.id, revision: 1, open_count: 1, unsent_count: 0, unread_reply_count: 1 } } } } }));
+  await settleRenders();
+  expect(countFor("window-a")).toBe(0);
+  expect(countFor("window-b")).toBe(0);
+  fireEvent.click(within(first).getByRole("button", { name: "기본 에이전트 고르기…" }));
+  expect(await screen.findByText("서버에 연결하면 기본 에이전트를 고를 수 있습니다")).toBeTruthy();
+  const resizeIndex = resizeObserve.mock.calls.findIndex(([node]) => node === content);
+  const mutationIndex = mutationObserve.mock.calls.findIndex(([node]) => node === content);
+  expect(resizeIndex).toBeGreaterThanOrEqual(0);
+  expect(mutationIndex).toBeGreaterThanOrEqual(0);
+  const latest = store.getSnapshot()!;
+  await act(async () => transport.emit({ event: "state.changed", snapshot: { ...latest, shared: { ...latest.shared, windows: latest.shared.windows.map((window) => window.id === "window-a" ? { ...window, minimized: true } : window) } } }));
+  await waitFor(() => {
+    expect(resizeDisconnect.mock.instances).toContain(resizeObserve.mock.instances[resizeIndex]);
+    expect(mutationDisconnect.mock.instances).toContain(mutationObserve.mock.instances[mutationIndex]);
+  });
+  const callsBeforeHiddenChange = commentCalls.length;
+  const hidden = store.getSnapshot()!;
+  revision = 2;
+  await act(async () => transport.emit({ event: "state.changed", snapshot: { ...hidden, shared: { ...hidden.shared, app_comments: { [definition.id]: { app_id: definition.id, revision: 2, open_count: 1, unsent_count: 0, unread_reply_count: 1 } } } } }));
+  await settleRenders();
+  expect(commentCalls).toHaveLength(callsBeforeHiddenChange);
+  store.dispose();
+  resizeObserve.mockRestore(); resizeDisconnect.mockRestore(); mutationObserve.mockRestore(); mutationDisconnect.mockRestore();
+});
+
 describe("실제 Shell의 블록 렌더 격리", () => {
   it("제공자 초안은 폭 갈래 재마운트와 반복 복원 뒤 한 번만 남고 같은 요청 ID로 보낸다", async () => {
     const app: AppDefinition = { ...chatDefinition, requires: { blocks: 19, modules: { agent: 3 } }, ui: { type: "stack", direction: "column", children: [

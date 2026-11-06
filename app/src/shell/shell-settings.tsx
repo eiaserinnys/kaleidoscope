@@ -4,7 +4,7 @@ import { Check, Copy, LoaderCircle } from "../../../ui/src/components/icons";
 import { serverLabel } from "./server-label";
 import { AccountSettings } from "./account-settings";
 
-type Entry = { kind: "gear" | "server"; sequence: number };
+type Entry = { kind: "gear" | "server" | "agent"; sequence: number };
 
 function Progress() {
   return <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>;
@@ -33,6 +33,10 @@ export function ShellSettings({ snapshot, entry, call, store }: {
     if (entry.kind === "server") {
       serverEntry.current?.scrollIntoView?.({ block: "nearest" });
       serverEntry.current?.querySelector<HTMLElement>("input:not(:disabled), button:not(:disabled)")?.focus();
+    } else if (entry.kind === "agent") {
+      const agent = root.current?.querySelector<HTMLElement>("[data-settings-agent]");
+      agent?.scrollIntoView?.({ block: "nearest" });
+      agent?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
     } else root.current?.closest<HTMLElement>(".ks-window-content")?.focus();
   }, [entry]);
   useEffect(() => {

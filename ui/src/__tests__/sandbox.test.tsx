@@ -7,6 +7,7 @@ import { AppWindowContent } from "../render/app-window-content";
 import { describeVisible } from "../share/visible";
 import { flushSandboxes } from "../blocks/sandbox-flush";
 import { ContextMenuHost } from "../components/context-menu";
+import { registerCommentEntry } from "../comments/context-entry";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 import { ClientRuntime } from "../runtime/client-runtime";
 import type { WindowData } from "../data/window-data";
@@ -62,7 +63,7 @@ it("샌드박스의 올바른 토큰을 가진 선택 복사만 메뉴로 연다
   vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000001");
   const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 11, modules: {} }, ui: { type: "sandbox", value: "<p>글</p>", title: "격리" } as Block };
   const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
-  render(<><ContextMenuHost /><AppWindowContent store={store} windowId="editor-window" /></>);
+  render(<><ContextMenuHost /><div className="ks-window-content"><AppWindowContent store={store} windowId="editor-window" /></div></>);
   const frame = await screen.findByTitle("격리") as HTMLIFrameElement;
   const send = (token: string) => act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token, type: "ks-sandbox-context-menu", x: 10, y: 20, text: "선택한 글" } })));
   send("틀린 토큰");
@@ -74,6 +75,12 @@ it("샌드박스의 올바른 토큰을 가진 선택 복사만 메뉴로 연다
   act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: "00000000-0000-4000-8000-000000000001", type: "ks-sandbox-context-menu", x: 10, y: 20, text: "", editable: true, readOnly: false, password: false } })));
   fireEvent.click(screen.getByRole("menuitem", { name: "모두 선택" }));
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-context-command", action: "selectAll", token: "00000000-0000-4000-8000-000000000001" }), "*");
+  const pick = vi.fn();
+  const unregister = registerCommentEntry(frame.closest<HTMLElement>(".ks-window-content")!, pick);
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: "00000000-0000-4000-8000-000000000001", type: "ks-sandbox-context-menu", x: 10, y: 20, text: "", editable: false } })));
+  fireEvent.click(screen.getByRole("menuitem", { name: "커멘트 달기…" }));
+  expect(pick).toHaveBeenCalledWith(frame, { x: 10, y: 20 });
+  unregister();
   store.dispose();
 });
 

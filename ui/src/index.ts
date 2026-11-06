@@ -88,6 +88,8 @@ export type {
   WindowSize,
 } from "./contract/contract";
 export { captureWindowForComment, prepareShareForSend, useShareView } from "./share/share-view";
+export { CommentLayer, CommentTitle, useCommentMeta } from "./comments/layer";
+export { commentSession, forgetCommentSession, useCommentSession } from "./comments/session";
 export { suspendWebSurfaces } from "./blocks/web-surface-layer";
 export { useWindowControlHost } from "./share/window-control";
 export { describeNumbered, resolveNumbered, forgetNumbered } from "./share/numbered";

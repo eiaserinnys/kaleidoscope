@@ -67,3 +67,5 @@ summary,
 .ks-table-grid .ks-table-cell { user-select: none; }
 .ks-table-grid .ks-table-content-title,
 .ks-table-grid .ks-table-content-subtitle { user-select: text; }
+/* 커멘트가 무엇을 보내는지 사용자가 복사할 수 있다. */
+.ks-comment-sends-text { user-select: text; }

@@ -13,6 +13,7 @@ import type { HtmlAnchor } from "../blocks/html-bridge/frame-protocol";
 import { readThread, writeThreadChange } from "../blocks/html-document/storage";
 import type { ShellStore } from "../core/shell-store";
 import { ContextMenuHost } from "../components/context-menu";
+import { registerCommentEntry } from "../comments/context-entry";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const testAnchor: HtmlAnchor = { kind: "element", selector: "h1", selector_stable: false, path: "body > h1", tag: "h1", text: "제목", attrs: { id: null, role: null, aria_label: null, alt: null, href: null, src_hash: null }, quote: null, label: "h1", heading: "", rect: { x: 0, y: 0, w: 10, h: 10, vw: 300 } };
@@ -107,7 +108,7 @@ it("값 HTML은 스크립트를 정화한 격리 프레임으로 표시한다", 
 
 it("값 HTML 프레임의 선택 복사 요청을 공용 메뉴로 연다", async () => {
   const app: AppDefinition = { id: "html-value", name: "미리보기", requires: { blocks: 6, modules: {} }, permissions: [], state: {}, ui: { type: "html_view", value: "<p>글</p>" } };
-  render(<><ContextMenuHost /><AppWindowContent store={createShellStore(createFakeTransport(makeTestSeed({ definitions: [app] })))} windowId="viewer-window" /></>);
+  render(<><ContextMenuHost /><div className="ks-window-content"><AppWindowContent store={createShellStore(createFakeTransport(makeTestSeed({ definitions: [app] })))} windowId="viewer-window" /></div></>);
   const frame = await screen.findByTitle("미리보기") as HTMLIFrameElement;
   act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-context-menu", x: 12, y: 18, text: "프레임 글" } })));
   expect(screen.getByRole("menuitem", { name: "복사" })).toBeTruthy();
@@ -116,6 +117,12 @@ it("값 HTML 프레임의 선택 복사 요청을 공용 메뉴로 연다", asyn
   act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-context-menu", x: 12, y: 18, text: "", editable: true, readOnly: false, password: false } })));
   fireEvent.click(screen.getByRole("menuitem", { name: "모두 선택" }));
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-html-context-command", action: "selectAll" }), "*");
+  const pick = vi.fn();
+  const unregister = registerCommentEntry(frame.closest<HTMLElement>(".ks-window-content")!, pick);
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-context-menu", x: 12, y: 18, text: "", editable: false } })));
+  fireEvent.click(screen.getByRole("menuitem", { name: "커멘트 달기…" }));
+  expect(pick).toHaveBeenCalledWith(frame, { x: 12, y: 18 });
+  unregister();
 });
 
 it("값 HTML의 같이 보기는 숨긴 글과 스크립트를 빼고 프레임의 보이는 글을 받는다", async () => {

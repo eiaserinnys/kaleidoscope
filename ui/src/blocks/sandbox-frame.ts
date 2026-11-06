@@ -54,7 +54,7 @@ function bridgeSource(init: SandboxInit): string {
       const selection = getSelection();
       menuRange = !field && menuTarget && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
       const text = getSelection()?.toString() || '';
-      if (text || menuTarget) send('ks-sandbox-context-menu', { requestId: menuRequestId, x: event.clientX, y: event.clientY, text, editable: !!menuTarget, readOnly: !!(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === 'password' });
+      send('ks-sandbox-context-menu', { requestId: menuRequestId, x: event.clientX, y: event.clientY, text, editable: !!menuTarget, readOnly: !!(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === 'password' });
     });
     const lifecycleListeners = new Set(), pendingLifecycle = new Set(), processListeners = new Set(), processServicesListeners = new Set();
     let lifecycle = null;

@@ -46,6 +46,7 @@ function onKeyDown(event: KeyboardEvent) {
   const controlled = !event.isTrusted && !!targetOwner && windowActionActive(targetOwner);
   if (event.key === "Tab") grids.forEach((entry) => { if (!controlled || entry.context.window.id === targetOwner) entry.clearFocus(); });
   const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest('.ks-window[data-commenting="true"] .ks-window-content')) return;
   if (event.defaultPrevented || event.isComposing || typing(target)) return;
   if (hasVisibleShortcutOverlay(targetOwner, controlled)) return;
   for (const tour of tours) {

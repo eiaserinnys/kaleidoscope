@@ -35,7 +35,8 @@ export function describeTarget(element: HTMLElement, windowRoot: HTMLElement, fr
   const target = range ? row ?? block : surface ?? row ?? selectedControl ?? block;
   const kind: AppCommentAnchor["kind"] = range ? "text" : surface ? "point" : row ? "row" : selectedControl ? "control" : "block";
   const rect = measureTarget(target);
-  const description = target.getAttribute("aria-label") ?? target.getAttribute("title") ?? target.textContent?.trim().slice(0, 200) ?? "";
+  const cells = row ? [...row.querySelectorAll<HTMLElement>('[role="cell"], [role="gridcell"], [role="rowheader"]')].map((cell) => cell.textContent?.trim()).filter(Boolean).join(" · ") : "";
+  const description = target.getAttribute("aria-label") ?? target.getAttribute("title") ?? (cells || target.textContent?.trim() || "").slice(0, 200);
   const anchor: AppCommentAnchor = { schema_version: 1, kind, pointer, normalized_type: type,
     ...(rows.length ? { repeat_chain: rows } : {}),
     ...(row ? { row_identity: decodeCommentKey(row.getAttribute("data-ks-comment-key")!) } : {}),

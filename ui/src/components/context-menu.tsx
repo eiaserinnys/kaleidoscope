@@ -1,4 +1,5 @@
 import { EditorState } from "@codemirror/state";
+import { commentMenuEntry } from "../comments/context-entry";
 import { EditorView } from "@codemirror/view";
 import { useEffect, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from "react";
 import type { CoreError } from "../contract/contract";
@@ -129,11 +130,14 @@ export function openContextMenu(event: MenuEvent, siteEntries: MenuEntry[], opti
   const target = options.anchor ?? (origin instanceof HTMLElement ? origin : origin instanceof Element ? origin.closest<HTMLElement>("button") ?? origin.parentElement : null);
   if (!target) { closeMenu(); return; }
   const text = options.includeText === false ? [] : textEntries(target);
-  const entries: MenuEntry[] = text.length && siteEntries.length ? [...text, { id: "context-separator", type: "separator" }, ...siteEntries] : [...text, ...siteEntries];
-  if (!entries.length) { closeMenu(); return; }
   const keyboard = options.keyboard ?? event.detail === -1;
   const point = options.anchorPoint ?? (keyboard ? undefined : { x: event.clientX, y: event.clientY });
   const keyboardRect = keyboard && !options.anchorPoint ? visibleKeyboardRect(target) : undefined;
+  const existing: MenuEntry[] = text.length && siteEntries.length ? [...text, { id: "context-separator", type: "separator" }, ...siteEntries] : [...text, ...siteEntries];
+  const rect = target.getBoundingClientRect();
+  const comment = commentMenuEntry(target, point ?? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  const entries: MenuEntry[] = comment ? [...existing, ...(existing.length ? [{ id: "comment-separator", type: "separator" as const }] : []), comment] : existing;
+  if (!entries.length) { closeMenu(); return; }
   const anchor = options.anchor ?? target.closest<HTMLElement>(".cm-content, [contenteditable='true'], [contenteditable='plaintext-only']") ?? target;
   setMenu({ anchor, point, keyboardRect, entries });
 }
@@ -143,7 +147,7 @@ type FrameCommand = { requestId: number; action: "delete" | "insertText" | "sele
 export function openFrameContextMenu(frame: HTMLIFrameElement, data: FrameContext, send?: (command: FrameCommand) => void): void {
   const rect = frame.getBoundingClientRect();
   const copy: MenuEntry = { id: "frame-copy", label: "복사", shortcut: "Ctrl+C", disabled: !data.text || data.password, onSelect: () => { void writeMenuClipboard(data.text, "복사"); } };
-  let entries: MenuEntry[] = [copy];
+  let entries: MenuEntry[] = data.text ? [copy] : [];
   if (data.editable) {
     const all: MenuEntry = { id: "frame-all", label: "모두 선택", shortcut: "Ctrl+A", onSelect: () => send?.({ requestId: data.requestId, action: "selectAll" }) };
     entries = data.readOnly ? [copy, all] : [

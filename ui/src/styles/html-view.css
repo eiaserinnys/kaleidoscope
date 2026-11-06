@@ -122,6 +122,7 @@
 
 /* 좁은 창: 프레임과 레일을 번갈아 본다. 낮은 창: 레일 전체가 함께 스크롤한다. */
 @container (max-width: 560px) {
+  .ks-window[data-commenting="true"] .ks-comment-rail { inset-inline: var(--ks-line-width); width: auto; border-inline-start: 0; border-end-start-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); }
   .ks-html-header { gap: var(--ks-space-2); }
   .ks-html-header .ks-html-doc, .ks-html-header .ks-html-rev { padding-inline: var(--ks-space-2); }
   .ks-html-face-count { display: none; }

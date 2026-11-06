@@ -3,7 +3,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use kaleidoscope_contract::{app_comments::*, app_storage::STORAGE_JSON_MAX_BYTES, errors};
 use rusqlite::types::Type;
 
-const SUMMARY_COLUMNS: &str = "c.id,c.app_id,c.number,c.created_app_version,c.created_definition_digest,c.created_shell_version,c.origin_json,c.source_window_id,c.anchor_json,c.text,(SELECT count(*) FROM app_comment_replies r WHERE r.account_id=c.account_id AND r.comment_id=c.id),c.image_meta_json,c.resolved,c.resolved_app_version,c.sent_at,c.unread_reply,c.created_at,c.updated_at,c.revision";
+const SUMMARY_COLUMNS: &str = "c.id,c.app_id,c.number,c.created_app_version,c.created_definition_digest,c.created_shell_version,c.origin_json,c.source_window_id,c.anchor_json,c.text,(SELECT count(*) FROM app_comment_replies r WHERE r.account_id=c.account_id AND r.comment_id=c.id),c.image_meta_json,c.resolved,c.resolved_app_version,c.sent_at,c.unread_reply,c.created_at,c.updated_at,c.revision,(SELECT json_object('id',r.id,'author',r.author,'text',r.text,'created_at',r.created_at) FROM app_comment_replies r WHERE r.account_id=c.account_id AND r.comment_id=c.id ORDER BY r.rowid DESC LIMIT 1)";
 
 fn json_column<T: serde::de::DeserializeOwned>(
     row: &rusqlite::Row<'_>,
@@ -33,6 +33,8 @@ fn summary_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AppCommentSummary> {
         anchor: json_column(row, 8)?,
         text: row.get(9)?,
         reply_count: row.get::<_, i64>(10)? as u64,
+        last_reply: row.get::<_, Option<String>>(19)?.map(|value| serde_json::from_str(&value)
+            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(19, Type::Text, Box::new(e)))).transpose()?,
         image,
         resolved: row.get(12)?,
         resolved_app_version: row.get(13)?,

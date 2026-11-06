@@ -11,6 +11,7 @@ export interface MenuItem {
   onSelect?: () => void;
   disabled?: boolean;
   danger?: boolean;
+  skipInitialFocus?: boolean;
   checked?: boolean;
   description?: string;
   shortcut?: string;
@@ -48,13 +49,18 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
     const owner = ownerOf(anchor);
     const checked = menu?.querySelector<HTMLButtonElement>('[aria-current="true"]');
     if (menu && checked) menu.scrollTop = checked.offsetTop - (menu.clientHeight - checked.offsetHeight) / 2;
+    const initial = itemRefs.current.filter((_, index) => {
+      const entry = items[index];
+      return entry && entry.type !== "separator" && entry.type !== "heading" && !entry.skipInitialFocus;
+    });
     const focusTarget = checked && !checked.disabled
       ? checked
-      : itemRefs.current.find((item) => item && !item.disabled && !item.classList.contains("ks-menu-item-danger"))
-        ?? itemRefs.current.find((item) => item && !item.disabled);
+      : initial.find((item) => item && !item.disabled && !item.classList.contains("ks-menu-item-danger"))
+        ?? initial.find((item) => item && !item.disabled);
     if (!owner || !preserveWindowActionFocus(owner)) {
       if (checked) focusTarget?.focus({ preventScroll: true });
-      else focusTarget?.focus();
+      else if (focusTarget) focusTarget.focus();
+      else if (items.some((entry) => entry.type !== "separator" && entry.type !== "heading" && entry.skipInitialFocus)) menu?.focus();
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -111,6 +117,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
       }}
       ref={menuRef}
       role="menu"
+      tabIndex={-1}
       style={{ left: position.left, top: position.top }}
     >
       {items.map((item) => item.type === "separator" ? (

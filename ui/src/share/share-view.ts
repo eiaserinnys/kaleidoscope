@@ -6,6 +6,7 @@ import { toCoreError } from "../core/core-transport";
 import * as errors from "../contract/shell-errors";
 import { clientShare } from "../runtime/client-runtime";
 import { isFullyVisible, revealWebSurface, webSurfaceBounds } from "../blocks/web-surface-layer";
+import { suspendCommentHighlights } from "../comments/highlight";
 import { describeVisible, limitShareText } from "./visible";
 import { registerControlWindow } from "./window-control";
 import { ownedOverlays } from "./overlay-owner";
@@ -138,6 +139,7 @@ function captureIsolated<T>(store: ShellStore, windowId: string, getElement: () 
     if (frozen.op !== "share.freeze" || !frozen.frozen) throw comment ? errors.COMMENT_CAPTURE_FREEZE_FAILED() : toCoreError("창 화면을 고정할 수 없습니다.");
     const root = document.documentElement;
     const overlays = ownedOverlays(windowId);
+    const restoreHighlights = suspendCommentHighlights();
     let restoreWeb: () => Promise<void> = async () => undefined;
     try {
       root.dataset.shareIsolating = "true";
@@ -153,6 +155,7 @@ function captureIsolated<T>(store: ShellStore, windowId: string, getElement: () 
       delete frame.dataset.shareTarget;
       for (const overlay of overlays) overlay.removeAttribute("data-share-target");
       delete root.dataset.shareIsolating;
+      restoreHighlights();
       try { await restoredOnScreen(); } finally { await store.call({ op: "share.unfreeze" }); }
     }
   });
@@ -188,6 +191,7 @@ async function prepareOnce(store: ShellStore): Promise<void> {
 
   const root = document.documentElement;
   const started = performance.now();
+  const restoreHighlights = suspendCommentHighlights();
   try {
     root.dataset.shareIsolating = "true";
     for (const [windowId, entry] of targets) {
@@ -216,6 +220,7 @@ async function prepareOnce(store: ShellStore): Promise<void> {
       delete frame.dataset.shareTarget;
     }
     delete root.dataset.shareIsolating;
+    restoreHighlights();
     try { await restoredOnScreen(); } catch { /* 표시 대기 실패도 해제를 막지 않는다. */ }
     try {
       await store.call({ op: "share.unfreeze" });

@@ -53,7 +53,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [launcher, setLauncher] = useState<{ anchor: HTMLElement } | null>(null);
   const closeLauncher = useCallback(() => setLauncher(null), []);
-  const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; entry: { kind: "gear" | "server"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
+  const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server" | "agent"; entry: { kind: "gear" | "server" | "agent"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
   const settingsRect = useRef<Rect | null>(null);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
@@ -150,7 +150,7 @@ export function Shell({ store }: { store: ShellStore }) {
     }
   }), [newWindowRect, runCommand, store]);
 
-  const openSettings = (anchor: HTMLElement, kind: "gear" | "server") => {
+  const openSettings = (anchor: HTMLElement, kind: "gear" | "server" | "agent") => {
     closeMenu(); closeLauncher();
     const z = maxZNow() + 1;
     setSettings((current) => current
@@ -210,7 +210,7 @@ export function Shell({ store }: { store: ShellStore }) {
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}{settingsButton}</div></header>
       {/* 아래 작업 있는 갈래와 main의 같은 자리에 DesktopArea를 두어야 연결 중과 페어링을 거쳐도 설정 창이 다시 만들어지지 않는다. */}
-      <DesktopArea canvasKey={canvasKey} systemWindow={systemWindow} launcherOpen={false} onAreaChange={reportArea} onCall={runCommand} onOpenApps={() => {}} store={store} windowActions={windowActions}
+      <DesktopArea canvasKey={canvasKey} systemWindow={systemWindow} launcherOpen={false} onAreaChange={reportArea} onCall={runCommand} onOpenApps={() => {}} onChooseAgent={(anchor) => openSettings(anchor, "agent")} store={store} windowActions={windowActions}
         emptyState={<EmptyState icon={<LayoutGrid size="empty" />} text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
           action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined} />} />
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
@@ -420,6 +420,7 @@ export function Shell({ store }: { store: ShellStore }) {
         onCall={runCommand}
         onOpenApps={openAppMenu}
         windowActions={windowActions}
+        onChooseAgent={(anchor) => openSettings(anchor, "agent")}
         getNewWindowRect={newWindowRect}
         store={store}
       />

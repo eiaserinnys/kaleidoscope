@@ -201,7 +201,7 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
       if (data.type === "ks-sandbox-point-done" && typeof data.requestId === "string") {
         points.current.get(data.requestId)?.();
         points.current.delete(data.requestId);
-      } else if (data.type === "ks-sandbox-context-menu" && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string" && (data.text || data.editable) && frame.current) {
+      } else if (data.type === "ks-sandbox-context-menu" && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string" && frame.current) {
         openFrameContextMenu(frame.current, data, (command) => send({ type: "ks-sandbox-context-command", token: source.token, ...command }));
       } else if (data.type === "ks-sandbox-ready") {
         send({ type: "ks-sandbox-state-sync", state: JSON.parse(stateJson) });

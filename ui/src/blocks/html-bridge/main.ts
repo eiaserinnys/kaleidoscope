@@ -169,7 +169,7 @@ document.addEventListener("contextmenu", (event) => {
   const selection = getSelection();
   menuRange = !field && menuTarget && selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
   const text = getSelection()?.toString() ?? "";
-  if (text || menuTarget) send({ type: "ks-html-context-menu", requestId: menuRequestId, x: event.clientX, y: event.clientY, text, editable: Boolean(menuTarget), readOnly: Boolean(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === "password" });
+  send({ type: "ks-html-context-menu", requestId: menuRequestId, x: event.clientX, y: event.clientY, text, editable: Boolean(menuTarget), readOnly: Boolean(field && (field.readOnly || field.disabled)), password: field instanceof HTMLInputElement && field.type === "password" });
 });
 document.addEventListener("pointerdown", (event) => { if (locked) { event.preventDefault(); event.stopPropagation(); } }, true);
 let downPoint: { x: number; y: number } | null = null;
