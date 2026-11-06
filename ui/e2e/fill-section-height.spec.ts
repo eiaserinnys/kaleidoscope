@@ -23,6 +23,28 @@ const input = (label: string) => ({ type: "input", label, label_position: "top",
 const rows = Array.from({ length: 30 }, (_, i) => ({ key: String(i), title: `항목 ${i + 1}` }));
 const list = { type: "list", items: rows };
 
+test("중첩 구역의 끝 채움 칸은 바깥 구역의 바닥 여백만 쓴다", async ({ page }) => {
+  const app = await open(page, { type: "section", title: "바깥", child: {
+    type: "stack", direction: "column", fill: 0, children: [
+      { type: "section", title: "안쪽", child: { type: "stack", direction: "column", children: [input("첫 값"), input("마지막 값")] } },
+    ],
+  } });
+  const sections = app.locator(".ks-data-section");
+  await expect(sections).toHaveCount(2);
+  expect(await sections.evaluateAll(els => els.map(el => getComputedStyle(el).paddingBottom))).toEqual(["12px", "0px"]);
+});
+
+test("대화상자의 끝 채움 칸 구역은 대화상자의 바닥 간격만 쓴다", async ({ page }) => {
+  const app = await open(page, { type: "dialog", title: "고르기", open: true, on_close: [{ set_state: "dialogOpen", value: false }], child: {
+    type: "stack", direction: "column", fill: 0, children: [
+      { type: "section", title: "목록", child: { type: "text", value: "내용" } },
+    ],
+  } });
+  const dialog = app.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  expect(await dialog.locator(".ks-data-section").evaluate(el => getComputedStyle(el).paddingBottom)).toBe("0px");
+});
+
 test("보완 1: 채움 구역의 끝 칸에만 창 바닥 여백이 생긴다", async ({ page }) => {
   const section = (title: string) => ({ type: "section", title, child: { type: "stack", direction: "column", fill: 0, children: [list] } });
   const app = await open(page, { type: "stack", direction: "column", fill: [0, 1], children: [section("중간 구역"), section("마지막 구역")] });
