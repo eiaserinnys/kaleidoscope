@@ -194,7 +194,7 @@
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-input-field.is-label-hidden:not(.ks-data-tab-panel *) { width: 100%; margin-inline: 0; }
 .ks-data-stack-item.is-fill > .ks-input-field.is-label-hidden:has(> .ks-data-input > textarea):not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); }
 :is(.ks-data-section, .ks-dialog) .ks-data-stack-item.is-fill > .ks-input-field.is-label-hidden:has(> .ks-data-input > textarea):not(.ks-data-tab-panel *) { width: 100%; }
-.ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-input-field.is-label-hidden:not(.ks-data-tab-panel *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); }
+.ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-input-field.is-label-hidden:not(.ks-data-tab-panel *, .ks-data-section *, .ks-dialog *) { width: calc(100% - 2 * var(--ks-space-3)); margin-inline: var(--ks-space-3); }
 .ks-data-tab-panel .ks-field.is-label-hidden { grid-template-columns: minmax(0, 1fr) auto; }
 .ks-data-tab-panel .ks-field.is-label-hidden > :is(.ks-button, .ks-data-input, .ks-color-control, .ks-data-segmented) { grid-column: 1 / -1; }
 .ks-slider-field.is-value-hidden .ks-slider { flex: 1 1 auto; }

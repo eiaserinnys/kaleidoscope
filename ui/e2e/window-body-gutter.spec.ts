@@ -143,3 +143,35 @@ test("최상위 가로 쌓기의 왼쪽 구역 오른쪽 패딩은 몸통이 스
   expect(short.scrolls).toBe(true);
   expect(short.sectionEnd).toBe(tall.sectionEnd);
 });
+
+test("몸통 스크롤바가 생겨도 숨긴 이름표 입력의 끝선은 12로 같다", async ({ page }) => {
+  const app = await open(page, "deco-letters", 480, 360);
+  await page.evaluate(async () => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const definition = snapshot.shared.app_versions.find((v: any) => v.app_id === "deco-letters");
+    const stack = definition.definition.ui.child;
+    stack.children.splice(1, 0, { type: "input", placeholder: "숨김 입력", label: "이름", label_position: "hidden", value: { state: "hid" }, on_change: { set_state: "hid" } });
+    definition.definition.state = { ...definition.definition.state, hid: "" };
+    definition.version += 1;
+    const win = snapshot.shared.windows.find((w: any) => w.app_id === "deco-letters");
+    win.app_version = definition.version; win.state = definition.definition.state;
+    harness.emit({ event: "state.changed", snapshot });
+  });
+  const hidden = app.getByPlaceholder("숨김 입력");
+  await expect(hidden).toBeVisible();
+  const end = () => app.locator(".ks-data-window-body").evaluate((body) => {
+    const input = body.querySelector<HTMLElement>('[placeholder="숨김 입력"]')!;
+    return { end: body.getBoundingClientRect().right - input.getBoundingClientRect().right, overflow: body.scrollHeight > body.clientHeight, scrollWidth: body.scrollWidth - body.clientWidth };
+  });
+  const short = await end();
+  expect(short.overflow).toBe(false);
+  await app.getByPlaceholder("영문 입력").click();
+  for (let line = 0; line < 12; line += 1) { await page.keyboard.type("Kaleidoscope letters"); await page.keyboard.press("Shift+Enter"); }
+  const long = await end();
+  console.log(JSON.stringify({ short, long }));
+  expect(long.overflow, "스크롤바가 생겨야 한다").toBe(true);
+  expect(short.end).toBeCloseTo(12, 0);
+  expect(Math.abs(long.end - short.end)).toBeLessThanOrEqual(1);
+  expect(long.scrollWidth).toBe(0);
+});

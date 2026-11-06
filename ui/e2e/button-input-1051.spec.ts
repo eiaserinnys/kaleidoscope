@@ -161,18 +161,25 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-test("구역 없는 가로 쌓기의 채우는 입력은 이름 없는 입력과 같고 가로 스크롤이 없다", async ({ page }) => {
+test("가로 쌓기의 채우는 숨긴 이름표 입력은 어느 배치에서도 이름 없는 입력과 같고 가로 스크롤이 없다", async ({ page }) => {
   const row = (n: string, extra: Record<string, unknown> = {}) => ({ type: "stack", direction: "row", fill: 0, children: [input(`${n}-field`, extra), button("보내기")] });
-  for (const width of [1100, 360]) {
+  const pairOf = () => ({ type: "stack", direction: "column", children: [row("plain"), row("hid", { label: "hid-label", label_position: "hidden" })] });
+  const layouts: Array<[string, unknown]> = [
+    ["구역 없음", pairOf()],
+    ["제목 없는 구역", { type: "section", child: pairOf() }],
+    ["제목 있는 구역", { type: "section", title: "구역", child: pairOf() }],
+    ["대화상자", { type: "dialog", title: "대화", open: true, on_close: [], child: pairOf() }],
+  ];
+  for (const width of [1100, 360]) for (const [name, ui] of layouts) {
     await page.setViewportSize({ width, height: 900 });
-    await setApp(page, { type: "stack", direction: "column", children: [row("plain"), row("hid", { label: "hid-label", label_position: "hidden" })] }, { "plain-field": "", "hid-field": "" });
-    const app = page.getByTestId("app-window-data-controls");
-    const a = await app.getByPlaceholder("plain-field").boundingBox();
-    const b = await app.getByPlaceholder("hid-field").boundingBox();
-    expect.soft(Math.abs(a!.x - b!.x), `${width} 왼쪽`).toBeLessThanOrEqual(1);
-    expect.soft(Math.abs(a!.x + a!.width - b!.x - b!.width), `${width} 오른쪽`).toBeLessThanOrEqual(1);
-    const body = app.locator(".ks-data-window-body");
-    expect.soft(await body.evaluate(el => el.scrollWidth - el.clientWidth), `${width} 가로 스크롤`).toBeLessThanOrEqual(0);
+    await setApp(page, ui, { "plain-field": "", "hid-field": "" });
+    const root = name === "대화상자" ? page.locator(".ks-dialog") : page.getByTestId("app-window-data-controls");
+    const a = await root.getByPlaceholder("plain-field").boundingBox();
+    const b = await root.getByPlaceholder("hid-field").boundingBox();
+    expect.soft(Math.abs(a!.x - b!.x), `${width}/${name} 왼쪽`).toBeLessThanOrEqual(1);
+    expect.soft(Math.abs(a!.x + a!.width - b!.x - b!.width), `${width}/${name} 오른쪽`).toBeLessThanOrEqual(1);
+    const body = page.getByTestId("app-window-data-controls").locator(".ks-data-window-body");
+    expect.soft(await body.evaluate(el => el.scrollWidth - el.clientWidth), `${width}/${name} 가로 스크롤`).toBeLessThanOrEqual(0);
   }
 });
 
