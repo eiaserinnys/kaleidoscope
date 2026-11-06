@@ -212,8 +212,8 @@
 .ks-data-segmented .ks-button { border-radius: 0; }
 .ks-data-segmented > .ks-button { flex: 1 1 auto; min-width: 0; }
 .ks-data-segmented .ks-truncate-label { min-width: 1.5em; }
-.ks-data-segmented > .ks-button { padding-inline: var(--ks-space-1); }
-.ks-data-segmented > .ks-button::before, .ks-data-segmented > .ks-button::after { content: ""; width: calc(var(--ks-space-3) - var(--ks-space-1)); min-width: 0; flex: 0 100000 auto; }
+.ks-data-segmented > .ks-button:has(> .ks-truncate-label) { padding-inline: var(--ks-space-1); }
+.ks-data-segmented > .ks-button:has(> .ks-truncate-label)::before, .ks-data-segmented > .ks-button:has(> .ks-truncate-label)::after { content: ""; width: calc(var(--ks-space-3) - var(--ks-space-1)); min-width: 0; flex: 0 100000 auto; }
 .ks-data-segmented .ks-button:first-child { border-radius: var(--ks-radius-small) 0 0 var(--ks-radius-small); }
 .ks-data-segmented .ks-button:last-child { border-radius: 0 var(--ks-radius-small) var(--ks-radius-small) 0; }
 .ks-data-segmented > .ks-button + .ks-button { margin-inline-start: calc(-1 * var(--ks-line-width)); }

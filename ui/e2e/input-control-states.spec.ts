@@ -28,6 +28,23 @@ test("분할 선택은 남는 자리에서 여백을 유지하고 좁은 칸에�
   for (const label of await measure()) expect(label.visible).toBeGreaterThan(0);
 });
 
+test("글 없는 분할 단추는 여백 자리를 더하지 않아 아이콘 폭을 유지한다", async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 360, height: 640 } });
+  await page.goto("/?preview=html-report");
+  const app = page.getByTestId("app-window-html-report");
+  await app.getByRole("button", { name: "고르기" }).click();
+  const measure = (buttons: Element[]) => buttons.map((button) => {
+    const style = getComputedStyle(button);
+    const icon = button.querySelector("svg")!.getBoundingClientRect().width;
+    return { width: button.getBoundingClientRect().width, before: getComputedStyle(button, "::before").content,
+      minimum: Math.max(parseFloat(style.minWidth) || 0, icon + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)) };
+  });
+  const faces = await app.locator(".ks-html-header-faces .ks-button").evaluateAll(measure);
+  expect(faces).toHaveLength(2);
+  for (const face of faces) { expect(face.before).toBe("none"); expect(face.width).toBeCloseTo(face.minimum, 0); }
+  await page.close();
+});
+
 test("입력 상태와 고르기 및 분할선이 구분되고 잠긴 조작은 실행되지 않는다", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/?preview=input-control-states");
