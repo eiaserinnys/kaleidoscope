@@ -179,6 +179,9 @@ it("스토어 연결 동의는 설치 동의와 같은 창에서 차례로 뜨�
   expect(dialog.textContent).toContain("이 스토어에 연결할까요?");
   expect(dialog.textContent).toContain("http://192.168.1.2:8080/long/path");
   expect(dialog.textContent).toContain("이 연결은 암호화되지 않습니다.");
+  expect(dialog.textContent).toContain("이 PC에서 앱 목록과 설치 파일을 받도록 허용합니다.");
+  expect(dialog.textContent!.indexOf("http://192.168.1.2:8080/long/path")).toBeLessThan(dialog.textContent!.indexOf("이 연결은 암호화되지 않습니다."));
+  expect(dialog.textContent!.indexOf("이 연결은 암호화되지 않습니다.")).toBeLessThan(dialog.textContent!.indexOf("이 PC에서 앱 목록과 설치 파일을 받도록 허용합니다."));
   call.mockClear();
   fireEvent.click(within(dialog).getByRole("button", { name: "연결 허용" }));
   expect(call).not.toHaveBeenCalled();

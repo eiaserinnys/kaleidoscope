@@ -35,8 +35,8 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
       title="이 스토어에 연결할까요?" ok="연결 허용" onCancel={cancel} onConfirm={confirm}
       body={<>
         <strong className="ks-consent-value">{request.server}</strong>
-        <span>이 PC에서 이 주소의 앱 목록과 설치 파일을 받도록 허용합니다.</span>
         {request.server.startsWith("http:") ? <strong className="ks-install-sentence is-warning"><TriangleAlert size="inline" /><span>이 연결은 암호화되지 않습니다.</span></strong> : null}
+        <span>이 PC에서 앱 목록과 설치 파일을 받도록 허용합니다.</span>
       </>} />;
   }
   const place = workerLocation === "embedded" ? "embedded" : workerLocation ? "remote" : "unknown";
