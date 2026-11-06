@@ -22,6 +22,9 @@ error_catalog! { ENTRIES;
     COMMENT_CAPTURE_IMAGE_UNAVAILABLE() { class: Unavailable, place: "커멘트 그림 캡처", cause: "기기가 창 그림 캡처를 지원하지 않는다", message: "이 기기에서는 창 그림을 찍을 수 없습니다. 그림 없이 커멘트를 남길 수 있습니다.", fix: "그림 없이 커멘트를 남기세요" }
     COMMENT_CAPTURE_FREEZE_FAILED() { class: Io, place: "커멘트 그림 화면 고정", cause: "캡처할 화면을 고정하지 못했다", message: "창 그림을 찍기 위한 화면 고정에 실패했습니다. 자리를 다시 골라 주세요.", fix: "자리를 다시 골라 주세요" }
     COMMENT_LIST_CURSOR_INVALID() { class: InvalidRequest, place: "커멘트 목록 커서 검사", cause: "목록 커서를 읽지 못했다", message: "커멘트 목록의 이어 볼 위치가 올바르지 않습니다. 목록을 처음부터 다시 읽어 주세요.", fix: "목록을 처음부터 다시 읽어 주세요" }
+    COMMENT_LIST_STORAGE_FAILED(reason) { class: Server, place: "커멘트 목록 조회", cause: "서버 저장소에서 목록을 읽지 못했다", message: "서버가 커멘트 목록을 읽지 못했습니다. 잠시 뒤 다시 열어 주세요. 원인: {reason}", fix: "잠시 뒤 다시 열어 주세요" }
+    COMMENT_GET_STORAGE_FAILED(reason) { class: Server, place: "커멘트 글타래 조회", cause: "서버 저장소에서 글타래를 읽지 못했다", message: "서버가 커멘트 글타래를 읽지 못했습니다. 잠시 뒤 다시 열어 주세요. 원인: {reason}", fix: "잠시 뒤 다시 열어 주세요" }
+    COMMENT_IMAGE_STORAGE_FAILED(reason) { class: Server, place: "커멘트 그림 조회", cause: "서버 저장소에서 그림을 읽지 못했다", message: "서버가 커멘트 그림을 읽지 못했습니다. 잠시 뒤 다시 열어 주세요. 원인: {reason}", fix: "잠시 뒤 다시 열어 주세요" }
     COMMENT_CREATE_STORAGE_FAILED(reason) { class: Server, place: "커멘트 생성 저장", cause: "서버 저장소에 커멘트를 쓰지 못했다", message: "서버가 커멘트를 저장하지 못했습니다. 잠시 뒤 다시 저장해 주세요. 원인: {reason}", fix: "잠시 뒤 다시 저장해 주세요" }
     COMMENT_REPLY_STORAGE_FAILED(reason) { class: Server, place: "커멘트 답글 저장", cause: "서버 저장소에 답글을 쓰지 못했다", message: "서버가 커멘트 답글을 저장하지 못했습니다. 잠시 뒤 다시 저장해 주세요. 원인: {reason}", fix: "잠시 뒤 다시 저장해 주세요" }
     COMMENT_RESOLVE_STORAGE_FAILED(reason) { class: Server, place: "커멘트 해결 상태 저장", cause: "서버 저장소에 해결 상태를 쓰지 못했다", message: "서버가 커멘트의 해결 상태를 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요. 원인: {reason}", fix: "잠시 뒤 다시 시도해 주세요" }
