@@ -9,6 +9,18 @@ const tabbedPanePair = () => ({ type: "split", direction: "row", children: [
   { type: "section", title: "구역 제목", child: { type: "text", value: "내용" } },
 ] });
 export const shellDefectFixtures = [
+  ...(["tree", "table"] as const).flatMap(kind => (["window", "pane", "toolbar", "section", "tab"] as const).map(context => {
+    const child = kind === "tree"
+      ? { type: "tree", by: "children", items: { expr: '[{"key":"a","title":$data.sample.message}]' } }
+      : { type: "table", columns: [{ field: "name", label: "이름" }], rows: { expr: '[{"key":"a","name":$data.sample.message}]' } };
+    const ui = context === "pane" ? { type: "split", direction: "row", children: [child, { type: "text", value: "옆 칸" }] }
+      : context === "toolbar" ? { type: "stack", direction: "column", fill: 1, children: [{ type: "toolbar", start: [{ type: "button", label: "새로 고침", on_click: [] }] }, child] }
+      : context === "section" ? { type: "section", title: "내용", child }
+      : context === "tab" ? { type: "tabs", tabs: [{ label: "내용", child }] } : child;
+    return { id: `loading-position-1057-${kind}-${context}`, name: "로딩 위치", requires: { blocks: 30, modules: { connection: 1 } },
+      permissions: [{ module: "connection", id: "sample", connection: "sample", label: "자료", access: "read" }],
+      sources: { sample: { kind: "request", permission: "sample", path: "/sample" } }, state: {}, ui };
+  })),
   ...(["direct", "section", "natural"] as const).map(context => {
     const list = { type: "list", items: [] };
     const child = context === "section" ? { type: "section", title: "목록", child: list }

@@ -3,7 +3,7 @@ import { selectTab } from "./tab-helper";
 
 test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
 
-test("격자 로딩 칸과 실제 칸이 같은 자리를 쓴다", async ({ page }) => {
+for (const count of [3, 30]) test(`격자 로딩 칸과 실제 칸이 같은 자리를 쓴다: ${count}개`, async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/?preview=paging-test");
   const app = page.getByTestId("app-window-paging-test");
@@ -11,22 +11,50 @@ test("격자 로딩 칸과 실제 칸이 같은 자리를 쓴다", async ({ page
   const item = app.getByRole("option", { name: "첫 칸" });
   await expect(item).toBeVisible();
   await expect(app.getByRole("option", { name: "셋째 칸" })).toBeVisible();
-  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: {
-    sources: {}, values: { "/ui/tabs/6/child/items": { status: "ready", value: Array.from({ length: 30 }, (_, index) => ({ key: String(index), title: index === 0 ? "첫 칸" : `항목 ${index}` })) } },
-  } }));
-  await expect(item).toHaveAttribute("aria-setsize", "30");
+  await page.evaluate((count) => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: {
+    sources: {}, values: { "/ui/tabs/6/child/items": { status: "ready", value: Array.from({ length: count }, (_, index) => ({ key: String(index), title: index === 0 ? "첫 칸" : `항목 ${index}` })) } },
+  } }), count);
+  await expect(item).toHaveAttribute("aria-setsize", String(count));
   const before = (await item.boundingBox())!;
+  const geometry = await app.locator(".ks-list.is-grid").evaluate(el => ({
+    scrollbar: el.offsetWidth - el.clientWidth,
+    columns: getComputedStyle(el.querySelector(".ks-list-grid-row")!).gridTemplateColumns.trim().split(/\s+/).length,
+  }));
   await page.evaluate(() => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: {
     sources: {}, values: { "/ui/tabs/6/child/items": { status: "loading" } },
   } }));
   const loading = app.getByRole("status", { name: "불러오는 중" });
+  await expect(loading).toHaveCSS("pointer-events", "none");
   await expect(loading.locator(".ks-list-card")).toHaveCount(12);
   const after = (await loading.locator(".ks-list-card").first().boundingBox())!;
   expect(Math.abs(before.x - after.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(before.y - after.y)).toBeLessThanOrEqual(1);
-  expect(Math.abs(before.width - after.width)).toBeLessThanOrEqual(1);
-  expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
+  expect(Math.abs(before.width - after.width)).toBeLessThanOrEqual(geometry.scrollbar / geometry.columns + 1);
+  if (count === 3) expect(geometry.scrollbar).toBe(0);
 });
+
+for (const kind of ["tree", "table"] as const) for (const context of ["window", "pane", "toolbar", "section", "tab"] as const) {
+  test(`${kind} 첫 행은 ${context} 로딩 전후 같은 위치다`, async ({ page }) => {
+    const id = `loading-position-1057-${kind}-${context}`;
+    const pointer = context === "pane" ? "/ui/children/0" : context === "toolbar" ? "/ui/children/1"
+      : context === "section" ? "/ui/child" : context === "tab" ? "/ui/tabs/0/child" : "/ui";
+    await page.goto(`/?preview=${id}`);
+    const app = page.getByTestId(`app-window-${id}`);
+    const row = kind === "tree" ? app.getByRole("treeitem").first() : app.locator(".ks-table-row").first();
+    await expect(row).toBeVisible();
+    const before = (await row.boundingBox())!;
+    await page.evaluate(({ id, pointer, kind }) => (window as any).conversationHarness.emit({ event: "data.update", window_id: `${id}-window`, view: {
+      sources: {}, values: { [`${pointer}/${kind === "tree" ? "items" : "rows"}`]: { status: "loading" } },
+    } }), { id, pointer, kind });
+    const loading = app.locator(".ks-data-loading-rows");
+    await expect(loading).toHaveCSS("pointer-events", "none");
+    await expect(loading.locator(".ks-row")).toHaveCount(8);
+    const after = (await loading.locator(kind === "tree" ? ".ks-file-tree-row" : ".ks-table-row").first().boundingBox())!;
+    expect(Math.abs(before.x - after.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(before.y - after.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(before.height - after.height)).toBeLessThanOrEqual(1);
+  });
+}
 
 test("행 로딩의 높이는 실제 행과 같다", async ({ page }) => {
   await page.goto("/?preview=paging-test");

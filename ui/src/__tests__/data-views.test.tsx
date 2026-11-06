@@ -157,6 +157,14 @@ it.each(["tree", "table-rows", "table-columns"] as const)("%s 로딩은 여덟 �
   act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { [`/ui/${key}`]: { status: "loading" } } } }));
   const loading = await screen.findByRole("status", { name: "불러오는 중" });
   expect(loading.querySelectorAll(".ks-row")).toHaveLength(8);
+  if (table) {
+    expect(loading.classList.contains("ks-table-scroll")).toBe(true);
+    expect(loading.querySelector(".ks-table-header .ks-data-skeleton i")).not.toBeNull();
+    expect(loading.querySelectorAll(".ks-table-row")).toHaveLength(8);
+  } else {
+    expect(loading.classList.contains("ks-data-tree")).toBe(true);
+    expect(loading.querySelectorAll(".ks-file-tree-row")).toHaveLength(8);
+  }
 });
 it("누른 칸과 다른 빈 곳에 놓으면 선택을 지우지 않고 빈 곳을 누르면 초점을 유지한다", async () => {
   const { calls } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },

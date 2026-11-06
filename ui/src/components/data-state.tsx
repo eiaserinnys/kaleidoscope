@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { BindingValue } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { useWindowData } from "../data/window-data";
@@ -34,7 +34,7 @@ export function BindingFailureNotice({ value, rootProps }: { value: BindingValue
   return <Notice rootProps={rootProps} role="alert" errorId={value.id}>{value.message}</Notice>;
 }
 
-export function DataState({ value, compact = false, layout, loading, loginFailure, onRetry, onLogin, rootProps }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; layout?: "row"; loading?: "rows" | React.ReactElement; loginFailure?: { message: string; id?: string }; onRetry?: () => void; onLogin?: () => void; rootProps?: import("../comments/block-root").BlockRootProps }) {
+export function DataState({ value, compact = false, layout, loading, loginFailure, onRetry, onLogin, rootProps }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; layout?: "row"; loading?: "tree" | "table" | "table-grid" | React.ReactElement; loginFailure?: { message: string; id?: string }; onRetry?: () => void; onLogin?: () => void; rootProps?: import("../comments/block-root").BlockRootProps }) {
   const data = useWindowData();
   const context = { store: data.store, window: { id: data.windowId } };
   const [loginError, setLoginError] = useState<ReturnType<typeof toCoreError> | null>(null);
@@ -48,7 +48,17 @@ export function DataState({ value, compact = false, layout, loading, loginFailur
   const declaration = data.definition.permissions.find((item) => item.module === "files" && item.id === ungranted);
   const waitingForDefault = value.status === "failed" && value.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && declaration?.module === "files" && Boolean(declaration.default_folder) && !folderState;
   if (value.status === "loading" || waitingForDefault) {
-    if (loading === "rows") return <div {...rootProps} className="ks-data-view ks-data-loading-rows" role="status" aria-label="불러오는 중">{Array.from({ length: 8 }, (_, index) => <div className="ks-row" aria-hidden="true" key={index}><span className="ks-data-skeleton"><i /></span></div>)}</div>;
+    if (loading === "tree") return <div {...rootProps} className="ks-data-view ks-data-tree ks-data-loading-rows" role="status" aria-label="불러오는 중">{Array.from({ length: 8 }, (_, index) => <div className="ks-row ks-file-tree-row" aria-hidden="true" key={index}><span className="ks-data-skeleton"><i /></span></div>)}</div>;
+    if (loading === "table" || loading === "table-grid") {
+      const grid = loading === "table-grid";
+      const bar = <span className="ks-data-skeleton"><i /></span>;
+      return <div {...rootProps} className={`ks-data-view ks-table-scroll ${grid ? "ks-table-grid" : "ks-table-rows"} ks-data-loading-rows`} role="status" aria-label="불러오는 중" style={{ "--ks-table-columns": "minmax(0, 1fr)" } as CSSProperties}>
+        <div className="ks-table-inner">
+          <div className="ks-table-header" aria-hidden="true">{grid ? <div>{bar}</div> : <div><button type="button" tabIndex={-1}>{bar}</button></div>}</div>
+          {Array.from({ length: 8 }, (_, index) => <div className={`ks-row ks-table-row${grid ? " ks-grid-row" : ""}`} aria-hidden="true" key={index}><span className={`ks-table-cell${grid ? " ks-grid-cell" : ""}`}>{bar}</span></div>)}
+        </div>
+      </div>;
+    }
     if (loading) return loading;
     return <div {...rootProps} className={`ks-data-skeleton${compact ? " is-compact" : ""}`} role="status" aria-label="불러오는 중"><i /><i /><i /></div>;
   }

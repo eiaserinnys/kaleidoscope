@@ -96,7 +96,7 @@ function ancestors(nodes: DataNode[], key: unknown, parents: string[] = []): str
 export function TreeBlock({ block, context, pointer }: { block: DataTreeBlockData; context: BlockContext; pointer: string }) {
   const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
-  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} loading="rows" />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} loading="tree" />;
   return <TreeReady block={block} context={context} pointer={pointer} value={value.value} />;
 }
 
