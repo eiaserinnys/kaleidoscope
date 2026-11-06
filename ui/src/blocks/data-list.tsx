@@ -14,13 +14,15 @@ import { useLoadMore } from "./load-more";
 import type { BindingMore } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
-import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
-import { IconButton } from "../components/primitives";
+import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, listGroups, isObject, keepRovingRow, useRoving, useVirtualRows, type ListGroup } from "./data-view-common";
+import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
+import { DataIcon } from "../components/data-icons";
+import { useItemScope } from "../data/item-scope";
 import { X } from "../components/icons";
 import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
 
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
-type Row = { kind: "heading"; title: string; meta?: string } | { kind: "items"; items: ListItem[]; start: number };
+type Row = { kind: "heading"; title: string; meta?: string } | { kind: "status"; group: ListGroup<ListItem> } | { kind: "items"; items: ListItem[]; start: number };
 type ListHandlers = {
   focus: (index: number) => void;
   keyDown: (event: React.KeyboardEvent<HTMLElement>, index: number, item: ListItem) => void;
@@ -88,7 +90,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
   const menu = useItemMenu(block.item_menu, pointer);
-  const grouped = useMemo(() => groups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
+  const grouped = useMemo(() => listGroups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
+  const parentScope = useItemScope();
   const items = useMemo(() => grouped.flatMap((group) => group.items), [grouped]);
   const grid = block.layout === "grid";
   const icons = block.layout === "icons";
@@ -111,13 +114,15 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const rows = useMemo(() => {
     const result: Row[] = []; let start = 0;
     for (const group of grouped) {
+      if (!items.length && !group.status) continue;
       if (block.grouped) result.push({ kind: "heading", title: group.title, meta: group.meta });
+      if (block.grouped && group.status) result.push({ kind: "status", group });
       const step = activeColumns;
       for (let i = 0; i < group.items.length; i += step) result.push({ kind: "items", items: group.items.slice(i, i + step), start: start + i });
       start += group.items.length;
     }
     return result;
-  }, [grouped, block.grouped, activeColumns]);
+  }, [grouped, items.length, block.grouped, activeColumns]);
   const rowKeys = useMemo(() => rows.map((row) => row.kind === "items" ? row.items.map((item) => item.key) : []), [rows]);
   const { virtual } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys);
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
@@ -137,16 +142,28 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   };
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, useWindowVisible(context), icons ? <IconTileSkeleton count={activeColumns} /> : undefined, items.length);
+  const hasStatus = grouped.some((group) => group.status);
   if (value === null && !more) return null;
-  if (!items.length && !more) return <NoItems rootProps={blockRoot} />;
+  if (!items.length && !more && !hasStatus) return <NoItems rootProps={blockRoot} />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const currentHeading = block.grouped ? rows.slice(0, first + 1).reverse().find((row) => row.kind === "heading") : undefined;
   return <><div {...blockRoot} className={`ks-data-view ks-list${grid ? " is-grid" : icons ? " is-icons" : ""}`} ref={scroll} role={block.on_remove ? "list" : "listbox"} aria-label="목록">
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
-    {!items.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
+    {!items.length && !hasStatus ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
       const entry = rows[row.index];
-      return <div className={entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
-        {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.items.map((item, n) => {
+      return <div className={entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} data-row-key={entry.kind === "status" ? entry.group.key ?? entry.group.title : undefined} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
+        {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.kind === "status" ? (() => {
+          const { group } = entry; const status = group.status!;
+          const index = block.group_actions?.findIndex((action) => action.key === group.action) ?? -1;
+          const action = index < 0 ? undefined : block.group_actions?.[index];
+          const button = action ? <Button disabled={disabled} onClick={(event) => {
+            const item = group.original as unknown as JsonValue;
+            void data.act(`${pointer}/group_actions/${index}/on_click`, group.action!, item, undefined, { item, parent_item: parentScope?.item, key: group.key ?? group.title, index: row.index, instance: event.currentTarget });
+          }}>{action.label}</Button> : undefined;
+          return <div className="ks-data-state-compact ks-list-group-status" aria-live="polite">{status.state === "loading" ? <DataState value={{ status: "loading" }} compact /> : null}
+            {status.state !== "loading" || status.message || status.code || button ? <EmptyState icon={status.state === "error" ? <DataIcon name="triangle-alert" size="empty" /> : undefined}
+              text={<>{status.message ?? (status.state === "empty" ? "없음" : "")}{status.code ? <> <ErrorId id={status.code} /></> : null}</>} action={button} /> : null}</div>;
+        })() : entry.items.map((item, n) => {
           const index = entry.start + n; const active = item.key === selected;
           return <ListRow item={item} index={index} length={items.length} active={active} focused={roving.focus === index} grid={grid} icons={icons} handlers={handlers} readOnly={disabled || (!block.on_select && !block.on_remove && !isMedia(item.image) && !block.item_menu?.length)} removable={Boolean(block.on_remove)} disabled={disabled} key={item.key} />;
         })}

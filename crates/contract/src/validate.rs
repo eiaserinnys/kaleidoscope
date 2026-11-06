@@ -3336,7 +3336,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::List { selected, disabled, layout, .. } => {
+        Block::List { selected, disabled, layout, group_actions, .. } => {
             if *layout == crate::ListLayout::Icons && definition.requires.blocks < crate::LIST_ICONS_BLOCK_SET_VERSION {
                 let version = crate::LIST_ICONS_BLOCK_SET_VERSION;
                 details.push(format!("{at}: list의 icons 배치는 블록 세트 {version}판 이상이 필요합니다"));
@@ -3346,6 +3346,14 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             }
             if let Some(disabled) = disabled {
                 validate_ui_binding(disabled, definition, details, &format!("{at}/disabled"));
+            }
+            if let Some(actions) = group_actions {
+                let mut keys = HashSet::new();
+                for (index, action) in actions.iter().enumerate() {
+                    if !keys.insert(&action.key) {
+                        details.push(format!("{at}/group_actions/{index}/key: 묶음 동작 키가 중복됩니다"));
+                    }
+                }
             }
         }
         Block::Feed {

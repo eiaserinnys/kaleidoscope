@@ -84,6 +84,23 @@ fn store_actions_resolve_event_and_state_bindings() {
 }
 
 #[test]
+fn list_group_action_evaluates_original_item_and_action_event() {
+    let mut definition = serde_json::to_value(fixture()).unwrap();
+    definition["ui"]["children"][0]["group_actions"] = json!([{
+        "key":"retry", "label":"다시 받기", "on_click":[
+            {"set_state":"selected", "value":{"expr":"{'address': $item.address, 'action': $event}"}}
+        ]
+    }]);
+    let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
+    let empty = BTreeMap::new();
+    let event = json!("retry");
+    let item = json!({"title":"둘째", "items":[], "address":"local", "action":"retry"});
+    let env = Env { state:&empty, data:&empty, data_meta:&empty, storage:&empty, storage_meta:&empty, apps:None, event:&event, item:&item, modifiers:None };
+    assert_eq!(app.action_step("/ui/children/0/group_actions/0/on_click", 0, &env).unwrap(),
+        Step::SetState { key:"selected".into(), value:json!({"address":"local", "action":"retry"}) });
+}
+
+#[test]
 fn apps_expression_only_recalculates_the_selected_binding() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["ui"]["children"][1]["value"] = json!({"expr":"$count($apps)"});

@@ -438,7 +438,11 @@ meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Bloc
 /**
  * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
  */
-on_remove?: Actions, item_menu?: Array<ItemMenuEntry>, disabled?: Binding, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
+on_remove?: Actions, 
+/**
+ * (43판) 묶음 자료의 action이 고를 수 있는 정적 동작 자리.
+ */
+group_actions?: Array<GroupAction>, item_menu?: Array<ItemMenuEntry>, disabled?: Binding, } | { "type": "table", rows: Binding, columns: TableColumns, selection?: TableSelection, row_header?: string, sort?: SortSpec, selected?: Binding, on_select?: Actions, item_menu?: Array<ItemMenuEntry>, } | { "type": "properties", fields: Array<PropertyField>, layout?: PropertiesLayout, } | { "type": "feed", entries: Binding, grouped?: boolean, format?: TextFormat, follow?: boolean, 
 /**
  * (블록 세트 7판) 본문 문단(`body`가 배열일 때)을 같은 너비의 칸으로 나란히 놓는다. 창이 좁아 칸마다
  * 최소 너비를 지킬 수 없으면 위아래로 쌓는다. 예: 여러 문단 비교.
@@ -952,6 +956,11 @@ root_name: string, granted_at: string, };
  */
 export type Group<T> = { title: string, meta?: string, items: Array<T>, };
 
+/**
+ * 묶음 자료가 고를 수 있는 앱 정의의 동작 자리.
+ */
+export type GroupAction = { key: string, label: string, on_click: Actions, };
+
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ImageFit = "contain" | "cover";
@@ -996,6 +1005,18 @@ user_code: string, expires_at: string, } | { "state": "connected", mode: ServerM
  * 마지막 연결 오류. 연결을 시작하는 동안에는 없다.
  */
 reason: CoreError | null, } | { "state": "revoked", server_url: string, };
+
+/**
+ * 목록 전용 묶음 데이터. `action`은 앱 정의에 선언된 슬롯 키다.
+ */
+export type ListGroup<T> = { title: string, meta?: string, items: Array<T>, key?: string, status?: ListGroupStatus, action?: string, };
+
+export type ListGroupState = "loading" | "empty" | "error";
+
+/**
+ * `list` 묶음의 상태. 준비된 묶음은 이 필드를 생략한다.
+ */
+export type ListGroupStatus = { state: ListGroupState, message?: string, code?: string, };
 
 /**
  * `list` 항목.

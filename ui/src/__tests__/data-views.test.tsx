@@ -73,6 +73,27 @@ it("moves through grouped list entries and selects the focused item", async () =
   fireEvent.keyDown(document.activeElement!, { key: "Enter" });
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/on_select", event: "b", item: { key: "b", title: "둘" } })));
 });
+it.each(["rows", "icons"] as const)("%s 묶음은 상태와 선언된 동작을 항목 사이에 보인다", async (layout) => {
+  const failed = { key: "second", title: "둘째", items: [], status: { state: "error", message: "자료에 닿을 수 없습니다", code: "SOURCE_FAILED" }, action: "retry", address: "local" };
+  const { calls } = setup({ type: "list", layout, grouped: true, items: [
+    { key: "first", title: "첫째", items: [{ key: "one", title: "항목" }] }, failed,
+    { key: "third", title: "셋째", items: [], status: { state: "empty", message: "비어 있습니다" } },
+  ], group_actions: [{ key: "retry", label: "다시 받기", on_click: [{ set_state: "choice", value: { expr: "$item.address" } }] }] } as unknown as Block, { choice: null }, 43);
+  expect(await screen.findByText("자료에 닿을 수 없습니다")).toBeTruthy();
+  expect(screen.getByText("SOURCE_FAILED")).toBeTruthy();
+  expect(screen.getByText("비어 있습니다")).toBeTruthy();
+  const button = screen.getByRole("button", { name: "다시 받기" });
+  expect(button.tabIndex).toBe(0);
+  fireEvent.click(button);
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", pointer: "/ui/group_actions/0/on_click", event: "retry", item: failed })));
+});
+it("항목이 없는 상태 묶음은 남고 알 수 없는 동작은 실행되지 않는다", async () => {
+  setup({ type: "list", grouped: true, items: [{ title: "이전 빈 묶음", items: [] }, { title: "빈 묶음", items: [], status: { state: "empty", message: "자료 없음" }, action: "unknown" }], group_actions: [] } as unknown as Block, {}, 43);
+  expect(await screen.findByText("빈 묶음")).toBeTruthy();
+  expect(screen.queryByText("이전 빈 묶음")).toBeNull();
+  expect(screen.getByText("자료 없음")).toBeTruthy();
+  expect(screen.queryByRole("button")).toBeNull();
+});
 it("cycles table sort and exposes its direction", async () => {
   setup({ type: "table", rows: [{ key: "a", n: 2 }, { key: "b", n: 1 }], columns: [{ field: "n", label: "숫자", format: "number" }] });
   const header = await screen.findByRole("columnheader");

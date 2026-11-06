@@ -1109,6 +1109,54 @@ pub struct Group<T> {
     pub items: Vec<T>,
 }
 
+/// `list` 묶음의 상태. 준비된 묶음은 이 필드를 생략한다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ListGroupStatus {
+    pub state: ListGroupState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub code: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ListGroupState { Loading, Empty, Error }
+
+/// 목록 전용 묶음 데이터. `action`은 앱 정의에 선언된 슬롯 키다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ListGroup<T> {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub meta: Option<String>,
+    pub items: Vec<T>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub status: Option<ListGroupStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub action: Option<String>,
+}
+
+/// 묶음 자료가 고를 수 있는 앱 정의의 동작 자리.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct GroupAction {
+    pub key: String,
+    pub label: String,
+    pub on_click: Actions,
+}
+
 /// `tree` 항목. `by: children`이면 `children`으로 내려가고, `by: path`면 `path`를 `/`로 나눠 폴더를 만든다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -1876,6 +1924,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             disabled,
             on_select,
             on_remove,
+            group_actions,
             ..
         } => {
             bind!("items", items);
@@ -1890,6 +1939,11 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(on_remove) = on_remove {
                 act!("on_remove", on_remove);
+            }
+            if let Some(actions) = group_actions {
+                for (index, action) in actions.iter().enumerate() {
+                    act!(format!("group_actions/{index}/on_click"), &action.on_click);
+                }
             }
         }
         Block::Tree {

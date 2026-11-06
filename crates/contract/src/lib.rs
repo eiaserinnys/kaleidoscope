@@ -306,7 +306,9 @@ pub const CONTRACT_VERSION: u32 = 39;
 /// - 40판: list 행 잠금 바인딩.
 /// - 41판: 창의 파일 드롭 선언.
 /// - 42판: 줄 단추와 앱의 초기 창 크기.
-pub const BLOCK_SET_VERSION: u32 = ROW_WINDOW_SIZE_BLOCK_SET_VERSION;
+pub const BLOCK_SET_VERSION: u32 = LIST_GROUP_STATUS_BLOCK_SET_VERSION;
+/// 목록 묶음의 상태와 동작.
+pub const LIST_GROUP_STATUS_BLOCK_SET_VERSION: u32 = 43;
 /// 창 파일 드롭 선언과 권한 파일 열기의 첫 지원 판.
 pub const FILE_DROP_BLOCK_SET_VERSION: u32 = 41;
 pub const CLIENT_FILE_OPEN_VERSION: u32 = 7;
@@ -1908,7 +1910,7 @@ pub enum Block {
     },
 
     // ----- 블록 세트 4판: 데이터 보기 -----
-    /// (4판) 목록. `items`는 [`data::ListItem`] 배열이고, `grouped`면 [`data::Group`]`<ListItem>` 배열이다.
+    /// (4판) 목록. `items`는 [`data::ListItem`] 배열이고, `grouped`면 [`data::ListGroup`]`<ListItem>` 배열이다.
     /// `layout`이 `grid`면 그림 칸의 격자다(그림이 없는 항목은 빈 칸에 제목만). 항목을 누르면 `on_select`가
     /// `$event`(항목의 `key`)와 `$item`(항목)으로 돈다. `selected`의 값과 `key`가 같은 항목을 고른 것으로 보인다.
     /// 화살표 키로 옮겨 다니고 Enter로 고른다. 긴 목록은 보이는 줄만 그린다.
@@ -1930,6 +1932,10 @@ pub enum Block {
         #[ts(optional)]
         /// (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
         on_remove: Option<Actions>,
+        /// (43판) 묶음 자료의 action이 고를 수 있는 정적 동작 자리.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        group_actions: Option<Vec<data::GroupAction>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         item_menu: Option<Vec<ItemMenuEntry>>,
@@ -2693,6 +2699,8 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_remove: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        group_actions: Option<Vec<data::GroupAction>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         item_menu: Option<Vec<ItemMenuEntry>>,
     },
     /// (4판) 표. `rows`는 객체 배열이고 각 행에 `key`(문자열)가 있다. 칸은 `columns`의 `field`로 행에서 읽는다.
@@ -3343,6 +3351,7 @@ impl From<RawBlock> for Block {
                 disabled,
                 on_select,
                 on_remove,
+                group_actions,
                 item_menu,
             } => Block::List {
                 items,
@@ -3352,6 +3361,7 @@ impl From<RawBlock> for Block {
                 disabled,
                 on_select,
                 on_remove,
+                group_actions,
                 item_menu,
             },
             RawBlock::Table {
@@ -3721,6 +3731,7 @@ impl Block {
             } => 6,
             Block::Markdown { value: Some(_), .. } => 4,
             Block::Markdown { .. } => 1,
+            Block::List { group_actions: Some(_), .. } => LIST_GROUP_STATUS_BLOCK_SET_VERSION,
             Block::List { disabled: Some(_), .. } => LIST_DISABLED_BLOCK_SET_VERSION,
             Block::Chat { loading: Some(_), .. } => CHAT_LOADING_BLOCK_SET_VERSION,
             Block::Chat {
