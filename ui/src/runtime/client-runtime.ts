@@ -609,6 +609,9 @@ export class ClientRuntime {
       void this.store.call({ op: "client.blob_remove", window_id: this.data.windowId, key: message.key }).then(() => this.reply(message.requestId, null)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-blob-list") {
       void this.store.call({ op: "client.blob_list", window_id: this.data.windowId, prefix: message.prefix }).then(({ keys }) => this.reply(message.requestId, keys)).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
+    } else if (message.type === "ks-client-file-open") {
+      if (typeof message.permission !== "string" || typeof message.path !== "string") { this.reply(message.requestId, undefined, shellErrors.SHELL_CLIENT_FILE_OPEN_INPUT_INVALID()); return; }
+      void this.store.call({ op: "client.file_open", window_id: this.data.windowId, permission: message.permission, path: message.path }).then(({ file }) => { this.fileRegistry.register(file, "core"); this.reply(message.requestId, file); }).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));
     } else if (message.type === "ks-client-file-read") {
       const result = this.fileRegistry.read(message.id);
       void result.then((bytes) => this.reply(message.requestId, bytes, undefined, [bytes])).catch((error) => this.reply(message.requestId, undefined, toCoreError(error)));

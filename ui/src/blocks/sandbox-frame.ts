@@ -151,6 +151,7 @@ function bridgeSource(init: SandboxInit): string {
         return () => set.delete(listener);
       } },
       files: {
+        open({ permission, path }) { return clientRequest('ks-client-file-open', { permission, path }); },
         read(id) { return clientRequest('ks-client-file-read', { id }); },
         write(sink, offset, bytes) { return clientRequest('ks-client-file-write', { sink, offset, bytes }, [bytes]); },
         truncate(sink, size) { return clientRequest('ks-client-file-truncate', { sink, size }); },

@@ -44,7 +44,8 @@ kaleidoscope는 에이전트가 올린 앱을 창으로 띄우는 데스크톱 �
 
 참조
 도구의 workspace_id를 빼면 이 MCP 연결의 작업을 씁니다.
-앱 정의 JSON의 필드는 id, name, description, icon, badge, requires, permissions, state, state_migrate, sources, assets, storage, agent, client, worker, opens, shortcuts, messages, locale, ui입니다. version은 서버가 부여하며 앱 정의에 넣지 않습니다. upload_app의 입력 스키마가 정확한 형식과 최신 블록 필드의 정본입니다. 모르는 필드는 넣지 않습니다. state_migrate는 앱 판을 올릴 때 옛 상태에 없는 키의 값만 JSONata 식으로 계산하며 새 창에는 적용하지 않습니다. opens.set_state는 탐색기에서 파일을 열 때 경로와 함께 창 상태에 쓸 값을 선언합니다.
+앱 정의 JSON의 필드는 id, name, description, icon, badge, requires, permissions, state, state_migrate, sources, assets, storage, agent, client, worker, opens, file_drop, shortcuts, messages, locale, ui입니다. version은 서버가 부여하며 앱 정의에 넣지 않습니다. upload_app의 입력 스키마가 정확한 형식과 최신 블록 필드의 정본입니다. 모르는 필드는 넣지 않습니다. state_migrate는 앱 판을 올릴 때 옛 상태에 없는 키의 값만 JSONata 식으로 계산하며 새 창에는 적용하지 않습니다. opens.set_state는 탐색기에서 파일을 열 때 경로와 함께 창 상태에 쓸 값을 선언합니다.
+file_drop은 {"accept":[{"mime":"image/*","extensions":["png"]}],"multiple":false,"client":"load"}처럼 창에 놓은 파일을 받을 client 동작을 선언합니다. requires.blocks 41과 requires.modules.client 7 이상이 필요하며 client.actions에 동작을 선언합니다. 파일 선택의 accept와 같은 형태입니다. client 파일 API의 files.open({permission,path})은 이 창의 folder 파일 권한으로 이미 허용된 상대 경로를 열어 ClientFile을 돌려주며, files.read(file.id)로 바이트를 읽습니다. 사용자 조작 안에서만 부를 필요는 없습니다. 탐색기에서 열리는 client 앱은 opens.state 경로와 files.grant가 준비되면 files.open을 호출하고, 성공이나 실패 후 그 입력 키를 null로 비웁니다. 같은 파일을 다시 열 수 있도록 client.state_keys에도 그 키를 선언합니다.
 stack.fill은 기존의 자식 번호 하나 또는 번호 목록(예: [0, 1])입니다. 목록은 빈 값이나 중복 없이 자식 범위의 번호를 담고 requires.blocks를 37 이상으로 선언합니다. 선택한 칸은 남는 높이 또는 폭을 균등하게 나눕니다. 채움 칸 바로 아래의 여러 줄 input은 칸 높이를 채우고 내용이 넘치면 내부에서 스크롤하며 rows는 최소 줄 수입니다.
 
 chat.loading은 불러오는 중을 정하는 선택 바인딩입니다(리터럴 boolean, state, expr, client). requires.blocks를 38 이상으로 선언합니다. 생략하면 false이고 계산값이 true일 때만 대화 기록을 뼈대로 바꾸며 입력 줄과 초안, 첨부를 유지한 채 입력과 동작을 잠급니다. 예: {"type":"chat","loading":{"client":"session_switching"}}.

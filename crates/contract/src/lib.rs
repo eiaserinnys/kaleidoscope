@@ -230,6 +230,7 @@ pub mod size;
 pub mod validate;
 mod validate_input;
 mod validate_button;
+mod validate_file_input;
 pub mod window_control;
 pub mod worker;
 pub use window_control::*;
@@ -249,7 +250,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 38;
+pub const CONTRACT_VERSION: u32 = 39;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -303,7 +304,11 @@ pub const CONTRACT_VERSION: u32 = 38;
 /// - 38판: chat의 불러오는 중 바인딩.
 /// - 39판: 앱 아이콘 숫자 배지.
 /// - 40판: list 행 잠금 바인딩.
-pub const BLOCK_SET_VERSION: u32 = LIST_DISABLED_BLOCK_SET_VERSION;
+/// - 41판: 창의 파일 드롭 선언.
+pub const BLOCK_SET_VERSION: u32 = FILE_DROP_BLOCK_SET_VERSION;
+/// 창 파일 드롭 선언과 권한 파일 열기의 첫 지원 판.
+pub const FILE_DROP_BLOCK_SET_VERSION: u32 = 41;
+pub const CLIENT_FILE_OPEN_VERSION: u32 = 7;
 /// 앱 아이콘의 숫자 배지를 처음 지원하는 블록 세트 판.
 pub const APP_BADGE_BLOCK_SET_VERSION: u32 = 39;
 /// list.disabled를 처음 지원하는 블록 세트 판.
@@ -355,6 +360,7 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// - `client` 3판: 로컬 process 실행 권한.
 /// - `client` 4판: 채팅 채널과 앱 작성 지침·같이 보기 준비 기능, 앱 정의에서 선언한 폴더 권한의 선택과 grant 변경 알림,
 ///   창 범위 기기 저장소와 프로그램 파일 주소.
+/// - `client` 7판: 허용된 폴더의 파일을 창별 client 파일로 연다.
 /// - `process` 1판: 로컬 프로그램 실행, 명세마다 허용.
 /// - `process` 2판: 1판 + 권한의 `command`, 프로그램마다 한 번 허용.
 /// - `http` 3판: 권한의 `access: readwrite`, client `http.request`(헤더, 쓰기 메서드, 응답 상태와 헤더).
@@ -368,7 +374,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("http", 3),
     ("worker", 1),
     ("profiler", 1),
-    ("client", RECEIVE_MESSAGE_CLIENT_VERSION),
+    ("client", CLIENT_FILE_OPEN_VERSION),
     ("process", 2),
     ("store", 2),
 ];
@@ -878,6 +884,10 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub opens: Option<OpensDecl>,
+    /// 창에 놓인 파일을 받을 클라이언트 동작.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub file_drop: Option<data::PickFilesSpec>,
     /// (블록 세트 4판) 이름 붙인 원천. 식에서 `$data.이름`으로 읽는다. 규칙은 [`data`] 모듈 머리글에 있다.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(optional, as = "Option<BTreeMap<String, SourceDecl>>")]
@@ -4495,6 +4505,8 @@ pub enum CoreRequest {
     },
     #[serde(rename = "client.blob_open")]
     ClientBlobOpen { window_id: String, key: String },
+    #[serde(rename = "client.file_open")]
+    ClientFileOpen { window_id: String, permission: String, path: String },
     #[serde(rename = "client.blob_remove")]
     ClientBlobRemove { window_id: String, key: String },
     #[serde(rename = "client.blob_list")]
@@ -5486,6 +5498,8 @@ pub enum CoreReply {
     ClientBlobPut {},
     #[serde(rename = "client.blob_open")]
     ClientBlobOpen { file: Option<client::ClientFile> },
+    #[serde(rename = "client.file_open")]
+    ClientFileOpen { file: client::ClientFile },
     #[serde(rename = "client.blob_remove")]
     ClientBlobRemove {},
     #[serde(rename = "client.blob_list")]

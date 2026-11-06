@@ -16,6 +16,8 @@ use crate::Inner;
 
 mod access;
 mod error;
+mod open;
+pub(crate) use open::open;
 use access::require_client;
 use error::{export_error, export_not_owned, input_not_owned};
 

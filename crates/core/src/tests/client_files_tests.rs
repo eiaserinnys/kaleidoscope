@@ -6,6 +6,103 @@ struct FileHost {
     input: PathBuf,
     output: Arc<Mutex<Option<PathBuf>>>,
 }
+
+#[test]
+fn open_granted_folder_file_as_window_owned_client_file() {
+    let data = TempDir::new().unwrap();
+    let docs = TempDir::new().unwrap();
+    fs::write(docs.path().join("그림.png"), b"sample image bytes").unwrap();
+    let definition = json!({"id":"open-test","name":"파일 열기 시험",
+        "requires":{"blocks":12,"modules":{"assets":1,"client":7,"files":2}},
+        "permissions":[{"module":"files","id":"docs","access":"read","label":"문서"},
+            {"module":"files","id":"write","access":"readwrite","label":"쓰기"},
+            {"module":"files","id":"pc","access":"read","label":"PC","scope":"pc"}],
+        "state":{},"assets":[{"id":"entry","version":1}],
+        "client":{"runtime":"javascript","entry":{"id":"entry","version":1}},
+        "ui":{"type":"text","value":"시험"}});
+    let mut older = definition.clone();
+    older["id"] = json!("old-client");
+    older["requires"]["modules"]["client"] = json!(6);
+    let mut no_client = definition.clone();
+    no_client["id"] = json!("no-client");
+    no_client.as_object_mut().unwrap().remove("client");
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(
+        data.path(),
+        vec![
+            definition.to_string(),
+            older.to_string(),
+            no_client.to_string(),
+        ],
+        &host,
+    );
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "open-test");
+    let other = open_window(&core, &desktop, "open-test");
+    let old_window = open_window(&core, &desktop, "old-client");
+    let no_client_window = open_window(&core, &desktop, "no-client");
+    let request = |window: &str, permission: &str, path: &str| -> CoreRequest {
+        serde_json::from_value(
+            json!({"op":"client.file_open","window_id":window,"permission":permission,"path":path}),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        core.handle(request(&old_window, "docs", "그림.png"))
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("FILE_CLIENT_OPEN_VERSION_LOW")
+    );
+    assert_eq!(
+        core.handle(request(&no_client_window, "docs", "그림.png"))
+            .unwrap_err()
+            .id
+            .as_deref(),
+        Some("FILE_CLIENT_NOT_DECLARED")
+    );
+    assert!(core.handle(request(&window, "docs", "그림.png")).is_err());
+    host.choose(Some(docs.path().into()));
+    for permission in ["docs", "write"] {
+        core.handle(CoreRequest::FilesPickFolder {
+            window_id: window.clone(),
+            permission: permission.into(),
+        })
+        .unwrap();
+        let reply = serde_json::to_value(
+            core.handle(request(&window, permission, "그림.png"))
+                .unwrap(),
+        )
+        .unwrap();
+        let id = reply["file"]["id"].as_str().unwrap();
+        assert_eq!(reply["file"]["name"], "그림.png");
+        assert_eq!(
+            core.client_read_file(&window, id).unwrap(),
+            b"sample image bytes"
+        );
+        assert!(core.client_read_file(&other, id).is_err());
+    }
+    for (owner, permission, path) in [
+        (&other[..], "docs", "그림.png"),
+        (&window[..], "pc", "그림.png"),
+        (&window[..], "missing", "그림.png"),
+        (&window[..], "docs", "../그림.png"),
+        (&window[..], "docs", "/tmp/그림.png"),
+    ] {
+        assert!(core.handle(request(owner, permission, path)).is_err());
+    }
+    #[cfg(unix)]
+    {
+        let outside = TempDir::new().unwrap();
+        fs::write(outside.path().join("다른.png"), b"outside").unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("다른.png"),
+            docs.path().join("링크.png"),
+        )
+        .unwrap();
+        assert!(core.handle(request(&window, "docs", "링크.png")).is_err());
+    }
+}
 impl Host for FileHost {
     fn pick_folder(&self) -> Option<PathBuf> {
         None

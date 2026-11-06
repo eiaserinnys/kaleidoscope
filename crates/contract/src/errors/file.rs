@@ -1,4 +1,5 @@
 error_catalog! { ENTRIES;
+    FILE_CLIENT_OPEN_VERSION_LOW(version) { class: PermissionDenied, place: "권한 파일 열기 client 판 검사", cause: "앱이 파일 열기를 지원하는 client 판을 선언하지 않았다", message: "이 앱은 권한 파일 열기를 지원하지 않는 client 판을 선언했습니다. 앱 정의의 requires.modules.client를 {version} 이상으로 고치세요.", fix: "앱 정의의 client 모듈 판을 올리세요" }
     FILE_ACCESS_PERMISSION_UNDECLARED(permission) {
         class: PermissionDenied,
         place: "파일 접근 권한 검사",

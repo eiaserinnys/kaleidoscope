@@ -1,6 +1,11 @@
 // 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.
 import type { CoreError } from "./contract";
 
+export const SHELL_FILE_DROP_TYPE_REJECTED = (args: { name: string }): CoreError => ({ id: "SHELL_FILE_DROP_TYPE_REJECTED", code: "invalid_request", message: `${args.name}은 이 앱에서 받지 않는 파일 형식입니다. 지원하는 파일을 다시 놓으세요.`, details: [] });
+export const SHELL_FILE_DROP_MULTIPLE_REJECTED = (): CoreError => ({ id: "SHELL_FILE_DROP_MULTIPLE_REJECTED", code: "invalid_request", message: `이 앱은 파일 하나만 받습니다. 파일 하나를 다시 놓으세요.`, details: [] });
+export const SHELL_FILE_DROP_DIRECTORY_REJECTED = (): CoreError => ({ id: "SHELL_FILE_DROP_DIRECTORY_REJECTED", code: "invalid_request", message: `폴더는 파일로 열 수 없습니다. 폴더 안의 파일을 다시 놓으세요.`, details: [] });
+export const SHELL_FILE_DROP_TOO_LARGE = (args: { name: string; limit: string }): CoreError => ({ id: "SHELL_FILE_DROP_TOO_LARGE", code: "invalid_request", message: `${args.name}의 크기가 ${args.limit}를 넘어 열 수 없습니다. 더 작은 파일을 다시 놓으세요.`, details: [] });
+export const SHELL_CLIENT_FILE_OPEN_INPUT_INVALID = (): CoreError => ({ id: "SHELL_CLIENT_FILE_OPEN_INPUT_INVALID", code: "invalid_request", message: `권한 파일을 열 수 없습니다. 앱 코드의 files.open에 문자열 permission과 path를 지정하세요.`, details: [] });
 export const SHELL_COMMENT_TARGET_CHANGED = (): CoreError => ({ id: "SHELL_COMMENT_TARGET_CHANGED", code: "conflict", message: `고른 뒤 앱 화면의 판이 바뀌었습니다. 내용은 남겨 두었습니다. 자리를 다시 골라 주세요.`, details: [] });
 export const SHELL_COMMENT_SEND_TEXT_TOO_LONG = (args: { limit: string }): CoreError => ({ id: "SHELL_COMMENT_SEND_TEXT_TOO_LONG", code: "invalid_request", message: `보내려는 커멘트 안내가 ${args.limit}를 넘습니다. 보낼 커멘트를 줄여 주세요.`, details: [] });
 export const SHELL_CLIENT_HTTP_REQUEST_TRANSPORT_UNAVAILABLE = (): CoreError => ({ id: "SHELL_CLIENT_HTTP_REQUEST_TRANSPORT_UNAVAILABLE", code: "io", message: `이 쉘에서는 앱 HTTP 요청을 보낼 수 없습니다. 쉘을 업데이트하세요.`, details: [] });

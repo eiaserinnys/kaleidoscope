@@ -165,6 +165,19 @@ it("폴더 선택은 client 동작 안에서만 요청하고 선언 권한 grant
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
 
+it("권한 파일 열기는 사용자 동작 바깥에서도 프레임 요청을 보낸다", () => {
+  vi.useFakeTimers();
+  const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험" });
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  new Function(code)();
+  void (window as any).kaleidoscope.files.open({ permission: "docs", path: "그림.png" });
+  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-file-open", permission: "docs", path: "그림.png" }), "*");
+  vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+});
+
 it("선언되지 않은 client 동작 메시지는 handler와 host API를 열지 않는다", async () => {
   vi.useFakeTimers();
   const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities: ["keep_awake"], actions: [] });
