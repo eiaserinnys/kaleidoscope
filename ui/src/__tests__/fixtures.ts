@@ -91,6 +91,7 @@ export function makeTestSnapshot(options: {
       active_desktop_ids: { "workspace-1": "desktop-1" },
       grants: options.grants ?? [],
       pc_access: [],
+      default_folder_access: [],
       process_access: [],
       store_servers: [],
     },

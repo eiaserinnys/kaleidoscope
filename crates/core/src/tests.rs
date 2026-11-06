@@ -26,6 +26,7 @@ use crate::storage::LinkFile;
 use crate::{Core, CoreConfig, CoreError, Host};
 
 mod app_comments_tests;
+mod default_folder_tests;
 mod client_blobs_tests;
 mod client_files_tests;
 mod client_http_request_tests;

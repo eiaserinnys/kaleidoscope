@@ -758,6 +758,27 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         emitState();
         return { op: "files.pick_folder", grant: clone(grant) };
       }
+      case "files.prepare_default_folder":
+      case "files.allow_default_folder": {
+        const { window, declaration } = permissionFor(request.window_id, request.permission);
+        const grant = snapshot.device.grants.find((item) => item.window_id === request.window_id && item.permission === request.permission);
+        if (grant) return { op: request.op, result: { status: "ready", grant: clone(grant) } };
+        const folder = declaration.default_folder;
+        if (!folder || declaration.scope === "pc") return fail("invalid_request", "기본 폴더가 선언되지 않았습니다");
+        if (!seed.folder) return { op: request.op, result: { status: "unavailable" } };
+        const granted = snapshot.device.default_folder_access.some((item) => item.app_id === window.app_id && item.permission === request.permission && item.folder === folder && item.access === declaration.access);
+        if (!granted && request.op === "files.prepare_default_folder") {
+          return { op: request.op, result: { status: "consent_required", folder, access: declaration.access } };
+        }
+        const now = new Date().toISOString();
+        const nextGrant: Grant = { window_id: request.window_id, permission: request.permission, ...seed.folder, granted_at: now };
+        snapshot = { ...snapshot, device: { ...snapshot.device,
+          grants: [...snapshot.device.grants, nextGrant],
+          default_folder_access: granted ? snapshot.device.default_folder_access : [...snapshot.device.default_folder_access, { app_id: window.app_id, permission: request.permission, folder, access: declaration.access, granted_at: now }],
+        } };
+        emitState();
+        return { op: request.op, result: { status: "ready", grant: clone(nextGrant) } };
+      }
       case "files.allow_pc": {
         const { window, declaration } = permissionFor(request.window_id, request.permission);
         if (declaration.scope !== "pc") return fail("invalid_request", "내 PC 범위가 아닌 권한입니다");
