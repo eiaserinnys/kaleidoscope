@@ -100,6 +100,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const grid = block.layout === "grid";
   const icons = block.layout === "icons";
   const [columns, setColumns] = useState(1);
+  const measuredColumns = useRef<number | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const iconColumns = useIconGridColumns(scroll, icons && (items.length > 0 || !!more));
   const activeColumns = icons ? iconColumns : grid ? columns : 1;
@@ -122,7 +123,9 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       if (!pane) return;
       const gap = parseFloat(style.getPropertyValue("--ks-space-3")) || 12;
       const width = element.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
-      setColumns(Math.max(1, Math.floor((width + gap) / (pane + gap))));
+      const next = Math.max(1, Math.floor((width + gap) / (pane + gap)));
+      measuredColumns.current = next;
+      setColumns(next);
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe?.remove(); };
   }, [grid, block.item_width]);
@@ -182,6 +185,21 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const validCurrent = (key: unknown): key is string => typeof key === "string" && draft.draft.keys.includes(key) && items.some(item => item.key === key && item.selectable !== false);
   const current = validCurrent(localKey) ? localKey : validCurrent(boundCurrent) ? boundCurrent : [...draft.draft.keys].reverse().find(validCurrent) ?? null;
   const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf, multiple, !multiple || currentValue.status !== "loading");
+  // 앱이 현재 칸을 바꾸면(탐색기에서 파일 열기처럼 이 목록의 입력이 아닌 것) 그 칸이 보이게 하고 키보드 기준을 옮긴다.
+  const revealed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!multiple) return;
+    if (typeof boundCurrent !== "string") { revealed.current = null; return; }
+    if (revealed.current === boundCurrent) return;
+    if (draft.isSending() || localCurrent?.key === boundCurrent) { revealed.current = boundCurrent; return; }
+    if (current !== boundCurrent) return;
+    // 격자는 실제 열 수로 행을 나눈 뒤에 스크롤한다.
+    if (grid && measuredColumns.current !== activeColumns) return;
+    revealed.current = boundCurrent;
+    const index = items.findIndex((item) => item.key === boundCurrent);
+    roving.setFocus(index);
+    virtual.scrollToIndex(rowOf(index), { align: "auto" });
+  });
   const selectable = items.filter((item) => item.selectable !== false);
   const orderedKeys = (keys: readonly string[]) => {
     const wanted = new Set(keys);
