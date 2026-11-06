@@ -48,12 +48,14 @@ it("같은 창의 오버레이만 읽고 허용 화면을 제외하며 이전 �
 });
 
 it("현재 번호의 숨김, 비활성, 읽기 전용 상태를 재검사한다", () => {
-  document.body.innerHTML = '<main id="root"><button disabled>닫기</button><input readonly aria-label="문서"><button>숨김</button></main>';
+  document.body.innerHTML = '<main id="root"><button disabled>닫기</button><input readonly aria-label="문서"><input readonly disabled aria-label="잠긴 입력"><button>숨김</button></main>';
   const root = document.querySelector<HTMLElement>("#root")!;
   const view = describeNumbered("one", root);
   const number = (label: string) => Number(view.text.match(new RegExp(`\\[(\\d+)\\] [^\\n]*${label}`))?.[1]);
   expect(view.text).toContain("닫기 (비활성)");
   expect(resolveNumbered("one", number("닫기"))).toEqual({ reason: "disabled" });
+  expect(view.text).toContain("잠긴 입력 (비활성)");
+  expect(resolveNumbered("one", number("잠긴 입력"), true)).toEqual({ reason: "disabled" });
   expect(resolveNumbered("one", number("문서"), true)).toEqual({ reason: "readonly" });
   root.lastElementChild!.setAttribute("hidden", "");
   expect(resolveNumbered("one", number("숨김"))).toEqual({ reason: "hidden" });

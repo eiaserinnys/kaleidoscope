@@ -472,7 +472,11 @@ options_only?: boolean,
 /**
  * (25판) 참이면 편집을 막고 글 선택과 복사는 허용한다.
  */
-read_only?: Binding, spin?: boolean, min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, label_position?: LabelPosition, style?: SelectStyle, placeholder?: Binding, 
+read_only?: Binding, 
+/**
+ * (48판) 참이면 입력과 부속 조작을 잠근다.
+ */
+disabled?: Binding, spin?: boolean, min?: Binding, max?: Binding, step?: Binding, format?: InputFormat, commit?: InputCommit, focus?: Binding, on_cancel?: Actions, value: Binding, on_change: Actions, label?: Binding, label_position?: LabelPosition, kind?: InputKind, multiline?: boolean, rows?: number, columns?: number, placeholder?: Binding, on_submit?: Actions, } | { "type": "select", value: Binding, on_change: Actions, options: Binding, label?: Binding, label_position?: LabelPosition, style?: SelectStyle, placeholder?: Binding, 
 /**
  * (18판) 참이면 이 고르기를 사용할 수 없다.
  */

@@ -33,6 +33,8 @@
   word-break: keep-all;
 }
 
+.ks-field-label { overflow-wrap: break-word; word-break: keep-all; }
+
 .ks-markdown-text pre,
 .ks-process-command {
   white-space: pre-wrap;

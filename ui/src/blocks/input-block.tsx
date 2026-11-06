@@ -55,6 +55,9 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const optionsOnly = block.options_only === true && block.options !== undefined;
   const readOnlyBinding = useBinding(`${pointer}/read_only`, block.read_only ?? null);
   const readOnly = readOnlyBinding.status === "ready" && readOnlyBinding.value === true;
+  const disabledBinding = useBinding(`${pointer}/disabled`, block.disabled ?? null);
+  const disabled = disabledBinding.status === "ready" && disabledBinding.value === true;
+  const locked = readOnly || disabled;
   const label = useBinding(`${pointer}/label`, block.label ?? null);
   const placeholder = useBinding(`${pointer}/placeholder`, block.placeholder ?? null);
   const hasLabel = block.label != null;
@@ -120,7 +123,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     } else if (timer.current) clearTimeout(timer.current);
   }, []);
   useLayoutEffect(() => {
-    if (!readOnly) {
+    if (!locked) {
       if (focused) holding.current = true;
       return;
     }
@@ -131,7 +134,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     spinPending.current = false;
     change(initialDraft);
     finish();
-  }, [readOnly]);
+  }, [locked]);
   useEffect(() => {
     if (focus.status !== "ready") return;
     if (previousFocus.current === uninitializedFocus) {
@@ -169,13 +172,13 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [block.rows, multiline]);
-  const { sendDraft, markChanged, commit, cancel, endSpin, choose, canSyncExternal } = useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin, composing, optionsOnly, optionValues, codec });
+  const { sendDraft, markChanged, commit, cancel, endSpin, choose, canSyncExternal } = useInputDraft({ block, pointer, data, readOnly: locked, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin, composing, optionsOnly, optionValues, codec });
   sendDraftRef.current = sendDraft;
   afterSpin.current = () => { if (!spinning.current && !focusedRef.current && !edited.current) finish(false); };
   const latestDraft = useRef(draft);
   latestDraft.current = draft;
   const normalizeNumberDraft = () => {
-    if (block.kind !== "number" || readOnly) return;
+    if (block.kind !== "number" || locked) return;
     const normalized = toEventValue(latestDraft.current);
     if (typeof normalized === "number") {
       const next = inputDraft(normalized, block.kind, block.format);
@@ -193,7 +196,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     return true;
   };
   const increment = (direction: 1 | -1, multiplier = 1, held = false) => {
-    if (readOnly) return false;
+    if (locked) return false;
     if (held) { spinning.current = true; holding.current = true; }
     const normalized = toEventValue(latestDraft.current);
     const currentNumber = typeof normalized === "number" ? normalized : 0;
@@ -202,7 +205,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     return changed && (direction === 1 ? maximum === null || next < maximum : minimum === null || next > minimum);
   };
   const keyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (readOnly) return;
+    if (locked) return;
     if (event.key === "Escape" && !event.nativeEvent.isComposing && !composing.current && block.on_cancel && (focused || edited.current)) {
       event.preventDefault();
       cancel();
@@ -224,8 +227,8 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
       void data.act(`${pointer}/on_submit`, toEventValue(draft)).then((success) => { if (success) adopt(submitted); });
     }
   };
-  const props = { id: inputId, className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: readOnly ? initialDraft : draft, readOnly, "aria-readonly": readOnly,
-    onFocus: () => { setFocused(true); focusedRef.current = true; editFormatter.current = formatter; holding.current = !readOnly; }, onBlur: () => {
+  const props = { id: inputId, className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: locked ? initialDraft : draft, readOnly: locked, disabled, "aria-readonly": readOnly,
+    onFocus: () => { setFocused(true); focusedRef.current = true; editFormatter.current = formatter; holding.current = !locked; }, onBlur: () => {
       setFocused(false);
       focusedRef.current = false;
       normalizeNumberDraft();
@@ -256,8 +259,8 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
       aria-valuemax={block.kind === "number" ? maximum ?? undefined : undefined}
       aria-valuenow={block.kind === "number" ? numericValue : undefined}
     />}
-    {block.kind === "number" && block.spin ? <WindowSpinButtons context={context} ref={spinButtons} increment={(direction, held) => increment(direction, 1, held)} onEnd={() => { spinning.current = false; endSpin(); if (!spinPending.current && !edited.current && !focusedRef.current) finish(); }} atMin={minimum !== null && numericValue !== undefined && numericValue <= minimum} atMax={maximum !== null && numericValue !== undefined && numericValue >= maximum} readOnly={readOnly} /> : null}
-    {block.kind === "search" && (readOnly ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={readOnly} onClick={() => { markChanged(""); if (optionsOnly) commit(""); else sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
+    {block.kind === "number" && block.spin ? <WindowSpinButtons context={context} ref={spinButtons} increment={(direction, held) => increment(direction, 1, held)} onEnd={() => { spinning.current = false; endSpin(); if (!spinPending.current && !edited.current && !focusedRef.current) finish(); }} atMin={minimum !== null && numericValue !== undefined && numericValue <= minimum} atMax={maximum !== null && numericValue !== undefined && numericValue >= maximum} readOnly={locked} /> : null}
+    {block.kind === "search" && (locked ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={locked} onClick={() => { markChanged(""); if (optionsOnly) commit(""); else sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
   </div>;
   const optionsError = normalizedOptions && !normalizedOptions.ok ? inputOptionsError(normalizedOptions) : null;
   const invalidBound = dateTime && block.min !== undefined && minBinding.status === "ready" && !minDateTime ? "min" : dateTime && block.max !== undefined && maxBinding.status === "ready" && !maxDateTime ? "max" : null;

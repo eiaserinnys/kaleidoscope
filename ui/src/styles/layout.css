@@ -56,6 +56,7 @@
   height: var(--ks-line-width);
 }
 
+.ks-split-handle:focus-visible { outline: none; }
 .ks-split-handle:hover::after,
 .ks-split-handle:active::after,
 .ks-split-handle:focus-visible::after {
