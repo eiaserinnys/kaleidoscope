@@ -79,6 +79,16 @@ On Windows, you can instead download `kaleidoscope-orchestrator-x86_64-pc-window
 
 App workers run Python 3 (`python3` on Linux, `python` on Windows), which must be on the server's PATH. The Docker image includes Python and Node.js. For devices on another machine, put the server behind an HTTPS reverse proxy and use that address in the shell.
 
+### Run a private app store
+
+Download `kaleidoscope-store-server-x86_64-pc-windows-msvc.exe` from Releases, or build it with `cargo build --release -p kaleidoscope-store-server`. Both command-line flags are required:
+
+```text
+kaleidoscope-store-server --bind 0.0.0.0:4230 --data-dir ./store-data
+```
+
+The server serves the version 1 store index and accepts app folders through `POST /publish` as multipart files. Publishing the same contents keeps the existing release; changed contents create a new release. It has no login or approval: bind it only where your private network controls access.
+
 ### 4. Connect an MCP client
 
 Add the printed configuration to your agent's MCP settings. It describes a Streamable HTTP server:

@@ -76,6 +76,21 @@ jobs:
           $names = @($release.assets | ForEach-Object { $_.name })
           if ($installer -notin $names -or "$installer.sig" -notin $names) { throw '설치본 또는 서명 자산이 없습니다' }
 
+      - name: 스토어 서버 빌드와 릴리스 업로드
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cargo test -p kaleidoscope-store-server --target x86_64-pc-windows-msvc -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw '스토어 서버 시험 실패' }
+          cargo build --release -p kaleidoscope-store-server --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw '스토어 서버 빌드 실패' }
+          Copy-Item target/x86_64-pc-windows-msvc/release/kaleidoscope-store-server.exe kaleidoscope-store-server-x86_64-pc-windows-msvc.exe
+          gh release upload '${{ github.ref_name }}' kaleidoscope-store-server-x86_64-pc-windows-msvc.exe --clobber
+          if ($LASTEXITCODE -ne 0) { throw '스토어 서버 업로드 실패' }
+          $release = gh release view '${{ github.ref_name }}' --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or 'kaleidoscope-store-server-x86_64-pc-windows-msvc.exe' -notin @($release.assets | ForEach-Object { $_.name })) { throw '스토어 서버 릴리스 자산이 없습니다' }
+
       - name: R2에 설치본과 업데이트 매니페스트 올리기
         if: ${{ !contains(github.ref_name, '-') }}
         shell: pwsh
