@@ -123,6 +123,19 @@ it("선택 밖의 현재 키는 무시하고 선택 배열의 마지막 키를 �
   expect(a.classList.contains("is-current")).toBe(true);
   expect(a.tabIndex).toBe(0);
 });
+it("앱이 현재 칸을 바꾸면 그 칸으로 키보드 기준을 옮긴다", async () => {
+  const keys = Array.from({ length: 60 }, (_, index) => `k${String(index).padStart(2, "0")}`);
+  const items = keys.map(key => ({ key, title: key }));
+  const { transport } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, current: { state: "current" },
+    items, on_select: { set_state: "choice" } } as unknown as Block, { choice: [keys[0]], current: keys[0] }, 50);
+  const first = await screen.findByRole("option", { name: keys[0] });
+  expect(first.tabIndex).toBe(0);
+  await act(async () => { await transport.call({ op: "window.patch_state", window_id: "viewer-window", patch: { choice: [keys[55]], current: keys[55] } }); });
+  const target = await screen.findByRole("option", { name: keys[55] });
+  await waitFor(() => expect(target.classList.contains("is-current")).toBe(true));
+  await waitFor(() => expect(target.tabIndex).toBe(0));
+  expect(first.tabIndex).toBe(-1);
+});
 it("누른 칸과 다른 빈 곳에 놓으면 선택을 지우지 않고 빈 곳을 누르면 초점을 유지한다", async () => {
   const { calls } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },
     items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: ["a"] }, 49);

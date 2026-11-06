@@ -182,6 +182,19 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const validCurrent = (key: unknown): key is string => typeof key === "string" && draft.draft.keys.includes(key) && items.some(item => item.key === key && item.selectable !== false);
   const current = validCurrent(localKey) ? localKey : validCurrent(boundCurrent) ? boundCurrent : [...draft.draft.keys].reverse().find(validCurrent) ?? null;
   const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf, multiple, !multiple || currentValue.status !== "loading");
+  // 앱이 현재 칸을 바꾸면(탐색기에서 파일 열기처럼 이 목록의 입력이 아닌 것) 그 칸이 보이게 하고 키보드 기준을 옮긴다.
+  const revealed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!multiple) return;
+    if (typeof boundCurrent !== "string") { revealed.current = null; return; }
+    if (revealed.current === boundCurrent) return;
+    if (draft.isSending() || localCurrent?.key === boundCurrent) { revealed.current = boundCurrent; return; }
+    if (current !== boundCurrent) return;
+    revealed.current = boundCurrent;
+    const index = items.findIndex((item) => item.key === boundCurrent);
+    roving.setFocus(index);
+    virtual.scrollToIndex(rowOf(index), { align: "auto" });
+  });
   const selectable = items.filter((item) => item.selectable !== false);
   const orderedKeys = (keys: readonly string[]) => {
     const wanted = new Set(keys);
