@@ -434,7 +434,7 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, selected?: Binding, on_select?: Actions, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, grouped?: boolean, select_on_focus?: boolean, selected?: Binding, on_select?: Actions, 
 /**
  * (블록 세트 36판) 항목 끝의 빼기 단추가 실행하는 동작.
  */

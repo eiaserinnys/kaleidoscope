@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerAppShortcuts, registerGridShortcuts } from "../runtime/shortcuts";
+import { waitFor } from "@testing-library/react";
+import type { AppDefinition } from "../contract/contract";
+import { createFakeTransport } from "../core/fake-transport";
+import { createShellStore } from "../core/shell-store";
+import { WindowData } from "../data/window-data";
+import { ClientRuntime } from "../runtime/client-runtime";
+import { makeTestSeed } from "./fixtures";
 
 const mods = { shift: false, alt: false, ctrl: false, meta: false };
 const snapshot = () => ({ device: { active_workspace_id: "w", active_desktop_ids: { w: "d" } }, shared: { desktops: [{ id: "d", workspace_id: "w" }], windows: [{ id: "a", desktop_id: "d", z: 1, minimized: false }] } });
@@ -56,4 +63,26 @@ it("열린 안내가 앱 단축키보다 먼저 이전·다음·닫기를 처리
   expect(next).toHaveBeenCalledTimes(2);
   expect(close).toHaveBeenCalledTimes(1);
   expect(app).not.toHaveBeenCalled();
+});
+
+it("저장 단축키는 WindowData를 거쳐 파일 저장 동작과 이름을 전달한다", async () => {
+  const save = vi.spyOn(ClientRuntime.prototype, "save").mockResolvedValue(true);
+  vi.spyOn(ClientRuntime.prototype, "start").mockResolvedValue();
+  vi.spyOn(ClientRuntime.prototype, "stop").mockResolvedValue();
+  const definition = {
+    id: "md-viewer", name: "저장 시험", requires: { blocks: 44, modules: { assets: 1, client: 2 } },
+    permissions: [], state: {}, assets: [{ id: "script", version: 1 }],
+    client: { runtime: "javascript", entry: { id: "script", version: 1 }, inputs: {}, outputs: {}, actions: ["saved"], commands: {}, state_keys: [], storage_entries: [] },
+    shortcuts: [{ code: "KeyS", modifiers: ["primary"], action: { save_file: { client: "saved", suggested_name: "결과.txt", mime: "text/plain" } } }],
+    ui: { type: "text", value: "시험" },
+  } as unknown as AppDefinition;
+  const localStore = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  const data = new WindowData(localStore, "viewer-window", definition);
+  const unmount = data.mount();
+  await waitFor(() => expect(ClientRuntime.prototype.start).toHaveBeenCalled());
+  const shortcutContext = { store: localStore, window: { id: "viewer-window", desktop_id: "desktop-1" } } as never;
+  disposers.push(registerAppShortcuts(shortcutContext, definition.shortcuts!, (index, modifiers) => { void data.act(`/shortcuts/${index}/action`, null, undefined, modifiers); }));
+  key("KeyS", { key: "s", ctrlKey: true });
+  await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ client: "saved", mime: "text/plain" }), "결과.txt", undefined));
+  unmount(); localStore.dispose(); vi.restoreAllMocks();
 });

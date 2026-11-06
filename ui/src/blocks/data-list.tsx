@@ -135,7 +135,11 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const handlers = useRef<ListHandlers>(null!);
   handlers.current = {
     focus: roving.setFocus,
-    keyDown: (event, index, item) => { const trigger = event.currentTarget; roving.keyDown(event, index, () => handlers.current.choose(item, trigger), activeColumns); },
+    keyDown: (event, index, item) => {
+      const trigger = event.currentTarget;
+      roving.keyDown(event, index, () => handlers.current.choose(item, trigger), activeColumns,
+        block.select_on_focus && block.on_select && !disabled ? (next) => handlers.current.choose(items[next], trigger) : undefined);
+    },
     choose: (item, trigger) => { if (disabled) return; if (block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue); else if (isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger }); },
     remove: (item) => { if (!disabled && block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
     menu: (event, item) => { if (disabled) { event.preventDefault(); return; } if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },

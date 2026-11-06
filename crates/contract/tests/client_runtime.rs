@@ -20,6 +20,55 @@ fn accepted(value: &Value) -> bool {
 }
 
 #[test]
+fn file_actions_in_shortcuts_require_new_block_version_and_declared_client() {
+    for action in [
+        json!({"pick_files":{"accept":[],"client":"change"}}),
+        json!({"save_file":{"suggested_name":"보고서.txt","mime":"text/plain","client":"change"}}),
+    ] {
+        for shortcut_action in [action.clone(), json!([action.clone()])] {
+            let mut app = definition(json!({"type":"text","value":"시험"}));
+            app["requires"] = json!({"blocks":44,"modules":{"assets":1,"client":2}});
+            app["shortcuts"] = json!([{"code":"KeyO","modifiers":["primary"],"action":shortcut_action}]);
+            assert!(accepted(&app), "{app}");
+            app["requires"]["blocks"] = json!(43);
+            assert!(!accepted(&app));
+            app["requires"]["blocks"] = json!(44);
+            app["client"]["actions"] = json!([]);
+            assert!(!accepted(&app));
+            app["client"]["actions"] = json!(["change"]);
+            app["requires"]["modules"]["client"] = json!(1);
+            assert!(!accepted(&app));
+        }
+    }
+}
+
+#[test]
+fn list_select_on_focus_requires_new_block_version_and_preserves_old_definitions() {
+    let mut app = definition(json!({"type":"list","items":[],"select_on_focus":true}));
+    app["requires"]["blocks"] = json!(43);
+    assert!(!accepted(&app));
+    app["requires"]["blocks"] = json!(44);
+    let parsed = parse_app_definition(&app.to_string()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap()["ui"]["select_on_focus"], true);
+    app["ui"]["select_on_focus"] = json!(false);
+    let parsed = parse_app_definition(&app.to_string()).unwrap();
+    assert!(serde_json::to_value(parsed).unwrap()["ui"].get("select_on_focus").is_none());
+    app["ui"].as_object_mut().unwrap().remove("select_on_focus");
+    app["requires"]["blocks"] = json!(12);
+    let parsed = parse_app_definition(&app.to_string()).unwrap();
+    assert!(serde_json::to_value(parsed).unwrap()["ui"].get("select_on_focus").is_none());
+}
+
+#[test]
+fn list_focus_and_group_actions_together_require_block_44() {
+    let mut app = definition(json!({"type":"list","grouped":true,"items":[],"select_on_focus":true,"group_actions":[]}));
+    app["requires"]["blocks"] = json!(43);
+    assert!(!accepted(&app));
+    app["requires"]["blocks"] = json!(44);
+    assert!(accepted(&app));
+}
+
+#[test]
 fn instructions_and_context_require_block_18_and_client_4() {
     for capability in ["instructions", "context_capture"] {
         let mut app = definition(json!({"type":"text","value":"시험"}));
