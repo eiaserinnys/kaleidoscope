@@ -89,7 +89,7 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
   useEffect(() => {
     if (!mode || !visible) return;
     const key = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || (event.target instanceof Element && event.target.closest(".ks-comment-dialog"))) return;
+      if (event.key !== "Escape" || event.defaultPrevented || content.closest(".ks-window")?.querySelector(".ks-comment-dialog")) return;
       const owner = event.target instanceof Element ? event.target.closest(".ks-window") : null;
       if (owner !== content.closest(".ks-window") && !(event.target === document.body && content.closest(".ks-window")?.querySelector(".ks-window-frame-active"))) return;
       event.preventDefault(); event.stopPropagation();

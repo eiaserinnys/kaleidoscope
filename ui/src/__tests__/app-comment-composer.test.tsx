@@ -26,6 +26,7 @@ it("창 그림을 빼면 전송 안내와 저장 요청에서 그림이 빠진�
   const index = new Map([["/ui", { type: "button", own_fingerprint: "fingerprint", parent_child_types: ["button"], meaningful: true, empty_fingerprint: "empty" }]]);
   render(<CommentComposer store={{ call } as unknown as ShellStore} content={content} windowId="window" appId="app" appName="앱" version={3} shellVersion="1" origin={{ kind: "personal" }} digest="digest" index={index} target={target} onRetarget={() => {}} onClose={() => {}} onError={() => {}} onPositioned={() => {}} />);
   await screen.findByRole("button", { name: "창 그림 빼기" });
+  expect(screen.getByText("“대상”")).toBeTruthy();
   expect(screen.getByText("앱 3판, 창 그림이 에이전트에게 갑니다")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "창 그림 빼기" }));
   expect(screen.getByText("앱 3판이 에이전트에게 갑니다")).toBeTruthy();

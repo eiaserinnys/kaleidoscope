@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AppCommentThread } from "../contract/contract";
+import { commentLabel } from "../comments/label";
 import { commentMessage, pendingComments, replyMessage } from "../comments/message";
 
 const comment = (overrides: Partial<AppCommentThread> = {}): AppCommentThread => ({
@@ -34,4 +35,14 @@ describe("앱 커멘트 전송 글", () => {
     expect(result).toContain("3번 · 글 “고른 글” :");
     expect(result).not.toContain("블록 전체 글");
   });
+  it("행 없는 구역과 단추는 블록 이름과 짧은 인용을 같은 함수로 만든다", () => {
+    const anchor = { schema_version: 1, kind: "block" as const, normalized_type: "section", element: { tag: "section", description: "September in Servo: <progress>, rounded rectangles, and moreiamnothere 2026-11-05 14:34Weryj" } };
+    const label = commentLabel(anchor);
+    expect(label).toBe('구역 “September in Servo: <progress>, rounded rectangl…”');
+    expect(commentLabel(anchor, true)).toBe('“September in Servo: <progress>, rounded rectangl…”');
+    expect(commentMessage("앱", [comment({ anchor })])).toContain(`3번 · ${label} :`);
+    expect(commentLabel({ schema_version: 1, kind: "control", normalized_type: "button", element: { tag: "button", description: "초기화" } })).toBe('단추 “초기화”');
+    expect(commentLabel({ schema_version: 1, kind: "block", normalized_type: "section" })).toBe("구역");
+  });
+
 });

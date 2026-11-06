@@ -77,7 +77,7 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
       const surface = win.querySelector<HTMLElement>(".ks-comment-surface");
       const surfaceRect = surface?.getBoundingClientRect();
       const barRect = win.querySelector<HTMLElement>(".ks-comment-bar.is-inside")?.getBoundingClientRect();
-      const overlapsSurface = (rect: { left: number; right: number; top: number; bottom: number }) => [surfaceRect, barRect].some((box) => box && rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top);
+      const overlapsSurface = (rect: { left: number; right: number; top: number; bottom: number }) => !!surfaceRect && rect.left < surfaceRect.right && rect.right > surfaceRect.left && rect.top < surfaceRect.bottom && rect.bottom > surfaceRect.top;
       const showBox = (box: HTMLElement | null, element: HTMLElement, rect: DOMRect, expand = false) => {
         const clip = scrollClip(element, content), extra = expand ? small : 0;
         const left = Math.max(clip.left, rect.left - extra), top = Math.max(clip.top, rect.top - extra);
@@ -105,7 +105,7 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
         const ownRight = kind === "block" && element.clientWidth ? bounds.left + element.clientLeft + element.clientWidth : bounds.right;
         const edge = Math.min(kind === "text" ? bounds.right : rect.right, clip.right, ownRight);
         const x = kind === "point" ? Math.min(rect.left, rightLimit) : Math.min(edge - inset, rightLimit);
-        if (!overlapsSurface({ left: x, right: x + size, top: y, bottom: y + size })) placed.push({ id, x: x - origin.left, y: y - origin.top });
+        if (!overlapsSurface({ left: x, right: x + size, top: y, bottom: y + size }) && !(barRect && x < barRect.right && x + size > barRect.left && y < barRect.bottom && y + size > barRect.top)) placed.push({ id, x: x - origin.left, y: y - origin.top });
         return true;
       };
       for (const item of items) {
