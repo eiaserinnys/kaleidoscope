@@ -10,7 +10,7 @@ mod checks;
 
 const WATCH: &str = r#"window.__ksAppKeys=0;
 window.addEventListener('message',e=>{if(e.data==='ks-e2e-app-key')window.__ksAppKeys++});
-window.addEventListener('keydown',()=>{if(window===top)window.__ksAppKeys++;else top.postMessage('ks-e2e-app-key','*')});"#;
+window.addEventListener('keydown',e=>{if(!['F8','ArrowRight','PageDown','Tab'].includes(e.code))return;if(window===top)window.__ksAppKeys++;else top.postMessage('ks-e2e-app-key','*')});"#;
 const HTML: &str =
     "<input autofocus style='width:95%;height:120px' aria-label='키 입력'><p>네이티브 키 시험</p>";
 
@@ -155,6 +155,9 @@ pub(super) fn scenario(
             definition["assets"] = json!([{"id":"shortcut-client","version":1}]);
             definition["client"] =
                 json!({"runtime":"javascript","entry":{"id":"shortcut-client","version":1}});
+        }
+        if name == "web" {
+            definition["requires"]["modules"] = json!({"web":1});
         }
         call(
             core,

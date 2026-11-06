@@ -117,7 +117,7 @@ pub(super) fn latest_share_view(
         })
 }
 
-pub(super) fn wait_until(
+pub(in crate::e2e) fn wait_until(
     label: &str,
     mut ready: impl FnMut() -> Result<bool, String>,
 ) -> Result<(), String> {
@@ -190,7 +190,7 @@ pub(crate) fn wait_dom(app: &AppHandle, body: &str, label: &str) -> Result<(), S
     wait_until(label, || Ok(evaluate(app, body)? == json!(true)))
 }
 
-pub(super) fn snapshot(
+pub(in crate::e2e) fn snapshot(
     core: &Core,
 ) -> Result<kaleidoscope_core::kaleidoscope_contract::ShellSnapshot, String> {
     match call(core, CoreRequest::StateGet {})? {
@@ -199,7 +199,7 @@ pub(super) fn snapshot(
     }
 }
 
-pub(super) fn open(
+pub(in crate::e2e) fn open(
     core: &Core,
     desktop_id: &str,
     app_id: &str,
