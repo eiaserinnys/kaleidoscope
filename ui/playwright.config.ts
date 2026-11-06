@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+const port = Number(process.env.KS_E2E_PORT ?? 5173);
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
@@ -7,14 +9,15 @@ export default defineConfig({
   workers: 2,
   outputDir: process.env.KS_PLAYWRIGHT_OUTPUT ?? "test-results",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: `http://127.0.0.1:${port}`,
     browserName: "chromium",
     screenshot: "off",
     trace: "retain-on-failure",
   },
   webServer: {
     command: `${process.platform === "win32" ? "" : "exec "}node ./harness/e2e-server.mjs`,
-    url: "http://127.0.0.1:5173",
+    url: `http://127.0.0.1:${port}`,
+    env: { KS_E2E_PORT: String(port) },
     reuseExistingServer: false,
     timeout: 120_000,
   },
