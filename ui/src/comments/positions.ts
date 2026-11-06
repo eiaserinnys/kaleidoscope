@@ -76,7 +76,8 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
       const inset = small + parseFloat(styles.getPropertyValue("--ks-scrollbar-thumb-inset"));
       const surface = win.querySelector<HTMLElement>(".ks-comment-surface");
       const surfaceRect = surface?.getBoundingClientRect();
-      const overlapsSurface = (rect: { left: number; right: number; top: number; bottom: number }) => !!surfaceRect && rect.left < surfaceRect.right && rect.right > surfaceRect.left && rect.top < surfaceRect.bottom && rect.bottom > surfaceRect.top;
+      const barRect = win.querySelector<HTMLElement>(".ks-comment-bar.is-inside")?.getBoundingClientRect();
+      const overlapsSurface = (rect: { left: number; right: number; top: number; bottom: number }) => [surfaceRect, barRect].some((box) => box && rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top);
       const showBox = (box: HTMLElement | null, element: HTMLElement, rect: DOMRect, expand = false) => {
         const clip = scrollClip(element, content), extra = expand ? small : 0;
         const left = Math.max(clip.left, rect.left - extra), top = Math.max(clip.top, rect.top - extra);

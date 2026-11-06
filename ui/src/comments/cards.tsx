@@ -10,6 +10,7 @@ import { IconButton } from "../components/primitives";
 import { Compose, Group } from "../blocks/html-document/parts";
 import { ImagePreview } from "../blocks/agent-attachments";
 import { appCommentStore } from "./store";
+import { commentLabel } from "./label";
 import { sendCommentReply } from "./send";
 import type { PositionStatus } from "./positions";
 
@@ -50,14 +51,14 @@ export function CommentCard({ item, status, active, host, store, windowId, open,
     } catch (cause) { error(toCoreError(cause)); return false; }
     finally { replyInFlight.current = false; setReplyBusy(false); }
   };
-  const label = item.anchor.element?.description ?? (item.anchor.quote?.exact ? `“${item.anchor.quote.exact}”` : item.anchor.normalized_type ?? "블록");
+  const label = commentLabel(item.anchor);
   const title = `${status === "orphan" ? `${item.created_app_version}판 ` : status === "moved" ? "옮겨 찾음, " : ""}${label}`;
   const away = status === "not_visible" || status === "orphan";
   const pinClass = item.resolved ? "is-resolved" : status === "orphan" ? "is-orphan" : item.sent_at ? "is-sent" : "is-draft";
   const last = item.last_reply ? { author: item.last_reply.author, text: item.last_reply.text } : undefined;
   const closeCard = () => { close(); requestAnimationFrame(() => targetButton.current?.focus({ preventScroll: true })); };
   return <CommentCardBody className="ks-comment-card" active={active} resolved={item.resolved} target={title} targetRef={targetButton} activate={open} unread={item.unread_reply} text={item.text} last={last}
-    onKeyDown={(event) => { if (active && event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); closeCard(); } }}
+    onKeyDown={(event) => { if (confirm) return; if (active && event.key === "Escape" && !event.defaultPrevented) { event.stopPropagation(); closeCard(); } }}
     pin={<span title={status === "not_visible" ? "지금 화면에 없음" : undefined} className={`ks-comment-pin is-rail ${pinClass}${away ? " is-away" : ""}`}>{item.number}{item.unread_reply ? <span className="ks-comment-pin-dot" /> : null}{status === "moved" ? <span className="ks-comment-pin-dot is-moved" /> : null}</span>}
     tools={<span className="ks-html-comment-tools" onClick={(event) => event.stopPropagation()}>
       <IconButton aria-label={item.resolved ? "다시 열기" : "해결"} disabled={busy} onClick={() => void change(() => store.call({ op: "comment.resolve", app_id: item.app_id, id: item.id, request: { resolved: !item.resolved } }))}>{item.resolved ? <RotateCcw /> : <Check />}</IconButton>
@@ -68,7 +69,7 @@ export function CommentCard({ item, status, active, host, store, windowId, open,
     {image && preview ? <ImagePreview preview={{ src: `data:image/png;base64,${image}`, name: "그때의 창 그림", trigger: preview }} onClose={() => setPreview(null)} /> : null}
     <Compose label="답글" disabled={replyBusy} initialValue={data.draft(item.id)} onDraftChange={(value) => data.setDraft(item.id, value)} onSubmit={reply} onEscape={closeCard} />
     {menu ? <Menu anchor={menu} onClose={() => setMenu(null)} items={[{ id: "delete", label: "삭제", danger: true, onSelect: () => setConfirm(true) }]} /> : null}
-    {confirm ? <Dialog host={host.closest<HTMLElement>(".ks-window") ?? host} overlayClassName="ks-comment-dialog" inertSelector=":scope > .ks-window-frame, :scope > .ks-comment-layer" title={`커멘트 ${item.number}번을 지울까요?`} ok="지우기" danger onCancel={() => setConfirm(false)} onConfirm={() => void change(async () => { await store.call({ op: "comment.delete", app_id: item.app_id, id: item.id }); setConfirm(false); close(); })} /> : null}
+    {confirm ? <Dialog host={host.closest<HTMLElement>(".ks-window") ?? host} overlayClassName="ks-comment-dialog" inertSelector=":scope > .ks-window-frame, :scope > .ks-comment-layer" title={`커멘트 ${item.number}번을 지울까요?`} ok="지우기" danger onCancel={() => setConfirm(false)} onConfirm={() => void change(async () => { await store.call({ op: "comment.delete", app_id: item.app_id, id: item.id }); setConfirm(false); close(); requestAnimationFrame(() => { const win = host.closest(".ks-window"); (win?.querySelector<HTMLElement>('.ks-comment-bar button, .ks-comment-title-button') ?? host).focus({ preventScroll: true }); }); })} /> : null}
   </CommentCardBody>;
 }
 

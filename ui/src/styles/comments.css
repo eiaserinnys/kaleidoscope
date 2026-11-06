@@ -1,9 +1,9 @@
-.ks-comment-layer { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.ks-comment-layer { --ks-comment-bar-reserve: 0px; position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .ks-window[data-commenting="true"] { container-type: inline-size; }
 .ks-comment-layer > * { pointer-events: auto; }
 .ks-comment-layer > :is(.ks-comment-ring, .ks-comment-box) { pointer-events: none; }
 .ks-dialog-overlay.ks-comment-dialog { z-index: 4; inset-block-start: calc(var(--ks-window-titlebar-height) + var(--ks-line-width)); border-end-start-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); border-end-end-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); }
-.ks-comment-notice { position: absolute; left: 50%; bottom: var(--ks-space-3); transform: translateX(-50%); width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); }
+.ks-comment-notice { position: absolute; left: 50%; bottom: calc(var(--ks-space-3) + var(--ks-comment-bar-reserve)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); }
 .ks-comment-bar-item .ks-button-progress { position: static; }
 .ks-comment-ring { position: absolute; inset: calc(var(--ks-window-titlebar-height) + var(--ks-line-width)) var(--ks-line-width) var(--ks-line-width); border-radius: 0 0 calc(var(--ks-radius-window) - var(--ks-line-width)) calc(var(--ks-radius-window) - var(--ks-line-width)); box-shadow: inset 0 0 0 var(--ks-focus-width) var(--ks-color-accent); }
 .ks-window[data-commenting="true"] .ks-window-content { cursor: crosshair; }
@@ -48,9 +48,12 @@
 .ks-comment-thread .ks-comment-card { padding: 0; border: 0; background: transparent; }
 .ks-comment-rail { position: absolute; z-index: 0; inset-block: calc(var(--ks-window-titlebar-height) + var(--ks-line-width)) var(--ks-line-width); inset-inline-end: var(--ks-line-width); display: flex; width: calc(var(--ks-space-6) * 8); flex-direction: column; min-height: 0; overflow: hidden; border-inline-start: var(--ks-line-width) solid var(--ks-color-border); border-end-end-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); background: var(--ks-material-dialog); backdrop-filter: blur(var(--ks-blur-popover)); cursor: default; }
 .ks-comment-bar { position: absolute; inset-block-start: calc(100% + var(--ks-space-3)); inset-inline-end: 0; display: flex; height: calc(var(--ks-control-height) + var(--ks-space-1) * 2); align-items: center; gap: var(--ks-space-1); border: var(--ks-line-width) solid var(--ks-color-glass-edge); border-radius: var(--ks-radius-bar); background: var(--ks-material-popover); box-shadow: var(--ks-shadow-bar); padding: 0 var(--ks-space-1); backdrop-filter: blur(var(--ks-blur-bar)); }
-.ks-comment-bar.is-inside { inset-block-start: auto; inset-block-end: var(--ks-space-3); }
+.ks-comment-bar.is-inside { inset-inline-end: var(--ks-space-3); inset-block-start: auto; inset-block-end: var(--ks-space-3); }
 .ks-comment-bar-item { display: inline-flex; height: var(--ks-control-height); flex: 0 0 auto; align-items: center; gap: var(--ks-space-1); border: var(--ks-line-width) solid transparent; border-radius: calc(var(--ks-radius-bar) - var(--ks-space-1)); padding-inline: var(--ks-space-3); background: transparent; color: var(--ks-color-text); cursor: pointer; font-family: var(--ks-font-family); font-size: var(--ks-type-body); line-height: 1; white-space: nowrap; }
 .ks-comment-bar-item:hover:not(:disabled) { background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover)); }
 .ks-comment-bar-item[aria-pressed="true"] { background: var(--ks-color-selection); }
 .ks-comment-bar-item:disabled { color: var(--ks-color-muted); cursor: default; }
 .ks-comment-bar-item.is-primary { background: var(--ks-color-accent); color: var(--ks-color-accent-contrast); }
+
+.ks-comment-notice > .ks-notice { background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
+.ks-comment-rail > .ks-html-rail-body { padding-block-end: calc(var(--ks-space-3) + var(--ks-comment-bar-reserve)); }

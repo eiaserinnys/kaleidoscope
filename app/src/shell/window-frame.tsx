@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AppIcon, CommentLayer, CommentTitle, IconButton, ScreenShare, Settings, commentSession, forgetCommentSession, forgetNumbered, useCommentMeta, useCommentSession, useShareView, windowActionActive, clientFileDropReady, deliverClientFiles, registerFileDropTarget, type PickFilesSpec, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow } from "@kaleidoscope/ui";
+import { AppIcon, CommentLayer, CommentTitle, IconButton, ScreenShare, Settings, commentSession, forgetNumbered, useCommentMeta, useCommentSession, useShareView, windowActionActive, clientFileDropReady, deliverClientFiles, registerFileDropTarget, type PickFilesSpec, type MenuEntry, type ShellStore, type CoreError, type CoreReply, type CoreRequest, type AppWindow } from "@kaleidoscope/ui";
 import appConfig from "../../src-tauri/tauri.conf.json";
 import { ProcessConsent } from "./process-consent";
 import { InstallationConsent } from "./installation-consent";
@@ -66,7 +66,7 @@ export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable
   }, [appWindow.id, fileDrop, isMinimized, onCall, settingsOpen, store]);
   const toggleShare = () => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing });
   const toggleSettings = () => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } };
-  const closeWindow = () => void onCall({ op: "window.close", window_id: appWindow.id }).then((reply) => { if (reply) forgetCommentSession(appWindow.id); });
+  const closeWindow = () => void onCall({ op: "window.close", window_id: appWindow.id });
   const titleMenu: MenuEntry[] = [
     ...(commentMeta !== undefined ? [{ id: "comment", label: "커멘트", checked: commenting, onSelect: () => commentSession(appWindow.id).set(!commenting) }] : []),
     ...(shareable ? [{ id: "share", label: "같이 보기", checked: sharing, onSelect: toggleShare }] : []),

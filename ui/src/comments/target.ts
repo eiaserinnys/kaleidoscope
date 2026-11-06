@@ -6,7 +6,7 @@ import { frameSurfaces } from "./frame";
 import { commentAncestors } from "./ancestry";
 import { measureTarget } from "./measure";
 
-const names: Record<string, string> = { repeat: "반복", progress: "진행", dialog: "대화상자", anchor: "구역", tour: "안내", canvas: "캔버스", timeline: "시간축", split: "분할", tree: "트리", folder: "폴더", markdown: "문서", html_view: "HTML", sandbox: "프레임", chat: "대화", stack: "구역", tabs: "탭", toolbar: "도구 막대", section: "구역", list: "목록", table: "표", properties: "속성", notice: "안내", feed: "흐름", text: "글", input: "입력", slider: "슬라이더", color: "색", select: "선택", toggle: "스위치", button: "단추", code: "코드", image: "이미지", media: "미디어", metrics: "수치", button_grid: "단추 모음", chart: "차트", map: "지도", web_view: "웹", explorer: "탐색기" };
+import { blockName as nameOfBlock } from "./label";
 const frames = new Set(["canvas", "sandbox", "html_view", "web_view"]);
 const controls = 'button, input:not([type="hidden"]), textarea, select, [role="button"], [role="tab"], [role="checkbox"], [role="switch"], [role="combobox"], [role="slider"]';
 export type TargetDescription = { anchor: AppCommentAnchor; path: string; name?: string; element: HTMLElement; rect: DOMRect | null; range?: Range };
@@ -38,7 +38,7 @@ export function describeTarget(element: HTMLElement, windowRoot: HTMLElement, fr
   const cells = row ? [...row.querySelectorAll<HTMLElement>('[role="cell"], [role="gridcell"]')].map((cell) => cell.textContent?.trim() ?? "").filter((text) => text && /\D/.test(text)) : [];
   const primary = row?.querySelector<HTMLElement>(".ks-feed-body")?.textContent?.trim() ?? cells.sort((a, b) => b.length - a.length)[0];
   const position = row?.getAttribute("aria-rowindex") ?? row?.getAttribute("aria-posinset");
-  const blockName = names[type] ?? "블록";
+  const blockName = nameOfBlock(type);
   const name = row && primary ? `“${primary.slice(0, 200)}”` : target.getAttribute("aria-label") ?? target.getAttribute("title") ?? (target.textContent?.trim() || "").slice(0, 200);
   const path = `${blockName}${row ? ` › ${position ? `${position}행` : "행"}` : ""}`;
   const description = row ? `${path.replace(" › ", " ")}${range ? ` “${range.toString()}”` : name ? ` ${name}` : ""}` : name;

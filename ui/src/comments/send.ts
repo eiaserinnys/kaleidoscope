@@ -14,5 +14,5 @@ export async function sendComments({ store, appId, appName, windowId }: { store:
 }
 
 export async function sendCommentReply(store: ShellStore, windowId: string, item: AppCommentSummary, text: string) {
-  if (item.sent_at) await sendToDefaultAgent({ store, fromWindowId: windowId, requestId: crypto.randomUUID(), text: replyMessage(item, text) });
+  if (item.sent_at) await sendToDefaultAgent({ store, fromWindowId: windowId, requestId: crypto.randomUUID(), text: replyMessage(store.getSnapshot()?.shared.apps.find((app) => app.id === item.app_id)?.name ?? item.app_id, item, text) });
 }

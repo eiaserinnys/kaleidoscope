@@ -64,7 +64,7 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
     void store.call({ op: "window.raise", window_id: window.id }).catch((cause) => console.error("커멘트 오류가 난 창을 앞으로 가져오지 못했습니다.", cause));
   }, [store, window.id]);
   const showBar = Boolean(meta?.unsent_count || (mode && ((meta?.open_count ?? 0) || (meta?.unread_reply_count ?? 0) || list.items.length)));
-  useCommentBarPosition(content, barRef, showBar && visible);
+  useCommentBarPosition(content, barRef, showBar && visible, mode);
   const position = useCommentPositions(content, window.id, mode && visible && ready, definition, list.items, rail, activeId ?? hoveredId, target, hover, onPinsPositioned);
   useEffect(() => { if (meta === undefined) data.reset(); }, [meta === undefined, data]);
   useEffect(() => {
@@ -89,7 +89,7 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
   useEffect(() => {
     if (!mode || !visible) return;
     const key = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.key !== "Escape" || event.defaultPrevented || (event.target instanceof Element && event.target.closest(".ks-comment-dialog"))) return;
       const owner = event.target instanceof Element ? event.target.closest(".ks-window") : null;
       if (owner !== content.closest(".ks-window") && !(event.target === document.body && content.closest(".ks-window")?.querySelector(".ks-window-frame-active"))) return;
       event.preventDefault(); event.stopPropagation();
