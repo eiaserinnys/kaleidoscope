@@ -8,6 +8,8 @@ export const AGENT_ATTACHMENT_MAX_BYTES = 20971520;
 export const AGENT_ATTACHMENTS_TOTAL_MAX_BYTES = 31457280;
 /** 한 번에 보낼 수 있는 글의 최대 글자 수(앞뒤 공백을 뺀 뒤, 유니코드 문자 단위). */
 export const CONVERSATION_MESSAGE_MAX_CHARS = 20000;
+/** 커멘트 자리 필드와 지문 계산 형식의 판. */
+export const APP_COMMENT_ANCHOR_SCHEMA_VERSION = 1;
 /** JSON 저장 항목 하나의 최대 바이트 수. */
 export const STORAGE_JSON_MAX_BYTES = 1048576;
 /** Markdown 저장 항목 하나의 최대 UTF-8 바이트 수. */

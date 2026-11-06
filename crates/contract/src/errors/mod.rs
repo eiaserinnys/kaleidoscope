@@ -52,6 +52,7 @@ macro_rules! error_catalog {
 
 pub mod app;
 pub mod asset;
+pub mod comment;
 pub mod conn;
 pub mod conv;
 pub mod data;
@@ -73,6 +74,7 @@ pub mod worker;
 
 pub use app::*;
 pub use asset::*;
+pub use comment::*;
 pub use conn::*;
 pub use conv::*;
 pub use data::*;
@@ -117,6 +119,7 @@ pub const AREAS: &[(&str, &[ErrorEntry])] = &[
     ("STORAGE", storage::ENTRIES),
     ("STORECLIENT", store_client::ENTRIES),
     ("DATA", data::ENTRIES),
+    ("COMMENT", comment::ENTRIES),
     ("CONN", &CONNECTION_ENTRIES),
     ("CONV", conv::ENTRIES),
     ("MEDIA", media::ENTRIES),

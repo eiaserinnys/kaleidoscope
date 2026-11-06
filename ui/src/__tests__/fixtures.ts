@@ -67,6 +67,7 @@ export function makeTestSnapshot(options: {
 
   return {
     shared: {
+      app_comments: {},
       apps,
       app_versions: appVersions,
       workspaces: [{

@@ -302,7 +302,9 @@ pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 기기 토큰을 쓴 MCP 호출의 작업 기본값.
 pub const WORKSPACE_HEADER: &str = "x-kaleidoscope-workspace";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = PREFERENCES_REGISTRY_VERSION;
+pub const REGISTRY_VERSION: u32 = APP_COMMENTS_REGISTRY_VERSION;
+/// 앱 커멘트 메타 이벤트를 처음 지원하는 레지스트리 판.
+pub const APP_COMMENTS_REGISTRY_VERSION: u32 = 14;
 /// 계정 설정 이벤트를 처음 지원하는 레지스트리 판.
 pub const PREFERENCES_REGISTRY_VERSION: u32 = 13;
 /// 창 제어 응답: `POST /api/device/window-control/{request_id}`, 기기 bearer 인증과 `WindowControlResponse` 본문을 쓴다.
@@ -570,6 +572,15 @@ pub struct ConnectionReply {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event")]
 pub enum DeviceEvent {
+    /// 14판 이상 연결에만 보낸다. 연결 직후 앱별 커멘트 메타다.
+    #[serde(rename = "app_comments.snapshot")]
+    AppCommentsSnapshot { apps: Vec<crate::app_comments::AppCommentAppMeta> },
+    /// 14판 이상 연결에만 보낸다. 변경된 앱의 커멘트 메타다.
+    #[serde(rename = "app_comments.changed")]
+    AppCommentsChanged {
+        #[serde(flatten)]
+        meta: crate::app_comments::AppCommentAppMeta,
+    },
     /// 13판 이상 연결에만 보낸다. 연결 직후 계정 설정의 전체 값이다.
     #[serde(rename = "preferences.snapshot")]
     PreferencesSnapshot { preferences: crate::preferences::AccountPreferences },

@@ -39,7 +39,7 @@ export {
 } from "./components/icons";
 export { Menu, type MenuEntry, type MenuHeading, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
 export { ContextMenuHost, openContextMenu, writeMenuClipboard } from "./components/context-menu";
-export { BUILTIN_APP_IDS } from "./contract/limits";
+export { APP_COMMENT_ANCHOR_SCHEMA_VERSION, BUILTIN_APP_IDS } from "./contract/limits";
 export { TextInput, type TextInputProps } from "./components/text-input";
 export { createHttpTransport } from "./core/http-transport";
 export {

@@ -179,6 +179,7 @@ const snapshot: ShellSnapshot = {
   app_badges: {},
   embedded_available: true,
   shared: {
+    app_comments: {},
     apps,
     app_versions: appVersions,
     workspaces: [{ id: "workspace-1", name: "kaleidoscope", created_at: timestamp, updated_at: timestamp }],
