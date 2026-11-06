@@ -20,6 +20,7 @@ kaleidoscope는 에이전트가 올린 앱을 창으로 띄우는 데스크톱 �
 - 계정과 앱마다 설정과 문서를 남깁니다(storage, 항목이나 문서 하나에 1MiB까지). 기기에만 남길 큰 파일은 client의 blobs를 씁니다.
 - 이미지, HTML, 스크립트 같은 불변 자산을 올려 씁니다(upload_asset).
 - 웹 페이지를 창에 띄웁니다(web_view).
+- 사용자가 창에 남긴 커멘트를 읽고 답합니다(참조 첫 항목).
 
 할 수 없는 것
 - 쉘, 블록, 코어의 코드를 고치지 못합니다. 없는 블록이나 스키마에 없는 필드는 올릴 때 거부됩니다. 원하는 화면이 블록에 없으면 canvas나 sandbox로 그릴 수 있는지 보고, 그래도 안 되면 무엇이 안 되는지 사용자에게 말합니다.
@@ -43,6 +44,7 @@ kaleidoscope는 에이전트가 올린 앱을 창으로 띄우는 데스크톱 �
 도구 목록에 upload_app이 없으면 앱을 올릴 수 없습니다. 쉘이 서버에 연결되어 있지 않거나 이 에이전트가 HTTP MCP를 쓰지 못하는 경우입니다. 만들었다고 말하지 말고 그 사실을 사용자에게 알립니다.
 
 참조
+앱 화면 커멘트: 사용자는 아무 앱 창에서 자리를 짚어 커멘트를 남기고 「에이전트에게 보내기」로 번호와 자리 설명, 요청을 보냅니다. list_app_comments(app_id)로 번호, 자리, 답글을 읽고 get_app_comment(comment_id, image: true)로 그 순간의 창 그림을 받습니다. 사용자가 제출한 자리 글과 그림은 같이 보기가 꺼진 창에서도 읽습니다. 지금 화면을 읽으려면 read_window의 동의가 그대로 필요합니다. 고칠 곳은 앱 출처로 정합니다. 개인 앱은 get_app과 upload_app으로 고치고, 기본 앱은 리포 apps/ 또는 쉘을 고쳐 릴리스하며, 스토어 앱은 스토어 원본을 고쳐 새 판을 설치합니다. 고친 뒤 reply_app_comment로 무엇을 고쳤는지 답하고 resolve_app_comment(comment_id, resolved: true, fixed_app_version: 새 판)로 닫습니다. 새 판에서 자리는 옮겨 찾아지거나 제자리 없음이 될 수 있고, 다시 붙는 것은 보장되지 않습니다. 앱은 커멘트를 읽거나 쓰지 못합니다.
 도구의 workspace_id를 빼면 이 MCP 연결의 작업을 씁니다.
 앱 정의 JSON의 필드는 id, name, description, icon, badge, requires, permissions, state, state_migrate, sources, assets, storage, agent, client, worker, opens, file_drop, shortcuts, messages, locale, ui입니다. version은 서버가 부여하며 앱 정의에 넣지 않습니다. upload_app의 입력 스키마가 정확한 형식과 최신 블록 필드의 정본입니다. 모르는 필드는 넣지 않습니다. state_migrate는 앱 판을 올릴 때 옛 상태에 없는 키의 값만 JSONata 식으로 계산하며 새 창에는 적용하지 않습니다. opens.set_state는 탐색기에서 파일을 열 때 경로와 함께 창 상태에 쓸 값을 선언합니다.
 file_drop은 {"accept":[{"mime":"image/*","extensions":["png"]}],"multiple":false,"client":"load"}처럼 창에 놓은 파일을 받을 client 동작을 선언합니다. requires.blocks 45와 requires.modules.client 7 이상이 필요하며 client.actions에 동작을 선언합니다. 파일 선택의 accept와 같은 형태입니다. client 파일 API의 files.open({permission,path})은 이 창의 folder 파일 권한으로 이미 허용된 상대 경로를 열어 ClientFile을 돌려주며, files.read(file.id)로 바이트를 읽습니다. 사용자 조작 안에서만 부를 필요는 없습니다. 탐색기에서 열리는 client 앱은 opens.state 경로와 files.grant가 준비되면 files.open을 호출하고, 성공이나 실패 후 그 입력 키를 null로 비웁니다. 같은 파일을 다시 열 수 있도록 client.state_keys에도 그 키를 선언합니다.

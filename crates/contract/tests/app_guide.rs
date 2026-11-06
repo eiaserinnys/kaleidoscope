@@ -33,6 +33,13 @@ fn app_authoring_guide_explains_boundaries_before_reference_section() {
 }
 
 #[test]
+fn comment_guide_names_tools_and_keeps_read_window_consent() {
+    for phrase in ["list_app_comments", "get_app_comment", "reply_app_comment", "resolve_app_comment", "read_window의 동의가 그대로", "다시 붙는 것은 보장되지 않습니다"] {
+        assert!(APP_AUTHORING_GUIDE.contains(phrase), "{phrase}");
+    }
+}
+
+#[test]
 fn realtime_guide_explains_permission_and_network_boundary() {
     for phrase in ["client.realtime_permissions", "webSocketConstructor", "connection.login", "직접 WebSocket은 막혀", "arraybuffer", "onLifecycle"] {
         assert!(APP_AUTHORING_GUIDE.contains(phrase), "{phrase}");
