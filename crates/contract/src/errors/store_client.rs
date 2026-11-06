@@ -1,4 +1,13 @@
 error_catalog! { ENTRIES;
+    STORECLIENT_SERVER_ALLOW_ADDRESS_INVALID() { class: InvalidRequest, place: "스토어 서버 허용 입력", cause: "서버 주소가 문자열이 아니다", message: "허용할 스토어 주소가 문자열이 아닙니다. 앱 작성자가 서버 값을 확인해야 합니다.", fix: "앱 작성자가 서버 값을 확인해야 합니다" }
+    STORECLIENT_SERVER_ALLOW_WINDOW_MISSING() { class: NotFound, place: "스토어 서버 허용 창 검사", cause: "요청한 창을 찾을 수 없다", message: "스토어 연결을 요청한 창을 찾지 못했습니다. 앱 창을 다시 열고 연결하세요.", fix: "앱 창을 다시 여세요" }
+    STORECLIENT_SERVER_ALLOW_PERMISSION_UNDECLARED(permission) { class: PermissionDenied, place: "스토어 서버 허용 권한 검사", cause: "스토어 권한이 선언되지 않았다", message: "스토어 연결 권한 {permission}이 선언되지 않았습니다. 앱 작성자가 스토어 권한을 선언해야 합니다.", fix: "앱 작성자가 스토어 권한을 선언해야 합니다" }
+    STORECLIENT_SERVER_ALLOW_CONTEXT_CHANGED() { class: InvalidRequest, place: "스토어 서버 허용 문맥 검사", cause: "요청 창이나 서버 연결이 바뀌었다", message: "스토어 연결을 묻는 동안 앱이나 서버 연결이 바뀌었습니다. 앱에서 연결을 다시 요청하세요.", fix: "앱에서 연결을 다시 요청하세요" }
+    STORECLIENT_SERVER_ALLOW_REQUEST_EXPIRED() { class: NotFound, place: "스토어 서버 허용 응답", cause: "대기 중인 요청이 없다", message: "스토어 연결 요청이 만료되었습니다. 앱에서 연결을 다시 요청하세요.", fix: "앱에서 연결을 다시 요청하세요" }
+    STORECLIENT_SERVER_ALLOW_WINDOW_MISMATCH() { class: PermissionDenied, place: "스토어 서버 허용 응답 창 검사", cause: "요청 창과 응답 창이 다르다", message: "스토어 연결 응답이 요청한 창과 다릅니다. 연결을 요청한 창에서 응답하세요.", fix: "연결을 요청한 창에서 응답하세요" }
+    STORECLIENT_SERVER_ALLOW_TARGET_MISMATCH() { class: InvalidRequest, place: "스토어 서버 허용 응답 주소 검사", cause: "응답 주소가 요청 주소와 다르다", message: "확인한 스토어 주소가 요청 주소와 다릅니다. 앱에서 연결을 다시 요청하세요.", fix: "앱에서 연결을 다시 요청하세요" }
+    STORECLIENT_SERVER_ALLOW_SAVE_FAILED() { class: Unavailable, place: "스토어 서버 허용 저장", cause: "기기 설정 저장에 실패했다", message: "스토어 연결 허용을 이 PC에 저장하지 못했습니다. 저장 공간과 파일 권한을 확인한 뒤 다시 연결하세요.", fix: "저장 공간과 파일 권한을 확인하세요" }
+
     STORECLIENT_INSTALL_REQUEST_TOO_LARGE(app, size) {
         class: InvalidRequest, place: "스토어 설치 요청 전송", cause: "프록시가 설치 요청 크기를 거절했다",
         message: "“{app}” 설치 요청 {size}를 서버가 크기 초과로 받지 않았습니다. 서버나 그 앞 프록시의 요청 크기 한도를 이 요청보다 크게 늘린 뒤 다시 설치하세요.", fix: "서버나 프록시의 요청 크기 한도를 늘린 뒤 다시 설치하세요"

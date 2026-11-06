@@ -72,12 +72,14 @@ fn store_example_roundtrips_and_is_valid_with_store_support() {
 }
 
 #[test]
-fn current_shell_supports_store_two_but_rejects_newer_versions() {
+fn current_shell_supports_store_three_but_rejects_newer_versions() {
     parse_app_definition(&definition().to_string()).unwrap();
     let mut newer = definition();
     newer["requires"]["modules"]["store"] = json!(2);
     parse_app_definition(&newer.to_string()).unwrap();
     newer["requires"]["modules"]["store"] = json!(3);
+    parse_app_definition(&newer.to_string()).unwrap();
+    newer["requires"]["modules"]["store"] = json!(4);
     let error = parse_app_definition(&newer.to_string()).unwrap_err();
     assert_eq!(
         error.id.as_deref(),
@@ -233,4 +235,22 @@ fn store_index_does_not_allow_app_id() {
     let mut value = definition();
     value["sources"]["catalog"]["id"] = json!("example");
     assert!(parse_app_definition_with_supported(&value.to_string(), &supported()).is_err());
+}
+
+#[test]
+fn allow_server_requires_store_three_and_roundtrips_wire() {
+    let mut value = definition();
+    value["ui"]["on_click"] = json!([{"store.allow_server":{"permission":"catalog","server":{"state":"selected_app"}}}]);
+    value["requires"]["modules"]["store"] = json!(3);
+    let parsed = parse_app_definition(&value.to_string()).unwrap();
+    assert_eq!(serde_json::to_value(parsed).unwrap()["ui"]["on_click"], value["ui"]["on_click"]);
+    value["requires"]["modules"]["store"] = json!(2);
+    assert!(parse_app_definition(&value.to_string()).is_err());
+    value["requires"]["modules"]["store"] = json!(3);
+    value["permissions"] = json!([]);
+    assert_eq!(parse_app_definition(&value.to_string()).unwrap_err().id.as_deref(), Some("APP_STORE_PERMISSION_UNDECLARED"));
+    let event = json!({"event":"store.server_permission","window_id":"w","request_id":"r","app_name":"앱","server":"http://localhost:8080"});
+    let response = json!({"op":"store.respond_server_permission","window_id":"w","request_id":"r","server":"http://localhost:8080","allow":true});
+    assert_eq!(serde_json::to_value(serde_json::from_value::<kaleidoscope_contract::CoreEvent>(event.clone()).unwrap()).unwrap(), event);
+    assert_eq!(serde_json::to_value(serde_json::from_value::<kaleidoscope_contract::CoreRequest>(response.clone()).unwrap()).unwrap(), response);
 }

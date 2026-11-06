@@ -165,6 +165,9 @@ pub(crate) fn act(
             flush_pending_state(inner, window_id, &mut pending, &mut pending_steps)?;
         }
         match step {
+            Step::StoreAllowServer { permission, server } => {
+                if !crate::store_server_consent::allow(inner, window_id, &permission, server)? { break; }
+            }
             Step::StoreInstall { permission, server, id, release } => {
                 if !crate::store::install::install(inner, window_id, &permission, server, id, release)? { break; }
             }

@@ -23,7 +23,7 @@ export interface ShellStore {
   bytes?: CoreTransport["bytes"];
 }
 
-export type InstallConsent = Extract<CoreEvent, { event: "app.install_permission" }>;
+export type InstallConsent = Extract<CoreEvent, { event: "app.install_permission" | "store.server_permission" }>;
 
 export function createShellStore(transport: CoreTransport): ShellStore {
   let snapshot: ShellSnapshot | null = null;
@@ -56,7 +56,11 @@ export function createShellStore(transport: CoreTransport): ShellStore {
         if (!nextWindow || (oldWindow && (oldWindow.app_id !== nextWindow.app_id || oldWindow.app_version !== nextWindow.app_version))) {
           setConsent(windowId, []);
           for (const request of requests) {
-            void transport.call({ op: "app.respond_install_permission", window_id: windowId, request_id: request.request_id, digest: request.digest, allow: false });
+            if (request.event === "app.install_permission") {
+              void transport.call({ op: "app.respond_install_permission", window_id: windowId, request_id: request.request_id, digest: request.digest, allow: false });
+            } else {
+              void transport.call({ op: "store.respond_server_permission", window_id: windowId, request_id: request.request_id, server: request.server, allow: false });
+            }
           }
         }
       }
@@ -64,13 +68,22 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       const nextLink = event.snapshot.link;
       const previousServer = previousLink && "server_url" in previousLink ? previousLink.server_url : "";
       const nextServer = "server_url" in nextLink ? nextLink.server_url : "";
-      if (previousServer !== nextServer || (nextLink.state === "unlinked" && previousLink?.state !== "unlinked")) iconCache.clear();
+      if (previousServer !== nextServer || (nextLink.state === "unlinked" && previousLink?.state !== "unlinked")) {
+        iconCache.clear();
+        for (const [windowId, requests] of installConsents) {
+          const remaining = requests.filter((request) => request.event !== "store.server_permission");
+          for (const request of requests) if (request.event === "store.server_permission") {
+            void transport.call({ op: "store.respond_server_permission", window_id: windowId, request_id: request.request_id, server: request.server, allow: false });
+          }
+          setConsent(windowId, remaining);
+        }
+      }
       snapshot = shareShellSnapshot(snapshot, event.snapshot);
       error = null;
       notify();
       advance(event.sequence);
     } else {
-      if (event.event === "app.install_permission") setConsent(event.window_id, [...(installConsents.get(event.window_id) ?? []), event]);
+      if (event.event === "app.install_permission" || event.event === "store.server_permission") setConsent(event.window_id, [...(installConsents.get(event.window_id) ?? []), event]);
       for (const listener of eventListeners) listener(event);
     }
   });
@@ -99,8 +112,9 @@ export function createShellStore(transport: CoreTransport): ShellStore {
         request.op === "files.allow_pc" || request.op === "files.pick_folder" || request.op === "connection.login"
         || (request.op === "process.respond_permission" && request.allow)
         || (request.op === "app.respond_install_permission" && request.allow)
+        || (request.op === "store.respond_server_permission" && request.allow)
       )) return Promise.reject(SHELL_WINDOW_CONTROL_CONSENT_BLOCKED());
-      if (request.op === "app.respond_install_permission") {
+      if (request.op === "app.respond_install_permission" || request.op === "store.respond_server_permission") {
         const requests = installConsents.get(request.window_id);
         if (requests) setConsent(request.window_id, requests.filter((item) => item.request_id !== request.request_id));
       }

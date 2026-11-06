@@ -8,14 +8,18 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
   const request = useSyncExternalStore(subscribe, getRequest, getRequest);
   const active = useShellSelector(store, (snapshot) => isWindowTop(snapshot, windowId));
   const workerLocation = useShellSelector(store, (snapshot) => {
-    if (!request?.definition.worker) return "";
+    if (request?.event !== "app.install_permission" || !request.definition.worker) return "";
     const link = snapshot?.link;
     if (link?.state !== "connected" && link?.state !== "offline") return "";
     return link.mode === "embedded" ? "embedded" : link.server_url;
   });
   const answer = useCallback((allow: boolean) => {
     if (!request) return;
-    void store.call({ op: "app.respond_install_permission", window_id: windowId, request_id: request.request_id, digest: request.digest, allow });
+    if (request.event === "app.install_permission") {
+      void store.call({ op: "app.respond_install_permission", window_id: windowId, request_id: request.request_id, digest: request.digest, allow });
+    } else {
+      void store.call({ op: "store.respond_server_permission", window_id: windowId, request_id: request.request_id, server: request.server, allow });
+    }
   }, [request, store, windowId]);
   const cancel = useCallback(() => answer(false), [answer]);
   const confirm = useCallback((event: MouseEvent<HTMLButtonElement>) => {
@@ -25,6 +29,16 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
     if (request && active) host?.querySelector<HTMLButtonElement>(".ks-install-consent .ks-dialog-actions > button")?.focus({ preventScroll: true });
   }, [request, active, host]);
   if (!request || !host) return null;
+  if (request.event === "store.server_permission") {
+    return <Dialog key={request.request_id} host={host} windowId={windowId} userConsent windowModal active={active}
+      overlayClassName="ks-window-consent-overlay ks-install-consent" inertSelector=":scope > .ks-window-content"
+      title="이 스토어에 연결할까요?" ok="연결 허용" onCancel={cancel} onConfirm={confirm}
+      body={<>
+        <strong className="ks-consent-value">{request.server}</strong>
+        {request.server.startsWith("http:") ? <strong className="ks-install-sentence is-warning"><TriangleAlert size="inline" /><span>이 연결은 암호화되지 않습니다.</span></strong> : null}
+        <span>이 PC에서 앱 목록과 설치 파일을 받도록 허용합니다.</span>
+      </>} />;
+  }
   const place = workerLocation === "embedded" ? "embedded" : workerLocation ? "remote" : "unknown";
   const groups = describeInstallScope(request.definition, place, place === "remote" ? new URL(workerLocation).host : undefined);
   return <Dialog key={request.request_id} host={host} windowId={windowId} userConsent windowModal active={active}

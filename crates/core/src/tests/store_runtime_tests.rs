@@ -391,3 +391,134 @@ fn store_source_and_consent_install_update_modified_and_remove() {
     let active: i64 = db.query_row("SELECT COUNT(*) FROM apps WHERE id='example' AND deleted_at IS NULL", [], |row| row.get(0)).unwrap();
     assert_eq!(active, 0);
 }
+
+#[test]
+fn server_consent_persists_only_after_approval_and_cancels_on_close() {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    let (temp, core, _, window) = store_caller();
+    *core.inner.store_transport.lock().unwrap() = None;
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let server = format!("http://{}/appstore", listener.local_addr().unwrap());
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::StoreServerPermission { request_id, server, .. } = event {
+        tx.send((request_id.clone(), server.clone())).unwrap();
+    }));
+    let start = |core: Arc<Core>, window: String, server: String| thread::spawn(move ||
+        crate::store_server_consent::allow(&core.inner, &window, "catalog", json!(format!("{server}/"))));
+    let first = start(core.clone(), window.clone(), server.clone());
+    let (id, requested) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(requested, server);
+    assert!(core.inner.state.lock().unwrap().device.store_servers.is_empty());
+    assert_eq!(crate::store::client(&core.inner, &server).err().unwrap().id.as_deref(), Some("STORECLIENT_SERVER_PERMISSION_REQUIRED"));
+    assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+    core.handle(CoreRequest::StoreRespondServerPermission { window_id: window.clone(), request_id: id, server: server.clone(), allow: false }).unwrap();
+    assert!(!first.join().unwrap().unwrap());
+    assert!(core.inner.state.lock().unwrap().device.store_servers.is_empty());
+
+    let second = start(core.clone(), window.clone(), server.clone());
+    let (id, requested) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(requested, server);
+    assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+    core.handle(CoreRequest::StoreRespondServerPermission { window_id: window.clone(), request_id: id, server: server.clone(), allow: true }).unwrap();
+    assert!(second.join().unwrap().unwrap());
+    assert_eq!(core.inner.state.lock().unwrap().device.store_servers, [server.clone()]);
+    assert_eq!(crate::storage::load_device(temp.path()).unwrap().store_servers, [server.clone()]);
+
+    let (fixture, _, _) = crate::store::tests::fixture();
+    let body = fixture.files.lock().unwrap()["/appstore/index.json"].2.clone();
+    let worker = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            match listener.accept() {
+                Ok((mut socket, _)) => {
+                    socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                    let mut request = [0; 8192];
+                    let count = socket.read(&mut request).unwrap();
+                    assert!(String::from_utf8_lossy(&request[..count]).starts_with("GET /appstore/index.json "));
+                    write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+                    socket.write_all(&body).unwrap();
+                    break;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
+                Err(e) => panic!("{e}"),
+            }
+        }
+    });
+    let index = crate::store::client(&core.inner, &server).unwrap().index("catalog").unwrap();
+    assert_eq!(index.items[0].id, "example");
+    worker.join().unwrap();
+    assert!(crate::store_server_consent::allow(&core.inner, &window, "catalog", json!(server)).unwrap());
+    assert!(rx.try_recv().is_err());
+
+    let pending = thread::spawn({ let core = core.clone(); let window = window.clone(); move ||
+        crate::store_server_consent::allow(&core.inner, &window, "catalog", json!("http://127.0.0.1:8080")) });
+    rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    core.handle(CoreRequest::WindowClose { window_id: window }).unwrap();
+    assert!(!pending.join().unwrap().unwrap());
+}
+
+#[test]
+fn server_consent_rejects_mismatched_response_and_cancels_on_context_changes() {
+    let (_temp, core, _, window) = store_caller();
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::StoreServerPermission { request_id, server, .. } = event {
+        tx.send((request_id.clone(), server.clone())).unwrap();
+    }));
+    let start = |core: Arc<Core>, window: String| thread::spawn(move ||
+        crate::store_server_consent::allow(&core.inner, &window, "catalog", json!("http://127.0.0.1:8080")));
+    let pending = start(core.clone(), window.clone());
+    let (id, server) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let answer = |window_id: String, request_id: String, server: String| core.handle(CoreRequest::StoreRespondServerPermission { window_id, request_id, server, allow: true });
+    assert_eq!(answer("other".into(), id.clone(), server.clone()).unwrap_err().id.as_deref(), Some("STORECLIENT_SERVER_ALLOW_WINDOW_MISMATCH"));
+    assert_eq!(answer(window.clone(), id.clone(), "http://other".into()).unwrap_err().id.as_deref(), Some("STORECLIENT_SERVER_ALLOW_TARGET_MISMATCH"));
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        state.shared.windows.iter_mut().find(|w| w.id == window).unwrap().app_version += 1;
+    }
+    crate::store_server_consent::state_changed(&core.inner);
+    assert!(!pending.join().unwrap().unwrap());
+    assert_eq!(answer(window.clone(), id, server).unwrap_err().id.as_deref(), Some("STORECLIENT_SERVER_ALLOW_REQUEST_EXPIRED"));
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        state.shared.windows.iter_mut().find(|w| w.id == window).unwrap().app_version -= 1;
+    }
+    let pending = start(core.clone(), window.clone());
+    rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    core.handle(CoreRequest::LinkUnlink {}).unwrap();
+    assert!(!pending.join().unwrap().unwrap());
+    let pending = start(core.clone(), window);
+    rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    core.shutdown();
+    assert!(!pending.join().unwrap().unwrap());
+}
+
+#[test]
+fn server_consent_cancel_stops_following_action() {
+    let temp = TempDir::new().unwrap();
+    let definition = json!({"id":"allow-tester","name":"스토어 시험","requires":{"blocks":4,"modules":{"store":3}},
+        "permissions":[{"module":"store","id":"catalog","label":"스토어"}],"state":{"success":false},
+        "ui":{"type":"button","label":"연결","on_click":[
+            {"store.allow_server":{"permission":"catalog","server":"http://127.0.0.1:8080"}},
+            {"set_state":"success","value":true}
+        ]}
+    }).to_string();
+    let core = Arc::new(open_core_with_client(temp.path(), vec![definition], &Arc::new(FakeHost::default()), registry_client()));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "allow-tester");
+    mark_connected(&core);
+    core.handle(CoreRequest::DataAttach { window_id:window.clone(), dormant:vec![] }).unwrap();
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::StoreServerPermission { request_id, server, .. } = event {
+        tx.send((request_id.clone(), server.clone())).unwrap();
+    }));
+    let task = thread::spawn({ let core=core.clone(); let window=window.clone(); move || core.handle(CoreRequest::DataAct {
+        window_id:window, pointer:"/ui/on_click".into(), event:Value::Null, item:Value::Null, modifiers:None
+    }) });
+    let (request_id, server) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    core.handle(CoreRequest::StoreRespondServerPermission { window_id:window.clone(), request_id, server, allow:false }).unwrap();
+    task.join().unwrap().unwrap();
+    assert_eq!(core.inner.state.lock().unwrap().shared.windows.iter().find(|w| w.id == window).unwrap().state["success"], json!(false));
+}

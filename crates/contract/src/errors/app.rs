@@ -8,6 +8,8 @@ error_catalog! { ENTRIES;
     APP_BUTTON_ROW_PREVIEW(pointer) { class: InvalidAppDefinition, place: "줄 단추 미리보기 검사", cause: "줄 단추에 preview를 지정했다", message: "단추 {pointer}의 row 변형은 preview와 함께 쓸 수 없습니다. 앱 정의에서 preview를 빼세요.", fix: "단추에서 preview를 빼세요" }
     APP_WINDOW_SIZE_VERSION_LOW(version) { class: InvalidAppDefinition, place: "초기 창 크기 판 검사", cause: "초기 창 크기에 필요한 블록 판보다 낮다", message: "앱 정의의 window_size는 블록 세트 {version}판부터입니다. requires.blocks를 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
     APP_WINDOW_SIZE_TOO_SMALL(width, height) { class: InvalidAppDefinition, place: "초기 창 크기 최소값 검사", cause: "초기 창 크기가 쉘 최소 크기보다 작다", message: "앱 정의의 window_size {width}×{height}는 쉘 최소 크기 360×240보다 작습니다. width와 height를 각각 최소 360과 240으로 고치세요.", fix: "window_size를 쉘 최소 크기 이상으로 고치세요" }
+    APP_STORE_ALLOW_SERVER_VERSION_LOW(location) { class: InvalidAppDefinition, place: "스토어 서버 허용 동작 판 검사", cause: "store 모듈이 3판보다 낮다", message: "{location}의 스토어 서버 허용은 store 모듈 3판부터입니다. 앱 작성자가 requires.modules.store를 3 이상으로 고쳐야 합니다.", fix: "앱 작성자가 store 모듈 판을 3 이상으로 고쳐야 합니다" }
+
     APP_BADGE_VERSION_LOW(required, minimum) { class: InvalidAppDefinition, place: "앱 배지 판 검사", cause: "배지를 지원하지 않는 블록 판", message: "앱 정의의 badge는 블록 세트 {required}판부터입니다. requires.blocks를 {minimum} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
     APP_BADGE_VARIABLE_FORBIDDEN(variable) { class: InvalidAppDefinition, place: "앱 배지 식 변수 검사", cause: "창이나 원천에 의존하는 변수", message: "앱 정의의 badge 식에서 {variable} 변수를 읽을 수 없습니다. $apps만 사용하도록 식을 고치세요.", fix: "badge 식에서 해당 변수를 제거하세요" }
     APP_ICON_APP_NOT_INSTALLED(app_id) { class: NotFound, place: "쉘 앱 아이콘의 앱 조회", cause: "앱이 이 기기에 없다", message: "앱 ID {app_id}: 이 기기에 설치되어 있지 않아 아이콘을 불러오지 못했습니다. 앱을 다시 설치하세요.", fix: "앱을 다시 설치하세요" }

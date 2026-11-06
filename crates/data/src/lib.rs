@@ -105,6 +105,7 @@ pub struct Env<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum Step {
+    StoreAllowServer { permission: String, server: Value },
     StoreInstall { permission: String, server: Value, id: Value, release: Value },
     StoreRemove { permission: String, id: Value },
     Worker {
@@ -531,6 +532,13 @@ impl CompiledApp {
                 let action = actions.get(index).ok_or("없는 동작 단계입니다")?;
                 let base = format!("{pointer}/{index}");
                 match action {
+                    Action::StoreAllowServer(action) => {
+                        let spec = &action.store_allow_server;
+                        Ok(Step::StoreAllowServer {
+                            permission: spec.permission.clone(),
+                            server: self.binding(&spec.server, &format!("{base}/store.allow_server/server"), env.state, &vars)?,
+                        })
+                    }
                     Action::StoreInstall(action) => {
                         let spec = &action.store_install;
                         Ok(Step::StoreInstall {

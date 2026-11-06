@@ -347,7 +347,7 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
     for (pointer, group) in data::ui_actions(definition) {
         if let Actions::Many(list) = group {
             for (index, action) in list.iter().enumerate() {
-                if matches!(action, Action::StoreInstall(_) | Action::StoreRemove(_)) {
+                if matches!(action, Action::StoreInstall(_) | Action::StoreRemove(_) | Action::StoreAllowServer(_)) {
                     actions.push((format!("{pointer}/{index}"), action));
                 }
             }
@@ -385,6 +385,12 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
                 }
             }
             Action::StoreRemove(action) => check_permission(&location, &action.store_remove.permission)?,
+            Action::StoreAllowServer(action) => {
+                if definition.requires.modules.get("store").copied().unwrap_or(0) < 3 {
+                    return Err(crate::errors::APP_STORE_ALLOW_SERVER_VERSION_LOW(&location));
+                }
+                check_permission(&location, &action.store_allow_server.permission)?;
+            },
             _ => unreachable!(),
         }
     }
@@ -2121,6 +2127,9 @@ fn validate_actions(
             for (index, action) in list.iter().enumerate() {
                 let at = format!("{at}/{index}");
                 match action {
+                    Action::StoreAllowServer(action) => {
+                        validate_binding_shape(&action.store_allow_server.server, definition, details, &format!("{at}/store.allow_server/server"));
+                    }
                     Action::StoreInstall(action) => {
                         let spec = &action.store_install;
                         for (field, binding) in [("server", &spec.server), ("id", &spec.id), ("release", &spec.release)] {

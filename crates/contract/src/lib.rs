@@ -379,7 +379,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("profiler", 1),
     ("client", CLIENT_FILE_OPEN_VERSION),
     ("process", 2),
-    ("store", 2),
+    ("store", 3),
 ];
 
 /// 단추 강조 바인딩과 새 아이콘을 처음 지원한 블록 세트 판.
@@ -4997,6 +4997,8 @@ pub enum CoreRequest {
     #[serde(rename = "connection.realtime.release")]
     RealtimeRelease { window_id: String, session: String },
 
+    #[serde(rename = "store.respond_server_permission")]
+    StoreRespondServerPermission { window_id: String, request_id: String, server: String, allow: bool },
     #[serde(rename = "app.respond_install_permission")]
     AppRespondInstallPermission { window_id: String, request_id: String, digest: String, allow: bool },
 
@@ -5738,6 +5740,8 @@ pub enum CoreReply {
     },
     #[serde(rename = "context.commit")]
     ContextCommit {},
+    #[serde(rename = "store.respond_server_permission")]
+    StoreRespondServerPermission {},
     #[serde(rename = "app.respond_install_permission")]
     AppRespondInstallPermission {},
     #[serde(rename = "process.respond_permission")]
@@ -5946,6 +5950,8 @@ pub enum CoreEvent {
         window_id: String,
         update: app_storage::StorageUpdate,
     },
+    #[serde(rename = "store.server_permission")]
+    StoreServerPermission { window_id: String, request_id: String, app_name: String, server: String },
     #[serde(rename = "app.install_permission")]
     AppInstallPermission { window_id: String, request_id: String, app_name: String, release: u32, store_url: String, digest: String, definition: AppDefinition },
     /// 쉘이 사용자에게 실행 허용을 묻는다.
