@@ -8,11 +8,38 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 mod checks;
 
-const WATCH: &str = r#"window.__ksAppKeys=0;window.__ksRawKeys=[];
-window.addEventListener('message',e=>{if(e.data==='ks-e2e-app-key')window.__ksAppKeys++});
-window.addEventListener('keydown',e=>{window.__ksRawKeys.push({key:e.key,code:e.code,keyCode:e.keyCode,trusted:e.isTrusted});if(![119,39,34,9].includes(e.keyCode))return;if(window===top)window.__ksAppKeys++;else top.postMessage('ks-e2e-app-key','*')},true);"#;
+const WATCH: &str = r#"window.__ksAppKeys=0;window.__ksRawKeys=[];window.__ksObservedFrames=new Set();
+window.addEventListener('message',e=>{if(e.data==='ks-e2e-frame-ready')window.__ksObservedFrames.add(e.source);if(e.data==='ks-e2e-app-key')window.__ksAppKeys++});
+window.addEventListener('keydown',e=>{window.__ksRawKeys.push({key:e.key,code:e.code,keyCode:e.keyCode,trusted:e.isTrusted});if(![119,39,34,9].includes(e.keyCode))return;if(window===top)window.__ksAppKeys++;else top.postMessage('ks-e2e-app-key','*')},true);
+if(window!==top)top.postMessage('ks-e2e-frame-ready','*');"#;
 const HTML: &str =
     "<input autofocus style='width:95%;height:120px' aria-label='키 입력'><p>네이티브 키 시험</p>";
+
+fn watch_documents(view: &tauri::Webview) -> Result<(), String> {
+    use webview2_com::AddScriptToExecuteOnDocumentCreatedCompletedHandler;
+    use windows::core::HSTRING;
+    let (tx, rx) = mpsc::channel();
+    view.with_webview(move |native| {
+        let immediate = tx.clone();
+        let callback = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(
+            move |status, _| {
+                let _ = tx.send(status.map_err(|error| error.to_string()));
+                Ok(())
+            },
+        ));
+        let result = unsafe {
+            native.controller().CoreWebView2().and_then(|web| {
+                web.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(WATCH), &callback)
+            })
+        };
+        if let Err(error) = result {
+            let _ = immediate.send(Err(error.to_string()));
+        }
+    })
+    .map_err(|error| error.to_string())?;
+    rx.recv_timeout(Duration::from_secs(5))
+        .map_err(|error| error.to_string())?
+}
 
 fn eval(view: &tauri::Webview, script: &str) -> Result<Value, String> {
     let reply = probe(view, ProbeCall::Evaluate(script.into()))?;
@@ -49,11 +76,11 @@ fn focus(
         .ok_or("메인 창 없음")?
         .set_focus()
         .map_err(|e| e.to_string())?;
-    let script = format!("const root=document.querySelector('[data-window-id=\"{window}\"]')??document.querySelector('[data-testid=\"app-window-{window}\"]');const e=root?.querySelector({});if(!e)return null; const r=e.getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+Math.min(r.height/2,50)}};", serde_json::to_string(selector).unwrap());
+    let script = format!("const root=document.querySelector('[data-window-id=\"{window}\"]')??document.querySelector('[data-testid=\"app-window-{window}\"]');const e=root?.querySelector({});if(!e)return null; const r=e.getBoundingClientRect();return {{x:r.x+r.width/2,y:r.y+Math.min(r.height/2,50),observer:e.tagName!=='IFRAME'||window.__ksObservedFrames.has(e.contentWindow)}};", serde_json::to_string(selector).unwrap());
     let mut point = Value::Null;
-    ui::driver::wait_until("포커스 표면", || {
+    ui::driver::wait_until("포커스 표면과 프레임 관찰기 설치", || {
         point = ui::evaluate(app, &script)?;
-        Ok(point.is_object())
+        Ok(point["observer"] == true)
     })?;
     let win = app.get_window("main").ok_or("메인 창 없음")?;
     let origin = win.inner_position().map_err(|e| e.to_string())?;
@@ -133,7 +160,7 @@ fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), S
         ))
     })?;
     let main = app.get_webview("main").ok_or("메인 웹뷰 없음")?;
-    probe(&main, ProbeCall::NewDocument(WATCH.into()))?;
+    watch_documents(&main)?;
     eval(&main, WATCH)?;
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     let url = format!(
