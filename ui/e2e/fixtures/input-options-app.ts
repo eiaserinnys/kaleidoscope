@@ -23,6 +23,7 @@ export const inputOptionsApp = {
     { type: "input", label: "검색 전용", kind: "search", value: { state: "search" }, on_change: { set_state: "search" }, options, options_only: true },
     { type: "input", label: "여섯 글자", columns: 6, value: { state: "digits" }, on_change: { set_state: "digits" }, options: ["123456"], options_only: true, disabled: { state: "locked" } },
     { type: "input", kind: "search", label: "일반 검색", value: { state: "plainSearch" }, on_change: { set_state: "plainSearch" } },
+    { type: "input", kind: "search", label: "선택지 검색", value: { state: "search" }, on_change: { set_state: "search" }, options },
     { type: "input", label: "짧은 목록", value: { state: "short" }, on_change: { set_state: "short" }, options_only: true, options: [{ value: "a", label: "a", description: "긴 설명을 읽습니다. ".repeat(40) }, "b", "c"] },
     { type: "button", label: "잠금 전환", on_click: [{ set_state: "locked", value: { expr: "$not($state.locked)" } }] },
   ] },

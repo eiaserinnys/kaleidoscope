@@ -47,9 +47,8 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     expect(await page.getByRole("option").count()).toBeLessThan(100);
     const initialBox = await page.locator(".ks-combobox-list").boundingBox();
     await input.press("ArrowUp");
-    await expect(page.locator(".ks-combobox-description")).toBeEmpty();
-    await expect(page.locator(".ks-combobox-description")).toHaveAttribute("aria-hidden", "true");
-    await expect(page.locator(".ks-combobox-separator")).toHaveCount(1);
+    await expect(page.locator(".ks-combobox-description")).toHaveCount(0);
+    await expect(page.locator(".ks-combobox-separator")).toHaveCount(0);
     expect(await page.locator(".ks-combobox-list").boundingBox()).toMatchObject({ x: initialBox!.x, width: initialBox!.width });
     await input.press("ArrowDown");
     await page.locator(".ks-combobox-option").first().hover();
@@ -181,13 +180,15 @@ test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른�
     const input = page.getByRole("combobox", { name: "이름" });
     await input.scrollIntoViewIfNeeded();
     await input.focus();
+    // 빈 설명 DOM을 전제로 삼지 않고 실제 설명이 있는 행에서 필요한 높이를 잰다.
+    await page.getByRole("option").first().hover();
     const measureRoom = () => input.evaluate((element) => {
       const css = getComputedStyle(element);
       const token = (name: string) => Number.parseFloat(css.getPropertyValue(name)) || 0;
       const row = Math.max(token("--ks-control-height"), token("--ks-type-body") * token("--ks-line-body") + 2 * token("--ks-space-2"));
       return {
         below: window.innerHeight - token("--ks-space-3") - element.getBoundingClientRect().bottom - token("--ks-space-2"),
-        need: 3 * row + 2 * token("--ks-space-1") + Math.min(document.querySelector<HTMLElement>(".ks-combobox-description")?.scrollHeight ?? 0, token("--ks-pane-min-size")) + token("--ks-line-width"),
+        need: 3 * row + 2 * token("--ks-space-1") + (document.querySelector(".ks-combobox-popup")?.classList.contains("is-far") ? Math.min(document.querySelector<HTMLElement>(".ks-combobox-description")?.scrollHeight ?? 0, token("--ks-pane-min-size")) + token("--ks-line-width") : 0),
       };
     });
     let room = await measureRoom();

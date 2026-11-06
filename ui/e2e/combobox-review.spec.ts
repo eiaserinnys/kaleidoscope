@@ -199,11 +199,53 @@ test("설명 칸에서 편집을 취소한 직후에도 교체한다", async ({ 
   await page.keyboard.type("배"); await expect(f).toHaveValue("배");
 });
 
-test("옆 설명도 짧은 목록의 높이와 위쪽 선을 예약한다", async ({ page }) => {
+test("옆 설명은 필요할 때만 그리면서 짧은 목록의 행을 고정한다", async ({ page }) => {
   const f = page.getByLabel("짧은 목록", { exact: true }); await f.scrollIntoViewIfNeeded(); await f.focus();
   const list = page.locator(".ks-combobox-list"); const before = (await list.boundingBox())!;
+  await expect(page.locator(".ks-combobox-description")).toHaveCount(0);
   await f.press("ArrowUp"); await page.waitForTimeout(100);
+  await expect(page.locator(".ks-combobox-description")).toBeVisible();
   const after = (await list.boundingBox())!;
   expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
+});
+
+for (const ending of ["Enter", "Escape"]) test(`닫힌 ${ending} 뒤 Enter는 다음 첫 글자를 고르지 않는다`, async ({ page }) => {
+  const f = page.getByRole("combobox", { name: "글자 선택" });
+  await f.click();
+  if (ending === "Enter") await f.fill("포도");
+  await f.press(ending); await f.press("Enter");
+  await page.keyboard.type("x"); await page.waitForTimeout(120); await page.keyboard.type("y");
+  await expect(f).toHaveValue("xy");
+});
+
+test("자동 전체 선택의 우클릭은 선택과 복사·잘라내기를 유지한다", async ({ page }) => {
+  const f = page.getByRole("combobox", { name: "글자 선택" });
+  await f.click(); await expect.poll(() => selection(f)).toEqual([0, 16]);
+  const point = await textPoint(f, 4);
+  await page.mouse.click(point.x, point.y, { button: "right" });
+  expect(await selection(f)).toEqual([0, 16]);
+  await expect(page.getByRole("menuitem", { name: /^복사/ })).toBeEnabled();
+  await expect(page.getByRole("menuitem", { name: /^잘라내기/ })).toBeEnabled();
+});
+
+for (const name of ["검색 전용", "선택지 검색", "일반 검색"]) for (const keyboard of [false, true]) test(`${name} ${keyboard ? "키보드" : "포인터"} X는 닫고 비운 뒤 입력을 기다린다`, async ({ page }) => {
+  const f = page.getByLabel(name, { exact: true });
+  const clear = f.locator("..").getByRole("button", { name: "지우기" });
+  if (keyboard) { await clear.focus(); await clear.press("Enter"); } else await clear.click();
+  await expect(f).toBeFocused(); await expect(f).toHaveValue("");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await f.press("Enter"); await expect(f).toHaveValue("");
+  await page.keyboard.type("항목"); await expect(f).toHaveValue("항목");
+  await expect(page.getByRole("listbox")).toHaveCount(name === "일반 검색" ? 0 : 1);
+});
+
+test("설명 없는 활성·검색·일치 없음에는 빈 설명 칸이 없다", async ({ page }) => {
+  const f = page.getByRole("combobox", { name: "목록 전용" });
+  await f.fill("entry-0"); await f.press("Enter"); await f.click();
+  for (const query of [null, "항목", "없는 이름"]) {
+    if (query !== null) await f.fill(query);
+    await expect(page.locator(".ks-combobox-description")).toHaveCount(0);
+    await expect(page.locator(".ks-combobox-separator")).toHaveCount(0);
+  }
 });
