@@ -76,7 +76,7 @@ error_catalog! { ENTRIES;
     }
     MEDIA_BLOB_VERSION_LOW(version, media) {
         class: InvalidRequest, place: "앱 창의 기기 저장소 미디어 판 확인", cause: "앱 정의의 requires.blocks가 이 기능의 판보다 낮다",
-        message: "기기 저장소 미디어는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 {version} 이상으로 올려 주세요. 파일: {media}",
+        message: "기기 저장소 미디어는 블록 세트 {version}판 이상이 필요합니다. 앱 정의의 requires.blocks를 올려 주세요. 파일: {media}",
         fix: "앱 정의의 requires.blocks를 이 기능의 판 이상으로 올리세요"
     }
     MEDIA_BLOB_ROOT_NOT_FOUND(media) {
