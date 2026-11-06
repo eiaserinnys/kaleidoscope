@@ -3,6 +3,7 @@ import type { Crop, MediaRef } from "../contract/contract";
 import { useMedia } from "../data/use-media";
 import { DataIcon } from "./data-icons";
 import { IconImage, iconImageFromData } from "./app-icon";
+import { ICON_SIZE, ImageOff } from "./icons";
 
 export function isMedia(value: unknown): value is MediaRef {
   return typeof value === "object" && value !== null && (("asset" in value && typeof value.asset === "string") || ("permission" in value && typeof value.permission === "string" && "path" in value && typeof value.path === "string"));
@@ -16,19 +17,24 @@ export function MediaThumbnail({ media, size, className = "", icon = false }: { 
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const measure = () => { const rect = element.getBoundingClientRect(); setMeasured(Math.ceil(Math.max(rect.width, rect.height))); };
+    const measure = () => {
+      const rect = element.getBoundingClientRect();
+      const pixels = Math.ceil(Math.max(rect.width, rect.height) * (globalThis.devicePixelRatio || 1));
+      setMeasured(pixels ? [64, 128, 256, 512, 1024].find((step) => step >= pixels) ?? pixels : 0);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  const result = useMedia(measured ? media : null, measured || size);
+  const result = useMedia(measured ? media : null, measured ? measured / (globalThis.devicePixelRatio || 1) : size);
   const url = result.status === "ready" ? result.url : null;
   const image = useMemo(() => {
-    if (!icon || !url) return null;
+    if (!icon || !url || !media) return null;
     const [header, base64] = url.split(",");
-    return iconImageFromData(header.slice(5, -7), base64);
-  }, [icon, url]);
+    const mime = header.slice(5, -7);
+    return "asset" in media || mime === "image/svg+xml" ? iconImageFromData(mime, base64) : null;
+  }, [icon, url, media]);
   const style = cropStyle(media?.crop);
-  return <span ref={ref} style={icon && result.status === "ready" ? { color: "inherit" } : undefined} className={`ks-media-thumbnail${media && "asset" in media ? " is-asset" : ""}${media ? ` is-${result.status}` : ""} ${className}`} title={result.status === "failed" ? `${result.error.message} ${result.error.id ?? ""}` : undefined}>{result.status === "ready" ? image ? <IconImage image={image} size="tile" /> : <img alt="" src={result.url} style={style} draggable={false} /> : <DataIcon name="image" size="empty" />}</span>;
+  return <span ref={ref} style={icon && image ? { color: "inherit" } : undefined} className={`ks-media-thumbnail${media && "asset" in media ? " is-asset" : ""}${image ? " is-icon-image" : ""}${media ? ` is-${result.status}` : ""} ${className}`} title={result.status === "failed" ? `${result.error.message} ${result.error.id ?? ""}` : undefined}>{!media ? <DataIcon name="image" size="empty" /> : result.status === "loading" ? icon ? <i aria-hidden="true" className="ks-icon-skeleton-icon" style={{ width: ICON_SIZE.tile, height: ICON_SIZE.tile }} /> : null : result.status === "failed" ? <ImageOff size="empty" /> : image ? <IconImage image={image} size="tile" /> : <img alt="" src={result.url} style={style} draggable={false} />}</span>;
 }

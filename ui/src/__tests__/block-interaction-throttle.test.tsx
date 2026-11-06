@@ -15,7 +15,7 @@ const runtime = vi.hoisted(() => {
     act: vi.fn((pointer: string, event: unknown) => { state.calls.push({ pointer, event }); return Promise.resolve(true); }),
     bindings: {} as Record<string, unknown>,
     visible: true,
-    mediaCache: new Map<string, Promise<string>>(),
+    mediaCache: new Map<string, { size: number; request: Promise<string> }>(),
     storeCall: vi.fn(async () => ({ op: "data.media", media: { mime: "audio/mpeg", data_base64: "AQID" } })),
     attachSurface: vi.fn(() => 1),
     resizeSurface: vi.fn(),

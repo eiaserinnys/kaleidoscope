@@ -5,7 +5,6 @@ import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { WindowDataProvider } from "../data/window-data";
 import { useMedia } from "../data/use-media";
-import { useLayoutEffect } from "react";
 import { useWindowData } from "../data/window-data";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed } from "./fixtures";
@@ -79,29 +78,24 @@ it("이미 받은 이미지는 연결이 복구되어도 다시 요청하지 않
   state.store.dispose();
 });
 
-it("이미지 크기가 돌아오는 렌더 중 앞선 크기 응답이 와도 원래 그림을 복구한다", async () => {
+it("여러 호출자가 진행 중인 더 큰 미디어 요청을 공유한다", async () => {
   const state = setup(base, "image/png", "image");
-  let resolveLarge: ((url: string) => void) | undefined;
-  let returning = false;
-  const smallKey = JSON.stringify([{ asset: "sample", version: 1 }, 512]);
-  const largeKey = JSON.stringify([{ asset: "sample", version: 1 }, 1024]);
-  const pending = { then: (resolve: (url: string) => void) => { resolveLarge = resolve; } } as unknown as Promise<string>;
+  await state.store.ready;
+  state.reconnect();
+  let resolve!: (reply: CoreReply) => void;
+  const original = vi.mocked(state.store.call).getMockImplementation()!;
+  vi.mocked(state.store.call).mockImplementation((request) => request.op === "data.media"
+    ? new Promise<CoreReply>((done) => { resolve = done; }) as ReturnType<typeof state.store.call>
+    : original(request));
   function Image({ size }: { size: number }) {
-    const data = useWindowData();
-    if (!data.mediaCache.has(smallKey)) data.mediaCache.set(smallKey, Promise.resolve("작은 그림"));
-    if (!data.mediaCache.has(largeKey)) data.mediaCache.set(largeKey, pending);
     const result = useMedia({ asset: "sample", version: 1 }, size);
-    useLayoutEffect(() => { if (size === 512 && returning) resolveLarge?.("큰 그림"); }, [size]);
     return <div>{result.status === "ready" ? result.url : "불러오는 중"}</div>;
   }
-  const draw = (size: number) => <WindowDataProvider store={state.store} windowId={state.windowId} definition={base}><Image size={size} /></WindowDataProvider>;
-  const view = render(draw(512));
-  await screen.findByText("작은 그림");
-  view.rerender(draw(1024));
-  await waitFor(() => expect(resolveLarge).toBeTypeOf("function"));
-  returning = true;
-  view.rerender(draw(512));
-  await waitFor(() => expect(screen.getByText("작은 그림")).toBeTruthy());
+  render(<WindowDataProvider store={state.store} windowId={state.windowId} definition={base}><Image size={1024} /><Image size={512} /></WindowDataProvider>);
+  await waitFor(() => expect(resolve).toBeTypeOf("function"));
+  expect(state.calls.mock.calls.filter(([request]) => request.op === "data.media")).toHaveLength(1);
+  await act(async () => resolve({ op: "data.media", media: { mime: "image/png", data_base64: btoa("large"), width: null, height: null } }));
+  expect(screen.getAllByText(/data:image/)).toHaveLength(2);
   state.store.dispose();
 });
 

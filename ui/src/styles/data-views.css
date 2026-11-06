@@ -96,7 +96,9 @@
 /* 머리와 위쪽 패딩을 한 유리 층으로 덮어 틈과 겹친 재질 경계를 없앤다. */
 .ks-list.is-icons > .ks-view-sticky .ks-view-group::before { content: ""; position: absolute; inset: calc(-1 * var(--ks-space-2)) 0 0; z-index: -1; background: var(--ks-material-window-body); backdrop-filter: blur(var(--ks-blur-window)); }
 .ks-icon-tile .ks-media-thumbnail { background: transparent; border-radius: 0; }
-.ks-icon-tile .ks-media-thumbnail img { object-fit: contain; }
+.ks-icon-tile .ks-media-thumbnail.is-icon-image img { object-fit: contain; }
+.ks-icon-tile .ks-media-thumbnail.is-loading { background: transparent; }
+.ks-icon-tile .ks-media-thumbnail.is-ready:not(.is-icon-image) { background: var(--ks-color-hover); border-radius: var(--ks-radius-small); }
 .ks-list-icon-row { padding-block-end: var(--ks-space-1); }
 .ks-list.is-icons > .ks-load-more { padding: 0; }
 .ks-icon-skeleton-grid { width: 100%; }
