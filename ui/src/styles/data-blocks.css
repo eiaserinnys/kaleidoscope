@@ -45,7 +45,8 @@
 .ks-data-window-body > .ks-data-stack.is-column:not(:has(.ks-split, .ks-data-section, .ks-data-tabs)) .ks-data-stack-item:last-child > .ks-data-text:not(.ks-data-stack-item:not(:last-child) *) { padding-block-end: var(--ks-space-3); }
 :is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body, .ks-data-stack-item.is-fill) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) { display: flex; height: 100%; flex-direction: column; }
 :is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body, .ks-data-stack-item.is-fill) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) > .ks-data-section-child { flex: 1 1 auto; min-height: 0; overflow: auto; }
-.ks-data-section-child { margin-inline: calc(-1 * var(--ks-focus-ring)); padding-inline: var(--ks-focus-ring); margin-block-end: calc(-1 * var(--ks-focus-ring)); padding-block-end: var(--ks-focus-ring); }
+:is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body, .ks-data-stack-item.is-fill) > .ks-data-section:not(.ks-split.is-stacked > .ks-split-pane *):has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) > .ks-data-section-child { padding-block-end: var(--ks-focus-ring); }
+.ks-data-section-child { margin-inline: calc(-1 * var(--ks-focus-ring)); padding-inline: var(--ks-focus-ring); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) :is(
   .ks-data-section,
   .ks-data-tab-header,
@@ -66,6 +67,7 @@
 .ks-split-pane > .ks-data-section, .ks-data-tab-panel > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child, .ks-data-tab-panel > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child { overflow-y: auto; }
+.ks-split:not(.is-stacked) > .ks-split-pane > .ks-data-section > .ks-data-section-child { padding-block-end: var(--ks-focus-ring); }
 .ks-data-section-child > .ks-data-stack { height: auto; }
 .ks-data-section-child > .ks-data-stack.is-column.has-fill-list { height: var(--ks-fill-list-height, 100%); }
 .ks-data-section-child > .ks-data-stack.is-column.has-textarea-fill { height: 100%; }

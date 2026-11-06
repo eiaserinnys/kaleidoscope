@@ -92,20 +92,38 @@ for (const width of [880, 360]) test(`미리보기 격자는 가로 넘침과 �
   if (width === 880) expect(size.sh).toBe(size.ch);
 });
 
-test("구역의 토글은 키보드 초점 고리까지 잘리지 않는다", async ({ page }) => {
-  const app = await open(page, { type: "section", title: "옵션", child: {
-    type: "toggle", label: "사용", value: { state: "on" }, on_change: { set_state: "on" },
-  } });
-  const toggle = app.getByRole("switch", { name: "사용" });
+test("스크롤 구역의 처음과 끝에서 토글 초점 고리가 잘리지 않는다", async ({ page }) => {
+  const toggle = (label: string) => ({ type: "toggle", label, value: { state: "on" }, on_change: { set_state: "on" } });
+  const app = await open(page, { type: "split", direction: "row", children: [
+    { type: "section", title: "옵션", child: { type: "stack", direction: "column", gap: "medium", children: [
+      toggle("첫 토글"), ...Array.from({ length: 20 }, (_, i) => ({ type: "text", value: `옵션 ${i + 1}` })), toggle("끝 토글"),
+    ] } },
+    { type: "text", value: "옆 칸" },
+  ] });
+  const scroller = app.locator(".ks-split-pane > .ks-data-section > .ks-data-section-child");
+  const first = app.getByRole("switch", { name: "첫 토글" });
+  const last = app.getByRole("switch", { name: "끝 토글" });
   await page.keyboard.press("Tab");
-  await toggle.focus();
-  const geometry = await toggle.evaluate(el => {
-    const r = el.getBoundingClientRect(), style = getComputedStyle(el);
-    const bleed = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
-    const clip = el.closest(".ks-data-section-child")!.getBoundingClientRect();
-    return { left: r.left - bleed - clip.left, bottom: clip.bottom - r.bottom - bleed, outline: style.outlineStyle };
-  });
-  expect(geometry.outline).toBe("solid");
-  expect(geometry.left).toBeGreaterThanOrEqual(0);
-  expect(geometry.bottom).toBeGreaterThanOrEqual(0);
+  for (const target of [first, last]) {
+    if (target === last) {
+      await scroller.evaluate(el => { el.scrollTop = el.scrollHeight; });
+      expect(await scroller.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    }
+    await target.focus();
+    const geometry = await target.evaluate(el => {
+      const r = el.getBoundingClientRect(), style = getComputedStyle(el);
+      const bleed = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+      const clip = el.closest(".ks-data-section-child")!.getBoundingClientRect();
+      return { left: r.left - bleed - clip.left, bottom: clip.bottom - r.bottom - bleed, outline: style.outlineStyle };
+    });
+    expect(geometry.outline).toBe("solid");
+    expect(geometry.left).toBeGreaterThanOrEqual(0);
+    // scrollTop이 정수로 반올림되는 경우의 반 픽셀 좌표 오차.
+    expect(geometry.bottom).toBeGreaterThanOrEqual(-0.5);
+  }
+});
+
+test("스크롤하지 않는 구역에는 아래 고리 여백을 더하지 않는다", async ({ page }) => {
+  const app = await open(page, { type: "section", title: "옵션", child: { type: "text", value: "내용" } });
+  expect(await app.locator(".ks-data-section-child").evaluate(el => getComputedStyle(el).paddingBottom)).toBe("0px");
 });
