@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import { AppClient } from "../src/app.ts";
+
+test("기본 에이전트 중 Antigravity만 HTTP MCP 지원을 명시한다", () => {
+  const definition = JSON.parse(readFileSync(new URL("../../agent.json", import.meta.url), "utf8"));
+  const agents = definition.storage.entries.find((entry: any) => entry.id === "agents").default;
+  assert.equal(agents.find((agent: any) => agent.id === "antigravity").assume_http_mcp, true);
+  for (const id of ["claude", "codex", "gemini"]) {
+    assert.equal(Object.hasOwn(agents.find((agent: any) => agent.id === id), "assume_http_mcp"), false);
+  }
+});
 
 test("여러 에이전트는 가운데 선택을 거쳐 폴더를 고르고, 실행 취소 뒤 다시 시도한다", async () => {
   let lifecycle: any, storage: any, reads = 0;

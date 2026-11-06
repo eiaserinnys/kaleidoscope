@@ -2,25 +2,20 @@ use kaleidoscope_contract::{validate::parse_app_definition, LIST_DISABLED_BLOCK_
 use serde_json::Value;
 
 #[test]
-fn builtin_agent_assumes_http_mcp_only_for_antigravity() {
+fn builtin_agent_assumes_http_mcp_for_one_default() {
     let json = include_str!("../../../apps/agent.json");
     let value: Value = serde_json::from_str(json).unwrap();
     let agents = value["storage"]["entries"].as_array().unwrap().iter().find(|entry| entry["id"] == "agents").unwrap();
     let defaults = agents["default"].as_array().unwrap();
-    assert_eq!(defaults.iter().map(|agent| agent["id"].as_str().unwrap()).collect::<Vec<_>>(), ["claude", "codex", "gemini", "antigravity"]);
-    for agent in defaults {
-        if agent["id"] == "antigravity" {
-            assert_eq!(agent["assume_http_mcp"], true);
-        } else {
-            assert!(agent.get("assume_http_mcp").is_none());
-        }
-    }
+    let with_flag: Vec<_> = defaults.iter().enumerate().filter(|(_, agent)| agent.get("assume_http_mcp").is_some()).collect();
+    assert_eq!(with_flag.len(), 1);
+    assert_eq!(with_flag[0].1["assume_http_mcp"], true);
     let app = parse_app_definition(json).unwrap();
     let storage = app.storage.unwrap();
     let entry = storage.entries.iter().find(|entry| entry.id == "agents").unwrap();
     kaleidoscope_contract::app_storage::validate_storage_content(entry, &agents["default"]).unwrap();
     let mut invalid = agents["default"].clone();
-    invalid[3]["assume_http_mcp"] = "true".into();
+    invalid[with_flag[0].0]["assume_http_mcp"] = "true".into();
     assert!(kaleidoscope_contract::app_storage::validate_storage_content(entry, &invalid).is_err());
 }
 
