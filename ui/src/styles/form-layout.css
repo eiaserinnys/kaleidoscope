@@ -9,7 +9,8 @@
 }
 :where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-field:where(:not(.is-label-top, .is-label-hidden):has(> .ks-field-label)) > :is(.ks-data-input, .ks-select-button, .ks-data-segmented, .ks-color-control) { grid-column: 2 / -1; width: 100%; min-width: 0; }
 :where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-slider-field:where(:not(.is-label-top, .is-label-hidden, .is-value-hidden):has(> .ks-field-label)) { grid-template-columns: var(--ks-field-label-width) minmax(0, 1fr) minmax(var(--ks-space-6), auto); }
-:where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-slider-field:where(:not(.is-label-top, .is-label-hidden):has(> .ks-field-label)) > .ks-slider { min-width: 0; width: 100%; margin: 0; }
+:where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-slider-field:where(:not(.is-label-top, .is-label-hidden)) > .ks-slider { margin: 0; }
+:where(.ks-data-stack.is-column > .ks-data-stack-item) > .ks-slider-field:where(:not(.is-label-top, .is-label-hidden):has(> .ks-field-label)) > .ks-slider { min-width: 0; width: 100%; }
 :where(.ks-data-stack.is-column:has(> .ks-data-stack-item > .ks-field:not(.is-label-top, .is-label-hidden) > .ks-field-label)) > .ks-data-stack-item > .ks-data-toggle { margin-inline-start: calc(var(--ks-field-label-width) + var(--ks-space-2)); }
 
 /* 분할 선택은 자연 너비가 안 들어가면 다음 줄을 쓴다. 짧은 두 칸은 이름표 옆에 남는다. */

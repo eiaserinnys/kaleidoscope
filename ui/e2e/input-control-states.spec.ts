@@ -15,12 +15,13 @@ test("분할 선택은 남는 자리에서 여백을 유지하고 좁은 칸에�
     return { inset: label.getBoundingClientRect().left - button.getBoundingClientRect().left,
       visible: label.clientWidth, full: label.scrollWidth };
   }));
+  // 남는 폭의 가운데 정렬과 분리해 분할 자체의 자연 너비와 여백을 검증한다.
+  await group.evaluate(el => { el.style.flexGrow = "0"; });
   await resize(400);
   const wide = await measure();
   for (const label of wide) { expect(label.inset).toBeCloseTo(13, 0); expect(label.visible).toBeGreaterThanOrEqual(label.full); }
   const natural = await group.evaluate((el) => el.getBoundingClientRect().width);
-  const fieldWidth = await group.evaluate((el) => el.parentElement!.getBoundingClientRect().width);
-  await resize(fieldWidth - 16);
+  await resize(natural - 16);
   const narrow = await measure();
   for (const label of narrow) { expect(label.inset).toBeLessThan(13); expect(label.visible).toBeGreaterThanOrEqual(label.full); }
   expect(await group.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThan(natural);

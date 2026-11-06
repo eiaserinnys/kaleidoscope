@@ -55,8 +55,8 @@ for(const child of [S([T,B]),{type:'section',title:'구역',child:T},{type:'list
  if(child.type==='stack'){const x=await app.locator('.ks-data-text').evaluate(el=>{const r=document.createRange();r.selectNodeContents(el);return r.getBoundingClientRect().left-el.closest('.ks-data-window-body')!.getBoundingClientRect().left;});expect(x).toBe(12);}
 });
 test('무이름 색과 분할은 빈 이름표 열을 만들지 않는다',async({page})=>{
- const app=await open(page,S([T,{type:'color',value:'#112233',on_change:[]},{...seg(['하나','둘']),label:undefined}]),360);
- const x=await app.locator('.ks-color-control,.ks-data-segmented').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().left-e.closest('.ks-data-window-body')!.getBoundingClientRect().left));expect(x).toEqual([12,12]);
+ const app=await open(page,S([T,{type:'slider',value:10,min:0,max:100,on_change:[]},{type:'color',value:'#112233',on_change:[]},{...seg(['하나','둘']),label:undefined}]),360);
+ const x=await app.locator('.ks-slider,.ks-color-control,.ks-data-segmented').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().left-e.closest('.ks-data-window-body')!.getBoundingClientRect().left));expect(x).toEqual([12,12,12]);
 });
 test('긴 토글 트랙은 줄어들지 않고 글은 시작 정렬',async({page})=>{
  const app=await open(page,S([I,{type:'toggle',label:'아주 긴 이름표가 붙은 토글로 설명까지 들어감',value:true,on_change:[]}]),360);

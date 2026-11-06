@@ -214,3 +214,18 @@ test("보완 3: 대화상자를 열고 닫아도 뒤의 분할과 여백을 유�
   const closedSectionGap = await split.locator(".ks-data-section").first().evaluate(el => el.getBoundingClientRect().bottom - el.querySelector(".ks-data-section-child")!.getBoundingClientRect().bottom);
   expect(closedSectionGap).toBeCloseTo(sectionGap, 0);
 });
+
+for(const owner of ['direct','tail','section','tab','dialog','section-tail','tab-tail','dialog-tail']) test(`채움 양식 스크롤 끝 여백: ${owner}`,async({page})=>{
+ const fields={type:'stack',direction:'column',gap:'small',children:Array.from({length:30},(_,i)=>input(`값 ${i+1}`))};
+ let ui:any={type:'stack',direction:'column',fill:0,children:[fields]};
+ if(owner.endsWith('tail'))ui.children.push({type:'toolbar',start:[],end:[{type:'button',label:'적용',on_click:[]}]});
+ if(owner.startsWith('section'))ui={type:'section',title:'옵션',child:ui};
+ if(owner.startsWith('tab'))ui={type:'tabs',tabs:[{label:'옵션',child:ui}]};
+ if(owner.startsWith('dialog'))ui={type:'dialog',title:'옵션',open:true,on_close:[],child:ui};
+ const app=await open(page,{type:'split',direction:'row',children:[{type:'text',value:'그림'},ui]});
+ const last=app.getByLabel('값 30',{exact:true});await expect(last).toBeAttached();
+ const m=await last.evaluate(el=>{const parents:HTMLElement[]=[];let p=el.parentElement;while(p){if(p.clientHeight>0 && /(auto|scroll)/.test(getComputedStyle(p).overflowY) && p.scrollHeight>p.clientHeight+1)parents.push(p);p=p.parentElement;}for(const p of parents)p.scrollTop=p.scrollHeight;const sc=parents[0];const pane=el.closest('.ks-split-pane')!;const bar=el.closest('.ks-data-window')!.querySelector('.ks-data-toolbar');return {gap:(bar ? bar.getBoundingClientRect().top : (sc??pane).getBoundingClientRect().bottom)-el.getBoundingClientRect().bottom,space:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3')),scrolls:parents.map(p=>({cls:p.className,pad:getComputedStyle(p).paddingBottom}))};});
+ console.log(owner,m);
+ if(owner==='direct'||owner.endsWith('tail'))expect(m.gap).toBeCloseTo(m.space,0);
+ else {expect(m.gap).toBeGreaterThanOrEqual(0);expect(m.gap).toBeLessThanOrEqual(m.space);}
+});

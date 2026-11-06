@@ -1,0 +1,11 @@
+/* 칸 직속 목록은 스크롤 안쪽 끝에만 여백을 둔다. grid와 icons는
+   마지막 행이 이미 같은 여백을 갖는다. 구역·탭·대화상자는 기존 소유자를 따른다. */
+.ks-split-pane > .ks-list:not(.is-grid, .is-icons, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) { padding-block-end: var(--ks-space-3); }
+.ks-split-pane > .ks-list:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-load-more) { padding-block-end: 0; }
+.ks-split-pane > .ks-list:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-load-more { padding-block-end: var(--ks-space-3); }
+
+/* 채움 양식은 내용 쌓기의 마지막에 둔다. 결정 줄 앞은 내부 스크롤이
+   소유하고, 결정 줄 없는 구역·탭·대화상자는 바깥의 기존 여백을 쓴다. */
+.ks-stack-scroll-content:has(> .ks-data-stack-item:last-child > .ks-field),
+.ks-stack-scroll-content .ks-data-stack-item.is-fill > .ks-data-stack.is-column:has(> .ks-data-stack-item:last-child > .ks-field),
+.ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-data-stack-item:last-child > .ks-field) { padding-block-end: var(--ks-space-3); }
