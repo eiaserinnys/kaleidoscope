@@ -30,8 +30,8 @@ export function DatePicker({ inputProps, inputRef, value, min, max, locale, labe
       if (!event.isTrusted && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
       if (!surface.current?.contains(target) && !trigger.current?.contains(target) && target !== anchor) { onEditingEnd(); close(false); }
     };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
   }, [anchor, onEditingEnd]);
   const show = () => { if (!inputProps.readOnly) setAnchor(inputRef.current); };
   return <>

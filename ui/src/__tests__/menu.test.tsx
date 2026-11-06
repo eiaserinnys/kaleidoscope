@@ -96,6 +96,20 @@ describe("Menu", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("다른 창 머리처럼 전파를 멈추는 자리를 눌러도 닫는다", () => {
+    const anchor = document.createElement("button");
+    const onClose = vi.fn();
+    render(<Menu anchor={anchor} items={[]} onClose={onClose} />);
+    const titlebar = document.createElement("div");
+    titlebar.addEventListener("pointerdown", (event) => event.stopPropagation());
+    document.body.append(titlebar);
+
+    fireEvent.pointerDown(titlebar, { button: 0 });
+
+    expect(onClose).toHaveBeenCalledOnce();
+    titlebar.remove();
+  });
+
   it("closes a coordinate menu when its anchor row is clicked, but preserves button-anchored menus", () => {
     const anchor = document.createElement("button");
     const child = document.createElement("span");
