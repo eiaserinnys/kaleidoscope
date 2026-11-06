@@ -1,5 +1,6 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
+import { StrictMode, useState } from "react";
 import { Dialog } from "../components/dialog";
 
 afterEach(cleanup);
@@ -27,4 +28,36 @@ it("취소가 없는 대화상자는 입력이 있으면 입력, 없으면 닫�
   cleanup();
   const second = show("내용", { showCancel: false });
   expect(document.activeElement).toBe(within(second).getByRole("button", { name: "확인" }));
+});
+
+function FocusDialog({ enabled = true, version = 0 }: { enabled?: boolean; version?: number }) {
+  const [open, setOpen] = useState(false);
+  return <><button aria-disabled={open || undefined} onClick={() => setOpen(true)}>열기</button><span>{version}</span>
+    {enabled && open ? <Dialog host={document.body} title="확인" ok="확정" onCancel={() => setOpen(false)} onConfirm={() => setOpen(false)} /> : null}
+  </>;
+}
+
+it("부모가 다시 그려도 처음 연 요소로 취소 뒤 돌아간다", () => {
+  const view = render(<StrictMode><FocusDialog /></StrictMode>);
+  const opener = screen.getByRole("button", { name: "열기" });
+  opener.focus(); fireEvent.click(opener);
+  view.rerender(<StrictMode><FocusDialog version={1} /></StrictMode>);
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(document.activeElement).toBe(opener);
+});
+
+it("확정으로 닫으면 연 요소로 돌아간다", () => {
+  render(<FocusDialog />);
+  const opener = screen.getByRole("button", { name: "열기" });
+  opener.focus(); fireEvent.click(opener);
+  fireEvent.click(screen.getByRole("button", { name: "확정" }));
+  expect(document.activeElement).toBe(opener);
+});
+
+it("조건부 부모와 함께 사라져도 연 요소로 돌아간다", () => {
+  const view = render(<FocusDialog />);
+  const opener = screen.getByRole("button", { name: "열기" });
+  opener.focus(); fireEvent.click(opener);
+  view.rerender(<FocusDialog enabled={false} />);
+  expect(document.activeElement).toBe(opener);
 });

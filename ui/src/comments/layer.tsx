@@ -21,6 +21,7 @@ import { commentSession, useCommentSession } from "./session";
 import { appCommentStore } from "./store";
 import type { TargetDescription } from "./target";
 import { useCommentBarPosition } from "./bar-position";
+import { restoreWindowFocus } from "../components/focus-rescue";
 
 export function useCommentMeta(store: ShellStore, appId: string) {
   return useShellSelector(store, (snapshot) => snapshot?.shared.app_comments == null ? undefined : snapshot.shared.app_comments[appId] ?? null);
@@ -75,7 +76,7 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
   }, [mode, visible, meta === undefined, window.id, content, onError]);
   useEffect(() => { if (mode && visible && meta !== undefined && !list.error) void data.load(meta?.revision ?? 0); }, [mode, visible, meta, list.revision, list.loading, list.error, data]);
   useEffect(() => {
-    if (mode) return () => { if (document.activeElement === content) content.blur(); };
+    if (mode) return () => { if (document.activeElement === content) restoreWindowFocus(content); };
     setTarget(null); setTargetChanged(false); setRail(false); setActive(null); setHoveredId(null); setCluster(null);
   }, [mode, content]);
   const pick = useCallback((next: TargetDescription) => { if (next.range) document.getSelection()?.removeAllRanges(); session.pick(window.app_version, next); setTarget(next); setTargetChanged(false); setActive(null); setCluster(null); setRail(false); }, [session, window.app_version]);
