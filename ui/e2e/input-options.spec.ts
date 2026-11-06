@@ -10,6 +10,28 @@ const run = (page: Page, label: string, action: Record<string, unknown>) => page
   return api.act(view.view_id, { ...action, target: Number(line.match(/^\[(\d+)\]/)[1]) });
 }, { label, action });
 
+test("좁은 앱 창의 설명 경계와 이름 확정, 다시 입력을 지킨다", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto("/?preview=input-options-fixture");
+  const app = page.getByTestId("app-window-input-options-fixture");
+  await app.evaluate((element) => { element.style.width = "360px"; });
+  const input = app.getByRole("combobox", { name: "목록 전용" });
+  await input.click();
+  const popup = page.locator(".ks-combobox-popup");
+  const bounds = (await app.boundingBox())!;
+  const box = (await popup.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+  expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+  await page.keyboard.type("Zombie 마지막");
+  await input.press("Enter");
+  await expect(input).toHaveValue("entry-503");
+  await expect(popup).toHaveCount(0);
+  await input.blur();
+  await input.click();
+  await page.keyboard.type("Zombie");
+  await expect(input).toHaveValue("Zombie");
+});
+
 test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨다", async ({ page }) => {
   const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
   const metrics: Record<string, unknown> = {};
@@ -144,7 +166,7 @@ test("원천 선택지를 기다리는 화면과 잘못된 선택지 오류를 �
 test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른다", async ({ page }) => {
   const output = process.env.KS_INPUT_OPTIONS_CAPTURE_DIR;
   const metrics = [];
-  // 좁은 칸은 이름표가 칸 위에 서서(#314) 360폭의 이름 칸이 더 아래에 놓인다. 세 행과 먼 쪽 설명 칸이 아래에 들어가는 높이로 연다.
+  // 갤러리의 선행 입력과 이름표 배치가 바뀌어도, 세 행과 설명이 들어갈 공간을 먼저 확보한다.
   for (const [width, height, theme] of [[1200, 800, "light"], [360, 900, "dark"]] as const) {
     await page.setViewportSize({ width, height });
     await page.emulateMedia({ colorScheme: theme });
@@ -152,7 +174,7 @@ test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른�
     await page.getByTestId("app-window-block-gallery").getByRole("tab", { name: "입력" }).click();
     const input = page.getByRole("combobox", { name: "이름" });
     await input.scrollIntoViewIfNeeded();
-    const room = await input.evaluate((element) => {
+    const measureRoom = () => input.evaluate((element) => {
       const css = getComputedStyle(element);
       const token = (name: string) => Number.parseFloat(css.getPropertyValue(name)) || 0;
       const row = Math.max(token("--ks-control-height"), token("--ks-type-body") * token("--ks-line-body") + 2 * token("--ks-space-2"));
@@ -161,6 +183,11 @@ test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른�
         need: 3 * row + 2 * token("--ks-space-1") + token("--ks-pane-min-size") + token("--ks-line-width"),
       };
     });
+    let room = await measureRoom();
+    if (room.below < room.need) {
+      await page.setViewportSize({ width, height: height + Math.ceil(room.need - room.below) });
+      room = await measureRoom();
+    }
     expect(room.below, `시험 전제: ${width}x${height}에서 이름 칸 아래에 세 행과 설명 칸이 들어가야 한다`).toBeGreaterThanOrEqual(room.need);
     await input.focus();
     const popup = page.locator(".ks-combobox-popup");

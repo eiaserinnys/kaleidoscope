@@ -9,6 +9,36 @@ import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("목록 전용은 고른 글을 전체 선택하고 이름 Enter 확정 뒤 닫는다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus();
+  expect(input.selectionStart).toBe(0);
+  expect(input.selectionEnd).toBe(input.value.length);
+  expect(document.querySelector(".ks-combobox-indicator")).toBeTruthy();
+  fireEvent.change(input, { target: { value: "Zombie 마지막" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  expect(input.value).toBe("value-503");
+});
+
+it("쉘 안의 좁은 앱 창에서는 설명을 목록 아래로 놓는다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return (this.classList.contains("ks-data-window")
+      ? { left: 100, right: 460, top: 40, bottom: 740, width: 360, height: 700 }
+      : { left: 120, right: 320, top: 100, bottom: 140, width: 200, height: 40 }) as DOMRect;
+  });
+  const css = document.documentElement.style;
+  css.setProperty("--ks-pane-min-size", "160px");
+  vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
+  render(<div className="ks-data-window" data-window-id="narrow"><Combobox inputRef={createRef<HTMLInputElement>()} inputProps={{ value: "a" }} ready visible options={[{ value: "a", label: "a", description: "설명", index: 0, searchValue: "a", searchLabel: "a" }]} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} /></div>);
+  fireEvent.focus(screen.getByRole("combobox"));
+  expect(document.querySelector(".ks-combobox-popup")?.classList.contains("is-far")).toBe(true);
+  cleanup(); css.cssText = "";
+});
+
 function setup(optionsOnly = false) {
   const choices = Array.from({ length: 504 }, (_, index) => ({ value: `value-${index}`, label: index === 503 ? "Zombie 마지막" : `항목 ${index}`, ...(index === 0 ? {} : { description: `설명 ${index}` }) }));
   const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 33, modules: {} }, state: { draft: "value-1", saved: "" }, ui: { type: "stack", direction: "column", children: [

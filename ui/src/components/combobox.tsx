@@ -6,6 +6,7 @@ import { ownerOf } from "../share/overlay-owner";
 import { windowActionActive } from "../share/action-context";
 import { registerSelectOptions } from "../share/select-options";
 import { computeAnchoredPosition, useAnchoredOverlay } from "./anchored-overlay";
+import { ChevronDown } from "./icons";
 
 type Props = {
   inputProps: InputHTMLAttributes<HTMLInputElement>;
@@ -60,7 +61,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
     if (!element) return;
     return registerSelectOptions(element, shown.map(({ label, value }) => ({ label, value, disabled: Boolean(inputProps.readOnly) || !ready })), (selected) => { const option = shown[selected]; if (option) choose(option); });
   }, [inputRef, shown, choose, inputProps.readOnly, ready]);
-  useEffect(() => { if (!visible || inputProps.readOnly) setOpen(false); }, [visible, inputProps.readOnly]);
+  useEffect(() => { if (!visible || inputProps.readOnly || inputProps.disabled) setOpen(false); }, [visible, inputProps.readOnly, inputProps.disabled]);
   useEffect(() => {
     if (!open || !anchor) return;
     const owner = ownerOf(anchor);
@@ -78,7 +79,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
     return () => document.removeEventListener("pointerdown", outside);
   }, [open, anchor]);
   const show = () => {
-    if ((!ready && !loading) || inputProps.readOnly) return;
+    if ((!ready && !loading) || inputProps.readOnly || inputProps.disabled) return;
     setAnchor(inputRef.current); setQuery(""); setActive(options.find((option) => option.value === selected)?.index ?? null); setOpen(true);
   };
   const changeActive = (direction: number) => {
@@ -89,7 +90,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   };
   return <>
     <input {...inputProps} ref={inputRef} role="combobox" aria-autocomplete="list" aria-expanded={popupVisible} aria-controls={popupVisible ? listId : undefined} aria-activedescendant={popupVisible ? activeId : undefined}
-      onFocus={(event) => { inputProps.onFocus?.(event); show(); }}
+      onFocus={(event) => { inputProps.onFocus?.(event); if (optionsOnly && !inputProps.readOnly) event.currentTarget.select(); show(); }}
       onClick={(event) => { inputProps.onClick?.(event); if (!open) show(); }}
       onBlur={(event) => { if (!surface.current?.contains(event.relatedTarget as Node | null)) { inputProps.onBlur?.(event); setOpen(false); } }}
       onChange={(event) => { inputProps.onChange?.(event); if (ready && !inputProps.readOnly) { setAnchor(inputRef.current); const value = event.currentTarget.value; if (!composing.current || filterInputOptions(options, value).length) setQuery(value); setActive(null); setOpen(true); } }}
@@ -101,11 +102,15 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); if (event.altKey && event.key === "ArrowDown") show(); else changeActive(event.key === "ArrowDown" ? 1 : -1); return; }
         if (event.key === "Enter") {
           if (open && activeOption) { event.preventDefault(); choose(activeOption); return; }
+          const exact = optionsOnly && open ? filtered.find((option) => option.searchLabel === text.toLowerCase() || option.searchValue === text.toLowerCase()) : undefined;
+          if (exact) { event.preventDefault(); choose(exact); return; }
           if (!onCommit()) { event.preventDefault(); return; }
+          setOpen(false);
         }
         if (event.key === "Tab") { onCommit(); setOpen(false); }
         inputProps.onKeyDown?.(event);
       }} />
+    {optionsOnly && !inputProps.readOnly && <span className="ks-combobox-indicator" aria-hidden="true"><ChevronDown size="inline" /></span>}
     {popupVisible && anchor && createPortal(<div ref={surface} data-ks-overlay className={`ks-anchored-overlay ks-combobox-popup${layout?.far ? " is-far" : ""}${layout?.above ? " is-above" : ""}`} style={{ ...position, ...layout?.style, ...(!layout ? { visibility: "hidden" } : {}) }} onBlur={(event) => {
       if (event.relatedTarget === anchor || surface.current?.contains(event.relatedTarget as Node | null)) return;
       onCommit(); onEditingEnd(); setOpen(false);
@@ -138,9 +143,13 @@ function useComboboxLayout(anchor: HTMLElement | null, options: InputOption[], l
       const offset = token("--ks-space-2");
       const pane = token("--ks-pane-min-size");
       const line = token("--ks-line-width");
-      const width = Math.min(Math.max(rect.width, pane), Math.max(window.innerWidth - 2 * inset, 0));
-      const position = computeAnchoredPosition({ rect, width, height: 0, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, inset, offset, alignEndOnOverflow: true });
-      const far = position.left + width + line + 2 * pane > window.innerWidth - inset;
+      const host = anchor.closest<HTMLElement>(".ks-data-window[data-window-id]")?.getBoundingClientRect();
+      const left = Math.max(host?.left ?? 0, 0);
+      const right = Math.min(host?.right ?? window.innerWidth, window.innerWidth);
+      const width = Math.min(Math.max(rect.width, pane), Math.max(right - left - 2 * inset, 0));
+      const position = computeAnchoredPosition({ rect: { left: rect.left - left, right: rect.right - left, top: rect.top, bottom: rect.bottom }, width, height: 0, viewportWidth: right - left, viewportHeight: window.innerHeight, inset, offset, alignEndOnOverflow: true });
+      position.left += left;
+      const far = position.left + width + line + 2 * pane > right - inset;
       const { options, loading } = choices.current;
       const bodyHeight = token("--ks-type-body") * token("--ks-line-body");
       const metaHeight = token("--ks-type-meta") * token("--ks-line-body");
@@ -165,7 +174,12 @@ function useComboboxLayout(anchor: HTMLElement | null, options: InputOption[], l
     const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); }); };
     window.addEventListener("resize", schedule);
     window.addEventListener("scroll", schedule, true);
+    const observer = new ResizeObserver(schedule);
+    observer.observe(anchor);
+    const host = anchor.closest(".ks-data-window[data-window-id]");
+    if (host) observer.observe(host);
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", schedule);
       window.removeEventListener("scroll", schedule, true);
       if (frame) cancelAnimationFrame(frame);
