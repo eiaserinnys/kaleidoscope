@@ -26,7 +26,9 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let focusedRemove = false;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
     let bookmark = focusBookmark(null, body);
-    let lastContent: HTMLElement | null = null;
+    // StrictMode가 효과를 다시 붙일 때처럼 이 인스턴스가 붙기 전에 초점을 받은 내용 칸을 이어받는다.
+    const seeded = document.activeElement;
+    let lastContent: HTMLElement | null = seeded instanceof HTMLElement && body.contains(seeded) && isContentFocus(seeded) ? seeded : null;
     let inContent = false;
     let pointer = false;
     let focusFrame = 0;
