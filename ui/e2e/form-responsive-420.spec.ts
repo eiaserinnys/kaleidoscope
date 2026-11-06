@@ -46,10 +46,12 @@ test('짧은 두 칸과 입력의 시작선 유지',async({page})=>{
  const app=await open(page,S([I,seg(['너비','높이'])]),360);
  const x=await app.locator('.ks-field > .ks-data-input,.ks-field > .ks-data-segmented').evaluateAll(els=>els.map(e=>e.getBoundingClientRect().left));expect(Math.abs(x[0]-x[1])).toBeLessThanOrEqual(1);
 });
-for(const child of [S([T,B]),{type:'section',title:'구역',child:T},{type:'list',items:[{key:'1',title:'목록'}]},{type:'table',columns:[{key:'x',label:'값'}],rows:[{x:'값'}]}]) test(`가로 줄 안 ${child.type} 여백 중복 없음`,async({page})=>{
+for(const child of [S([T,B]),{type:'section',title:'구역',child:T},{type:'list',items:[{key:'1',title:'목록'}]},{type:'table',columns:[{field:'x',label:'값'}],rows:[{x:'값'}]}]) test(`가로 줄 안 ${child.type} 여백 중복 없음`,async({page})=>{
  const app=await open(page,S([R([child])]),880);
  const row=app.locator('.ks-data-window-body > .ks-data-stack > .ks-data-stack-item').first();
  expect(await row.evaluate(el=>parseFloat(getComputedStyle(el).paddingLeft))).toBe(0);
+ if(child.type==='table') await expect(app.locator('.ks-table-scroll')).toBeVisible();
+ if(child.type==='list') await expect(app.locator('.ks-list')).toBeVisible();
  if(child.type==='stack'){const x=await app.locator('.ks-data-text').evaluate(el=>{const r=document.createRange();r.selectNodeContents(el);return r.getBoundingClientRect().left-el.closest('.ks-data-window-body')!.getBoundingClientRect().left;});expect(x).toBe(12);}
 });
 test('무이름 색과 분할은 빈 이름표 열을 만들지 않는다',async({page})=>{
