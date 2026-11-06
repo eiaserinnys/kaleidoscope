@@ -528,7 +528,7 @@ describe("shell core events", () => {
     }
   });
 
-  it("빈 데스크톱에서 앱을 열어도 실행 단추에 초점을 보존한다", async () => {
+  it("빈 데스크톱에서 앱을 열면 새 창이 초점을 받는다", async () => {
     const snapshot = makeTestSnapshot({ definitions: [calculatorJson] as AppDefinition[] });
     const openedWindow = { ...snapshot.shared.windows[0], id: "opened-calculator", app_id: "calculator" };
     snapshot.shared.windows = [];
@@ -549,7 +549,7 @@ describe("shell core events", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "앱 열기" })).getByRole("button", { name: "계산기" }));
     await waitFor(() => expect(document.querySelector('[data-window-id="opened-calculator"]')).not.toBeNull());
     expect(desktopTrigger.isConnected).toBe(true);
-    expect(document.activeElement).toBe(desktopTrigger);
+    await waitFor(() => expect(document.querySelector('[data-window-id="opened-calculator"]')?.contains(document.activeElement)).toBe(true));
     store.dispose();
   });
 

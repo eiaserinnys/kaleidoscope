@@ -1,5 +1,6 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AgentBinding, AppDefinition } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
@@ -51,4 +52,30 @@ it("저장과 제공자 적용을 따로 표시하고 다시 시도한다", asyn
   act(() => transport.emit({ event: "conversation.apply_status", app_id: definition.id, status: "applied" }));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   expect(document.activeElement).toBe(screen.getByRole("heading", { name: "앱 설정" }));
+});
+
+it("창 프레임 없이 설정을 Esc로 닫으면 마지막 본문 행으로 초점을 돌린다", async () => {
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  const definition: AppDefinition = {
+    ...mdEditorDefinition,
+    ui: { type: "list", items: [{ key: "a", title: "첫 행" }, { key: "b", title: "둘째 행" }] },
+    storage: { entries: [{ id: "role", key: "role", label: "역할", kind: "json", schema: { type: "string" }, default: "기본", presentation: "settings" }] },
+  };
+  const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  function SettingsFixture() {
+    const [open, setOpen] = useState(false);
+    return <><button onClick={() => setOpen(true)}>설정 열기</button><AppWindowContent store={store} windowId="editor-window" settingsOpen={open} settingsVisited onSettingsClose={() => setOpen(false)} /></>;
+  }
+  render(<SettingsFixture />);
+  const row = await screen.findByRole("option", { name: "첫 행" });
+  const user = userEvent.setup();
+  await user.click(row);
+  expect(document.activeElement).toBe(row);
+  await user.click(screen.getByRole("button", { name: "설정 열기" }));
+  expect(document.activeElement).toBe(screen.getByRole("heading", { name: "앱 설정" }));
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(document.activeElement).toBe(row));
+  await user.keyboard("{ArrowDown}");
+  expect(document.activeElement).toBe(screen.getByRole("option", { name: "둘째 행" }));
+  store.dispose();
 });

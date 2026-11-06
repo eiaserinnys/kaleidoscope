@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import explorerJson from "../../../apps/explorer.json";
 import type { AppDefinition, Block } from "../contract/contract";
@@ -69,6 +70,24 @@ function setup({ legacy = false, folder = "", view = "icons", files, scope = "fo
 }
 
 describe("explorer block", () => {
+  it("PC 접근 동의 단추는 자동 초점과 복구에서 건너뛰고 Tab으로 고를 수 있다", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const { container } = setup({ scope: "pc" });
+    const consent = await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" });
+    const body = container.querySelector<HTMLElement>(".ks-data-window-body")!;
+    await waitFor(() => expect(document.activeElement).toBe(body));
+
+    await userEvent.tab();
+    expect(document.activeElement).toBe(consent);
+
+    const previous = document.createElement("button");
+    previous.textContent = "임시 조작";
+    body.append(previous);
+    previous.focus();
+    previous.remove();
+    await waitFor(() => expect(document.activeElement).toBe(body));
+  });
+
   it("합성 클릭으로 PC 읽기를 허용하지 않는다", async () => {
     const { calls } = setup({ scope: "pc" });
     const button = await screen.findByRole("button", { name: "이 PC의 파일 읽기 허용" });

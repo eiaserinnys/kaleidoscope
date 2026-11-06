@@ -4,8 +4,83 @@
 import { ownerOf } from "../share/overlay-owner";
 import { preserveWindowActionFocus } from "../share/action-context";
 const rescued = new WeakSet<Element>();
+const lastWindowFocus = new WeakMap<HTMLElement, HTMLElement>();
 
 export const writableControlSelector = 'textarea:not(:disabled):not([readonly]), input:not(:disabled):not([readonly]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="file"]), select:not(:disabled), [contenteditable]:not([contenteditable="false"])';
+
+const controlSelector = 'button, input:not([type="hidden"]), textarea, select, a[href], [tabindex], [contenteditable], iframe, canvas';
+const contentSelector = `[role="option"][tabindex="0"], [role="treeitem"][tabindex="0"], [role="row"][tabindex="0"], [role="gridcell"][tabindex="0"], ${writableControlSelector}, iframe, canvas[tabindex]`;
+const paneSelector = '.ks-split-pane, [role="tabpanel"], .ks-data-window-body';
+
+export function usableFocus(element: HTMLElement | null): element is HTMLElement {
+  return Boolean(element?.isConnected && !element.matches(':disabled, [aria-disabled="true"]')
+    && !element.closest('[hidden], [inert], [aria-hidden="true"], [aria-disabled="true"]')
+    && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
+}
+
+function restorableFocus(element: HTMLElement | null): element is HTMLElement {
+  return Boolean(element?.isConnected && !element.matches(":disabled")
+    && !element.closest("[hidden], [inert]")
+    && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
+}
+
+export function firstContentFocus(within: HTMLElement): HTMLElement | undefined {
+  return Array.from(within.querySelectorAll<HTMLElement>(contentSelector)).find((element) =>
+    usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-split-handle, [role="separator"]') && !element.closest('.ks-toolbar, .ks-data-toolbar, [role="toolbar"]'));
+}
+
+export function firstFocus(within: HTMLElement): HTMLElement | undefined {
+  return firstContentFocus(within) ?? Array.from(within.querySelectorAll<HTMLElement>(controlSelector))
+    .find((element) => usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-split-handle, [role="separator"]') && (element.tabIndex >= 0 || element.isContentEditable));
+}
+
+export function focusContainer(element: HTMLElement): HTMLElement {
+  if (!element.hasAttribute("tabindex")) element.tabIndex = -1;
+  element.classList.add("ks-focus-rescue-empty");
+  element.addEventListener("blur", () => element.classList.remove("ks-focus-rescue-empty"), { once: true });
+  return element;
+}
+
+export type FocusBookmark = { element: HTMLElement | null; pane: HTMLElement | null };
+
+export function focusBookmark(element: HTMLElement | null, content: HTMLElement): FocusBookmark {
+  const pane = element?.closest<HTMLElement>(paneSelector);
+  return { element, pane: pane && content.contains(pane) ? pane : content };
+}
+
+export function bookmarkTarget(bookmark: FocusBookmark, content: HTMLElement): HTMLElement {
+  if (restorableFocus(bookmark.element) && content.contains(bookmark.element)) return bookmark.element;
+  if (bookmark.pane?.isConnected && content.contains(bookmark.pane)) {
+    if (bookmark.pane.querySelector(".ks-data-skeleton") && !firstContentFocus(bookmark.pane)) return focusContainer(bookmark.pane);
+    return firstContentFocus(bookmark.pane) ?? firstFocus(bookmark.pane) ?? focusContainer(bookmark.pane);
+  }
+  return firstFocus(content) ?? focusContainer(content);
+}
+
+export function clearRescuedFocus() {
+  if (document.activeElement) rescued.delete(document.activeElement);
+}
+
+export function rememberWindowFocus(content: HTMLElement, target: HTMLElement) {
+  lastWindowFocus.set(content, target);
+}
+
+export function lastFocusInWindow(host: HTMLElement): HTMLElement | null {
+  const content = host.closest<HTMLElement>(".ks-window-content")
+    ?? host.closest<HTMLElement>(".ks-window")?.querySelector<HTMLElement>(".ks-window-content")
+    ?? host;
+  return lastWindowFocus.get(content) ?? null;
+}
+
+export function restoreWindowFocus(content: HTMLElement) {
+  if (!content.isConnected || !document.hasFocus()) return;
+  const body = content.querySelector<HTMLElement>(".ks-data-window-body") ?? content;
+  const last = lastWindowFocus.get(content) ?? null;
+  const owner = ownerOf(content);
+  if (owner && preserveWindowActionFocus(owner)) return;
+  const target = usableFocus(last) && !last.matches('.ks-split-handle, [role="separator"]') && body.contains(last) ? last : firstFocus(body) ?? focusContainer(body);
+  focusRescued(target, { preventScroll: true });
+}
 
 export function focusRescued(element: HTMLElement, options?: FocusOptions) {
   const owner = ownerOf(element);

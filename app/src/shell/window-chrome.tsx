@@ -128,6 +128,7 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
     <div className={`ks-window-frame${isTop ? " ks-window-frame-active" : ""}`} ref={frameRef}>
       <header className={`ks-window-titlebar${isTop ? " ks-window-titlebar-active" : ""}`}
         onContextMenu={(event) => openContextMenu(event, menuEntries)}
+        onMouseDown={(event) => { if (!(event.target instanceof Element && event.target.closest("button"))) event.preventDefault(); }}
         onPointerDown={(event) => {
           if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button")) || maximized) return;
           beginGesture("move", event);
