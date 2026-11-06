@@ -37,7 +37,7 @@ export function useCommentPick(content: HTMLElement | null, enabled: boolean, pi
       event.stopPropagation();
       const element = htmlTarget(event.target) ?? down;
       const target = targetAt(content, element, event.clientX, event.clientY);
-      if (target) pick(target);
+      if (target) pick({ ...target, input: "pointer" });
       down = null;
     };
     const stop = (event: Event) => { event.stopPropagation(); if (event.type !== "mousedown") event.preventDefault(); };
@@ -60,7 +60,7 @@ export function useCommentPick(content: HTMLElement | null, enabled: boolean, pi
       if ((event.key === "Enter" || event.key === " ") && event.target instanceof HTMLElement) {
         const r = event.target.getBoundingClientRect();
         const target = targetAt(content, event.target, r.left + r.width / 2, r.top + r.height / 2);
-        if (target) pick(target);
+        if (target) pick({ ...target, input: "keyboard" });
       }
     };
     content.addEventListener("pointermove", move, true); content.addEventListener("pointerleave", leave); content.addEventListener("focusin", focus);

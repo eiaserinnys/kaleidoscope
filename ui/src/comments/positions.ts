@@ -32,8 +32,12 @@ function scrollClip(element: HTMLElement, content: HTMLElement) {
 }
 
 /** 창 내용 안의 고정 머리만 말풍선을 가리는 것으로 본다. */
-export function isCommentAnchorVisible(content: HTMLElement, element: HTMLElement, kind: string, rect: Pick<DOMRect, "left" | "right" | "top" | "height">, clip: { left: number; right: number }, firstLineHeight: number): boolean {
-  if (kind === "point") return true;
+export function isCommentAnchorVisible(content: HTMLElement, element: HTMLElement, kind: string, rect: Pick<DOMRect, "left" | "right" | "top" | "height">, clip: { left: number; right: number; top: number; bottom: number }, firstLineHeight: number): boolean {
+  if (kind === "point") {
+    const surface = element.getBoundingClientRect();
+    return rect.left >= Math.max(surface.left, clip.left) && rect.left <= Math.min(surface.right, clip.right)
+      && rect.top >= Math.max(surface.top, clip.top) && rect.top <= Math.min(surface.bottom, clip.bottom);
+  }
   const x = Math.max(clip.left, Math.min((rect.left + rect.right) / 2, clip.right));
   const y = rect.top + Math.min(rect.height, firstLineHeight) / 2;
   const top = element.ownerDocument.elementsFromPoint(x, y).find((candidate) => content.contains(candidate) && !candidate.closest(".ks-comment-layer"));
@@ -111,13 +115,13 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
         const center = rect.top + Math.min(rect.height, size * 5 / 3) / 2;
         const y = kind === "point" ? rect.top - size : kind === "control" ? rect.top - size + inset : center - size / 2;
         if (kind !== "point" && (center < clip.top || center > clip.bottom)) return false;
+        if (!isCommentAnchorVisible(content, element, kind, rect, clip, size * 5 / 3)) return false;
         if (rail && (rail.width >= contentRect.width || rect.left >= rail.left)) return true;
         const rightLimit = Math.min(area ? area.right - size : Infinity, rail ? rail.left - size / 2 : Infinity);
         const bounds = element.getBoundingClientRect();
         const ownRight = kind === "block" && element.clientWidth ? bounds.left + element.clientLeft + element.clientWidth : bounds.right;
         const edge = Math.min(kind === "text" ? bounds.right : rect.right, clip.right, ownRight);
         const x = kind === "point" ? Math.min(rect.left, rightLimit) : Math.min(edge - inset, rightLimit);
-        if (!isCommentAnchorVisible(content, element, kind, rect, clip, size * 5 / 3)) return false;
         if (!overlapsSurface({ left: x, right: x + size, top: y, bottom: y + size }) && !(barRect && x < barRect.right && x + size > barRect.left && y < barRect.bottom && y + size > barRect.top)) placed.push({ id, x: x - origin.left, y: y - origin.top });
         return true;
       };
@@ -135,7 +139,7 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
         if (!place(item.id, item.anchor.kind, result.element, rect)) next[item.id] = "not_visible";
       }
       if (target) {
-        const bounds = target.range?.getClientRects()[0] ?? target.rect ?? target.element.getBoundingClientRect();
+        const bounds = target.anchor.kind === "point" ? target.element.getBoundingClientRect() : target.range?.getClientRects()[0] ?? target.rect ?? target.element.getBoundingClientRect();
         const rect = target.anchor.kind === "point" && target.anchor.frame_rel ? new DOMRect(bounds.left + bounds.width * target.anchor.frame_rel.x, bounds.top + bounds.height * target.anchor.frame_rel.y, 0, 0) : bounds;
         place("__draft__", target.anchor.kind, target.element, rect);
       }

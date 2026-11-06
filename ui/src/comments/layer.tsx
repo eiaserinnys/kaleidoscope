@@ -147,7 +147,7 @@ export function CommentLayer({ store, window, appName, content, shellVersion, ch
     if ("element" in result) result.element.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
   const closeTarget = () => {
-    const element = target?.element;
+    const element = target?.input === "keyboard" ? target.element : content;
     session.clearDraft(); setTargetChanged(false);
     setTarget(null);
     if (element) requestAnimationFrame(() => {

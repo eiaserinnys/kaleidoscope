@@ -20,12 +20,14 @@ it("고르기 상태에서 앱의 누름을 막고 대상을 넘기며 끄면 �
   fireEvent.click(button);
   expect(picked).toHaveBeenCalledOnce();
   expect(picked.mock.calls[0][0].anchor.kind).toBe("control");
+  expect(picked.mock.calls[0][0].input).toBe("pointer");
   expect(clicked).not.toHaveBeenCalled();
   fireEvent.keyDown(button, { key: "ArrowDown" });
   expect(keydown).not.toHaveBeenCalled();
   fireEvent.keyDown(button, { key: "Enter" });
   expect(keydown).not.toHaveBeenCalled();
   expect(picked).toHaveBeenCalledTimes(2);
+  expect(picked.mock.calls[1][0].input).toBe("keyboard");
   fireEvent.click(screen.getByRole("button", { name: "고르기 종료" }));
   fireEvent.click(button);
   expect(clicked).toHaveBeenCalledOnce();

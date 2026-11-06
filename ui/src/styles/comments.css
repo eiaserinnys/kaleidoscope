@@ -7,6 +7,7 @@
 .ks-comment-bar-item .ks-button-progress { position: static; }
 .ks-comment-ring { position: absolute; inset: calc(var(--ks-window-titlebar-height) + var(--ks-line-width)) var(--ks-line-width) var(--ks-line-width); border-radius: 0 0 calc(var(--ks-radius-window) - var(--ks-line-width)) calc(var(--ks-radius-window) - var(--ks-line-width)); box-shadow: inset 0 0 0 var(--ks-focus-width) var(--ks-color-accent); }
 .ks-window[data-commenting="true"] .ks-window-content { cursor: crosshair; }
+.ks-window[data-commenting="true"] .ks-window-content:focus-visible { outline: none; }
 .ks-window[data-commenting="true"] .ks-window-content :is(button, a, input, textarea, select, [role="button"], [role="row"], [role="option"], [role="tab"]) { cursor: crosshair; }
 .ks-window[data-commenting="true"] .ks-window-content :is(.ks-feed-body, .ks-markdown-text, .ks-data-text:not(.is-interactive), .ks-agent-chat-user, .ks-agent-chat-assistant, .ks-table-content-title, .ks-table-content-subtitle),
 .ks-window[data-commenting="true"] .ks-window-content :is(.ks-feed-body, .ks-markdown-text, .ks-data-text:not(.is-interactive), .ks-agent-chat-user, .ks-agent-chat-assistant, .ks-table-content-title, .ks-table-content-subtitle) * { cursor: text; }

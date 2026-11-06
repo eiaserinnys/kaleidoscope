@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { isCommentAnchorVisible } from "../comments/positions";
 
 const rect = new DOMRect(10, 20, 100, 40);
-const clip = { left: 30, right: 90 };
+const clip = { left: 30, right: 90, top: 10, bottom: 80 };
 const prepare = () => {
   const content = document.createElement("div");
   content.className = "ks-window-content";
@@ -17,7 +17,18 @@ afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
 
 it("프레임 점은 적중 판정을 건너뛴다", () => {
   const { content, target, hit, restore } = prepare();
-  try { expect(isCommentAnchorVisible(content, target, "point", rect, clip, 40)).toBe(true); expect(hit).not.toHaveBeenCalled(); } finally { restore(); }
+  vi.spyOn(target, "getBoundingClientRect").mockReturnValue(rect);
+  try { expect(isCommentAnchorVisible(content, target, "point", new DOMRect(40, 30, 0, 0), clip, 40)).toBe(true); expect(hit).not.toHaveBeenCalled(); } finally { restore(); }
+});
+it("프레임 점은 표면과 스크롤 칸의 교집합 밖이면 숨긴다", () => {
+  const { content, target, hit, restore } = prepare();
+  vi.spyOn(target, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 0, 100, 100));
+  try {
+    for (const [x, y, visible] of [[40, 20, true], [40, -1, false], [40, 81, false], [20, 20, false], [91, 20, false]]) {
+      expect(isCommentAnchorVisible(content, target, "point", new DOMRect(x as number, y as number, 0, 0), clip, 40)).toBe(visible);
+    }
+    expect(hit).not.toHaveBeenCalled();
+  } finally { restore(); }
 });
 it("숫자 입력 안의 단추 등 고정 머리가 아닌 형제 가림은 표시한다", () => {
   const { content, target, hit, restore } = prepare();

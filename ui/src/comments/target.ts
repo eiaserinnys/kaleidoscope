@@ -9,7 +9,7 @@ import { measureTarget } from "./measure";
 import { blockName as nameOfBlock } from "./label";
 const frames = new Set(["canvas", "sandbox", "html_view", "web_view"]);
 const controls = 'button, input:not([type="hidden"]), textarea, select, [role="button"], [role="tab"], [role="checkbox"], [role="switch"], [role="combobox"], [role="slider"]';
-export type TargetDescription = { anchor: AppCommentAnchor; path: string; name?: string; element: HTMLElement; rect: DOMRect | null; range?: Range };
+export type TargetDescription = { anchor: AppCommentAnchor; path: string; name?: string; element: HTMLElement; rect: DOMRect | null; range?: Range; input?: "pointer" | "keyboard" };
 
 /** Selects only DOM belonging to this window; a frame's contents are never inspected. */
 export function describeTarget(element: HTMLElement, windowRoot: HTMLElement, frameRel?: AppCommentPoint, elementRel?: AppCommentPoint): TargetDescription | null {
