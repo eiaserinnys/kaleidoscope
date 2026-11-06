@@ -1391,6 +1391,19 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
     inner.layout_signal.notify();
 }
 
+pub(crate) fn store_servers_changed(inner: &Arc<Inner>) {
+    let retries: Vec<_> = {
+        let windows = inner.data_runtimes.windows.lock().unwrap();
+        windows.iter().filter_map(|(window, runtime)| {
+            let names: Vec<_> = runtime.definition.sources.iter()
+                .filter(|(_, source)| matches!(source, SourceDecl::Store(_)))
+                .map(|(name, _)| name.clone()).collect();
+            (!names.is_empty()).then_some((window.clone(), names))
+        }).collect()
+    };
+    for (window, names) in retries { let _ = refresh(inner, &window, &names, false, true); }
+}
+
 pub(crate) fn grant_changed(inner: &Arc<Inner>, window: &str, permission: &str) {
     let names = {
         let windows = inner.data_runtimes.windows.lock().unwrap();

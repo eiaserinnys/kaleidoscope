@@ -149,7 +149,12 @@ pub(crate) fn use_local(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         .as_ref()
         .ok_or_else(errors::SERVER_SWITCH_LOCAL_UNAVAILABLE)?;
     let file = local_file(info, &inner.device_name);
-    let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let generation = {
+        let _state = inner.state.lock().unwrap();
+        let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        crate::store_server_consent::shutdown(inner);
+        generation
+    };
     activate(inner, file.clone(), generation)?;
     link::start_stream(inner.clone(), generation, file);
     Ok(CoreReply::LinkUseLocal {})

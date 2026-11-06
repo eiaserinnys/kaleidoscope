@@ -516,6 +516,7 @@ pub enum Action {
     Call(CallAction),
     SetStorage(SetStorageAction),
     Worker(WorkerAction),
+    StoreAllowServer(StoreAllowServerAction),
     StoreInstall(StoreInstallAction),
     StoreRemove(StoreRemoveAction),
     Client(ClientAction),
@@ -525,6 +526,14 @@ pub enum Action {
     CopyText(CopyTextAction),
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreAllowServerAction { #[serde(rename = "store.allow_server")] pub store_allow_server: StoreAllowServerSpec }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StoreAllowServerSpec { pub permission: String, pub server: Binding }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -2239,6 +2248,7 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
             .map(|value| ("value".to_string(), value))
             .collect(),
         Action::Refresh(_) => Vec::new(),
+        Action::StoreAllowServer(action) => vec![("store.allow_server/server".into(), &action.store_allow_server.server)],
         Action::StoreInstall(action) => vec![("store.install/server".into(), &action.store_install.server), ("store.install/id".into(), &action.store_install.id), ("store.install/release".into(), &action.store_install.release)],
         Action::StoreRemove(action) => vec![("store.remove/id".into(), &action.store_remove.id)],
         Action::Call(call) => {

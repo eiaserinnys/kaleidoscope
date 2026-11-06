@@ -41,7 +41,7 @@ async function setup() {
   const emit = (app = definition, id = "request") => act(() => receive({ event: "app.install_permission", window_id: appWindow.id, request_id: id, app_name: id === "request" ? "자료 수집" : id, release: 3, store_url: "https://store.example.org/apps", digest: `digest-${id}`, definition: app } as CoreEvent));
   const change = (next: (value: ShellSnapshot) => ShellSnapshot) => act(() => { snapshot = next(snapshot); receive({ event: "state.changed", snapshot, sequence: 2 }); });
   call.mockClear();
-  return { appWindow, call, store, emit, change };
+  return { appWindow, call, store, emit, change, receive };
 }
 
 it("창 밖에 닿는 권한과 출처를 읽고 상세를 열 수 있다", async () => {
@@ -165,5 +165,40 @@ it("설치 동의 변경은 다른 창을 다시 그리지 않는다", async () 
   const before = renders;
   emit();
   expect(renders - before).toBe(0);
+  store.dispose();
+});
+
+it("스토어 연결 동의는 설치 동의와 같은 창에서 차례로 뜨고 합성 허용을 거부한다", async () => {
+  const { appWindow, call, emit, receive, store } = await setup();
+  emit(definition, "install");
+  act(() => receive({ event: "store.server_permission", window_id: appWindow.id, request_id: "server", app_name: "스토어", server: "http://192.168.1.2:8080/long/path" } as CoreEvent));
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(screen.getByRole("dialog").textContent).toContain("이 앱을 설치할까요?");
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "취소" }));
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("이 스토어에 연결할까요?");
+  expect(dialog.textContent).toContain("http://192.168.1.2:8080/long/path");
+  expect(dialog.textContent).toContain("이 연결은 암호화되지 않습니다.");
+  call.mockClear();
+  fireEvent.click(within(dialog).getByRole("button", { name: "연결 허용" }));
+  expect(call).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+  expect(call).toHaveBeenCalledWith({ op: "store.respond_server_permission", window_id: appWindow.id, request_id: "server", server: "http://192.168.1.2:8080/long/path", allow: false });
+  store.dispose();
+});
+
+it("같이 보기 조작은 스토어 연결을 허용하지 못하고 다른 창의 대기열은 독립이다", async () => {
+  const { appWindow, call, receive, store } = await setup();
+  const other = store.getSnapshot()!.shared.windows.find((item) => item.id === "viewer-window")!;
+  act(() => {
+    receive({ event: "store.server_permission", window_id: appWindow.id, request_id: "one", app_name: "앱", server: "https://example.org" });
+    receive({ event: "store.server_permission", window_id: other.id, request_id: "two", app_name: "다른 앱", server: "https://other.example" });
+  });
+  expect(store.getInstallConsent(appWindow.id)?.request_id).toBe("one");
+  expect(store.getInstallConsent(other.id)?.request_id).toBe("two");
+  const finish = beginWindowAction(appWindow.id);
+  await expect(store.call({ op: "store.respond_server_permission", window_id: appWindow.id, request_id: "one", server: "https://example.org", allow: true })).rejects.toMatchObject({ id: "SHELL_WINDOW_CONTROL_CONSENT_BLOCKED" });
+  expect(call).not.toHaveBeenCalled();
+  finish();
   store.dispose();
 });

@@ -11,6 +11,7 @@ mod conversation_context;
 mod conversation_http;
 mod conversation_reconcile;
 mod installation_consent;
+mod store_server_consent;
 mod conversation_send;
 mod conversation_stream;
 mod data_runtime;
@@ -230,6 +231,7 @@ pub(crate) struct Inner {
     pub(crate) data_runtimes: data_runtime::DataRuntimes,
     pub(crate) processes: process_host::Processes,
     pub(crate) installation_consents: installation_consent::Consents,
+    pub(crate) store_server_consents: store_server_consent::Consents,
     #[cfg(test)]
     pub(crate) store_transport: Mutex<Option<Arc<dyn store::fetch::Transport>>>,
     pub(crate) realtime: realtime_host::RealtimeConnections,
@@ -293,12 +295,17 @@ pub struct Core {
 impl Drop for Core {
     fn drop(&mut self) {
         if self.owner {
-            self.inner.shutting_down.store(true, Ordering::SeqCst);
-            self.inner.generation.fetch_add(1, Ordering::SeqCst);
+            {
+                let _state = self.inner.state.lock().unwrap();
+                self.inner.shutting_down.store(true, Ordering::SeqCst);
+                self.inner.generation.fetch_add(1, Ordering::SeqCst);
+            }
+
             self.inner.layout_signal.notify();
             self.inner.media_streams.stop();
             process_host::shutdown(&self.inner);
             installation_consent::shutdown(&self.inner);
+            store_server_consent::shutdown(&self.inner);
             realtime_host::shutdown_sessions(&self.inner);
             if let Err(err) = self.flush_storage() {
                 eprintln!("상태를 저장할 수 없습니다: {}", err.message);
@@ -471,6 +478,7 @@ impl Core {
             data_runtimes: data_runtime::DataRuntimes::default(),
             processes: process_host::Processes::with_windows(process_windows),
             installation_consents: installation_consent::Consents::default(),
+            store_server_consents: store_server_consent::Consents::default(),
             #[cfg(test)]
             store_transport: Mutex::new(None),
             realtime: realtime_host::RealtimeConnections::default(),
@@ -673,6 +681,7 @@ impl Core {
             request @ (CoreRequest::WindowControlRespond { .. }
             | CoreRequest::WindowControlCapture { .. }
             | CoreRequest::WebControl { .. }) => window_control::handle(&self.inner, request),
+            CoreRequest::StoreRespondServerPermission { window_id, request_id, server, allow } => store_server_consent::respond(&self.inner, &window_id, &request_id, &server, allow),
             CoreRequest::AppRespondInstallPermission { window_id, request_id, digest, allow } => installation_consent::respond(&self.inner, &window_id, &request_id, &digest, allow),
             CoreRequest::ProfilerReport { inputs, frames } => {
                 self.inner.profiler.report(inputs, frames);
@@ -998,13 +1007,18 @@ impl Core {
     }
 
     pub fn shutdown(&self) {
-        self.inner.shutting_down.store(true, Ordering::SeqCst);
-        self.inner.generation.fetch_add(1, Ordering::SeqCst);
+        {
+            let _state = self.inner.state.lock().unwrap();
+            self.inner.shutting_down.store(true, Ordering::SeqCst);
+            self.inner.generation.fetch_add(1, Ordering::SeqCst);
+        }
+
         self.inner.layout_signal.notify();
         self.inner.media_streams.stop();
         client_files::release_all(&self.inner);
         process_host::shutdown(&self.inner);
         installation_consent::shutdown(&self.inner);
+        store_server_consent::shutdown(&self.inner);
         realtime_host::shutdown_sessions(&self.inner);
         if let Err(err) = self.flush_storage() {
             eprintln!("상태를 저장할 수 없습니다: {}", err.message);
@@ -1289,6 +1303,7 @@ impl Inner {
         conversation_stream::state_changed(self);
         process_host::state_changed(self);
         installation_consent::state_changed(self);
+        store_server_consent::state_changed(self);
         realtime_host::state_changed(self);
         client_services::state_changed(self);
     }
