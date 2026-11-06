@@ -45,6 +45,8 @@
 .ks-settings-custom .ks-data-stack.is-row .ks-data-button { display: flex; min-width: 0; }
 .ks-settings-custom .ks-data-stack.is-row .ks-data-button .ks-button { justify-content: flex-start; gap: var(--ks-space-2); }
 .ks-settings-custom .ks-data-stack-item > .ks-data-text { padding: 0; }
+.ks-settings-custom .ks-list:not(.is-grid):not(.is-icons) { padding-inline: 0; }
+.ks-settings-custom .ks-list-row { padding-inline: 0; border-inline-width: 0; }
 .ks-settings-custom .ks-data-stack.is-row .ks-data-stack-item > .ks-data-text { overflow: visible; }
 .ks-settings-custom .ks-data-toggle { display: flex; width: 100%; flex-direction: row-reverse; justify-content: space-between; text-align: start; font-size: var(--ks-type-body); color: var(--ks-color-text); }
 .ks-settings-custom .ks-data-toggle > span:last-child { min-width: 0; }

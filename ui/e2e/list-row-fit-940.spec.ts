@@ -1,5 +1,28 @@
 import { expect, test } from "@playwright/test";
 
+test("긴 주소 메타가 있어도 묶음 제목은 한 줄로 남는다", async ({ page }) => {
+  await page.goto("/?preview=list-row-fit-940");
+  const heading = page.getByTestId("app-window-list-row-fit-940").locator(".ks-view-group").first();
+  await expect(heading).toBeVisible();
+  await heading.evaluate(el => {
+    el.style.width = "160px";
+    el.querySelector("strong")!.textContent = "사설 3";
+    const meta = document.createElement("span");
+    meta.textContent = "http://10.20.30.40:8443/kaleidoscope/appstore/team-platform/production/internal-tools-and-utilities";
+    el.append(meta);
+  });
+  const result = await heading.evaluate(el => {
+    const title = el.querySelector("strong")!;
+    const meta = el.querySelector("span")!;
+    return { titleHeight: title.getBoundingClientRect().height, line: parseFloat(getComputedStyle(title).lineHeight),
+      metaWidth: meta.clientWidth, metaContent: meta.scrollWidth, overflow: el.scrollWidth > el.clientWidth };
+  });
+  expect(result.titleHeight).toBeLessThanOrEqual(result.line + 1);
+  expect(result.metaWidth).toBeGreaterThan(0);
+  expect(result.metaContent).toBeGreaterThan(result.metaWidth);
+  expect(result.overflow).toBe(false);
+});
+
 test("목록은 넓을 때 정보를 보존하고 좁을 때 배지와 시각 자리를 회수한다", async ({ page }) => {
   await page.goto("/?preview=list-row-fit-940");
   const app = page.getByTestId("app-window-list-row-fit-940");
