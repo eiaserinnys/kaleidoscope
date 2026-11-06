@@ -275,7 +275,7 @@ if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsP
   let failAnswer = harnessParams.has("fail-answer");
   transport.call = (async (request: CoreRequest) => {
     if (pcAllowErrorScenario && request.op === "files.allow_pc") {
-      return Promise.reject({ id: "FILE_ACCESS_PERMISSION_UNDECLARED", code: "permission_denied", message: "허용할 수 없습니다", details: [] });
+      return Promise.reject({ id: "DESK_PC_ACCESS_PERMISSION_UNDECLARED", code: "invalid_request", message: `파일 권한 ${request.permission}: 앱 정의 permissions에 scope pc로 선언되지 않았습니다. 앱 정의에서 이 권한의 scope를 pc로 고치세요.`, details: [] });
     }
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
     if (shellSettingsPreview && harnessParams.has("slow-link") && request.op === "link.sync_local_to_remote") await new Promise((resolve) => setTimeout(resolve, 2000));
