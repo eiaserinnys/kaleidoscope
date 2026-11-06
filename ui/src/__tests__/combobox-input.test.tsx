@@ -213,14 +213,15 @@ it.each([false, true])("불일치 시 목록 전용 %s에 맞는 팝업을 보�
   expect(screen.getByText("Zombie 마지막")).toBeTruthy();
 });
 
-it("활성 선택지에 설명이 없으면 설명 칸과 구분선을 숨긴다", async () => {
+it("활성 선택지에 설명이 없어도 공간은 예약하고 빈 설명은 읽지 않는다", async () => {
   setup(true);
   const input = await screen.findByRole("combobox") as HTMLInputElement;
   fireEvent.focus(input);
   expect(document.querySelector(".ks-combobox-description")).toBeTruthy();
   fireEvent.keyDown(input, { key: "ArrowUp" });
-  expect(document.querySelector(".ks-combobox-description")).toBeNull();
-  expect(document.querySelector(".ks-combobox-separator")).toBeNull();
+  expect(document.querySelector(".ks-combobox-description")?.textContent).toBe("");
+  expect(document.querySelector(".ks-combobox-description")?.getAttribute("aria-hidden")).toBe("true");
+  expect(document.querySelector(".ks-combobox-separator")).toBeTruthy();
 });
 
 it("자유 입력은 한글 조합을 마치기 전에는 지연 시간이 지나도 보내지 않는다", async () => {
