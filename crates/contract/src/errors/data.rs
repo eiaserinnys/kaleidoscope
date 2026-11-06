@@ -464,6 +464,13 @@ error_catalog! { ENTRIES;
         message: "데이터 화면 상태를 바꿀 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
         fix: "앱 열기에서 앱을 다시 여세요"
     }
+    DATA_READ_RUNTIME_NOT_FOUND() {
+        class: NotFound,
+        place: "동작 시점의 현재 값 읽기",
+        cause: "값을 읽을 창의 데이터 연결이 없다",
+        message: "이 창의 데이터 연결이 끝나 현재 값을 읽을 수 없습니다. 창을 다시 열어 주세요.",
+        fix: "창을 다시 여세요"
+    }
     DATA_RUNTIME_REFRESH_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "데이터 원천 새로고침",

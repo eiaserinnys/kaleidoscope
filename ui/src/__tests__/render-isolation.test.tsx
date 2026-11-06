@@ -1582,6 +1582,39 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("현재 값 읽기는 항목 단추 클릭에서만 한 번 부르고 키 입력과 범위 없는 동작에서는 부르지 않는다", async () => {
+    const rows = [{ id: "a", title: "첫째" }];
+    const app: AppDefinition = { id: "read-count", name: "읽기 횟수", requires: { blocks: 18, modules: {} }, permissions: [], state: { draft: "", rows },
+      ui: { type: "stack", children: [
+        { type: "input", value: { state: "draft" }, on_change: { set_state: "draft" } },
+        { type: "button", label: "저장", on_click: { set_state: "draft" } },
+        { type: "repeat", key: "id", items: { state: "rows" }, virtual: false, template: { type: "button", label: "복사", on_click: { copy_text: { item: "title" } } } },
+      ] } } as unknown as AppDefinition;
+    const snapshot = makeTestSnapshot({ definitions: [app] });
+    snapshot.shared.windows[0].id = "window-read";
+    snapshot.shared.windows[0].state = { draft: "", rows };
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const reads = () => transport.getCalls().filter((call) => call.op === "data.read").length;
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    await screen.findByRole("button", { name: "복사" });
+    await settleRenders();
+    expect(reads()).toBe(0);
+    await user.type(screen.getByRole("textbox"), "abc");
+    await settleRenders();
+    expect(reads()).toBe(0);
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await settleRenders();
+    expect(reads()).toBe(0);
+    await user.click(screen.getByRole("button", { name: "복사" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("첫째"));
+    expect(reads()).toBe(1);
+    store.dispose();
+  });
+
   it("자동 격자 칸 폭을 바꿔도 같은 창의 다른 블록은 다시 그리지 않는다", async () => {
     mockVirtualLayout();
     let width = 327.5;

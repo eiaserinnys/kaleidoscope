@@ -971,6 +971,7 @@ impl Core {
                 data_runtime::dormant(&self.inner, &window_id, dormant)
             }
             CoreRequest::DataDetach { window_id } => data_runtime::detach(&self.inner, &window_id),
+            CoreRequest::DataRead { window_id } => data_runtime::read(&self.inner, &window_id),
             CoreRequest::DataAct {
                 window_id,
                 pointer,

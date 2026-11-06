@@ -722,6 +722,13 @@ error_catalog! { ENTRIES;
         message: "값을 복사하지 못했습니다. 값을 직접 골라 Ctrl+C로 복사하세요. 원인: {reason}",
         fix: "값을 직접 골라 Ctrl+C로 복사하세요"
     }
+    SHELL_ACTION_ITEM_REMOVED() {
+        class: NotFound,
+        place: "목록 항목 동작 실행 직전 항목 확인",
+        cause: "동작을 누른 항목이 그 사이 목록에서 사라졌다",
+        message: "선택한 항목이 목록에서 사라져 동작을 실행하지 않았습니다. 목록에서 항목을 다시 골라 주세요.",
+        fix: "목록에서 항목을 다시 고르세요"
+    }
     SHELL_MENU_CLIPBOARD_WRITE_FAILED(item, alternative, reason) {
         class: Io,
         place: "메뉴 클립보드 쓰기",

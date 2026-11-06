@@ -2177,6 +2177,7 @@ fn folder_and_file_sources_must_protect_data_dir() {
 mod liveness_tests;
 mod rate_limit_tests;
 mod paging_tests;
+mod read_tests;
 
 #[test]
 fn action_modifiers_are_available_in_expressions_with_false_defaults() {

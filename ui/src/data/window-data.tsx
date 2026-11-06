@@ -11,6 +11,7 @@ import { ClientRuntime } from "../runtime/client-runtime";
 import { useBlockRenderProbe } from "../render/render-probe";
 import { isWindowVisible, useWindowStateValue } from "./window-state";
 import { itemPath, useItemScope, type ItemScope } from "./item-scope";
+import { hasRepeatLocator, resolveActionScope, type ActionRead } from "./action-scope";
 import { trackWindowAction } from "../share/action-context";
 import { checkAppLink } from "./app-link";
 import { DefaultFolderPreparation } from "./default-folder";
@@ -543,18 +544,45 @@ export class WindowData {
     return null;
   }
 
-  private localBinding(pointer: string, binding: Binding, scope?: ItemScope): JsonValue {
+  /** 동작 때 바인딩을 푼다. `read`가 있으면 상태와 식 값을 그 읽기에서, 없으면 지금 화면이 든 값에서 가져온다. */
+  private resolveLocal(pointer: string, binding: Binding, scope?: ItemScope | null, read?: ActionRead): BindingValue {
     const kind = bindingKind(binding);
-    const state = this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.windowId)?.state;
+    const state = read ? read.state : this.store.getSnapshot()?.shared.windows.find((window) => window.id === this.windowId)?.state;
     const stateKey = kind.kind === "state" ? kind.key : kind.kind === "message" || kind.kind === "message_item" ? this.definition.locale?.state : undefined;
     const stateValue = stateKey === undefined ? undefined : state?.[stateKey];
     const value = kind.kind === "client"
       ? this.getValue(`@client/${kind.key}`)
       : kind.kind === "expr"
-        ? this.getValue(pointer)
+        ? read?.view.values[pointer] ?? this.getValue(pointer)
         : loading;
-    const resolved = resolveBindingValue(binding, kind, this.definition, pointer, scope, value, stateValue);
+    return resolveBindingValue(binding, kind, this.definition, pointer, scope, value, stateValue);
+  }
+
+  private localBinding(pointer: string, binding: Binding, scope?: ItemScope, read?: ActionRead): JsonValue {
+    const resolved = this.resolveLocal(pointer, binding, scope, read);
     return resolved.status === "ready" ? resolved.value : null;
+  }
+
+  /** 단일 로컬 동작이 쓰는 바인딩(copy_text, open_url, save_file의 suggested_name). 없으면 undefined. */
+  private localActionBinding(pointer: string): Binding | undefined {
+    const action = this.localAction(pointer);
+    if (action) {
+      if (action.save_file) return (action.save_file as SaveFileSpec).suggested_name;
+      if ("copy_text" in action) return action.copy_text as Binding;
+      return undefined;
+    }
+    const definition = this.definitionAt(pointer);
+    if (definition && typeof definition === "object" && !Array.isArray(definition) && "open_url" in definition) return definition.open_url as Binding;
+    return undefined;
+  }
+
+  /** 입력이 아닌 동작 시점에 현재 값을 한 번 읽어야 하는가: repeat 항목 범위가 있거나 식/상태 바인딩을 읽는 로컬 동작이다. */
+  private needsRead(pointer: string, scope?: ItemScope): boolean {
+    if (hasRepeatLocator(scope)) return true;
+    const binding = this.localActionBinding(pointer);
+    if (binding === undefined) return false;
+    const kind = bindingKind(binding).kind;
+    return kind === "expr" || kind === "state";
   }
 
   private actionLabel(pointer: string, scope?: ItemScope): string | null {
@@ -583,6 +611,14 @@ export class WindowData {
         const reached = this.store.reached(this.inputSequence);
         if (reached) await reached;
       }
+      // 입력 응답 뒤에도 계산값 이벤트는 늦을 수 있다. 코어가 이미 든 현재 값을 이 동작에서만 한 번 읽는다.
+      let read: ActionRead | undefined;
+      if (!options?.input && this.needsRead(pointer, scope)) {
+        await this.ready;
+        const reply = await this.store.call({ op: "data.read", window_id: this.windowId });
+        read = { state: reply.state, view: reply.view };
+        if (scope) scope = resolveActionScope(scope, (at, binding, local) => this.resolveLocal(at, binding, local, read));
+      }
       if (scope) item = scope.item;
       const action = this.localAction(pointer);
       if (action) {
@@ -590,12 +626,12 @@ export class WindowData {
         if (action.pick_files) return await this.runtime?.pick(action.pick_files as PickFilesSpec, scope) ?? false;
         if (action.save_file) {
           const spec = action.save_file as SaveFileSpec;
-          const raw = this.localBinding(`${pointer}${Array.isArray(this.definitionAt(pointer)) ? "/0" : ""}/save_file/suggested_name`, spec.suggested_name, scope);
+          const raw = this.localBinding(`${pointer}${Array.isArray(this.definitionAt(pointer)) ? "/0" : ""}/save_file/suggested_name`, spec.suggested_name, scope, read);
           return await this.runtime?.save(spec, typeof raw === "string" ? raw : "", scope) ?? false;
         }
         if ("copy_text" in action) {
           const arrayPrefix = Array.isArray(this.definitionAt(pointer)) ? "/0" : "";
-          const raw = this.localBinding(`${pointer}${arrayPrefix}/copy_text`, action.copy_text as Binding, scope);
+          const raw = this.localBinding(`${pointer}${arrayPrefix}/copy_text`, action.copy_text as Binding, scope, read);
           if (typeof raw !== "string") throw shellErrors.SHELL_COPY_TEXT_NOT_TEXT();
           if (raw.length === 0) throw shellErrors.SHELL_COPY_TEXT_EMPTY();
           try {
@@ -609,7 +645,7 @@ export class WindowData {
       }
       const openUrl = this.definitionAt(pointer);
       if (openUrl && typeof openUrl === "object" && !Array.isArray(openUrl) && "open_url" in openUrl) {
-        const raw = this.localBinding(`${pointer}/open_url`, openUrl.open_url as Binding, scope);
+        const raw = this.localBinding(`${pointer}/open_url`, openUrl.open_url as Binding, scope, read);
         if (typeof raw !== "string") throw shellErrors.SHELL_OPEN_URL_NOT_TEXT();
         if (raw.length === 0) throw shellErrors.SHELL_OPEN_URL_EMPTY();
         await this.store.call({ op: "external.open", window_id: this.windowId, url: checkAppLink(raw) });

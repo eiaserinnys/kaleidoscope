@@ -672,6 +672,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::DataAttach { .. }
         | CoreRequest::DataDormant { .. }
         | CoreRequest::DataDetach { .. }
+        | CoreRequest::DataRead { .. }
         | CoreRequest::DataAct { .. }
         | CoreRequest::DataRefresh { .. }
         | CoreRequest::DataMedia { .. }

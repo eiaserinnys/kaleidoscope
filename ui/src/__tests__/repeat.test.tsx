@@ -189,9 +189,9 @@ it("중첩 단추의 클라이언트 동작에 항목과 부모, 키, 순서와 
   const frame = document.querySelector(".ks-client-frames iframe") as HTMLIFrameElement;
   const post = vi.spyOn(frame.contentWindow!, "postMessage");
   fireEvent.click(await screen.findByRole("button", { name: "고르기" }), { shiftKey: true });
-  expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-action", name: "choose", context: {
+  await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-action", name: "choose", context: {
     event: null, item: { id: "inner", name: "고르기" }, parent_item: { id: "parent", children: [{ id: "inner", name: "고르기" }] }, key: "inner", index: 0, modifiers: { shift: true, alt: false, ctrl: false, meta: false },
-  } }), "*");
+  } }), "*"));
   store.dispose();
 });
 
