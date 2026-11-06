@@ -5,7 +5,11 @@ use super::*;
 mod native_windows;
 mod retry;
 
-pub(super) fn external_drop_guard(app: &AppHandle, log: &mut File) -> Result<(), String> {
+pub(super) fn external_drop_guard(
+    app: &AppHandle,
+    core: &Core,
+    log: &mut File,
+) -> Result<(), String> {
     ui::wait_dom(
         app,
         "return !!document.querySelector('[data-testid=\\\"app-window-e2e-folder-drag\\\"]');",
@@ -36,6 +40,69 @@ pub(super) fn external_drop_guard(app: &AppHandle, log: &mut File) -> Result<(),
     record(
         log,
         "files-write.external-drop-guard",
+        json!({"passed": true, "synthetic": true}),
+    )?;
+    let source = include_str!("../../../../ui/e2e/fixtures/file-drop/client.js");
+    super::realtime::upload_file_drop_fixture(app, source)?;
+    call(
+        core,
+        CoreRequest::AppImport {
+            definition_json: include_str!("../../../../ui/e2e/fixtures/file-drop/app.json").into(),
+        },
+    )?;
+    let snapshot = match call(core, CoreRequest::StateGet {})? {
+        CoreReply::StateGet { snapshot, .. } => snapshot,
+        reply => return Err(format!("unexpected state response: {reply:?}")),
+    };
+    let workspace = snapshot
+        .device
+        .active_workspace_id
+        .ok_or("no active workspace")?;
+    let desktop = snapshot
+        .device
+        .active_desktop_ids
+        .get(&workspace)
+        .ok_or("no active desktop")?
+        .clone();
+    call(
+        core,
+        CoreRequest::WindowOpen {
+            desktop_id: desktop,
+            app_id: "file-drop-fixture".into(),
+            rect: None,
+        },
+    )?;
+    let root = "document.querySelector('[data-testid=\\\"app-window-file-drop-fixture\\\"]')";
+    ui::wait_dom(
+        app,
+        &format!("return {root}?.textContent.includes('준비됨');"),
+        "file drop client ready",
+    )?;
+    let result = ui::evaluate(
+        app,
+        &format!(
+            r#"
+        const content = {root}.querySelector('.ks-window-content');
+        const data = new DataTransfer(); data.items.add(new File(['abc'], 'test.txt', {{type:'text/plain'}}));
+        const over = new DragEvent('dragover', {{bubbles:true, cancelable:true, dataTransfer:data}});
+        content.dispatchEvent(over);
+        const event = new DragEvent('drop', {{bubbles:true, cancelable:true, dataTransfer:data}});
+        content.dispatchEvent(event);
+        return {{prevented: event.defaultPrevented, effect: data.dropEffect, over: over.defaultPrevented}};
+    "#
+        ),
+    )?;
+    if result["prevented"] != true || result["effect"] != "copy" || result["over"] != true {
+        return Err(format!("allowed synthetic drop failed: {result}"));
+    }
+    ui::wait_dom(
+        app,
+        &format!("return {root}?.textContent.includes('test.txt:97,98,99');"),
+        "file drop bytes",
+    )?;
+    record(
+        log,
+        "files-write.external-drop-allowed",
         json!({"passed": true, "synthetic": true}),
     )
 }

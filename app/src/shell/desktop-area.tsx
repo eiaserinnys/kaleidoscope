@@ -17,6 +17,7 @@ import {
   type CoreReply,
   type CoreRequest,
   type MenuEntry,
+  type PickFilesSpec,
   type ShellSnapshot,
   type ShellStore,
   type Rect,
@@ -257,6 +258,7 @@ const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCa
     const app = snapshot?.shared.apps.find((candidate) => candidate.id === appWindow.app_id);
     return {
       appName: version?.definition.name ?? app?.name ?? appWindow.app_id,
+      fileDrop: version?.definition.file_drop,
       shareable: !version || !containsAgentChat(version.definition.ui),
       hasSettings: Boolean(version?.definition.settings)
         || (version?.definition.storage?.entries.some((entry) => entry.presentation === "settings") ?? false),
@@ -274,6 +276,7 @@ const DesktopWindow = memo(function DesktopWindow({ appWindow, area, isTop, onCa
     key={`${appWindow.id}:${appWindow.app_version}`}
     area={area}
     appName={details.appName}
+    fileDrop={details.fileDrop}
     isTop={isTop}
     sharing={sharing}
     shareable={details.shareable}
@@ -306,9 +309,9 @@ function windowTitle(window: AppWindow, snapshot: ShellSnapshot | null): string 
   )?.definition.name ?? snapshot?.shared.apps.find((app) => app.id === window.app_id)?.name ?? window.app_id;
 }
 
-function sameDetails(left: { appName: string; shareable: boolean; hasSettings: boolean; settingsAvailableInitially: boolean }, right: { appName: string; shareable: boolean; hasSettings: boolean; settingsAvailableInitially: boolean }) {
+function sameDetails(left: { appName: string; fileDrop: PickFilesSpec | undefined; shareable: boolean; hasSettings: boolean; settingsAvailableInitially: boolean }, right: { appName: string; fileDrop: PickFilesSpec | undefined; shareable: boolean; hasSettings: boolean; settingsAvailableInitially: boolean }) {
   return left.appName === right.appName && left.shareable === right.shareable && left.hasSettings === right.hasSettings
-    && left.settingsAvailableInitially === right.settingsAvailableInitially;
+    && left.settingsAvailableInitially === right.settingsAvailableInitially && left.fileDrop === right.fileDrop;
 }
 
 function sameReferences<T>(left: readonly T[], right: readonly T[]): boolean {

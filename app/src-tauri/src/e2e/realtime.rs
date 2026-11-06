@@ -9,6 +9,20 @@ mod checks;
 mod fixture;
 mod server;
 
+#[cfg(windows)]
+pub(super) fn upload_file_drop_fixture(app: &AppHandle, source: &str) -> Result<(), String> {
+    use sha2::{Digest, Sha256};
+    fixture::mcp(
+        app,
+        "upload_asset",
+        json!({
+            "id": "file-drop-fixture-client", "version": 1, "format": "javascript",
+            "sha256": format!("{:x}", Sha256::digest(source.as_bytes())),
+            "source": "ui/e2e/fixtures/file-drop/client.js", "license": "MIT", "data_base64": STANDARD.encode(source.as_bytes())
+        }),
+    )
+}
+
 static SESSIONS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static SENDS: AtomicUsize = AtomicUsize::new(0);
 static READS: AtomicUsize = AtomicUsize::new(0);

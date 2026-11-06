@@ -2,7 +2,7 @@ import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientL
 import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { ClientChatEnvelope } from "../data/client-chat";
-import { CLIENT_PING_TIMEOUT_SECS } from "../contract/limits";
+import { CLIENT_PING_TIMEOUT_SECS, CLIENT_PICK_FILE_MAX_BYTES } from "../contract/limits";
 import type { ShellStore } from "../core/shell-store";
 import { isCoreError, toCoreError } from "../core/core-transport";
 import type { WindowData } from "../data/window-data";
@@ -19,6 +19,15 @@ import * as shellErrors from "../contract/shell-errors";
 import { trackWindowAction, windowActionActive } from "../share/action-context";
 
 type Client = NonNullable<AppDefinition["client"]>;
+function acceptsFile(spec: PickFilesSpec, file: File): boolean {
+  if (!spec.accept.length) return true;
+  const name = file.name.toLowerCase(), mime = file.type.toLowerCase();
+  return spec.accept.some((item) => {
+    const pattern = item.mime.toLowerCase();
+    return (mime !== "" && (pattern.endsWith("/*") ? mime.startsWith(pattern.slice(0, -1)) : mime === pattern))
+      || item.extensions.some((extension) => name.endsWith(`.${extension.replace(/^\./, "").toLowerCase()}`));
+  });
+}
 const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
 const runtimes = new WeakMap<ShellStore, Map<string, ClientRuntime>>();
 
@@ -86,6 +95,14 @@ export async function clientShare(store: ShellStore, windowId: string, visual: b
   return runtimes.get(store)?.get(windowId)?.share(visual) ?? null;
 }
 
+export function clientFileDropReady(store: ShellStore, windowId: string): boolean {
+  return runtimes.get(store)?.get(windowId)?.fileDropReady() ?? false;
+}
+
+export function deliverClientFiles(store: ShellStore, windowId: string, spec: PickFilesSpec, transfer: DataTransfer): void {
+  runtimes.get(store)?.get(windowId)?.dropFiles(spec, transfer);
+}
+
 export class ClientRuntime {
   private frame: HTMLIFrameElement | null = null;
   private token = "";
@@ -131,6 +148,24 @@ export class ClientRuntime {
   }
 
   registerBrowserFile(file: File) { return this.fileRegistry.registerBrowserFile(file); }
+
+  fileDropReady() { return this.ready && !!this.frame && !this.stopped; }
+
+  dropFiles(spec: PickFilesSpec, transfer: DataTransfer) {
+    if (!this.fileDropReady()) return;
+    const files = Array.from(transfer.files);
+    const directory = Array.from(transfer.items).some((item) => item.kind === "file" && item.webkitGetAsEntry?.()?.isDirectory);
+    const oversized = files.find((file) => file.size > CLIENT_PICK_FILE_MAX_BYTES);
+    const rejected = files.find((file) => !acceptsFile(spec, file));
+    const error = directory ? shellErrors.SHELL_FILE_DROP_DIRECTORY_REJECTED()
+      : !spec.multiple && files.length > 1 ? shellErrors.SHELL_FILE_DROP_MULTIPLE_REJECTED()
+      : oversized ? shellErrors.SHELL_FILE_DROP_TOO_LARGE({ name: oversized.name, limit: `${CLIENT_PICK_FILE_MAX_BYTES / (1024 * 1024)}MB` })
+      : rejected ? shellErrors.SHELL_FILE_DROP_TYPE_REJECTED({ name: rejected.name }) : null;
+    if (error) { this.data.setNotice(error); return; }
+    if (!files.length) return;
+    const registered = files.map((file) => this.registerBrowserFile(file));
+    void this.data.act("/file_drop", { cancelled: false, files: registered } as unknown as JsonValue);
+  }
 
   async start() {
     try {
