@@ -12,6 +12,7 @@ use crate::{CoreState, Inner};
 
 mod path;
 mod pc;
+pub(crate) mod default_folder;
 pub(crate) use path::resolve_path;
 use pc::pc_roots;
 pub(crate) use pc::scope;

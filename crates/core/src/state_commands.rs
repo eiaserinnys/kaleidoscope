@@ -648,6 +648,8 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::StorageReset { .. }
         | CoreRequest::StorageMove { .. }
         | CoreRequest::FilesPickFolder { .. }
+        | CoreRequest::FilesPrepareDefaultFolder { .. }
+        | CoreRequest::FilesAllowDefaultFolder { .. }
         | CoreRequest::ClientFileOpen { .. }
         | CoreRequest::FilesAllowPc { .. }
         | CoreRequest::FilesOpen { .. }

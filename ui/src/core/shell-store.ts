@@ -109,7 +109,7 @@ export function createShellStore(transport: CoreTransport): ShellStore {
     call: ((request: Parameters<CoreTransport["call"]>[0]) => {
       const windowId = "window_id" in request ? request.window_id : undefined;
       if (windowId && windowActionActive(windowId) && (
-        request.op === "files.allow_pc" || request.op === "files.pick_folder" || request.op === "connection.login"
+        request.op === "files.allow_pc" || request.op === "files.allow_default_folder" || request.op === "files.pick_folder" || request.op === "connection.login"
         || (request.op === "process.respond_permission" && request.allow)
         || (request.op === "app.respond_install_permission" && request.allow)
         || (request.op === "store.respond_server_permission" && request.allow)

@@ -812,6 +812,14 @@ impl Core {
                 window_id,
                 permission,
             } => self.pick_folder(&window_id, &permission),
+            CoreRequest::FilesPrepareDefaultFolder { window_id, permission } => {
+                let result = files::default_folder::prepare(&self.inner, &window_id, &permission)?;
+                Ok(CoreReply::FilesPrepareDefaultFolder { result })
+            }
+            CoreRequest::FilesAllowDefaultFolder { window_id, permission } => {
+                let result = files::default_folder::allow(&self.inner, &window_id, &permission)?;
+                Ok(CoreReply::FilesAllowDefaultFolder { result })
+            }
             CoreRequest::FilesPick {
                 window_id,
                 accept,
@@ -1193,9 +1201,8 @@ impl Core {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| root_path.display().to_string());
 
-        let mut state = self.inner.state.lock().unwrap();
+        let state = self.inner.state.lock().unwrap();
         files::permission(&state, window_id, permission, false)?;
-        let before = state.clone();
         let grant = Grant {
             window_id: window_id.to_string(),
             permission: permission.to_string(),
@@ -1203,19 +1210,7 @@ impl Core {
             root_name,
             granted_at: state_commands::timestamp(),
         };
-        state.device.grants.retain(|existing| {
-            existing.window_id != window_id || existing.permission != permission
-        });
-        state.device.grants.push(grant.clone());
-
-        if let Err(error) = self.inner.save_state_locked(&state, false, true, false) {
-            *state = before;
-            return Err(error);
-        }
-        let event = self.inner.state_event_locked(&state);
-        drop(state);
-        self.inner.emit_state(&event);
-        data_runtime::grant_changed(&self.inner, window_id, permission);
+        let grant = files::default_folder::save_grant(&self.inner, state, grant, None)?;
 
         Ok(CoreReply::FilesPickFolder { grant: Some(grant) })
     }

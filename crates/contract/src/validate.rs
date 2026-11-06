@@ -80,6 +80,18 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
     crate::validate_button::validate_button_extensions(&definition)?;
     crate::validate_file_input::validate_file_drop(&definition)?;
 
+    for permission in &definition.permissions {
+        if let PermissionDecl::Files { id, scope, default_folder: Some(_), .. } = permission {
+            if *scope == FilesScope::Pc {
+                return Err(crate::errors::APP_FILES_DEFAULT_SCOPE_INVALID(id));
+            }
+            if definition.requires.blocks < crate::DEFAULT_FOLDER_BLOCK_SET_VERSION
+                || definition.requires.modules.get("files").copied().unwrap_or(0) < 4 {
+                return Err(crate::errors::APP_FILES_DEFAULT_VERSION_LOW(id, crate::DEFAULT_FOLDER_BLOCK_SET_VERSION));
+            }
+        }
+    }
+
     if let Some(size) = definition.window_size {
         if definition.requires.blocks < crate::ROW_WINDOW_SIZE_BLOCK_SET_VERSION {
             return Err(crate::errors::APP_WINDOW_SIZE_VERSION_LOW(crate::ROW_WINDOW_SIZE_BLOCK_SET_VERSION));
