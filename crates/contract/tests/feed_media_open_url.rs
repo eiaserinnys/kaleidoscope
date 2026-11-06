@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{data::{self, FeedEntry}, validate::parse_app_definition};
+use kaleidoscope_contract::{data::{self, FeedEntry}, validate::parse_app_definition, INPUT_DISABLED_BLOCK_SET_VERSION};
 use serde_json::{json, Value};
 
 fn app(ui: Value, blocks: u32) -> Value {
@@ -13,6 +13,27 @@ fn list_disabled_requires_new_version_and_registers_binding() {
         let error = parse_app_definition(&value.to_string()).expect_err("list.disabled에는 새 판이 필요하다");
         assert!(format!("{error:?}").contains("requires.blocks가 40 이상"));
         value["requires"]["blocks"] = json!(40);
+        let definition = parse_app_definition(&value.to_string()).expect("새 판에서 잠금 허용");
+        assert_eq!(serde_json::to_value(&definition).unwrap()["ui"]["disabled"], disabled);
+        assert!(data::all_ui_bindings(&definition).iter().any(|(pointer, _)| pointer == "/ui/disabled"));
+    }
+}
+
+#[test]
+fn input_disabled_requires_new_version_and_registers_binding() {
+    assert!(kaleidoscope_contract::app_definition_schema().to_string().contains("참이면 입력과 부속 조작을 잠근다"));
+    for disabled in [json!(true), json!(false), json!({"state":"locked"}), json!({"expr":"$state.locked"}), json!({"client":"locked"})] {
+        let mut value = app(json!({"type":"input", "value":{"state":"text"}, "on_change":{"set_state":"text"}, "disabled":disabled}), INPUT_DISABLED_BLOCK_SET_VERSION - 1);
+        value["state"] = json!({"locked":true, "text":""});
+        value["requires"]["modules"] = json!({"assets":1,"client":1});
+        value["assets"] = json!([{"id":"script","version":1}]);
+        value["client"] = json!({"runtime":"javascript","entry":{"id":"script","version":1}, "inputs":{}, "outputs":{"locked":{"default":false}}, "actions":[], "commands":{}, "state_keys":[], "storage_entries":[]});
+        for version in [INPUT_DISABLED_BLOCK_SET_VERSION - 2, INPUT_DISABLED_BLOCK_SET_VERSION - 1] {
+            value["requires"]["blocks"] = json!(version);
+            let error = parse_app_definition(&value.to_string()).expect_err("input.disabled에는 새 판이 필요하다");
+            assert!(format!("{error:?}").contains(&format!("requires.blocks가 {} 이상", INPUT_DISABLED_BLOCK_SET_VERSION)));
+        }
+        value["requires"]["blocks"] = json!(INPUT_DISABLED_BLOCK_SET_VERSION);
         let definition = parse_app_definition(&value.to_string()).expect("새 판에서 잠금 허용");
         assert_eq!(serde_json::to_value(&definition).unwrap()["ui"]["disabled"], disabled);
         assert!(data::all_ui_bindings(&definition).iter().any(|(pointer, _)| pointer == "/ui/disabled"));

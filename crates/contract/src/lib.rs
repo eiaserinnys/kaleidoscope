@@ -312,9 +312,12 @@ pub const CONTRACT_VERSION: u32 = 40;
 /// - 45판: 창의 파일 드롭.
 /// - 46판: 목록 항목 아이콘과 격자 칸 최소 폭.
 /// - 47판: 기본 폴더 최초 허용 화면.
-/// - 48판: 목록 여러 선택과 항목 활성화.
+/// - 48판: input 잠금 바인딩.
+/// - 49판: 목록 여러 선택과 항목 활성화.
 pub const BLOCK_SET_VERSION: u32 = LIST_MULTIPLE_BLOCK_SET_VERSION;
-pub const LIST_MULTIPLE_BLOCK_SET_VERSION: u32 = 48;
+pub const LIST_MULTIPLE_BLOCK_SET_VERSION: u32 = 49;
+/// input.disabled를 처음 지원하는 블록 세트 판.
+pub const INPUT_DISABLED_BLOCK_SET_VERSION: u32 = 48;
 /// 목록 항목 아이콘과 격자 칸 최소 폭.
 pub const LIST_ICON_WIDTH_BLOCK_SET_VERSION: u32 = 46;
 /// 목록 초점 이동 선택과 파일 동작 단축키의 첫 지원 판.
@@ -2125,6 +2128,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         read_only: Option<Binding>,
+        /// (48판) 참이면 입력과 부속 조작을 잠근다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        disabled: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         spin: Option<bool>,
@@ -2867,6 +2874,8 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         read_only: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        disabled: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         min: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         max: Option<Binding>,
@@ -3510,6 +3519,7 @@ impl From<RawBlock> for Block {
                 options,
                 options_only,
                 read_only,
+                disabled,
                 min,
                 max,
                 step,
@@ -3532,6 +3542,7 @@ impl From<RawBlock> for Block {
                 options,
                 options_only,
                 read_only,
+                disabled,
                 min,
                 max,
                 step,
@@ -3563,6 +3574,7 @@ impl From<RawBlock> for Block {
                 options: None,
                 options_only: None,
                 read_only: None,
+                disabled: None,
                 min: None,
                 max: None,
                 step: None,
@@ -3820,6 +3832,7 @@ impl Block {
             Block::List { select_on_focus: true, .. } => LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION,
             Block::List { group_actions: Some(_), .. } => LIST_GROUP_STATUS_BLOCK_SET_VERSION,
             Block::List { disabled: Some(_), .. } => LIST_DISABLED_BLOCK_SET_VERSION,
+            Block::Input { disabled: Some(_), .. } => INPUT_DISABLED_BLOCK_SET_VERSION,
             Block::Chat { loading: Some(_), .. } => CHAT_LOADING_BLOCK_SET_VERSION,
             Block::Chat {
                 client: Some(_), ..

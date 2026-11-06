@@ -112,8 +112,9 @@ test("누르고 놓은 스핀은 마지막 값만 보내고 바로 누른 동작
   await expect(max.getByRole("button", { name: "늘리기" })).toBeDisabled();
   await expect(max.getByRole("button", { name: "줄이기" })).toBeEnabled();
   const locked = app.getByRole("spinbutton", { name: "읽기 전용" }).locator("..");
-  await expect(locked.getByRole("button", { name: "늘리기" })).toBeDisabled();
-  await expect(locked.getByRole("button", { name: "줄이기" })).toBeDisabled();
+  await expect(locked.locator(".ks-number-spin")).toBeHidden();
+  await expect(locked.locator('button[aria-label="늘리기"]')).toBeDisabled();
+  await expect(locked.locator('button[aria-label="줄이기"]')).toBeDisabled();
 });
 
 test("같이 보기의 키와 단추 조작은 각각 한 번 증감한다", async ({ page }) => {

@@ -30,8 +30,10 @@ pub(crate) fn configure_main(app: &AppHandle) -> Result<(), Box<dyn std::error::
         format!("{scheme}://tauri.localhost/").parse()?
     };
     let origin = app_url.origin();
+    let shortcuts_app = app.clone();
     main.with_webview(move |native| {
         let result = (|| unsafe {
+            crate::shell_shortcuts::register(shortcuts_app, "main".into(), &native.controller())?;
             let webview = native.controller().CoreWebView2()?;
             webview
                 .Settings()?
@@ -61,7 +63,7 @@ pub(crate) fn configure_main(app: &AppHandle) -> Result<(), Box<dyn std::error::
             windows::core::Result::<()>::Ok(())
         })();
         if let Err(error) = result {
-            eprintln!("메인 웹뷰 메뉴와 클립보드 설정 실패: {error}");
+            eprintln!("메인 웹뷰 메뉴, 클립보드와 단축키 설정 실패: {error}");
         }
     })?;
     Ok(())

@@ -282,6 +282,39 @@ it("읽기 전용 검색 입력의 지우기 조작은 값을 보내지 않는�
   expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("검색어");
 });
 
+it.each([false, true])("비활성 %s줄 입력은 초점과 편집이 막히고 해제하면 편집한다", async (multiline) => {
+  runtime.values = { text: "저장된 내용", locked: true };
+  const input = { type: "input", label: "내용", multiline, value: { client: "text" }, disabled: { client: "locked" }, on_change: { client: "change" } };
+  const draw = () => <InputBlock block={input as never} context={{} as never} pointer="/input" />;
+  const view = render(draw());
+  const field = screen.getByRole("textbox", { name: "내용" }) as HTMLInputElement | HTMLTextAreaElement;
+  expect(field.disabled).toBe(true);
+  await userEvent.click(field);
+  expect(document.activeElement).not.toBe(field);
+  expect(runtime.act).not.toHaveBeenCalled();
+  runtime.values.locked = false;
+  view.rerender(draw());
+  expect(field.disabled).toBe(false);
+  await userEvent.clear(field);
+  await userEvent.type(field, "수정");
+  fireEvent.blur(field);
+  await vi.waitFor(() => expect(runtime.act).toHaveBeenCalledWith("/input/on_change", "수정", undefined, undefined, undefined, { input: true }));
+});
+
+it.each([
+  [{ kind: "number", spin: true, value: 3 }, "spinbutton", ["늘리기", "줄이기"]],
+  [{ kind: "search", value: "검색어" }, "textbox", ["지우기"]],
+  [{ kind: "date", value: "2026-11-06" }, "textbox", ["날짜 선택"]],
+  [{ kind: "time", value: "12:00" }, "combobox", []],
+  [{ options: ["하나", "둘"], value: "하나" }, "combobox", []],
+] as const)("비활성 입력의 부속 조작도 잠긴다: %j", (extra, role, buttons) => {
+  const input = { type: "input", ...extra, disabled: true, on_change: { client: "change" } };
+  render(<InputBlock block={input as never} context={{ definition: {} } as never} pointer="/input" />);
+  expect((screen.getByRole(role) as HTMLInputElement).disabled).toBe(true);
+  for (const name of buttons) expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+  expect(runtime.act).not.toHaveBeenCalled();
+});
+
 it.each([false, true])("목록 전용 검색 지우기는 빈 선택지 허용 여부 %s에 맞춰 확정한다", async (hasEmpty) => {
   runtime.values = { text: "alpha" };
   const input = { type: "input", kind: "search", value: { client: "text" }, on_change: { client: "change" }, options: hasEmpty ? ["", "alpha"] : ["alpha", "beta"], options_only: true };

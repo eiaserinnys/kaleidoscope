@@ -58,22 +58,22 @@ fn new_icon_names_require_version_in_buttons_and_button_grids() {
 fn multiple_selection_and_activation_require_their_contract() {
     let mut ui = json!({"type":"list", "items":[{"key":"a", "title":"A"}],
         "selection":"multiple", "selected":{"state":"choice"}, "on_select":{"set_state":"choice"}});
-    assert_eq!(parse_app_definition(&definition(47, ui.clone()).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_MULTIPLE_VERSION_LOW"));
-    let parsed = parse_app_definition(&definition(48, ui.clone()).to_string()).unwrap();
-    assert_eq!(parsed.ui.introduced_in(), 48);
+    assert_eq!(parse_app_definition(&definition(48, ui.clone()).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_MULTIPLE_VERSION_LOW"));
+    let parsed = parse_app_definition(&definition(49, ui.clone()).to_string()).unwrap();
+    assert_eq!(parsed.ui.introduced_in(), 49);
     assert_eq!(serde_json::to_value(parsed).unwrap()["ui"]["selection"], "multiple");
     for selected in [json!(null), json!({"expr":"[]"}), json!({"state":"missing"})] {
         ui["selected"] = selected;
-        assert_eq!(parse_app_definition(&definition(48, ui.clone()).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_MULTIPLE_SELECTED_INVALID"));
+        assert_eq!(parse_app_definition(&definition(49, ui.clone()).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_MULTIPLE_SELECTED_INVALID"));
     }
     ui["selected"] = json!({"state":"choice"});
     ui.as_object_mut().unwrap().remove("on_select");
-    assert_eq!(parse_app_definition(&definition(48, ui).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_MULTIPLE_SELECTED_INVALID"));
+    assert_eq!(parse_app_definition(&definition(49, ui).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_MULTIPLE_SELECTED_INVALID"));
     for extra in [json!({"on_activate":{"set_state":"choice"}}), json!({"items":[{"key":"a", "title":"A", "selectable":false}]})] {
         let mut list = json!({"type":"list", "items":[]});
         list.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
-        assert_eq!(parse_app_definition(&definition(47, list.clone()).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_ACTIVATE_VERSION_LOW"));
-        let parsed = parse_app_definition(&definition(48, list).to_string()).unwrap();
-        if extra.get("on_activate").is_some() { assert_eq!(parsed.ui.introduced_in(), 48); }
+        assert_eq!(parse_app_definition(&definition(48, list.clone()).to_string()).unwrap_err().id.as_deref(), Some("APP_LIST_ACTIVATE_VERSION_LOW"));
+        let parsed = parse_app_definition(&definition(49, list).to_string()).unwrap();
+        if extra.get("on_activate").is_some() { assert_eq!(parsed.ui.introduced_in(), 49); }
     }
 }

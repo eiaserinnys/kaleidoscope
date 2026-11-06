@@ -1,6 +1,52 @@
 import type { AppDefinition } from "../../src/contract/contract";
+import contractSource from "../../../crates/contract/src/lib.rs?raw";
+
+const inputDisabledVersion = Number(contractSource.match(/pub const INPUT_DISABLED_BLOCK_SET_VERSION: u32 = (\d+);/)![1]);
 
 const definitions = [
+  {
+    id: "input-control-states", name: "입력 상태 시험",
+    requires: { blocks: inputDisabledVersion, modules: {} }, permissions: [],
+    state: { value: "같은 값", empty: "", choice: "나이", blankChoice: null, selected: "중복 제거", number: 3, date: "2026-11-06", search: "찾기" },
+    ui: { type: "split", direction: "row", children: [
+      { type: "stack", direction: "column", gap: "small", children: [
+        { type: "input", label: "열림", value: { state: "value" }, on_change: { set_state: "value" } },
+        { type: "input", label: "결과", value: { state: "value" }, read_only: true, on_change: { set_state: "value" } },
+        { type: "input", label: "잠김", value: { state: "value" }, disabled: true, on_change: { set_state: "value" } },
+        { type: "input", label: "빈 열림", value: { state: "empty" }, on_change: { set_state: "empty" } },
+        { type: "input", label: "빈 잠김", value: { state: "empty" }, disabled: true, on_change: { set_state: "empty" } },
+        { type: "input", kind: "number", spin: true, label: "잠긴 숫자", value: { state: "number" }, disabled: true, on_change: { set_state: "number" } },
+        { type: "input", kind: "date", label: "잠긴 날짜", value: { state: "date" }, disabled: true, on_change: { set_state: "date" } },
+        { type: "input", kind: "search", label: "잠긴 검색", value: { state: "search" }, disabled: true, on_change: { set_state: "search" } },
+      ] },
+      { type: "stack", direction: "column", gap: "small", children: [
+        { type: "select", label: "긴 이름표 테스트", value: { state: "selected" }, on_change: { set_state: "selected" }, style: "segmented", options: ["중복 제거", "연속 중복 제거", "고유 줄", "관계"] },
+        { type: "select", label: "선택됨", value: { state: "choice" }, on_change: { set_state: "choice" }, options: ["나이", "이름"] },
+        { type: "select", label: "선택 전", value: { state: "blankChoice" }, on_change: { set_state: "blankChoice" }, options: ["나이", "이름"] },
+      ] },
+    ] },
+  },
+  {
+    id: "input-control-review", name: "입력과 선택지 시험",
+    requires: { blocks: inputDisabledVersion, modules: {} }, permissions: [],
+    state: { value: "같은 값", number: 3, date: "2026-11-06", time: "12:00", search: "검색어", locked: true, choice: "well-known" },
+    ui: { type: "section", title: "옵션", child: { type: "stack", direction: "column", gap: "small", children: [
+      { type: "input", label: "열림", value: { state: "value" }, on_change: { set_state: "value" } },
+      { type: "input", label: "결과", value: { state: "value" }, read_only: { state: "locked" }, on_change: { set_state: "value" } },
+      { type: "input", kind: "number", spin: true, label: "읽기 숫자", value: { state: "number" }, read_only: { state: "locked" }, on_change: { set_state: "number" } },
+      { type: "input", kind: "date", label: "읽기 날짜", value: { state: "date" }, read_only: { state: "locked" }, on_change: { set_state: "date" } },
+      { type: "input", kind: "time", label: "읽기 시간", value: { state: "time" }, read_only: { state: "locked" }, on_change: { set_state: "time" } },
+      { type: "input", kind: "search", label: "읽기 검색", value: { state: "search" }, read_only: { state: "locked" }, on_change: { set_state: "search" } },
+      { type: "input", label: "읽기 선택지", value: { state: "value" }, read_only: { state: "locked" }, options: ["같은 값", "다른 값"], on_change: { set_state: "value" } },
+      { type: "input", kind: "number", spin: true, label: "잠긴 숫자", value: { state: "number" }, disabled: true, on_change: { set_state: "number" } },
+      { type: "input", kind: "date", label: "잠긴 날짜", value: { state: "date" }, disabled: true, on_change: { set_state: "date" } },
+      { type: "input", kind: "search", label: "잠긴 검색", value: { state: "search" }, disabled: true, on_change: { set_state: "search" } },
+      { type: "select", label: "포트 범위", value: { state: "choice" }, on_change: { set_state: "choice" }, style: "segmented", options: [
+        { value: "well-known", label: "잘 알려진 포트" }, { value: "registered", label: "등록된 포트" },
+        { value: "dynamic", label: "동적 포트" }, { value: "custom", label: "직접 지정" },
+      ] },
+    ] } },
+  },
   {
     id: "input-read-only",
     name: "입력 읽기 전용",

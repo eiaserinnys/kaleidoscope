@@ -53,7 +53,7 @@ describe("shell core events", () => {
     await store.ready;
     const taskbar = screen.getByRole("toolbar", { name: "작업 표시줄" });
     expect(within(taskbar).getAllByRole("button").map((button) => button.getAttribute("aria-label"))).toEqual([
-      "이전 데스크톱", "앱 열기", "모든 창 최소화", "모든 창 최대화", "다음 데스크톱",
+      "이전 데스크톱", "앱 열기", "모든 창 최소화", "모든 창 다시 열기", "다음 데스크톱",
     ]);
     expect(within(document.querySelector(".ks-shell-bar") as HTMLElement).queryByRole("button", { name: "앱 열기" })).toBeNull();
     expect((within(taskbar).getByRole("button", { name: "이전 데스크톱" }) as HTMLButtonElement).disabled).toBe(true);
@@ -97,18 +97,24 @@ describe("shell core events", () => {
     store.dispose();
   });
 
-  it("전체 최대화는 최소화된 창을 포함해 z 순으로 펼치고 전체 최소화 후 비활성화한다", async () => {
+  it("다시 열기는 최소화된 창만 원래 크기와 최대화 상태로 연다", async () => {
     const snapshot = makeTestSnapshot();
     snapshot.shared.windows[0].minimized = true;
+    snapshot.shared.windows[0].maximized = true;
+    const original = structuredClone(snapshot.shared.windows);
     const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
     const calls = vi.spyOn(transport, "call");
     const store = createShellStore(transport);
     render(<Shell store={store} />);
     await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
-    await waitFor(() => expect(calls.mock.calls.filter(([request]) => request.op === "window.maximize").map(([request]) => request)).toEqual([
-      { op: "window.maximize", window_id: "editor-window" }, { op: "window.maximize", window_id: "viewer-window" },
-    ]));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 다시 열기" }));
+    await waitFor(() => expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "editor-window" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "모든 창 다시 열기" }) as HTMLButtonElement).disabled).toBe(true));
+    const restored = store.getSnapshot()!.shared.windows;
+    expect(restored[0].maximized).toBe(true);
+    expect(restored[0].rect).toEqual(original[0].rect);
+    expect(restored[1]).toEqual(original[1]);
+    expect(calls.mock.calls.filter(([request]) => request.op === "window.raise")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "모든 창 최소화" }));
     await waitFor(() => expect((screen.getByRole("button", { name: "모든 창 최소화" }) as HTMLButtonElement).disabled).toBe(true));
     store.dispose();
@@ -171,12 +177,12 @@ describe("shell core events", () => {
     expect(within(bar).getByRole("button", { name: "설정" })).toBeTruthy();
     fireEvent.click(within(bar).getByRole("button", { name: "모든 창 최소화" }));
     await waitFor(() => expect((within(bar).getByRole("button", { name: "모든 창 최소화" }) as HTMLButtonElement).disabled).toBe(true));
-    fireEvent.click(within(bar).getByRole("button", { name: "모든 창 최대화" }));
+    fireEvent.click(within(bar).getByRole("button", { name: "모든 창 다시 열기" }));
     await waitFor(() => expect(screen.getByTestId("system-window-settings").getAttribute("data-minimized")).toBe("false"));
     store.dispose();
   });
 
-  it("설정 창만 있어도 전체 최대화로 최소화된 설정을 펼친다", async () => {
+  it("설정 창만 있어도 최소화된 설정을 원래 크기로 펼친다", async () => {
     const snapshot = makeTestSnapshot();
     snapshot.shared.windows = [];
     const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
@@ -185,20 +191,21 @@ describe("shell core events", () => {
     fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "설정" }));
     fireEvent.click(screen.getByRole("button", { name: "모든 창 최소화" }));
     await waitFor(() => expect((screen.getByRole("button", { name: "모든 창 최소화" }) as HTMLButtonElement).disabled).toBe(true));
-    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 다시 열기" }));
     await waitFor(() => expect(screen.getByTestId("system-window-settings").getAttribute("data-minimized")).toBe("false"));
-    expect(screen.getByTestId("system-window-settings").getAttribute("data-maximized")).toBe("true");
+    expect(screen.getByTestId("system-window-settings").getAttribute("data-maximized")).toBe("false");
     store.dispose();
   });
 
   it.each([
-    { settingsOnTop: false, minimized: false },
-    { settingsOnTop: false, minimized: true },
-    { settingsOnTop: true, minimized: false },
-  ])("전체 최대화는 설정이 맨 위인지 $settingsOnTop, 최소화 창이 있는지 $minimized일 때 겹침 순서를 유지한다", async ({ settingsOnTop, minimized }) => {
+    { settingsOnTop: false, shortcut: false },
+    { settingsOnTop: true, shortcut: true },
+  ])("전체 다시 열기는 설정이 맨 위인지 $settingsOnTop, 단축키인지 $shortcut일 때 겹침 순서를 유지한다", async ({ settingsOnTop, shortcut }) => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");
-    const transport = createFakeTransport(makeTestSeed());
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.windows[0].maximized = true;
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot });
     const store = createShellStore(transport);
     render(<Shell store={store} />);
     await store.ready;
@@ -210,19 +217,22 @@ describe("shell core events", () => {
       fireEvent.pointerDown(b);
       await waitFor(() => expect(b.querySelector(".ks-window-frame-active")).toBeTruthy());
     }
-    if (minimized) await act(async () => { await transport.call({ op: "window.minimize", window_id: "editor-window" }); });
     const order = () => [a, settings, b].sort((left, right) => {
       const difference = Number(left.style.zIndex) - Number(right.style.zIndex);
       return difference || (left.compareDocumentPosition(right) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     });
     expect(order()).toEqual(settingsOnTop ? [a, b, settings] : [a, settings, b]);
-    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
-    await waitFor(() => expect([a, b, settings].every((element) => element.getAttribute("data-maximized") === "true" && element.getAttribute("data-minimized") === "false")).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최소화" }));
+    await waitFor(() => expect([a, b, settings].every((element) => element.getAttribute("data-minimized") === "true")).toBe(true));
+    if (shortcut) fireEvent.keyDown(window, { code: "ArrowUp", key: "ArrowUp", ctrlKey: true, altKey: true, shiftKey: true });
+    else fireEvent.click(screen.getByRole("button", { name: "모든 창 다시 열기" }));
+    await waitFor(() => expect([a, b, settings].every((element) => element.getAttribute("data-minimized") === "false")).toBe(true));
+    expect([a, b, settings].map((element) => element.getAttribute("data-maximized"))).toEqual(["true", "false", "false"]);
     expect(order()).toEqual(settingsOnTop ? [a, b, settings] : [a, settings, b]);
     store.dispose();
   });
 
-  it("최대화 응답이 상태 이벤트보다 먼저 와도 설정을 올리기 전 상태 반영을 기다린다", async () => {
+  it("다시 열기 응답이 상태 이벤트보다 먼저 와도 설정을 올리기 전 상태 반영을 기다린다", async () => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");
     const transport = createFakeTransport(makeTestSeed());
@@ -235,7 +245,7 @@ describe("shell core events", () => {
     });
     const original = transport.call.bind(transport);
     vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) => {
-      if (request.op === "window.maximize" && request.window_id === "editor-window") hold = true;
+      if (request.op === "window.raise" && request.window_id === "editor-window") hold = true;
       return original(request);
     }) as typeof transport.call);
     const store = createShellStore(transport);
@@ -245,11 +255,13 @@ describe("shell core events", () => {
     const b = screen.getByTestId("app-window-md-viewer");
     fireEvent.pointerDown(b);
     await waitFor(() => expect(b.querySelector(".ks-window-frame-active")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "모든 창 최대화" }));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 최소화" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "모든 창 최소화" }) as HTMLButtonElement).disabled).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "모든 창 다시 열기" }));
     await waitFor(() => expect(deliver).toBeDefined());
-    expect(screen.getByTestId("system-window-settings").getAttribute("data-maximized")).toBe("false");
+    expect(screen.getByTestId("system-window-settings").getAttribute("data-minimized")).toBe("true");
     await act(async () => deliver?.());
-    await waitFor(() => expect(b.getAttribute("data-maximized")).toBe("true"));
+    await waitFor(() => expect(b.getAttribute("data-minimized")).toBe("false"));
     const a = screen.getByTestId("app-window-md-editor");
     const settings = screen.getByTestId("system-window-settings");
     expect(Number(a.style.zIndex)).toBeLessThan(Number(settings.style.zIndex));

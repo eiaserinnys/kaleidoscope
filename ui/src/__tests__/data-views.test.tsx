@@ -45,7 +45,7 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
 }
 it("누른 칸과 다른 빈 곳에 놓으면 선택을 지우지 않고 빈 곳을 누르면 초점을 유지한다", async () => {
   const { calls } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },
-    items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: ["a"] }, 48);
+    items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: ["a"] }, 49);
   const a = await screen.findByRole("option", { name: "a" });
   const list = screen.getByRole("listbox");
   fireEvent.mouseDown(a); fireEvent.click(list);
@@ -58,14 +58,14 @@ it("누른 칸과 다른 빈 곳에 놓으면 선택을 지우지 않고 빈 곳
 });
 it.each(["single", "multiple"] as const)("%s에서 고를 수 없는 칸의 두 번째 누름은 열지 않는다", async (selection) => {
   const { calls } = setup({ type: "list", selection, selected: { state: "choice" }, items: [{ key: "folder", title: "폴더", selectable: false }],
-    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null }, 48);
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null }, 49);
   const folder = await screen.findByRole("option", { name: "폴더" });
   fireEvent.click(folder, { detail: 1 }); fireEvent.click(folder, { detail: 2 });
   await waitFor(() => expect(calls.mock.calls.filter(([c]) => c.op === "data.act" && c.pointer.endsWith("on_activate"))).toHaveLength(1));
 });
 it("앱이 선택을 바꾸면 이전 현재 칸 대신 남은 마지막 칸을 표시한다", async () => {
   const { transport } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" },
-    items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+    items: [{ key: "a", title: "a" }, { key: "b", title: "b" }], on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 49);
   const a = await screen.findByRole("option", { name: "a" });
   const b = screen.getByRole("option", { name: "b" });
   fireEvent.click(a);
@@ -76,7 +76,7 @@ it("앱이 선택을 바꾸면 이전 현재 칸 대신 남은 마지막 칸을 
 });
 it.each(["single", "multiple"] as const)("%s에서 고르기 뒤 활성화하며 수정 키와 이동은 활성화하지 않는다", async (selection) => {
   const { calls, originalCall } = setup({ type: "list", selection, selected: { state: "choice" }, items: [{ key: "a", title: "a" }, { key: "b", title: "b" }],
-    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null }, 48);
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null }, 49);
   const a = await screen.findByRole("option", { name: "a" });
   let release!: () => void;
   const pending = new Promise<void>((resolve) => { release = resolve; });
@@ -100,7 +100,7 @@ it.each(["single", "multiple"] as const)("%s의 느린 열기는 다음 선택�
   const { calls, originalCall } = setup({ type: "stack", children: [
     { type: "list", selection, selected: { state: "choice" }, items, on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } },
     { type: "button", label: "확인", on_click: { set_state: "confirmed" } },
-  ] } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null, confirmed: null }, 48);
+  ] } as unknown as Block, { choice: selection === "multiple" ? [] : null, opened: null, confirmed: null }, 49);
   const a = await screen.findByRole("option", { name: "a" });
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
@@ -121,7 +121,7 @@ it.each(["single", "multiple"] as const)("%s의 느린 열기는 다음 선택�
 it("합친 키 이동 사이의 열기는 남겨 둔다", async () => {
   const items = ["a", "b", "c", "d"].map(key => ({ key, title: key }));
   const { calls, originalCall } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
-    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 48);
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 49);
   const a = await screen.findByRole("option", { name: "a" });
   let release!: () => void;
   const pending = new Promise<void>(resolve => { release = resolve; });
@@ -145,7 +145,7 @@ it("열기 없는 single은 앞 응답을 기다리지 않고 원래대로 선�
   await act(async () => { release(); });
 });
 it("화면 밖에 유지된 초점 칸으로 배경 누름 뒤 돌아간다", async () => {
-  setup({ type: "list", selection: "multiple", items: Array.from({ length: 80 }, (_, i) => ({ key: String(i), title: `항목 ${i}` })), selected: { state: "choice" }, on_select: { set_state: "choice" } } as unknown as Block, { choice: ["0"] }, 48);
+  setup({ type: "list", selection: "multiple", items: Array.from({ length: 80 }, (_, i) => ({ key: String(i), title: `항목 ${i}` })), selected: { state: "choice" }, on_select: { set_state: "choice" } } as unknown as Block, { choice: ["0"] }, 49);
   const first = await screen.findByRole("option", { name: "항목 0" });
   const list = screen.getByRole("listbox");
   act(() => { list.scrollTop = 2000; fireEvent.scroll(list); });
@@ -170,7 +170,7 @@ it("여러 항목 선택은 묶음을 넘어 순서대로 선택하고 고를 �
   const folder = { key: "folder", title: "폴더", selectable: false };
   const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" },
     grouped: true, items: [{ title: "첫째", items: items.slice(0, 2) }, { title: "둘째", items: [folder, ...items.slice(2)] }],
-    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 48);
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 49);
   const b = await screen.findByRole("option", { name: "b" });
   fireEvent.click(b);
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: ["b"], item: items[1] })));
@@ -196,7 +196,7 @@ it("여러 항목 선택은 묶음을 넘어 순서대로 선택하고 고를 �
 it("여러 선택의 키 이동과 빈 배경은 선택을 바꾼다", async () => {
   const items = ["a", "b", "c"].map((key) => ({ key, title: key }));
   const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
-    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 49);
   const a = await screen.findByRole("option", { name: "a" });
   fireEvent.click(a);
   fireEvent.keyDown(a, { key: "ArrowDown", shiftKey: true });
@@ -208,7 +208,7 @@ it("여러 선택의 키 이동과 빈 배경은 선택을 바꾼다", async () 
 it("응답이 느릴 때 연속 Ctrl 선택을 순서대로 보낸다", async () => {
   const items = ["b", "d"].map((key) => ({ key, title: key }));
   const { calls, originalCall } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
-    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 49);
   const b = await screen.findByRole("option", { name: "b" });
   let release!: () => void;
   const delayed = new Promise<void>((resolve) => { release = resolve; });
@@ -222,7 +222,7 @@ it("응답이 느릴 때 연속 Ctrl 선택을 순서대로 보낸다", async ()
 it("한 칸을 고르면 관계없는 칸은 다시 그리지 않는다", async () => {
   const items = ["a", "b", "c"].map((key) => ({ key, title: key, image: { asset: key } }));
   setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, items,
-    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 48);
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: [] }, 49);
   const b = await screen.findByRole("option", { name: "b" });
   const before = mediaRenders.get("c");
   fireEvent.click(b);
@@ -232,7 +232,7 @@ it("한 칸을 고르면 관계없는 칸은 다시 그리지 않는다", async 
 it("앵커가 없을 때 Shift 누름은 누르기 전 초점에서 범위를 잡는다", async () => {
   const items = ["a", "b", "c", "d"].map((key) => ({ key, title: key }));
   const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items,
-    on_select: { set_state: "choice" } } as unknown as Block, { choice: ["b"] }, 48);
+    on_select: { set_state: "choice" } } as unknown as Block, { choice: ["b"] }, 49);
   const b = await screen.findByRole("option", { name: "b" });
   const d = screen.getByRole("option", { name: "d" });
   act(() => b.focus());
@@ -245,7 +245,7 @@ it("선택 불가 칸으로 범위를 옮기면 초점만 옮기고 활성화는
   const a = { key: "a", title: "a" };
   const folder = { key: "folder", title: "폴더", selectable: false };
   const { calls } = setup({ type: "list", selection: "multiple", selected: { state: "choice" }, items: [a, folder, { key: "b", title: "b" }],
-    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 48);
+    on_select: { set_state: "choice" }, on_activate: { set_state: "opened" } } as unknown as Block, { choice: [], opened: null }, 49);
   const first = await screen.findByRole("option", { name: "a" });
   fireEvent.click(first);
   fireEvent.keyDown(first, { key: "ArrowDown", shiftKey: true });

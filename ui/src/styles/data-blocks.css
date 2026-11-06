@@ -35,16 +35,16 @@
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; padding-inline: var(--ks-space-3); }
 /* 뒤에 내용이 이어지는 쌓기와 세로 분할은 창 바닥 여백을 갖지 않는다. */
-.ks-data-stack.is-column > .ks-data-stack-item:has(~ .ks-data-stack-item:not(:empty)),
+.ks-data-stack.is-column > .ks-data-stack-item:has(~ .ks-data-stack-item:not(:empty):not(.is-dialog)),
 :is(.ks-split.is-stacked, .ks-split-column) > .ks-split-pane:not(:last-child) { --ks-pane-bottom-space: 0px; }
 /* 구역의 자식 스크롤 밖에 남긴다. 탭은 구역 안팎 어느 쪽이든 탭 패널이 맡는다. */
-:is(.ks-split-pane, .ks-data-window-body) > .ks-data-section:not(.ks-data-tab-panel *):not(:has(> .ks-data-section-child > .ks-data-tabs)) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }
+:is(.ks-split-pane, .ks-data-window-body, .ks-data-stack-item.is-fill:not(.ks-data-section-child *, .ks-dialog *)) > .ks-data-section:not(.ks-data-tab-panel *):not(:has(> .ks-data-section-child > .ks-data-tabs)) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }
 /* 같은 분할의 직접 콘텐츠도 구역과 끝선을 맞춘다. 중간 쌓인 칸은 기존 간격만 쓴다. */
 .ks-split:has(> .ks-split-pane > .ks-data-section) > .ks-split-pane:not(:has(> :is(.ks-data-section, .ks-data-tabs, .ks-data-stack, .ks-split))):not(.ks-split.is-stacked > .ks-split-pane:not(:last-child)):not(.ks-data-tab-panel *) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }
 /* 별도 여백 주인이 없는 창 본문 쌓기는 마지막 글의 자연 높이에 여백을 포함한다. */
 .ks-data-window-body > .ks-data-stack.is-column:not(:has(.ks-split, .ks-data-section, .ks-data-tabs)) .ks-data-stack-item:last-child > .ks-data-text:not(.ks-data-stack-item:not(:last-child) *) { padding-block-end: var(--ks-space-3); }
-:is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) { display: flex; height: 100%; flex-direction: column; }
-:is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) > .ks-data-section-child { flex: 1 1 auto; min-height: 0; overflow: auto; }
+:is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body, .ks-data-stack-item.is-fill) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) { display: flex; height: 100%; flex-direction: column; }
+:is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body, .ks-data-stack-item.is-fill) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) > .ks-data-section-child { flex: 1 1 auto; min-height: 0; overflow: auto; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) :is(
   .ks-data-section,
   .ks-data-tab-header,
@@ -60,13 +60,14 @@
   .ks-data-stack-item > .ks-data-skeleton,
   .ks-timeline-labels > div
 ) { padding-inline: 0; }
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-tab-list { margin-inline-end: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-feed-entry-nested { padding-inline-end: 0; }
 :is(.ks-data-section, .ks-dialog) .ks-markdown-view:not(.ks-data-tab-panel > .ks-markdown-view) { padding-inline: 0; background: transparent; }
 .ks-split-pane > .ks-data-section, .ks-data-tab-panel > .ks-data-section { display: flex; height: 100%; flex-direction: column; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child, .ks-data-tab-panel > .ks-data-section > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child { overflow-y: auto; }
 .ks-data-section-child > .ks-data-stack { height: auto; }
-.ks-data-section-child > .ks-data-stack.is-column.has-fill-list { height: 100%; }
+.ks-data-section-child > .ks-data-stack.is-column.has-fill-list { height: var(--ks-fill-list-height, 100%); }
 .ks-data-section-child > .ks-data-stack.is-column.has-textarea-fill { height: 100%; }
 .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-skeleton { padding-block: var(--ks-space-3); }
 .ks-split-pane > .ks-data-skeleton { box-sizing: border-box; padding: var(--ks-space-3); }
@@ -79,7 +80,7 @@
 .ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:last-child) { padding-inline-end: var(--ks-space-3); }
 .ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:first-child) { padding-inline-start: var(--ks-space-3); }
 .ks-split.is-stacked { display: flex; flex-direction: column; overflow-y: auto; }
-.ks-split.is-stacked > .ks-split-pane { flex: 0 0 auto; overflow: visible; }
+.ks-split.is-stacked > .ks-split-pane { --ks-fill-list-basis: auto; --ks-fill-list-height: auto; flex: 0 0 auto; overflow: visible; }
 .ks-split.is-stacked > .ks-split-pane:not(:has(> .ks-split.is-stacked)):not(:has(
   > .ks-data-stack.is-column > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) > .ks-data-stack.is-column:not(.has-explicit-fill),
   > .ks-data-stack.is-column > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill)
@@ -88,7 +89,7 @@
   .ks-explorer, .ks-file-tree, .ks-code-view, .ks-markdown-editor, .ks-markdown-view,
   .ks-agent-chat, .ks-html-view, .ks-web-view, .ks-canvas, .ks-map, .ks-chart, .ks-timeline,
   .ks-split:not(.is-stacked)
-)) { height: calc(var(--ks-pane-min-size) * 2); }
+)) { --ks-fill-list-basis: 0; --ks-fill-list-height: 100%; height: calc(var(--ks-pane-min-size) * 2); }
 .ks-split.is-stacked > .ks-split-pane > .ks-split.is-stacked { height: auto; }
 .ks-split.is-stacked > .ks-split-handle { display: none; }
 .ks-split.is-stacked > .ks-split-pane:not(:last-child) { padding-bottom: var(--ks-space-2); }
@@ -153,7 +154,10 @@
 .ks-data-stack-item > .ks-data-input:not(.ks-data-tab-panel *) { margin-block: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-input:not(.ks-data-tab-panel *) { width: 100%; margin-inline: 0; }
 .ks-data-input .ks-text-input { display: block; font-family: inherit; }
-.ks-data-input .ks-text-input[readonly] { color: var(--ks-color-muted); }
+.ks-data-input .ks-text-input[readonly]:not(:disabled) { background: transparent; border-color: transparent; }
+.ks-data-input:has(> .ks-text-input[readonly]:not(:disabled)) > :is(.ks-number-spin, .ks-data-input-clear) { display: none; }
+.ks-data-input:has(> :disabled) { opacity: .56; cursor: default; }
+.ks-data-input:has(> .ks-text-input:disabled) :is(.ks-number-spin, .ks-data-input-clear) > :disabled { opacity: 1; }
 .ks-data-input textarea { padding-block: calc((var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)) / 2 - var(--ks-line-width)); max-height: calc(var(--ks-type-body) * var(--ks-line-body) * 8 + var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)); resize: none; overflow-y: auto; }
 .ks-data-input.has-rows { --ks-fill-textarea-max: none; }
 .ks-data-input.has-rows textarea { max-height: none; }
@@ -204,8 +208,12 @@
 .ks-data-input-search, .ks-data-input-clear { position: absolute; top: 50%; transform: translateY(-50%); display: flex; align-items: center; color: var(--ks-color-muted); }
 .ks-data-input-search { left: var(--ks-space-2); }
 .ks-data-input-clear { right: var(--ks-space-1); }
-.ks-data-segmented { display: inline-flex; min-width: 0; }
+.ks-data-segmented { display: inline-flex; min-width: 0; max-width: 100%; }
 .ks-data-segmented .ks-button { border-radius: 0; }
+.ks-data-segmented > .ks-button { flex: 1 1 auto; min-width: 0; }
+.ks-data-segmented .ks-truncate-label { min-width: 1.5em; }
+.ks-data-segmented > .ks-button:has(> .ks-truncate-label) { padding-inline: var(--ks-space-1); }
+.ks-data-segmented > .ks-button:has(> .ks-truncate-label)::before, .ks-data-segmented > .ks-button:has(> .ks-truncate-label)::after { content: ""; width: calc(var(--ks-space-3) - var(--ks-space-1)); min-width: 0; flex: 0 100000 auto; }
 .ks-data-segmented .ks-button:first-child { border-radius: var(--ks-radius-small) 0 0 var(--ks-radius-small); }
 .ks-data-segmented .ks-button:last-child { border-radius: 0 var(--ks-radius-small) var(--ks-radius-small) 0; }
 .ks-data-segmented > .ks-button + .ks-button { margin-inline-start: calc(-1 * var(--ks-line-width)); }
@@ -225,7 +233,9 @@
 .ks-data-button.is-row.is-copied > .ks-button:hover:not(:disabled) { background: var(--ks-color-selection); }
 .ks-data-button.is-row.is-copied > .ks-button svg { color: var(--ks-color-accent); }
 .ks-truncate-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-block: .25em; margin-block: -.25em; }
-.ks-select-button { max-width: 100%; min-width: 0; }
+.ks-select-button { max-width: 100%; min-width: 0; gap: var(--ks-space-2); }
+.ks-select-choice-label:empty { display: none; }
+.ks-select-button:has(> .ks-select-choice-label:empty) { min-width: calc(var(--ks-space-6) * 2); justify-content: flex-end; }
 .ks-data-button.is-chip > .ks-button,
 .ks-data-button.is-chip > .ks-icon-button { border-radius: var(--ks-space-4); }
 .ks-data-button.is-chip > .ks-button[aria-pressed="true"] { border-color: var(--ks-color-accent); }
@@ -444,6 +454,7 @@
 .ks-timeline-playhead::before { position: absolute; top: 0; left: calc(-1 * var(--ks-space-2)); width: 0; height: 0; border-inline: var(--ks-space-2) solid transparent; border-top: var(--ks-space-2) solid var(--ks-color-accent); content: ""; }
 .ks-timeline-marker { position: absolute; top: 0; width: var(--ks-space-3); height: var(--ks-space-3); transform: translateX(-50%); border: 0; background: var(--ks-color-accent); cursor: ew-resize; }
 
+.ks-select-field { max-width: 100%; min-width: 0; }
 .ks-select-field > .ks-button { justify-content: space-between; text-align: start; }
 
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-input-field { display: flex; width: 100%; min-width: 0; }
