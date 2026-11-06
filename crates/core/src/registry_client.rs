@@ -73,7 +73,19 @@ pub(crate) struct AssetDownload {
     pub(crate) mime: String,
 }
 
+pub(crate) struct CommentRequest<'a> {
+    pub(crate) method: reqwest::Method,
+    pub(crate) app_id: &'a str,
+    pub(crate) id: Option<&'a str>,
+    pub(crate) suffix: Option<&'a str>,
+    pub(crate) cursor: Option<&'a str>,
+    pub(crate) body: Option<serde_json::Value>,
+}
+
 pub(crate) trait RegistryClient: Send + Sync + 'static {
+    fn app_comments_request(&self, _url: &str, _token: &str, _request: &CommentRequest<'_>) -> Result<Vec<u8>, RegistryError> {
+        Err(RegistryError::failure(FailureStage::Send, "커멘트 서버를 사용할 수 없습니다"))
+    }
     fn install_store_app(&self, _url: &str, _token: &str, _request: &kaleidoscope_contract::store::DeviceInstallRequest) -> Result<kaleidoscope_contract::store::DeviceInstallReply, RegistryError> {
         Err(RegistryError::failure(FailureStage::Send, "앱 설치를 사용할 수 없습니다"))
     }
@@ -429,6 +441,29 @@ impl HttpRegistryClient {
 }
 
 impl RegistryClient for HttpRegistryClient {
+    fn app_comments_request(&self, url: &str, token: &str, request: &CommentRequest<'_>) -> Result<Vec<u8>, RegistryError> {
+        let mut address = reqwest::Url::parse(&format!("{}/api/device/app-comments/", url.trim_end_matches('/')))
+            .map_err(|error| RegistryError::failure(FailureStage::Send, error.to_string()))?;
+        {
+            let mut segments = address.path_segments_mut().map_err(|_| RegistryError::failure(FailureStage::Send, "커멘트 서버 주소를 만들 수 없습니다"))?;
+            segments.pop_if_empty().push(request.app_id);
+            if let Some(id) = request.id { segments.push(id); }
+            if let Some(suffix) = request.suffix { segments.push(suffix); }
+        }
+        if let Some(cursor) = request.cursor { address.query_pairs_mut().append_pair("cursor", cursor); }
+        let mut builder = self.requests()?.request(request.method.clone(), address).bearer_auth(token);
+        if let Some(body) = &request.body { builder = builder.json(body); }
+        let response = builder.send_registry()?;
+        let status = response.status();
+        let host = response_host(&response);
+        let bytes = response.bytes().map_err(response_read_failure)?;
+        if status.is_success() { return Ok(bytes.to_vec()); }
+        if let Ok(error) = serde_json::from_slice::<CoreError>(&bytes) {
+            return Err(RegistryError::Validation(error));
+        }
+        check_status(status, &bytes, &host)?;
+        Err(status_failure(status, &host))
+    }
     fn post_preferences(
         &self,
         url: &str,

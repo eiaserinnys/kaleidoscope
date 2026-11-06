@@ -94,6 +94,7 @@ pub(crate) fn activate(
     let exists = dir.join("state.json").exists();
     let mut shared = storage::load_shared(&dir)?;
     shared.preferences = None;
+    shared.app_comments = None;
     let device = if exists {
         storage::load_device(&dir)?
     } else {
