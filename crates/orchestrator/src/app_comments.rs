@@ -95,7 +95,7 @@ pub(super) fn meta(
         )
         .optional()?
         .unwrap_or(0);
-    let (open_count, unsent_count, unread_reply_count) = db.query_row("SELECT count(*), count(*) FILTER (WHERE sent_at IS NULL), count(*) FILTER (WHERE unread_reply=1) FROM app_comments WHERE account_id=?1 AND app_id=?2 AND resolved=0",params![account,app_id],|r| Ok((r.get::<_,i64>(0)? as u64,r.get::<_,i64>(1)? as u64,r.get::<_,i64>(2)? as u64)))?;
+    let (open_count, unsent_count, unread_reply_count) = db.query_row("SELECT count(*) FILTER (WHERE resolved=0), count(*) FILTER (WHERE resolved=0 AND sent_at IS NULL), count(*) FILTER (WHERE unread_reply=1) FROM app_comments WHERE account_id=?1 AND app_id=?2",params![account,app_id],|r| Ok((r.get::<_,i64>(0)? as u64,r.get::<_,i64>(1)? as u64,r.get::<_,i64>(2)? as u64)))?;
     Ok(AppCommentAppMeta {
         app_id: app_id.to_owned(),
         revision: revision as u64,

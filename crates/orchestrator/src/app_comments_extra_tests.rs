@@ -128,3 +128,57 @@ async fn app_comments_numbers_idempotency_and_account_scoped_writes() {
         2
     );
 }
+
+#[tokio::test]
+async fn resolved_agent_reply_remains_unread_until_opened() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    let token = device(&state, "owner", &account);
+    assert_eq!(
+        request(
+            &state,
+            &token,
+            "POST",
+            "/api/device/app-comments/app",
+            create("one")
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let app = router(state.clone());
+    let session = mcp_session(&app, &token).await;
+    let reply = mcp_call(
+        &app,
+        &token,
+        &session,
+        "reply_app_comment",
+        json!({"comment_id":"one","text":"수정했습니다"}),
+    )
+    .await;
+    let reply: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(reply["meta"]["unread_reply_count"], 1);
+    let resolved = mcp_call(
+        &app,
+        &token,
+        &session,
+        "resolve_app_comment",
+        json!({"comment_id":"one","resolved":true,"fixed_app_version":2}),
+    )
+    .await;
+    let resolved: Value =
+        serde_json::from_str(resolved["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(resolved["meta"]["open_count"], 0);
+    assert_eq!(resolved["meta"]["unsent_count"], 0);
+    assert_eq!(resolved["meta"]["unread_reply_count"], 1);
+    let (_, read) = request(
+        &state,
+        &token,
+        "POST",
+        "/api/device/app-comments/app/one/read",
+        json!(null),
+    )
+    .await;
+    assert_eq!(read["meta"]["unread_reply_count"], 0);
+}
