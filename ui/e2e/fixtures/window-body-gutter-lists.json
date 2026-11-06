@@ -3,7 +3,7 @@
   "name": "몸통 스크롤 블록",
   "description": "몸통이 스크롤하는 목록과 표",
   "requires": {
-    "blocks": 41,
+    "blocks": 42,
     "modules": {}
   },
   "permissions": [],
@@ -277,7 +277,9 @@
       {
         "type": "button",
         "label": "저장",
-        "on_click": []
+        "on_click": {
+          "copy_text": "저장"
+        }
       },
       {
         "type": "feed",
