@@ -39,6 +39,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   const clickedClosed = useRef(false);
   const selectAfterChoose = useRef(false);
   const autoSelected = useRef(false);
+  const releaseOnFocus = useRef(false);
   const suppressFocus = useRef(false);
   const selectAll = (element: HTMLInputElement) => { element.select(); autoSelected.current = true; };
   const clickSelection = useRef<(() => void) | null>(null);
@@ -123,10 +124,10 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   };
   return <>
     <input {...inputProps} ref={inputRef} role="combobox" aria-autocomplete="list" aria-expanded={popupVisible} aria-controls={popupVisible ? listId : undefined} aria-activedescendant={popupVisible ? activeId : undefined}
-      onPointerDown={(event) => { if (event.button === 0) { cancelClickSelection(); const element = event.currentTarget; if (autoSelected.current && element.selectionStart === 0 && element.selectionEnd === element.value.length) element.setSelectionRange(element.value.length, element.value.length); autoSelected.current = false; } pointer.current = true; clickedClosed.current = !open; inputProps.onPointerDown?.(event); }}
+      onPointerDown={(event) => { if (event.button === 0) { cancelClickSelection(); const element = event.currentTarget; if (autoSelected.current && element.selectionStart === 0 && element.selectionEnd === element.value.length) { element.setSelectionRange(element.value.length, element.value.length); releaseOnFocus.current = document.activeElement !== element; } autoSelected.current = false; } pointer.current = true; clickedClosed.current = !open; inputProps.onPointerDown?.(event); }}
       onPointerUp={(event) => { pointer.current = false; inputProps.onPointerUp?.(event); }}
       onPointerCancel={() => { pointer.current = false; clickedClosed.current = false; }}
-      onFocus={(event) => { inputProps.onFocus?.(event); if (!suppressFocus.current) { if (optionsOnly && !inputProps.readOnly && !pointer.current) selectAll(event.currentTarget); if (!isUnclaimedFocus(event.currentTarget)) show(); } }}
+      onFocus={(event) => { inputProps.onFocus?.(event); if (releaseOnFocus.current) { releaseOnFocus.current = false; const element = event.currentTarget; element.setSelectionRange(element.value.length, element.value.length); } if (!suppressFocus.current) { if (optionsOnly && !inputProps.readOnly && !pointer.current) selectAll(event.currentTarget); if (!isUnclaimedFocus(event.currentTarget)) show(); } }}
       onClick={(event) => {
         inputProps.onClick?.(event);
         const element = event.currentTarget;

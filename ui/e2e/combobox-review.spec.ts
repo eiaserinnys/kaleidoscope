@@ -27,6 +27,21 @@ test("포인터 드래그와 더블클릭은 일부 글자 선택을 보존한�
   expect(await selection(f)).toEqual([6, 10]);
 });
 
+test("칸을 눌러 전체 선택한 뒤 초점을 뺐다가 끌어도 값이 끌려 나가지 않는다", async ({ page }) => {
+  const f = page.getByRole("combobox", { name: "글자 선택" });
+  await f.scrollIntoViewIfNeeded();
+  await page.evaluate(() => { (window as any).dragStarts = 0; document.addEventListener("dragstart", () => (window as any).dragStarts++); });
+  await f.click();
+  const whole = await f.evaluate((e: HTMLInputElement) => e.value.length);
+  await expect.poll(() => selection(f)).toEqual([0, whole]);
+  await f.press("Escape");
+  await f.blur();
+  const a = await textPoint(f, 2); const b = await textPoint(f, 8);
+  await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 8 }); await page.mouse.up();
+  expect(await selection(f)).toEqual([2, 8]);
+  expect(await page.evaluate(() => (window as any).dragStarts)).toBe(0);
+});
+
 for (const method of ["이름", "행", "방향키"]) test(method + " 선택 직후 blur 없이 다시 입력한다", async ({ page }) => {
   const f = page.getByRole("combobox", { name: "글자 선택" });
   await f.click();
