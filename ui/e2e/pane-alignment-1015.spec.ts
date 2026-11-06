@@ -52,6 +52,49 @@ test("구역 머리는 동작 종류에 관계없이 같은 높이다", async ({
   expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
 });
 
+test("스크롤된 묶음 머리는 고른 행의 양 끝과 곡률을 따른다", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/?preview=pane-alignment-1015");
+  const app = page.getByTestId("app-window-pane-alignment-1015");
+  const list = app.locator(".ks-split-row > .ks-split-pane > .ks-list").first();
+  await expect(list.locator(".ks-list-row").first()).toBeVisible();
+  await list.evaluate(el => { el.scrollTop = el.scrollHeight / 2; });
+  const sticky = list.locator(".ks-view-sticky .ks-view-group");
+  await expect(sticky).toBeVisible();
+  const visibleIndex = await list.locator(".ks-list-row").evaluateAll(rows => {
+    const viewport = rows[0].closest(".ks-list")!.getBoundingClientRect();
+    const heading = rows[0].closest(".ks-list")!.querySelector(".ks-view-sticky .ks-view-group")!.getBoundingClientRect();
+    return rows.findIndex(row => {
+      const box = row.getBoundingClientRect();
+      return box.top >= heading.bottom && box.bottom <= viewport.bottom;
+    });
+  });
+  expect(visibleIndex).toBeGreaterThanOrEqual(0);
+  await list.locator(".ks-list-row").nth(visibleIndex).click();
+  await expect(list.locator(".ks-list-row.is-selected")).toBeVisible();
+  const metrics = await list.evaluate(el => {
+    const heading = el.querySelector<HTMLElement>(".ks-view-sticky .ks-view-group")!;
+    const selected = el.querySelector<HTMLElement>(".ks-list-row.is-selected")!;
+    const text = heading.querySelector("strong")!.getBoundingClientRect();
+    const rowText = selected.querySelector(".ks-list-title")!.getBoundingClientRect();
+    const headBox = heading.getBoundingClientRect();
+    const rowBox = selected.getBoundingClientRect();
+    const paneBox = el.parentElement!.getBoundingClientRect();
+    const style = getComputedStyle(heading);
+    return { headLeft: headBox.left, headRight: headBox.right, rowLeft: rowBox.left, rowRight: rowBox.right,
+      textLeft: text.left, rowTextLeft: rowText.left, paneLeft: paneBox.left,
+      inset: parseFloat(style.getPropertyValue("--ks-space-1")), radius: parseFloat(style.borderTopLeftRadius),
+      expectedRadius: parseFloat(getComputedStyle(selected).borderTopLeftRadius), scrollable: el.scrollHeight > el.clientHeight };
+  });
+  console.log(`붙는 묶음 머리: ${JSON.stringify(metrics)}`);
+  expect(metrics.scrollable).toBe(true);
+  expect(Math.abs(metrics.headLeft - metrics.rowLeft)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.headRight - metrics.rowRight)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.textLeft - metrics.rowTextLeft)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.rowLeft - metrics.paneLeft - metrics.inset)).toBeLessThanOrEqual(1);
+  expect(metrics.radius).toBe(metrics.expectedRadius);
+});
+
 test("가로 분할 안의 세로 분할도 첫 줄과 머리 높이를 맞춘다", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/?preview=pane-nested-1015");
