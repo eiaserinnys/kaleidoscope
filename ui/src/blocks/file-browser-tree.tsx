@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { CoreError, FolderEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
-import { Button, ErrorId, IconButton, StatusText } from "../components/primitives";
+import { ErrorId, IconButton, StatusText } from "../components/primitives";
 import { FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { TextInput } from "../components/text-input";
 import { END_ACTION_ID, TreeView } from "../components/tree/tree-view";
@@ -14,6 +14,7 @@ import { useShellSelector } from "../core/shell-store";
 import { createFileFolderBackend, type FolderBackend } from "./folder-backend";
 import { useFolderActions } from "./folder-actions";
 import { useFolderDrag } from "./folder-drag";
+import { FileGrant } from "./file-grant";
 
 interface CreatingFile {
   directory: string;
@@ -604,10 +605,7 @@ export function FileBrowserTree({
       {pane?.collapsed ? (
         <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span>
       ) : !hasRoot ? (
-        <div className="ks-file-tree-ungranted">
-          <Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) void pickFolder(); }}>{permissionLabel} 고르기</Button>
-          {actionError ? <FolderTreeError error={actionError} /> : null}
-        </div>
+        <FileGrant context={context} permission={permission} pickerLabel={`${permissionLabel} 고르기`} />
       ) : (
         <>
           {header ? <FolderTreeHeader label={rootName}>

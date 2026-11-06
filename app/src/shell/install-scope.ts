@@ -1,4 +1,4 @@
-import type { AppDefinition } from "@kaleidoscope/ui";
+import { knownFolderNames, type AppDefinition } from "@kaleidoscope/ui";
 
 type PermissionDecl = AppDefinition["permissions"][number];
 type ClientDecl = NonNullable<AppDefinition["client"]>;
@@ -59,6 +59,7 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
   const group = (index: number, sentence: string, tone: ConsentGroup["tone"] = "normal") =>
     groups[index] ??= { tone, sentence, rows: [], notes: [] };
   const httpHosts = new Map<string, { labels: string[]; paths: string[] }>();
+  const defaultFolders = new Map<string, ConsentGroup>();
 
   for (const permission of definition.permissions) {
     if (!Object.hasOwn(permissionKinds, permission.module)) {
@@ -77,6 +78,16 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
         break;
       }
       case "files": {
+        if (permission.scope !== "pc" && permission.default_folder) {
+          const key = `${permission.default_folder}:${permission.access}`;
+          let item = defaultFolders.get(key);
+          if (!item) {
+            item = { tone: "normal", sentence: `이 기기에서 허용한 ${knownFolderNames[permission.default_folder]} 폴더 또는 내가 고른 폴더의 파일을 ${permission.access === "read" ? "읽습니다" : "읽고 고칩니다"}`, rows: [], notes: ["기본 폴더는 이 기기에서 처음 사용할 때 허용합니다"] };
+            defaultFolders.set(key, item);
+          }
+          item.rows.push({ reason: permission.label });
+          break;
+        }
         const index = permission.scope === "pc" ? 4 : permission.access === "read" ? 2 : 3;
         const sentence = index === 4 ? "이 PC의 파일을 둘러보고 읽습니다" : index === 2 ? "내가 고른 폴더의 파일을 읽습니다" : "내가 고른 폴더의 파일을 읽고 고칩니다";
         group(index, sentence).rows.push({ reason: permission.label });
@@ -124,5 +135,5 @@ export function describeInstallScope(definition: AppDefinition, workerPlace: "em
       group(11, "화면이 꺼지지 않게 합니다");
     }
   }
-  return groups.filter((item): item is ConsentGroup => item !== undefined);
+  return [...groups.filter((item): item is ConsentGroup => item !== undefined), ...defaultFolders.values()];
 }

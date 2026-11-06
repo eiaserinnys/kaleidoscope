@@ -4,7 +4,7 @@ import { toCoreError } from "../core/core-transport";
 import { useWindowData } from "../data/window-data";
 import { useWindowGrants } from "../data/window-state";
 import { DataIcon } from "./data-icons";
-import { FolderOpen } from "./icons";
+import { FileGrant } from "../blocks/file-grant";
 import { Button, EmptyState, ErrorId, Notice } from "./primitives";
 
 export function useFolderPick() {
@@ -37,7 +37,6 @@ export function BindingFailureNotice({ value, rootProps }: { value: BindingValue
 export function DataState({ value, compact = false, layout, loginFailure, onRetry, onLogin, rootProps }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; layout?: "row"; loginFailure?: { message: string; id?: string }; onRetry?: () => void; onLogin?: () => void; rootProps?: import("../comments/block-root").BlockRootProps }) {
   const data = useWindowData();
   const context = { store: data.store, window: { id: data.windowId } };
-  const { error, pick } = useFolderPick();
   const [loginError, setLoginError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const grants = useWindowGrants(context);
   const possiblePermissions = value.status === "failed"
@@ -52,7 +51,7 @@ export function DataState({ value, compact = false, layout, loginFailure, onRetr
   if (ungranted !== undefined && value.status === "failed" && value.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN") {
     const retry = value.retry;
     return <div {...rootProps} className={compact ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
-      <EmptyState icon={<FolderOpen size={compact ? "inline" : "empty"} />} text={error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : "폴더를 선택해 주세요"} action={<Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) pick(ungranted, () => void data.refresh(retry)); }}>폴더 선택</Button>} />
+      <FileGrant context={{ ...context, definition: data.definition }} permission={ungranted} compact={compact} contentsOnly onGranted={() => void data.refresh(retry)} />
     </div>;
   }
   const failureText = loginError ? <>{loginError.message}{loginError.id ? <> <ErrorId id={loginError.id} /></> : null}</> : value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : loginFailure ? <>{loginFailure.message}{loginFailure.id ? <> <ErrorId id={loginFailure.id} /></> : null}</> : "로그인이 필요합니다";
