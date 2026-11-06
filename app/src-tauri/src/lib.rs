@@ -6,6 +6,8 @@ mod e2e;
 mod freeze_cover;
 #[cfg(windows)]
 mod native_webview;
+#[cfg(windows)]
+mod shell_shortcuts;
 mod updater;
 #[cfg(windows)]
 mod web_control;
@@ -349,6 +351,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![core, core_bytes])
         .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                shell_shortcuts::clear();
+            }
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Resized(_)) {
                 if let (Some(core), Ok(minimized)) = (
                     window.app_handle().try_state::<Arc<Core>>(),

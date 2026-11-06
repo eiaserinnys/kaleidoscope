@@ -30,8 +30,10 @@ pub(crate) fn configure_main(app: &AppHandle) -> Result<(), Box<dyn std::error::
         format!("{scheme}://tauri.localhost/").parse()?
     };
     let origin = app_url.origin();
+    let shortcuts_app = app.clone();
     main.with_webview(move |native| {
         let result = (|| unsafe {
+            crate::shell_shortcuts::register(shortcuts_app, "main".into(), &native.controller())?;
             let webview = native.controller().CoreWebView2()?;
             webview
                 .Settings()?

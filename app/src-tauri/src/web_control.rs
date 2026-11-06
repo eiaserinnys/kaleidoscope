@@ -184,6 +184,7 @@ const VISIBLE_POINT_JS: &str = r#"function() {
 
 #[cfg(feature = "e2e")]
 pub(crate) enum ProbeCall {
+    NewDocument(String),
     EnableAccessibility,
     AccessibilityTree,
     BoxModel(i64),
@@ -198,6 +199,7 @@ pub(crate) enum ProbeCall {
 impl ProbeCall {
     fn protocol(self) -> (&'static str, Value) {
         match self {
+            Self::NewDocument(source) => ("Page.addScriptToEvaluateOnNewDocument", json!({"source":source})),
             Self::EnableAccessibility => ("Accessibility.enable", json!({})),
             Self::AccessibilityTree => ("Accessibility.getFullAXTree", json!({})),
             Self::BoxModel(id) => ("DOM.getBoxModel", json!({"backendNodeId": id})),

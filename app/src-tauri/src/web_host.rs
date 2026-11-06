@@ -135,9 +135,11 @@ fn register(view: &Webview, app: AppHandle, id: String, page: Page) -> Result<()
     let (tx, rx) = mpsc::channel();
     view.with_webview(move |native| {
         let result = (|| unsafe {
+            let controller = native.controller();
             let native = native.controller().CoreWebView2()?;
             let mut token = 0;
             crate::native_webview::register_child_menu(&native)?;
+            crate::shell_shortcuts::register(app.clone(), format!("web-{id}"), &controller)?;
             macro_rules! event {
                 ($method:ident, $handler:ident, $loading:expr) => {{
                     let app = app.clone();
@@ -292,6 +294,8 @@ impl WebHost for TauriWebHost {
         self.pages.lock().unwrap().insert(id.into(), page.clone());
         if let Err(e) = register(&view, self.app.clone(), id.into(), page.clone()) {
             self.pages.lock().unwrap().remove(id);
+            let label = label.clone();
+            let _ = view.with_webview(move |_| crate::shell_shortcuts::unregister(&label));
             let _ = view.close();
             return Err(e);
         }
@@ -466,6 +470,8 @@ impl WebHost for TauriWebHost {
         self.pages.lock().unwrap().remove(id);
         self.controls.lock().unwrap().remove(id);
         if let Some(view) = self.app.get_webview(&format!("web-{id}")) {
+            let label = format!("web-{id}");
+            self.on_main(move |_| { crate::shell_shortcuts::unregister(&label); Ok(()) }, |_| errors::WEB_HOST_DETACH_FAILED())?;
             view.close().map_err(|error| {
                 with_detail(
                     error,

@@ -128,3 +128,19 @@ pub(super) fn press_key(key: u16) -> Result<(), String> {
     }
     Ok(())
 }
+
+pub(crate) fn chord(modifiers: &[u16], key: u16) -> Result<(), String> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{INPUT_KEYBOARD, KEYBDINPUT, VIRTUAL_KEY};
+    let input = |key, up| INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT {
+        wVk: VIRTUAL_KEY(key), wScan: 0, dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() }, time: 0, dwExtraInfo: 0,
+    } } };
+    let send = |key, up| unsafe { SendInput(&[input(key, up)], std::mem::size_of::<INPUT>() as i32) == 1 };
+    let mut ok = true;
+    for &modifier in modifiers { ok &= send(modifier, false); }
+    ok &= send(key, false);
+    thread::sleep(Duration::from_millis(70));
+    // 중간 입력 실패에도 놓는 입력은 전부 보낸다.
+    ok &= send(key, true);
+    for &modifier in modifiers.iter().rev() { ok &= send(modifier, true); }
+    if ok { Ok(()) } else { Err("SendInput 조합 키를 모두 보내지 못함".into()) }
+}
