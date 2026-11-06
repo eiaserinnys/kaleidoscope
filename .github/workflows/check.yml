@@ -79,6 +79,7 @@ jobs:
       - run: pnpm --dir app build
       - run: cargo check -p kaleidoscope-app
       - run: cargo test -p kaleidoscope-app --lib --features e2e
+      - run: cargo test -p kaleidoscope-store-server -- --test-threads=1
       - run: cargo test -p kaleidoscope-core windows_process_cmd_terminates_descendants_in_unicode_cwd -- --test-threads=2
       - run: cargo test -p kaleidoscope-core windows_process_finds_new_user_path_without_restart -- --test-threads=2
       - name: Verify process file URI with a Unicode Windows path

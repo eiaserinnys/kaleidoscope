@@ -44,5 +44,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 [dev-dependencies]
 tempfile = "3"
 kaleidoscope-orchestrator = { path = "../orchestrator" }
+kaleidoscope-store-server = { path = "../store-server" }
+reqwest = { version = "0.12.4", default-features = false, features = ["blocking", "multipart", "rustls-tls"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
 tower = { version = "0.5", features = ["util"] }

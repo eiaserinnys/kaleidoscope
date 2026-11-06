@@ -2311,6 +2311,7 @@ dependencies = [
  "kaleidoscope-contract",
  "kaleidoscope-data",
  "kaleidoscope-orchestrator",
+ "kaleidoscope-store-server",
  "mime_guess",
  "opener",
  "percent-encoding",

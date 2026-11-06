@@ -7,6 +7,8 @@ mod transport;
 
 #[cfg(test)]
 pub(crate) mod tests;
+#[cfg(test)]
+mod server_integration_tests;
 
 use kaleidoscope_contract::{data::ResourceMediaRef, errors, CoreError};
 use std::collections::BTreeMap;
