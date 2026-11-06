@@ -37,7 +37,7 @@ export function WindowNotice() {
     ? clientFailed ? [<Button key="restart" onClick={() => { void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
     : [<Button key="retry" onClick={() => { void data.refresh(failed); }}>다시 받기</Button>, closeButton];
   if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} />;
-  return <Notice role="alert" errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
+  return <Notice role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
 }
 
 const STATUS_NOTICE_DURATION_MS = 5000;

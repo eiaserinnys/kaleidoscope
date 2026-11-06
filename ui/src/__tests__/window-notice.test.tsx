@@ -5,6 +5,7 @@ import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import * as windowData from "../data/window-data";
 import { WindowNotice } from "../data/window-notice";
+import { isFullyVisible } from "../blocks/web-surface-layer";
 import { makeTestSeed } from "./fixtures";
 
 const definition: AppDefinition = { id: "notices", name: "알림", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "text", value: "본문" } };
@@ -19,6 +20,28 @@ beforeEach(() => {
   render(<WindowNotice />);
 });
 afterEach(() => { cleanup(); store.dispose(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
+it.each(["동작 오류", "원천 실패"])("%s 알림이 겹친 네이티브 웹 표면을 가린다", (kind) => {
+  const surface = document.createElement("div");
+  document.body.append(surface);
+  const rect = new DOMRect(20, 20, 100, 80);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
+  vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => rect } as unknown as DOMRectList);
+  expect(isFullyVisible(surface)).toBe(true);
+
+  if (kind === "동작 오류") {
+    act(() => data.setNotice({ id: "TEST_ERROR", code: "invalid_request", message: "동작 오류", details: [] }));
+  } else {
+    cleanup();
+    vi.spyOn(data, "getSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
+    render(<WindowNotice />);
+  }
+  expect(screen.getByRole("alert")).toBeTruthy();
+  expect(isFullyVisible(surface)).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  expect(isFullyVisible(surface)).toBe(true);
+  surface.remove();
+});
 
 it("정보 알림은 잠시 보인 뒤 사라진다", () => {
   act(() => data.setStatus("저장했습니다"));
