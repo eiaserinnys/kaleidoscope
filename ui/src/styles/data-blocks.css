@@ -71,6 +71,7 @@
 .ks-split-pane > .ks-data-section > .ks-data-section-child > .ks-data-skeleton { padding-block: var(--ks-space-3); }
 .ks-split-pane > .ks-data-skeleton { box-sizing: border-box; padding: var(--ks-space-3); }
 .ks-data-section-header { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
+.ks-split-row .ks-data-section:not(.ks-data-section .ks-data-section) > .ks-data-section-header { box-sizing: content-box; min-height: var(--ks-control-height); flex-shrink: 0; }
 .ks-data-section-header:empty { display: none; }
 .ks-data-section > .ks-data-section-header { padding-block-start: var(--ks-space-2); }
 .ks-data-section:has(> .ks-data-section-header:empty) { padding-block-start: var(--ks-space-2); }

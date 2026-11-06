@@ -246,7 +246,7 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
         <div className="ks-data-button-card-preview" aria-hidden="true" inert><PreviewContext.Provider value={setPreviewError}>{renderBlock(block.preview, context, `${pointer}/preview`)}</PreviewContext.Provider></div>
         <div aria-hidden={bindingFailure ? undefined : true} className={`ks-data-button-card-label${bindingFailure ? " is-failure" : ""}${showProgress ? " is-progress" : ""}`}>
           {!bindingFailure && prefixText ? <><span className="ks-data-button-prefix">{prefixText}</span><wbr /></> : null}
-          {!bindingFailure ? labelLoading ? <span aria-hidden="true" className="ks-data-button-label ks-data-skeleton"><i /></span> : <span className="ks-data-button-label is-emphasized">{labelText}</span> : null}
+          {!bindingFailure ? labelLoading ? <span aria-hidden="true" className="ks-data-button-label ks-data-skeleton"><i /></span> : <span className="ks-data-button-label">{labelText}</span> : null}
           {previewFailure}
           {showProgress ? progress : null}
         </div>

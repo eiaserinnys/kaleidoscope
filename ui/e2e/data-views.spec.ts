@@ -154,23 +154,45 @@ test("긴 목록과 격자에서 가상 스크롤과 키보드 선택", async ({
   await capture(page, "grid-wide");
 });
 
-test("고정 묶음 머리의 행 여백은 8px다", async ({ page }) => {
+test("구역 안 고정 묶음 머리는 목록 행과 글 시작선을 맞춘다", async ({ page }) => {
   await page.goto("/?preview=data-views-test");
-  const paddingLeft = await page.evaluate(() => {
+  const alignment = await page.evaluate(() => {
     const section = document.createElement("div");
     section.className = "ks-data-section";
+    const list = document.createElement("div");
+    list.className = "ks-list";
     const sticky = document.createElement("div");
     sticky.className = "ks-view-sticky";
     const group = document.createElement("div");
     group.className = "ks-view-group";
+    const heading = document.createElement("strong");
+    heading.textContent = "묶음";
+    group.append(heading);
     sticky.append(group);
-    section.append(sticky);
+    const row = document.createElement("button");
+    row.className = "ks-row ks-list-row";
+    const content = document.createElement("span");
+    content.className = "ks-list-content";
+    const title = document.createElement("span");
+    title.className = "ks-list-title";
+    title.textContent = "행";
+    content.append(title);
+    row.append(content);
+    list.append(sticky, row);
+    section.append(list);
     document.body.append(section);
-    const value = getComputedStyle(group).paddingLeft;
+    const rowStyle = getComputedStyle(row);
+    const result = {
+      headingLeft: heading.getBoundingClientRect().left,
+      titleLeft: title.getBoundingClientRect().left,
+      headingInset: parseFloat(getComputedStyle(group).paddingLeft),
+      rowInset: parseFloat(rowStyle.borderLeftWidth) + parseFloat(rowStyle.paddingLeft),
+    };
     section.remove();
-    return value;
+    return result;
   });
-  expect(paddingLeft).toBe("8px");
+  expect(alignment.headingInset).toBe(alignment.rowInset);
+  expect(Math.abs(alignment.headingLeft - alignment.titleLeft)).toBeLessThanOrEqual(1);
 });
 
 test("표 머리 고정과 가로 스크롤, 흐름 따라가기", async ({ page }) => {

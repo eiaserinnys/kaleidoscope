@@ -37,6 +37,7 @@
   --ks-repeat-grid-item-width-large: calc(var(--ks-pane-min-size) * 1.5);
   --ks-feed-column-min: 18em;
   --ks-line-width: 1px;
+  --ks-row-text-inset: calc(var(--ks-line-width) + var(--ks-space-2));
   --ks-scrollbar-thumb-inset: 2px;
   --ks-focus-width: 2px;
   --ks-focus-offset: 2px;

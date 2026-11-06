@@ -4,10 +4,64 @@ import stackContexts, { bottomPaddingCases } from "./stack-contexts";
 
 const base = { requires: { blocks: 20, modules: {} }, permissions: [] };
 const rows = Array.from({ length: 30 }, (_, i) => ({ id: String(i), name: `항목 ${i}` }));
+const tabbedPanePair = () => ({ type: "split", direction: "row", children: [
+  { type: "list", grouped: true, items: [{ title: "첫 묶음", items: [{ key: "a", title: "첫 행" }] }] },
+  { type: "section", title: "구역 제목", child: { type: "text", value: "내용" } },
+] });
 export const shellDefectFixtures = [
   ...stackFillRegressions,
   ...stackContexts,
   ...bottomPaddingCases,
+  ...(["direct", "section", "tab", "dialog"] as const).map(context => {
+    const grid = { type: "list", layout: "grid", grouped: true, items: [{ title: "pictures", items: Array.from({ length: 30 }, (_, i) => ({ key: String(i), title: `사진 ${i}`, meta: "2 MB" })) }] };
+    const feed = { type: "feed", grouped: true, entries: [{ title: "pictures", meta: "30", items: Array.from({ length: 30 }, (_, i) => ({ key: String(i), name: "작성자", body: `댓글 ${i}` })) }] };
+    const wrap = (child: unknown) => context === "section" ? { type: "section", title: "내용", child }
+      : context === "tab" ? { type: "tabs", tabs: [{ label: "내용", child }] }
+      : context === "dialog" ? { type: "dialog", title: "내용", open: true, on_close: [], child } : child;
+    return { ...base, requires: { blocks: 37, modules: {} }, id: `pane-bands-1015-${context}`, name: "머리 여백", state: {}, ui: context === "section" ? { type: "split", direction: "row", children: [wrap(grid), wrap(feed)] } : wrap({ type: "split", direction: "row", children: [grid, feed] }) };
+  }),
+  { ...base, requires: { blocks: 37, modules: {} }, id: "pane-alignment-1015", name: "칸 정렬", state: { selected: "a", view: "after" }, ui: {
+    type: "split", direction: "row", children: [
+      { type: "list", grouped: true, selected: { state: "selected" }, on_select: { set_state: "selected" }, items: [
+        { title: "첫 묶음", items: Array.from({ length: 30 }, (_, i) => ({ key: i ? String(i) : "a", title: `목록 ${i + 1}` })) },
+        { title: "둘째 묶음", items: [{ key: "last", title: "마지막" }] },
+      ] },
+      { type: "section", title: "그림 머리", actions: [{ type: "select", style: "segmented", label: "보기", label_position: "hidden", value: { state: "view" }, on_change: { set_state: "view" }, options: ["before", "after"] }], child: { type: "text", value: "그림 내용" } },
+      { type: "section", title: "속성 머리", child: { type: "list", grouped: true, items: [{ title: "안쪽 묶음", items: [{ key: "inside", title: "안쪽 행" }] }] } },
+    ],
+  } },
+  { ...base, requires: { blocks: 37, modules: {} }, id: "pane-header-1015", name: "머리 높이", state: { view: "after" }, ui: {
+    type: "split", direction: "row", children: [
+      { type: "section", title: "단추 없음", child: { type: "text", value: "내용" } },
+      { type: "section", title: "아이콘", actions: [{ type: "button", icon: "plus", icon_only: true, label: "더하기", on_click: [] }], child: { type: "text", value: "내용" } },
+      { type: "section", title: "고르기", actions: [{ type: "select", style: "segmented", label: "보기", label_position: "hidden", value: { state: "view" }, on_change: { set_state: "view" }, options: ["before", "after"] }], child: { type: "text", value: "내용" } },
+    ],
+  } },
+  { ...base, requires: { blocks: 37, modules: {} }, id: "pane-tab-alignment-1015", name: "탭 안 칸 정렬", state: {}, ui: {
+    type: "tabs", tabs: [
+      { label: "직접 분할", child: tabbedPanePair() },
+      { label: "첫 세로 칸", child: { type: "split", direction: "column", children: [tabbedPanePair(), { type: "text", value: "아래 내용" }] } },
+      { label: "둘째 세로 칸", child: { type: "split", direction: "column", children: [{ type: "text", value: "위 내용" }, tabbedPanePair()] } },
+    ],
+  } },
+  { ...base, requires: { blocks: 37, modules: {} }, id: "pane-nested-1015", name: "겹친 분할", state: { view: "after" }, ui: {
+    type: "split", direction: "row", children: [
+      { type: "list", grouped: true, items: [{ title: "첫 묶음", items: [{ key: "a", title: "첫 행" }] }] },
+      { type: "split", direction: "column", children: [
+        { type: "section", title: "그림", actions: [{ type: "select", style: "segmented", label: "보기", label_position: "hidden", value: { state: "view" }, on_change: { set_state: "view" }, options: ["before", "after"] }], child: { type: "text", value: "그림 내용" } },
+        { type: "section", title: "파일", actions: [{ type: "button", icon: "plus", icon_only: true, label: "더하기", on_click: [] }], child: { type: "text", value: "파일 내용" } },
+      ] },
+      { type: "section", title: "속성", child: { type: "text", value: "속성 내용" } },
+    ],
+  } },
+  { ...base, requires: { blocks: 37, modules: {} }, id: "pane-long-heading-1015", name: "긴 머리", state: {}, ui: {
+    type: "split", direction: "row", sizes: [40, 60], children: [
+      { type: "list", items: [{ key: "a", title: "첫 글" }] },
+      { type: "section", title: "Claude Code sends your email address to websites", meta: "작성자 2026-11-05 22:17", child: {
+        type: "feed", entries: Array.from({ length: 60 }, (_, i) => ({ key: String(i), name: "작성자", body: `댓글 ${i + 1}` })),
+      } },
+    ],
+  } },
   { ...base, id: "list-row-fit-940", name: "목록 줄 축소", state: {}, ui: { type: "list", grouped: true, items: [{ title: "묶음", items: Array.from({ length: 20 }, (_, i) => ({ key: String(i), title: `@작성자_${i}`, subtitle: "말줄임으로 표시할 아주 긴 부제입니다. ".repeat(8), color: "#804080", meta: "11/03", badges: ["고치는 중"] })) }] } },
   ...(["grid", "icons"] as const).map((layout) => ({ ...base, requires: { blocks: 30, modules: {} }, id: `layout-940-${layout}`, name: "그림 목록", state: {}, ui: { type: "tabs", tabs: [
     { label: "그림", child: { type: "stack", direction: "column", children: [

@@ -138,10 +138,16 @@ test("탭 정렬과 첫 제목, 쌓인 분할 스크롤과 독립 메모", async
   const gallery = await open(page, "block-gallery", 1100, 920);
   const layout = await chooseLayout(page, gallery);
   const split = gallery.locator(".ks-data-tab-panel:visible > .ks-split");
-  const heads = await split.locator(".ks-data-section-title").evaluateAll((items) => items.map((item) => ({ text: item.textContent, top: item.getBoundingClientRect().top })));
+  const heads = await split.locator(".ks-data-section-title").evaluateAll((items) => items.map((item) => {
+    const rect = item.getBoundingClientRect();
+    return { text: item.textContent, center: rect.top + rect.height / 2 };
+  }));
   const top = (await layout.boundingBox())!.y + (await layout.boundingBox())!.height + 8;
-  console.log(`넓은 분할 제목: ${JSON.stringify(heads)}, 기준 ${top}`);
-  expect(heads.map((item) => Math.abs(item.top - top))).toEqual([0, 0, 0]);
+  const controlHeight = await split.evaluate((element) => parseFloat(getComputedStyle(element).getPropertyValue("--ks-control-height")));
+  const center = top + controlHeight / 2;
+  console.log(`넓은 분할 제목: ${JSON.stringify(heads)}, 기준 ${center}`);
+  expect(heads).toHaveLength(3);
+  for (const head of heads) expect(Math.abs(head.center - center)).toBeLessThanOrEqual(0.5);
   await capture(gallery, "layout-1100");
   const selection = await open(page, "shell-selection-test", 1100, 920);
   const summary = selection.getByRole("tab", { name: "요약" });

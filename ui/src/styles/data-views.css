@@ -40,20 +40,35 @@
 .ks-repeat-item > .ks-data-stack { height: auto; }
 .ks-view-meta, .ks-list.is-icons .ks-view-group > span:not(.ks-data-skeleton) { color: var(--ks-color-muted); font-size: var(--ks-type-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-view-group { display: flex; align-items: center; justify-content: space-between; gap: var(--ks-space-2); padding: var(--ks-space-3) var(--ks-space-3) var(--ks-space-1); background: transparent; color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
-.ks-view-group strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ks-font-label); font-weight: 600; letter-spacing: var(--ks-letter-label); text-transform: uppercase; }
+.ks-view-group strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ks-font-label); font-weight: 600; letter-spacing: 0; }
 .ks-view-group > span:not(.ks-data-skeleton) { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: end; }
 .ks-view-group > .ks-data-skeleton { width: calc(3 * var(--ks-space-6)); }
 .ks-view-group > .ks-data-skeleton i { height: calc(var(--ks-type-meta) * var(--ks-line-body)); }
 .ks-view-sticky { position: sticky; top: 0; z-index: 2; height: 0; }
 .ks-view-sticky .ks-view-group {
   padding-block: var(--ks-space-2);
-  background: var(--ks-material-popover);
+  border-radius: var(--ks-radius-small);
+  background: color-mix(in srgb, color-mix(in srgb, var(--ks-color-background) 25%, var(--ks-color-surface-solid)) 86%, transparent);
   backdrop-filter: blur(var(--ks-blur-popover));
 }
-:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-view-sticky .ks-view-group {
-  padding-inline: var(--ks-space-2);
-  border-radius: var(--ks-radius-small);
+.ks-list .ks-view-group,
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list .ks-view-group { padding-inline: var(--ks-row-text-inset); }
+.ks-list.is-grid .ks-view-group,
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list.is-grid .ks-view-group { padding-inline: calc(var(--ks-focus-width) + var(--ks-space-1)); }
+.ks-list.is-grid .ks-view-sticky .ks-view-group { border-start-start-radius: 0; border-start-end-radius: 0; }
+:is(.ks-data-tab-panel, .ks-data-section) .ks-feed .ks-view-sticky .ks-view-group { padding-inline: var(--ks-space-2); }
+.ks-split-row > .ks-split-pane > .ks-list > div:not(.ks-view-sticky) > [data-index="0"] > .ks-view-group {
+  padding-block-start: calc(var(--ks-space-2) + (var(--ks-control-height) - var(--ks-type-meta) * var(--ks-line-body)) / 2);
 }
+.ks-data-tab-panel .ks-split-row > :is(
+  .ks-split.is-stacked > .ks-split-pane:not(:first-child),
+  .ks-data-tab-panel > .ks-split-row > .ks-split-pane,
+  .ks-data-tab-panel :is(.ks-split-row > .ks-split-pane, .ks-split-column > .ks-split-pane:first-child):not(.ks-data-tab-panel .ks-split-column > .ks-split-pane:not(:first-child) *, .ks-data-tab-panel .ks-data-stack-item:not(:first-child) *, .ks-data-tab-panel .ks-data-section *)
+) > .ks-list > div:not(.ks-view-sticky) > [data-index="0"] > .ks-view-group {
+  padding-block-start: calc((var(--ks-control-height) - var(--ks-type-meta) * var(--ks-line-body)) / 2);
+}
+.ks-list:not(.is-grid):not(.is-icons) { padding-inline: var(--ks-space-1); }
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list:not(.is-grid):not(.is-icons) { padding-inline: 0; }
 .ks-list-row .ks-list-content { flex: 1 1 0; min-width: min(100%, 6.5em); }
 .ks-list-row > .ks-view-meta, .ks-list-row > .ks-view-badges { flex: none; }
 .ks-list-item { position: relative; display: flex; align-items: center; min-width: 0; }
@@ -96,6 +111,7 @@
 .ks-list-card .ks-media-thumbnail { flex: none; width: 100%; height: auto; aspect-ratio: 4 / 3; }
 .ks-list-card .ks-list-grid-icon { color: inherit; }
 .ks-list-row > svg { flex: none; }
+.ks-list-card > :is(.ks-list-content, .ks-view-badges, .ks-view-meta) { padding-inline: var(--ks-space-1); }
 .ks-list-card .ks-view-badges { align-self: flex-start; }
 .ks-table-inner { display: grid; min-width: max-content; width: 100%; }
 .ks-table-inner:has(> .ks-empty-state) { min-height: 100%; grid-template-rows: auto 1fr; }
