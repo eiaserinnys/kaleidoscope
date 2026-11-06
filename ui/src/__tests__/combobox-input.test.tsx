@@ -61,6 +61,36 @@ it("쉘이 초점을 돌려주면 목록을 열지 않고 고른 값만 전체 �
   expect(input.getAttribute("aria-expanded")).toBe("true");
 });
 
+it("다른 창 머리처럼 전파를 멈추는 자리를 눌러도 목록을 닫는다", async () => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  expect(input.getAttribute("aria-expanded")).toBe("true");
+  const titlebar = document.createElement("div");
+  titlebar.addEventListener("pointerdown", (event) => event.stopPropagation());
+  document.body.append(titlebar);
+  fireEvent.pointerDown(titlebar, { button: 0 });
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  titlebar.remove();
+});
+
+it("대화상자의 첫 목록 전용 입력은 열 때 목록을 열지 않고 누르면 연다", async () => {
+  const { Dialog } = await import("../components/dialog");
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  document.body.append(host);
+  const options = [{ value: "사과", label: "사과", index: 0, searchValue: "사과", searchLabel: "사과" }];
+  render(<Dialog host={host} title="확인" body={<Combobox inputRef={createRef<HTMLInputElement>()} inputProps={{ "aria-label": "고르기" }} ready visible optionsOnly options={options} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} />} ok="확인" onCancel={() => {}} onConfirm={() => {}} />);
+  const input = screen.getByRole("combobox", { name: "고르기" }) as HTMLInputElement;
+  expect(document.activeElement).toBe(input);
+  expect(input.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(input);
+  expect(input.getAttribute("aria-expanded")).toBe("true");
+  cleanup(); host.remove();
+});
+
 it("자유 입력도 Enter 확정에 목록을 닫는다", async () => {
   setup();
   const input = await screen.findByRole("combobox");

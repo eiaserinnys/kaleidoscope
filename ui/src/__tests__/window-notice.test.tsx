@@ -253,6 +253,38 @@ it.each([[{ refresh: ['feed'] }], [{ set_state: 'x', value: null }, { refresh: [
   expect(screen.getByRole('alert')).toBeTruthy();
 });
 
+it("대화상자 슬롯이 있으면 알림을 그 안에 그리고 슬롯이 없어지면 창 자리로 돌린다", () => {
+  const slot = document.createElement("div");
+  document.body.append(slot);
+  act(() => data.setNotice("동작을 처리하지 못했습니다"));
+  expect(slot.contains(screen.getByRole("alert"))).toBe(false);
+  act(() => data.setNoticeSlot(slot));
+  expect(slot.contains(screen.getByRole("alert"))).toBe(true);
+  expect(screen.getByRole("alert").textContent).toContain("동작을 처리하지 못했습니다");
+  act(() => data.setNoticeSlot(null));
+  expect(slot.contains(screen.getByRole("alert"))).toBe(false);
+  expect(screen.getByRole("alert").textContent).toContain("동작을 처리하지 못했습니다");
+  slot.remove();
+});
+
+it("상태 알림은 대화상자 슬롯과 창 자리를 오가도 시간을 새로 시작하지 않는다", () => {
+  const slot = document.createElement("div");
+  document.body.append(slot);
+  act(() => data.setStatus("저장했습니다"));
+  expect(screen.getByRole("status").textContent).toContain("저장했습니다");
+  tick(4000);
+  act(() => data.setNoticeSlot(slot));
+  expect(slot.contains(screen.getByRole("status"))).toBe(true);
+  tick(999);
+  expect(screen.queryByRole("status")).toBeTruthy();
+  act(() => data.setNoticeSlot(null));
+  expect(slot.contains(screen.queryByRole("status"))).toBe(false);
+  tick(1);
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(data.getStatusSequence()).toBe(1);
+  slot.remove();
+});
+
 it('실제 재수신 중 다시 받기는 진행 표시와 잠금을 유지한다', () => {
   const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
   const fail = { state: 'failed', has_value: true, message: '읽기 실패' };

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, expect, it } from "vitest";
 import { StrictMode, useState } from "react";
 import { Dialog } from "../components/dialog";
+import { isUnclaimedFocus } from "../components/focus-rescue";
 
 afterEach(cleanup);
 
@@ -60,4 +61,24 @@ it("조건부 부모와 함께 사라져도 연 요소로 돌아간다", () => {
   opener.focus(); fireEvent.click(opener);
   view.rerender(<FocusDialog enabled={false} />);
   expect(document.activeElement).toBe(opener);
+});
+
+it("대화상자는 알림 슬롯을 본문 스크롤과 바닥 단추 사이에 두고 닫을 때 놓는다", () => {
+  let slot: HTMLDivElement | null = null;
+  render(<Dialog host={document.body} title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={() => {}} onConfirm={() => {}} noticeSlotRef={(element) => { slot = element; }} />);
+  const dialog = screen.getByRole("dialog");
+  const element = dialog.querySelector<HTMLDivElement>(".ks-dialog-notice-slot");
+  expect(element).toBeTruthy();
+  expect(element!.previousElementSibling?.classList.contains("ks-dialog-scroll")).toBe(true);
+  expect(element!.nextElementSibling?.classList.contains("ks-dialog-actions")).toBe(true);
+  expect(slot).toBe(element);
+  cleanup();
+  expect(slot).toBeNull();
+});
+
+it("대화상자가 처음 주는 초점은 쉘이 준 초점으로 표시한다", () => {
+  const dialog = show(<input aria-label="이름" />);
+  const input = within(dialog).getByRole("textbox", { name: "이름" });
+  expect(document.activeElement).toBe(input);
+  expect(isUnclaimedFocus(input)).toBe(true);
 });

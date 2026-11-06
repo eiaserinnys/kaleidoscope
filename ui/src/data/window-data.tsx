@@ -175,6 +175,8 @@ export class WindowData {
   private listeners = new Map<string, Set<() => void>>();
   private sourceListeners = new Set<() => void>();
   private noticeListeners = new Set<() => void>();
+  private noticeSlotListeners = new Set<() => void>();
+  private noticeSlot: HTMLElement | null = null;
   private notice: string | null = null;
   private noticeProblem: CoreError | string | null = null;
   private noticeOwner: object | null = null;
@@ -313,6 +315,13 @@ export class WindowData {
   getSourceRetrySequence = () => this.sourceRetrySequence;
   getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
+  subscribeNoticeSlot = (listener: () => void) => { this.noticeSlotListeners.add(listener); return () => this.noticeSlotListeners.delete(listener); };
+  getNoticeSlot = () => this.noticeSlot;
+  setNoticeSlot = (element: HTMLElement | null) => {
+    if (this.noticeSlot === element) return;
+    this.noticeSlot = element;
+    this.noticeSlotListeners.forEach((listener) => listener());
+  };
   getNotice = () => this.noticeRole === "status" ? this.statusMessage : this.notice;
   getNoticeId = () => this.noticeRole === "status" ? null : this.noticeId;
   getNoticeRole = () => this.noticeRole;

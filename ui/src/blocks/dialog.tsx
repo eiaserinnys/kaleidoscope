@@ -54,6 +54,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
     {isOpen && host ? <Dialog
       rootProps={blockRoot}
       ownerAnchor={root.current}
+      noticeSlotRef={data.setNoticeSlot}
       host={host}
       overlayClassName={hasPicker(block.child) ? "is-picker" : ""}
       title={titleText}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { LoaderCircle, X } from "../components/icons";
 import { Button, IconButton, Notice } from "../components/primitives";
 import { useWindowData } from "./window-data";
@@ -19,6 +20,7 @@ export function WindowNotice() {
   const statusSequence = useSyncExternalStore(data.subscribeNotice, data.getStatusSequence, data.getStatusSequence);
   const clientFailed = useSyncExternalStore(data.subscribeNotice, data.getClientFailed, data.getClientFailed);
   const retrySequence = useSyncExternalStore(data.subscribeSources, data.getSourceRetrySequence, data.getSourceRetrySequence);
+  const slot = useSyncExternalStore(data.subscribeNoticeSlot, data.getNoticeSlot, data.getNoticeSlot);
   const [dismissed, setDismissed] = useState(false);
 
   const failed = Object.entries(sources).filter(([, value]) => value.state === "failed" && value.has_value).map(([name]) => name);
@@ -46,14 +48,15 @@ export function WindowNotice() {
   const actions: [ReactNode] | [ReactNode, ReactNode] = message
     ? clientFailed ? [<Button key="restart" onClick={() => { void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
     : [<Button key="retry" aria-label="다시 받기" aria-disabled={retrying || undefined} aria-busy={retrying || undefined} className={retrying ? "is-progress" : undefined} onClick={() => { if (!retrying) void data.refresh(failed); }}><span>다시 받기</span>{retrying && <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>}</Button>, closeButton];
-  if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} />;
-  return <Notice role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
+  if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} slot={slot} />;
+  const notice = <Notice role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
+  return slot ? createPortal(notice, slot) : notice;
 }
 
 const STATUS_NOTICE_DURATION_MS = 5000;
 
-function TransientStatus({ data, message, sequence }: {
-  data: ReturnType<typeof useWindowData>; message: string; sequence: number;
+function TransientStatus({ data, message, sequence, slot }: {
+  data: ReturnType<typeof useWindowData>; message: string; sequence: number; slot: HTMLElement | null;
 }) {
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -61,7 +64,8 @@ function TransientStatus({ data, message, sequence }: {
     }, STATUS_NOTICE_DURATION_MS);
     return () => clearTimeout(timer);
   }, [data, sequence]);
-  return <div className="ks-window-status" data-ks-overlay>
+  const status = <div className="ks-window-status" data-ks-overlay>
     <Notice role="status">{message}</Notice>
   </div>;
+  return slot ? createPortal(status, slot) : status;
 }

@@ -22,6 +22,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     const commenting = () => isCommenting(windowId) || Boolean(content.closest(".ks-window[data-commenting]"));
     let focused: HTMLElement | null = null;
     let focusedDialog = false;
+    let focusedDialogElement: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
@@ -66,6 +67,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       if (target === content || target.classList.contains("ks-window-content")) return;
       focused = target;
       focusedDialog = Boolean(target.closest(".ks-dialog-overlay"));
+      focusedDialogElement = focusedDialog ? target.closest<HTMLElement>(".ks-dialog") : null;
       focusedRemove = target.classList.contains("ks-list-remove");
       inContent = body.contains(target);
       if (!inContent) return;
@@ -145,6 +147,19 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
           focused = null;
           move(target);
           if (bookmark.pane?.isConnected && !firstContentFocus(bookmark.pane)) waiting.current = { pane: bookmark.pane, kind: "restore" };
+        }
+      }
+      // 대화상자 안의 알림 단추처럼 대화상자는 살아 있는데 초점 요소만 사라지면, 창 본문이 아니라 그 대화상자의 첫 조작으로 옮긴다.
+      if (onTop && focused && focusedDialog && !focused.isConnected && focusedDialogElement?.isConnected) {
+        const lost = active === document.body || active === focused || (active instanceof Element && scope.contains(active) && isUnclaimedFocus(active));
+        if (lost && !preserveWindowActionFocus(windowId)) {
+          const target = focusedDialogElement.querySelector<HTMLElement>(".ks-dialog-actions > button:not(:disabled)");
+          if (usableFocus(target ?? null)) {
+            focused = null;
+            focusedDialog = false;
+            focusedDialogElement = null;
+            move(target!);
+          }
         }
       }
       if (waiting.current && onTop && !bodyUnavailable() && isUnclaimedFocus(document.activeElement)) {
