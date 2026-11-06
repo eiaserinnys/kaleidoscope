@@ -52,9 +52,12 @@ export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable
     return registerFileDropTarget(content, {
       canDrop: () => clientFileDropReady(store, appWindow.id),
       hover: setDropActive,
-      drop: (transfer) => deliverClientFiles(store, appWindow.id, fileDrop, transfer),
+      drop: (transfer) => {
+        void onCall({ op: "window.raise", window_id: appWindow.id });
+        deliverClientFiles(store, appWindow.id, fileDrop, transfer);
+      },
     });
-  }, [appWindow.id, fileDrop, isMinimized, settingsOpen, store]);
+  }, [appWindow.id, fileDrop, isMinimized, onCall, settingsOpen, store]);
   const toggleShare = () => void onCall({ op: "share.set", window_id: appWindow.id, on: !sharing });
   const toggleSettings = () => { if (settingsOpen) closeSettings(); else { setSettingsVisited(true); setSettingsOpen(true); } };
   const closeWindow = () => void onCall({ op: "window.close", window_id: appWindow.id });
@@ -81,6 +84,6 @@ export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable
     pointerGuard={(event) => !event.nativeEvent.isTrusted && windowActionActive(appWindow.id)}
     overlays={<><ProcessConsent store={store} windowId={appWindow.id} host={frameHost} /><InstallationConsent store={store} windowId={appWindow.id} host={frameHost} /></>}>
     {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited, reportWindowHeader, reportSettingsAvailable) : children}
-    {dropActive && contentRef.current ? createPortal(<div className="ks-window-file-drop" aria-hidden="true"><span>파일 열기</span></div>, contentRef.current) : null}
+    {dropActive && contentRef.current ? createPortal(<div className="ks-window-file-drop" aria-hidden="true" />, contentRef.current) : null}
   </WindowChrome>;
 }

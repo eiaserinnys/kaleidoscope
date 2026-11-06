@@ -1,4 +1,4 @@
-import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientLifecycle, EventModifiers, MessageInput, MessageResult, PickFilesSpec, SaveFileSpec } from "../contract/contract";
+import type { AppDefinition, Binding, BindingValue, ClientActionContext, ClientLifecycle, CoreError, EventModifiers, MessageInput, MessageResult, PickFilesSpec, SaveFileSpec } from "../contract/contract";
 import type { ItemScope } from "../data/item-scope";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { ClientChatEnvelope } from "../data/client-chat";
@@ -27,6 +27,10 @@ function acceptsFile(spec: PickFilesSpec, file: File): boolean {
     return (mime !== "" && (pattern.endsWith("/*") ? mime.startsWith(pattern.slice(0, -1)) : mime === pattern))
       || item.extensions.some((extension) => name.endsWith(`.${extension.replace(/^\./, "").toLowerCase()}`));
   });
+}
+function acceptedFormats(spec: PickFilesSpec): string {
+  const extensions = [...new Set(spec.accept.flatMap((item) => item.extensions.map((extension) => extension.replace(/^\./, "").toUpperCase())))];
+  return (extensions.length ? extensions : [...new Set(spec.accept.map((item) => item.mime))]).join(", ");
 }
 const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
 const runtimes = new WeakMap<ShellStore, Map<string, ClientRuntime>>();
@@ -109,6 +113,7 @@ export class ClientRuntime {
   private stopped = false;
   private loaded = false;
   private ready = false;
+  private fileDropNotice: CoreError | null = null;
   private receiverReady = false;
   private messageReplies = new Map<string, (result: unknown, error: unknown) => void>();
   private lastPong = 0;
@@ -151,8 +156,14 @@ export class ClientRuntime {
 
   fileDropReady() { return this.ready && !!this.frame && !this.stopped; }
 
+  private clearFileDropNotice() {
+    if (this.fileDropNotice) this.data.clearNoticeIf(this.fileDropNotice);
+    this.fileDropNotice = null;
+  }
+
   dropFiles(spec: PickFilesSpec, transfer: DataTransfer) {
     if (!this.fileDropReady()) return;
+    this.clearFileDropNotice();
     const files = Array.from(transfer.files);
     const directory = Array.from(transfer.items).some((item) => item.kind === "file" && item.webkitGetAsEntry?.()?.isDirectory);
     const oversized = files.find((file) => file.size > CLIENT_PICK_FILE_MAX_BYTES);
@@ -160,8 +171,8 @@ export class ClientRuntime {
     const error = directory ? shellErrors.SHELL_FILE_DROP_DIRECTORY_REJECTED()
       : !spec.multiple && files.length > 1 ? shellErrors.SHELL_FILE_DROP_MULTIPLE_REJECTED()
       : oversized ? shellErrors.SHELL_FILE_DROP_TOO_LARGE({ name: oversized.name, limit: `${CLIENT_PICK_FILE_MAX_BYTES / (1024 * 1024)}MB` })
-      : rejected ? shellErrors.SHELL_FILE_DROP_TYPE_REJECTED({ name: rejected.name }) : null;
-    if (error) { this.data.setNotice(error); return; }
+      : rejected ? shellErrors.SHELL_FILE_DROP_TYPE_REJECTED({ name: rejected.name, formats: acceptedFormats(spec) }) : null;
+    if (error) { this.fileDropNotice = error; this.data.setNotice(error); return; }
     if (!files.length) return;
     const registered = files.map((file) => this.registerBrowserFile(file));
     void this.data.act("/file_drop", { cancelled: false, files: registered } as unknown as JsonValue);
@@ -382,6 +393,7 @@ export class ClientRuntime {
   }
 
   async pick(spec: PickFilesSpec, scope?: ItemScope): Promise<boolean> {
+    this.clearFileDropNotice();
     try {
       const result = this.store.nativeFiles
         ? await this.store.call({ op: "files.pick", window_id: this.data.windowId, accept: spec.accept, multiple: spec.multiple ?? false }).then((picked) => {

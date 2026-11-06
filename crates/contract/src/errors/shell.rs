@@ -1,5 +1,5 @@
 error_catalog! { ENTRIES;
-    SHELL_FILE_DROP_TYPE_REJECTED(name) { class: InvalidRequest, place: "파일 드롭 형식 검사", cause: "받지 않는 파일 형식", message: "{name}은 이 앱에서 받지 않는 파일 형식입니다. 지원하는 파일을 다시 놓으세요.", fix: "지원하는 파일을 다시 놓으세요" }
+    SHELL_FILE_DROP_TYPE_REJECTED(name, formats) { class: InvalidRequest, place: "파일 드롭 형식 검사", cause: "받지 않는 파일 형식", message: "{name} 파일은 이 앱에서 받지 않습니다. {formats} 파일을 놓으세요.", fix: "받는 형식의 파일을 놓으세요" }
     SHELL_FILE_DROP_MULTIPLE_REJECTED() { class: InvalidRequest, place: "파일 드롭 개수 검사", cause: "한 파일만 받는 창에 여러 파일을 놓았다", message: "이 앱은 파일 하나만 받습니다. 파일 하나를 다시 놓으세요.", fix: "파일 하나를 다시 놓으세요" }
     SHELL_FILE_DROP_DIRECTORY_REJECTED() { class: InvalidRequest, place: "파일 드롭 폴더 검사", cause: "폴더를 파일로 놓았다", message: "폴더는 파일로 열 수 없습니다. 폴더 안의 파일을 다시 놓으세요.", fix: "폴더 안의 파일을 다시 놓으세요" }
     SHELL_FILE_DROP_TOO_LARGE(name, limit) { class: InvalidRequest, place: "파일 드롭 크기 검사", cause: "파일 크기가 한도를 넘었다", message: "{name}의 크기가 {limit}를 넘어 열 수 없습니다. 더 작은 파일을 다시 놓으세요.", fix: "더 작은 파일을 다시 놓으세요" }

@@ -448,8 +448,7 @@
   color: var(--ks-color-danger);
 }
 .ks-window-content:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
-.ks-window-file-drop { position: absolute; inset: 0; display: grid; place-items: center; outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); pointer-events: none; }
-.ks-window-file-drop span { padding: var(--ks-space-2) var(--ks-space-3); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); color: var(--ks-color-text); font-size: var(--ks-type-body); }
+.ks-window-file-drop { position: absolute; inset: 0; border-bottom-left-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); border-bottom-right-radius: calc(var(--ks-radius-window) - var(--ks-line-width)); outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); background: color-mix(in srgb, var(--ks-color-focus) 14%, transparent); pointer-events: none; }
 
 
 .ks-window-resize-east,
