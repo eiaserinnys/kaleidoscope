@@ -24,6 +24,11 @@ function restorableFocus(element: HTMLElement | null): element is HTMLElement {
     && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
 }
 
+/** 사용자가 직접 조작하던 내용 칸인가: 목록과 트리와 표의 현재 칸, 쓰기 입력, iframe, canvas. */
+export function isContentFocus(element: HTMLElement): boolean {
+  return element.matches(contentSelector);
+}
+
 export function firstContentFocus(within: HTMLElement): HTMLElement | undefined {
   return Array.from(within.querySelectorAll<HTMLElement>(contentSelector)).find((element) =>
     usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-split-handle, [role="separator"]') && !element.closest('.ks-toolbar, .ks-data-toolbar, [role="toolbar"]'));
@@ -31,7 +36,7 @@ export function firstContentFocus(within: HTMLElement): HTMLElement | undefined 
 
 export function firstFocus(within: HTMLElement): HTMLElement | undefined {
   return firstContentFocus(within) ?? Array.from(within.querySelectorAll<HTMLElement>(controlSelector))
-    .find((element) => usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-split-handle, [role="separator"]') && (element.tabIndex >= 0 || element.isContentEditable));
+    .find((element) => usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-button-emphasis, .ks-split-handle, [role="separator"]') && (element.tabIndex >= 0 || element.isContentEditable));
 }
 
 export function focusContainer(element: HTMLElement): HTMLElement {
@@ -48,13 +53,22 @@ export function focusBookmark(element: HTMLElement | null, content: HTMLElement)
   return { element, pane: pane && content.contains(pane) ? pane : content };
 }
 
+const splitHandleSelector = '.ks-split-handle, [role="separator"]';
+
 export function bookmarkTarget(bookmark: FocusBookmark, content: HTMLElement): HTMLElement {
-  if (restorableFocus(bookmark.element) && content.contains(bookmark.element)) return bookmark.element;
+  if (restorableFocus(bookmark.element) && content.contains(bookmark.element) && !bookmark.element.matches(splitHandleSelector)) return bookmark.element;
   if (bookmark.pane?.isConnected && content.contains(bookmark.pane)) {
     if (bookmark.pane.querySelector(".ks-data-skeleton") && !firstContentFocus(bookmark.pane)) return focusContainer(bookmark.pane);
     return firstContentFocus(bookmark.pane) ?? firstFocus(bookmark.pane) ?? focusContainer(bookmark.pane);
   }
   return firstFocus(content) ?? focusContainer(content);
+}
+
+/** 본문 밖(알림, 창 머리)에서 초점을 잃었을 때: 지나온 단추가 아니라 마지막 내용 초점으로 돌아간다. */
+export function contentRescueTarget(lastContent: HTMLElement | null, bookmark: FocusBookmark, content: HTMLElement): HTMLElement {
+  if (usableFocus(lastContent) && content.contains(lastContent)) return lastContent;
+  const pane = bookmark.pane?.isConnected && content.contains(bookmark.pane) ? bookmark.pane : content;
+  return firstContentFocus(pane) ?? focusContainer(content);
 }
 
 export function clearRescuedFocus() {
