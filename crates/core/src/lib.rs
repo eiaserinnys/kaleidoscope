@@ -731,6 +731,9 @@ impl Core {
             CoreRequest::ClientBlobOpen { window_id, key } => Ok(CoreReply::ClientBlobOpen {
                 file: client_blobs::open(&self.inner, &window_id, &key)?,
             }),
+            CoreRequest::ClientFileOpen { window_id, permission, path } => Ok(CoreReply::ClientFileOpen {
+                file: client_files::open(&self.inner, &window_id, &permission, &path)?,
+            }),
             CoreRequest::ClientBlobRemove { window_id, key } => {
                 client_blobs::remove(&self.inner, &window_id, &key)?;
                 Ok(CoreReply::ClientBlobRemove {})

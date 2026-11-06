@@ -196,10 +196,12 @@ it("client 폴더 선택은 코어 권한 확인을 거쳐 이름만 돌려주�
     getSnapshot: () => current,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     subscribeEvents: () => () => undefined,
-    nativeFiles: true,
+    nativeFiles: false,
+    bytes: vi.fn(async () => new Uint8Array([1, 2, 3]).buffer),
     call: vi.fn(async (request: any) => {
       if (request.op === "data.media") return { op: "data.media", media: { mime: "text/javascript", data_base64: "" } };
       if (request.op === "client.release") return { op: "client.release" };
+      if (request.op === "client.file_open") return { op: "client.file_open", file: { id: "handle-1", name: "그림.png", size: 3, mime: "image/png" } };
       if (request.op === "files.pick_folder" && request.permission === "docs") {
         current = { ...current, device: { ...current.device, grants: [declared, pc] } };
         listeners.forEach((listener) => listener());
@@ -240,6 +242,17 @@ it("client 폴더 선택은 코어 권한 확인을 거쳐 이름만 돌려주�
 
   receive("denied", "undeclared");
   await vi.waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-reply", requestId: "denied", errorId: "FILE_ACCESS_PERMISSION_UNDECLARED", errorCode: "permission_denied" }), "*"));
+  window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null",
+    data: { token, type: "ks-client-file-open", requestId: "open", permission: "docs", path: "그림.png" } }));
+  await vi.waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-reply", requestId: "open", result: expect.objectContaining({ id: "handle-1", name: "그림.png" }) }), "*"));
+  expect(store.call).toHaveBeenCalledWith({ op: "client.file_open", window_id: "window-1", permission: "docs", path: "그림.png" });
+  window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null",
+    data: { token, type: "ks-client-file-read", requestId: "read-open", id: "handle-1" } }));
+  await vi.waitFor(() => expect(post.mock.calls.some(([message]) => message.requestId === "read-open" && message.result instanceof ArrayBuffer)).toBe(true));
+  expect(store.bytes).toHaveBeenCalledWith({ op: "files.read_bytes", window_id: "window-1", handle: "handle-1" });
+  window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null",
+    data: { token, type: "ks-client-file-open", requestId: "invalid", permission: 1, path: "그림.png" } }));
+  await vi.waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ requestId: "invalid", errorId: "SHELL_CLIENT_FILE_OPEN_INPUT_INVALID" }), "*"));
   const stopping = runtime.stop();
   const flush = post.mock.calls.map(([message]) => message).find((message) => message.type === "ks-sandbox-flush");
   expect(flush).toBeTruthy();

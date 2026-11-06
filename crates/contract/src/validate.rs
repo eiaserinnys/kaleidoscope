@@ -78,6 +78,7 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
     crate::validate_input::validate_input_extensions(&definition)?;
     crate::validate_button::validate_button_extensions(&definition)?;
+    crate::validate_file_input::validate_file_drop(&definition)?;
 
     if let Some(badge) = &definition.badge {
         if definition.requires.blocks < crate::APP_BADGE_BLOCK_SET_VERSION {
