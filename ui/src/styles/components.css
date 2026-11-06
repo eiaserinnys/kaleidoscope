@@ -35,6 +35,10 @@
   color: var(--ks-color-accent-contrast);
 }
 
+.ks-button-emphasis:active:not(:disabled) {
+  background-image: linear-gradient(color-mix(in srgb, var(--ks-color-accent-contrast) 8%, transparent), color-mix(in srgb, var(--ks-color-accent-contrast) 8%, transparent)), linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
+}
+
 .ks-button.is-selected {
   background: var(--ks-color-selection);
 }
@@ -78,6 +82,11 @@
 
 .ks-icon-button.is-taskbar:hover:not(:disabled) {
   background: var(--ks-color-taskbar-hover);
+}
+
+.ks-icon-button.is-taskbar:active:not(:disabled) {
+  background-color: var(--ks-color-taskbar-hover);
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
 .ks-button.is-progress, .ks-icon-button.is-progress { position: relative; }
