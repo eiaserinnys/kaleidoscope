@@ -216,3 +216,34 @@ for (const theme of ["light", "dark"] as const) {
     }
   });
 }
+
+test("검수용 보완 화면을 기록한다", async ({ page }) => {
+  test.skip(!process.env.KS_1051_STATES_DIR);
+  const dir = process.env.KS_1051_STATES_DIR!;
+  mkdirSync(dir, { recursive: true });
+  const app = page.getByTestId("app-window-data-controls");
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    const targets: Array<[string, unknown, string]> = [
+      ["row-danger", { type: "stack", direction: "row", children: [button("기본"), button("위험", "danger")] }, "위험"],
+      ["emphasis", { type: "stack", direction: "row", children: [button("강조", "primary")] }, "강조"],
+      ["keypad-danger", { type: "button_grid", columns: 2, buttons: [{ key: "a", label: "기본" }, { key: "d", label: "위험", variant: "danger" }], on_press: [] }, "위험"],
+      ["confirm-danger", { type: "dialog", title: "확인", open: true, on_close: [], on_confirm: [], danger: true, child: { type: "text", value: "지울까요?" } }, ""],
+    ];
+    for (const [name, ui, label] of targets) {
+      await setApp(page, ui);
+      const el = name === "confirm-danger" ? page.locator(".ks-dialog-confirm .ks-button") : app.getByRole("button", { name: label, exact: true });
+      const box = async (state: string) => { await el.screenshot({ path: join(dir, `${theme}-${name}-${state}.png`) }); };
+      await page.mouse.move(0, 0); await box("idle");
+      await el.hover(); await box("hover");
+      await page.mouse.down(); await box("active"); await page.mouse.up();
+    }
+    for (const width of [1100, 360]) {
+      await page.setViewportSize({ width, height: 700 });
+      const row = (n: string, extra: Record<string, unknown> = {}) => ({ type: "stack", direction: "row", fill: 0, children: [input(`${n}-field`, extra), button("보내기")] });
+      await setApp(page, { type: "stack", direction: "column", children: [row("plain"), row("hid", { label: "hid-label", label_position: "hidden" })] }, { "plain-field": "", "hid-field": "" });
+      await page.screenshot({ path: join(dir, `${theme}-row-hidden-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 1100, height: 720 });
+  }
+});
