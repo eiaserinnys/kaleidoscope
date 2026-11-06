@@ -202,3 +202,56 @@ for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아�
   expect(await notice.evaluate(el => getComputedStyle(el).pointerEvents)).toBe("none");
   await expect(notice).toHaveCount(0, { timeout: 8000 });
 });
+
+ test("본문의 표 머리와 붙는 머리는 창 알림 위로 새지 않는다", async ({ page }) => {
+  await page.goto("/?preview=notice-fixture");
+  await page.getByTestId("fake-files-panel").evaluate(e => e.remove());
+  const app = page.getByTestId("app-window-notice-fixture");
+  await expect(app.getByRole("button", { name: "시작 단추" })).toBeVisible();
+  await app.evaluate(e => {
+    e.style.width = "360px"; e.style.height = "240px";
+    const body = e.querySelector<HTMLElement>(".ks-data-window-body")!;
+    const header = document.createElement("div"); header.className = "ks-table-header";
+    header.style.cssText = "position:absolute;inset:0"; header.textContent = "이름 상태";
+    body.append(header);
+  });
+  await page.evaluate(() => (window as any).noticeFixture.alert());
+  const n = app.getByRole("alert");
+  const bad = await n.evaluate(e => {
+    const r = e.getBoundingClientRect(); let bad = 0;
+    for (let y = r.top + 3; y < r.bottom - 3; y += 5) for (let x = r.left + 3; x < r.right - 3; x += 5) if (!e.contains(document.elementFromPoint(x, y))) bad++;
+    return bad;
+  });
+  expect(bad).toBe(0);
+ });
+
+ test("키보드로 알림을 닫고 Enter를 다시 눌러도 본문 동작이 실행되지 않는다", async ({ page }) => {
+  await page.goto("/?preview=notice-fixture");
+  const app = page.getByTestId("app-window-notice-fixture");
+  await expect(app.getByRole("button", { name: "시작 단추" })).toBeVisible();
+  await page.evaluate(() => (window as any).noticeFixture.alert());
+  await app.getByRole("button", { name: "닫기", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(app.getByRole("alert")).toHaveCount(0);
+  expect(await app.locator(".ks-data-window-body").evaluate(e => document.activeElement === e)).toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(app.getByText("시작 누름", { exact: true })).toHaveCount(0);
+ });
+
+ test("행 오류가 있는 표는 낮은 채움 칸에도 정상 행을 남기고 부모를 넘치지 않는다", async ({ page }) => {
+  await page.goto("/?preview=paging-test");
+  await page.evaluate(() => document.querySelector('[data-testid="fake-files-panel"]')?.remove());
+  const app = page.getByTestId("app-window-paging-test");
+  await app.getByRole("tab", { name: "표", exact: true }).click();
+  await expect(app.getByRole("table")).toBeVisible();
+  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: { sources: {}, values: { "/ui/tabs/1/child/children/1/rows": { status: "ready", value: [{ name: "빠진 키" }, ...Array.from({ length: 40 }, (_, i) => ({ key: String(i), name: `정상 ${i}` }))] } } } }));
+  await expect(app.getByRole("alert")).toBeVisible();
+  await app.evaluate(e => { e.style.width = "360px"; e.style.height = "240px"; });
+  const metrics = await app.getByRole("table").evaluate(e => {
+    const parent = e.parentElement!, r = e.getBoundingClientRect();
+    const row = e.querySelector('[data-row-key]')!.getBoundingClientRect();
+    return { overflow: parent.scrollHeight - parent.clientHeight, visibleRow: Math.min(row.bottom, r.bottom) - Math.max(row.top, r.top) };
+  });
+  expect(metrics.overflow).toBeLessThanOrEqual(1);
+  expect(metrics.visibleRow).toBeGreaterThan(10);
+ });

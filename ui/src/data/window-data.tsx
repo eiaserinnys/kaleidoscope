@@ -309,11 +309,12 @@ export class WindowData {
   getSources = () => this.sources;
   getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
-  getNotice = () => this.notice;
-  getNoticeId = () => this.noticeId;
+  getNotice = () => this.noticeRole === "status" ? this.statusMessage : this.notice;
+  getNoticeId = () => this.noticeRole === "status" ? null : this.noticeId;
   getNoticeRole = () => this.noticeRole;
   getStatusSequence = () => this.statusSequence;
   setNotice = (problem: CoreError | string | null, owner: object | null = null) => {
+    this.statusMessage = null;
     this.noticeProblem = problem;
     this.noticeOwner = owner;
     this.notice = typeof problem === "string" ? problem : problem?.message ?? null;
@@ -322,10 +323,26 @@ export class WindowData {
     this.noticeListeners.forEach((listener) => listener());
   };
   setOwnedNotice = (problem: CoreError | string, owner: object) => {
-    if (this.notice === null || this.noticeOwner === owner) this.setNotice(problem, owner);
+    if (this.notice !== null && this.noticeOwner !== owner) return;
+    if (this.noticeRole !== "status") { this.setNotice(problem, owner); return; }
+    this.noticeProblem = problem; this.noticeOwner = owner;
+    this.notice = typeof problem === "string" ? problem : problem.message;
+    this.noticeId = typeof problem === "string" ? null : problem.id;
+    this.noticeListeners.forEach((listener) => listener());
   };
-  clearNoticeIf = (problem: CoreError | string, owner?: object) => { if (this.noticeProblem === problem && (!owner || this.noticeOwner === owner)) this.setNotice(null); };
-  setStatus = (message: string) => { this.noticeProblem = null; this.noticeOwner = null; this.notice = message; this.noticeId = null; this.noticeRole = "status"; this.statusSequence += 1; this.noticeListeners.forEach((listener) => listener()); };
+  clearNoticeIf = (problem: CoreError | string, owner?: object) => {
+    if (this.noticeProblem !== problem || (owner && this.noticeOwner !== owner)) return;
+    this.noticeProblem = null; this.noticeOwner = null; this.notice = null; this.noticeId = null;
+    this.noticeListeners.forEach((listener) => listener());
+  };
+  private statusMessage: string | null = null;
+  clearStatus = (sequence: number) => {
+    if (this.statusSequence !== sequence) return;
+    this.statusMessage = null;
+    this.noticeRole = "alert";
+    this.noticeListeners.forEach((listener) => listener());
+  };
+  setStatus = (message: string) => { this.statusMessage = message; this.noticeRole = "status"; this.statusSequence += 1; this.noticeListeners.forEach((listener) => listener()); };
   getClientFailed = () => this.clientFailed;
   failClient = (problem: CoreError) => { this.clientFailed = true; this.setNotice(problem); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };

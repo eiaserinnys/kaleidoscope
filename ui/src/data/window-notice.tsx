@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { X } from "../components/icons";
 import { Button, IconButton, Notice } from "../components/primitives";
 import { useWindowData } from "./window-data";
@@ -18,8 +18,14 @@ export function WindowNotice() {
   const statusSequence = useSyncExternalStore(data.subscribeNotice, data.getStatusSequence, data.getStatusSequence);
   const clientFailed = useSyncExternalStore(data.subscribeNotice, data.getClientFailed, data.getClientFailed);
   const [dismissed, setDismissed] = useState(false);
-  useEffect(() => { setDismissed(false); }, [sources]);
+
   const failed = Object.entries(sources).filter(([, value]) => value.state === "failed" && value.has_value).map(([name]) => name);
+  const failureKey = JSON.stringify([...failed].sort().map((name) => {
+    const source = sources[name];
+    return source.state === "failed" ? [name, source.id, source.message] : [];
+  }));
+  useEffect(() => { setDismissed(false); }, [failureKey]);
+  const safeFocus = useRef<HTMLDivElement>(null);
   const sourceErrorId = failed
     .map((name) => {
       const source = sources[name];
@@ -31,13 +37,21 @@ export function WindowNotice() {
     ? `${failed.length > 1 ? `화면 ${failed.length}곳이 이전에 받은 내용을 보이고 있습니다.` : "이전에 받은 내용을 보이고 있습니다."} ${firstFailed.message}`
     : "";
   if (!message && (!failed.length || dismissed)) return null;
-  const close = () => { if (message) data.setNotice(null); else setDismissed(true); };
+  const close = () => {
+    // 사라지는 단추 대신 동작 없는 창 본문에 초점을 둔다.
+    const body = safeFocus.current?.closest(".ks-data-window")?.querySelector<HTMLElement>(".ks-data-window-body");
+    if (body && !body.closest("[inert]")) {
+      body.tabIndex = -1;
+      body.focus({ preventScroll: true });
+    }
+    if (message) data.setNotice(null); else setDismissed(true);
+  };
   const closeButton = <IconButton key="close" aria-label="닫기" onClick={close}><X size="inline" /></IconButton>;
   const actions: [ReactNode] | [ReactNode, ReactNode] = message
     ? clientFailed ? [<Button key="restart" onClick={() => { void data.restartClient(); }}>다시 시작</Button>, closeButton] : [closeButton]
     : [<Button key="retry" onClick={() => { void data.refresh(failed); }}>다시 받기</Button>, closeButton];
   if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} />;
-  return <Notice role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
+  return <><div ref={safeFocus} hidden /><Notice role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice></>;
 }
 
 const STATUS_NOTICE_DURATION_MS = 5000;
@@ -47,7 +61,7 @@ function TransientStatus({ data, message, sequence }: {
 }) {
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (data.getNoticeRole() === "status" && data.getStatusSequence() === sequence) data.setNotice(null);
+      if (data.getNoticeRole() === "status" && data.getStatusSequence() === sequence) data.clearStatus(sequence);
     }, STATUS_NOTICE_DURATION_MS);
     return () => clearTimeout(timer);
   }, [data, sequence]);

@@ -15,3 +15,12 @@ it("문서를 정화하고 nonce가 붙은 브리지만 실행하도록 만든�
   expect(scripts[0].getAttribute("src")).toMatch(/^data:text\/javascript;base64,/);
   expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content")).toContain(`script-src 'nonce-${nonce}'`);
 });
+
+
+it("토큰 문서만 낮은 우선순위의 기본 색상 체계를 받고 작성자 선언은 보존한다", () => {
+  const token = htmlViewSource('<p style="color:var(--ks-color-text)">본문</p>');
+  expect(token).toContain(":where(:root){color-scheme:light dark}");
+  expect(htmlViewSource('<p style="color:black;background:white">본문</p>')).not.toContain(":where(:root){color-scheme:light dark}");
+  const own = htmlViewSource('<style>:root{color-scheme:only light}</style><p style="color:var(--ks-color-text)">본문</p>');
+  expect(own).toContain(":root{color-scheme:only light}");
+});

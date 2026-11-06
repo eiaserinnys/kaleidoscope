@@ -162,3 +162,30 @@ it("정보 알림이 사라진 뒤 원천 실패와 다시 받기는 남는다",
   expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
   expect(screen.getByRole("button", { name: "다시 받기" })).toBeTruthy();
 });
+
+
+it("다른 원천 갱신은 닫힌 실패를 다시 열지 않고 해소 뒤 재발은 연다", () => {
+  const fail = { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" };
+  const merge = (sources: unknown) => act(() => (data as any).merge({ sources, values: {} }));
+  merge({ feed: fail });
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  merge({ other: { state: "ready", has_value: true } });
+  expect(screen.queryByRole("alert")).toBeNull();
+  merge({ feed: { ...fail } });
+  expect(screen.queryByRole("alert")).toBeNull();
+  merge({ feed: { ...fail, message: "새 실패" } });
+  expect(screen.getByRole("alert").textContent).toContain("새 실패");
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  merge({ feed: { state: "ready", has_value: true } });
+  merge({ feed: { ...fail, message: "새 실패" } });
+  expect(screen.getByRole("alert").textContent).toContain("새 실패");
+});
+
+it("상태 알림이 끝나면 해결하지 않은 동작 실패를 다시 보인다", () => {
+  act(() => data.failClient({ id: "TEST_ERROR", code: "server", message: "동작 실패", details: [] }));
+  act(() => data.setStatus("복사할 글이 없습니다"));
+  expect(screen.getByRole("status")).toBeTruthy();
+  tick(5000);
+  expect(screen.getByRole("alert").textContent).toContain("동작 실패");
+  expect(screen.getByRole("button", { name: "다시 시작" })).toBeTruthy();
+});
