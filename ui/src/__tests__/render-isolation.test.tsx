@@ -413,14 +413,14 @@ afterEach(() => {
 
 it("앱 배지 변경은 해당 타일과 앱 열기 단추만 갱신한다", async () => {
   const { store, transport } = await setup([definition, whenDefinition]);
-  fireEvent.click(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기" }));
+  fireEvent.click(within(document.querySelector(".ks-taskbar") as HTMLElement).getByRole("button", { name: "앱 열기" }));
   await screen.findByRole("dialog", { name: "앱 열기" });
   await settleRenders();
   tileRenders.clear(); frameRenders.count = 0;
   const current = store.getSnapshot()!;
   await act(async () => transport.emit({ event: "state.changed", snapshot: { ...current, app_badges: { [definition.id]: 1 } } }));
   await settleRenders();
-  expect(within(document.querySelector(".ks-shell-bar") as HTMLElement).getByRole("button", { name: "앱 열기, 알림 1개" })).toBeTruthy();
+  expect(within(document.querySelector(".ks-taskbar") as HTMLElement).getByRole("button", { name: "앱 열기, 알림 1개" })).toBeTruthy();
   expect(screen.getByRole("button", { name: `${definition.name}, 알림 1개` })).toBeTruthy();
   expect(tileRenders.get(definition.name)).toBe(1);
   expect(tileRenders.get(whenDefinition.name) ?? 0).toBe(0);
@@ -574,7 +574,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     else fallbackProbe.current = (windowId, pointer, type) => calls.push({ windowId, pointer, type });
     calls.length = 0;
     await act(async () => complete({ op: "app.icon", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } }));
-    await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(2));
+    await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(4));
     await settleRenders();
     expect(countFor("window-b")).toBe(0);
     expect(calls).toHaveLength(0);
@@ -842,6 +842,16 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     const shortcutDefinition: AppDefinition = { ...definition, requires: { blocks: 14, modules: { client: 2 } }, shortcuts: [{ code: "KeyR", modifiers: [], action: { client: "reset" } }] };
     const { store } = await setup([shortcutDefinition]);
     fireEvent.keyDown(document.body, { code: "KeyR", key: "r" });
+    await settleRenders();
+    expect(countFor("window-a")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    store.dispose();
+  });
+
+  it("쉘 단축키로 창을 최대화해도 창 내용은 다시 그리지 않는다", async () => {
+    const { store } = await setup();
+    fireEvent.keyDown(document.body, { code: "ArrowUp", key: "ArrowUp", ctrlKey: true, altKey: true });
+    await waitFor(() => expect(screen.getAllByTestId(`app-window-${definition.id}`)[0].getAttribute("data-maximized")).toBe("true"));
     await settleRenders();
     expect(countFor("window-a")).toBe(0);
     expect(countFor("window-b")).toBe(0);

@@ -109,7 +109,7 @@ describe("쉘 앱 아이콘", () => {
     render(<Shell store={store} />);
     await store.ready;
     await waitFor(() => expect(document.querySelector(".ks-shell-actions")).not.toBeNull());
-    const launcher = within(document.querySelector(".ks-shell-actions") as HTMLElement).getByRole("button", { name: "앱 열기" });
+    const launcher = within(document.querySelector(".ks-taskbar") as HTMLElement).getByRole("button", { name: "앱 열기" });
     const iconCalls = () => calls.mock.calls.filter(([request]) => request.op === "app.icon");
     expect(iconCalls()).toHaveLength(0);
     fireEvent.click(launcher);
@@ -120,7 +120,7 @@ describe("쉘 앱 아이콘", () => {
     expect(screen.getByTestId("app-window-md-viewer").querySelector(".ks-window-titlebar .ks-icon-skeleton-chrome")).not.toBeNull();
     expect(iconCalls()).toHaveLength(1);
     complete({ op: "app.icon", media: { mime: "image/png", data_base64: "AA==", width: null, height: null } });
-    await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(2));
+    await waitFor(() => expect(document.querySelectorAll("img.ks-app-icon")).toHaveLength(3));
     expect(screen.getByRole("dialog", { name: "앱 열기" }).querySelector(".ks-icon-skeleton-icon")).toBeNull();
     transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [window] }, link: { state: "connected", mode: "remote", server_url: "https://second.test", device_name: "PC" } } });
     await waitFor(() => expect(iconCalls()).toHaveLength(2));

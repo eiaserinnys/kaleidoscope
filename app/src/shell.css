@@ -331,25 +331,14 @@
   white-space: nowrap;
 }
 
-.ks-taskbar-window-dot {
-  width: var(--ks-space-2);
-  height: var(--ks-space-2);
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--ks-color-muted);
+.ks-taskbar-item[data-state="minimized"] .ks-app-icon {
+  opacity: 0.5;
 }
 
-.ks-taskbar-item[data-state="active"] .ks-taskbar-window-dot {
-  background: var(--ks-color-accent-soft);
-}
-
-.ks-taskbar-item[data-state="minimized"] .ks-taskbar-window-dot {
-  border: var(--ks-line-width) solid var(--ks-color-muted);
-  background: transparent;
-}
-
+.ks-taskbar > .ks-icon-button { flex: 0 0 auto; }
 .ks-taskbar-windows {
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   align-items: center;
   gap: var(--ks-space-1);

@@ -5,12 +5,9 @@ import {
   focusRescued, useAnchoredOverlay, useIconGridColumns, useShellSelector, type ShellStore,
 } from "@kaleidoscope/ui";
 
-export type LauncherSpacing = "none" | "gap";
-
-export function AppLauncher({ store, anchor, spacing, onClose, onSelect }: {
+export function AppLauncher({ store, anchor, onClose, onSelect }: {
   store: ShellStore;
   anchor: HTMLElement;
-  spacing: LauncherSpacing;
   onClose: () => void;
   onSelect: (appId: string) => void;
 }) {
@@ -19,15 +16,15 @@ export function AppLauncher({ store, anchor, spacing, onClose, onSelect }: {
   const grid = useRef<HTMLDivElement>(null);
   const tiles = useRef<Array<HTMLButtonElement | null>>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const [space, setSpace] = useState(() => availableSpace(anchor, spacing));
+  const [space, setSpace] = useState(() => availableSpace(anchor));
   useLayoutEffect(() => {
-    const measure = () => setSpace(availableSpace(anchor, spacing));
+    const measure = () => setSpace(availableSpace(anchor));
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [anchor, spacing]);
+  }, [anchor]);
   const columns = useIconGridColumns(grid, !!apps?.length);
-  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true, preferAbove: space.preferAbove, offsetToken: spacing === "gap" ? "--ks-space-2" : undefined });
+  const position = useAnchoredOverlay(anchor, panel, { observe: true, alignEndOnOverflow: true, preferAbove: true, offsetToken: "--ks-space-2" });
   const { groups, all } = useMemo(() => {
     const builtins = new Set<string>(BUILTIN_APP_IDS);
     const sorted = (apps ?? []).slice().sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
@@ -46,7 +43,7 @@ export function AppLauncher({ store, anchor, spacing, onClose, onSelect }: {
       onClose();
       setTimeout(() => {
         if (document.activeElement && document.activeElement !== document.body) return;
-        const target = anchor.isConnected ? anchor : document.querySelector<HTMLElement>('.ks-shell-bar button[aria-label^="앱 열기"]');
+        const target = anchor.isConnected ? anchor : document.querySelector<HTMLElement>(".ks-app-launcher-button");
         if (target) focusRescued(target, { preventScroll: true });
       }, 0);
     };
@@ -137,14 +134,12 @@ const LauncherTile = memo(function LauncherTile({ store, app, ...props }: {
   return <IconTile {...props} name={app.name} badge={badge} icon={<AppIcon store={store} appId={app.id} appVersion={app.current_version} size="tile" placeholder="skeleton" />} />;
 });
 
-function availableSpace(anchor: HTMLElement, spacing: LauncherSpacing) {
+function availableSpace(anchor: HTMLElement) {
   const rect = anchor.getBoundingClientRect();
   const barBottom = document.querySelector(".ks-shell-bar")?.getBoundingClientRect().bottom ?? 0;
   const style = getComputedStyle(anchor);
   const inset = Number.parseFloat(style.getPropertyValue("--ks-space-3")) || 0;
-  const gap = spacing === "gap" ? Number.parseFloat(style.getPropertyValue("--ks-space-2")) || 0 : 0;
-  const below = window.innerHeight - rect.bottom - inset;
+  const gap = Number.parseFloat(style.getPropertyValue("--ks-space-2")) || 0;
   const above = rect.top - barBottom - inset;
-  const preferAbove = above > below;
-  return { preferAbove, height: (preferAbove ? above : below) - gap };
+  return { height: Math.max(0, above - gap) };
 }

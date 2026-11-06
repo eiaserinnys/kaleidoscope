@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   Button,
-  CountBadge,
   ContextMenuHost,
   SHELL_DESKTOP_DELETE_UNSAVED,
   SHELL_WINDOW_CLOSE_UNSAVED,
@@ -29,11 +28,10 @@ import {
   type MenuEntry,
   type ShellSnapshot,
   type ShellStore,
-  type Workspace,
   type Rect,
   type WindowSize,
 } from "@kaleidoscope/ui";
-import { AppLauncher, type LauncherSpacing } from "./app-launcher";
+import { AppLauncher } from "./app-launcher";
 import { serverLabel } from "./server-label";
 import { ShellSettings } from "./shell-settings";
 import { MessageAppPrompt } from "./message-app-prompt";
@@ -43,22 +41,17 @@ import { DesktopArea } from "./desktop-area";
 import { SystemWindow, type SystemWindowState } from "./system-window";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect, windowSizeForApp } from "./window-geometry";
+import { createShellWindowActions, selectDesktop, selectWorkspace } from "./shell-window-actions";
+import { installShellShortcuts } from "./shell-shortcuts";
 
 type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
-
-function AppLauncherButton({ store, expanded, onClick }: { store: ShellStore; expanded: boolean; onClick: (anchor: HTMLElement) => void }) {
-  const count = useShellSelector(store, (snapshot) => Object.values(snapshot?.app_badges ?? {}).reduce((sum, value) => sum + value, 0));
-  return <IconButton className="ks-app-launcher-button" aria-label={count ? `앱 열기, 알림 ${count}개` : "앱 열기"} aria-haspopup="dialog" aria-expanded={expanded} onClick={(event) => onClick(event.currentTarget)} title="앱 열기">
-    <span className="ks-badge-anchor"><LayoutGrid /><CountBadge count={count} dot /></span>
-  </IconButton>;
-}
 
 export function Shell({ store }: { store: ShellStore }) {
   useWindowControlHost(store);
   const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
-  const [launcher, setLauncher] = useState<{ anchor: HTMLElement; spacing: LauncherSpacing } | null>(null);
+  const [launcher, setLauncher] = useState<{ anchor: HTMLElement } | null>(null);
   const closeLauncher = useCallback(() => setLauncher(null), []);
   const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server"; entry: { kind: "gear" | "server"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
   const settingsRect = useRef<Rect | null>(null);
@@ -173,7 +166,10 @@ export function Shell({ store }: { store: ShellStore }) {
     }
     setSettings(null);
   }, [settingsAnchor, settingsOrigin]);
-  const raiseSettings = useCallback(() => setSettings((current) => current ? { ...current, minimized: false, z: maxZNow() + 1 } : null), [maxZNow]);
+  const raiseSettings = useCallback(() => {
+    const z = maxZNow() + 1;
+    setSettings((current) => current ? { ...current, minimized: false, z } : null);
+  }, [maxZNow]);
   const minimizeSettings = useCallback(() => setSettings((current) => current ? { ...current, minimized: true } : null), []);
   const maximizeSettings = useCallback(() => setSettings((current) => current ? { ...current, maximized: true } : null), []);
   const restoreSettings = useCallback(() => setSettings((current) => current ? { ...current, maximized: false } : null), []);
@@ -185,6 +181,10 @@ export function Shell({ store }: { store: ShellStore }) {
     minimized: settingsMinimized, maximized: settingsMaximized, z: settingsZ, isTop: settingsIsTop,
     raise: raiseSettings, minimize: minimizeSettings, maximize: maximizeSettings, restore: restoreSettings, close: closeSettings,
   } : undefined, [settingsOpen, settingsMinimized, settingsMaximized, settingsZ, settingsIsTop, raiseSettings, minimizeSettings, maximizeSettings, restoreSettings, closeSettings]);
+  const systemStateRef = useRef(systemState);
+  systemStateRef.current = systemState;
+  const windowActions = useMemo(() => createShellWindowActions(store, runCommand, () => systemStateRef.current), [store, runCommand]);
+  useEffect(() => installShellShortcuts(windowActions), [windowActions]);
 
   const serverButton = snapshot ? (
     <Button className="ks-button-quiet shell-link-button" onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabel(snapshot)}>
@@ -210,7 +210,7 @@ export function Shell({ store }: { store: ShellStore }) {
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}{settingsButton}</div></header>
       {/* 아래 작업 있는 갈래와 main의 같은 자리에 DesktopArea를 두어야 연결 중과 페어링을 거쳐도 설정 창이 다시 만들어지지 않는다. */}
-      <DesktopArea canvasKey={canvasKey} systemWindow={systemWindow} launcherOpen={false} onAreaChange={reportArea} onCall={runCommand} onOpenApps={() => {}} store={store}
+      <DesktopArea canvasKey={canvasKey} systemWindow={systemWindow} launcherOpen={false} onAreaChange={reportArea} onCall={runCommand} onOpenApps={() => {}} store={store} windowActions={windowActions}
         emptyState={<EmptyState icon={<LayoutGrid size="empty" />} text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
           action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined} />} />
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
@@ -223,9 +223,9 @@ export function Shell({ store }: { store: ShellStore }) {
     .filter((desktop) => desktop.workspace_id === activeWorkspace.id)
     .sort((a, b) => a.position - b.position);
 
-  const openAppMenu = (anchor: HTMLElement, spacing: LauncherSpacing) => {
+  const openAppMenu = (anchor: HTMLElement) => {
     closeMenu();
-    setLauncher((current) => current?.anchor === anchor ? null : { anchor, spacing });
+    setLauncher((current) => current?.anchor === anchor ? null : { anchor });
   };
   const selectApp = (appId: string) => {
     const latest = store.getSnapshot();
@@ -384,7 +384,6 @@ export function Shell({ store }: { store: ShellStore }) {
         </nav>
 
         <div className="ks-shell-actions">
-          <AppLauncherButton store={store} expanded={launcher !== null} onClick={(anchor) => openAppMenu(anchor, "none")} />
           <IconButton aria-label="앱 정의 가져오기" onClick={() => { fileInput.current?.click(); }} title="앱 정의 가져오기">
             <Import />
           </IconButton>
@@ -419,14 +418,15 @@ export function Shell({ store }: { store: ShellStore }) {
         launcherOpen={launcher !== null}
         onAreaChange={reportArea}
         onCall={runCommand}
-        onOpenApps={(anchor) => openAppMenu(anchor, "gap")}
+        onOpenApps={openAppMenu}
+        windowActions={windowActions}
         getNewWindowRect={newWindowRect}
         store={store}
       />
 
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
-      {launcher ? <AppLauncher store={store} anchor={launcher.anchor} spacing={launcher.spacing} onClose={closeLauncher} onSelect={selectApp} /> : null}
+      {launcher ? <AppLauncher store={store} anchor={launcher.anchor} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}
@@ -467,19 +467,6 @@ function sameShellChrome(left: ShellSnapshot | null, right: ShellSnapshot | null
     && left.embedded_available === right.embedded_available
     && left.last_transfer === right.last_transfer
     && left.transfer_error === right.transfer_error;
-}
-
-function selectWorkspace(snapshot: ShellSnapshot): Workspace | undefined {
-  return snapshot.shared.workspaces.find((workspace) => workspace.id === snapshot.device.active_workspace_id)
-    ?? snapshot.shared.workspaces[0];
-}
-
-function selectDesktop(snapshot: ShellSnapshot, workspace: Workspace): Desktop | undefined {
-  const desktops = snapshot.shared.desktops
-    .filter((desktop) => desktop.workspace_id === workspace.id)
-    .sort((a, b) => a.position - b.position);
-  const activeId = snapshot.device.active_desktop_ids[workspace.id];
-  return desktops.find((desktop) => desktop.id === activeId) ?? desktops[0];
 }
 
 function nextName(prefix: string, existing: string[]): string {
