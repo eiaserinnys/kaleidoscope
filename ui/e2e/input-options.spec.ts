@@ -2,6 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+// 몸통 여백이 실제 스크롤바 폭을 전제하므로 운영처럼 스크롤바를 띄운다.
+test.use({ launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] } });
+
 const run = (page: Page, label: string, action: Record<string, unknown>) => page.evaluate(async ({ label, action }) => {
   const api = (window as any).inputOptionsHarness;
   const view = api.read();
