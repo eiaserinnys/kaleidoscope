@@ -1,4 +1,5 @@
 import { encodeCommentKey } from "../../comments/key";
+import { selectionRange, toggleSelection } from "../collection-selection";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { isValidElement } from "react";
 import { keepRovingRow, useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
@@ -165,14 +166,8 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
   }, [selection, selectableRows, onSelectionChange]);
   const selectRange = useCallback((id: string) => {
     const { selectableRows, onSelectionChange } = handlers.current;
-    const start = selectableRows.findIndex((row) => row.id === selectionAnchor.current);
-    const end = selectableRows.findIndex((row) => row.id === id);
-    if (end < 0) return;
-    const origin = start < 0 ? end : start;
-    const step = origin <= end ? 1 : -1;
-    const ids: string[] = [];
-    for (let i = origin; i !== end + step; i += step) ids.push(selectableRows[i].id);
-    onSelectionChange?.(ids);
+    const keys = selectableRows.map((row) => row.id);
+    if (keys.includes(id)) onSelectionChange?.(selectionRange(keys, selectionAnchor.current, id));
   }, []);
   const [focusRequest, setFocusRequest] = useState<{ targets: Array<string | null>; waitForTarget: boolean; select?: boolean; currentOnNull: boolean; visibleOnly?: boolean; token: number } | null>(null);
   const focusRequestToken = useRef(0);
@@ -219,7 +214,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
       if (event.shiftKey) { selectRange(row.id); return; }
       if (event.ctrlKey) {
         selectionAnchor.current = row.id;
-        onSelectionChange(selection.includes(row.id) ? selection.filter((id) => id !== row.id) : [...selection, row.id]);
+        onSelectionChange(toggleSelection(selection, row.id));
         return;
       }
       selectionAnchor.current = row.id;

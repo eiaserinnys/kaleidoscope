@@ -63,6 +63,25 @@ afterEach(() => {
 });
 
 describe("공용 가상 트리", () => {
+  it("Ctrl 토글과 역방향 Shift 범위는 기존 선택 순서를 지킨다", () => {
+    const changes = vi.fn();
+    function SelectionHarness() {
+      const [selection, setSelection] = useState<string[]>([]);
+      return <TreeView className="ks-file-tree-list" expanded={new Set()} label="여러 선택"
+        nodes={["a", "b", "c", "d"].map((id) => ({ id, label: id }))}
+        endAction={{ label: "끝", onActivate: vi.fn() }} selection={selection}
+        onSelectionChange={(next) => { changes(next); setSelection(next); }}
+        onActivate={() => {}} onExpandedChange={() => {}} />;
+    }
+    render(<SelectionHarness />);
+    fireEvent.click(screen.getByRole("treeitem", { name: "b" }));
+    fireEvent.click(screen.getByRole("treeitem", { name: "d" }), { ctrlKey: true });
+    expect(changes).toHaveBeenLastCalledWith(["b", "d"]);
+    fireEvent.click(screen.getByRole("treeitem", { name: "a" }), { shiftKey: true });
+    expect(changes).toHaveBeenLastCalledWith(["d", "c", "b", "a"]);
+    fireEvent.keyDown(screen.getByRole("treeitem", { name: "a" }), { key: "a", ctrlKey: true });
+    expect(changes).toHaveBeenLastCalledWith(["a", "b", "c", "d"]);
+  });
   it.each([null, "row-40"])("화면 안 포커스 요청은 스크롤 없이 행 또는 목록으로 돌아온다 (%s)", async (target) => {
     let focus!: TreeFocusController;
     render(<><input aria-label="바깥 입력" /><TreeView className="ks-file-tree-list" expanded={new Set()} label="포커스 복귀"
