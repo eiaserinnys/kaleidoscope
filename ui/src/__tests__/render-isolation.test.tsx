@@ -1338,7 +1338,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
       return original(request);
     }) as typeof store.call);
     const items = Array.from({ length: 400 }, (_, i) => ({ key: String(i), title: `앱 ${i}`, image: { permission: "catalog", path: `apps/${i}.png`, query: { server: "https://store.example" } } }));
-    const groups = [{ title: "자료", items }, { title: "빈 자료", items: [], status: { state: "empty", message: "없음" } }];
+    const groups: JsonValue[] = [{ title: "자료", items }, { title: "빈 자료", items: [], status: { state: "empty", message: "없음" } }];
     await act(async () => transport.emit({ event: "data.update", window_id: "window-a", view: { sources: {}, values: { "/ui/items": { status: "ready", value: grouped ? groups : items } } } }));
     await waitFor(() => expect(mediaCalls.length).toBeGreaterThan(0));
     await settleRenders();
