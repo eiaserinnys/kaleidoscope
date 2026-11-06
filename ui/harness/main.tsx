@@ -42,6 +42,8 @@ import { stackWhenFillApp } from "../e2e/fixtures/stack-when-fill";
 import { inputSpinApp } from "../e2e/fixtures/input-spin";
 import { inputOptionsApp } from "../e2e/fixtures/input-options-app";
 import { inputDateTimeApp } from "../e2e/fixtures/input-date-time-app";
+import windowBodyGutter from "../e2e/fixtures/window-body-gutter.json";
+import windowBodyGutterLists from "../e2e/fixtures/window-body-gutter-lists.json";
 import { executeWindowAction, readWindowView, registerControlWindow } from "../src/share/window-control";
 import { describeVisible } from "../src/share/visible";
 
@@ -93,7 +95,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
+const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
