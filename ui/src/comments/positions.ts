@@ -31,6 +31,20 @@ function scrollClip(element: HTMLElement, content: HTMLElement) {
   return { left, top, right, bottom };
 }
 
+/** 창 내용 안의 고정 머리만 말풍선을 가리는 것으로 본다. */
+export function isCommentAnchorVisible(content: HTMLElement, element: HTMLElement, kind: string, rect: Pick<DOMRect, "left" | "right" | "top" | "height">, clip: { left: number; right: number }, firstLineHeight: number): boolean {
+  if (kind === "point") return true;
+  const x = Math.max(clip.left, Math.min((rect.left + rect.right) / 2, clip.right));
+  const y = rect.top + Math.min(rect.height, firstLineHeight) / 2;
+  const top = element.ownerDocument.elementsFromPoint(x, y).find((candidate) => content.contains(candidate) && !candidate.closest(".ks-comment-layer"));
+  if (!top || element.contains(top) || top.contains(element)) return true;
+  for (let node: Element | null = top; node; node = node.parentElement) {
+    if (getComputedStyle(node).position === "sticky") return false;
+    if (node === content) break;
+  }
+  return true;
+}
+
 export function useCommentPositions(content: HTMLElement | null, windowId: string, enabled: boolean, definition: AppDefinition | undefined, items: AppCommentSummary[], railOpen: boolean, selectedId: string | null, target: TargetDescription | null, hover: HTMLElement | null, onPinsPositioned: () => boolean) {
   const [index, setIndex] = useState<Index>();
   const [statuses, setStatuses] = useState<Record<string, PositionStatus>>({});
@@ -70,8 +84,9 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
       const surfaceRect = surface?.getBoundingClientRect();
       const barRect = win.querySelector<HTMLElement>(".ks-comment-bar.is-inside")?.getBoundingClientRect();
       const overlapsSurface = (rect: { left: number; right: number; top: number; bottom: number }) => !!surfaceRect && rect.left < surfaceRect.right && rect.right > surfaceRect.left && rect.top < surfaceRect.bottom && rect.bottom > surfaceRect.top;
-      const expands = (element: HTMLElement, kind: string) => {
+      const expands = (element: HTMLElement, kind: string, type?: string) => {
         if (kind !== "row") return true;
+        if (type !== "feed") return false;
         const padding = getComputedStyle(element);
         return parseFloat(padding.paddingInlineStart) === 0 && parseFloat(padding.paddingInlineEnd) === 0;
       };
@@ -88,9 +103,9 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
       if (hoverBox.current) hoverBox.current.style.display = "none";
       if (hover && content.contains(hover)) {
         const hovered = describeTarget(hover, content);
-        if (hovered) showBox(hoverBox.current, hovered.element, hovered.element.getBoundingClientRect(), expands(hovered.element, hovered.anchor.kind));
+        if (hovered) showBox(hoverBox.current, hovered.element, hovered.element.getBoundingClientRect(), expands(hovered.element, hovered.anchor.kind, hovered.anchor.normalized_type));
       }
-      if (target && target.anchor.kind !== "text" && target.anchor.kind !== "point") showBox(selectedBox.current, target.element, target.element.getBoundingClientRect(), expands(target.element, target.anchor.kind));
+      if (target && target.anchor.kind !== "text" && target.anchor.kind !== "point") showBox(selectedBox.current, target.element, target.element.getBoundingClientRect(), expands(target.element, target.anchor.kind, target.anchor.normalized_type));
       const place = (id: string, kind: string, element: HTMLElement, rect: DOMRect) => {
         const clip = scrollClip(element, content);
         const center = rect.top + Math.min(rect.height, size * 5 / 3) / 2;
@@ -102,8 +117,7 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
         const ownRight = kind === "block" && element.clientWidth ? bounds.left + element.clientLeft + element.clientWidth : bounds.right;
         const edge = Math.min(kind === "text" ? bounds.right : rect.right, clip.right, ownRight);
         const x = kind === "point" ? Math.min(rect.left, rightLimit) : Math.min(edge - inset, rightLimit);
-        const top = element.ownerDocument.elementsFromPoint(kind === "point" ? rect.left : edge - inset, kind === "point" ? rect.top : center).find((candidate) => !candidate.closest(".ks-comment-layer"));
-        if (!top || !element.contains(top)) return false;
+        if (!isCommentAnchorVisible(content, element, kind, rect, clip, size * 5 / 3)) return false;
         if (!overlapsSurface({ left: x, right: x + size, top: y, bottom: y + size }) && !(barRect && x < barRect.right && x + size > barRect.left && y < barRect.bottom && y + size > barRect.top)) placed.push({ id, x: x - origin.left, y: y - origin.top });
         return true;
       };
@@ -116,7 +130,7 @@ export function useCommentPositions(content: HTMLElement | null, windowId: strin
         if (item.resolved || !("rect" in result)) continue;
         const rect = result.range?.getClientRects()[0] ?? result.rect;
         if (item.id === selectedId && item.anchor.kind !== "point" && item.anchor.kind !== "text" && selectedBox.current) {
-          showBox(selectedBox.current, result.element, rect, expands(result.element, item.anchor.kind));
+          showBox(selectedBox.current, result.element, rect, expands(result.element, item.anchor.kind, item.anchor.normalized_type));
         }
         if (!place(item.id, item.anchor.kind, result.element, rect)) next[item.id] = "not_visible";
       }
