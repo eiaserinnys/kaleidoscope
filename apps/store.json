@@ -53,7 +53,7 @@
       "store": "app",
       "permission": "catalog",
       "server": {"state": "selected_store"},
-      "id": {"expr": "$state.selected != null and $state.selected_store in $data.catalog.stores.server ? $state.selected : null"}
+      "id": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) ? $state.selected : null"}
     }
   },
   "window_title": {"title": "앱스토어"},
@@ -93,7 +93,7 @@
           {
             "type": "list",
             "layout": "icons",
-            "items": {"expr": "(\n  $q := $lowercase($trim($state.query)); $category := $state.category;\n  [$map($data.catalog.stores, function($s, $index) { (\n    $installed := [$apps[origin != null and origin.store_url = $s.server]];\n    $updates := [$installed[$not(modified) and latest.compatible = true and latest.release > origin.release]];\n    $chosen := $category = '__updates' ? $updates : $installed;\n    $pool := $category = '__installed' or $category = '__updates'\n      ? $append([$s.items[id in $chosen.id]], [$chosen[$not(id in $s.items.id)].{ \"id\": id, \"name\": name }])\n      : ($category = '' ? $s.items : [$s.items[category = $category]]);\n    $hits := [$pool[$q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q) or $contains($lowercase($string(summary)), $q)]];\n    $direct := $s.state = 'ready' and $category != '__updates' and $category != '__installed' and $q != '' and $not($q in $s.items.id) and $match($q, /^[a-z0-9-]{1,64}$/)\n      ? [{ \"id\": $q, \"name\": $q }] : [];\n    $items := [$map($append($hits, $direct), function($a) { { \"key\": $string([$s.server, $a.id]), \"title\": $a.name, \"image\": $a.icon, \"server\": $s.server, \"id\": $a.id } })];\n    $group := { \"key\": $s.server, \"server\": $s.server, \"title\": $index = 0 ? '기본 앱스토어' : '사설 ' & $string($index), \"items\": $items };\n    $merge([$group, $s.state = 'ready' ? ($count($items) = 0 ? { \"status\": { \"state\": \"empty\" } } : {})\n      : { \"status\": { \"state\": \"error\", \"message\": $s.error.message, \"code\": $s.error.id }, \"action\": $s.state = 'permission_required' ? 'allow' : 'retry' }])\n  ) })]\n)"},
+            "items": {"expr": "(\n  $q := $lowercase($trim($state.query)); $category := $state.category;\n  $stores := [$data.catalog.stores];\n  $ready := [$stores[state = 'ready']];\n  $all := [$ready.items];\n  $first := $ready[0].server;\n  $installedAll := [$apps[origin != null]];\n  $updatesAll := [$installedAll[$not(modified) and latest.compatible = true and latest.release > origin.release]];\n  $chosenAll := $category = '__updates' ? $updatesAll : $installedAll;\n  $storeGroups := [$map($stores, function($s, $index) { (\n    $installed := [$installedAll[origin.store_url = $s.server]];\n    $updates := [$updatesAll[origin.store_url = $s.server]];\n    $chosen := $category = '__updates' ? $updates : $installed;\n    $pool := $category = '__installed' or $category = '__updates'\n      ? $append([$s.items[id in $chosen.id]], [$chosen[$not(id in $s.items.id)].{ \"id\": id, \"name\": name }])\n      : ($category = '' ? $s.items : [$s.items[category = $category]]);\n    $hits := [$pool[$q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q) or $contains($lowercase($string(summary)), $q)]];\n    $direct := $s.state = 'ready' and $s.server = $first and $category != '__updates' and $category != '__installed' and $q != '' and $not($q in $all.id) and $match($q, /^[a-z0-9-]{1,64}$/)\n      ? [{ \"id\": $q, \"name\": $q }] : [];\n    $items := [$map($append($hits, $direct), function($a) { { \"key\": $string([$s.server, $a.id]), \"title\": $a.name, \"image\": $a.icon, \"server\": $s.server, \"id\": $a.id } })];\n    $group := { \"key\": $s.server, \"server\": $s.server, \"title\": $index = 0 ? '기본 앱스토어' : '사설 ' & $string($index), \"items\": $items };\n    $merge([$group, $index = 0 ? {} : { \"meta\": $s.server },\n      $s.state = 'ready' ? ($count($items) = 0 ? { \"status\": { \"state\": \"empty\" } } : {})\n      : $s.state = 'permission_required' ? { \"status\": { \"state\": \"empty\", \"message\": \"이 PC에서 연결을 허용하면 앱을 볼 수 있습니다.\" }, \"action\": \"allow\" }\n      : $merge([{ \"status\": { \"state\": \"error\", \"message\": $s.error.message, \"code\": $s.error.id } },\n          $s.error.id = 'STORECLIENT_URL_COMPONENT_INVALID' ? {} : { \"action\": \"retry\" }])])\n  ) })];\n  $orphans := [$chosenAll[$not(origin.store_url in $stores.server) and ($q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q))]];\n  $other := ($category = '__installed' or $category = '__updates') and $count($orphans) > 0\n    ? [{ \"key\": \"other-stores\", \"title\": \"그 밖의 스토어\", \"items\": [$map($orphans, function($a) { { \"key\": $string([$a.origin.store_url, $a.id]), \"title\": $a.name, \"image\": $a.icon, \"server\": $a.origin.store_url, \"id\": $a.id } })] }] : [];\n  $append($storeGroups, $other)\n)"},
             "selected": {"state": "selected_key"},
             "on_select": [
               {"set_state": "selected_key", "value": {"expr": "$item.key"}},
@@ -120,7 +120,7 @@
             "start": [
               {
                 "type": "text",
-                "value": {"expr": "$state.selected != null and $state.selected_store in $data.catalog.stores.server ? $state.selected_name : ''"},
+                "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) ? $state.selected_name : ''"},
                 "format": "plain",
                 "style": "title"
               }
@@ -128,7 +128,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and $state.selected_store in $data.catalog.stores.server and $data_meta.detail.state = 'ready'"},
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready'"},
             "child": {
               "type": "stack",
               "direction": "column",
@@ -153,7 +153,7 @@
                     },
                     {
                       "label": "상태",
-                      "value": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($exists($a)) ? '설치 전' : ($a.origin = null ? '같은 id의 다른 앱이 있어 설치할 수 없습니다' : ($a.origin.store_url != $state.selected_store ? '다른 스토어에서 설치한 앱입니다. 지운 뒤 이 스토어에서 다시 설치할 수 있습니다.' : ($a.modified ? '설치 뒤 고친 앱이라 업데이트하지 않습니다' : ($a.origin.release < $d.release ? $string($a.origin.release) & '판 설치됨, 새 판 있음' : $string($a.origin.release) & '판 설치됨')))) )"},
+                      "value": {"expr": "(\n  $a := $apps[id = $state.selected]; $d := $data.detail;\n  $names := [$map($data.catalog.stores, function($s, $i) { $s.server = $a.origin.store_url ? ($i = 0 ? '기본 앱스토어' : '사설 ' & $string($i)) : null })][$ != null];\n  $not($exists($a)) ? '설치 전' : ($a.origin = null ? '같은 id의 다른 앱이 있어 설치할 수 없습니다' :\n    ($a.origin.store_url != $state.selected_store ? ($count($names) > 0 ? $names[0] : '다른 스토어') & '에서 설치한 앱입니다. 지운 뒤 설치할 수 있습니다.' :\n      ($a.modified ? '설치 뒤 고친 앱이라 업데이트하지 않습니다' : ($a.origin.release < $d.release ? $string($a.origin.release) & '판 설치됨, 새 판 있음' : $string($a.origin.release) & '판 설치됨'))))\n)"},
                       "format": "text"
                     },
                     {"label": "id", "value": {"state": "selected"}, "format": "code"}
@@ -174,12 +174,12 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and $state.selected_store in $data.catalog.stores.server and $data_meta.detail.state != 'ready'"},
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state != 'ready'"},
             "child": {"type": "text", "value": {"expr": "$data.detail.name"}}
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and $state.selected_store in $data.catalog.stores.server and $data_meta.detail.state = 'ready'"},
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready'"},
             "child": {
               "type": "toolbar",
               "start": [
@@ -209,7 +209,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and $state.selected_store in $data.catalog.stores.server and $data_meta.detail.state != 'ready'"},
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state != 'ready'"},
             "child": {
               "type": "toolbar",
               "start": [
@@ -241,13 +241,13 @@
     "ui": {
       "type": "stack",
       "direction": "column",
-      "gap": "small",
+      "gap": "large",
       "children": [
         {"type": "properties", "fields": [{"label": "기본 앱스토어", "value": "https://kaleidoscope.eiaserinnys.me/appstore", "format": "text"}]},
         {
           "type": "list",
           "layout": "rows",
-          "items": {"expr": "[($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).{\"key\": $, \"title\": $}]"},
+          "items": {"expr": "[$map(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), function($server, $index) { {\"key\": $server, \"title\": $server, \"meta\": \"사설 \" & $string($index + 1)} })]"},
           "on_remove": [
             {
               "set_storage": {
@@ -257,19 +257,47 @@
             }
           ]
         },
-        {"type": "input", "label": "사설 스토어 주소", "value": {"state": "new_server"}, "on_change": {"set_state": "new_server"}},
         {
-          "type": "button",
-          "label": "추가",
-          "disabled": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $url = '' or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore')"},
-          "on_click": [
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
             {
-              "set_storage": {
-                "entry": "servers",
-                "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $url = '' or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
-              }
+              "type": "input",
+              "label": "사설 스토어 주소",
+              "value": {"state": "new_server"},
+              "on_change": {"set_state": "new_server"},
+              "on_submit": [
+                {
+                  "set_storage": {
+                    "entry": "servers",
+                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
+                  }
+                },
+                {"set_state": "new_server", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_server"}}
+              ]
             },
-            {"set_state": "new_server", "value": ""}
+            {
+              "type": "stack",
+              "direction": "column",
+              "align": "end",
+              "children": [
+                {
+                  "type": "button",
+                  "label": "추가",
+                  "disabled": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore')"},
+                  "on_click": [
+                    {
+                      "set_storage": {
+                        "entry": "servers",
+                        "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
+                      }
+                    },
+                    {"set_state": "new_server", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_server"}}
+                  ]
+                }
+              ]
+            }
           ]
         }
       ]

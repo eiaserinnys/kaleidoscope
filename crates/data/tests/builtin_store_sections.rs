@@ -26,8 +26,12 @@ fn store_groups_indexes_and_keeps_same_ids_separate() {
     let groups = value(&values, "/ui/children/1/children/1/items");
     assert_eq!(groups.as_array().unwrap().len(), 3);
     assert_eq!(groups[0]["title"], "기본 앱스토어");
+    assert!(groups[0].get("meta").is_none());
     assert_eq!(groups[1]["title"], "사설 1");
-    assert_eq!(groups[2]["status"]["code"], "DENIED");
+    assert_eq!(groups[1]["meta"], "http://private");
+    assert_eq!(groups[2]["status"]["state"], "empty");
+    assert_eq!(groups[2]["status"]["message"], "이 PC에서 연결을 허용하면 앱을 볼 수 있습니다.");
+    assert!(groups[2]["status"].get("code").is_none());
     assert_eq!(groups[2]["action"], "allow");
     assert_ne!(groups[0]["items"][0]["key"], groups[1]["items"][0]["key"]);
 }
@@ -99,7 +103,9 @@ fn adding_and_removing_private_addresses_write_effective_list() {
     let event = Value::Null;
     let item = json!({"key":"http://one", "title":"http://one"});
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&item, modifiers:None };
-    assert_eq!(app.action_step("/settings/ui/children/3/on_click", 0, &env).unwrap(),
+    assert_eq!(app.action_step("/settings/ui/children/2/children/1/children/0/on_click", 0, &env).unwrap(),
+        Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one","http://two"]) });
+    assert_eq!(app.action_step("/settings/ui/children/2/children/0/on_submit", 0, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one","http://two"]) });
     assert_eq!(app.action_step("/settings/ui/children/1/on_remove", 0, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!([]) });
@@ -107,12 +113,12 @@ fn adding_and_removing_private_addresses_write_effective_list() {
     same_state.insert("new_server".into(), json!("http://one/"));
     let legacy_with_slash = map(json!({"servers":null,"custom_url":"http://one/"}));
     let env = Env { state:&same_state, storage:&legacy_with_slash, ..env };
-    assert_eq!(app.action_step("/settings/ui/children/3/on_click", 0, &env).unwrap(),
+    assert_eq!(app.action_step("/settings/ui/children/2/children/1/children/0/on_click", 0, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one/"]) });
 }
 
 #[test]
-fn search_covers_all_stores_and_unlisted_id_per_ready_store() {
+fn search_covers_all_stores_and_unlisted_id_only_once() {
     let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let data = map(json!({"catalog":{"stores":[
@@ -130,7 +136,75 @@ fn search_covers_all_stores_and_unlisted_id_per_ready_store() {
     let result = app.evaluate_with_data_meta(&state, &data, &empty, &empty, &empty, &BTreeMap::new(), None);
     let groups = value(&result, "/ui/children/1/children/1/items");
     assert_eq!(groups[0]["items"][0]["id"], "private-id");
+    assert!(groups[1]["items"].as_array().unwrap().is_empty());
+    state.insert("query".into(), json!("two"));
+    let result = app.evaluate_with_data_meta(&state, &data, &empty, &empty, &empty, &BTreeMap::new(), None);
+    let groups = value(&result, "/ui/children/1/children/1/items");
+    assert!(groups[0]["items"].as_array().unwrap().is_empty());
+    assert_eq!(groups[1]["items"][0]["id"], "two");
+    state.insert("query".into(), json!("private-id"));
+    let first_offline = map(json!({"catalog":{"stores":[
+        {"server":"https://a.example", "state":"error", "items":[], "error":{"id":"OFFLINE","message":"오류"}},
+        {"server":"https://b.example", "state":"ready", "items":[]}
+    ]}}));
+    let result = app.evaluate_with_data_meta(&state, &first_offline, &empty, &empty, &empty, &BTreeMap::new(), None);
+    let groups = value(&result, "/ui/children/1/children/1/items");
+    assert!(groups[0]["items"].as_array().unwrap().is_empty());
     assert_eq!(groups[1]["items"][0]["id"], "private-id");
+}
+
+#[test]
+fn removed_stores_remain_removable_in_installed_and_updates() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let data = map(json!({"catalog":{"stores":[{"server":"https://a.example","state":"ready","items":[]}]}}));
+    let apps: Vec<kaleidoscope_contract::store::InstalledAppValue> = serde_json::from_value(json!([
+        {"id":"gone","name":"남은 앱","version":1,"origin":{"store_url":"https://removed.example","store_app_id":"gone","release":1,"digest":"abc"},"latest":{"release":2,"compatible":true},"installed_version":1,"modified":false,"icon":null}
+    ])).unwrap();
+    let empty = BTreeMap::new();
+    let mut state = definition.state.clone();
+    for category in ["__installed", "__updates"] {
+        state.insert("category".into(), json!(category));
+        let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+        let groups = value(&values, "/ui/children/1/children/1/items");
+        let orphan = groups.as_array().unwrap().last().unwrap();
+        assert_eq!(orphan["title"], "그 밖의 스토어");
+        assert_eq!(orphan["items"][0]["server"], "https://removed.example");
+        assert_eq!(orphan["items"][0]["id"], "gone");
+    }
+    state.insert("category".into(), json!(""));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    assert!(!value(&values, "/ui/children/1/children/1/items").to_string().contains("그 밖의 스토어"));
+    state.insert("selected".into(), json!("gone"));
+    state.insert("selected_store".into(), json!("https://removed.example"));
+    assert!(matches!(app.plan_source_with_apps("detail", &state, &data, &empty, &empty, Some(&apps)), SourcePlan::StoreApp { id, .. } if id == "gone"));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/4/child/start/0/disabled"), json!(false));
+}
+
+#[test]
+fn invalid_store_address_has_no_retry_and_names_the_installed_origin() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let data = map(json!({"catalog":{"stores":[
+        {"server":"https://a.example","state":"ready","items":[]},
+        {"server":"https://b.example","state":"error","items":[],"error":{"id":"STORECLIENT_URL_COMPONENT_INVALID","message":"주소 오류"}}
+    ]},"detail":{"release":2,"compatible":true}}));
+    let apps: Vec<kaleidoscope_contract::store::InstalledAppValue> = serde_json::from_value(json!([
+        {"id":"same","name":"메모","version":1,"origin":{"store_url":"https://b.example","store_app_id":"same","release":1,"digest":"abc"},"latest":null,"installed_version":1,"modified":false,"icon":null}
+    ])).unwrap();
+    let mut state = definition.state.clone();
+    state.insert("selected".into(), json!("same"));
+    state.insert("selected_store".into(), json!("https://a.example"));
+    let empty = BTreeMap::new();
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    assert!(value(&values, "/ui/children/1/children/1/items")[1].get("action").is_none());
+    assert_eq!(value(&values, "/ui/children/2/children/1/child/children/0/fields/6/value"), "사설 1에서 설치한 앱입니다. 지운 뒤 설치할 수 있습니다.");
+    state.insert("selected_store".into(), json!("https://b.example"));
+    let mut first_apps = apps.clone();
+    first_apps[0].origin.as_mut().unwrap().store_url = "https://a.example".into();
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&first_apps), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/1/child/children/0/fields/6/value"), "기본 앱스토어에서 설치한 앱입니다. 지운 뒤 설치할 수 있습니다.");
 }
 
 #[test]
@@ -166,8 +240,34 @@ fn settings_address_input_and_add_button_are_separate_vertical_children() {
     let definition: Value = serde_json::from_str(include_str!("../../../apps/store.json")).unwrap();
     let settings = &definition["settings"]["ui"];
     assert_eq!(settings["direction"], "column");
-    assert_eq!(settings["children"][2]["type"], "input");
-    assert!(settings["children"][2].get("label_position").is_none());
-    assert_eq!(settings["children"][3]["type"], "button");
-    assert_eq!(settings["children"][3]["label"], "추가");
+    let input = &settings["children"][2]["children"][0];
+    let button = &settings["children"][2]["children"][1]["children"][0];
+    assert_eq!(input["type"], "input");
+    assert!(input.get("label_position").is_none());
+    assert_eq!(input["on_submit"], button["on_click"]);
+    assert_eq!(settings["gap"], "large");
+}
+
+#[test]
+fn settings_reject_addresses_without_http_scheme() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let empty = BTreeMap::new();
+    let mut state = definition.state.clone();
+    state.insert("new_server".into(), json!("private.local"));
+    let values = app.evaluate_with_data_meta(&state, &empty, &empty, &empty, &empty, &BTreeMap::new(), None);
+    assert_eq!(value(&values, "/settings/ui/children/2/children/1/children/0/disabled"), json!(true));
+    let invalid_storage = map(json!({"servers":[], "custom_url":""}));
+    let event = Value::Null;
+    let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&invalid_storage, storage_meta:&empty, apps:None, event:&event, item:&event, modifiers:None };
+    let submit = "/settings/ui/children/2/children/0/on_submit";
+    assert_eq!(app.action_step(submit, 0, &env).unwrap(), Step::SetStorage { entry:"servers".into(), doc:None, value:json!([]) });
+    assert_eq!(app.action_step(submit, 1, &env).unwrap(), Step::SetState { key:"new_server".into(), value:json!("private.local") });
+    state.insert("new_server".into(), json!("https://private.local"));
+    let storage = map(json!({"servers":["http://one", "https://two"], "custom_url":""}));
+    let values = app.evaluate_with_data_meta(&state, &empty, &storage, &empty, &empty, &BTreeMap::new(), None);
+    assert_eq!(value(&values, "/settings/ui/children/2/children/1/children/0/disabled"), json!(false));
+    let rows = value(&values, "/settings/ui/children/1/items");
+    assert_eq!(rows[0]["meta"], "사설 1");
+    assert_eq!(rows[1]["meta"], "사설 2");
 }

@@ -77,14 +77,14 @@ const ListRow = memo(function ListRow({ item, index, length, active, focused, gr
 export function ListBlock({ block, context, pointer }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string }) {
   const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
-  if (value.status !== "ready") return block.layout === "icons" && value.status === "loading" ? <IconListLoading /> : <DataState rootProps={blockRoot} value={value} />;
+  if (value.status !== "ready") return block.layout === "icons" && value.status === "loading" ? <IconListLoading grouped={Boolean(block.grouped)} /> : <DataState rootProps={blockRoot} value={value} />;
   return <ListReady block={block} context={context} pointer={pointer} value={value.value} more={value.more} />;
 }
-function IconListLoading() {
+function IconListLoading({ grouped }: { grouped: boolean }) {
   const blockRoot = useBlockRootProps();
   const scroll = useRef<HTMLDivElement>(null);
   const columns = useIconGridColumns(scroll, true);
-  return <div {...blockRoot} className="ks-data-view ks-list is-icons" ref={scroll}><IconTileSkeleton count={columns * 2} /></div>;
+  return <div {...blockRoot} className="ks-data-view ks-list is-icons" ref={scroll}>{grouped && <div className="ks-view-group" aria-hidden="true"><span className="ks-data-skeleton"><i /></span></div>}<IconTileSkeleton count={columns * 2} /></div>;
 }
 function ListReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const blockRoot = useBlockRootProps();
@@ -168,7 +168,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
     {!items.length && !hasStatus ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
       const entry = rows[row.index];
-      return <div className={entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} data-row-key={entry.kind === "status" ? entry.group.key ?? entry.group.title : undefined} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
+      return <div className={entry.kind === "status" ? "ks-load-more ks-list-group-row" : entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} data-row-key={entry.kind === "status" ? entry.group.key ?? entry.group.title : undefined} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
         {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.kind === "status" ? (() => {
           const { group } = entry; const status = group.status!;
           const index = block.group_actions?.findIndex((action) => action.key === group.action) ?? -1;
@@ -177,8 +177,8 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
             const item = group.original as unknown as JsonValue;
             void data.act(`${pointer}/group_actions/${index}/on_click`, group.action!, item, undefined, { item, parent_item: parentScope?.item, key: group.key ?? group.title, index: row.index, instance: event.currentTarget });
           }}>{action.label}</Button> : undefined;
-          return <div className="ks-data-state-compact ks-list-group-status" aria-live="polite">{status.state === "loading" ? <DataState value={{ status: "loading" }} compact /> : null}
-            {status.state !== "loading" || status.message || status.code || button ? <EmptyState icon={status.state === "error" ? <DataIcon name="triangle-alert" size="empty" /> : undefined}
+          return <div className="ks-data-state-compact ks-list-group-status" data-layout="row" aria-live="polite">{status.state === "loading" ? <DataState value={{ status: "loading" }} compact /> : null}
+            {status.state !== "loading" || status.message || status.code || button ? <EmptyState icon={status.state === "error" ? <DataIcon name="triangle-alert" size="inline" /> : undefined}
               text={<>{status.message ?? (status.state === "empty" ? "없음" : "")}{status.code ? <> <ErrorId id={status.code} /></> : null}</>} action={button} /> : null}</div>;
         })() : entry.items.map((item, n) => {
           const index = entry.start + n; const active = item.key === selected;

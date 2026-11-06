@@ -202,43 +202,47 @@ pub(crate) fn fetch_named(
 fn fetch_store_indexes(inner: &Arc<Inner>, permission: &str, servers: &[String]) -> kaleidoscope_contract::store::StoreIndexesValue {
     use kaleidoscope_contract::store::{StoreIndexError, StoreIndexRow, StoreIndexState, StoreIndexesValue};
     let mut seen = HashSet::new();
-    let mut stores = Vec::new();
-    for input in servers {
+    let inputs: Vec<_> = servers.iter().filter_map(|input| {
         let parsed = crate::store::StoreUrl::parse(input);
         let server = parsed.as_ref().map_or_else(|_| input.clone(), |url| url.as_str().to_owned());
-        if !seen.insert(server.clone()) { continue; }
-        let result = (|| -> Result<_, CoreError> {
-            let url = parsed?;
-            let gate = crate::store_latest::gate(inner, url.as_str());
-            let _guard = gate.lock().unwrap();
-            let key = crate::data_runtime::store_gate_key(url.as_str()).expect("정규화된 스토어 주소");
-            let client = crate::store::client(inner, url.as_str())?;
-            if let Some(until) = crate::data_runtime::gates::blocked(&inner.data_runtimes, &key) {
-                return Err(errors::STORECLIENT_FETCH_HTTP_REJECTED("index.json")
-                    .and_details(vec![format!("HTTP 429; 재시도 가능 시각: {until}")]));
-            }
-            match client.index(permission) {
-                Ok(value) => {
-                    crate::data_runtime::gates::release_expired(&inner.data_runtimes, &key);
-                    crate::store_latest::record(inner, &value);
-                    Ok(value)
+        seen.insert(server.clone()).then_some((server, parsed))
+    }).collect();
+    let stores = std::thread::scope(|scope| {
+        let tasks: Vec<_> = inputs.into_iter().map(|(server, parsed)| scope.spawn(move || {
+            let result = (|| -> Result<_, CoreError> {
+                let url = parsed?;
+                let gate = crate::store_latest::gate(inner, url.as_str());
+                let _guard = gate.lock().unwrap();
+                let key = crate::data_runtime::store_gate_key(url.as_str()).expect("정규화된 스토어 주소");
+                let client = crate::store::client(inner, url.as_str())?;
+                if let Some(until) = crate::data_runtime::gates::blocked(&inner.data_runtimes, &key) {
+                    return Err(errors::STORECLIENT_FETCH_HTTP_REJECTED("index.json")
+                        .and_details(vec![format!("HTTP 429; 재시도 가능 시각: {until}")]));
                 }
-                Err(failure) => {
-                    if failure.status == Some(429) {
-                        crate::data_runtime::gates::record_limit(&inner.data_runtimes, &key, failure.rate_limit.and_then(|hint| hint.retry_after_secs));
+                match client.index(permission) {
+                    Ok(value) => {
+                        crate::data_runtime::gates::release_expired(&inner.data_runtimes, &key);
+                        crate::store_latest::record(inner, &value);
+                        Ok(value)
                     }
-                    Err(failure.error)
+                    Err(failure) => {
+                        if failure.status == Some(429) {
+                            crate::data_runtime::gates::record_limit(&inner.data_runtimes, &key, failure.rate_limit.and_then(|hint| hint.retry_after_secs));
+                        }
+                        Err(failure.error)
+                    }
+                }
+            })();
+            match result {
+                Ok(value) => StoreIndexRow { server, state: StoreIndexState::Ready, error: None, generated_at: Some(value.generated_at), items: value.items },
+                Err(error) => {
+                    let state = if error.id.as_deref() == Some("STORECLIENT_SERVER_PERMISSION_REQUIRED") { StoreIndexState::PermissionRequired } else { StoreIndexState::Error };
+                    StoreIndexRow { server, state, error: Some(StoreIndexError { id: error.id.expect("등록된 스토어 오류"), message: error.message, details: error.details }), generated_at: None, items: Vec::new() }
                 }
             }
-        })();
-        stores.push(match result {
-            Ok(value) => StoreIndexRow { server, state: StoreIndexState::Ready, error: None, generated_at: Some(value.generated_at), items: value.items },
-            Err(error) => {
-                let state = if error.id.as_deref() == Some("STORECLIENT_SERVER_PERMISSION_REQUIRED") { StoreIndexState::PermissionRequired } else { StoreIndexState::Error };
-                StoreIndexRow { server, state, error: Some(StoreIndexError { id: error.id.expect("등록된 스토어 오류"), message: error.message, details: error.details }), generated_at: None, items: Vec::new() }
-            }
-        });
-    }
+        })).collect();
+        tasks.into_iter().map(|task| task.join().expect("스토어 색인 조회 스레드")).collect()
+    });
     StoreIndexesValue { stores }
 }
 

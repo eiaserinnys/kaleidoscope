@@ -77,6 +77,20 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[test]
+fn transport_failure_reports_connection_advice_and_keeps_target_in_details() {
+    struct Offline;
+    impl Transport for Offline {
+        fn get(&self, _: &str, _: &[String], _: &str, _: u64) -> Result<PublicResponse, PublicHttpError> {
+            Err(PublicHttpError::Transport("연결 시간 초과".into()))
+        }
+    }
+    let client = StoreClient::new(StoreUrl::parse("https://example.com/appstore").unwrap(), Offline);
+    let failure = client.index("catalog").unwrap_err();
+    assert_eq!(failure.error.message, "스토어에 연결하지 못했습니다. 네트워크 연결과 스토어 주소를 확인하세요.");
+    assert!(failure.error.details.iter().any(|detail| detail.contains("index.json")));
+}
+
 pub(crate) type Reply = (u16, &'static str, Vec<u8>);
 #[derive(Clone)]
 pub(crate) struct Loopback {

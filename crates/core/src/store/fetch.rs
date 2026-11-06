@@ -88,8 +88,8 @@ impl<T: Transport> StoreClient<T> {
                         kaleidoscope_contract::size::format_byte_limit(limit),
                     ),
                     PublicHttpError::Transport(reason) => {
-                        errors::STORECLIENT_FETCH_TRANSPORT_FAILED(relative)
-                            .and_details(vec![format!("원인: {reason}")])
+                        errors::STORECLIENT_FETCH_TRANSPORT_FAILED()
+                            .and_details(vec![format!("파일: {relative}"), format!("원인: {reason}")])
                     }
                 };
                 StoreFailure::from(err)
