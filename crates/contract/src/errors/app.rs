@@ -1,4 +1,6 @@
 error_catalog! { ENTRIES;
+    APP_FILES_DEFAULT_SCOPE_INVALID(permission) { class: InvalidAppDefinition, place: "기본 폴더 범위 검사", cause: "내 PC 범위에 기본 폴더를 선언했다", message: "파일 권한 {permission}의 기본 폴더는 scope가 pc일 때 쓸 수 없습니다. 앱 정의에서 scope를 folder로 바꾸거나 default_folder를 빼세요.", fix: "scope를 folder로 바꾸거나 default_folder를 빼세요" }
+    APP_FILES_DEFAULT_VERSION_LOW(permission, version) { class: InvalidAppDefinition, place: "기본 폴더 판 검사", cause: "기본 폴더에 필요한 판보다 낮다", message: "파일 권한 {permission}의 기본 폴더는 블록 세트 {version}판과 files 모듈 4판부터입니다. 앱 정의의 requires를 고치세요.", fix: "requires.blocks와 requires.modules.files를 필요한 판 이상으로 고치세요" }
     APP_FILE_DROP_BLOCK_SET_VERSION_LOW(version) { class: InvalidAppDefinition, place: "파일 드롭 블록 판 검사", cause: "파일 드롭을 지원하지 않는 블록 판", message: "앱 정의의 file_drop을 쓰려면 requires.blocks를 {version} 이상으로 고치세요.", fix: "requires.blocks를 필요한 판 이상으로 고치세요" }
     APP_FILE_DROP_CLIENT_VERSION_LOW(version) { class: InvalidAppDefinition, place: "파일 드롭 client 판 검사", cause: "파일 드롭을 지원하지 않는 client 판", message: "앱 정의의 file_drop을 쓰려면 requires.modules.client를 {version} 이상으로 고치세요.", fix: "requires.modules.client를 필요한 판 이상으로 고치세요" }
     APP_FILE_DROP_CLIENT_REQUIRED() { class: InvalidAppDefinition, place: "파일 드롭 client 선언 검사", cause: "파일을 받을 client가 없다", message: "앱 정의의 file_drop에 파일을 받을 client가 없습니다. client를 선언하세요.", fix: "앱 정의에 client를 선언하세요" }

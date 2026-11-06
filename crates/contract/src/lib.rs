@@ -250,7 +250,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 39;
+pub const CONTRACT_VERSION: u32 = 40;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -311,6 +311,8 @@ pub const CONTRACT_VERSION: u32 = 39;
 pub const BLOCK_SET_VERSION: u32 = LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION;
 /// 목록 초점 이동 선택과 파일 동작 단축키의 첫 지원 판.
 pub const LIST_FOCUS_FILE_SHORTCUT_BLOCK_SET_VERSION: u32 = 44;
+/// 기본 폴더 선언을 처음 지원하는 블록 세트 판. 화면 연결은 다음 단계에서 지원한다.
+pub const DEFAULT_FOLDER_BLOCK_SET_VERSION: u32 = 46;
 /// 목록 묶음의 상태와 동작.
 pub const LIST_GROUP_STATUS_BLOCK_SET_VERSION: u32 = 43;
 /// 창 파일 드롭 선언과 권한 파일 열기의 첫 지원 판.
@@ -374,7 +376,7 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// - `process` 2판: 1판 + 권한의 `command`, 프로그램마다 한 번 허용.
 /// - `http` 3판: 권한의 `access: readwrite`, client `http.request`(헤더, 쓰기 메서드, 응답 상태와 헤더).
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
-    ("files", 3),
+    ("files", 4),
     ("agent", 3),
     ("web", 1),
     ("connection", realtime::REALTIME_CONNECTION_VERSION),
@@ -637,6 +639,9 @@ pub struct DeviceState {
     /// 앱의 새 버전에서도 같은 `id`의 `pc` 권한이 있으면 이어 쓴다.
     #[serde(default)]
     pub pc_access: Vec<PcAccess>,
+    /// 이 기기에서 허용한 앱별 기본 폴더.
+    #[serde(default)]
+    pub default_folder_access: Vec<DefaultFolderAccess>,
     #[serde(default)]
     pub process_access: Vec<process::ProcessAccess>,
     // 이 기기에서 접근을 허용한 정규화된 스토어 주소.
@@ -651,6 +656,16 @@ pub struct PcAccess {
     pub app_id: String,
     /// 앱 정의의 권한 `id`.
     pub permission: String,
+    pub granted_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct DefaultFolderAccess {
+    pub app_id: String,
+    pub permission: String,
+    pub folder: KnownFolder,
+    pub access: FileAccess,
     pub granted_at: String,
 }
 
@@ -1223,6 +1238,10 @@ pub enum PermissionDecl {
         #[serde(default, skip_serializing_if = "FilesScope::is_folder")]
         #[ts(optional, as = "Option<FilesScope>")]
         scope: FilesScope,
+        /// 기기에서 한 번 허용하면 새 창에 적용할 알려진 폴더.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        default_folder: Option<KnownFolder>,
     },
     /// (모듈 `connection` 1판) 서버에 등록한 연결 하나. 주소와 인증은 서버의 연결 설정에 있고 앱 정의에는 이름만 둔다.
     /// `read`는 GET만, `readwrite`는 동작의 연결 부르기에서 다른 메서드도 쓴다(서버의 연결도 쓰기를 허락해야 한다).
@@ -1318,6 +1337,30 @@ pub const PC_KNOWN_FOLDERS: &[(&str, &str)] = &[
     ("music", "음악"),
     ("videos", "동영상"),
 ];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum KnownFolder { Desktop, Documents, Downloads, Pictures, Music, Videos }
+
+impl KnownFolder {
+    pub const ALL: [Self; 6] = [Self::Desktop, Self::Documents, Self::Downloads, Self::Pictures, Self::Music, Self::Videos];
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Desktop => "desktop", Self::Documents => "documents", Self::Downloads => "downloads",
+            Self::Pictures => "pictures", Self::Music => "music", Self::Videos => "videos",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "status", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum DefaultFolderResult {
+    Ready { grant: Grant },
+    ConsentRequired { folder: KnownFolder, access: FileAccess },
+    Unavailable,
+}
 
 impl PermissionDecl {
     pub fn id(&self) -> &str {
@@ -4571,6 +4614,10 @@ pub enum CoreRequest {
         window_id: String,
         permission: String,
     },
+    #[serde(rename = "files.prepare_default_folder")]
+    FilesPrepareDefaultFolder { window_id: String, permission: String },
+    #[serde(rename = "files.allow_default_folder")]
+    FilesAllowDefaultFolder { window_id: String, permission: String },
     #[serde(rename = "files.pick")]
     FilesPick {
         window_id: String,
@@ -5646,6 +5693,10 @@ pub enum CoreReply {
 
     #[serde(rename = "files.pick_folder")]
     FilesPickFolder { grant: Option<Grant> },
+    #[serde(rename = "files.prepare_default_folder")]
+    FilesPrepareDefaultFolder { result: DefaultFolderResult },
+    #[serde(rename = "files.allow_default_folder")]
+    FilesAllowDefaultFolder { result: DefaultFolderResult },
     #[serde(rename = "files.allow_pc")]
     FilesAllowPc { access: PcAccess },
     #[serde(rename = "files.list")]

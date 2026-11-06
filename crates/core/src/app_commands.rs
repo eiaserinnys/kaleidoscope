@@ -213,6 +213,7 @@ pub(crate) fn remove_registry_app(state: &mut CoreState, app_id: &str) {
         .device
         .pc_access
         .retain(|access| access.app_id != app_id);
+    state.device.default_folder_access.retain(|access| access.app_id != app_id);
     state
         .device
         .process_access
