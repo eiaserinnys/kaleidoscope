@@ -130,13 +130,13 @@ error_catalog! { ENTRIES;
         class: NotFound, place: "스토어 파일 읽기", cause: "파일이 없다",
         message: "스토어에서 {target}을 찾지 못했습니다. 목록을 새로 읽거나 앱 ID와 판을 확인하세요.", fix: "앱 ID와 판을 확인하세요"
     }
-    STORECLIENT_FETCH_HTTP_REJECTED(target) {
+    STORECLIENT_FETCH_HTTP_REJECTED() {
         class: Unavailable, place: "스토어 파일 읽기", cause: "서버가 요청을 거부했다",
-        message: "스토어가 {target} 요청을 거부했습니다. 잠시 뒤 다시 읽으세요.", fix: "잠시 뒤 다시 읽으세요"
+        message: "스토어가 요청을 거부했습니다. 잠시 뒤 다시 받으세요.", fix: "잠시 뒤 다시 받으세요"
     }
-    STORECLIENT_FETCH_TRANSPORT_FAILED(target) {
+    STORECLIENT_FETCH_TRANSPORT_FAILED() {
         class: Unavailable, place: "스토어 파일 읽기", cause: "네트워크 전송에 실패했다",
-        message: "스토어에 연결해 {target}을 받지 못했습니다. 인터넷 연결과 주소를 확인하세요.", fix: "인터넷 연결과 주소를 확인하세요"
+        message: "스토어에 연결하지 못했습니다. 네트워크 연결과 스토어 주소를 확인하세요.", fix: "네트워크 연결과 스토어 주소를 확인하세요"
     }
     STORECLIENT_FETCH_TOO_LARGE(target, limit) {
         class: InvalidRequest, place: "스토어 파일 크기 검사", cause: "허용 크기를 넘었다",

@@ -2,6 +2,41 @@ use super::*;
 use super::store_runtime_tests::store_caller;
 
 #[test]
+fn indexes_fetch_stores_concurrently_in_input_order() {
+    struct SlowTransport {
+        active: AtomicUsize,
+        peak: AtomicUsize,
+        body: Vec<u8>,
+    }
+    impl crate::store::fetch::Transport for SlowTransport {
+        fn get(&self, _: &str, _: &[String], _: &str, _: u64) -> Result<kaleidoscope_data::public_http::PublicResponse, kaleidoscope_data::public_http::PublicHttpError> {
+            let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+            self.peak.fetch_max(active, Ordering::SeqCst);
+            thread::sleep(Duration::from_millis(300));
+            self.active.fetch_sub(1, Ordering::SeqCst);
+            Ok(kaleidoscope_data::public_http::PublicResponse {
+                status: 200, headers: BTreeMap::new(), rate_limit: None, retry_after: None,
+                mime: "application/json".into(), bytes: self.body.clone(),
+            })
+        }
+    }
+    let (_temp, core, _, window) = store_caller();
+    let (fixture, _, _) = crate::store::tests::fixture();
+    let body = fixture.files.lock().unwrap()["/appstore/index.json"].2.clone();
+    let transport = Arc::new(SlowTransport { active: AtomicUsize::new(0), peak: AtomicUsize::new(0), body });
+    *core.inner.store_transport.lock().unwrap() = Some(transport.clone());
+    let servers = vec!["https://first.example/appstore".into(), "https://second.example/appstore".into()];
+    let start = Instant::now();
+    let value = crate::data_sources::fetch(&core.inner, &window,
+        &kaleidoscope_data::SourcePlan::StoreIndexes { permission: "catalog".into(), servers: servers.clone() },
+        kaleidoscope_contract::data::SourceFormat::Json).unwrap();
+    println!("두 스토어 조회 시간: {:?}", start.elapsed());
+    assert_eq!(transport.peak.load(Ordering::SeqCst), 2, "두 주소를 동시에 읽는다");
+    assert_eq!(value["stores"][0]["server"], servers[0]);
+    assert_eq!(value["stores"][1]["server"], servers[1]);
+}
+
+#[test]
 fn indexes_read_independently_and_respect_liveness() {
     use std::io::{Read, Write};
     use std::net::TcpListener;

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block, Column } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { TableView } from "../blocks/data-table";
+import { ICON_SIZE } from "../components/icons";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
@@ -11,6 +12,8 @@ import { mockVirtualLayout } from "./virtual-layout";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import { DataIcon } from "../components/data-icons";
 import { ICON_NAMES } from "../contract/limits";
+import storeDefinitionText from "../../../apps/store.json?raw";
+import jsonata from "jsonata";
 
 beforeEach(mockVirtualLayout);
 afterEach(() => {
@@ -26,6 +29,18 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   return { calls, transport };
 }
+it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 쓴다", async () => {
+  const app = JSON.parse(storeDefinitionText);
+  const items = await jsonata(app.ui.children[1].children[1].items.expr).evaluate({}, {
+    state: { category: "__installed", query: "" }, data: { catalog: { stores: [] } },
+    apps: [{ id: "notes", name: "남은 앱", icon: { asset: "other-app-icon", version: 1 }, origin: { store_url: "http://removed" } }],
+  });
+  expect(items[0].items[0].image).toBeUndefined();
+  setup({ type: "list", layout: "icons", grouped: true, items }, {}, 43);
+  const tile = await screen.findByRole("option", { name: "남은 앱" });
+  expect(tile.querySelector(".is-failed")).toBeNull();
+  expect(tile.querySelector(".ks-media-thumbnail.is-asset")).toBeNull();
+});
 it("허용된 모든 아이콘 이름은 접근성 트리에서 숨긴 SVG를 그린다", () => {
   const { container } = render(<>{ICON_NAMES.map(name => <DataIcon key={name} name={name} />)}</>);
   expect(container.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(ICON_NAMES.length);
@@ -88,6 +103,15 @@ it.each([[360, 6], [1000, 18]])("%i 폭의 초기 아이콘 뼈대는 두 줄과
   for (const name of loading.querySelectorAll(".ks-icon-skeleton-name")) expect(name.children).toHaveLength(1);
   vi.unstubAllGlobals();
 });
+it("묶인 아이콘 목록은 격자 뼈대 앞에 묶음 머리 자리를 둔다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  const { transport } = setup({ type: "list", grouped: true, layout: "icons", items: { expr: "[]" } });
+  await screen.findByText("없음", { exact: true });
+  await act(async () => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/items": { status: "loading" } } } }));
+  const loading = await screen.findByRole("status", { name: "불러오는 중" });
+  expect(loading.closest(".ks-list")?.querySelector(".ks-view-group .ks-data-skeleton i")).not.toBeNull();
+  vi.unstubAllGlobals();
+});
 it("moves through grouped list entries and selects the focused item", async () => {
   const { calls } = setup({ type: "list", grouped: true, items: [{ title: "묶음", items: [{ key: "a", title: "하나" }, { key: "b", title: "둘" }] }], on_select: { set_state: "choice" } }, { choice: null });
   const first = await screen.findByRole("option", { name: "하나" });
@@ -105,6 +129,10 @@ it.each(["rows", "icons"] as const)("%s 묶음은 상태와 선언된 동작을 
     { key: "third", title: "셋째", items: [], status: { state: "empty", message: "비어 있습니다" } },
   ], group_actions: [{ key: "retry", label: "다시 받기", on_click: [{ set_state: "choice", value: { expr: "$item.address" } }] }] } as unknown as Block, { choice: null }, 43);
   expect(await screen.findByText("자료에 닿을 수 없습니다")).toBeTruthy();
+  const status = screen.getByText("자료에 닿을 수 없습니다").closest(".ks-list-group-status")!;
+  expect(status.closest(".ks-load-more")).not.toBeNull();
+  expect(status.getAttribute("data-layout")).toBe("row");
+  expect(status.querySelector("svg")?.getAttribute("width")).toBe(String(ICON_SIZE.inline));
   expect(screen.getByText("SOURCE_FAILED")).toBeTruthy();
   expect(screen.getByText("비어 있습니다")).toBeTruthy();
   const button = screen.getByRole("button", { name: "다시 받기" });
