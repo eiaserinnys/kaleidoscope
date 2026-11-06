@@ -43,7 +43,8 @@ for(const place of ['direct','section','tab','dialog']) test(`결정 줄 앞 마
  ]};
  if(place==='section')ui={type:'section',title:'바깥',child:ui};
  if(place==='tab')ui={type:'tabs',tabs:[{label:'옵션',child:ui}]};
- if(place==='dialog')ui={type:'dialog',title:'옵션',open:true,on_close:[],child:ui};
+ // 채움 영역은 실제 목록·표 대화상자의 고정 높이 안에서 검증한다.
+ if(place==='dialog')ui={type:'dialog',title:'옵션',open:true,on_close:[],child:{type:'split',direction:'row',children:[{type:'list',layout:'grid',items:[{key:'a',title:'그림'}]},ui]}};
  const app=await open(page,{type:'split',direction:'row',children:[{type:'text',value:'그림'},ui]});
  const last=app.getByLabel('구역 값 30',{exact:true});await expect(last).toBeAttached();
  const m=await last.evaluate(el=>{let p=el.parentElement;while(p){if(p.clientHeight&&/(auto|scroll)/.test(getComputedStyle(p).overflowY))p.scrollTop=p.scrollHeight;p=p.parentElement;}const bar=el.closest('.ks-data-window')!.querySelector('.ks-data-toolbar')!;return {gap:bar.getBoundingClientRect().top-el.getBoundingClientRect().bottom,space:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3'))};});
