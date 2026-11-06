@@ -20,6 +20,8 @@ pub(super) fn external_drop_guard(
         r#"
         const check = (type, files) => {
             const data = new DataTransfer();
+            let effect = 'move';
+            Object.defineProperty(data, 'dropEffect', {get: () => effect, set: (value) => { effect = value; }});
             if (files) data.items.add(new File(['test'], 'test.txt'));
             else data.setData('application/x-kaleidoscope-folder', '{}');
             const event = new DragEvent(type, {bubbles: true, cancelable: true, dataTransfer: data});
@@ -83,7 +85,10 @@ pub(super) fn external_drop_guard(
         &format!(
             r#"
         const content = {root}.querySelector('.ks-window-content');
-        const data = new DataTransfer(); data.items.add(new File(['abc'], 'test.txt', {{type:'text/plain'}}));
+        const data = new DataTransfer();
+        let effect = 'none';
+        Object.defineProperty(data, 'dropEffect', {{get: () => effect, set: (value) => {{ effect = value; }}}});
+        data.items.add(new File(['abc'], 'test.txt', {{type:'text/plain'}}));
         const over = new DragEvent('dragover', {{bubbles:true, cancelable:true, dataTransfer:data}});
         content.dispatchEvent(over);
         const event = new DragEvent('drop', {{bubbles:true, cancelable:true, dataTransfer:data}});
