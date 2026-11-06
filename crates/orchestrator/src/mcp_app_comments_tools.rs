@@ -39,7 +39,7 @@ fn account(state: &AppState, principal: McpPrincipal) -> Result<String, CoreErro
 impl McpServer {
     #[tool(
         name = "list_app_comments",
-        description = "사용자가 제출한 저장 커멘트의 앱별 메타 또는 앱별 목록을 읽습니다. 기본 앱은 리포 apps/ 또는 쉘을 고쳐 릴리스하며 get_app과 upload_app으로 정의를 고칠 수 없습니다. 개인 앱은 get_app으로 확인해 upload_app으로 올립니다. 스토어 앱은 스토어 원본을 고쳐 새 판을 설치하세요."
+        description = "사용자가 제출한 저장 커멘트의 앱별 메타 또는 앱별 목록을 읽습니다. 기본 앱은 리포 apps/ 또는 쉘을 고쳐 릴리스하며 get_app과 upload_app으로 정의를 고칠 수 없습니다. 개인 앱은 get_app으로 확인해 upload_app으로 올립니다. 스토어 앱은 스토어 원본을 고쳐 새 판을 설치하세요. 고친 뒤 reply_app_comment로 무엇을 고쳤는지 답하고 resolve_app_comment로 닫으세요. 고치지 못하면 답글로 까닭을 알리세요."
     )]
     async fn list_app_comments(
         &self,
@@ -66,7 +66,7 @@ impl McpServer {
     }
     #[tool(
         name = "get_app_comment",
-        description = "사용자가 제출한 커멘트와 답글을 읽습니다. image=true는 현재 화면이 아닌 저장된 PNG를 함께 돌려줍니다. 저장 위치의 재부착은 보장되지 않습니다. 기본 앱은 리포 apps/ 또는 쉘에서 고쳐 릴리스하고, 개인 앱은 get_app과 upload_app으로, 스토어 앱은 스토어 원본에서 고칩니다. 현재 화면 읽기는 read_window의 동의가 필요합니다."
+        description = "사용자가 제출한 커멘트와 답글을 읽습니다. image=true는 현재 화면이 아닌 저장된 PNG를 함께 돌려줍니다. 저장 위치의 재부착은 보장되지 않습니다. 기본 앱은 리포 apps/ 또는 쉘에서 고쳐 릴리스하고, 개인 앱은 get_app과 upload_app으로, 스토어 앱은 스토어 원본에서 고칩니다. 현재 화면 읽기는 read_window의 동의가 필요합니다. 고친 뒤 reply_app_comment로 무엇을 고쳤는지 답하고 resolve_app_comment로 닫으세요. 고치지 못하면 답글로 까닭을 알리세요."
     )]
     async fn get_app_comment(
         &self,
