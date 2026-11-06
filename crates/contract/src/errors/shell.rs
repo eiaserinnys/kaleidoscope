@@ -158,7 +158,7 @@ error_catalog! { ENTRIES;
     SHELL_IPC_HANDLE_HEADER_INVALID() {
         class: InvalidRequest,
         place: "쉘 파일 전송 대상 확인",
-        cause: "요청 대상 정보가 없거나 올바른 문자열이 아니다",
+        cause: "요청 대상 정보가 올바른 문자열이 아니다",
         message: "주고받을 파일을 확인하지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
         fix: "쉘을 업데이트한 뒤 다시 시도하세요"
     }
