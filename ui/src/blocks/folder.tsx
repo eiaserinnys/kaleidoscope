@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { useBlockRootProps, type BlockRootProps } from "../comments/block-root";
 import type { Block, FolderEntry } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { useShellSelector } from "../core/shell-store";
@@ -16,6 +17,7 @@ function extensionOf(name: string): string {
 }
 
 export function FolderBlock({ block, context, pointer }: { block: FolderBlockData; context: BlockContext; pointer: string }) {
+  const rootProps = useBlockRootProps();
   const data = useOptionalWindowData();
   const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
   const selected = typeof selectedValue === "string" ? selectedValue : null;
@@ -46,12 +48,13 @@ export function FolderBlock({ block, context, pointer }: { block: FolderBlockDat
   }, [selectItem]);
 
   if ("entry" in block.root) {
-    return <CollectionFolder block={block} context={context} onSelect={selectItem} selected={selected} />;
+    return <CollectionFolder rootProps={rootProps} block={block} context={context} onSelect={selectItem} selected={selected} />;
   }
 
   const permission = block.root.permission;
   const permissionLabel = context.definition.permissions.find((item) => item.module === "files" && item.id === permission)?.label ?? permission;
   return <FileBrowserTree
+    rootProps={rootProps}
     actionsEnabled={!legacy}
     canCreate={legacy && context.definition.permissions.some((item) =>
       item.module === "files" && item.id === permission && item.access === "readwrite")}
@@ -68,7 +71,8 @@ export function FolderBlock({ block, context, pointer }: { block: FolderBlockDat
   />;
 }
 
-function CollectionFolder({ block, context, onSelect, selected }: {
+function CollectionFolder({ block, context, onSelect, selected, rootProps }: {
+  rootProps: BlockRootProps;
   block: FolderBlockData;
   context: BlockContext;
   onSelect: (path: string, item: JsonValue) => unknown;
@@ -98,6 +102,7 @@ function CollectionFolder({ block, context, onSelect, selected }: {
     modified: "",
   }) as unknown as JsonValue), [onSelect]);
   return <FileBrowserTree
+    rootProps={rootProps}
     actionsEnabled
     backend={backend}
     backendLabel={label}

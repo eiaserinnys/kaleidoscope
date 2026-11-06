@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../../comments/block-root";
 import { useCallback, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import type { Block, DocumentRef } from "../../contract/contract";
 import { Dialog } from "../../components/dialog";
@@ -15,6 +16,7 @@ import { PropertyFace } from "./properties";
 type HtmlBlock = Extract<Block, { type: "html_view" }> & { document: DocumentRef };
 
 export function HtmlDocumentViewBlock({ block, context }: { block: HtmlBlock; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const model = useHtmlDocument(block, context);
   useShareDescriber(model.root, () => ({ text: model.share(true), visual: true }));
   const host = model.root.current?.closest<HTMLElement>(".ks-data-window");
@@ -38,7 +40,7 @@ export function HtmlDocumentViewBlock({ block, context }: { block: HtmlBlock; co
       : model.loaded && !model.active && model.docs.length === 0 ? <EmptyState icon={<FileCode size="empty" />} text="문서가 없습니다" />
       : <StatusText>불러오는 중</StatusText>}</div>;
   const style = { "--ks-html-side-min": `${SIDE_MIN}px`, "--ks-html-document-min": `${DOCUMENT_MIN}px`, "--ks-html-divider-width": `${DIVIDER_WIDTH}px` } as CSSProperties;
-  return <section className="ks-html-view" ref={model.root} style={style} tabIndex={-1} onKeyDown={keyboard} onPointerDown={focusSurface}>
+  return <section {...blockRoot} className="ks-html-view" ref={model.root} style={style} tabIndex={-1} onKeyDown={keyboard} onPointerDown={focusSurface}>
     <HtmlHeader model={model} />
     {model.error && !documentError ? <div className="ks-html-notice"><Notice role="alert" errorId={model.error.id} actions={model.saveFailed ? [<Button key="retry" onClick={() => void model.saveRevision()}>다시 시도</Button>] : model.errorSource === "list" ? [<Button key="retry" onClick={model.retryList}>다시 시도</Button>] : undefined}>{model.error.message}</Notice></div> : null}
     <DocumentLayout selecting={model.mode === "select"} compact={model.compact} face={model.face} locked={model.locked}

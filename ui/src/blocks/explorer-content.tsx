@@ -1,3 +1,4 @@
+import { encodeCommentKey } from "../comments/key";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Column, CoreError, ExplorerView, FileEntry, SortSpec } from "../contract/contract";
 import { EmptyState, ErrorId, IconButton, StatusText } from "../components/primitives";
@@ -260,7 +261,7 @@ export function ExplorerContent({
           : view === "icons" ? <div aria-label="폴더 내용" className="ks-data-view ks-icon-grid ks-explorer-icons" ref={grid} role="listbox">
             {sortedEntries.map((entry, index) => {
               const active = selected === entry.path;
-              return <IconTile name={entry.name} icon={entry.kind === "dir" ? directoryIcon(entry, "tile") : fileIcon(entry, "tile")} selected={active} aria-label={entry.name} aria-posinset={index + 1} aria-selected={active} aria-setsize={sortedEntries.length} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
+              return <IconTile name={entry.name} icon={entry.kind === "dir" ? directoryIcon(entry, "tile") : fileIcon(entry, "tile")} selected={active} aria-label={entry.name} aria-posinset={index + 1} aria-selected={active} aria-setsize={sortedEntries.length} data-ks-comment-key={encodeCommentKey({ permission, path: entry.path })} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
                 if (entry.kind === "file") { event.preventDefault(); setSelected(entry.path); onContextFile(event.currentTarget, entry.path); }
               }} onDoubleClick={(event) => activate(event.currentTarget, entry)} onFocus={() => roving.setFocus(index)} onKeyDown={(event) => roving.keyDown(event, index, () => activate(event.currentTarget, entry), gridColumns)} role="option" tabIndex={roving.focus === index ? 0 : -1} title={entry.name} />;
             })}
@@ -280,6 +281,6 @@ export function ExplorerContent({
             if (column.field === "name") return <span className="ks-explorer-detail-name">{entry.kind === "dir" ? directoryIcon(entry) : fileIcon(entry)}<span>{entry.name}</span></span>;
             if (column.field === "size") return entry.kind === "dir" ? "" : formatSize(entry.size);
             return undefined;
-          }} rowProps={(row): Record<string, string> => row.kind === "dir" ? { "data-folder-path": row.key } : { "data-file-path": row.key }} rows={rows} selected={selected} />}
+          }} rowProps={(row): Record<string, string> => row.kind === "dir" ? { "data-folder-path": row.key, "data-ks-comment-key": encodeCommentKey({ permission, path: row.key }) } : { "data-file-path": row.key, "data-ks-comment-key": encodeCommentKey({ permission, path: row.key }) }} rows={rows} selected={selected} />}
   </div>;
 }

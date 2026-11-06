@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import type { Block, MediaPlayback, MediaRef } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
@@ -14,11 +15,13 @@ export function formatMediaTime(value: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 export function MediaBlock({ block, pointer }: { block: Data; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const binding = useBinding(`${pointer}/src`, block.src);
-  if (binding.status !== "ready") return <DataState value={binding} />;
+  if (binding.status !== "ready") return <DataState rootProps={blockRoot} value={binding} />;
   return <MediaPlayer src={isMedia(binding.value) ? binding.value : null} kind={block.kind} autoplay={!!block.autoplay} />;
 }
 function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "audio" | "video"; autoplay: boolean }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const folder = useFolderPick();
   const [attempt, setAttempt] = useState(0);
@@ -92,7 +95,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
     }
   };
   const props = { crossOrigin: current?.playback.kind === "stream" ? "anonymous" as const : undefined, src: current?.url, onError: onMediaError, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
-  return <div className={`ks-media-player${video ? " is-video" : ""}`} style={video && ratio ? { "--ks-media-ratio": ratio } as React.CSSProperties : undefined}>
+  return <div {...blockRoot} className={`ks-media-player${video ? " is-video" : ""}`} style={video && ratio ? { "--ks-media-ratio": ratio } as React.CSSProperties : undefined}>
     {video ? <video ref={(el) => { element.current = el; }} {...props} onLoadedMetadata={(event) => { const { videoWidth, videoHeight } = event.currentTarget; if (videoWidth > 0 && videoHeight > 0) setRatio(videoWidth / videoHeight); }} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
     {error ? <Notice role="alert" errorId={(folder.error ?? error).id} actions={error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && src && "permission" in src ? [<Button key="pick" data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(src.permission, () => setAttempt((value) => value + 1)); }}>폴더 선택</Button>] : undefined}>{(folder.error ?? error).message}</Notice> : null}
     <div className="ks-media-controls-container">

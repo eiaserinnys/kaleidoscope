@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Block, MapPoint } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -95,12 +96,14 @@ function normalize(value: unknown): Point[] {
 }
 
 export function MapBlock({ block, context, pointer }: { block: MapBlockType; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/points`, block.points);
-  if (value.status !== "ready") return <DataState value={value} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
   return <MapReady block={block} context={context} pointer={pointer} value={value.value} />;
 }
 
 function MapReady({ block, context, pointer, value }: { block: MapBlockType; context: BlockContext; pointer: string; value: JsonValue }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const root = useRef<HTMLDivElement>(null);
   const points = useMemo(() => normalize(value), [value]);
@@ -120,7 +123,7 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
   useEffect(() => { if (active) setCenter({ lat: active.lat, lng: active.lng }); }, [active?.key, active?.lat, active?.lng]);
   const projectedLand = useMemo(() => mode === "globe" ? landRings.map((ring) => landPath(ring, center)) : [], [mode, center]);
   useShareDescriber(root, () => ({ text: `[지도${mode === "globe" ? " (3D 지구본)" : ""}, 지점 ${points.length}개${active ? `, ${block.selected && selectedIndex < 0 ? "표시" : "선택"}: ${active.label ?? active.key} (${coord(active.lat, active.lng)})` : ""}]\n${points.slice(0, 10).map((p) => `${p.label ?? p.key} · ${coord(p.lat, p.lng)}`).join("\n")}`, visual: true }));
-  if (!points.length) return <NoItems />;
+  if (!points.length) return <NoItems rootProps={blockRoot} />;
   const sizes = points.map((p) => p.size).filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
   const min = Math.min(...sizes), max = Math.max(...sizes);
   const radius = (point: Point) => typeof point.size === "number" && Number.isFinite(point.size) && point.size >= 0 && max > min ? 4.5 + (point.size - min) / (max - min) * 6 : 6;
@@ -159,7 +162,7 @@ function MapReady({ block, context, pointer, value }: { block: MapBlockType; con
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     drag.current = null;
   };
-  return <div ref={root} className={`ks-map is-${block.height ?? "medium"}`}>
+  return <div {...blockRoot} ref={root} className={`ks-map is-${block.height ?? "medium"}`}>
     <div className="ks-map-frame" role="region" aria-label="세계 지도" tabIndex={0} onKeyDown={keyDown}>
     <div className="ks-map-readout">
       <div className="ks-map-readout-main"><span className={`ks-map-swatch ks-map-tone-${tone(active)}`} /><strong>{active.label ?? active.key}</strong>{active.sublabel && <span>{active.sublabel}</span>}{isBadge(active.badge) && <Badge value={active.badge} />}</div>

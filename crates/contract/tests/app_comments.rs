@@ -17,6 +17,8 @@ fn anchor_round_trips_and_distinguishes_typed_row_keys() {
         "repeat_chain": [1, "1"],
         "row_identity": 1
     });
+    let point = json!({"schema_version": 1, "kind": "point", "frame_css_width": 320.0, "frame_css_height": 180.0});
+    assert_eq!(serde_json::to_value(serde_json::from_value::<AppCommentAnchor>(point.clone()).unwrap()).unwrap(), point);
     let mut string = number.clone();
     string["row_identity"] = json!("1");
     let number_anchor: AppCommentAnchor = serde_json::from_value(number.clone()).unwrap();

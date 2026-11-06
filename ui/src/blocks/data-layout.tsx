@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
@@ -41,6 +42,7 @@ function isTextarea(block: Block): boolean {
 }
 
 export function StackBlock({ block, context, pointer }: Props<"stack">) {
+  const blockRoot = useBlockRootProps();
   const last = block.children.length - 1;
   const fill = block.place === "center" ? [] : block.fill === undefined
     ? ((block.direction === "column" ? isFixedHeightControl(block.children[last]) : isFixedWidthControl(block.children[last])) ? [] : [last])
@@ -76,12 +78,13 @@ export function StackBlock({ block, context, pointer }: Props<"stack">) {
   const hasActions = tail < block.children.length;
   const classes = `ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${Array.isArray(block.fill) && block.place !== "center" ? " has-fill-list" : ""}${textareaFill ? " has-textarea-fill" : ""}${align}`;
   const items = block.children.map((child, index) => <div className={`ks-data-stack-item${filled.has(index) ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>);
-  return <div className={`${classes}${hasActions ? " has-action-tail" : ""}`}>
+  return <div {...blockRoot} className={`${classes}${hasActions ? " has-action-tail" : ""}`}>
     {hasActions ? <><div className="ks-data-stack-item is-fill ks-stack-scroll"><div className={`${classes} ks-stack-scroll-content`}>{items.slice(0, tail)}</div></div>{items.slice(tail)}</> : items}
   </div>;
 }
 
 export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
+  const blockRoot = useBlockRootProps();
   const pane = useContext(SplitPaneContext);
   const [local, setLocal] = useState(0);
   const [focused, setFocused] = useState(0);
@@ -182,7 +185,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
   const renderChild = (tabIndex: number) => <SplitPaneContext.Provider value={block.collapsible ? null : pane}>
     {renderBlock(block.tabs[tabIndex].child, context, `${pointer}/tabs/${tabIndex}/child`)}
   </SplitPaneContext.Provider>;
-  return <div className={`ks-data-tabs${collapsed ? " is-collapsed" : ""}`} ref={tabsRef}>
+  return <div {...blockRoot} className={`ks-data-tabs${collapsed ? " is-collapsed" : ""}`} ref={tabsRef}>
     {collapsed ? <span className="ks-file-tree-expand"><IconButton aria-label="목록 펼치기" onClick={togglePane}><PanelLeftOpen /></IconButton></span> : null}
     {showHeader ? <div className="ks-data-tab-header">
       <div className="ks-data-tab-list" role="tablist" ref={listRef}>
@@ -209,6 +212,7 @@ export function TabsBlock({ block, context, pointer }: Props<"tabs">) {
 }
 
 export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
+  const blockRoot = useBlockRootProps();
   const trackRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const track = trackRef.current;
@@ -235,10 +239,11 @@ export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
     if (focused.left < left) track.scrollLeft += focused.left - left;
     else if (focused.right > right) track.scrollLeft += focused.right - right;
   };
-  return <div className="ks-data-toolbar" onFocus={revealFocus} ref={trackRef}><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
+  return <div {...blockRoot} className="ks-data-toolbar" onFocus={revealFocus} ref={trackRef}><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
 }
 
 export function SectionBlock({ block, context, pointer }: Props<"section">) {
+  const blockRoot = useBlockRootProps();
   const title = useBinding(`${pointer}/title`, block.title);
   const meta = useBinding(`${pointer}/meta`, block.meta ?? null);
   const [collapsed, setCollapsed] = useState(Boolean(block.collapsed));
@@ -246,7 +251,7 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
   const titleText = title.status === "ready" && title.value !== null ? <span className="ks-data-section-title">{display(title.value)}</span> : null;
   const metaText = block.meta !== undefined && meta.status === "ready" && meta.value !== null ? <span className="ks-data-section-meta">{display(meta.value)}</span> : null;
   const actions = block.actions?.map((action, index) => <div className="ks-data-section-action" key={index}>{renderBlock(action, context, `${pointer}/actions/${index}`)}</div>);
-  return <section className="ks-data-section">
+  return <section {...blockRoot} className="ks-data-section">
     <div className="ks-data-section-header">
       {block.collapsible
         ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={titleText === null ? collapsed ? "펼치기" : "접기" : undefined} onClick={() => setCollapsed(!collapsed)} type="button">
@@ -300,11 +305,12 @@ const BoundTabPanel = memo(function BoundTabPanel({ id, labelledBy, pointer, bin
 });
 
 export function TextBlock({ block, context, pointer }: Props<"text">) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const value = useBinding(`${pointer}/value`, block.value);
   if (value.status !== "ready") {
-    if (isMessageBindingFailure(value)) return <div className="ks-data-text is-body ks-data-text-error" role="alert"><DataIcon name="triangle-alert" size="inline" /><span>{value.message} <ErrorId id={value.id} /></span></div>;
-    return <DataState value={value} />;
+    if (isMessageBindingFailure(value)) return <div {...blockRoot} className="ks-data-text is-body ks-data-text-error" role="alert"><DataIcon name="triangle-alert" size="inline" /><span>{value.message} <ErrorId id={value.id} /></span></div>;
+    return <DataState rootProps={blockRoot} value={value} />;
   }
   if (block.format === "time" && isClock(value.value)) return <ClockText block={block} context={context} pointer={pointer} clock={value.value} data={data} />;
   const text = block.format === "time" && typeof value.value === "number" ? formatClockTime(value.value) : display(value.value);
@@ -329,6 +335,7 @@ function TextValue({ block, pointer, text, data }: {
   text: string;
   data: ReturnType<typeof useWindowData>;
 }) {
+  const blockRoot = useBlockRootProps();
   const interactive = Boolean(block.on_click || block.on_double_click);
   const keyboardPointer = block.on_click ? `${pointer}/on_click` : block.on_double_click ? `${pointer}/on_double_click` : null;
   const onClick = block.on_click ? (event: React.MouseEvent<HTMLElement>) => { void data.act(`${pointer}/on_click`, null, undefined, eventModifiers(event)); } : undefined;
@@ -339,7 +346,7 @@ function TextValue({ block, pointer, text, data }: {
     if (!event.repeat) void data.act(keyboardPointer, null, undefined, eventModifiers(event));
   } : undefined;
   const content = block.format === "markdown" ? <MarkdownText>{text}</MarkdownText> : text;
-  return <div className={`ks-data-text is-${block.style ?? "body"}${interactive ? " is-interactive" : ""}`}
+  return <div {...blockRoot} className={`ks-data-text is-${block.style ?? "body"}${interactive ? " is-interactive" : ""}`}
     role={interactive ? "button" : undefined} tabIndex={interactive ? 0 : undefined}
     onClick={onClick} onDoubleClick={onDoubleClick} onKeyDown={onKeyDown}>{content}</div>;
 }

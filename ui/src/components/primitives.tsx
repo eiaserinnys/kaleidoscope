@@ -3,6 +3,7 @@ import { Tooltip } from "./tooltip";
 import type { CoreError } from "../contract/contract";
 
 export interface ButtonProps {
+  rootProps?: import("../comments/block-root").BlockRootProps;
   ref?: Ref<HTMLButtonElement>;
   className?: string,
   children: ReactNode;
@@ -28,6 +29,7 @@ export interface ButtonProps {
 }
 
 export function Button({
+  rootProps,
   ref,
   children,
   className,
@@ -49,6 +51,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
+      {...rootProps}
       ref={ref}
       className={`ks-button ks-button-${variant}${pressed === true ? " is-selected" : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
@@ -126,13 +129,15 @@ export function EmptyState({
   icon,
   text,
   action,
+  rootProps,
 }: {
   icon?: ReactNode;
   text?: ReactNode;
   action?: ReactNode;
+  rootProps?: import("../comments/block-root").BlockRootProps;
 }) {
   return (
-    <div className={`ks-empty-state${text ? "" : " ks-empty-state-without-text"}`}>
+    <div {...rootProps} className={`ks-empty-state${text ? "" : " ks-empty-state-without-text"}`}>
       {icon != null ? <span aria-hidden="true" className="ks-empty-state-icon">{icon}</span> : null}
       {text ? <span className="ks-empty-state-text">{text}</span> : null}
       {action ? <span className="ks-empty-state-action">{action}</span> : null}
@@ -148,6 +153,8 @@ export function Notice({
   onDismiss,
   role = "status",
   "data-ks-overlay": overlay,
+  rootProps,
+  commentKey,
 }: {
   children: ReactNode;
   actions?: ReactNode[];
@@ -156,9 +163,11 @@ export function Notice({
   onDismiss?: () => void;
   role?: "alert" | "status";
   "data-ks-overlay"?: boolean;
+  rootProps?: import("../comments/block-root").BlockRootProps;
+  commentKey?: string;
 }) {
   return (
-    <div className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
+    <div {...rootProps} data-ks-comment-key={commentKey} className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();

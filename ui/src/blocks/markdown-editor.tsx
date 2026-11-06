@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useShareDescriber } from "../share/visible";
 import { describeEditor } from "../share/editor";
@@ -23,6 +24,7 @@ export function MarkdownEditorBlock({ block, context }: { block: MarkdownEditorB
 }
 
 function FileMarkdownEditorBlock({ block, context }: { block: FileMarkdownEditorBlockData; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const stateValue = useWindowStateValue(context, typeof block.file.path === "string" ? null : block.file.path.state);
   const path = resolveFilePath(block.file, stateValue);
   const emptyShareRef = useRef<HTMLDivElement>(null);
@@ -58,11 +60,12 @@ function FileMarkdownEditorBlock({ block, context }: { block: FileMarkdownEditor
   }, [session]);
 
   if (!hasGrant) return null;
-  if (path === null) return <div className="ks-markdown-editor" ref={emptyShareRef} />;
+  if (path === null) return <div {...blockRoot} className="ks-markdown-editor" ref={emptyShareRef} />;
   return <EditorContent path={state.path ?? path} session={session} state={state} />;
 }
 
 function DocumentMarkdownEditorBlock({ document, context }: { document: DocumentRef; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const { entry } = document;
   const stateKey = typeof document.doc === "object" ? document.doc.state : null;
   const value = useWindowStateValue(context, stateKey);
@@ -76,20 +79,21 @@ function DocumentMarkdownEditorBlock({ document, context }: { document: Document
   );
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot, session.getSnapshot);
   useEffect(() => { void session.open(path); }, [path, session]);
-  if (path === null) return <div className="ks-markdown-editor" />;
+  if (path === null) return <div {...blockRoot} className="ks-markdown-editor" />;
   return <EditorContent path={state.path ?? path} session={session} state={state} />;
 }
 
 function EditorContent({ path, session, state }: { path: string; session: FileEditorSession; state: FileEditorSnapshot }) {
+  const blockRoot = useBlockRootProps();
   if (!state.loaded) {
-    return <div className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
+    return <div {...blockRoot} className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   }
   if (state.error && state.revision === null && !state.dirty) {
-    return <div className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
+    return <div {...blockRoot} className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
   }
 
   return (
-    <div className="ks-markdown-editor">
+    <div {...blockRoot} className="ks-markdown-editor">
       {state.error ? <ErrorNotice error={state.error} /> : null}
       {state.conflict ? <EditorConflict session={session} /> : null}
       <div className="ks-editor-content">

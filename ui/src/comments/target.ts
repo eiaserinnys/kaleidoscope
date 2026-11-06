@@ -1,0 +1,50 @@
+import type { AppCommentAnchor, AppCommentPoint } from "../contract/contract";
+import type { JsonValue } from "../contract/serde_json/JsonValue";
+import { overlayOwner } from "../share/overlay-owner";
+import { decodeCommentKey } from "./key";
+import { frameSurfaces } from "./frame";
+import { commentAncestors } from "./ancestry";
+
+const names: Record<string, string> = { repeat: "반복", progress: "진행", dialog: "대화상자", anchor: "구역", tour: "안내", canvas: "캔버스", timeline: "시간축", split: "분할", tree: "트리", folder: "폴더", markdown: "문서", html_view: "HTML", sandbox: "프레임", chat: "대화", stack: "구역", tabs: "탭", toolbar: "도구 막대", section: "구역", list: "목록", table: "표", properties: "속성", notice: "안내", feed: "흐름", text: "글", input: "입력", slider: "슬라이더", color: "색", select: "선택", toggle: "스위치", button: "단추", code: "코드", image: "이미지", media: "미디어", metrics: "수치", button_grid: "단추 모음", chart: "차트", map: "지도", web_view: "웹", explorer: "탐색기" };
+const frames = new Set(["canvas", "sandbox", "html_view", "web_view"]);
+const controls = 'button, input:not([type="hidden"]), textarea, select, [role="button"], [role="tab"], [role="checkbox"], [role="switch"], [role="combobox"], [role="slider"]';
+export type TargetDescription = { anchor: AppCommentAnchor; path: string; element: HTMLElement; range?: Range };
+
+/** Selects only DOM belonging to this window; a frame's contents are never inspected. */
+export function describeTarget(element: HTMLElement, windowRoot: HTMLElement, frameRel?: AppCommentPoint, elementRel?: AppCommentPoint): TargetDescription | null {
+  const overlay = overlayOwner(element);
+  const windowId = windowRoot.closest<HTMLElement>("[data-window-id]")?.dataset.windowId ?? windowRoot.dataset.windowId;
+  if (!windowRoot.contains(element) && (!overlay || overlay.windowId !== windowId)) return null;
+  const block = element.closest<HTMLElement>("[data-ks-block]");
+  if (!block) return null;
+  const pointer = block.dataset.ksBlock!, type = block.dataset.ksBlockType!;
+  const rows: JsonValue[] = []; let row: HTMLElement | null = null;
+  for (const node of commentAncestors(element)) {
+    const raw = node.getAttribute("data-ks-comment-key");
+    if (raw !== null) { const key = decodeCommentKey(raw); if (key !== undefined) { if (node.hasAttribute("data-repeat-key")) { if (type === "repeat" && block.contains(node) && !row && node instanceof HTMLElement) row = node; else rows.unshift(key); } else if (!row && node instanceof HTMLElement) row = node; } }
+    if (node === windowRoot) break;
+  }
+  const selection = element.ownerDocument.getSelection();
+  const selected = selection && !selection.isCollapsed && selection.rangeCount ? selection.getRangeAt(0) : undefined;
+  const range = selected && block.contains(selected.commonAncestorContainer) && (!row || row.contains(selected.commonAncestorContainer)) ? selected.cloneRange() : undefined;
+  const unkeyedRow = element.closest<HTMLElement>('[role="row"], [role="option"], [role="treeitem"], .ks-feed-entry, [data-repeat-key]');
+  const control = unkeyedRow && !unkeyedRow.hasAttribute("data-ks-comment-key") ? null : element.closest<HTMLElement>(controls);
+  const surface = frames.has(type) ? frameSurfaces(block, type).find((candidate) => candidate === element || candidate.contains(element) || (frameRel && element.contains(candidate))) : undefined;
+  const target = range ? row ?? block : surface ?? row ?? (control && block.contains(control) ? control : block);
+  const kind: AppCommentAnchor["kind"] = range ? "text" : surface ? "point" : row ? "row" : target !== block ? "control" : "block";
+  const description = target.getAttribute("aria-label") ?? target.getAttribute("title") ?? target.textContent?.trim().slice(0, 200) ?? "";
+  const anchor: AppCommentAnchor = { schema_version: 1, kind, pointer, normalized_type: type,
+    ...(rows.length ? { repeat_chain: rows } : {}),
+    ...(row ? { row_identity: decodeCommentKey(row.getAttribute("data-ks-comment-key")!) } : {}),
+    ...(elementRel ? { element_rel: elementRel } : {}),
+    element: { tag: target.tagName.toLowerCase(), ...(target.getAttribute("role") ? { role: target.getAttribute("role")! } : {}), ...(description ? { description } : {}) },
+  };
+  if (range) {
+    const container = row ?? block; const before = element.ownerDocument.createRange(); before.selectNodeContents(container); before.setEnd(range.startContainer, range.startOffset);
+    const content = container.textContent ?? "", start = before.toString().length, exact = range.toString();
+    anchor.quote = { exact, prefix: content.slice(Math.max(0, start - 32), start), suffix: content.slice(start + exact.length, start + exact.length + 32) };
+  }
+  if (kind === "point") { const rect = target.getBoundingClientRect(); anchor.frame_css_width = rect.width; anchor.frame_css_height = rect.height; if (frameRel) anchor.frame_rel = frameRel; }
+  const position = row?.getAttribute("aria-rowindex") ?? row?.getAttribute("aria-posinset");
+  return { anchor, path: `${names[type] ?? "블록"}${row ? ` › ${position ? `${position}행` : "행"}` : ""}`, element: target, ...(range ? { range } : {}) };
+}

@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Badge as BadgeValue, Block, PropertyField } from "../contract/contract";
 import { Badge, isBadge, validColor } from "../components/badge";
@@ -46,5 +47,6 @@ function Property({ field, pointer }: { field: PropertyField; pointer: string })
   return <><dt>{labelContent}</dt><dd>{content}</dd></>;
 }
 export function PropertiesBlock({ block, pointer }: { block: Extract<Block, { type: "properties" }>; pointer: string }) {
-  return <div className="ks-properties-container"><dl className={`ks-properties${block.layout === "rows" ? " is-rows" : ""}`}>{block.fields.map((field, index) => <Property key={index} field={field} pointer={`${pointer}/fields/${index}`} />)}</dl></div>;
+  const blockRoot = useBlockRootProps();
+  return <div {...blockRoot} className="ks-properties-container"><dl className={`ks-properties${block.layout === "rows" ? " is-rows" : ""}`}>{block.fields.map((field, index) => <Property key={index} field={field} pointer={`${pointer}/fields/${index}`} />)}</dl></div>;
 }

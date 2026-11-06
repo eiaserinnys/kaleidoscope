@@ -1,3 +1,5 @@
+import { encodeCommentKey } from "../comments/key";
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Actions, Block, EventModifiers } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -91,6 +93,7 @@ export function TimelineBlock({ block, pointer, context }: { block: TimelineData
 }
 
 function TimelineSecondsBlock({ block, pointer, context }: { block: SecondsTimelineData; pointer: string; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const visible = useWindowVisible(context);
   const serialSeek = useMemo(() => createSerialSend((value: number) => data.act(`${pointer}/on_seek`, value)), [data, pointer]);
@@ -353,8 +356,8 @@ function TimelineSecondsBlock({ block, pointer, context }: { block: SecondsTimel
     pendingSeek.current = null;
     if (latest !== null) serialSeek(latest, { coalesce: true });
   }, [serialSeek]);
-  if (duration.status !== "ready") return <DataState value={duration} />;
-  if (tracks.status !== "ready") return <DataState value={tracks} />;
+  if (duration.status !== "ready") return <DataState rootProps={blockRoot} value={duration} />;
+  if (tracks.status !== "ready") return <DataState rootProps={blockRoot} value={tracks} />;
   const percent = (value: number) => `${seconds ? value / seconds * 100 : 0}%`;
   const rulerTicks = Array.from({ length: Math.floor(seconds / step) + 1 }, (_, index) => index * step);
   const currentTime = clock ? clockPosition(clock, performance.timeOrigin + performance.now()) : typeof rawPosition === "number" ? rawPosition : 0;
@@ -387,7 +390,7 @@ function TimelineSecondsBlock({ block, pointer, context }: { block: SecondsTimel
   wheelHandler.current = onWheel;
   const showControls = block.controls !== false;
   const bodyWidth = seconds > 0 ? `${seconds / viewportSpan * 100}%` : "100%";
-  return <div className="ks-timeline" ref={root}>
+  return <div {...blockRoot} className="ks-timeline" ref={root}>
     <div className={`ks-timeline-layout${block.controls === true ? " has-controls" : ""}`}><div className="ks-timeline-labels"><div className="ks-timeline-ruler-label">{showControls ? <><IconButton aria-label="축소" disabled={!canChangeViewport || zoom <= 1} onClick={() => zoomBy(1 / 1.6)}><DataIcon name="minus" size="inline" /></IconButton><IconButton aria-label="확대" disabled={!canChangeViewport || zoom >= maxZoom} onClick={() => zoomBy(1.6)}><DataIcon name="plus" size="inline" /></IconButton>{block.controls === true ? <IconButton aria-label="전체 맞춤" disabled={!canChangeViewport || (viewportRange.start === 0 && viewportRange.end === seconds)} onClick={() => changeViewport({ start: 0, end: seconds })}><DataIcon name="maximize-2" size="inline" /></IconButton> : null}</> : null}</div>{trackData.map((track) => <div key={track.id}><span>{track.label ?? track.id}</span>{track.locked ? <DataIcon name="lock" size="inline" /> : null}</div>)}</div>
       <div className="ks-timeline-scroll" ref={attachScroll}><div className="ks-timeline-body" ref={body} style={{ width: bodyWidth }}>
         <span className="ks-timeline-ruler-measure" aria-hidden="true">{rulerTime(seconds).replace(/\d/g, "0")}</span>
@@ -404,7 +407,7 @@ function TimelineSecondsBlock({ block, pointer, context }: { block: SecondsTimel
             const canResizeStart = !!(item.resize_start_only || item.resizable) && !track.locked && !block.read_only;
             const canResizeEnd = !!item.resizable && !item.resize_start_only && !track.locked && !block.read_only;
             const label = item.label ?? item.id;
-            return <div key={item.id} role="button" tabIndex={0} aria-label={label} title={label} className={`ks-timeline-item is-${item.tone ?? "neutral"} series-${(item.series ?? 0) % 4}${!item.movable || track.locked || block.read_only ? " is-fixed" : ""}${selected.includes(item.id) ? " is-selected" : ""}${preview?.id === item.id ? " is-dragging" : ""}`} style={{ left: percent(shown.start), width: percent(shown.end - shown.start) }} onKeyDown={(event) => keyEdit(event, edit, !!item.movable && !track.locked)} onPointerDown={(event) => begin(event, edit, !!item.movable && !track.locked)} {...handlers}>
+            return <div key={item.id} data-ks-comment-key={encodeCommentKey(item.id)} role="button" tabIndex={0} aria-label={label} title={label} className={`ks-timeline-item is-${item.tone ?? "neutral"} series-${(item.series ?? 0) % 4}${!item.movable || track.locked || block.read_only ? " is-fixed" : ""}${selected.includes(item.id) ? " is-selected" : ""}${preview?.id === item.id ? " is-dragging" : ""}`} style={{ left: percent(shown.start), width: percent(shown.end - shown.start) }} onKeyDown={(event) => keyEdit(event, edit, !!item.movable && !track.locked)} onPointerDown={(event) => begin(event, edit, !!item.movable && !track.locked)} {...handlers}>
               {canResizeStart ? <span className="ks-timeline-handle is-start" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_start" }, true)} {...handlers} /> : null}
               <span className="ks-timeline-label">{label}</span>
               {canResizeEnd ? <span className="ks-timeline-handle is-end" onPointerDown={(event) => begin(event, { ...edit, kind: "resize_end" }, true)} {...handlers} /> : null}

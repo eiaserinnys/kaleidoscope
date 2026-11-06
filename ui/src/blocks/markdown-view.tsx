@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Binding, Block, DocumentRef, FileRef } from "../contract/contract";
 import { ErrorNotice, Notice, StatusText } from "../components/primitives";
@@ -23,15 +24,17 @@ export function MarkdownViewBlock({ block, context, pointer }: { block: Markdown
 }
 
 function BoundMarkdownViewBlock({ binding, pointer, context }: { binding: Binding; pointer: string; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/value`, binding);
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: `[${context.definition.name || "Markdown 보기"}]`, visual: false, continue: true }));
-  if (value.status !== "ready") return <DataState value={value} />;
-  if (typeof value.value !== "string") { const error = shellErrors.SHELL_MARKDOWN_VALUE_NOT_TEXT(); return <div className="ks-markdown-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>; }
-  return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{value.value}</MarkdownText></article>;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
+  if (typeof value.value !== "string") { const error = shellErrors.SHELL_MARKDOWN_VALUE_NOT_TEXT(); return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>; }
+  return <article {...blockRoot} className="ks-markdown-view" ref={shareRef}><MarkdownText>{value.value}</MarkdownText></article>;
 }
 
 function DocumentMarkdownViewBlock({ document, context }: { document: DocumentRef; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const { entry } = document;
   const stateKey = typeof document.doc === "object" ? document.doc.state : null;
   const value = useWindowStateValue(context, stateKey);
@@ -44,13 +47,14 @@ function DocumentMarkdownViewBlock({ document, context }: { document: DocumentRe
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: "[마크다운 보기]", visual: false, continue: true }));
   useEffect(() => { void session.open(path); }, [path, session]);
-  if (path === null) return <article className="ks-markdown-view" ref={shareRef} />;
-  if (!state.loaded) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (state.error) return <div className="ks-markdown-error"><ErrorNotice error={state.error} /></div>;
-  return <article className="ks-markdown-view" ref={shareRef}><MarkdownText>{state.text}</MarkdownText></article>;
+  if (path === null) return <article {...blockRoot} className="ks-markdown-view" ref={shareRef} />;
+  if (!state.loaded) return <div {...blockRoot} className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
+  if (state.error) return <div {...blockRoot} className="ks-markdown-error"><ErrorNotice error={state.error} /></div>;
+  return <article {...blockRoot} className="ks-markdown-view" ref={shareRef}><MarkdownText>{state.text}</MarkdownText></article>;
 }
 
 function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBlockData; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const stateValue = useWindowStateValue(context, typeof block.file.path === "string" ? null : block.file.path.state);
   const path = resolveFilePath(block.file, stateValue);
   const grantRoot = useWindowGrant(context, block.file.permission)?.root_path ?? null;
@@ -104,12 +108,12 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   }, [readFile]);
 
   if (!grant) return null;
-  if (path === null) return <article className="ks-markdown-view" ref={shareRef} />;
-  if (loading) return <div className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div className="ks-markdown-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
+  if (path === null) return <article {...blockRoot} className="ks-markdown-view" ref={shareRef} />;
+  if (loading) return <div {...blockRoot} className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
+  if (error) return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
 
   return (
-    <article className="ks-markdown-view" ref={shareRef}>
+    <article {...blockRoot} className="ks-markdown-view" ref={shareRef}>
       <MarkdownText>{text}</MarkdownText>
     </article>
   );

@@ -100,6 +100,13 @@ pub struct AppCommentAnchor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub frame_rel: Option<AppCommentPoint>,
+    // 고른 순간 프레임 표면의 CSS 픽셀 크기(point 자리만).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub frame_css_width: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub frame_css_height: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub body_css_width: Option<f64>,

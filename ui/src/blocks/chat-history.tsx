@@ -1,3 +1,4 @@
+import { encodeCommentKey } from "../comments/key";
 import { memo, useEffect, useId, useLayoutEffect, useRef, type MouseEvent, type ReactNode, type Ref, type UIEvent } from "react";
 import type { BindingValue, ConversationAttachment, ConversationItem } from "../contract/contract";
 import { DataState } from "../components/data-state";
@@ -109,8 +110,8 @@ export const ChatItem = memo(function ChatItem({ item, renderAttachment }: {
   item: ConversationItem;
   renderAttachment: (attachment: ConversationAttachment, item: ConversationItem, index: number) => ReactNode;
 }) {
-  if (item.kind === "user") return <div className="ks-agent-chat-user" tabIndex={item.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, item.text)}>{item.text}{item.attachments?.length ? <div className={`ks-agent-attachment-history${item.text ? " has-text" : ""}`}>{item.attachments.map((attachment, index) => renderAttachment(attachment, item, index))}</div> : null}</div>;
-  if (item.kind === "assistant") return <div className="ks-agent-chat-assistant" tabIndex={item.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, item.text)}><div className="ks-agent-chat-assistant-content"><MarkdownText>{item.text}</MarkdownText></div></div>;
-  if (item.kind === "error") return <Notice role="alert">{item.text}</Notice>;
-  return <div className="ks-agent-chat-notice">{item.text}</div>;
+  if (item.kind === "user") return <div data-ks-comment-key={encodeCommentKey(item.id)} className="ks-agent-chat-user" tabIndex={item.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, item.text)}>{item.text}{item.attachments?.length ? <div className={`ks-agent-attachment-history${item.text ? " has-text" : ""}`}>{item.attachments.map((attachment, index) => renderAttachment(attachment, item, index))}</div> : null}</div>;
+  if (item.kind === "assistant") return <div data-ks-comment-key={encodeCommentKey(item.id)} className="ks-agent-chat-assistant" tabIndex={item.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, item.text)}><div className="ks-agent-chat-assistant-content"><MarkdownText>{item.text}</MarkdownText></div></div>;
+  if (item.kind === "error") return <Notice commentKey={encodeCommentKey(item.id)} role="alert">{item.text}</Notice>;
+  return <div data-ks-comment-key={encodeCommentKey(item.id)} className="ks-agent-chat-notice">{item.text}</div>;
 });

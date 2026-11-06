@@ -15,6 +15,7 @@ export interface TreeNode {
   data?: unknown;
   currentOnSelection?: boolean;
   rowClassName?: string;
+  commentKey?: import("../../contract/serde_json/JsonValue").JsonValue;
 }
 
 export interface TreeRowModel {

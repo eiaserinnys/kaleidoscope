@@ -1,3 +1,5 @@
+import { encodeCommentKey } from "../comments/key";
+import { useBlockRootProps } from "../comments/block-root";
 import { memo, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { BindingMore, Block, Column, SortSpec, TableCellAddress } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -83,13 +85,15 @@ function normalizeColumns(value: unknown, rowHeader?: string, cell = false): { c
   return { columns };
 }
 export function TableBlock({ block, context, pointer }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string }) {
+  const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/rows`, block.rows);
   const columnsValue = useBinding(`${pointer}/columns`, block.columns);
-  if (value.status !== "ready") return <DataState value={value} />;
-  if (columnsValue.status !== "ready") return <DataState value={columnsValue} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
+  if (columnsValue.status !== "ready") return <DataState rootProps={blockRoot} value={columnsValue} />;
   return <TableReady block={block} context={context} pointer={pointer} value={value.value} columnsValue={columnsValue.value} more={value.more} />;
 }
 function TableReady({ block, context, pointer, value, columnsValue, more }: { block: Extract<Block, { type: "table" }>; context: BlockContext; pointer: string; value: unknown; columnsValue: unknown; more?: BindingMore }) {
+  const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const rows = useMemo(() => asArray(value).filter(validRow), [value]);
@@ -99,12 +103,13 @@ function TableReady({ block, context, pointer, value, columnsValue, more }: { bl
   const visible = useWindowVisible(context);
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
   const selectedCell = isObject(selected) && typeof selected.row === "string" && typeof selected.column === "string" ? { row: selected.row, column: selected.column } : null;
-  if (result.error) return <DataState value={{ status: "failed", message: result.error.message, id: result.error.id, retry: [] }} />;
-  if (!result.columns.length) return <NoItems />;
-  return <><TableView columns={result.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} selection={block.selection} selectedCell={selectedCell} rowHeader={block.row_header} onChooseCell={(row, column) => { if (block.on_select) void data.act(`${pointer}/on_select`, { row: row.key, column }, row); }} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from((anchor.closest('[role="row"]') ?? anchor).querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
+  if (result.error) return <DataState rootProps={blockRoot} value={{ status: "failed", message: result.error.message, id: result.error.id, retry: [] }} />;
+  if (!result.columns.length) return <NoItems rootProps={blockRoot} />;
+  return <><TableView rootProps={blockRoot} columns={result.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} selection={block.selection} selectedCell={selectedCell} rowHeader={block.row_header} onChooseCell={(row, column) => { if (block.on_select) void data.act(`${pointer}/on_select`, { row: row.key, column }, row); }} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from((anchor.closest('[role="row"]') ?? anchor).querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
 }
 
 export interface TableViewProps {
+  rootProps?: import("../comments/block-root").BlockRootProps;
   columns: Column[];
   rows: Row[];
   initialSort?: SortSpec | null;
@@ -133,7 +138,7 @@ type TableHandlers = {
   context: (event: React.MouseEvent<HTMLElement>, row: Row) => void;
 };
 const TableRow = memo(function TableRow({ row, index, start, active, focused, columns, measure, handlers, renderCell, rowProps, activatable }: { row: Row; index: number; start: number; active: boolean; focused: boolean; columns: Column[]; measure: (node: Element | null) => void; handlers: React.RefObject<TableHandlers>; renderCell?: TableViewProps["renderCell"]; rowProps?: TableViewProps["rowProps"]; activatable: boolean }) {
-  return <div {...rowProps?.(row)} role="row" aria-rowindex={index + 1} aria-selected={active} data-row-key={row.key} data-focus-index={index} data-index={index} tabIndex={focused ? 0 : -1} ref={measure} className={`ks-row ks-table-row${active ? " is-selected" : ""}${activatable ? " is-activatable" : ""}`} style={{ position: "absolute", top: 0, transform: `translateY(${start}px)` }} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, row)} onClick={() => handlers.current.choose(row)} onDoubleClick={(event) => handlers.current.activate(row, event.currentTarget)} onContextMenu={(event) => handlers.current.context(event, row)}>
+  return <div data-ks-comment-key={encodeCommentKey(row.key)} {...rowProps?.(row)} role="row" aria-rowindex={index + 1} aria-selected={active} data-row-key={row.key} data-focus-index={index} data-index={index} tabIndex={focused ? 0 : -1} ref={measure} className={`ks-row ks-table-row${active ? " is-selected" : ""}${activatable ? " is-activatable" : ""}`} style={{ position: "absolute", top: 0, transform: `translateY(${start}px)` }} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, row)} onClick={() => handlers.current.choose(row)} onDoubleClick={(event) => handlers.current.activate(row, event.currentTarget)} onContextMenu={(event) => handlers.current.context(event, row)}>
     {columns.map((column) => { const raw = row[column.field]; const text = cellValue(raw, column); const content = renderCell?.(row, column); return <span role="cell" key={column.field} title={text} className={`ks-table-cell${numericColumn(column) ? " is-numeric" : ""}`}>{content === undefined ? column.format === "badge" && isBadge(raw) ? <Badge value={raw} /> : formattedCell(raw, column) ?? text : content}</span>; })}
   </div>;
 });
@@ -142,7 +147,7 @@ export function TableView(props: TableViewProps) {
   return props.selection === "cell" ? <TableGrid {...props} /> : <RowTableView {...props} />;
 }
 
-function RowTableView({ columns: sourceColumns, rows: sourceRows, initialSort, selected, ariaLabel = "표", onChoose, onActivate, onContextMenu, renderCell, compareRows, rowProps, more, data, visible = true }: TableViewProps) {
+function RowTableView({ rootProps, columns: sourceColumns, rows: sourceRows, initialSort, selected, ariaLabel = "표", onChoose, onActivate, onContextMenu, renderCell, compareRows, rowProps, more, data, visible = true }: TableViewProps) {
   const [sort, setSort] = useState<SortSpec | null>(initialSort ?? null);
   const rows = useMemo(() => {
     if (!sort) return sourceRows;
@@ -179,7 +184,7 @@ function RowTableView({ columns: sourceColumns, rows: sourceRows, initialSort, s
   const gridColumns = useMemo(() => sourceColumns.map((column) => width(column, sourceRows)).join(" "), [sourceRows, sourceColumns]);
   const lines = Math.max(0, ...sourceColumns.filter((column) => column.format === "content").map((column) => column.max_lines ?? 3));
   const toggleSort = (field: string) => setSort((old) => old?.field !== field ? { field, desc: false } : !old.desc ? { field, desc: true } : null);
-  return <div className={`ks-data-view ks-table-scroll ks-table-rows${lines ? " has-content" : ""}`} ref={scroll} role="table" aria-rowcount={rows.length} aria-label={ariaLabel} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
+  return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-rows${lines ? " has-content" : ""}`} ref={scroll} role="table" aria-rowcount={rows.length} aria-label={ariaLabel} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">
       <div className="ks-table-header" role="row">
         {sourceColumns.map((column) => <div role="columnheader" aria-sort={sort?.field === column.field ? sort.desc ? "descending" : "ascending" : "none"} key={column.field}><button className={numericColumn(column) ? "is-numeric" : undefined} type="button" onClick={() => toggleSort(column.field)}>{column.label}{sort?.field === column.field && <DataIcon name={sort.desc ? "chevron-down" : "chevron-up"} size="inline" />}</button></div>)}

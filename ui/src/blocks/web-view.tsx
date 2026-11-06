@@ -1,3 +1,4 @@
+import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useRef, useState } from "react";
 import type { Block, WebPage } from "../contract/contract";
 import { EmptyState, ErrorId, IconButton, Notice } from "../components/primitives";
@@ -28,6 +29,7 @@ function pageHeading(page: WebPage | null): string {
 }
 
 export function WebViewBlock({ block, context }: { block: WebViewBlockData; context: BlockContext }) {
+  const blockRoot = useBlockRootProps();
   const visible = useWindowVisible(context);
   const stateUrl = useWindowStateValue(context, typeof block.url === "string" ? null : block.url.state);
   const address = resolveAddress(block, stateUrl);
@@ -171,7 +173,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
   const frozen = surface.kind === "covered";
 
   return (
-    <div className="ks-web-view" ref={shareRef}>
+    <div {...blockRoot} className="ks-web-view" ref={shareRef}>
       <div className="ks-file-tree-header ks-web-toolbar">
         <IconButton aria-label="뒤로" disabled={!page?.can_go_back} onClick={() => history("back")}><ArrowLeft /></IconButton>
         <IconButton aria-label="앞으로" disabled={!page?.can_go_forward} onClick={() => history("forward")}><ArrowRight /></IconButton>

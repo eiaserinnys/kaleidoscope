@@ -4,6 +4,7 @@ import type { BlockContext } from "./block-context";
 import { renderBlock } from "../render/render-block";
 import { SplitPaneContext } from "./split-pane-context";
 import { capturePointer } from "../share/pointer-capture";
+import { useBlockRootProps, type BlockRootProps } from "../comments/block-root";
 
 type SplitBlockData = Extract<Block, { type: "split" }>;
 
@@ -22,13 +23,14 @@ function readSplitSizes(element: HTMLElement) {
 }
 
 export function SplitBlock({ block, context, pointer = "/ui" }: { block: SplitBlockData; context: BlockContext; pointer?: string }) {
+  const rootProps = useBlockRootProps();
   const [narrow, setNarrow] = useState(false);
-  return <SplitPanes direction={narrow ? "column" : block.direction} sizes={block.sizes} columnBelow={block.column_below} onNarrowChange={setNarrow} stacked={narrow}>
+  return <SplitPanes rootProps={rootProps} direction={narrow ? "column" : block.direction} sizes={block.sizes} columnBelow={block.column_below} onNarrowChange={setNarrow} stacked={narrow}>
     {block.children.map((child, index) => renderBlock(child, context, `${pointer}/children/${index}`))}
   </SplitPanes>;
 }
 
-export function SplitPanes({ direction, sizes, children, columnBelow, onNarrowChange, stacked = false }: { direction: SplitBlockData["direction"]; sizes?: number[]; children: ReactNode[]; columnBelow?: number; onNarrowChange?: (narrow: boolean) => void; stacked?: boolean }) {
+export function SplitPanes({ direction, sizes, children, columnBelow, onNarrowChange, stacked = false, rootProps }: { rootProps?: BlockRootProps; direction: SplitBlockData["direction"]; sizes?: number[]; children: ReactNode[]; columnBelow?: number; onNarrowChange?: (narrow: boolean) => void; stacked?: boolean }) {
   const [weights, setWeights] = useState(() => sizes ? [...sizes] : children.map(() => 1));
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const containerRef = useRef<HTMLDivElement>(null);
@@ -123,6 +125,7 @@ export function SplitPanes({ direction, sizes, children, columnBelow, onNarrowCh
 
   return (
     <div
+      {...rootProps}
       className={`ks-split ks-split-${direction}${stacked ? " is-stacked" : ""}`}
       onPointerCancel={endDrag}
       onPointerMove={moveDrag}
