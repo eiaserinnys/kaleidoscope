@@ -101,3 +101,41 @@ pub(crate) fn wait(inner: &Inner, needed: WaitFor) -> Readiness {
         sequence = inner.layout_signal.wait_after_change(sequence);
     }
 }
+
+pub(crate) fn wait_for_workspace(inner: &Inner, window_id: &str) {
+    let mut sequence = inner.layout_signal.sequence();
+    loop {
+        let pending = {
+            let state = inner.state.lock().unwrap();
+            match snapshot_locked(inner, &state).server {
+                Readiness::Pending(_) => true,
+                Readiness::Failed => false,
+                Readiness::Ready => {
+                    let desktop = state
+                        .shared
+                        .windows
+                        .iter()
+                        .find(|window| window.id == window_id)
+                        .and_then(|window| {
+                            state
+                                .shared
+                                .desktops
+                                .iter()
+                                .find(|desktop| desktop.id == window.desktop_id)
+                        });
+                    desktop.is_some_and(|desktop| {
+                        !state.sync.merged
+                            || state.sync.contains(
+                                crate::sync_state::EntityKind::Workspace,
+                                &desktop.workspace_id,
+                            )
+                    })
+                }
+            }
+        };
+        if !pending {
+            return;
+        }
+        sequence = inner.layout_signal.wait_after_change(sequence);
+    }
+}

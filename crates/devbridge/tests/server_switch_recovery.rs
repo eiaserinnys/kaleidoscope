@@ -20,6 +20,7 @@ fn call(core: &Core, value: Value) -> Value {
     let request: CoreRequest = serde_json::from_value(value).unwrap();
     serde_json::to_value(core.handle(request).unwrap()).unwrap()
 }
+#[track_caller]
 fn wait_for(mut predicate: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(20);
     while Instant::now() < deadline {

@@ -267,6 +267,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             });
             match result {
                 Ok((true, event)) => {
+                    inner.layout_signal.notify();
                     if let Some(event) = event {
                         inner.emit_state(&event);
                     }
