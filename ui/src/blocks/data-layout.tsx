@@ -36,6 +36,12 @@ function isActionControl(block: Block | undefined): boolean {
   return block.type === "button" || block.type === "toolbar";
 }
 
+function isDialogOnly(block: Block | undefined): boolean {
+  if (!block) return false;
+  if (block.type === "when" || block.type === "anchor") return isDialogOnly(block.child);
+  return block.type === "dialog";
+}
+
 function isFixedWidthControl(block: Block | undefined): boolean {
   if (!block) return false;
   if (block.type === "when" || block.type === "anchor") return isFixedWidthControl(block.child);
@@ -87,7 +93,7 @@ export function StackBlock({ block, context, pointer }: Props<"stack">) {
     while (tail > fixedFrom && isActionControl(block.children[tail - 1])) tail -= 1;
   }
   const classes = `ks-data-stack is-${direction} gap-${block.gap ?? "none"}${block.wrap && block.place !== "center" ? " is-wrap" : ""}${block.place === "center" ? " is-center" : ""}${explicitFill ? " has-explicit-fill" : ""}${Array.isArray(block.fill) && block.place !== "center" ? " has-fill-list" : ""}${textareaFill ? " has-textarea-fill" : ""}${align}`;
-  const items = block.children.map((child, index) => <div className={`ks-data-stack-item${filled.has(index) ? " is-fill" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>);
+  const items = block.children.map((child, index) => <div className={`ks-data-stack-item${filled.has(index) ? " is-fill" : ""}${isDialogOnly(child) ? " is-dialog" : ""}`} key={index}>{renderBlock(child, context, `${pointer}/children/${index}`)}</div>);
   return <div {...blockRoot} className={`${classes}${wrapsScroll ? " has-action-tail" : ""}`}>
     {wrapsScroll ? <><div className="ks-data-stack-item is-fill ks-stack-scroll"><div className={`${classes} ks-stack-scroll-content`}>{items.slice(0, tail)}</div></div>{items.slice(tail)}</> : items}
   </div>;

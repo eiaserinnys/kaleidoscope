@@ -20,6 +20,7 @@
 .ks-data-stack.gap-large { gap: var(--ks-space-5); }
 .ks-data-stack-item { flex: 0 0 auto; min-width: 0; min-height: 0; }
 .ks-data-stack-item:empty { display: none; }
+.ks-data-stack-item.is-dialog { display: none; }
 .ks-data-stack-item:not(.is-fill) { --ks-fill-list-basis: auto; --ks-fill-list-height: auto; --ks-fill-textarea-height: auto; --ks-fill-textarea-max: calc(var(--ks-type-body) * var(--ks-line-body) * 8 + var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)); --ks-fill-media-max: initial; }
 .ks-data-stack-item.is-fill { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
 .ks-data-stack.has-fill-list > .ks-data-stack-item.is-fill { flex: 1 1 var(--ks-fill-list-basis, 0); }
