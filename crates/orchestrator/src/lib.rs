@@ -705,6 +705,9 @@ mod transfer;
 pub use embedded::{load_or_create_token, EmbeddedConfig, EmbeddedServer};
 
 mod app_delete;
+mod app_comments;
+mod app_comments_http;
+mod app_comments_write;
 mod app_storage;
 mod app_storage_context;
 mod app_storage_http;
@@ -770,3 +773,6 @@ mod transfer_tests;
 
 #[cfg(test)]
 mod preferences_tests;
+
+#[cfg(test)]
+mod app_comments_tests;

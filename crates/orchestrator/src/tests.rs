@@ -80,7 +80,7 @@ fn migration_v8_adds_soft_delete_without_changing_existing_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::INSTALLATION_SCHEMA_VERSION
+        storage::APP_COMMENTS_SCHEMA_VERSION
     );
 }
 
@@ -110,7 +110,7 @@ fn worker_migration_v14_removes_retired_builtin_rows() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::INSTALLATION_SCHEMA_VERSION
+        storage::APP_COMMENTS_SCHEMA_VERSION
     );
     for table in [
         "builtin_app_specs",
@@ -1105,7 +1105,7 @@ fn migration_upgrades_v1_without_losing_devices() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, storage::INSTALLATION_SCHEMA_VERSION);
+    assert_eq!(version, storage::APP_COMMENTS_SCHEMA_VERSION);
     assert_eq!(
         db.query_row("SELECT count(*) FROM devices", [], |r| r.get::<_, i64>(0))
             .unwrap(),
@@ -1149,7 +1149,7 @@ fn migration_v7_removes_legacy_tables_and_preserves_other_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, storage::INSTALLATION_SCHEMA_VERSION);
+    assert_eq!(version, storage::APP_COMMENTS_SCHEMA_VERSION);
     let old_tables: i64 = db.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('agents','agent_items')", [], |row| row.get(0)).unwrap();
     assert_eq!(old_tables, 0);
     let apps: i64 = db

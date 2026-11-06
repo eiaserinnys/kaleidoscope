@@ -25,6 +25,13 @@ pub fn router(state: AppState) -> Router {
         .layer(body_limit(48 * 1024 * 1024))
         .route_layer(middleware::from_fn_with_state(state.clone(), mcp_auth));
     let device = Router::new()
+        .route("/app-comments/{app_id}", get(super::app_comments_http::list).post(super::app_comments_http::create).layer(body_limit(30 * 1024 * 1024)))
+        .route("/app-comments/{app_id}/sent", post(super::app_comments_http::sent).layer(body_limit(2 * 1024 * 1024)))
+        .route("/app-comments/{app_id}/{id}", get(super::app_comments_http::get).delete(super::app_comments_http::delete))
+        .route("/app-comments/{app_id}/{id}/replies", post(super::app_comments_http::reply).layer(body_limit(2 * 1024 * 1024)))
+        .route("/app-comments/{app_id}/{id}/resolved", axum::routing::put(super::app_comments_http::resolve).layer(body_limit(2 * 1024 * 1024)))
+        .route("/app-comments/{app_id}/{id}/read", post(super::app_comments_http::read))
+        .route("/app-comments/{app_id}/{id}/image", get(super::app_comments_http::image))
         .route(
             "/builtin-specs",
             post(super::builtin_specs::device_register).layer(body_limit(4 * 1024 * 1024)),

@@ -171,6 +171,8 @@ pub(super) mod app_storage_tools;
 mod server_handler;
 #[path = "mcp_worker_tools.rs"]
 mod worker_tools;
+#[path = "mcp_app_comments_tools.rs"]
+mod app_comments_tools;
 
 #[tool_router(router = base_tool_router, vis = "pub(super)")]
 impl McpServer {
@@ -860,6 +862,7 @@ impl McpServer {
         let mut router = Self::base_tool_router();
         router.merge(Self::app_storage_tool_router());
         router.merge(Self::worker_tool_router());
+        router.merge(Self::app_comments_tool_router());
         router
     }
 }
