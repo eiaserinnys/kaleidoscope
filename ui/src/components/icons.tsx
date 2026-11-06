@@ -1,4 +1,5 @@
 import {
+  AppWindow as AppWindowIcon,
   ArrowUp as ArrowUpIcon,
   ArrowDown as ArrowDownIcon,
   Settings as SettingsIcon,
@@ -130,6 +131,7 @@ export const Download = (props: IconProps) => renderIcon(DownloadIcon, props);
 export const Video = (props: IconProps) => renderIcon(VideoIcon, props);
 export const Plus = (props: IconProps) => renderIcon(PlusIcon, props);
 export const LayoutGrid = (props: IconProps) => renderIcon(LayoutGridIcon, props);
+export const AppWindow = (props: IconProps) => renderIcon(AppWindowIcon, props);
 export const List = (props: IconProps) => renderIcon(ListIcon, props);
 export const Maximize2 = (props: IconProps) => renderIcon(Maximize2Icon, props);
 export const Minus = (props: IconProps) => renderIcon(MinusIcon, props);

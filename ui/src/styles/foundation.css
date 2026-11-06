@@ -78,6 +78,8 @@
   --ks-color-accent-contrast: #ffffff;
   --ks-color-selection: rgb(216 198 229 / 45%);
   --ks-color-selected-surface: rgb(250 247 253 / 58%);
+  --ks-color-taskbar-active: var(--ks-color-selected-surface);
+  --ks-shadow-taskbar-active: var(--ks-shadow-selected);
   --ks-color-focus: #8c6aaf;
   --ks-color-danger: #a9363d;
   --ks-color-danger-contrast: #ffffff;
@@ -117,6 +119,8 @@
     --ks-color-accent-contrast: #241b2c;
     --ks-color-selection: rgb(164 125 186 / 22%);
     --ks-color-selected-surface: rgb(164 125 186 / 18%);
+    --ks-color-taskbar-active: rgb(164 125 186 / 36%);
+    --ks-shadow-taskbar-active: inset 0 0 0 1px rgb(255 255 255 / 16%);
     --ks-color-focus: #b99bd8;
     --ks-color-danger: #ff9ba1;
     --ks-color-danger-contrast: #241b2c;

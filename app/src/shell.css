@@ -322,8 +322,8 @@
 
 .ks-taskbar-item[data-state="active"] {
   border-color: transparent;
-  background: var(--ks-color-selected-surface);
-  box-shadow: var(--ks-shadow-selected);
+  background: var(--ks-color-taskbar-active);
+  box-shadow: var(--ks-shadow-taskbar-active);
   color: var(--ks-color-text);
 }
 
