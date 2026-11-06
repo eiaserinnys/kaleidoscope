@@ -35,6 +35,8 @@ enum ScenarioKind {
     #[cfg(windows)]
     ShareIsolate,
     #[cfg(windows)]
+    CommentCapture,
+    #[cfg(windows)]
     WebControlProbe,
     Update,
     FilesWrite,
@@ -47,6 +49,8 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
     match name {
         #[cfg(windows)]
         Some("share-isolate") => ScenarioKind::ShareIsolate,
+        #[cfg(windows)]
+        Some("comment-capture") => ScenarioKind::CommentCapture,
         #[cfg(windows)]
         Some("web-control-probe") => ScenarioKind::WebControlProbe,
         Some("update" | "update-reject") => ScenarioKind::Update,
@@ -532,6 +536,8 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
             Ok(mut log) => match match selected {
                 #[cfg(windows)]
                 ScenarioKind::ShareIsolate => share_isolate::scenario(&app, &core, &out, &mut log),
+                #[cfg(windows)]
+                ScenarioKind::CommentCapture => share_isolate::comment_capture_scenario(&app, &core, &out, &mut log),
                 #[cfg(windows)]
                 ScenarioKind::WebControlProbe => {
                     web_control_probe::scenario(&app, &core, &out, &mut log)

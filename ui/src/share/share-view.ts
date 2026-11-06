@@ -1,11 +1,11 @@
 import { useEffect, type RefObject } from "react";
 import { SHARE_DEBOUNCE_MS } from "../contract/limits";
-import type { VisibleView, WindowGeometry } from "../contract/contract";
+import type { AppCommentImage, AppCommentRect, Rect, VisibleView, WindowGeometry } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { toCoreError } from "../core/core-transport";
 import * as errors from "../contract/shell-errors";
 import { clientShare } from "../runtime/client-runtime";
-import { isFullyVisible, revealWebSurface } from "../blocks/web-surface-layer";
+import { isFullyVisible, revealWebSurface, webSurfaceBounds } from "../blocks/web-surface-layer";
 import { describeVisible, limitShareText } from "./visible";
 import { registerControlWindow } from "./window-control";
 import { ownedOverlays } from "./overlay-owner";
@@ -112,13 +112,30 @@ let prepareTail: Promise<void> = Promise.resolve();
 let restoreSequence = 0;
 
 export function captureWindowForControl(store: ShellStore, windowId: string, requestId: string, rootElement?: HTMLElement): Promise<{ image_base64: string; geometry: WindowGeometry }> {
+  return captureIsolated(store, windowId, () => rootElement ?? active.get(windowId)?.element, false, async (bounds) => {
+    const reply = await store.call({ op: "window.control.capture", request_id: requestId, window_id: windowId, bounds });
+    if (reply.op !== "window.control.capture") throw toCoreError("창 캡처 응답이 올바르지 않습니다.");
+    return { image_base64: reply.image_base64, geometry: reply.geometry };
+  });
+}
+
+export function captureWindowForComment(store: ShellStore, windowId: string, contentElement: HTMLElement, targetRect: AppCommentRect): Promise<AppCommentImage> {
+  return captureIsolated(store, windowId, () => contentElement, true, async (bounds) => {
+    const reply = await store.call({ op: "comment.capture", window_id: windowId, bounds, surface_bounds: webSurfaceBounds(windowId, store), target_rect: targetRect });
+    if (reply.op !== "comment.capture") throw errors.COMMENT_CAPTURE_IMAGE_UNAVAILABLE();
+    return reply.image;
+  });
+}
+
+function captureIsolated<T>(store: ShellStore, windowId: string, getElement: () => HTMLElement | undefined, comment: boolean, capture: (bounds: Rect) => Promise<T>): Promise<T> {
   const run = prepareTail.then(async () => {
-    const element = rootElement ?? active.get(windowId)?.element;
+    const element = getElement();
     const frame = element?.closest<HTMLElement>(".ks-window");
     const rect = element?.getBoundingClientRect();
-    if (!element || !frame || !rect?.width || !rect.height) throw errors.SHELL_WINDOW_CONTROL_TARGET_HIDDEN({ target: "창" });
-    const frozen = await store.call({ op: "share.freeze" });
-    if (frozen.op !== "share.freeze" || !frozen.frozen) throw toCoreError("창 화면을 고정할 수 없습니다.");
+    if (!element || !frame || (comment && !element.isConnected)) throw comment ? errors.COMMENT_CAPTURE_WINDOW_NOT_FOUND() : errors.SHELL_WINDOW_CONTROL_TARGET_HIDDEN({ target: "창" });
+    if (!rect?.width || !rect.height) throw comment ? errors.COMMENT_CAPTURE_IMAGE_UNAVAILABLE() : errors.SHELL_WINDOW_CONTROL_TARGET_HIDDEN({ target: "창" });
+    const frozen = await store.call({ op: "share.freeze" }).catch((error: unknown) => { throw comment ? errors.COMMENT_CAPTURE_FREEZE_FAILED() : error; });
+    if (frozen.op !== "share.freeze" || !frozen.frozen) throw comment ? errors.COMMENT_CAPTURE_FREEZE_FAILED() : toCoreError("창 화면을 고정할 수 없습니다.");
     const root = document.documentElement;
     const overlays = ownedOverlays(windowId);
     let restoreWeb: () => Promise<void> = async () => undefined;
@@ -130,9 +147,7 @@ export function captureWindowForControl(store: ShellStore, windowId: string, req
       await twoFrames();
       const current = element.getBoundingClientRect();
       const bounds = { x: Math.round(current.x), y: Math.round(current.y), width: Math.round(current.width), height: Math.round(current.height) };
-      const reply = await store.call({ op: "window.control.capture", request_id: requestId, window_id: windowId, bounds });
-      if (reply.op !== "window.control.capture") throw toCoreError("창 캡처 응답이 올바르지 않습니다.");
-      return { image_base64: reply.image_base64, geometry: reply.geometry };
+      return await capture(bounds);
     } finally {
       try { await restoreWeb(); } catch { /* 화면 고정 해제는 계속한다. */ }
       delete frame.dataset.shareTarget;

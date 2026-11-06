@@ -452,7 +452,7 @@ fn codes_are_used_outside_catalog_and_shell_types_are_generated() {
         return;
     };
     let mut generated = String::from("// 생성물이다. `cargo test -p kaleidoscope-contract`가 오류 등록부에서 만든다. 손으로 고치지 않는다.\nimport type { CoreError } from \"./contract\";\n\n");
-    for entry in errors::shell::ENTRIES.iter().chain(errors::realtime::ENTRIES.iter().filter(|entry| matches!(entry.id, "CONN_REALTIME_MESSAGE_TOO_LARGE" | "CONN_REALTIME_SEND_QUEUE_FULL" | "CONN_REALTIME_CLOSE_INVALID" | "CONN_REALTIME_CLIENT_PERMISSION_MISSING" | "CONN_REALTIME_LOGIN_REQUIRED"))) {
+    for entry in errors::shell::ENTRIES.iter().chain(errors::realtime::ENTRIES.iter().filter(|entry| matches!(entry.id, "CONN_REALTIME_MESSAGE_TOO_LARGE" | "CONN_REALTIME_SEND_QUEUE_FULL" | "CONN_REALTIME_CLOSE_INVALID" | "CONN_REALTIME_CLIENT_PERMISSION_MISSING" | "CONN_REALTIME_LOGIN_REQUIRED"))).chain(errors::comment::ENTRIES.iter().filter(|entry| matches!(entry.id, "COMMENT_CAPTURE_FREEZE_FAILED" | "COMMENT_CAPTURE_IMAGE_UNAVAILABLE" | "COMMENT_CAPTURE_WINDOW_NOT_FOUND"))) {
         let args = entry
             .args
             .iter()

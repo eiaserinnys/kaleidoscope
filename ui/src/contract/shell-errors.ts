@@ -166,3 +166,6 @@ export const CONN_REALTIME_LOGIN_REQUIRED = (args: { name: string }): CoreError 
 export const CONN_REALTIME_MESSAGE_TOO_LARGE = (args: { name: string }): CoreError => ({ id: "CONN_REALTIME_MESSAGE_TOO_LARGE", code: "invalid_request", message: `연결 ${args.name}의 메시지가 8MiB를 넘습니다. 앱에서 메시지 크기를 줄여 주세요.`, details: [] });
 export const CONN_REALTIME_SEND_QUEUE_FULL = (args: { name: string }): CoreError => ({ id: "CONN_REALTIME_SEND_QUEUE_FULL", code: "server", message: `연결 ${args.name}으로 보낼 메시지가 쌓여 연결을 닫았습니다. 앱의 전송량을 줄이고 다시 연결해 주세요.`, details: [] });
 export const CONN_REALTIME_CLOSE_INVALID = (): CoreError => ({ id: "CONN_REALTIME_CLOSE_INVALID", code: "invalid_request", message: `연결 종료 코드나 사유가 WebSocket 규칙에 맞지 않습니다. 앱의 close 호출을 고쳐 주세요.`, details: [] });
+export const COMMENT_CAPTURE_WINDOW_NOT_FOUND = (): CoreError => ({ id: "COMMENT_CAPTURE_WINDOW_NOT_FOUND", code: "not_found", message: `그림을 찍을 창이 닫혔습니다. 앱 창을 다시 열어 주세요.`, details: [] });
+export const COMMENT_CAPTURE_IMAGE_UNAVAILABLE = (): CoreError => ({ id: "COMMENT_CAPTURE_IMAGE_UNAVAILABLE", code: "unavailable", message: `이 기기에서는 창 그림을 찍을 수 없습니다. 그림 없이 커멘트를 남길 수 있습니다.`, details: [] });
+export const COMMENT_CAPTURE_FREEZE_FAILED = (): CoreError => ({ id: "COMMENT_CAPTURE_FREEZE_FAILED", code: "io", message: `창 그림을 찍기 위한 화면 고정에 실패했습니다. 자리를 다시 골라 주세요.`, details: [] });

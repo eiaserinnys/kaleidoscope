@@ -2,7 +2,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ShellStore } from "../core/shell-store";
-import { flushShareViews, prepareShareForSend, useShareView } from "../share/share-view";
+import { captureWindowForComment, flushShareViews, prepareShareForSend, useShareView } from "../share/share-view";
 import { registerWebSurface } from "../blocks/web-surface-layer";
 import * as visible from "../share/visible";
 
@@ -88,6 +88,79 @@ function layout() {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
   vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue({ length: 1, item: () => rect } as unknown as DOMRectList);
 }
+
+it("커멘트 캡처 실패에도 격리와 화면 고정을 해제한다", async () => {
+  layout();
+  const frame = document.createElement("section");
+  frame.className = "ks-window";
+  const content = document.createElement("div");
+  content.className = "ks-window-content";
+  frame.append(content);
+  document.body.append(frame);
+  const ops: string[] = [];
+  const store = { call: vi.fn(async (request: { op: string }) => {
+    ops.push(request.op);
+    if (request.op === "share.freeze") return { op: "share.freeze", frozen: true };
+    if (request.op === "comment.capture") {
+      expect(document.documentElement.dataset.shareIsolating).toBe("true");
+      expect(frame.dataset.shareTarget).toBe("true");
+      throw new Error("capture failed");
+    }
+    return { op: request.op };
+  }) } as unknown as ShellStore;
+  await expect(captureWindowForComment(store, "target", content, { x: 10, y: 10, width: 0, height: 0 })).rejects.toThrow();
+  expect(ops).toEqual(["share.freeze", "comment.capture", "share.unfreeze"]);
+  expect(document.documentElement.dataset.shareIsolating).toBeUndefined();
+  expect(frame.dataset.shareTarget).toBeUndefined();
+  frame.remove();
+});
+
+it("같이 보기 없이 창 본문과 자리를 커멘트 캡처로 전달한다", async () => {
+  layout();
+  const frame = document.createElement("section");
+  frame.className = "ks-window";
+  const content = document.createElement("div");
+  content.className = "ks-window-content";
+  frame.append(content);
+  document.body.append(frame);
+  const image = { meta: { width: 100, height: 80, byte_size: 3, capture_surface: "window_body", target_rect: { x: 10, y: 15, width: 0, height: 0 } }, image_base64: "AAA" };
+  const call = vi.fn(async (request: { op: string }) => {
+    if (request.op === "share.freeze") return { op: "share.freeze", frozen: true };
+    if (request.op === "comment.capture") return { op: "comment.capture", image };
+    return { op: request.op };
+  });
+  const result = await captureWindowForComment({ call } as unknown as ShellStore, "target", content, image.meta.target_rect);
+  expect(result).toEqual(image);
+  expect(call).toHaveBeenCalledWith({ op: "comment.capture", window_id: "target", bounds: { x: 0, y: 0, width: 100, height: 80 }, surface_bounds: null, target_rect: image.meta.target_rect });
+  expect(call.mock.calls.map(([request]) => request.op)).toEqual(["share.freeze", "comment.capture", "share.unfreeze"]);
+  frame.remove();
+});
+
+it("커멘트 화면 고정이 실패하면 전용 오류를 내고 격리하지 않는다", async () => {
+  layout();
+  const frame = document.createElement("section");
+  frame.className = "ks-window";
+  const content = document.createElement("div");
+  frame.append(content);
+  document.body.append(frame);
+  const call = vi.fn(async () => ({ op: "share.freeze", frozen: false }));
+  await expect(captureWindowForComment({ call } as unknown as ShellStore, "target", content, { x: 0, y: 0, width: 0, height: 0 }))
+    .rejects.toMatchObject({ id: "COMMENT_CAPTURE_FREEZE_FAILED" });
+  expect(document.documentElement.dataset.shareIsolating).toBeUndefined();
+  expect(call).toHaveBeenCalledTimes(1);
+  frame.remove();
+});
+
+it("닫힌 창의 커멘트 캡처는 창 없음 오류를 낸다", async () => {
+  const frame = document.createElement("section");
+  frame.className = "ks-window";
+  const content = document.createElement("div");
+  frame.append(content);
+  const call = vi.fn();
+  await expect(captureWindowForComment({ call } as unknown as ShellStore, "closed", content, { x: 0, y: 0, width: 0, height: 0 }))
+    .rejects.toMatchObject({ id: "COMMENT_CAPTURE_WINDOW_NOT_FOUND" });
+  expect(call).not.toHaveBeenCalled();
+});
 
 it("가린 창만 고정 중 드러내 캡처하고 캡처 실패에도 해제한다", async () => {
   layout();

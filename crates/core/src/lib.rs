@@ -1,6 +1,7 @@
 // 기존 코어의 상태와 명령 진입점이 한 파일에 모여 있어 500줄을 넘는다.
 mod app_commands;
 mod app_comments;
+mod comment_capture;
 mod app_storage;
 mod attachment;
 pub mod builtin;
@@ -950,6 +951,9 @@ impl Core {
             }
             CoreRequest::ShareFreeze {} => Ok(share::freeze(&self.inner)),
             CoreRequest::ShareCapture { window_id } => share::capture(&self.inner, &window_id),
+            CoreRequest::CommentCapture { window_id, bounds, surface_bounds, target_rect } => {
+                comment_capture::capture(&self.inner, &window_id, bounds, surface_bounds, target_rect)
+            }
             CoreRequest::ShareUnfreeze {} => Ok(share::unfreeze(&self.inner)),
             CoreRequest::UpdateRestart {} => self.restart_for_update(),
             CoreRequest::DataAttach { window_id, dormant } => {

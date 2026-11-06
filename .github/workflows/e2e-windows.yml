@@ -39,6 +39,8 @@ jobs:
         run: cargo build -p kaleidoscope-acp-test-agent --release
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir app build
+        env:
+          VITE_KS_E2E: '1'
       - name: 실행 파일 캐시 복원
         id: executable-cache
         uses: actions/cache/restore@v4
@@ -281,6 +283,36 @@ jobs:
             }
             if ($appExitCode -ne 0 -or @($results | Where-Object { -not $_.data.ok }).Count -gt 0) { throw "같이 보기 격리 캡처 E2E 실패: $appExitCode" }
 
+          } finally {
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id $recorder.Id -Force -ErrorAction SilentlyContinue
+          }
+      - name: 같이 보지 않는 창의 커멘트 캡처
+        shell: pwsh
+        run: |
+          rustc --edition 2021 --test app/src-tauri/src/e2e/share_isolate/comment_capture/pixels.rs -o "$env:RUNNER_TEMP/comment-pixels.exe"
+          if ($LASTEXITCODE -ne 0) { throw '커멘트 픽셀 판정 시험 컴파일 실패' }
+          & "$env:RUNNER_TEMP/comment-pixels.exe"
+          if ($LASTEXITCODE -ne 0) { throw '커멘트 픽셀 판정 자체 시험 실패' }
+          ./app/e2e-windows/reset-app-data.ps1
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-comment-capture-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-comment-capture-localappdata'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-comment-capture-webview'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/comment-capture'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT | Out-Null
+          $recorderPath = Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/freeze-record.ps1'
+          $recorder = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $recorderPath, $env:KALEIDOSCOPE_E2E_OUT) -WindowStyle Hidden -PassThru
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=comment-capture', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -PassThru
+          try {
+            if (-not $app.WaitForExit(180000)) { throw '커멘트 캡처 E2E 시간 초과' }
+            if ($app.ExitCode -ne 0) { throw "커멘트 캡처 E2E 실패: $($app.ExitCode)" }
+            if (-not $recorder.WaitForExit(15000) -or $recorder.ExitCode -ne 0) { throw '커멘트 캡처 화면 기록 실패' }
+            $events = Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json }
+            foreach ($id in @('comment-capture', 'comment-flicker', 'comment-web-lease')) {
+              $checks = @($events | Where-Object { $_.step -eq 'check.result' -and $_.data.id -eq $id -and $_.data.ok })
+              if ($checks.Count -ne 1) { throw "커멘트 캡처 검사 누락: $id" }
+            }
           } finally {
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
             Stop-Process -Id $recorder.Id -Force -ErrorAction SilentlyContinue

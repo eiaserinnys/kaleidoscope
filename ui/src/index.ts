@@ -62,8 +62,10 @@ export { toCoreError } from "./core/core-transport";
 export type { CoreTransport, ReplyFor, RequestFor } from "./core/core-transport";
 export type {
   AppCommentAnchor,
+  AppCommentImage,
   AppCommentPoint,
   AppCommentQuote,
+  AppCommentRect,
   AppDefinition,
   AppWindow,
   Block,
@@ -80,7 +82,8 @@ export type {
   Workspace,
   WindowSize,
 } from "./contract/contract";
-export { prepareShareForSend, useShareView } from "./share/share-view";
+export { captureWindowForComment, prepareShareForSend, useShareView } from "./share/share-view";
+export { suspendWebSurfaces } from "./blocks/web-surface-layer";
 export { useWindowControlHost } from "./share/window-control";
 export { describeNumbered, resolveNumbered, forgetNumbered } from "./share/numbered";
 export { windowActionActive } from "./share/action-context";

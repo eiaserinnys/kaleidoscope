@@ -4368,6 +4368,10 @@ pub enum CoreRequest {
     #[serde(rename = "comment.capture")]
     CommentCapture {
         window_id: String,
+        // 창 본문의 뷰포트 기준 CSS 픽셀 상자.
+        bounds: Rect,
+        // 웹 표면이 있으면 그 표면의 뷰포트 기준 CSS 픽셀 상자.
+        surface_bounds: Option<Rect>,
         // 창 본문(.ks-window-content)의 왼쪽 위를 기준으로 한 CSS 픽셀 대상 상자 또는 점.
         target_rect: app_comments::AppCommentRect,
     },

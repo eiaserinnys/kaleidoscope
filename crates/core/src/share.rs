@@ -886,27 +886,9 @@ pub(crate) fn capture_for_control(
 ) -> Result<(String, kaleidoscope_contract::WindowGeometry), CoreError> {
     restore_saved_captures(inner);
     let unavailable = || errors::SHARE_CONTROL_IMAGE_UNAVAILABLE(window_id);
-    if bounds.width == 0 || bounds.height == 0 {
-        return Err(unavailable());
-    }
-    let web = inner.host.web().ok_or_else(unavailable)?;
     let has_web = window_has_web(&inner.state.lock().unwrap(), window_id).unwrap_or(false);
-    let (bytes, crop) = if has_web {
-        (
-            web.capture(window_id)
-                .map_err(|_| unavailable())?
-                .ok_or_else(unavailable)?,
-            None,
-        )
-    } else {
-        let (bytes, scale) = web
-            .capture_shell()
-            .map_err(|_| unavailable())?
-            .ok_or_else(unavailable)?;
-        (bytes, Some((bounds, scale)))
-    };
-    let (png, _, pixel_width, pixel_height) =
-        prepare_png_with_size(&bytes, crop).ok_or_else(unavailable)?;
+    let (png, pixel_width, pixel_height) =
+        capture_native(inner, window_id, bounds, has_web).ok_or_else(unavailable)?;
     Ok((
         STANDARD.encode(png),
         kaleidoscope_contract::WindowGeometry {
@@ -916,6 +898,29 @@ pub(crate) fn capture_for_control(
             pixel_height,
         },
     ))
+}
+
+pub(crate) fn capture_native(
+    inner: &Inner,
+    window_id: &str,
+    bounds: kaleidoscope_contract::Rect,
+    has_web: bool,
+) -> Option<(Vec<u8>, u32, u32)> {
+    if bounds.width == 0 || bounds.height == 0 {
+        return None;
+    }
+    let web = inner.host.web()?;
+    let (bytes, crop) = if has_web {
+        (
+            web.capture(window_id).ok()??,
+            None,
+        )
+    } else {
+        let (bytes, scale) = web.capture_shell().ok()??;
+        (bytes, Some((bounds, scale)))
+    };
+    let (png, _, pixel_width, pixel_height) = prepare_png_with_size(&bytes, crop)?;
+    Some((png, pixel_width, pixel_height))
 }
 
 fn png_with_hash(image: RgbaImage) -> Option<(Vec<u8>, String)> {
