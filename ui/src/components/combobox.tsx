@@ -36,6 +36,8 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   const pointer = useRef(false);
   const clickedClosed = useRef(false);
   const selectAfterChoose = useRef(false);
+  const autoSelected = useRef(false);
+  const selectAll = (element: HTMLInputElement) => { element.select(); autoSelected.current = true; };
   const clickSelection = useRef<(() => void) | null>(null);
   const clickFrame = useRef(0);
   const cancelClickSelection = () => { cancelAnimationFrame(clickFrame.current); clickSelection.current = null; };
@@ -70,7 +72,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   useLayoutEffect(() => {
     if (!selectAfterChoose.current) return;
     selectAfterChoose.current = false;
-    if (document.activeElement === inputRef.current) inputRef.current?.select();
+    if (document.activeElement === inputRef.current) inputRef.current && selectAll(inputRef.current);
   }, [text, open, inputRef]);
   useLayoutEffect(() => {
     const element = inputRef.current;
@@ -106,22 +108,22 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   };
   return <>
     <input {...inputProps} ref={inputRef} role="combobox" aria-autocomplete="list" aria-expanded={popupVisible} aria-controls={popupVisible ? listId : undefined} aria-activedescendant={popupVisible ? activeId : undefined}
-      onPointerDown={(event) => { cancelClickSelection(); pointer.current = true; clickedClosed.current = !open; inputProps.onPointerDown?.(event); }}
+      onPointerDown={(event) => { cancelClickSelection(); const element = event.currentTarget; if (autoSelected.current && element.selectionStart === 0 && element.selectionEnd === element.value.length) element.setSelectionRange(element.value.length, element.value.length); autoSelected.current = false; pointer.current = true; clickedClosed.current = !open; inputProps.onPointerDown?.(event); }}
       onPointerUp={(event) => { pointer.current = false; inputProps.onPointerUp?.(event); }}
       onPointerCancel={() => { pointer.current = false; clickedClosed.current = false; }}
-      onFocus={(event) => { inputProps.onFocus?.(event); if (optionsOnly && !inputProps.readOnly && !pointer.current) event.currentTarget.select(); show(); }}
+      onFocus={(event) => { inputProps.onFocus?.(event); if (optionsOnly && !inputProps.readOnly && !pointer.current) selectAll(event.currentTarget); show(); }}
       onClick={(event) => {
         inputProps.onClick?.(event);
         const element = event.currentTarget;
         const iconSize = Number.parseFloat(getComputedStyle(element).getPropertyValue("--ks-icon-button-size")) || 0;
-        if (optionsOnly && !search && !inputProps.readOnly && open && !clickedClosed.current && event.clientX >= element.getBoundingClientRect().right - iconSize) close();
+        if (optionsOnly && !search && !inputProps.readOnly && open && !clickedClosed.current && event.clientX >= element.getBoundingClientRect().right - iconSize) { selectAfterChoose.current = true; close(); }
         else {
           if (!open) show();
           if (optionsOnly && !inputProps.readOnly && (clickedClosed.current || !open)) {
             // 기본 클릭이 기존 선택을 커서로 바꾼 뒤, 새 선택 범위가 없을 때만 고른다.
             clickSelection.current = () => {
               clickSelection.current = null;
-              if (element.isConnected && document.activeElement === element && element.selectionStart === element.selectionEnd) element.select();
+              if (element.isConnected && document.activeElement === element && element.selectionStart === element.selectionEnd) selectAll(element);
             };
             clickFrame.current = requestAnimationFrame(() => clickSelection.current?.());
           }
@@ -129,26 +131,27 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
         pointer.current = false; clickedClosed.current = false;
       }}
       onBlur={(event) => { if (!surface.current?.contains(event.relatedTarget as Node | null)) { inputProps.onBlur?.(event); setOpen(false); } }}
-      onChange={(event) => { inputProps.onChange?.(event); if (ready && !inputProps.readOnly) { setAnchor(inputRef.current); const value = event.currentTarget.value; if (!composing.current || filterInputOptions(options, value).length) setQuery(value); setActive(null); setOpen(true); } }}
+      onChange={(event) => { autoSelected.current = false; inputProps.onChange?.(event); if (ready && !inputProps.readOnly) { setAnchor(inputRef.current); const value = event.currentTarget.value; if (!composing.current || filterInputOptions(options, value).length) setQuery(value); setActive(null); setOpen(true); } }}
       onCompositionStart={(event) => { composing.current = true; inputProps.onCompositionStart?.(event); }}
       onCompositionEnd={(event) => { composing.current = false; inputProps.onCompositionEnd?.(event); if (ready && !inputProps.readOnly) { setQuery(event.currentTarget.value); setActive(null); } }}
       onKeyDown={(event) => {
+        if (event.shiftKey || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a")) autoSelected.current = false;
         if (clickSelection.current) { cancelAnimationFrame(clickFrame.current); clickSelection.current(); }
         if (composing.current || event.nativeEvent.isComposing || inputProps.readOnly) { inputProps.onKeyDown?.(event); return; }
-        if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); if (optionsOnly) onRevert?.(); close(); return; }
+        if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); if (optionsOnly) { selectAfterChoose.current = true; onRevert?.(); } close(); return; }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); if (event.altKey && event.key === "ArrowDown") show(); else changeActive(event.key === "ArrowDown" ? 1 : -1); return; }
         if (event.key === "Enter") {
           if (open && activeOption) { event.preventDefault(); choose(activeOption); return; }
           const exact = optionsOnly && open ? filtered.length === 1 ? filtered[0] : filtered.find((option) => option.searchLabel === text.trim().toLowerCase() || option.searchValue === text.trim().toLowerCase()) : undefined;
           if (exact) { event.preventDefault(); choose(exact); return; }
-          close();
+          selectAfterChoose.current = optionsOnly; close();
           if (!onCommit()) { event.preventDefault(); return; }
         }
         if (event.key === "Tab") { onCommit(); setOpen(false); }
         inputProps.onKeyDown?.(event);
       }} />
     {optionsOnly && !search && (inputProps.disabled || !inputProps.readOnly) && <span className="ks-combobox-indicator" aria-hidden="true"><ChevronDown size="inline" /></span>}
-    {popupVisible && anchor && createPortal(<div ref={surface} data-ks-overlay className={`ks-anchored-overlay ks-combobox-popup${layout?.far ? " is-far" : ""}${layout?.above ? " is-above" : ""}`} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (optionsOnly) onRevert?.(); anchor.focus({ preventScroll: true }); close(); } }} style={{ ...position, ...layout?.style, ...(!layout ? { visibility: "hidden" } : {}) }} onBlur={(event) => {
+    {popupVisible && anchor && createPortal(<div ref={surface} data-ks-overlay className={`ks-anchored-overlay ks-combobox-popup${layout?.far ? " is-far" : ""}${layout?.above ? " is-above" : ""}`} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (optionsOnly) { selectAfterChoose.current = true; onRevert?.(); } anchor.focus({ preventScroll: true }); close(); } }} style={{ ...position, ...layout?.style, ...(!layout ? { visibility: "hidden" } : {}) }} onBlur={(event) => {
       if (event.relatedTarget === anchor || surface.current?.contains(event.relatedTarget as Node | null)) return;
       onCommit(); onEditingEnd(); setOpen(false);
     }}>
@@ -158,7 +161,7 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
           return <OptionRow key={option.index} option={option} id={`${id}-option-${option.index}`} top={row.start} selected={selected === option.value} active={option.index === active} size={filtered.length} position={row.index + 1} descriptionId={descriptionId} measure={virtual.measureElement} onActive={setActive} onChoose={choose} hideValue={hideValue} />;
         })}</VirtualSurface> : <div className="ks-combobox-empty">일치 없음</div>}
       </div>
-      {activeOption?.description && <><div className="ks-combobox-separator" /><div className="ks-combobox-description" id={descriptionId} tabIndex={-1}>{activeOption.description}</div></>}
+      {options.some(option => option.description) && <><div className="ks-combobox-separator" /><div className="ks-combobox-description" id={descriptionId} tabIndex={-1} aria-hidden={!activeOption?.description}>{activeOption?.description}</div></>}
     </div>, document.body)}
   </>;
 }

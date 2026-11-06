@@ -46,8 +46,9 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     expect(await page.getByRole("option").count()).toBeLessThan(100);
     const initialBox = await page.locator(".ks-combobox-list").boundingBox();
     await input.press("ArrowUp");
-    await expect(page.locator(".ks-combobox-description")).toHaveCount(0);
-    await expect(page.locator(".ks-combobox-separator")).toHaveCount(0);
+    await expect(page.locator(".ks-combobox-description")).toBeEmpty();
+    await expect(page.locator(".ks-combobox-description")).toHaveAttribute("aria-hidden", "true");
+    await expect(page.locator(".ks-combobox-separator")).toHaveCount(1);
     expect(await page.locator(".ks-combobox-list").boundingBox()).toMatchObject({ x: initialBox!.x, width: initialBox!.width });
     await input.press("ArrowDown");
     await page.locator(".ks-combobox-option").first().hover();

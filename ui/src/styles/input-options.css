@@ -34,6 +34,7 @@
   width: calc(2 * var(--ks-pane-min-size));
   min-width: 0;
   max-height: calc(2 * var(--ks-pane-min-size));
+  height: var(--ks-combobox-description-limit);
   overflow: auto;
   padding: var(--ks-space-2) var(--ks-space-3);
   font-size: var(--ks-type-body);

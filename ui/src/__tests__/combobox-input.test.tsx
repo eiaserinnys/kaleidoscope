@@ -293,3 +293,29 @@ it("불러오는 중에도 열면 목록 자리에 뼈대 세 줄을 보인다",
   expect(within(screen.getByRole("listbox")).getByRole("status")).toBeTruthy();
   expect(document.querySelectorAll(".ks-combobox-list .ks-data-skeleton i")).toHaveLength(3);
 });
+
+it.each(["Enter", "Escape"])("%s 되돌림도 반영된 값 전체를 선택한다", async key => {
+  setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  input.focus(); fireEvent.change(input, { target: { value: "없는 이름" } }); fireEvent.keyDown(input, { key });
+  expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
+});
+
+it("설명 공간을 처음부터 예약하고 세 행 여유가 없으면 쉘을 쓴다", async () => {
+  const { Combobox } = await import("../components/combobox");
+  const { createRef } = await import("react");
+  const css = document.documentElement.style;
+  for (const [name, value] of Object.entries({ "--ks-space-1": "4px", "--ks-space-2": "8px", "--ks-space-3": "12px", "--ks-pane-min-size": "160px", "--ks-control-height": "32px", "--ks-type-body": "14px", "--ks-line-body": "1.5", "--ks-line-width": "1px" })) css.setProperty(name, value);
+  vi.spyOn(window, "getComputedStyle").mockReturnValue(css);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return (this.classList.contains("ks-data-window") ? { left: 40, right: 400, top: 100, bottom: 500, width: 360, height: 400 } : { left: 80, right: 280, top: 250, bottom: 282, width: 200, height: 32 }) as DOMRect;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(79);
+  const options = Array.from({ length: 10 }, (_, index) => ({ value: String(index), label: String(index), index, searchLabel: String(index), searchValue: String(index), ...(index ? { description: "설명" } : {}) }));
+  render(<div className="ks-data-window" data-window-id="reserve"><Combobox inputRef={createRef<HTMLInputElement>()} inputProps={{ value: "0" }} ready visible options={options} onChoose={() => {}} onCommit={() => true} onEditingEnd={() => {}} /></div>);
+  fireEvent.focus(screen.getByRole("combobox"));
+  const popup = document.querySelector(".ks-combobox-popup") as HTMLElement;
+  expect(Number.parseFloat(popup.style.getPropertyValue("--ks-combobox-description-limit"))).toBe(79);
+  expect(Number.parseFloat(popup.style.maxHeight)).toBeGreaterThan(206);
+  cleanup(); css.cssText = "";
+});

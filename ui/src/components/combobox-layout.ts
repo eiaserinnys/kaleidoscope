@@ -14,6 +14,9 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
     const host = anchor.closest<HTMLElement>(".ks-data-window[data-window-id]");
     let openedAbove: boolean | undefined;
     let openedGeometry = "";
+    let measuredOptions: InputOption[] | undefined;
+    let measuredWidth = "";
+    let descriptionHeight = 0;
     const measure = () => {
       const rect = anchor.getBoundingClientRect();
       // 스크롤 영역을 벗어난 입력에 포털 목록만 남기지 않는다.
@@ -48,12 +51,32 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
       surface.current?.style.setProperty("--ks-combobox-list-width", width + "px");
       surface.current?.classList.toggle("is-far", far);
       const description = surface.current?.querySelector<HTMLElement>(".ks-combobox-description");
-      const descriptionHeight = description ? Math.min(description.scrollHeight, far ? pane : 2 * pane) : 0;
+      const measurementWidth = [width, far].join(":");
+      if (options !== measuredOptions || measurementWidth !== measuredWidth) {
+        descriptionHeight = 0;
+        if (description && surface.current) {
+          // 같은 폭에서 모든 설명이 쓸 공간을 미리 재고 활성 행과 무관하게 예약한다.
+          const probe = description.cloneNode(false) as HTMLElement;
+          probe.removeAttribute("id"); probe.setAttribute("aria-hidden", "true");
+          Object.assign(probe.style, { position: "absolute", visibility: "hidden", height: "auto", maxHeight: "none", pointerEvents: "none" });
+          surface.current.append(probe);
+          for (const text of new Set(options.map(option => option.description).filter(Boolean))) {
+            probe.textContent = text!;
+            descriptionHeight = Math.max(descriptionHeight, Math.min(probe.scrollHeight, far ? pane : 2 * pane));
+          }
+          probe.remove();
+        }
+        measuredOptions = options; measuredWidth = measurementWidth;
+      }
       const required = far ? listHeight + descriptionHeight + (description ? line : 0) : Math.max(listHeight, descriptionHeight);
-      const minimum = Math.min(3, options.length || 3) * rowHeight(options[0]) + padding + 2 * inset + 2 * offset;
-      const useWindow = bounds && bounds.height >= minimum;
-      const top = Math.max(useWindow ? bounds.top : 0, 0) + inset;
-      const bottom = Math.min(useWindow ? bounds.bottom : window.innerHeight, window.innerHeight) - inset;
+      const minimumList = Math.min(3, options.length || 3) * rowHeight(options[0]) + padding;
+      const minimum = far ? minimumList + descriptionHeight + (description ? line : 0) : Math.max(minimumList, descriptionHeight);
+      let top = Math.max(bounds?.top ?? 0, 0) + inset;
+      let bottom = Math.min(bounds?.bottom ?? window.innerHeight, window.innerHeight) - inset;
+      // 칸 자리와 설명을 뺀 실제 여유가 세 행보다 작으면 쉘 범위를 쓴다.
+      if (Math.max(bottom - rect.bottom - offset, rect.top - offset - top) < minimum) {
+        top = inset; bottom = window.innerHeight - inset;
+      }
       const below = Math.max(bottom - rect.bottom - offset, 0);
       const aboveSpace = Math.max(rect.top - offset - top, 0);
       const geometry = [rect.top, rect.bottom, top, bottom, width].join(":");
@@ -62,7 +85,7 @@ export function useComboboxLayout(anchor: HTMLElement | null, surface: RefObject
       const above = openedAbove ?? (below < required && aboveSpace > below);
       openedAbove = above;
       const available = above ? aboveSpace : below;
-      const descriptionLimit = Math.max(0, Math.min(descriptionHeight, available - Math.min(listHeight, rowHeight() + padding) - line));
+      const descriptionLimit = Math.max(0, Math.min(descriptionHeight, far ? available - Math.min(listHeight, rowHeight() + padding) - line : available));
       setLayout({ far, above, style: {
         left: position.left,
         top: above ? undefined : Math.max(rect.bottom + offset, top),

@@ -260,7 +260,7 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
       aria-valuenow={block.kind === "number" ? numericValue : undefined}
     />}
     {block.kind === "number" && block.spin ? <WindowSpinButtons context={context} ref={spinButtons} increment={(direction, held) => increment(direction, 1, held)} onEnd={() => { spinning.current = false; endSpin(); if (!spinPending.current && !edited.current && !focusedRef.current) finish(); }} atMin={minimum !== null && numericValue !== undefined && numericValue <= minimum} atMax={maximum !== null && numericValue !== undefined && numericValue >= maximum} readOnly={locked} /> : null}
-    {block.kind === "search" && (locked ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={locked} onClick={() => { markChanged(""); if (optionsOnly) choose(""); else sendDraft(""); }}><X size="inline" /></IconButton></span> : null}
+    {block.kind === "search" && (locked ? initialDraft : draft) ? <span className="ks-data-input-clear"><IconButton aria-label="지우기" disabled={locked} onClick={() => { markChanged(""); if (optionsOnly) choose(""); else sendDraft(""); inputElement.current?.focus({ preventScroll: true }); }}><X size="inline" /></IconButton></span> : null}
   </div>;
   const optionsError = normalizedOptions && !normalizedOptions.ok ? inputOptionsError(normalizedOptions) : null;
   const invalidBound = dateTime && block.min !== undefined && minBinding.status === "ready" && !minDateTime ? "min" : dateTime && block.max !== undefined && maxBinding.status === "ready" && !maxDateTime ? "max" : null;
