@@ -340,8 +340,9 @@ pub fn run() {
                     .and_then(std::ffi::OsStr::to_str),
                 Some("update" | "update-reject")
             );
+            // 배포 매니페스트는 Windows 설치본만 싣는다. 다른 플랫폼은 업데이터를 켜지 않아 `unavailable`로 남는다.
             #[cfg(not(feature = "e2e"))]
-            let run_updater = true;
+            let run_updater = cfg!(windows);
             if run_updater {
                 updater::start(app.handle().clone(), Arc::clone(&core), updater);
             }
