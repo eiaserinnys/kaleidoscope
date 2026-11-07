@@ -67,7 +67,7 @@ fn insert_device(state: &AppState, id: &str, name: &str) -> String {
     token
 }
 
-async fn next_sse_event(stream: &mut axum::body::BodyDataStream) -> Value {
+async fn next_sse_data(stream: &mut axum::body::BodyDataStream) -> Vec<u8> {
     tokio::time::timeout(Duration::from_secs(2), async {
         let mut pending = String::new();
         loop {
@@ -76,13 +76,17 @@ async fn next_sse_event(stream: &mut axum::body::BodyDataStream) -> Value {
             if let Some(start) = pending.find("data: ") {
                 let data = &pending[start + 6..];
                 if let Some(end) = data.find('\n') {
-                    return serde_json::from_str(data[..end].trim()).unwrap();
+                    return data[..end].trim().as_bytes().to_vec();
                 }
             }
         }
     })
     .await
     .expect("기기 이벤트를 받지 못했습니다")
+}
+
+async fn next_sse_event(stream: &mut axum::body::BodyDataStream) -> Value {
+    serde_json::from_slice(&next_sse_data(stream).await).unwrap()
 }
 
 async fn open_device_stream(
@@ -105,11 +109,12 @@ async fn open_device_stream(
         .into_data_stream()
 }
 
-async fn next_layout_snapshot(stream: &mut axum::body::BodyDataStream) -> Value {
+async fn next_layout_snapshot(stream: &mut axum::body::BodyDataStream) -> Vec<u8> {
     loop {
-        let event = next_sse_event(stream).await;
+        let data = next_sse_data(stream).await;
+        let event: Value = serde_json::from_slice(&data).unwrap();
         if event["event"] == "layout.snapshot" {
-            return event;
+            return data;
         }
     }
 }
@@ -244,7 +249,7 @@ struct LegacyChanges {
 }
 
 #[derive(serde::Deserialize)]
-#[serde(tag = "event", deny_unknown_fields)]
+#[serde(tag = "event")]
 enum LegacyLayoutEvent {
     #[serde(rename = "layout.snapshot")]
     Snapshot {
@@ -347,6 +352,7 @@ async fn legacy_stream_and_post_project_shortcuts_without_losing_them() {
 
 #[tokio::test]
 async fn transfer_layout_snapshot_projects_shortcuts_by_registry_version() {
+    use http_body_util::BodyExt;
     let remote = AppState::in_memory("secret");
     let old_token = insert_device(&remote, "old", "옛 기기");
     let new_token = insert_device(&remote, "new", "새 기기");
@@ -366,6 +372,7 @@ async fn transfer_layout_snapshot_projects_shortcuts_by_registry_version() {
     next_layout_snapshot(&mut new_stream).await;
 
     let local = AppState::in_memory("local");
+    let local_token = insert_device(&local, "local", "로컬 기기");
     let seed: LayoutChanges = serde_json::from_value(json!({
         "workspaces":[workspace("w", "작업")],
         "desktops":[desktop("d", "w")],
@@ -373,9 +380,21 @@ async fn transfer_layout_snapshot_projects_shortcuts_by_registry_version() {
     }))
     .unwrap();
     local.apply_layout_changes(None, &seed).unwrap();
-    let bundle = local.export_data(&local.mcp_account_id().unwrap()).unwrap();
+    let request = Request::builder().uri(kaleidoscope_contract::transfer::TRANSFER_PATH)
+        .header(header::AUTHORIZATION, format!("Bearer {local_token}"))
+        .body(Body::empty()).unwrap();
+    let response = router(local.clone()).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bundle = response.into_body().collect().await.unwrap().to_bytes();
+    let request = Request::builder().method("POST").uri(kaleidoscope_contract::transfer::TRANSFER_PATH)
+        .header(header::AUTHORIZATION, format!("Bearer {new_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(bundle)).unwrap();
+    let response = router(remote.clone()).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let result: kaleidoscope_contract::transfer::TransferResult = serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(result.imported, 3);
     let account = remote.mcp_account_id().unwrap();
-    remote.import_data(&account, bundle).unwrap();
     assert_eq!(
         remote
             .export_data(&account)
@@ -387,22 +406,17 @@ async fn transfer_layout_snapshot_projects_shortcuts_by_registry_version() {
     );
 
     let old_snapshot = next_layout_snapshot(&mut old_stream).await;
-    assert!(old_snapshot.get("desktop_shortcuts").is_none());
-    let old: LegacyLayoutEvent =
-        serde_json::from_slice(&serde_json::to_vec(&old_snapshot).unwrap()).unwrap();
+    let old: LegacyLayoutEvent = serde_json::from_slice(&old_snapshot).unwrap();
+    let old_value: Value = serde_json::from_slice(&old_snapshot).unwrap();
+    assert!(old_value.get("desktop_shortcuts").is_none());
     assert!(
         matches!(old, LegacyLayoutEvent::Snapshot { ref desktops, .. } if desktops.len() == 1),
         "옛 연결이 받은 이관 스냅샷이 옛 모양이 아닙니다"
     );
 
     let new_snapshot = next_layout_snapshot(&mut new_stream).await;
-    assert_eq!(
-        new_snapshot["desktop_shortcuts"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
-    );
+    let event: DeviceEvent = serde_json::from_slice(&new_snapshot).unwrap();
+    assert!(matches!(event, DeviceEvent::LayoutSnapshot { desktop_shortcuts, .. } if desktop_shortcuts.len() == 1 && desktop_shortcuts[0].id == "d/app"));
 }
 
 #[test]
