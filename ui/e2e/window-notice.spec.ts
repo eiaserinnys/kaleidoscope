@@ -2,6 +2,30 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+for (const width of [360, 880]) test(`${width} 폭에서 수동 재시도만 진행 표시를 보인다`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 600 });
+  await page.goto("/?preview=paging-test");
+  await page.addStyleTag({ content: "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }" });
+  const app = page.getByTestId("app-window-paging-test");
+  await expect(app.getByRole("option", { name: "항목 1", exact: true })).toBeVisible();
+  // 아이콘 원천의 초기 수신이 끝난 뒤 기존 값이 있는 실패를 재현한다.
+  await page.waitForTimeout(1500);
+  const update = (source: object) => page.evaluate(source => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: { sources: { icon_items: source }, values: {} } }), source);
+  await update({ state: "failed", has_value: true, message: "서버가 자료를 보내지 못했습니다.", id: "SOURCE_ERROR" });
+  const notice = app.getByRole("alert");
+  const button = notice.getByRole("button", { name: "다시 받기" });
+  await expect(button).toBeVisible();
+  await update({ state: "loading", has_value: true });
+  await expect(button).not.toHaveAttribute("aria-busy", "true");
+  await expect(button).not.toHaveAttribute("aria-disabled", "true");
+  const out = process.env.KS_1072_CAPTURE_DIR;
+  if (out && width === 360) { mkdirSync(out, { recursive: true }); await app.screenshot({ path: join(out, "item6-notice-bg-refresh-360.png") }); }
+  await button.click();
+  await expect(button).toHaveAttribute("aria-busy", "true");
+  if (out) { mkdirSync(out, { recursive: true }); await app.screenshot({ path: join(out, `item6-notice-retry-${width}.png`) }); }
+  await expect(notice).toHaveCount(0);
+});
+
 for (const width of [880, 360]) test(`${width} 폭의 오류 알림은 본문을 밀지 않고 창 안에 뜬다`, async ({ page }) => {
   await page.setViewportSize({ width, height: 600 });
   await page.goto("/?preview=notice-fixture");

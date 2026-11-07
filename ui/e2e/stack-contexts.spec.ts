@@ -73,7 +73,7 @@ for (const tail of [0, 1]) test(`격자가 든 상세 칸은 바깥 스크롤로
   await expect(panes).toHaveCount(2);
   await expect(app.locator(".ks-list.is-grid .ks-list-card").first()).toBeVisible();
   const heights = await panes.evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
-  expect(heights[0]).toBe(320);
+  expect(heights[0]).toBe(480);
   expect(heights[1]).toBeGreaterThan(320);
   const detail = panes.nth(1);
   const inner = detail.locator(".ks-stack-scroll");

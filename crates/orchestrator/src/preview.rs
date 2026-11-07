@@ -462,14 +462,23 @@ impl McpServer {
         );
         for (pointer, value) in &mut evaluated {
             if let BindingValue::Failed {
-                message, id, retry, ..
+                message,
+                id,
+                retry,
+                details,
+                ..
             } = value
             {
                 if id.is_none() && retry.is_empty() {
-                    let error =
-                        kaleidoscope_contract::errors::DATA_BINDING_EXPR_FAILED(pointer, &*message);
+                    let reason = std::mem::take(message);
+                    let error = kaleidoscope_contract::errors::DATA_BINDING_EXPR_FAILED()
+                        .and_details(vec![
+                            format!("pointer: {pointer}"),
+                            format!("reason: {reason}"),
+                        ]);
                     *message = error.message;
                     *id = error.id;
+                    *details = Some(error.details);
                 }
             }
         }

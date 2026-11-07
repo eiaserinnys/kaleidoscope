@@ -13,7 +13,6 @@ export function ClientShareSignal() {
 export function WindowNotice() {
   const data = useWindowData();
   const sources = useSyncExternalStore(data.subscribeSources, data.getNoticeSources, data.getNoticeSources);
-  const actualSources = useSyncExternalStore(data.subscribeSources, data.getSources, data.getSources);
   const message = useSyncExternalStore(data.subscribeNotice, data.getNotice, data.getNotice);
   const revision = useSyncExternalStore(data.subscribeNotice, data.getNoticeRevision, data.getNoticeRevision);
   const noticeId = useSyncExternalStore(data.subscribeNotice, data.getNoticeId, data.getNoticeId);
@@ -21,11 +20,11 @@ export function WindowNotice() {
   const statusSequence = useSyncExternalStore(data.subscribeNotice, data.getStatusSequence, data.getStatusSequence);
   const clientFailed = useSyncExternalStore(data.subscribeNotice, data.getClientFailed, data.getClientFailed);
   const retrySequence = useSyncExternalStore(data.subscribeSources, data.getSourceRetrySequence, data.getSourceRetrySequence);
+  const retrying = useSyncExternalStore(data.subscribeSources, data.getNoticeRetrying, data.getNoticeRetrying);
   const slot = useSyncExternalStore(data.subscribeNoticeSlot, data.getNoticeSlot, data.getNoticeSlot);
   const [dismissed, setDismissed] = useState(false);
 
   const failed = Object.entries(sources).filter(([, value]) => value.state === "failed" && value.has_value).map(([name]) => name);
-  const retrying = failed.some(name => actualSources[name]?.state === "loading");
   const failureKey = JSON.stringify([...failed].sort().map((name) => {
     const source = sources[name];
     return source.state === "failed" ? [name, source.id, source.message] : [];

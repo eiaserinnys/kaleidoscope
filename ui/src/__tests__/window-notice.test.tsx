@@ -301,26 +301,76 @@ it("같은 문구로 다시 실패하면 실패 알림 요소를 새로 그린�
   expect(second).not.toBe(first);
 });
 
-it('실제 재수신 중 다시 받기는 진행 표시와 잠금을 유지한다', () => {
+it('자동 재수신 중에는 다시 받기 단추를 잠그지 않고 진행 표시도 켜지 않는다', async () => {
   const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
   const fail = { state: 'failed', has_value: true, message: '읽기 실패' };
   merge(fail);
-  merge({ state: 'loading', has_value: true });
-  const refresh = vi.spyOn(data, 'refresh').mockResolvedValue(undefined);
   const button = screen.getByRole('button', { name: '다시 받기' }) as HTMLButtonElement;
+  const notice = screen.getByRole('alert');
   button.focus();
-  // 정기 갱신으로도 잠길 수 있으니 초점을 빼앗지 않게 disabled를 쓰지 않는다.
+  merge({ state: 'loading', has_value: true });
+  // 정기 갱신 중에도 알림과 초점은 그대로고, 단추는 눌릴 수 있어야 한다.
+  expect(screen.getByRole('alert')).toBe(notice);
   expect(button.disabled).toBe(false);
   expect(document.activeElement).toBe(button);
+  expect(button.getAttribute('aria-disabled')).toBeNull();
+  expect(button.getAttribute('aria-busy')).toBeNull();
+  expect(button.querySelector('.ks-button-progress')).toBeNull();
+  const call = vi.spyOn(store, 'call').mockResolvedValue({} as never);
+  fireEvent.click(button);
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  expect(call).toHaveBeenCalledWith(expect.objectContaining({ op: 'data.refresh', sources: ['feed'] }));
+  merge(fail);
+  expect(screen.getByRole('alert')).toBe(notice);
+  expect(document.activeElement).toBe(button);
+});
+
+it('직접 다시 받으면 진행 표시가 즉시 켜지고 최소 300ms 동안 유지된다', async () => {
+  act(() => (data as any).merge({ sources: { feed: { state: 'failed', has_value: true, message: '읽기 실패' } }, values: {} }));
+  // 응답이 19ms 만에 끝나는 빠른 재시도에서도 눌린 피드백이 사라지지 않아야 한다.
+  const call = vi.spyOn(store, 'call').mockResolvedValue({} as never);
+  const button = screen.getByRole('button', { name: '다시 받기' });
+  fireEvent.click(button);
   expect(button.getAttribute('aria-disabled')).toBe('true');
   expect(button.getAttribute('aria-busy')).toBe('true');
   expect(button.querySelector('.ks-button-progress')).toBeTruthy();
-  fireEvent.click(button);
-  expect(refresh).not.toHaveBeenCalled();
-  merge(fail);
-  const ready = screen.getByRole('button', { name: '다시 받기' });
-  expect(ready.getAttribute('aria-disabled')).toBeNull();
-  expect(document.activeElement).toBe(ready);
-  fireEvent.click(ready);
-  expect(refresh).toHaveBeenCalledTimes(1);
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  tick(19);
+  expect(call).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: '다시 받기' }).getAttribute('aria-busy')).toBe('true');
+  tick(280);
+  expect(screen.getByRole('button', { name: '다시 받기' }).getAttribute('aria-busy')).toBe('true');
+  tick(1);
+  const settled = screen.getByRole('button', { name: '다시 받기' });
+  expect(settled.getAttribute('aria-busy')).toBeNull();
+  expect(settled.getAttribute('aria-disabled')).toBeNull();
+  expect(settled.querySelector('.ks-button-progress')).toBeNull();
+});
+
+it('직접 다시 받은 갱신이 아직 도는 동안은 300ms가 지나도 진행 표시를 유지한다', async () => {
+  act(() => (data as any).merge({ sources: { feed: { state: 'failed', has_value: true, message: '읽기 실패' } }, values: {} }));
+  const call = vi.spyOn(store, 'call').mockResolvedValue({} as never);
+  fireEvent.click(screen.getByRole('button', { name: '다시 받기' }));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  act(() => (data as any).merge({ sources: { feed: { state: 'loading', has_value: true } }, values: {} }));
+  tick(400);
+  expect(screen.getByRole('button', { name: '다시 받기' }).getAttribute('aria-busy')).toBe('true');
+  expect(call).toHaveBeenCalledTimes(1);
+  act(() => (data as any).merge({ sources: { feed: { state: 'failed', has_value: true, message: '다시 실패' } }, values: {} }));
+  const settled = screen.getByRole('button', { name: '다시 받기' });
+  expect(settled.getAttribute('aria-busy')).toBeNull();
+  expect(screen.getByRole('alert').textContent).toContain('다시 실패');
+});
+
+it('직접 다시 받은 값이 곧바로 도착해도 진행 표시를 300ms 유지한 뒤 알림을 닫는다', async () => {
+  act(() => (data as any).merge({ sources: { feed: { state: 'failed', has_value: true, message: '읽기 실패' } }, values: {} }));
+  vi.spyOn(store, 'call').mockResolvedValue({} as never);
+  fireEvent.click(screen.getByRole('button', { name: '다시 받기' }));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  act(() => (data as any).merge({ sources: { feed: { state: 'ready', updated_at: '2026-11-07T00:00:00Z' } }, values: {} }));
+  expect(screen.getByRole('button', { name: '다시 받기' }).getAttribute('aria-busy')).toBe('true');
+  tick(299);
+  expect(screen.getByRole('alert')).toBeTruthy();
+  tick(1);
+  expect(screen.queryByRole('alert')).toBeNull();
 });

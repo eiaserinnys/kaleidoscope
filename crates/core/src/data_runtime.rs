@@ -424,8 +424,13 @@ impl Runtime {
         values: &mut BTreeMap<String, kaleidoscope_contract::data::BindingValue>,
     ) {
         for binding in self.compiled.binding_dependencies() {
-            let Some(kaleidoscope_contract::data::BindingValue::Failed { message, id, retry, .. }) =
-                values.get_mut(&binding.pointer)
+            let Some(kaleidoscope_contract::data::BindingValue::Failed {
+                message,
+                id,
+                retry,
+                details,
+                ..
+            }) = values.get_mut(&binding.pointer)
             else {
                 continue;
             };
@@ -433,9 +438,13 @@ impl Runtime {
                 continue;
             }
             let reason = std::mem::take(message);
-            let error = errors::DATA_BINDING_EXPR_FAILED(&binding.pointer, &reason);
+            let error = errors::DATA_BINDING_EXPR_FAILED().and_details(vec![
+                format!("pointer: {}", binding.pointer),
+                format!("reason: {reason}"),
+            ]);
             *message = error.message;
             *id = error.id;
+            *details = Some(error.details);
         }
     }
     fn selected_for(
@@ -1722,7 +1731,7 @@ mod freshness_tests {
     }
 
     #[test]
-    fn expression_failure_uses_its_binding_path_and_error_id() {
+    fn expression_failure_shows_everyday_message_and_keeps_cause_in_details() {
         let runtime = request_runtime();
         let binding = runtime.compiled.binding_dependencies().first().unwrap();
         let mut values = BTreeMap::from([(
@@ -1737,14 +1746,27 @@ mod freshness_tests {
 
         runtime.label_expression_failures(&mut values);
 
-        let kaleidoscope_contract::data::BindingValue::Failed { id, message, .. } =
-            &values[&binding.pointer]
+        let kaleidoscope_contract::data::BindingValue::Failed {
+            id,
+            message,
+            details,
+            ..
+        } = &values[&binding.pointer]
         else {
             panic!("식 계산 실패가 유지되어야 한다");
         };
         assert_eq!(id.as_deref(), Some("DATA_BINDING_EXPR_FAILED"));
-        assert!(message.contains(&binding.pointer));
-        assert!(message.contains("expected value"));
+        assert_eq!(
+            message,
+            "화면에 표시할 값을 계산하지 못했습니다. 입력값을 확인하거나 에이전트에게 앱 정의의 식을 고쳐 달라고 요청하세요"
+        );
+        assert!(!message.contains(&binding.pointer));
+        assert!(!message.contains("expected value"));
+        let details = details
+            .as_ref()
+            .expect("식 계산 실패의 포인터와 원인은 details에 남는다");
+        assert!(details.contains(&format!("pointer: {}", binding.pointer)));
+        assert!(details.contains(&"reason: expected value".to_string()));
     }
 
     fn seed_request_cache(

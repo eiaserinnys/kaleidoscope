@@ -172,7 +172,9 @@ function RowTableView({ rootProps, columns: sourceColumns, rows: sourceRows, ini
     });
   }, [sourceRows, sourceColumns, sort, compareRows]);
   const rowKeys = useMemo(() => rows.map((row) => [row.key]), [rows]);
-  const { scroll, virtual } = useVirtualRows(rows.length, 32, undefined, false, undefined, undefined, rowKeys);
+  const { scroll, virtual, resizeAnchor } = useVirtualRows(rows.length, 32, undefined, false, undefined, undefined, rowKeys);
+  const anchorIndex = rows.findIndex((row) => row.key === selected);
+  resizeAnchor.current = anchorIndex < 0 ? null : anchorIndex;
   const roving = useRoving(rows, selected, scroll, virtual);
   keepRovingRow(virtual, roving.focus);
   const virtualRows = virtual.getVirtualItems();

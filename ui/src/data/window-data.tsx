@@ -17,6 +17,8 @@ import { checkAppLink } from "./app-link";
 import { DefaultFolderPreparation } from "./default-folder";
 
 const loading: BindingValue = { status: "loading" };
+/** 직접 다시 받기를 눌렀을 때 진행 표시를 최소한 이만큼은 보인다. 빠른 응답의 깜빡임을 막는다. */
+const NOTICE_RETRY_MIN_MS = 300;
 const emptySources: Record<string, SourceStatus> = {};
 const lifecycle = new WeakMap<ShellStore, Map<string, Promise<void>>>();
 /** 성공 응답이 먼저 와도 대화상자가 닫힐 틈을 준다. 그 사이에 닫히면 알림 칸이 사라질 때 거둔다. */
@@ -173,6 +175,11 @@ export class WindowData {
   private sources: DataView["sources"] = emptySources;
   private noticeSources: DataView["sources"] = emptySources;
   private sourceRetrySequence = 0;
+  private noticeRetrying = false;
+  private noticeRetryPending = false;
+  private noticeRetryDeadline = 0;
+  private noticeRetrySources: string[] = [];
+  private noticeRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private sourceMeta: NonNullable<DataView["source_meta"]> = {};
   private listeners = new Map<string, Set<() => void>>();
   private sourceListeners = new Set<() => void>();
@@ -317,6 +324,39 @@ export class WindowData {
   getSources = () => this.sources;
   getNoticeSources = () => this.noticeSources;
   getSourceRetrySequence = () => this.sourceRetrySequence;
+  getNoticeRetrying = () => this.noticeRetrying;
+  private setNoticeRetrying = (value: boolean) => {
+    if (this.noticeRetrying === value) return;
+    this.noticeRetrying = value;
+    this.sourceListeners.forEach((listener) => listener());
+  };
+  private beginNoticeRetry = (sources: string[]) => {
+    this.noticeRetrySources = sources;
+    this.noticeRetryDeadline = Date.now() + NOTICE_RETRY_MIN_MS;
+    this.noticeRetryPending = true;
+    this.setNoticeRetrying(true);
+    this.armNoticeRetryTimer();
+  };
+  private armNoticeRetryTimer = () => {
+    if (this.noticeRetryTimer !== null) clearTimeout(this.noticeRetryTimer);
+    this.noticeRetryTimer = setTimeout(() => {
+      this.noticeRetryTimer = null;
+      this.settleNoticeRetry();
+    }, Math.max(0, this.noticeRetryDeadline - Date.now()));
+  };
+  // 직접 다시 받기의 진행 표시는 최소 시간이 지나고 대상 원천이 더는 받는 중이 아닐 때 끝난다.
+  private settleNoticeRetry = () => {
+    if (!this.noticeRetrying) return;
+    if (this.noticeRetryDeadline > Date.now()) { this.armNoticeRetryTimer(); return; }
+    if (this.noticeRetryPending) return;
+    if (this.noticeRetrySources.some((name) => this.sources[name]?.state === "loading")) return;
+    const noticeSources = { ...this.noticeSources };
+    for (const name of this.noticeRetrySources) {
+      if (this.sources[name]) noticeSources[name] = this.sources[name];
+    }
+    this.noticeSources = noticeSources;
+    this.setNoticeRetrying(false);
+  };
   getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
   subscribeNoticeSlot = (listener: () => void) => { this.noticeSlotListeners.add(listener); return () => this.noticeSlotListeners.delete(listener); };
@@ -416,11 +456,13 @@ export class WindowData {
       for (const [name, source] of Object.entries(view.sources)) {
         const previous = noticeSources[name];
         // 받은 값으로 화면을 유지하는 재수신 중에는 실패 안내도 유지한다.
-        noticeSources[name] = source.state === "loading" && source.has_value
-          && previous?.state === "failed" && previous.has_value ? previous : source;
+        noticeSources[name] = previous?.state === "failed" && previous.has_value
+          && ((source.state === "loading" && source.has_value)
+            || (this.noticeRetrying && this.noticeRetrySources.includes(name) && source.state === "ready")) ? previous : source;
       }
       this.noticeSources = noticeSources;
       this.sourceMeta = { ...this.sourceMeta, ...view.source_meta };
+      this.settleNoticeRetry();
       this.sourceListeners.forEach((listener) => listener());
     }
     this.runtime?.sync();
@@ -484,6 +526,9 @@ export class WindowData {
     globalThis.window.addEventListener("focus", onFocus);
     return () => {
       this.active = false;
+      if (this.noticeRetryTimer !== null) { clearTimeout(this.noticeRetryTimer); this.noticeRetryTimer = null; }
+      this.noticeRetryPending = false;
+      this.noticeRetrying = false;
       this.attached = false;
       this.mediaCache.clear();
       this.clearPlayback();
@@ -746,9 +791,11 @@ export class WindowData {
     if (retriedFailure) { this.sourceRetrySequence += 1; this.sourceListeners.forEach((listener) => listener()); }
   }
   refresh = async (sources: string[], manual = true) => {
-    if (manual) this.reopenSourceFailure(sources);
+    // 정기 갱신과 포커스 갱신은 사용자가 누른 것이 아니므로 진행 표시나 단추 잠금을 켜지 않는다.
+    if (manual) { this.reopenSourceFailure(sources); this.beginNoticeRetry(sources); }
     try { await this.ready; await this.store.call({ op: "data.refresh", window_id: this.windowId, sources }); }
     catch (error) { this.setNotice(toCoreError(error)); }
+    finally { if (manual) { this.noticeRetryPending = false; this.settleNoticeRetry(); } }
   };
   more = async (source: string) => {
     try { await this.ready; return (await this.store.call({ op: "data.more", window_id: this.windowId, source })).started; }
