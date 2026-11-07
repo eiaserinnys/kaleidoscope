@@ -3,6 +3,16 @@ error_catalog! { ENTRIES;
     DESK_SHORTCUT_ADD_APP_NOT_FOUND(app_id) { class: NotFound, place: "바탕화면 아이콘 추가", cause: "대상 앱이 없다", message: "앱 {app_id}이 설치되어 있지 않아 아이콘을 추가할 수 없습니다. 앱을 설치한 뒤 다시 추가하세요.", fix: "앱을 설치하세요" }
     DESK_SHORTCUT_MOVE_NOT_FOUND(shortcut_id) { class: NotFound, place: "바탕화면 아이콘 이동", cause: "이동할 아이콘이 없다", message: "이동할 아이콘 {shortcut_id}이 없습니다. 앱을 바탕화면에 다시 추가하세요.", fix: "앱을 바탕화면에 다시 추가하세요" }
     DESK_SHORTCUT_MOVE_POSITION_INVALID(column, row) { class: InvalidRequest, place: "바탕화면 아이콘 이동", cause: "위치가 허용 범위 밖이다", message: "아이콘 위치 열 {column}, 행 {row}은 사용할 수 없습니다. 0 이상의 위치로 다시 이동하세요.", fix: "허용 범위의 위치로 다시 이동하세요" }
+    DESK_WALLPAPER_DESKTOP_NOT_FOUND() { class: NotFound, place: "데스크톱 배경 설정", cause: "대상 데스크톱이 없다", message: "배경을 바꿀 데스크톱이 없습니다. 남은 데스크톱을 선택한 뒤 다시 시도하세요.", fix: "남은 데스크톱을 선택하세요" }
+    DESK_WALLPAPER_FORMAT_INVALID(format) { class: InvalidRequest, place: "배경 그림 형식 검사", cause: "PNG, JPEG, WebP가 아닌 그림이다", message: "배경 그림은 PNG, JPEG, WebP만 쓸 수 있습니다. 받은 형식: {format}. 지원하는 형식의 그림을 고르세요.", fix: "PNG, JPEG, WebP 그림을 고르세요" }
+    DESK_WALLPAPER_SERVER_REQUIRED() { class: Unavailable, place: "데스크톱 배경 올리기", cause: "서버에 연결돼 있지 않다", message: "배경 그림은 서버에 연결돼 있을 때만 바꿀 수 있습니다. 서버에 연결한 뒤 다시 시도하세요.", fix: "서버에 연결하세요" }
+    DESK_WALLPAPER_ENCODING_INVALID() { class: InvalidRequest, place: "배경 그림 데이터 읽기", cause: "그림 데이터를 해석하지 못했다", message: "배경 그림 데이터를 읽지 못했습니다. 그림 파일을 다시 고르세요.", fix: "그림 파일을 다시 고르세요" }
+    DESK_WALLPAPER_UPLOAD_TOO_LARGE(limit) { class: InvalidRequest, place: "배경 그림 크기 검사", cause: "그림이 크기 한도를 넘었다", message: "배경 그림은 {limit}까지 쓸 수 있습니다. 더 작은 그림을 고르세요.", fix: "더 작은 그림을 고르세요" }
+    DESK_WALLPAPER_UPLOAD_SEND_FAILED() { class: Unavailable, place: "배경 그림 올리기", cause: "그림을 서버로 보내지 못했다", message: "배경 그림을 서버로 보내지 못했습니다. 네트워크와 서버 주소를 확인한 뒤 다시 시도하세요.", fix: "네트워크와 서버 주소를 확인하세요" }
+    DESK_WALLPAPER_UPLOAD_STATUS_REJECTED() { class: Unavailable, place: "배경 그림 올리기 응답", cause: "서버가 그림 등록을 거부했다", message: "서버가 배경 그림을 받지 않았습니다. 서버 판과 저장 공간을 확인한 뒤 다시 시도하세요.", fix: "서버 판과 저장 공간을 확인하세요" }
+    DESK_WALLPAPER_UPLOAD_RESPONSE_READ_FAILED() { class: Io, place: "배경 그림 올리기 응답 읽기", cause: "등록 응답을 읽지 못했다", message: "서버의 배경 그림 등록 응답을 읽지 못했습니다. 다시 시도하세요.", fix: "다시 시도하세요" }
+    DESK_WALLPAPER_MEDIA_READ_FAILED() { class: Io, place: "배경 그림 읽기", cause: "저장된 그림을 받지 못했다", message: "저장된 배경 그림을 읽지 못했습니다. 기본 배경으로 보여 줍니다. 서버 연결을 확인하세요.", fix: "서버 연결을 확인하세요" }
+    DESK_WALLPAPER_ASSET_NOT_FOUND(asset, version) { class: NotFound, place: "배경 그림 자산 찾기", cause: "배경 레코드가 가리키는 자산이 서버에 없다", message: "저장된 배경 그림 자산 {asset}({version}판)을 찾지 못했습니다. 기본 배경으로 보여 줍니다. 그림을 다시 고르세요.", fix: "배경 그림을 다시 고르세요" }
     DESK_DEFAULT_FOLDER_PERMISSION_INVALID(permission) { class: InvalidRequest, place: "기본 폴더 권한 검사", cause: "파일 권한에 기본 폴더가 선언되지 않았다", message: "파일 권한 {permission}에 사용할 기본 폴더가 없습니다. 앱 작성자에게 폴더 범위와 default_folder 선언을 확인해 달라고 요청하세요.", fix: "앱 정의의 파일 권한을 확인하세요" }
     DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder) { class: Io, place: "기본 폴더 경로 확인", cause: "기본 폴더의 경로를 읽지 못했다", message: "{folder} 폴더의 경로를 읽지 못했습니다. 파일 관리자에서 폴더가 열리는지 확인하거나 다른 폴더를 선택하세요.", fix: "파일 관리자에서 폴더를 확인하거나 다른 폴더를 선택하세요" }
     DESK_DEFAULT_FOLDER_NOT_DIRECTORY(folder) { class: Io, place: "기본 폴더 종류 확인", cause: "기본 경로가 폴더가 아니다", message: "{folder} 폴더의 경로가 폴더가 아닙니다. 기기의 폴더 설정을 확인하거나 다른 폴더를 선택하세요.", fix: "기기의 폴더 설정을 확인하거나 다른 폴더를 선택하세요" }

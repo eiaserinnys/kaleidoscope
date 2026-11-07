@@ -97,6 +97,7 @@
   gap: var(--ks-space-2);
   background: var(--ks-material-shellbar);
   padding: 0 var(--ks-space-3);
+  backdrop-filter: blur(var(--ks-blur-bar)) saturate(1.08);
 }
 
 .ks-workspace-control {
@@ -617,4 +618,40 @@
 :root[data-share-isolating] .ks-comment-layer {
   opacity: 0;
   pointer-events: none;
+}
+
+/* 사용자 배경 그림. 테마 기본 그림(app-root::before) 위, 창과 막대 아래 같은 쌓임 맥락에 둔다. */
+.ks-wallpaper-layer {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background-color: var(--ks-color-background);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.ks-wallpaper-picker {
+  display: grid;
+  gap: var(--ks-space-2);
+  margin-top: var(--ks-space-2);
+}
+
+.ks-wallpaper-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  height: calc(var(--ks-space-6) * 4);
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-small);
+  background: var(--ks-color-background) var(--ks-wallpaper) center / cover no-repeat;
+}
+
+.ks-wallpaper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ks-space-2);
 }

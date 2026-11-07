@@ -206,27 +206,39 @@ impl AppState {
     }
 }
 
-/// 연결의 레지스트리 판에 맞춰 배치 이벤트의 데스크톱 바로가기를 투영한다.
+/// 연결의 레지스트리 판에 맞춰 배치 이벤트의 데스크톱 배경과 바로가기를 투영한다.
 ///
-/// 옛 판 연결에는 바로가기를 싣지 않는다. 새 필드만 있던 `LayoutChanged`는 그 연결에 보낼 것이
-/// 없으므로 false를 돌려준다. 초기 이벤트와 방송 이벤트가 모두 직렬화 직전에 이 함수를 탄다.
+/// 옛 판 연결에는 그 판이 모르는 엔티티를 싣지 않는다. 새 필드만 있던 `LayoutChanged`는 그 연결에
+/// 보낼 것이 없으므로 false를 돌려준다. 초기 이벤트와 방송 이벤트가 모두 직렬화 직전에 이 함수를 탄다.
 fn project_layout_event(registry_version: u32, event: &mut DeviceEvent) -> bool {
     match event {
         DeviceEvent::LayoutSnapshot {
-            desktop_shortcuts, ..
+            desktop_shortcuts,
+            desktop_wallpapers,
+            ..
         } => {
-            super::layouts::project_shortcuts(registry_version, desktop_shortcuts, &mut Vec::new());
+            super::layouts::project_layout(
+                registry_version,
+                desktop_wallpapers,
+                &mut Vec::new(),
+                desktop_shortcuts,
+                &mut Vec::new(),
+            );
             true
         }
         DeviceEvent::LayoutChanged { changes } => {
-            let has_shortcuts = !changes.desktop_shortcuts.is_empty()
+            let has_entities = !changes.desktop_wallpapers.is_empty()
+                || !changes.deleted_desktop_wallpapers.is_empty()
+                || !changes.desktop_shortcuts.is_empty()
                 || !changes.deleted_desktop_shortcuts.is_empty();
-            super::layouts::project_shortcuts(
+            super::layouts::project_layout(
                 registry_version,
+                &mut changes.desktop_wallpapers,
+                &mut changes.deleted_desktop_wallpapers,
                 &mut changes.desktop_shortcuts,
                 &mut changes.deleted_desktop_shortcuts,
             );
-            !(has_shortcuts && changes.is_empty())
+            !(has_entities && changes.is_empty())
         }
         _ => true,
     }

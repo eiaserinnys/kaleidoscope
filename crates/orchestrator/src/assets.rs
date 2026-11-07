@@ -264,6 +264,50 @@ impl AppState {
     }
 }
 
+pub(super) async fn device_post(
+    State(state): State<AppState>,
+    Extension(device): Extension<(String, String)>,
+    body: axum::body::Bytes,
+) -> Response {
+    // 형식 오류를 axum 기본 문구가 아니라 등록부 오류로 돌려준다.
+    let upload = match serde_json::from_slice::<AssetUpload>(&body) {
+        Ok(upload) => upload,
+        Err(error) => {
+            return super::http::error_response(
+                StatusCode::BAD_REQUEST,
+                kaleidoscope_contract::errors::SERVER_ASSET_DEVICE_UPLOAD_BODY_INVALID()
+                    .and_details(vec![error.to_string()]),
+            );
+        }
+    };
+    let result = state.device_account_id(&device.0).and_then(|account| {
+        let prepared = prepare(&upload)?;
+        let mut db = state.lock_db()?;
+        let tx = db.transaction().map_err(|error| {
+            kaleidoscope_contract::errors::ASSET_REGISTER_TRANSACTION_BEGIN_FAILED(&upload.id)
+                .and_details(vec![error.to_string()])
+        })?;
+        let meta = insert(&tx, &account, &prepared)?;
+        tx.commit().map_err(|error| {
+            kaleidoscope_contract::errors::ASSET_REGISTER_TRANSACTION_COMMIT_FAILED(&upload.id)
+                .and_details(vec![error.to_string()])
+        })?;
+        Ok(kaleidoscope_contract::assets::AssetRecord { meta })
+    });
+    match result {
+        Ok(record) => Json(record).into_response(),
+        Err(error) => {
+            let status = match error.code {
+                kaleidoscope_contract::ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
+                kaleidoscope_contract::ErrorCode::Conflict => StatusCode::CONFLICT,
+                kaleidoscope_contract::ErrorCode::NotFound => StatusCode::NOT_FOUND,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            };
+            super::http::error_response(status, error)
+        }
+    }
+}
+
 pub(super) async fn device_get(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,

@@ -303,7 +303,9 @@ pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 기기 토큰을 쓴 MCP 호출의 작업 기본값.
 pub const WORKSPACE_HEADER: &str = "x-kaleidoscope-workspace";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = DESKTOP_SHORTCUTS_REGISTRY_VERSION;
+pub const REGISTRY_VERSION: u32 = WALLPAPER_REGISTRY_VERSION;
+/// 데스크톱 배경 그림 동기화를 처음 지원하는 레지스트리 판.
+pub const WALLPAPER_REGISTRY_VERSION: u32 = 16;
 /// 데스크톱 바로가기 동기화를 처음 지원하는 레지스트리 판.
 pub const DESKTOP_SHORTCUTS_REGISTRY_VERSION: u32 = 15;
 /// 앱 커멘트 메타 이벤트를 처음 지원하는 레지스트리 판.
@@ -331,6 +333,10 @@ pub const PAIRING_POLL_INTERVAL_SECS: u32 = 3;
 /// 서버가 동시에 들고 있는 승인 대기 연결의 최대 수. 넘으면 429.
 pub const PAIRING_MAX_PENDING: usize = 20;
 
+/// (16판) 계정 자산 업로드 경로. 본문 한도는 이 경로만 32MiB이고, 자산 자체는 [`crate::data::MEDIA_MAX_BYTES`]까지다.
+pub const DEVICE_ASSETS_PATH: &str = "/api/device/assets";
+/// 자산 업로드 본문 한도. 20MiB 자산의 base64(약 26.7MiB)와 메타데이터를 담는다.
+pub const DEVICE_ASSETS_BODY_MAX_BYTES: usize = 32 * 1024 * 1024;
 pub const DEVICE_LAYOUT_PATH: &str = "/api/device/layout";
 /// 바뀐 워크스페이스, 데스크톱, 창을 올리는 경로.
 pub const DEVICE_LAYOUT_CHANGES_PATH: &str = "/api/device/layout/changes";
@@ -433,6 +439,10 @@ pub struct DeviceLayout {
 #[serde(deny_unknown_fields)]
 pub struct LayoutChanges {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub desktop_wallpapers: Vec<crate::DesktopWallpaper>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deleted_desktop_wallpapers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub desktop_shortcuts: Vec<crate::DesktopShortcut>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub deleted_desktop_shortcuts: Vec<String>,
@@ -452,7 +462,9 @@ pub struct LayoutChanges {
 
 impl LayoutChanges {
     pub fn is_empty(&self) -> bool {
-        self.desktop_shortcuts.is_empty()
+        self.desktop_wallpapers.is_empty()
+            && self.deleted_desktop_wallpapers.is_empty()
+            && self.desktop_shortcuts.is_empty()
             && self.deleted_desktop_shortcuts.is_empty()
             && self.workspaces.is_empty()
             && self.desktops.is_empty()
@@ -678,6 +690,8 @@ pub enum DeviceEvent {
         windows: Vec<AppWindow>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         desktop_shortcuts: Vec<crate::DesktopShortcut>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        desktop_wallpapers: Vec<crate::DesktopWallpaper>,
     },
     /// 서버 정본에서 바뀐 것. 모든 동기화하는 연결에 보낸다(6판).
     #[serde(rename = "layout.changed")]
@@ -832,6 +846,7 @@ mod tests {
                 desktops: vec![],
                 windows: vec![],
                 desktop_shortcuts: vec![],
+                desktop_wallpapers: vec![],
             }
         );
     }

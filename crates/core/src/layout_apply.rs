@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use kaleidoscope_contract::registry::LayoutChanges;
-use kaleidoscope_contract::{migrate_window_state, AppWindow, Desktop, DesktopShortcut, Workspace};
+use kaleidoscope_contract::{
+    migrate_window_state, AppWindow, Desktop, DesktopShortcut, DesktopWallpaper, Workspace,
+};
 
 use crate::sync_state::{EntityKey, EntityKind, SyncState};
 use crate::CoreState;
@@ -20,6 +22,11 @@ impl Entity for Desktop {
     }
 }
 impl Entity for DesktopShortcut {
+    fn id(&self) -> &str {
+        &self.id
+    }
+}
+impl Entity for DesktopWallpaper {
     fn id(&self) -> &str {
         &self.id
     }
@@ -90,6 +97,13 @@ pub(crate) fn apply_snapshot(state: &mut CoreState, device_id: &str, changes: La
                         .iter()
                         .map(|s| s.desktop_id.as_str()),
                 )
+                .chain(
+                    state
+                        .shared
+                        .desktop_wallpapers
+                        .iter()
+                        .map(|w| w.desktop_id.as_str()),
+                )
                 .collect();
             let keep: HashSet<_> = state
                 .shared
@@ -125,6 +139,7 @@ pub(crate) fn apply_snapshot(state: &mut CoreState, device_id: &str, changes: La
                         .strip_prefix(id.as_str())
                         .is_some_and(|suffix| suffix.starts_with('/'))
                 }),
+                EntityKind::DesktopWallpaper => !desktops.contains(&key.id),
                 EntityKind::Window => true,
             });
         }
@@ -155,6 +170,12 @@ pub(crate) fn apply_snapshot(state: &mut CoreState, device_id: &str, changes: La
         changes.desktop_shortcuts,
         &state.sync,
         EntityKind::DesktopShortcut,
+    );
+    snapshot_list(
+        &mut state.shared.desktop_wallpapers,
+        changes.desktop_wallpapers,
+        &state.sync,
+        EntityKind::DesktopWallpaper,
     );
     crate::app_commands::remove_retired_windows(state, true);
     reconcile(state);
@@ -189,6 +210,13 @@ pub(crate) fn apply_changes(state: &mut CoreState, changes: LayoutChanges) {
         &state.sync,
         EntityKind::DesktopShortcut,
     );
+    change_list(
+        &mut state.shared.desktop_wallpapers,
+        changes.desktop_wallpapers,
+        changes.deleted_desktop_wallpapers,
+        &state.sync,
+        EntityKind::DesktopWallpaper,
+    );
     crate::app_commands::remove_retired_windows(state, true);
     reconcile(state);
 }
@@ -218,6 +246,16 @@ pub(crate) fn reconcile(state: &mut CoreState) {
                 .sync
                 .pending
                 .remove(&EntityKey::new(EntityKind::DesktopShortcut, &shortcut.id));
+        }
+        valid
+    });
+    state.shared.desktop_wallpapers.retain(|wallpaper| {
+        let valid = desktops.contains(&wallpaper.desktop_id);
+        if !valid {
+            state
+                .sync
+                .pending
+                .remove(&EntityKey::new(EntityKind::DesktopWallpaper, &wallpaper.id));
         }
         valid
     });

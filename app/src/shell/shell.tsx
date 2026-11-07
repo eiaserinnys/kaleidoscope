@@ -38,6 +38,7 @@ import { MessageAppPrompt } from "./message-app-prompt";
 import { UpdateDialog } from "./update-dialog";
 import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
+import { WallpaperLayer } from "./wallpaper-layer";
 import { SystemWindow, type SystemWindowState } from "./system-window";
 import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect, windowSizeForApp } from "./window-geometry";
@@ -320,6 +321,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
   return (
     <main className="app-root" ref={setHost}>
+      <WallpaperLayer activeDesktopId={activeDesktop.id} onError={setNotice} store={store} />
       <ContextMenuHost onError={setNotice} />
       <header className="ks-shell-bar">
         <BrandMark />
@@ -459,6 +461,7 @@ export function Shell({ store }: { store: ShellStore }) {
 function sameShellChrome(left: ShellSnapshot | null, right: ShellSnapshot | null): boolean {
   if (left === right) return true;
   if (!left || !right) return false;
+  // 배경 그림은 WallpaperLayer와 설정이 맡은 데스크톱 몫만 스스로 구독하므로 쉘 전체를 다시 그리지 않는다.
   return left.link === right.link
     && left.update === right.update
     && left.shared.workspaces === right.shared.workspaces

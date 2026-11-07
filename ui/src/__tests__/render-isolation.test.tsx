@@ -705,6 +705,24 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     store.dispose();
   });
 
+  it("배경 그림 변경은 앱 창과 블록을 다시 그리지 않는다", async () => {
+    const { store, transport, snapshot } = await setup();
+    await settleRenders();
+    frameRenders.count = 0;
+    calls.length = 0;
+    act(() => transport.emit({ event: "state.changed", snapshot: {
+      ...snapshot,
+      shared: { ...snapshot.shared, desktop_wallpapers: [
+        { id: "desktop-1", desktop_id: "desktop-1", asset: { id: "wall-1", version: 1 }, updated_at: "2026-11-07T00:00:00Z" },
+      ] },
+    } }));
+    await settleRenders();
+    expect(countFor("window-a")).toBe(0);
+    expect(countFor("window-b")).toBe(0);
+    expect(frameRenders.count).toBe(0);
+    store.dispose();
+  });
+
   it("계정 설정은 다른 창을 다시 그리지 않고 창 상태는 닫힌 설정과 질문의 구독을 갱신하지 않는다", async () => {
     const snapshot = testSnapshot([definition]);
     snapshot.link = { state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "내 PC" };

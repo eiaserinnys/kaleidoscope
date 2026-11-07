@@ -43,6 +43,7 @@ fn preferences_events_reject_stale_revisions_and_survive_layout_sync() {
             desktops: vec![],
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     crate::registry_events::apply_event(

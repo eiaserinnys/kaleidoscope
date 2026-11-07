@@ -17,6 +17,7 @@ import type {
   WebPage,
   VisibleView,
   StorageEntryDecl,
+  DesktopWallpaper,
 } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { SHARE_TEXT_MAX_BYTES } from "../contract/limits";
@@ -36,6 +37,12 @@ export interface FakeTransportSeed {
   webUnavailable?: boolean;
   media?: Record<string, string>;
   playback?: Record<string, MediaPlayback>;
+  /** 배경 그림 자산 id → 서버가 돌려주는 원본. */
+  wallpaperMedia?: Record<string, { data_base64: string; mime: string }>;
+  wallpaperUploadError?: string;
+  wallpaperUploadDelayMs?: number;
+  /** 데스크톱 id → 미디어 응답 지연. 늦은 응답 역전 시험에 쓴다. */
+  wallpaperMediaDelayMs?: Record<string, number>;
 }
 
 export interface FakeConversationSeed {
@@ -146,6 +153,9 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   for (const [path, text] of Object.entries(seed.files)) {
     files.set(path, { text, revision: `fake-revision-${revisionNumber++}` });
   }
+  const wallpaperAssets = new Map<string, { data_base64: string; mime: string }>(
+    Object.entries(seed.wallpaperMedia ?? {}).map(([asset, media]) => [asset, { ...media }]));
+  let wallpaperNumber = 1;
 
   const emitState = () => {
     const event: CoreEvent = { event: "state.changed", snapshot: clone(snapshot), sequence: ++sequence };
@@ -526,6 +536,55 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         emitState();
         return { op: "desktop.activate" };
       }
+      case "desktop.wallpaper.upload": {
+        if (seed.wallpaperUploadDelayMs) await delay(seed.wallpaperUploadDelayMs);
+        if (snapshot.link.state !== "connected") return fail("server", "서버에 연결되어 있지 않습니다", [], "DESK_WALLPAPER_SERVER_REQUIRED");
+        if (seed.wallpaperUploadError) return fail("server", seed.wallpaperUploadError);
+        if (!snapshot.shared.desktops.some((item) => item.id === request.desktop_id)) return fail("not_found", "데스크톱을 찾을 수 없습니다");
+        const asset = `wallpaper-${wallpaperNumber++}`;
+        wallpaperAssets.set(asset, {
+          data_base64: request.data_base64,
+          mime: request.format === "jpeg" ? "image/jpeg" : request.format === "webp" ? "image/webp" : "image/png",
+        });
+        const wallpaper: DesktopWallpaper = {
+          id: request.desktop_id,
+          desktop_id: request.desktop_id,
+          asset: { id: asset, version: 1 },
+          updated_at: new Date().toISOString(),
+        };
+        snapshot = {
+          ...snapshot,
+          shared: {
+            ...snapshot.shared,
+            desktop_wallpapers: [
+              ...(snapshot.shared.desktop_wallpapers ?? []).filter((item) => item.desktop_id !== request.desktop_id),
+              wallpaper,
+            ],
+          },
+        };
+        emitState();
+        return { op: "desktop.wallpaper.upload", wallpaper };
+      }
+      case "desktop.wallpaper.media": {
+        const wait = seed.wallpaperMediaDelayMs?.[request.desktop_id];
+        if (wait) await delay(wait);
+        const wallpaper = snapshot.shared.desktop_wallpapers?.find((item) => item.desktop_id === request.desktop_id);
+        const media = wallpaper ? wallpaperAssets.get(wallpaper.asset.id) : undefined;
+        return {
+          op: "desktop.wallpaper.media",
+          media: media ? { mime: media.mime, data_base64: media.data_base64, width: null, height: null } : null,
+        };
+      }
+      case "desktop.wallpaper.reset":
+        snapshot = {
+          ...snapshot,
+          shared: {
+            ...snapshot.shared,
+            desktop_wallpapers: (snapshot.shared.desktop_wallpapers ?? []).filter((item) => item.desktop_id !== request.desktop_id),
+          },
+        };
+        emitState();
+        return { op: "desktop.wallpaper.reset" };
       case "window.raise":
         return { op: "window.raise", window: clone(raiseWindow(request.window_id)) };
       case "window.minimize": {

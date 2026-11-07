@@ -41,7 +41,7 @@ async fn embedded_migrates_v14_through_comments_then_restarts() {
     state.publish_app(&definition, "test", false, None).unwrap();
     drop(state);
     let db = Connection::open(config().db_path).unwrap();
-    db.execute_batch("DROP TABLE desktop_shortcuts; DROP TABLE app_comment_replies; DROP TABLE app_comments; DROP TABLE app_comment_apps; DROP TABLE account_preferences; ALTER TABLE apps DROP COLUMN installation_json; PRAGMA user_version=14;").unwrap();
+    db.execute_batch("DROP TABLE desktop_wallpapers; DROP TABLE desktop_shortcuts; DROP TABLE app_comment_replies; DROP TABLE app_comments; DROP TABLE app_comment_apps; DROP TABLE account_preferences; ALTER TABLE apps DROP COLUMN installation_json; PRAGMA user_version=14;").unwrap();
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
@@ -49,14 +49,21 @@ async fn embedded_migrates_v14_through_comments_then_restarts() {
     );
     drop(db);
 
+
     let first = EmbeddedServer::start(config()).await.unwrap();
     let db = Connection::open(config().db_path).unwrap();
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        18
+        19
     );
-    for table in ["app_comment_apps", "app_comments", "app_comment_replies", "desktop_shortcuts"] {
+    for table in [
+        "app_comment_apps",
+        "app_comments",
+        "app_comment_replies",
+        "desktop_shortcuts",
+        "desktop_wallpapers",
+    ] {
         let exists: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)", [table], |row| row.get(0)).unwrap();
         assert!(exists, "커멘트 표가 없습니다: {table}");
     }
@@ -121,4 +128,47 @@ async fn embedded_migrates_v14_through_comments_then_restarts() {
         .unwrap();
     assert!(app["app"]["origin"].is_null());
     assert!(app["app"]["installed_version"].is_null());
+}
+
+#[tokio::test]
+async fn embedded_serves_device_asset_upload_and_download() {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use sha2::{Digest, Sha256};
+
+    let dir = tempfile::tempdir().unwrap();
+    let config = || EmbeddedConfig {
+        db_path: dir.path().join("assets.sqlite"),
+        token_path: dir.path().join("assets.token"),
+        device_name: "시험 기기".into(),
+    };
+    let server = EmbeddedServer::start(config()).await.unwrap();
+    let bytes = STANDARD
+        .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+        .unwrap();
+    let upload = serde_json::json!({
+        "id": "wall-1",
+        "version": 1,
+        "format": "png",
+        "sha256": format!("{:x}", Sha256::digest(&bytes)),
+        "source": "시험",
+        "license": "user-provided",
+        "data_base64": STANDARD.encode(&bytes),
+    });
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/api/device/assets", server.server_url))
+        .bearer_auth(&server.token)
+        .json(&upload)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let response = client
+        .get(format!("{}/api/device/assets/wall-1/1", server.server_url))
+        .bearer_auth(&server.token)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    assert_eq!(response.bytes().await.unwrap().as_ref(), bytes.as_slice());
 }

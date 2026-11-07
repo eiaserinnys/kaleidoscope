@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use kaleidoscope_contract::{
-    errors, AppWindow, CoreError, CoreReply, CoreRequest, Desktop, DesktopShortcut, JsonValue,
-    Rect, Workspace, WINDOW_STATE_MAX_BYTES,
+    errors, AppWindow, CoreError, CoreReply, CoreRequest, Desktop, DesktopShortcut,
+    DesktopWallpaper, JsonValue, Rect, Workspace, WINDOW_STATE_MAX_BYTES,
 };
 
 use crate::app_commands;
@@ -420,6 +420,17 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .retain(|s| s.id != shortcut_id);
             Ok(CoreReply::DesktopShortcutRemove {})
         }
+        CoreRequest::DesktopWallpaperReset { desktop_id } => {
+            if !state.shared.desktops.iter().any(|d| d.id == desktop_id) {
+                return Err(errors::DESK_WALLPAPER_DESKTOP_NOT_FOUND()
+                    .and_details(vec![format!("desktop_id: {desktop_id}")]));
+            }
+            state
+                .shared
+                .desktop_wallpapers
+                .retain(|wallpaper| wallpaper.desktop_id != desktop_id);
+            Ok(CoreReply::DesktopWallpaperReset {})
+        }
         CoreRequest::WindowOpen {
             desktop_id,
             app_id,
@@ -757,6 +768,33 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::UpdateRestart {} => Err(errors::DESK_STATE_COMMAND_UNHANDLED()),
         _ => Err(errors::DESK_STATE_COMMAND_UNHANDLED()),
     }
+}
+
+/// 서버에 올린 그림 참조를 그 데스크톱의 배경으로 저장한다.
+pub(crate) fn store_wallpaper(
+    state: &mut CoreState,
+    wallpaper: DesktopWallpaper,
+) -> Result<CoreReply, CoreError> {
+    if !state
+        .shared
+        .desktops
+        .iter()
+        .any(|desktop| desktop.id == wallpaper.desktop_id)
+    {
+        return Err(errors::DESK_WALLPAPER_DESKTOP_NOT_FOUND()
+            .and_details(vec![format!("desktop_id: {}", wallpaper.desktop_id)]));
+    }
+    if let Some(existing) = state
+        .shared
+        .desktop_wallpapers
+        .iter_mut()
+        .find(|existing| existing.id == wallpaper.id)
+    {
+        *existing = wallpaper.clone();
+    } else {
+        state.shared.desktop_wallpapers.push(wallpaper.clone());
+    }
+    Ok(CoreReply::DesktopWallpaperUpload { wallpaper })
 }
 
 pub(crate) fn active_desktop(state: &CoreState, workspace_id: &str) -> Option<String> {

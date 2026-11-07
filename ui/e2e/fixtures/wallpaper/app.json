@@ -1,0 +1,17 @@
+{
+  "id": "wallpaper-window",
+  "name": "배경 시험",
+  "requires": { "blocks": 26 },
+  "permissions": [],
+  "state": {},
+  "ui": {
+    "type": "section",
+    "title": "배경 위 창",
+    "child": {
+      "type": "text",
+      "value": "배경 그림 위에서 창 제목과 본문, 하단 막대를 잰다.",
+      "format": "markdown",
+      "style": "body"
+    }
+  }
+}

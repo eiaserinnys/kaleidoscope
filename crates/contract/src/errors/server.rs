@@ -1,4 +1,5 @@
 error_catalog! { ENTRIES;
+    SERVER_ASSET_DEVICE_UPLOAD_BODY_INVALID() { class: InvalidRequest, place: "기기 자산 등록 본문 읽기", cause: "자산 등록 본문을 AssetUpload로 해석하지 못했다", message: "기기 자산 등록 요청의 형식이 올바르지 않습니다. 쉘을 최신 판으로 업데이트한 뒤 다시 시도하세요.", fix: "쉘을 업데이트한 뒤 다시 시도하세요" }
     SERVER_HTTP_BODY_TOO_LARGE(limit) {
         class: InvalidRequest, place: "서버 HTTP 본문 읽기", cause: "경로의 요청 본문 한도를 넘었다",
         message: "요청 본문이 이 경로의 서버 한도 {limit}를 넘었습니다. 요청 크기를 줄여 다시 시도하세요. 큰 요청이 필요하면 서버의 해당 경로 한도를 늘리세요.", fix: "요청 크기를 줄여 다시 시도하세요"

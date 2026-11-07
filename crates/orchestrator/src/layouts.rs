@@ -88,8 +88,10 @@ pub(super) async fn post_layout_changes(
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0);
-            project_shortcuts(
+            project_layout(
                 version,
+                &mut reply.desktop_wallpapers,
+                &mut reply.deleted_desktop_wallpapers,
                 &mut reply.desktop_shortcuts,
                 &mut reply.deleted_desktop_shortcuts,
             );
@@ -110,6 +112,7 @@ impl AppState {
             "desktops" => "SELECT d.data FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY d.created_at,d.id",
             "windows" => "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY v.created_at,v.id",
             "desktop_shortcuts" => "SELECT s.data FROM desktop_shortcuts s JOIN desktops d ON d.id=s.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY s.created_at,s.id",
+            "desktop_wallpapers" => "SELECT p.data FROM desktop_wallpapers p JOIN desktops d ON d.id=p.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY p.updated_at,p.id",
             _ => return Err(errors::SERVER_LAYOUT_ENTITIES_TABLE_UNSUPPORTED()),
         };
         read_entities(db, query, Some(account_id))
@@ -637,14 +640,22 @@ impl AppState {
     }
 }
 
-pub(super) fn project_shortcuts(
+/// 연결의 레지스트리 판에 맞춰 배치에 실린 새 엔티티를 투영한다. 판별 분기는 이 함수 하나에만 둔다.
+/// 판 15 연결은 바로가기만 받고, 판 14 이하는 둘 다 받지 않는다.
+pub(super) fn project_layout(
     version: u32,
+    wallpapers: &mut Vec<kaleidoscope_contract::DesktopWallpaper>,
+    deleted_wallpapers: &mut Vec<String>,
     shortcuts: &mut Vec<kaleidoscope_contract::DesktopShortcut>,
-    deleted: &mut Vec<String>,
+    deleted_shortcuts: &mut Vec<String>,
 ) {
+    if version < registry::WALLPAPER_REGISTRY_VERSION {
+        wallpapers.clear();
+        deleted_wallpapers.clear();
+    }
     if version < registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION {
         shortcuts.clear();
-        deleted.clear();
+        deleted_shortcuts.clear();
     }
 }
 

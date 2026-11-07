@@ -44,6 +44,7 @@ fn app_comments_snapshots_changes_switch_and_restart() {
             desktops: vec![],
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     crate::registry_events::apply_event(

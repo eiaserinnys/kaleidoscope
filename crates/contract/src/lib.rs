@@ -251,7 +251,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 44;
+pub const CONTRACT_VERSION: u32 = 45;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -572,6 +572,42 @@ impl TryFrom<RawDesktopShortcut> for DesktopShortcut {
     }
 }
 
+/// 데스크톱의 배경 그림. 그림 자체는 서버 자산이고 여기에는 참조만 둔다.
+/// id는 데스크톱 id와 같다. 레코드가 없으면 테마 기본 그림을 쓴다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(try_from = "RawDesktopWallpaper")]
+#[ts(export, export_to = "contract.ts")]
+pub struct DesktopWallpaper {
+    pub id: String,
+    pub desktop_id: String,
+    pub asset: assets::AssetDep,
+    pub updated_at: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawDesktopWallpaper {
+    id: String,
+    desktop_id: String,
+    asset: assets::AssetDep,
+    updated_at: String,
+}
+
+impl TryFrom<RawDesktopWallpaper> for DesktopWallpaper {
+    type Error = &'static str;
+    fn try_from(value: RawDesktopWallpaper) -> Result<Self, Self::Error> {
+        if value.id != value.desktop_id {
+            return Err("배경 그림 id가 데스크톱 id와 다릅니다");
+        }
+        Ok(Self {
+            id: value.id,
+            desktop_id: value.desktop_id,
+            asset: value.asset,
+            updated_at: value.updated_at,
+        })
+    }
+}
+
 /// 앱 하나의 실행. 데스크톱 위의 창 하나다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -680,6 +716,9 @@ pub struct SharedState {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(optional, as = "Option<Vec<DesktopShortcut>>")]
     pub desktop_shortcuts: Vec<DesktopShortcut>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<DesktopWallpaper>>")]
+    pub desktop_wallpapers: Vec<DesktopWallpaper>,
     /// None은 아직 서버에서 계정 설정을 받지 않은 상태다.
     #[serde(default)]
     #[ts(optional = nullable)]
@@ -4633,6 +4672,21 @@ pub enum CoreRequest {
     #[serde(rename = "desktop.shortcut.remove")]
     DesktopShortcutRemove { shortcut_id: String },
 
+    /// 고른 그림을 서버 자산으로 올린 뒤 그 데스크톱의 배경으로 저장한다.
+    /// 서버에 연결돼 있을 때만 되고, 실패하면 저장된 배경은 그대로 둔다.
+    #[serde(rename = "desktop.wallpaper.upload")]
+    DesktopWallpaperUpload {
+        desktop_id: String,
+        format: assets::AssetFormat,
+        data_base64: String,
+    },
+    /// 그 데스크톱의 배경 그림 바이트를 읽는다. 배경이 없으면 `None`.
+    #[serde(rename = "desktop.wallpaper.media")]
+    DesktopWallpaperMedia { desktop_id: String },
+    /// 그 데스크톱의 배경을 지워 테마 기본 그림으로 되돌린다.
+    #[serde(rename = "desktop.wallpaper.reset")]
+    DesktopWallpaperReset { desktop_id: String },
+
     /// 앱의 지금 버전으로 창을 연다. 창 상태는 정의의 `state` 기본값, z는 그 데스크톱 맨 위.
     /// `rect`가 없으면 코어가 정한 기본 위치와 크기로 연다.
     #[serde(rename = "window.open")]
@@ -5801,6 +5855,13 @@ pub enum CoreReply {
     DesktopShortcutMove { shortcut: DesktopShortcut },
     #[serde(rename = "desktop.shortcut.remove")]
     DesktopShortcutRemove {},
+
+    #[serde(rename = "desktop.wallpaper.upload")]
+    DesktopWallpaperUpload { wallpaper: DesktopWallpaper },
+    #[serde(rename = "desktop.wallpaper.media")]
+    DesktopWallpaperMedia { media: Option<data::MediaData> },
+    #[serde(rename = "desktop.wallpaper.reset")]
+    DesktopWallpaperReset {},
 
     #[serde(rename = "window.open")]
     WindowOpen { window: AppWindow },
