@@ -77,6 +77,38 @@ fn installed_filter_uses_store_origin_and_keeps_unlisted_apps() {
 }
 
 #[test]
+fn store_icon_tiles_mark_apps_with_available_updates() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let data = map(json!({"catalog":{"stores":[
+        {"server":"https://a.example", "state":"ready", "items":[
+            {"id":"notes","name":"메모","category":"도구","summary":""},
+            {"id":"clock","name":"시계","category":"도구","summary":""}
+        ]}
+    ]}}));
+    let apps: Vec<kaleidoscope_contract::store::InstalledAppValue> = serde_json::from_value(json!([
+        {"id":"notes","name":"메모","version":1,"origin":{"store_url":"https://a.example","store_app_id":"notes","release":1,"digest":"abc"},"latest":{"release":2,"compatible":true},"installed_version":1,"modified":false,"icon":null},
+        {"id":"clock","name":"시계","version":1,"origin":{"store_url":"https://a.example","store_app_id":"clock","release":1,"digest":"def"},"latest":{"release":1,"compatible":true},"installed_version":1,"modified":false,"icon":null},
+        {"id":"old","name":"옛 앱","version":1,"origin":{"store_url":"https://gone.example","store_app_id":"old","release":1,"digest":"ghi"},"latest":{"release":3,"compatible":true},"installed_version":1,"modified":false,"icon":null}
+    ])).unwrap();
+    let empty = BTreeMap::new();
+    let values = app.evaluate_profiled(&definition.state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    let groups = value(&values, "/ui/children/1/children/1/items");
+    let items = groups[0]["items"].as_array().unwrap();
+    assert_eq!(items[0]["id"], "notes");
+    assert_eq!(items[0]["dot"], json!(true));
+    assert_eq!(items[1]["id"], "clock");
+    assert_eq!(items[1]["dot"], json!(false));
+    let mut state = definition.state.clone();
+    state.insert("category".into(), json!("__updates"));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    let groups = value(&values, "/ui/children/1/children/1/items");
+    assert_eq!(groups[1]["title"], "그 밖의 스토어");
+    assert_eq!(groups[1]["items"][0]["id"], "old");
+    assert_eq!(groups[1]["items"][0]["dot"], json!(true));
+}
+
+#[test]
 fn another_store_install_cannot_be_updated() {
     let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
     let app = CompiledApp::compile(&definition);

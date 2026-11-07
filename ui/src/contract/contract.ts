@@ -1088,7 +1088,11 @@ color?: string, badges?: Array<Badge>,
 /**
  * 줄 보기에서는 앞의 작은 그림, 격자 보기에서는 칸의 그림.
  */
-image?: MediaRef, };
+image?: MediaRef, 
+/**
+ * 아이콘 격자 보기(`layout: "icons"`)에서 아이콘 오른쪽 위에 빨간 점을 표시한다.
+ */
+dot?: boolean, };
 
 export type ListLayout = "rows" | "grid" | "icons";
 

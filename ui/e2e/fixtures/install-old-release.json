@@ -1,0 +1,23 @@
+{
+  "definition": {
+    "id": "update-dot-1030",
+    "name": "새 판 시험",
+    "requires": { "blocks": 26, "modules": { "assets": 1 } },
+    "assets": [{ "id": "icon", "version": 1 }],
+    "icon": { "asset": "icon", "version": 1 },
+    "ui": { "type": "text", "value": "새 판 표시를 확인하는 시험 앱" }
+  },
+  "metadata": {
+    "summary": "아이콘 격자의 새 판 표시를 확인하는 시험 앱",
+    "description": "업데이트할 수 있는 앱의 아이콘 타일에만 빨간 점이 붙는지 확인합니다.",
+    "category": "도구",
+    "publisher": "eiaserinnys",
+    "listed": true,
+    "icon": "assets/icon.svg",
+    "assets": [
+      { "id": "icon", "version": 1, "file": "assets/icon.svg", "format": "svg", "source": "자체 제작", "license": "MIT" }
+    ]
+  },
+  "next_summary": "새 판으로 올라간 아이콘 격자 시험 앱",
+  "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect width=\"64\" height=\"64\" rx=\"14\" fill=\"#3b6ea8\"/><path d=\"M18 41h28M18 33h20M18 25h24\" stroke=\"#ffffff\" stroke-width=\"4\" stroke-linecap=\"round\"/></svg>"
+}

@@ -446,6 +446,16 @@ it("아이콘 목록은 이름만 보이고 선택할 때 원래 항목을 보�
   await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "a", item })));
   vi.unstubAllGlobals();
 });
+it("아이콘 목록은 항목의 점 표시를 아이콘 타일에 전한다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  const items = [{ key: "a", title: "새 판", dot: true }, { key: "b", title: "그대로" }];
+  setup({ type: "list", layout: "icons", items } as unknown as Block, {});
+  const marked = await screen.findByRole("option", { name: "새 판" });
+  const plain = await screen.findByRole("option", { name: "그대로" });
+  expect(marked.querySelector(".ks-icon-tile-icon.ks-badge-anchor .ks-badge.is-count.is-dot")).not.toBeNull();
+  expect(plain.querySelector(".is-dot")).toBeNull();
+  vi.unstubAllGlobals();
+});
 it.each([[360, 6], [1000, 18]])("%i 폭의 초기 아이콘 뼈대는 두 줄과 한 줄 이름을 쓴다", async (width, count) => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
