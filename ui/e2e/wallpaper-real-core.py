@@ -102,7 +102,12 @@ page.wait_for_timeout(300)
 
 def scroll_settings():
     page.get_by_test_id("system-window-settings").locator(".ks-app-settings-scroll").evaluate(
-        "(element) => { element.scrollTop = element.scrollHeight; }")
+        """(element) => {
+          const heading = Array.from(element.querySelectorAll('h3')).find((node) => node.textContent === '바탕화면');
+          if (!heading) return;
+          const offset = heading.getBoundingClientRect().top - element.getBoundingClientRect().top;
+          element.scrollTop = element.scrollTop + offset - 12;
+        }""")
     page.wait_for_timeout(200)
 
 
@@ -134,7 +139,7 @@ night_record = upload(night["id"], night_png, "night.png")
 scroll_settings()
 page.screenshot(path=str(sb.out / "settings-wide-light-night.png"))
 
-page.set_viewport_size({"width": 760, "height": 680})
+page.set_viewport_size({"width": 760, "height": 900})
 page.wait_for_timeout(300)
 scroll_settings()
 page.screenshot(path=str(sb.out / "settings-narrow-light.png"))
