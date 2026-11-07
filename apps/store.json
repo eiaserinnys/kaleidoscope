@@ -180,7 +180,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready'"},
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready' and $count($apps[id = $state.selected and origin != null]) > 0"},
             "child": {
               "type": "toolbar",
               "start": [
@@ -188,7 +188,6 @@
                   "type": "button",
                   "label": "지우기",
                   "variant": "danger",
-                  "disabled": {"expr": "( $a := $apps[id = $state.selected]; $not($exists($a)) or $a.origin = null )"},
                   "confirm": {"title": "앱을 지울까요?", "body": {"state": "selected_name"}, "ok": "지우기"},
                   "on_click": [{"store.remove": {"permission": "catalog", "id": {"state": "selected"}}}]
                 }
@@ -210,7 +209,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state != 'ready'"},
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state != 'ready' and $count($apps[id = $state.selected and origin != null]) > 0"},
             "child": {
               "type": "toolbar",
               "start": [
@@ -218,11 +217,48 @@
                   "type": "button",
                   "label": "지우기",
                   "variant": "danger",
-                  "disabled": {"expr": "( $a := $apps[id = $state.selected]; $not($exists($a)) or $a.origin = null )"},
                   "confirm": {"title": "앱을 지울까요?", "body": {"state": "selected_name"}, "ok": "지우기"},
                   "on_click": [{"store.remove": {"permission": "catalog", "id": {"state": "selected"}}}]
                 }
               ],
+              "end": [
+                {
+                  "type": "button",
+                  "label": {"expr": "( $a := $apps[id = $state.selected]; $exists($a[origin != null and origin.store_url = $state.selected_store and $not(modified) and latest.compatible = true and latest.release > origin.release]) ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )"},
+                  "variant": "primary",
+                  "disabled": true,
+                  "on_click": [{"set_state": "selected", "value": {"state": "selected"}}]
+                }
+              ]
+            }
+          },
+          {
+            "type": "when",
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready' and $count($apps[id = $state.selected and origin != null]) = 0"},
+            "child": {
+              "type": "toolbar",
+              "start": [],
+              "end": [
+                {
+                  "type": "button",
+                  "variant": "primary",
+                  "label": {"expr": "( $a := $apps[id = $state.selected]; $exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.release < $data.detail.release ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )"},
+                  "disabled": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($d.compatible) or ($exists($a) and ($a.origin = null or $a.origin.store_url != $state.selected_store or $a.modified or $a.origin.release >= $d.release)) )"},
+                  "on_click": [
+                    {
+                      "store.install": {"permission": "catalog", "server": {"expr": "$data.detail.server"}, "id": {"state": "selected"}, "release": {"expr": "$data.detail.release"}}
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "type": "when",
+            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state != 'ready' and $count($apps[id = $state.selected and origin != null]) = 0"},
+            "child": {
+              "type": "toolbar",
+              "start": [],
               "end": [
                 {
                   "type": "button",
