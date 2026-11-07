@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { coreUrl } from "./runtime.ts";
 
-const core = "http://127.0.0.1:7420";
 const activeCanvas = ".ks-desktop-canvas:not([hidden])";
 
 function icon(page: Page, appId: string) {
@@ -23,7 +23,7 @@ async function addFromPalette(page: Page, name: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto(`/?core=${core}`);
+  await page.goto(`/?core=${coreUrl}`);
   await expect(page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" })).toBeVisible();
 });
 
