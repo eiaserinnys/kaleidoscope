@@ -10,7 +10,7 @@ export const inputOptionsApp = {
   id: "input-options-fixture", name: "선택지 입력", requires: { blocks: 33, modules: { connection: 1 } },
   permissions: [{ id: "api", module: "connection", access: "read", connection: "sample", label: "예제" }],
   sources: { slow_options: { kind: "request", permission: "api", path: "/choices" } },
-  state: { value: "entry-1", free: "", saved: "", selected: "a", slow: "", invalid: "", locked: false, letters: "Alpha beta gamma", digits: "123456", search: "entry-1", plainSearch: "찾던 글", short: "b", invalid_options: ["정상", { value: 12, label: "잘못된 자료" }] },
+  state: { value: "entry-1", free: "", saved: "", selected: "a", slow: "", invalid: "", locked: false, letters: "Alpha beta gamma", digits: "123456", search: "entry-1", plainSearch: "찾던 글", short: "b", readonly: "entry-7", unknown: "목록 밖 값", invalid_options: ["정상", { value: 12, label: "잘못된 자료" }] },
   ui: { type: "stack", direction: "column", gap: "medium", children: [
     { type: "input", label: "목록 전용", value: { state: "value" }, on_change: { set_state: "value" }, options, options_only: true },
     { type: "input", label: "자유 입력", value: { state: "free" }, on_change: { set_state: "free" }, options },
@@ -26,5 +26,7 @@ export const inputOptionsApp = {
     { type: "input", kind: "search", label: "선택지 검색", value: { state: "search" }, on_change: { set_state: "search" }, options },
     { type: "input", label: "짧은 목록", value: { state: "short" }, on_change: { set_state: "short" }, options_only: true, options: [{ value: "a", label: "a", description: "긴 설명을 읽습니다. ".repeat(40) }, "b", "c"] },
     { type: "button", label: "잠금 전환", on_click: [{ set_state: "locked", value: { expr: "$not($state.locked)" } }] },
+    { type: "input", label: "읽기 전용 선택", value: { state: "readonly" }, read_only: true, options, options_only: true },
+    { type: "input", label: "모르는 값", value: { state: "unknown" }, on_change: { set_state: "unknown" }, options, options_only: true },
   ] },
 } as unknown as AppDefinition;

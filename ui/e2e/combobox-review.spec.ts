@@ -214,6 +214,17 @@ test("설명 칸에서 편집을 취소한 직후에도 교체한다", async ({ 
   await page.keyboard.type("배"); await expect(f).toHaveValue("배");
 });
 
+test("설명을 누른 뒤 행을 골라도 초점은 입력에 남는다", async ({ page }) => {
+  const f = page.getByRole("combobox", { name: "목록 전용" });
+  await f.fill("항목 10"); await f.press("ArrowDown");
+  await expect(page.locator(".ks-combobox-description")).toBeVisible();
+  await page.locator(".ks-combobox-description").click();
+  await page.getByRole("option").filter({ has: page.getByText("entry-10", { exact: true }) }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.state().value)).toBe("entry-10");
+  await expect(f).toBeFocused();
+  await expect(f).toHaveValue("항목 10");
+});
+
 test("옆 설명은 필요할 때만 그리면서 짧은 목록의 행을 고정한다", async ({ page }) => {
   const f = page.getByLabel("짧은 목록", { exact: true }); await f.scrollIntoViewIfNeeded(); await f.focus();
   const list = page.locator(".ks-combobox-list"); const before = (await list.boundingBox())!;
