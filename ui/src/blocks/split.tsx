@@ -50,6 +50,7 @@ export function SplitPanes({ direction, sizes, children, columnBelow, onNarrowCh
     minPaneSize: number;
   } | null>(null);
   const template = useMemo(() => buildTemplate(weights, collapsed), [weights, collapsed]);
+  const smallestWeight = Math.min(...weights);
   const sizesKey = sizes?.join(",") ?? `equal-${children.length}`;
   const style: CSSProperties = direction === "row"
     ? { gridTemplateColumns: template }
@@ -134,7 +135,7 @@ export function SplitPanes({ direction, sizes, children, columnBelow, onNarrowCh
       style={style}
     >
       {children.map((child, index) => (
-        <div className="ks-split-pane" key={index}>
+        <div className="ks-split-pane" key={index} style={{ "--ks-stacked-pane-weight": weights[index] / smallestWeight } as CSSProperties}>
           <SplitPaneContext.Provider value={{
             collapsed: collapsed.has(index),
             toggle: () => setCollapsed((current) => {

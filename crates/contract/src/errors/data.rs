@@ -247,12 +247,12 @@ error_catalog! { ENTRIES;
         message: "{target}의 서버가 성공 응답을 보내지 않아 자료를 받지 못했습니다. 다시 받기를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요. 원인: {reason}",
         fix: "다시 받기를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요"
     }
-    DATA_BINDING_EXPR_FAILED(pointer, reason) {
+    DATA_BINDING_EXPR_FAILED() {
         class: InvalidRequest,
         place: "데이터 바인딩 식 계산",
         cause: "바인딩 위치의 JSONata 식을 계산할 수 없다",
-        message: "바인딩 경로 {pointer}의 JSONata 식 계산에 실패했습니다. 식과 입력값을 확인하세요. 원인: {reason}",
-        fix: "표시된 바인딩의 식을 고치세요"
+        message: "화면에 표시할 값을 계산하지 못했습니다. 입력값을 확인하거나 에이전트에게 앱 정의의 식을 고쳐 달라고 요청하세요",
+        fix: "입력값을 확인하거나 에이전트에게 앱 정의의 식을 고쳐 달라고 요청하세요"
     }
     DATA_ACT_WINDOW_NOT_FOUND() {
         class: NotFound,

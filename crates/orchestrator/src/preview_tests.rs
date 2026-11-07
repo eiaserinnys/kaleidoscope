@@ -642,6 +642,13 @@ async fn preview_labels_expression_evaluation_failure() {
     let value = result_value(server.preview_app_result(args(definition)).await.unwrap());
     assert_eq!(value["values"][0]["status"], "failed");
     assert_eq!(value["values"][0]["id"], "DATA_BINDING_EXPR_FAILED");
+    assert_eq!(
+        value["values"][0]["message"],
+        "화면에 표시할 값을 계산하지 못했습니다. 입력값을 확인하거나 에이전트에게 앱 정의의 식을 고쳐 달라고 요청하세요"
+    );
+    let details = value["values"][0]["details"].to_string();
+    assert!(details.contains("pointer: /ui/children/0/value"), "{details}");
+    assert!(details.contains("reason:"), "{details}");
 }
 
 #[tokio::test]

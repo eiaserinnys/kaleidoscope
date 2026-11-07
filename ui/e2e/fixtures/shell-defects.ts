@@ -9,6 +9,20 @@ const tabbedPanePair = () => ({ type: "split", direction: "row", children: [
   { type: "section", title: "구역 제목", child: { type: "text", value: "내용" } },
 ] });
 export const shellDefectFixtures = [
+  { ...base, id: "shell-1072", name: "자료와 시간축", state: { selected: "" }, ui: { type: "split", direction: "row", column_below: 700, sizes: [32, 68], children: [
+    { type: "list", items: Array.from({ length: 40 }, (_, i) => ({ key: String(i), title: `자료 ${i + 1}` })), selected: { state: "selected" }, on_select: { set_state: "selected" } },
+    { type: "section", title: "시간축", child: { type: "timeline", controls: true, duration: 100, position: 0, tracks: [{ id: "track", label: "긴 트랙 이름", items: [{ id: "clip", label: "아주 긴 시간축 구간 이름입니다", start: 1, end: 15 }] }] } },
+  ] } },
+  { ...base, id: "shell-table-1072", name: "자료 표", state: { selected: "" }, ui: { type: "split", direction: "row", column_below: 700, sizes: [32, 68], children: [
+    { type: "table", columns: [{ field: "title", label: "제목" }], rows: Array.from({ length: 40 }, (_, i) => ({ key: String(i), title: `자료 ${i + 1}` })), selected: { state: "selected" }, on_select: { set_state: "selected" } },
+    { type: "list", items: [{ key: "detail", title: "상세 내용" }] },
+  ] } },
+  ...[false, true].map(section => ({ ...base, id: `shell-map-1072-${section ? "section" : "direct"}`, name: "지도와 자료", state: {}, ui: {
+    type: "split", direction: "row", column_below: 700, children: [
+      section ? { type: "section", title: "관측 지도", child: { type: "map", points: [{ key: "quake", lat: 35, lng: 128, label: "관측 지점" }] } } : { type: "map", points: [{ key: "quake", lat: 35, lng: 128, label: "관측 지점" }] },
+      { type: "list", items: [{ key: "a", title: "관측 지점" }] },
+    ],
+  } })),
   ...(["tree", "table"] as const).flatMap(kind => (["window", "pane", "toolbar", "section", "tab"] as const).map(context => {
     const child = kind === "tree"
       ? { type: "tree", by: "children", items: { expr: '[{"key":"a","title":$data.sample.message}]' } }

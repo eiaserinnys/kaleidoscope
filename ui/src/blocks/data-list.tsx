@@ -161,7 +161,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     observer.observe(heading);
     return () => observer.disconnect();
   });
-  const { virtual } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 });
+  const { virtual, resizeAnchor } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 });
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const currentValue = useBinding(`${pointer}/current`, block.current ?? null);
@@ -192,6 +192,9 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const localKey = localCurrent && (draft.isSending() || Object.is(localCurrent.binding, boundCurrent)) ? localCurrent.key : null;
   const validCurrent = (key: unknown): key is string => typeof key === "string" && draft.draft.keys.includes(key) && items.some(item => item.key === key && item.selectable !== false);
   const current = validCurrent(localKey) ? localKey : validCurrent(boundCurrent) ? boundCurrent : [...draft.draft.keys].reverse().find(validCurrent) ?? null;
+  const anchorKey = multiple ? current : selected;
+  const anchorIndex = items.findIndex((item) => item.key === anchorKey);
+  resizeAnchor.current = anchorIndex < 0 ? null : rowOf(anchorIndex);
   const roving = useRoving(items, multiple ? current : selected, scroll, virtual, rowOf, multiple, !multiple || currentValue.status !== "loading");
   // 앱이 현재 칸을 바꾸면(탐색기에서 파일 열기처럼 이 목록의 입력이 아닌 것) 그 칸이 보이게 하고 키보드 기준을 옮긴다.
   const revealed = useRef<string | null>(null);

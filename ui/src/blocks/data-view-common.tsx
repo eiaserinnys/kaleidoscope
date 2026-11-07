@@ -77,6 +77,7 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
   const scroll = supplied ?? local;
   const position = useRef(0);
   const hidden = useRef(false);
+  const resizeAnchor = useRef<number | null>(null);
   const previous = useRef<{ keys: RowKeys; virtual: Virtualizer<HTMLDivElement, Element> } | null>(null);
   // 새 옵션을 가상화기에 넣기 전에 이전 행의 화면 범위를 읽는다.
   const reset = useMemo(() => {
@@ -115,19 +116,35 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
     observeElementRect: (instance, callback) => observeElementRect(instance, (rect) => {
       const size = horizontal ? rect.width : rect.height;
       if (!size) { hidden.current = true; return; }
+      let restored = false;
       if (hidden.current) {
         hidden.current = false;
         const offset = instance.getTotalSize() <= size ? 0 : position.current;
         instance.scrollToOffset(offset);
+        restored = true;
       }
+      const oldHeight = instance.scrollRect?.height ?? 0;
+      const oldTop = instance.scrollOffset ?? 0;
+      const index = resizeAnchor.current;
+      const anchor = index === null ? undefined : instance.getVirtualItems().find((item) => item.index === index);
+      const preserve = !horizontal && !restored && oldHeight > 0 && rect.height > 0 && rect.height < oldHeight && anchor !== undefined
+        && anchor.end > oldTop + (instance.options.scrollPaddingStart ?? 0)
+        && anchor.start < oldTop + oldHeight - (instance.options.scrollPaddingEnd ?? 0);
       callback(rect);
+      if (preserve && index !== null) {
+        const element = instance.elementsCache.get(instance.options.getItemKey(index));
+        const viewport = instance.scrollElement;
+        const overflow = element && viewport ? element.getBoundingClientRect().bottom - viewport.getBoundingClientRect().bottom : 0;
+        if (overflow > 0) instance.scrollToOffset(oldTop + overflow);
+        else instance.scrollToIndex(index, { align: "auto" });
+      }
     }),
   });
   useLayoutEffect(() => {
     if (rowKeys) previous.current = { keys: rowKeys, virtual };
     if (reset) { position.current = 0; virtual.scrollToOffset(0); }
   }, [rowKeys, reset, virtual]);
-  return { scroll, virtual };
+  return { scroll, virtual, resizeAnchor };
 }
 export function useRoving<T extends { key: string }>(items: T[], selected: unknown, scroll: RefObject<HTMLDivElement | null>, virtual?: Virtualizer<HTMLDivElement, Element>, rowOf?: (index: number) => number, noInitialScroll = false, initialReady = true) {
   const [focusKey, setFocusKey] = useState<string | null>(() => items.find((item) => item.key === selected)?.key ?? items[0]?.key ?? null);
