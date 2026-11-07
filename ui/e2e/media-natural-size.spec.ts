@@ -93,15 +93,20 @@ test("내용 높이 쌓기의 마지막 미디어와 좁은 오류는 접히지 
       <div class="ks-data-section-child"><div class="ks-data-stack is-column"><div class="ks-data-stack-item is-fill"><div class="ks-image-view" style="--ks-image-ratio:16/9;--ks-image-natural-height:90px"></div></div></div></div>
       <div class="ks-data-section-child"><div class="ks-data-stack is-column"><div class="ks-data-stack-item is-fill"><div class="ks-media-player is-video" style="--ks-media-ratio:9/16"><video></video><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div></div></div>
       <div class="ks-data-stack-item" style="width:153px"><div class="ks-image-view is-failed"><div style="height:140px">오류와 다시 받기</div></div></div>
-      <div class="ks-data-button-card-preview" style="width:153px"><div class="ks-image-view is-failed"><div style="height:140px">오류</div></div></div>`;
+      <div class="ks-data-button-card-preview" style="width:153px"><div class="ks-image-view is-failed"><div style="height:140px">오류</div></div></div>
+      <div class="ks-data-stack-item" style="width:900px"><div class="ks-image-view"></div></div>
+      <div class="ks-data-stack-item" style="width:900px"><div class="ks-image-view is-failed"><div style="height:120px">오류와 다시 받기</div></div></div>
+      <div class="ks-data-window-body" style="width:900px;height:300px"><div class="ks-image-view is-failed"><div style="height:120px">오류</div></div></div>`;
     document.body.append(fixture);
   });
   const heights = await page.locator("#media-content-size-fixture").evaluate((fixture) => {
     const size = (selector: string) => [...fixture.querySelectorAll(selector)].map((element) => { const rect = element.getBoundingClientRect(); return { width: rect.width, height: rect.height }; });
     return { images: size(".ks-image-view"), video: size("video") };
   });
-  for (const [actual, expected] of heights.images.map((size, index) => [size.height, [size.width * 3 / 4, 90, 140, size.width * 9 / 16][index]])) {
+  for (const [actual, expected] of heights.images.map((size, index) => [size.height, [size.width * 3 / 4, 90, 140, size.width * 9 / 16, 480, 480, 300][index]])) {
     expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
   }
+  // 넓은 자리에서 실패 상자는 대기 높이를 지켜 뒤 내용을 밀지 않는다.
+  expect(Math.abs(heights.images[5].height - heights.images[4].height)).toBeLessThanOrEqual(1);
   expect(Math.abs(heights.video[0].height - 480)).toBeLessThanOrEqual(1);
 });

@@ -23,7 +23,8 @@ export function ImageBlock({ block, pointer }: { block: Data; pointer: string })
   const bindingError = binding.status === "failed" ? `${binding.message} (${binding.id})` : binding.status === "login_required" ? "로그인이 필요합니다" : null;
   useEffect(() => { if (binding.status !== "ready") preview?.(bindingError); }, [preview, binding.status, bindingError]);
   if (binding.status === "loading") return <div {...blockRoot} className="ks-image-view"><ImageLoading /></div>;
-  if (binding.status !== "ready") return preview ? <div {...blockRoot} className="ks-image-view"><PreviewFailure error={bindingError ?? "이미지를 불러오지 못했습니다"} /></div> : <DataState rootProps={blockRoot} value={binding} />;
+  if (binding.status !== "ready") return preview ? <div {...blockRoot} className="ks-image-view"><PreviewFailure error={bindingError ?? "이미지를 불러오지 못했습니다"} /></div>
+    : <div {...blockRoot} className={`ks-image-view${binding.status === "failed" ? " is-failed" : ""}`}><DataState value={binding} /></div>;
   return <ImageView media={isMedia(binding.value) ? binding.value : null} fit={block.fit ?? "contain"} zoomable={!!block.zoom && !preview} />;
 }
 function ImageLoading() {
@@ -43,8 +44,10 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const [overflowKey, setOverflowKey] = useState("");
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const scaleKey = useRef("");
   const key = media ? JSON.stringify(media) : "";
-  useEffect(() => { setScale(1); setOffset({ x: 0, y: 0 }); folder.clear(); }, [key]);
+  // 그림이 바뀐 직후의 첫 렌더는 아직 이전 배율을 들고 있다. 그 배율로는 작은 판을 보이지 않는다.
+  useEffect(() => { scaleKey.current = key; setScale(1); setOffset({ x: 0, y: 0 }); folder.clear(); }, [key]);
   useEffect(() => {
     const element = host.current; if (!element) return;
     const measure = () => { const rect = element.getBoundingClientRect(); setSize({ width: rect.width, height: rect.height }); };
@@ -53,7 +56,8 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const dpr = globalThis.devicePixelRatio || 1;
   const bucket = imageRequestSize(size.width, size.height, dpr, scale);
   // useMedia는 전달 크기에 기기의 픽셀 비율을 곱한다.
-  const result = useMedia(size.width && size.height ? media : null, bucket / dpr);
+  // 확대 중에는 더 큰 판이 오기 전까지 이전 판을 그대로 보여 준다.
+  const result = useMedia(size.width && size.height ? media : null, bucket / dpr, { showSmaller: scale > 1 && scaleKey.current === key });
   const adjust = (next: number, x = 0, y = 0) => {
     const target = Math.max(1, Math.min(8, next));
     if (target === 1) setOffset({ x: 0, y: 0 });
@@ -100,7 +104,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
       return rect.left < bounds.left - 0.5 || rect.right > bounds.right + 0.5 || rect.top < bounds.top - 0.5 || rect.bottom > bounds.bottom + 0.5;
     })) setOverflowKey(layoutKey);
   }, [failure, short, layoutKey]);
-  return <div {...blockRoot} className={`ks-image-view${zoomable ? " is-zoomable" : ""}${result.status === "failed" ? " is-failed" : ""}`} ref={host} style={media && sourceWidth && sourceHeight && result.status !== "failed" ? { "--ks-image-ratio": sourceWidth / sourceHeight, ...(Math.max(natural.width, natural.height) < bucket ? { "--ks-image-natural-height": `${sourceHeight}px` } : {}) } as React.CSSProperties : undefined} tabIndex={!preview && media && result.status === "ready" ? 0 : undefined} onContextMenu={preview ? undefined : (event) => {
+  return <div {...blockRoot} className={`ks-image-view${zoomable ? " is-zoomable" : ""}${result.status === "failed" ? " is-failed" : ""}`} ref={host} style={media && sourceWidth && sourceHeight ? { "--ks-image-ratio": sourceWidth / sourceHeight, ...(result.status !== "failed" && Math.max(natural.width, natural.height) < bucket ? { "--ks-image-natural-height": `${sourceHeight}px` } : {}) } as React.CSSProperties : undefined} tabIndex={!preview && media && result.status === "ready" ? 0 : undefined} onContextMenu={preview ? undefined : (event) => {
     const image = host.current?.querySelector(".ks-image-frame img");
     if (!(image instanceof HTMLImageElement) || (event.target !== event.currentTarget && event.target !== image)) return;
     openContextMenu(event, [{ id: "image-copy", label: "이미지 복사", onSelect: () => { void writeMenuImage(image, "이미지 복사"); } }]);
