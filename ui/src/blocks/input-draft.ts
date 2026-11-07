@@ -110,7 +110,7 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
     timer.current = setTimeout(() => { void sendDraft(timerValue.current); }, 300);
   };
   const commit = (value: string) => settle(value);
-  const choose = (value: string) => { if (readOnly) return; const formatted = codec ? codec.format(value) : value; accepted.current = formatted; pendingAccepted.current = formatted === initialDraft && !pendingAccepted.current ? null : { value: formatted }; change(formatted); void sendDraft(value); };
+  const choose = (value: string) => { if (readOnly) return; if (optionsOnly && value === accepted.current) { unregisterFlush.current?.(); unregisterFlush.current = null; setEdited(false); change(value); return; } const formatted = codec ? codec.format(value) : value; accepted.current = formatted; pendingAccepted.current = formatted === initialDraft && !pendingAccepted.current ? null : { value: formatted }; change(formatted); void sendDraft(value); };
   const canSyncExternal = () => pendingAccepted.current === null;
   const revert = () => {
     if (timer.current) clearTimeout(timer.current);

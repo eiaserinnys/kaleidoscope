@@ -446,6 +446,27 @@ it("값 글자를 치는 동안은 그대로 보이고 Enter 뒤 이름으로 �
   expect(input.value).toBe("항목 50");
 });
 
+it("현재 값을 다시 입력하고 Enter하면 다시 보내지 않고 이름을 보인다", async () => {
+  const { spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "value-1" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change"))).toHaveLength(0);
+  expect(input.value).toBe("항목 1");
+});
+
+it("현재 고른 행을 다시 눌러도 다시 보내지 않고 이름을 보인다", async () => {
+  const { spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.click(screen.getByRole("option", { selected: true }));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change"))).toHaveLength(0);
+  expect(input.value).toBe("항목 1");
+});
+
 it.each(["blur", "Escape"])("부분 글자 %s는 보내지 않고 이전 이름으로 돌아간다", async (key) => {
   const { spy } = setup(true);
   const input = await screen.findByRole("combobox") as HTMLInputElement;
