@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import type { ShellStore } from "../core/shell-store";
 import { useShellSelector } from "../core/shell-store";
 import { isWindowTop } from "../data/window-state";
-import { bookmarkTarget, clearRescuedFocus, contentRescueTarget, firstContentFocus, firstFocus, focusBookmark, focusContainer, focusRescued, isContentFocus, isUnclaimedFocus, rememberWindowFocus, usableFocus, writableControlSelector } from "../components/focus-rescue";
+import { bookmarkTarget, busyDialogAction, clearRescuedFocus, contentRescueTarget, dialogActionFocus, dialogFirstFocus, firstContentFocus, firstFocus, focusBookmark, focusContainer, focusRescued, holdsUserFocus, isContentFocus, isUnclaimedFocus, rememberWindowFocus, usableFocus } from "../components/focus-rescue";
 import { preserveWindowActionFocus } from "../share/action-context";
 import { revealStackControl } from "./focus-scroll";
 import { isCommenting } from "../comments/session";
@@ -22,6 +22,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     const commenting = () => isCommenting(windowId) || Boolean(content.closest(".ks-window[data-commenting]"));
     let focused: HTMLElement | null = null;
     let focusedDialog = false;
+    let focusedDialogElement: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
     let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
@@ -66,6 +67,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       if (target === content || target.classList.contains("ks-window-content")) return;
       focused = target;
       focusedDialog = Boolean(target.closest(".ks-dialog-overlay"));
+      focusedDialogElement = focusedDialog ? target.closest<HTMLElement>(".ks-dialog") : null;
       focusedRemove = target.classList.contains("ks-list-remove");
       inContent = body.contains(target);
       if (!inContent) return;
@@ -123,9 +125,18 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     };
     const start = () => {
       const active = document.activeElement;
-      if (!onTop || commenting() || bodyUnavailable() || !document.hasFocus() || preserveWindowActionFocus(windowId) || (active instanceof Element && scope.contains(active))) return;
-      if (active instanceof HTMLElement && ((active.matches(writableControlSelector) && usableFocus(active))
-        || (active.matches("iframe") && usableFocus(active)) || active.closest("[data-ks-overlay]"))) return;
+      if (!onTop || commenting() || !document.hasFocus() || preserveWindowActionFocus(windowId) || (active instanceof Element && scope.contains(active))) return;
+      // 다른 창에 입력하거나 덮개 안에 있으면 초점을 가져오지 않는다. 대화상자 창이 열려도 마찬가지다.
+      if (holdsUserFocus(active)) return;
+      // 대화상자가 열리면 본문이 inert라 초점을 받을 수 없다. 창으로 돌아오면 열린 대화상자 안으로 초점을 되돌린다.
+      if (bodyUnavailable()) {
+        const dialog = Array.from(content.querySelectorAll<HTMLElement>(":scope > .ks-dialog-overlay > .ks-dialog")).at(-1);
+        if (!dialog) return;
+        const current = usableFocus(focused) ? focused : busyDialogAction(focused) ? focused : null;
+        const target = current && dialog.contains(current) ? current : dialogFirstFocus(dialog);
+        if (target && (usableFocus(target) || busyDialogAction(target))) move(target);
+        return;
+      }
       const target = usableFocus(focused) && !focused.matches('.ks-split-handle, [role="separator"]') && body.contains(focused) ? focused : firstFocus(body) ?? focusContainer(body);
       move(target);
       if (!firstContentFocus(body)) waiting.current = { pane: body, kind: "entry" };
@@ -145,6 +156,19 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
           focused = null;
           move(target);
           if (bookmark.pane?.isConnected && !firstContentFocus(bookmark.pane)) waiting.current = { pane: bookmark.pane, kind: "restore" };
+        }
+      }
+      // 대화상자 안의 알림 단추처럼 대화상자는 살아 있는데 초점 요소만 사라지면, 창 본문이 아니라 그 대화상자의 첫 조작으로 옮긴다.
+      if (onTop && focused && focusedDialog && !focused.isConnected && focusedDialogElement?.isConnected) {
+        const lost = active === document.body || active === focused || (active instanceof Element && scope.contains(active) && isUnclaimedFocus(active));
+        if (lost && !preserveWindowActionFocus(windowId)) {
+          const target = dialogActionFocus(focusedDialogElement);
+          if (usableFocus(target ?? null)) {
+            focused = null;
+            focusedDialog = false;
+            focusedDialogElement = null;
+            move(target!);
+          }
         }
       }
       if (waiting.current && onTop && !bodyUnavailable() && isUnclaimedFocus(document.activeElement)) {

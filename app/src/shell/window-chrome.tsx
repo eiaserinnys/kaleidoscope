@@ -122,7 +122,15 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
   return <section className={`ks-window${preview ? " ks-window-gesturing" : ""}${sharing ? " ks-window-sharing" : ""}`}
     data-maximized={maximized ? "true" : "false"} data-minimized={minimized ? "true" : "false"} data-commenting={commenting || undefined}
     data-testid={testId} inert={minimized}
-    onPointerDownCapture={(event) => { if (pointerGuard?.(event)) return; if (!isTop) onRaise(); }}
+    onPointerDownCapture={(event) => {
+      if (pointerGuard?.(event)) return;
+      if (isTop) return;
+      // 사용자가 다른 창을 고르면 가려지는 창의 입력칸이 초점을 쥐고 있지 않게 한다.
+      // 초점이 없으면 맨 위가 되는 순간 window-focus가 이 창의 마지막 초점이나 첫 내용으로 옮긴다.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && !event.currentTarget.contains(active)) active.blur();
+      onRaise();
+    }}
     onPointerMove={moveGesture} onPointerUp={finishGesture} onPointerCancel={cancelGesture}
     style={{ left: displayRect.x, top: displayRect.y, width: displayRect.width, height: displayRect.height, zIndex }}>
     <div className={`ks-window-frame${isTop ? " ks-window-frame-active" : ""}`} ref={frameRef}>

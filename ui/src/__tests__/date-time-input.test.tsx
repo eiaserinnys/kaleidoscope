@@ -64,6 +64,21 @@ it("다섯 주와 여섯 주인 달을 모두 여섯 행으로 그린다", async
   expect(within(grid).getAllByRole("gridcell")).toHaveLength(42);
 });
 
+it("다른 창 머리처럼 전파를 멈추는 자리를 눌러도 달력을 닫는다", async () => {
+  setup("date", "2026-11-20");
+  const input = await screen.findByRole("textbox", { name: "입력" });
+  fireEvent.keyDown(input, { key: "ArrowDown", altKey: true });
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  const titlebar = document.createElement("div");
+  titlebar.addEventListener("pointerdown", (event) => event.stopPropagation());
+  document.body.append(titlebar);
+
+  fireEvent.pointerDown(titlebar, { button: 0 });
+
+  expect(screen.queryByRole("dialog")).toBeNull();
+  titlebar.remove();
+});
+
 it("달력 단추는 열린 달력을 다시 닫는다", async () => {
   setup("date", "2026-11-20");
   const button = await screen.findByRole("button", { name: "날짜 선택" });

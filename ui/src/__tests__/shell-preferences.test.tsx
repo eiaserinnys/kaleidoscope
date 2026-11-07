@@ -224,11 +224,12 @@ describe("새 메시지 앱 질문", () => {
     fireEvent.mouseDown(dialog.parentElement!);
     expect(spy).toHaveBeenCalledWith({ op: "shell.preferences.answer", app_id: "pas", use_as_default: false });
     const confirm = within(dialog).getByRole("button", { name: "바꾸기" }) as HTMLButtonElement;
-    expect(confirm.disabled).toBe(true);
+    expect(confirm.getAttribute("aria-disabled")).toBe("true");
     expect(confirm.classList.contains("is-progress")).toBe(true);
     expect(confirm.querySelector(".ks-button-progress")).toBeTruthy();
     expect(dialog.querySelector(".ks-dialog-body")).toBeNull();
     fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(confirm);
     expect(spy.mock.calls.filter(([request]) => request.op === "shell.preferences.answer")).toHaveLength(1);
     await act(async () => release());
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -249,9 +250,9 @@ describe("새 메시지 앱 질문", () => {
     fireEvent.click(within(first).getByRole("button", { name: "그대로 두기" }));
     const second = await screen.findByRole("dialog", { name: "기본 에이전트를 작업 PAS로 바꿀까요?" });
     const cancel = within(second).getByRole("button", { name: "그대로 두기" }) as HTMLButtonElement;
-    expect(cancel.disabled).toBe(true);
+    expect(cancel.getAttribute("aria-disabled")).toBe("true");
     await act(async () => release());
-    await waitFor(() => expect(cancel.disabled).toBe(false));
+    await waitFor(() => expect(cancel.getAttribute("aria-disabled")).toBeNull());
     expect(document.activeElement).toBe(cancel);
     store.dispose();
   });

@@ -109,8 +109,8 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
         setOpen(false);
       }
     };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
   }, [open, anchor]);
   const show = () => {
     if ((!ready && !loading) || inputProps.readOnly || inputProps.disabled) return;

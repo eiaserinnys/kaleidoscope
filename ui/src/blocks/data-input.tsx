@@ -22,8 +22,8 @@ import { renderBlock } from "../render/render-block";
 import { PreviewContext } from "./preview-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
-const BUTTON_PROGRESS_DELAY_MS = 250;
-const BUTTON_PROGRESS_MIN_MS = 400;
+export const BUTTON_PROGRESS_DELAY_MS = 250;
+export const BUTTON_PROGRESS_MIN_MS = 400;
 const fieldPosition = (position: "inline" | "top" | "hidden" | undefined) => position && position !== "inline" ? ` is-label-${position}` : "";
 function bindingText(value: ReturnType<typeof useBinding>): string {
   return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
@@ -191,7 +191,9 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     setConfirm(false);
     setBusy(true);
     progressShownAt.current = null;
-    progressTimer.current = setTimeout(() => { setShowProgress(true); progressTimer.current = null; }, BUTTON_PROGRESS_DELAY_MS);
+    // 지난 실패를 다시 보내는 것이면 결과를 기다리지 않고 바로 진행을 보인다. 처음 누름은 지금처럼 잠시 기다린다.
+    if (data.hasActionFailure(`${pointer}/on_click`)) setShowProgress(true);
+    else progressTimer.current = setTimeout(() => { setShowProgress(true); progressTimer.current = null; }, BUTTON_PROGRESS_DELAY_MS);
     const succeeded = await data.act(`${pointer}/on_click`, null, undefined, modifiers);
     if (!mounted.current) return;
     if (progressTimer.current) clearTimeout(progressTimer.current);

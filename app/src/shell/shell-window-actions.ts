@@ -14,6 +14,18 @@ export function selectDesktop(snapshot: ShellSnapshot, workspace: Workspace): De
 type Call = (request: CoreRequest) => Promise<CoreReply | undefined>;
 type Target = { kind: "app"; window: AppWindow } | { kind: "system"; state: SystemWindowState };
 
+// 사용자가 다른 창이나 데스크톱을 고르면 가려지는 창의 입력칸이 초점을 쥐고 있지 않게 한다.
+// 초점이 없으면 맨 위가 된 창의 window-focus가 그 창의 마지막 초점이나 첫 내용으로 옮긴다.
+function releaseActiveFocus() {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement) active.blur();
+}
+
+function sameTarget(a: Target, b: Target): boolean {
+  if (a.kind === "system" || b.kind === "system") return a.kind === "system" && b.kind === "system";
+  return a.window.id === b.window.id;
+}
+
 export function createShellWindowActions(store: ShellStore, call: Call, getSystemWindow: () => SystemWindowState | undefined) {
   const current = () => {
     const snapshot = store.getSnapshot();
@@ -44,7 +56,10 @@ export function createShellWindowActions(store: ShellStore, call: Call, getSyste
       const desktops = snapshot.shared.desktops.filter((item) => item.workspace_id === workspace.id).sort((a, b) => a.position - b.position);
       if (desktops.length < 2) return;
       const index = desktops.findIndex((item) => item.id === desktop.id);
-      await call({ op: "desktop.activate", desktop_id: desktops[(index + direction + desktops.length) % desktops.length].id });
+      const next = desktops[(index + direction + desktops.length) % desktops.length];
+      if (next.id === desktop.id) return;
+      releaseActiveFocus();
+      await call({ op: "desktop.activate", desktop_id: next.id });
     },
     async minimizeAll() {
       const { windows, system } = current();
@@ -92,8 +107,11 @@ export function createShellWindowActions(store: ShellStore, call: Call, getSyste
       const list = targets(windows, system).filter(visible);
       if (list.length < 2) return;
       const active = top(windows, system);
-      const index = list.findIndex((item) => item.kind === active?.kind && (item.kind === "system" || (active.kind === "app" && item.window.id === active.window.id)));
-      await apply(list[(index + direction + list.length) % list.length], "raise");
+      const index = active ? list.findIndex((item) => sameTarget(item, active)) : -1;
+      const next = list[(index + direction + list.length) % list.length];
+      if (active && sameTarget(next, active)) return;
+      releaseActiveFocus();
+      await apply(next, "raise");
     },
   };
 }

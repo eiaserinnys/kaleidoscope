@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -256,6 +256,83 @@ describe("app definition renderer", () => {
     button.remove();
     await act(async () => { await Promise.resolve(); });
     expect(document.activeElement).toBe(document.body);
+  });
+
+  function dialogNoticeDefinition(): AppDefinition {
+    return {
+      id: "dialog-notice", name: "대화상자 알림", requires: { blocks: 19, modules: {} }, permissions: [],
+      state: { open: false, draft: "보존", confirmed: false },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "button", label: "열기", on_click: [{ set_state: "open", value: true }] },
+        {
+          type: "dialog", open: { state: "open" }, title: "변경 확인", close_label: "확인",
+          child: { type: "input", value: { state: "draft" }, on_change: { set_state: "draft" } },
+          on_confirm: [{ set_state: "open", value: false }, { set_state: "confirmed", value: true }],
+          on_close: [{ set_state: "open", value: false }],
+        },
+      ] },
+    };
+  }
+
+  it("확정 실패 알림은 열린 대화상자 안에 남고 닫은 뒤 다시 확인할 수 있다", async () => {
+    const transport = createFakeTransport(makeTestSeed({ definitions: [dialogNoticeDefinition()] }));
+    const original = transport.call.bind(transport);
+    let failing = true;
+    vi.spyOn(transport, "call").mockImplementation(async (request) => {
+      if (failing && request.op === "data.act" && request.pointer.endsWith("/on_confirm")) throw new Error("저장하지 못했습니다");
+      return original(request);
+    });
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const opener = await screen.findByRole("button", { name: "열기" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByRole("textbox") as HTMLInputElement;
+    expect(input.value).toBe("보존");
+    const confirm = within(dialog).getByRole("button", { name: "확인" });
+    confirm.focus();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(within(dialog).getByRole("alert")).toBeTruthy());
+    const alert = within(dialog).getByRole("alert");
+    expect(alert.textContent).toContain("저장하지 못했습니다");
+    expect(alert.querySelector(".ks-error-id")?.textContent).toBe("SHELL_CALL_UNEXPECTED_FAILURE");
+    const slot = dialog.querySelector(".ks-dialog-notice-slot");
+    expect(slot?.contains(alert)).toBe(true);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(input.value).toBe("보존");
+    expect(document.activeElement).toBe(confirm);
+    const close = within(dialog).getByRole("button", { name: "닫기" });
+    expect(slot?.contains(close)).toBe(true);
+    close.focus();
+    fireEvent.click(close);
+    await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "취소" })));
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    failing = false;
+    confirm.focus();
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("대화상자를 취소하면 남은 상태 알림은 창 자리로 돌아간다", async () => {
+    let data: WindowData | null = null;
+    const transport = createFakeTransport(makeTestSeed({ definitions: [dialogNoticeDefinition()] }));
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId="viewer-window" onWindowData={(value) => { data = value; }} />);
+    const opener = await screen.findByRole("button", { name: "열기" });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(data).not.toBeNull());
+    act(() => data!.setStatus("저장했습니다"));
+    const status = await within(dialog).findByRole("status");
+    expect(dialog.querySelector(".ks-dialog-notice-slot")?.contains(status)).toBe(true);
+    fireEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const windowNotice = document.querySelector(".ks-data-window-notice") as HTMLElement;
+    expect(within(windowNotice).getByRole("status").textContent).toContain("저장했습니다");
   });
 
   it("포인터로 repeat 줄을 지우면 이웃 줄의 같은 자리에 초점을 둔다", async () => {

@@ -39,6 +39,33 @@ export function firstFocus(within: HTMLElement): HTMLElement | undefined {
     .find((element) => usableFocus(element) && !element.closest('[data-ks-user-consent]') && !element.matches('.ks-button-emphasis, .ks-split-handle, [role="separator"]') && (element.tabIndex >= 0 || element.isContentEditable));
 }
 
+/** 대화상자 바닥 단추 줄에서 초점을 받을 단추: 취소가 있으면 그 단추, 없으면 확정 단추. */
+export function dialogActionFocus(root: ParentNode): HTMLElement | null {
+  return root.querySelector<HTMLElement>(".ks-dialog-actions > button:not(:disabled):not([aria-disabled=\"true\"]), .ks-dialog-confirm button:not(:disabled):not([aria-disabled=\"true\"])");
+}
+
+/** 진행 표시로 막혀 있지만 초점은 그대로 두어야 하는 대화상자 단추인가. */
+export function busyDialogAction(element: HTMLElement | null): element is HTMLElement {
+  return Boolean(element?.matches('.ks-dialog-actions button[aria-disabled="true"], .ks-dialog-confirm button[aria-disabled="true"]')
+    && !element.closest('[hidden], [inert]'));
+}
+
+/** 쓰기 입력, 프레임, 덮개처럼 다른 창이 가져가면 안 되는 초점인가. */
+export function holdsUserFocus(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false;
+  return (element.matches(writableControlSelector) && usableFocus(element))
+    || (element.matches("iframe") && usableFocus(element))
+    || Boolean(element.closest("[data-ks-overlay]"));
+}
+
+/** 대화상자가 열리거나 다시 초점을 받을 때 갈 곳: 본문의 쓰기 입력, 없으면 바닥 단추. */
+export function dialogFirstFocus(root: HTMLElement): HTMLElement | null {
+  const input = [...root.querySelectorAll<HTMLElement>(`.ks-dialog-body :is(${writableControlSelector})`)]
+    .find((element) => !element.closest("[hidden], [inert]")
+      && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
+  return input ?? dialogActionFocus(root);
+}
+
 export function focusContainer(element: HTMLElement): HTMLElement {
   if (!element.hasAttribute("tabindex")) element.tabIndex = -1;
   element.classList.add("ks-focus-rescue-empty");

@@ -7,11 +7,19 @@
 .ks-data-window-notice:has(> .ks-window-status) { position: absolute; left: 50%; bottom: var(--ks-space-3); transform: translateX(-50%); z-index: 1; width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); pointer-events: none; }
 .ks-window-status > .ks-notice { background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
 .ks-data-window-notice:has(> .ks-notice) { position: absolute; inset-inline: var(--ks-space-2); bottom: var(--ks-space-2); z-index: 1; }
-.ks-data-window-notice > .ks-notice { flex-wrap: nowrap; background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
-.ks-data-window-notice > .ks-notice > .ks-notice-message,
-.ks-data-window-notice > .ks-notice.has-multiple-actions > .ks-notice-message { min-width: 0; flex: 1 1 0; max-height: calc(100cqh - 4 * var(--ks-space-2) - 2 * var(--ks-line-width)); overflow-y: auto; }
-.ks-data-window-notice > .ks-notice[role="alert"] { background: linear-gradient(var(--ks-color-danger-surface), var(--ks-color-danger-surface)), var(--ks-color-surface-solid); }
-.ks-data-window-notice .ks-button[aria-disabled="true"] { cursor: default; opacity: .56; }
+:is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice { flex-wrap: nowrap; background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
+:is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice > .ks-notice-message,
+:is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice.has-multiple-actions > .ks-notice-message { min-width: 0; flex: 1 1 0; max-height: calc(100cqh - 4 * var(--ks-space-2) - 2 * var(--ks-line-width)); overflow-y: auto; }
+:is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice[role="alert"] { background: linear-gradient(var(--ks-color-danger-surface), var(--ks-color-danger-surface)), var(--ks-color-surface-solid); }
+:is(.ks-data-window-notice, .ks-dialog-notice-slot) .ks-button[aria-disabled="true"] { cursor: default; opacity: .56; }
+/* 대화상자 안의 알림 자리: 알림이 먼저 보이고 본문이 그만큼 줄어든다. 자리 자체는 스크롤하지 않고 메시지만 스크롤해 바닥 단추를 밀지 않는다. */
+.ks-dialog-notice-slot:empty { display: none; }
+.ks-dialog-notice-slot { flex: 0 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; margin-top: var(--ks-space-3); }
+.ks-dialog-notice-slot > .ks-window-status { display: contents; }
+.ks-dialog-notice-slot .ks-notice { flex: 0 1 auto; min-height: 0; }
+.ks-dialog-notice-slot .ks-notice > .ks-notice-message,
+.ks-dialog-notice-slot .ks-notice.has-multiple-actions > .ks-notice-message { min-width: 0; flex: 1 1 0; min-height: 0; max-height: 100%; overflow-y: auto; align-self: stretch; display: flex; flex-wrap: wrap; align-content: safe center; column-gap: .25em; }
+.ks-dialog-notice-slot .ks-notice { box-shadow: none; }
 .ks-data-tabs { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
 .ks-data-tab-header { container-type: inline-size; display: flex; width: 100%; min-width: 0; flex: 0 0 auto; align-items: center; gap: var(--ks-space-2); padding-inline: var(--ks-space-3); }
 .ks-data-tab-list { position: relative; display: flex; min-width: 0; flex: 1 1 auto; gap: var(--ks-space-1); overflow: hidden; padding-block: var(--ks-space-2); padding-inline: var(--ks-space-1); margin-inline: calc(-1 * var(--ks-space-1)); }
@@ -411,12 +419,20 @@
 .ks-dialog-overlay.is-picker > .ks-dialog { width: 100%; height: 100%; }
 .ks-dialog-overlay.is-picker .ks-dialog-body { height: calc(100% - var(--ks-space-2)); min-height: 0; }
 .ks-dialog-title { flex: 0 0 auto; font-size: var(--ks-type-title); font-weight: 600; }
-.ks-dialog-scroll { --ks-dialog-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); min-height: 0; flex: 1 1 auto; overflow: auto; padding: 0 var(--ks-dialog-ring) var(--ks-dialog-ring); margin: 0 calc(-1 * var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring)); scroll-padding: var(--ks-dialog-ring); }
+.ks-dialog-scroll { --ks-dialog-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); min-height: 0; flex: 1 100000 auto; overflow: auto; padding: 0 var(--ks-dialog-ring) var(--ks-dialog-ring); margin: 0 calc(-1 * var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring)); scroll-padding: var(--ks-dialog-ring); }
 .ks-dialog-scroll:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+/* 알림이 있으면 스크롤 칸의 초점 고리 자리를 본문 안쪽으로 옮겨 스크롤 칸이 0까지 줄어들게 한다. 그 자리는 스크롤 내용이 되어 알림이 있는 동안 본문 띠가 남지 않는다. */
+.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll { padding-block-end: 0; }
+.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll > .ks-dialog-body { padding-block-end: var(--ks-dialog-ring); }
 .ks-dialog-confirm.is-danger .ks-button { border-color: var(--ks-color-danger); background-color: var(--ks-color-danger); color: var(--ks-color-danger-contrast); }
 .ks-dialog-confirm.is-danger .ks-button:active:not(:disabled) { background-image: linear-gradient(color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent), color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent)), linear-gradient(var(--ks-color-hover), var(--ks-color-hover)); }
 .ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
 .ks-dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
+/* 진행 중인 대화상자 단추는 눌리지 않지만 초점은 남는다. 모양과 호버와 누름은 예전 disabled와 같게 둔다. */
+.ks-dialog-actions .ks-button[aria-disabled="true"] { cursor: default; opacity: .56; }
+.ks-dialog-actions .ks-button[aria-disabled="true"]:hover,
+.ks-dialog-actions .ks-button[aria-disabled="true"]:active { background-image: none; }
+.ks-dialog-actions .ks-dialog-confirm.is-danger .ks-button[aria-disabled="true"]:active { background-image: none; }
 .ks-tour-overlay { position: absolute; inset: var(--ks-space-3); z-index: 2; pointer-events: none; }
 .ks-tour-spotlight { position: absolute; z-index: 0; border-radius: var(--ks-radius-small); outline: var(--ks-focus-width) solid var(--ks-color-accent); box-shadow: 0 0 0 100vmax light-dark(color-mix(in srgb, var(--ks-color-text) 35%, transparent), color-mix(in srgb, var(--ks-color-background) 55%, transparent)); pointer-events: none; }
 .ks-tour-card { position: absolute; z-index: 1; display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; flex-direction: column; gap: var(--ks-space-2); overflow: auto; padding: var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-glass-edge); border-radius: var(--ks-radius-window); background: var(--ks-material-dialog); box-shadow: var(--ks-shadow-popover); color: var(--ks-color-text); pointer-events: auto; backdrop-filter: blur(var(--ks-blur-popover)); }

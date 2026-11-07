@@ -19,6 +19,8 @@ import { DefaultFolderPreparation } from "./default-folder";
 const loading: BindingValue = { status: "loading" };
 const emptySources: Record<string, SourceStatus> = {};
 const lifecycle = new WeakMap<ShellStore, Map<string, Promise<void>>>();
+/** 성공 응답이 먼저 와도 대화상자가 닫힐 틈을 준다. 그 사이에 닫히면 알림 칸이 사라질 때 거둔다. */
+const ACTION_SUCCESS_SETTLE_MS = 300;
 type PlaybackLease = { request: Promise<MediaPlayback>; users: number; closed: boolean };
 type ChatRetry = { id: string; text: string; attachments: DraftAttachment[]; failed: boolean };
 type ChatDraft = { text: string; attachments: DraftAttachment[]; retry: ChatRetry | null; restored: ReadonlySet<string>; error: CoreError | null };
@@ -175,11 +177,15 @@ export class WindowData {
   private listeners = new Map<string, Set<() => void>>();
   private sourceListeners = new Set<() => void>();
   private noticeListeners = new Set<() => void>();
+  private noticeSlotListeners = new Set<() => void>();
+  private noticeSlot: HTMLElement | null = null;
   private notice: string | null = null;
   private noticeProblem: CoreError | string | null = null;
   private noticeOwner: object | null = null;
   private noticeId: string | null = null;
   private noticeRole: "alert" | "status" = "alert";
+  private noticeRevision = 0;
+  private actionFailure: { pointer: string; problem: CoreError; retrying: boolean } | null = null;
   private statusSequence = 0;
   private unsubscribe?: () => void;
   private unsubscribeLink?: () => void;
@@ -313,9 +319,21 @@ export class WindowData {
   getSourceRetrySequence = () => this.sourceRetrySequence;
   getSourceMeta = () => this.sourceMeta;
   subscribeNotice = (listener: () => void) => { this.noticeListeners.add(listener); return () => this.noticeListeners.delete(listener); };
+  subscribeNoticeSlot = (listener: () => void) => { this.noticeSlotListeners.add(listener); return () => this.noticeSlotListeners.delete(listener); };
+  getNoticeSlot = () => this.noticeSlot;
+  setNoticeSlot = (element: HTMLElement | null) => {
+    if (this.noticeSlot === element) return;
+    this.noticeSlot = element;
+    // 재시도 중에 대화상자가 닫혔으면 지난 실패를 창 아래로 내리지 않는다.
+    if (!element && this.actionFailure?.retrying) this.clearActionFailure(this.actionFailure.pointer);
+    this.noticeSlotListeners.forEach((listener) => listener());
+  };
   getNotice = () => this.noticeRole === "status" ? this.statusMessage : this.notice;
   getNoticeId = () => this.noticeRole === "status" ? null : this.noticeId;
   getNoticeRole = () => this.noticeRole;
+  getNoticeRevision = () => this.noticeRevision;
+  /** 같은 동작이 지금 화면에 그 실패를 그대로 보이고 있는가. 재시도인지 가르는 데 쓴다. */
+  hasActionFailure = (pointer: string) => this.actionFailure?.pointer === pointer && this.noticeProblem === this.actionFailure.problem;
   getStatusSequence = () => this.statusSequence;
   setNotice = (problem: CoreError | string | null, owner: object | null = null) => {
     this.statusMessage = null;
@@ -338,6 +356,13 @@ export class WindowData {
     if (this.noticeProblem !== problem || (owner && this.noticeOwner !== owner)) return;
     this.noticeProblem = null; this.noticeOwner = null; this.notice = null; this.noticeId = null;
     this.noticeListeners.forEach((listener) => listener());
+  };
+  /** 같은 동작을 다시 실행할 때 지난 실패 알림을 거둔다. 그 사이에 다른 알림이 올라왔으면 그대로 둔다. */
+  private clearActionFailure = (pointer: string) => {
+    const failure = this.actionFailure;
+    if (!failure || failure.pointer !== pointer) return;
+    this.actionFailure = null;
+    this.clearNoticeIf(failure.problem);
   };
   private statusMessage: string | null = null;
   clearStatus = (sequence: number) => {
@@ -626,6 +651,19 @@ export class WindowData {
     trackWindowAction(this.windowId, this.actInternal(pointer, event, item, modifiers, scope, options));
 
   private actInternal = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
+    // 지난 실패를 시작할 때 거두면 대화상자가 줄어 단추가 손가락 밑에서 움직인다. 결과가 올 때까지 그대로 두고 여기서 거둔다.
+    const retried = this.actionFailure?.pointer === pointer ? this.actionFailure : null;
+    if (retried) retried.retrying = true;
+    const result = await this.runAction(pointer, event, item, modifiers, scope, options);
+    if (retried && this.actionFailure === retried) {
+      if (!result) retried.retrying = false;
+      else if (!this.noticeSlot) this.clearActionFailure(pointer);
+      else setTimeout(() => { if (this.actionFailure === retried) this.clearActionFailure(pointer); }, ACTION_SUCCESS_SETTLE_MS);
+    }
+    return result;
+  };
+
+  private runAction = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
     const label = this.actionLabel(pointer, scope);
     try {
       if (!options?.input) {
@@ -694,7 +732,11 @@ export class WindowData {
       return true;
     } catch (error) {
       const problem = toCoreError(error);
-      this.setNotice(label ? { ...problem, message: `${label}: ${problem.message}` } : problem);
+      const shown = label ? { ...problem, message: `${label}: ${problem.message}` } : problem;
+      // 같은 문구로 다시 실패해도 화면 읽기 도구가 새 알림으로 읽도록 알림을 새로 그린다.
+      if (!options?.input && this.actionFailure?.pointer === pointer) this.noticeRevision += 1;
+      this.actionFailure = { pointer, problem: shown, retrying: false };
+      this.setNotice(shown);
       return false;
     }
   };
