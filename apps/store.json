@@ -40,7 +40,7 @@
       }
     ]
   },
-  "state": {"category": "", "query": "", "selected": null, "selected_name": "", "selected_store": null, "new_server": "", "selected_key": null, "shortcut_added": null},
+  "state": {"category": "", "query": "", "selected": null, "selected_name": "", "selected_store": null, "new_server": "", "new_invite": "", "selected_key": null, "shortcut_added": null},
   "sources": {
     "catalog": {
       "kind": "store",
@@ -333,9 +333,27 @@
                 {
                   "set_storage": {
                     "entry": "servers",
-                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
+                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, '') & ($trim($state.new_invite) = '' ? '' : '/' & $encodeUrlComponent($lowercase($trim($state.new_invite)))); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
                   }
                 },
+                {"set_state": "new_invite", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_invite"}},
+                {"set_state": "new_server", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_server"}}
+              ]
+            },
+            {
+              "type": "input",
+              "label": "초대코드",
+              "value": {"state": "new_invite"},
+              "on_change": {"set_state": "new_invite"},
+              "placeholder": "받은 초대코드가 있으면 넣습니다",
+              "on_submit": [
+                {
+                  "set_storage": {
+                    "entry": "servers",
+                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, '') & ($trim($state.new_invite) = '' ? '' : '/' & $encodeUrlComponent($lowercase($trim($state.new_invite)))); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
+                  }
+                },
+                {"set_state": "new_invite", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_invite"}},
                 {"set_state": "new_server", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_server"}}
               ]
             },
@@ -347,14 +365,15 @@
                 {
                   "type": "button",
                   "label": "추가",
-                  "disabled": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore')"},
+                  "disabled": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, '') & ($trim($state.new_invite) = '' ? '' : '/' & $encodeUrlComponent($lowercase($trim($state.new_invite)))); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore')"},
                   "on_click": [
                     {
                       "set_storage": {
                         "entry": "servers",
-                        "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
+                        "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, '') & ($trim($state.new_invite) = '' ? '' : '/' & $encodeUrlComponent($lowercase($trim($state.new_invite)))); $not($contains($url, /^https?:\\/\\//)) or $url in [($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])).$replace($, /\\/+$/, '')] or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' ? ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])) : $append(($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])), [$url]))"}
                       }
                     },
+                    {"set_state": "new_invite", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_invite"}},
                     {"set_state": "new_server", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_server"}}
                   ]
                 }
