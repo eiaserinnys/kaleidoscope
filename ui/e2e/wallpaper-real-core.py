@@ -221,11 +221,12 @@ page.wait_for_timeout(500)
 page.screenshot(path=str(sb.out / "switch-desktop-1.png"))
 
 
-def contrast(selector):
+def contrast(name, selector):
     box = page.locator(selector).first.bounding_box()
     if not box or box["width"] < 4 or box["height"] < 4:
         return None
     shot = page.screenshot(clip={"x": box["x"], "y": box["y"], "width": box["width"], "height": box["height"]})
+    (sb.out / f"contrast-{name}.png").write_bytes(shot)
     return page.evaluate("""async ({b64}) => {
       const image = new Image();
       image.src = 'data:image/png;base64,' + b64;
@@ -245,8 +246,8 @@ def contrast(selector):
       }
       values.sort((left, right) => left - right);
       const at = (share) => values[Math.min(values.length - 1, Math.floor(values.length * share))];
-      const low = at(0.05), high = at(0.95);
-      return { low, high, ratio: (high + 0.05) / (low + 0.05), pixels: values.length };
+      const low = at(0.01), high = at(0.99);
+      return { low, high, ratio: (high + 0.05) / (low + 0.05), p05: at(0.05), p95: at(0.95), pixels: values.length };
     }""", {"b64": base64.b64encode(shot).decode()})
 
 
@@ -255,9 +256,9 @@ day_window = wait(lambda: next((window for window in sb.snapshot()["shared"]["wi
                   "낮 데스크톱 앱 창")
 wait(lambda: page.locator(f'[data-window-id="{day_window["id"]}"]').count() > 0, "낮 창 그리기")
 day_metrics = {
-    "title": contrast(f'[data-window-id="{day_window["id"]}"] .ks-window-titlebar'),
-    "body": contrast(f'[data-window-id="{day_window["id"]}"] .ks-window-content'),
-    "bar": contrast(".ks-shell-bar"),
+    "title": contrast("bright-title", f'[data-window-id="{day_window["id"]}"] .ks-window-titlebar'),
+    "body": contrast("bright-body", f'[data-window-id="{day_window["id"]}"] .ks-window-content'),
+    "bar": contrast("bright-bar", ".ks-shell-bar"),
 }
 page.screenshot(path=str(sb.out / "contrast-bright.png"))
 
@@ -267,9 +268,9 @@ wait(lambda: page.locator(f'[data-window-id="{night_window["id"]}"]').count() > 
 page.wait_for_timeout(500)
 page.screenshot(path=str(sb.out / "switch-desktop-2.png"))
 night_metrics = {
-    "title": contrast(f'[data-window-id="{night_window["id"]}"] .ks-window-titlebar'),
-    "body": contrast(f'[data-window-id="{night_window["id"]}"] .ks-window-content'),
-    "bar": contrast(".ks-shell-bar"),
+    "title": contrast("dark-title", f'[data-window-id="{night_window["id"]}"] .ks-window-titlebar'),
+    "body": contrast("dark-body", f'[data-window-id="{night_window["id"]}"] .ks-window-content'),
+    "bar": contrast("dark-bar", ".ks-shell-bar"),
 }
 page.screenshot(path=str(sb.out / "contrast-dark.png"))
 
