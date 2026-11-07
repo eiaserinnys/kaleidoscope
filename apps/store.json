@@ -348,14 +348,14 @@
               "on_submit": [
                 {
                   "set_storage": {
-                    "entry": "servers",
-                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $stores := ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $url in [$stores.$replace($, /\\/+$/, '')] ? $stores : $append($stores, [$url]))"}
+                    "entry": "invites",
+                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $codes := ($type($storage.invites) = 'object' ? $storage.invites : {}); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $trim($state.new_invite) = '' ? $codes : $merge([$codes, { $url: $lowercase($trim($state.new_invite)) }]))"}
                   }
                 },
                 {
                   "set_storage": {
-                    "entry": "invites",
-                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $codes := ($type($storage.invites) = 'object' ? $storage.invites : {}); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $trim($state.new_invite) = '' ? $codes : $merge([$codes, { $url: $lowercase($trim($state.new_invite)) }]))"}
+                    "entry": "servers",
+                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $stores := ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $url in [$stores.$replace($, /\\/+$/, '')] ? $stores : $append($stores, [$url]))"}
                   }
                 },
                 {"set_state": "new_invite", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_invite"}},
@@ -371,14 +371,14 @@
               "on_submit": [
                 {
                   "set_storage": {
-                    "entry": "servers",
-                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $stores := ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $url in [$stores.$replace($, /\\/+$/, '')] ? $stores : $append($stores, [$url]))"}
+                    "entry": "invites",
+                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $codes := ($type($storage.invites) = 'object' ? $storage.invites : {}); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $trim($state.new_invite) = '' ? $codes : $merge([$codes, { $url: $lowercase($trim($state.new_invite)) }]))"}
                   }
                 },
                 {
                   "set_storage": {
-                    "entry": "invites",
-                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $codes := ($type($storage.invites) = 'object' ? $storage.invites : {}); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $trim($state.new_invite) = '' ? $codes : $merge([$codes, { $url: $lowercase($trim($state.new_invite)) }]))"}
+                    "entry": "servers",
+                    "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $stores := ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $url in [$stores.$replace($, /\\/+$/, '')] ? $stores : $append($stores, [$url]))"}
                   }
                 },
                 {"set_state": "new_invite", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_invite"}},
@@ -397,14 +397,14 @@
                   "on_click": [
                     {
                       "set_storage": {
-                        "entry": "servers",
-                        "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $stores := ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $url in [$stores.$replace($, /\\/+$/, '')] ? $stores : $append($stores, [$url]))"}
+                        "entry": "invites",
+                        "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $codes := ($type($storage.invites) = 'object' ? $storage.invites : {}); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $trim($state.new_invite) = '' ? $codes : $merge([$codes, { $url: $lowercase($trim($state.new_invite)) }]))"}
                       }
                     },
                     {
                       "set_storage": {
-                        "entry": "invites",
-                        "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $codes := ($type($storage.invites) = 'object' ? $storage.invites : {}); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $trim($state.new_invite) = '' ? $codes : $merge([$codes, { $url: $lowercase($trim($state.new_invite)) }]))"}
+                        "entry": "servers",
+                        "value": {"expr": "($url := $replace($trim($state.new_server), /\\/+$/, ''); $stores := ($type($storage.servers) = 'array' ? $storage.servers : ($trim($storage.custom_url) != '' ? [$trim($storage.custom_url)] : [])); $not($contains($url, /^https?:\\/\\//)) or $url = 'https://kaleidoscope.eiaserinnys.me/appstore' or $url in [$stores.$replace($, /\\/+$/, '')] ? $stores : $append($stores, [$url]))"}
                       }
                     },
                     {"set_state": "new_invite", "value": {"expr": "$contains($trim($state.new_server), /^https?:\\/\\//) ? '' : $state.new_invite"}},
