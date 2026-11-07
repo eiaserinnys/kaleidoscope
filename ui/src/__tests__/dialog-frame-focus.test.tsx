@@ -36,6 +36,25 @@ it("누를 수 있는 요소의 기본 동작은 막지 않는다", () => {
   expect(dialog).toBeTruthy();
 });
 
+it("창 본문 컨테이너 안의 대화상자도 제목을 누르면 초점을 빼앗기지 않는다", () => {
+  const windowContent = document.createElement("div");
+  windowContent.className = "ks-window-content";
+  windowContent.tabIndex = -1;
+  document.body.appendChild(windowContent);
+  const host = document.createElement("div");
+  windowContent.appendChild(host);
+  try {
+    render(<Dialog host={host} title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={() => {}} onConfirm={() => {}} />);
+    const dialog = screen.getByRole("dialog");
+    const title = dialog.querySelector<HTMLElement>(".ks-dialog-title")!;
+    title.style.userSelect = "none";
+    expect(fireEvent.mouseDown(title)).toBe(false);
+    expect(fireEvent.mouseDown(screen.getByRole("textbox", { name: "이름" }))).toBe(true);
+  } finally {
+    windowContent.remove();
+  }
+});
+
 it("읽을 수 있는 글은 끌어 고를 수 있게 두고, 눌렀다 떼면 대화상자 입력으로 초점을 돌려준다", () => {
   const { dialog } = open(<><input aria-label="이름" /><p style={{ userSelect: "text" }}>읽을 글</p></>);
   const input = screen.getByRole("textbox", { name: "이름" });

@@ -1,5 +1,5 @@
 export { AppWindowContent } from "./render/app-window-content";
-export { hasShellBlockingOverlay, hasVisibleShortcutOverlay } from "./runtime/shortcuts";
+export { hasShellBlockingOverlay } from "./runtime/shortcuts";
 export { knownFolderNames } from "./data/default-folder";
 export { Button, EmptyState, ErrorId, ErrorNotice, IconButton, Notice, StatusText } from "./components/primitives";
 export { TooltipProvider } from "./components/tooltip";

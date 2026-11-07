@@ -97,7 +97,8 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
       if (!(target instanceof Element)) return;
       if (!busy && !windowModal && target === event.currentTarget) { event.preventDefault(); onCancel(); return; }
       if (target === event.currentTarget) return;
-      if (target.closest(interactiveSelector)) return;
+      const interactive = target.closest(interactiveSelector);
+      if (interactive && event.currentTarget.contains(interactive)) return;
       // 읽고 복사할 글은 끌어 고를 수 있게 두고, 눌렀다 뗄 때만 초점을 되돌린다.
       if (getComputedStyle(target).userSelect !== "none") {
         const active = document.activeElement;
