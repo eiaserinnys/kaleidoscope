@@ -23,6 +23,7 @@ import {
   type Rect,
   type WindowSize,
 } from "@kaleidoscope/ui";
+import { DesktopIcons } from "./desktop-icons";
 import { WindowFrame } from "./window-frame";
 import { windowMenuEntries } from "./window-menu";
 import { systemWindowMenu, type SystemWindowState } from "./system-window";
@@ -38,6 +39,7 @@ export interface DesktopAreaProps {
   launcherOpen: boolean;
   onAreaChange: (area: { width: number; height: number }) => void;
   onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
+  onOpenApp?: (appId: string) => void;
   onOpenApps: (anchor: HTMLElement) => void;
   onChooseAgent?: (anchor: HTMLElement) => void;
   getNewWindowRect?: (desktopId: string, snapshot: ShellSnapshot, size?: WindowSize) => Rect | undefined;
@@ -54,6 +56,7 @@ export function DesktopArea({
   launcherOpen,
   onAreaChange,
   onCall,
+  onOpenApp,
   onOpenApps,
   onChooseAgent,
   getNewWindowRect,
@@ -90,6 +93,7 @@ export function DesktopArea({
         key={desktop.id}
         onCall={onCall}
         onChooseAgent={onChooseAgent}
+        onOpenApp={onOpenApp}
         store={store}
         systemWindow={systemWindow?.state}
       />)}
@@ -110,6 +114,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   area,
   onCall,
   onChooseAgent,
+  onOpenApp,
   store,
   getNewWindowRect,
   systemWindow,
@@ -120,6 +125,7 @@ const DesktopCanvas = memo(function DesktopCanvas({
   area: { width: number; height: number };
   onCall: DesktopAreaProps["onCall"];
   onChooseAgent: DesktopAreaProps["onChooseAgent"];
+  onOpenApp?: DesktopAreaProps["onOpenApp"];
   store: ShellStore;
   getNewWindowRect?: DesktopAreaProps["getNewWindowRect"];
   systemWindow?: SystemWindowState;
@@ -136,6 +142,13 @@ const DesktopCanvas = memo(function DesktopCanvas({
       undefined,
     )?.id ?? null;
   return <section aria-hidden={!active} className="ks-desktop-canvas" hidden={!active}>
+    {active && onOpenApp ? <DesktopIcons
+      area={area}
+      desktopId={desktop.id}
+      onCall={onCall}
+      onOpenApp={onOpenApp}
+      store={store}
+    /> : null}
     {windows.map((appWindow) => <DesktopWindow
       appWindow={appWindow}
       area={area}

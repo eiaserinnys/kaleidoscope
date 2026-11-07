@@ -45,6 +45,7 @@ import { inputDateTimeApp } from "../e2e/fixtures/input-date-time-app";
 import windowBodyGutter from "../e2e/fixtures/window-body-gutter.json";
 import windowBodyGutterLists from "../e2e/fixtures/window-body-gutter-lists.json";
 import windowBodyGutterRow from "../e2e/fixtures/window-body-gutter-row.json";
+import bareLayoutEdges1063 from "../e2e/fixtures/bare-layout-edges-1063.json";
 import { executeWindowAction, readWindowView, registerControlWindow } from "../src/share/window-control";
 import { describeVisible } from "../src/share/visible";
 
@@ -96,7 +97,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
+const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
@@ -409,6 +410,7 @@ function Harness() {
       act: (viewId: string, action: Parameters<typeof executeWindowAction>[2]) => executeWindowAction(optionsWindow.id, viewId, action, "options-test"),
       state: () => store.getSnapshot()?.shared.windows.find((item) => item.id === optionsWindow.id)?.state,
       calls: () => fakeTransport.getCalls().filter((call) => call.op === "data.act"),
+      visibleText: () => { const app = document.querySelector<HTMLElement>('[data-testid="app-window-input-options-fixture"]'); return app ? describeVisible(app).text : ""; },
     } });
     return unregister;
   }, [optionsWindow?.id]);

@@ -16,14 +16,14 @@ export function inputDraft(value: unknown, kind: string | undefined, format: Ext
 
 type Input = Extract<Block, { type: "input" }>;
 type Ref<T> = RefObject<T>;
-export function useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, spinPending, afterSpin, composing, optionsOnly, optionValues, codec }: {
+export function useInputDraft({ block, pointer, data, readOnly, initialDraft, toEventValue, change, finish, send, prepare, timer, timerValue, unregisterFlush, inputElement, textarea, edited, setEdited, spinPending, afterSpin, composing, optionsOnly, resolveOption, codec }: {
   block: Input; pointer: string; data: ReturnType<typeof useWindowData>; readOnly: boolean; initialDraft: string;
   toEventValue: (value: string) => JsonValue; change: (value: string) => void; finish: (sync?: boolean) => void;
   send: (value: string, coalesce?: boolean) => Promise<void>; prepare: Ref<() => void>;
   timer: Ref<ReturnType<typeof setTimeout> | null>; timerValue: Ref<string>; unregisterFlush: Ref<(() => void) | null>;
-  inputElement: Ref<HTMLInputElement | null>; textarea: Ref<HTMLTextAreaElement | null>; edited: Ref<boolean>; spinPending: Ref<boolean>; afterSpin: Ref<() => void>;
+  inputElement: Ref<HTMLInputElement | null>; textarea: Ref<HTMLTextAreaElement | null>; edited: Ref<boolean>; setEdited: (next: boolean) => void; spinPending: Ref<boolean>; afterSpin: Ref<() => void>;
   composing: Ref<boolean>;
-  optionsOnly: boolean; optionValues: string[] | null;
+  optionsOnly: boolean; resolveOption: (text: string) => string | null;
   codec?: { parse: (value: string) => Parsed; format: (value: string | null) => string };
 }) {
   const accepted = useRef(initialDraft);
@@ -38,7 +38,7 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
     timer.current = null;
     unregisterFlush.current?.(); unregisterFlush.current = null;
     const wasSpin = spinPending.current;
-    edited.current = false;
+    setEdited(false);
     spinPending.current = false;
     const normalized = codec ? toEventValue(value) : null;
     if (codec) {
@@ -50,7 +50,7 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
     const pending = wasSpin ? sent.finally(() => afterSpin.current()) : sent;
     pendingSend.current = pending;
     return pending;
-  }, [send, toEventValue, codec, initialDraft]);
+  }, [send, toEventValue, codec, initialDraft, setEdited]);
   const settle = (value: string, barrier = false): boolean => {
     if (codec) {
       if (readOnly) return true;
@@ -59,33 +59,37 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
       if (parsed.valid && (!barrier || block.commit !== "submit")) {
         const formatted = codec.format(parsed.value);
         if (formatted !== accepted.current) void sendDraft(value);
-        else { if (timer.current) clearTimeout(timer.current); timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null; edited.current = false; }
+        else { if (timer.current) clearTimeout(timer.current); timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null; setEdited(false); }
         if (!barrier) change(formatted);
         return true;
       }
       if (timer.current) clearTimeout(timer.current);
       timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null;
-      edited.current = false; change(accepted.current);
+      setEdited(false); change(accepted.current);
       return false;
     }
     if (!edited.current || readOnly) return true;
     if (!optionsOnly) { sendDraft(value); return true; }
-    if ((!barrier || block.commit !== "submit") && optionValues?.includes(value)) {
-      const changed = value !== accepted.current;
-      accepted.current = value;
-      if (changed) { pendingAccepted.current = value === initialDraft && !pendingAccepted.current ? null : { value }; sendDraft(value); }
-      else { unregisterFlush.current?.(); unregisterFlush.current = null; edited.current = false; }
-      return true;
+    if (!barrier || block.commit !== "submit") {
+      const resolved = resolveOption(value);
+      if (resolved !== null) {
+        const changed = resolved !== accepted.current;
+        accepted.current = resolved;
+        if (resolved !== value) change(resolved);
+        if (changed) { pendingAccepted.current = resolved === initialDraft && !pendingAccepted.current ? null : { value: resolved }; sendDraft(resolved); }
+        else { unregisterFlush.current?.(); unregisterFlush.current = null; setEdited(false); }
+        return true;
+      }
     }
     unregisterFlush.current?.(); unregisterFlush.current = null;
-    edited.current = false;
+    setEdited(false);
     change(accepted.current);
     return false;
   };
   prepare.current = () => { if ((block.options !== undefined || codec) && composing.current) return; if ((optionsOnly || codec) && edited.current) settle(timerValue.current, true); else if (edited.current && (timer.current || spinPending.current)) void sendDraft(timerValue.current); };
   const markChanged = (value: string, mode: "normal" | "debounce" | "hold" = "normal") => {
     if (readOnly) return;
-    edited.current = true;
+    setEdited(true);
     change(value);
     timerValue.current = value;
     if (timer.current) clearTimeout(timer.current);
@@ -106,13 +110,13 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
     timer.current = setTimeout(() => { void sendDraft(timerValue.current); }, 300);
   };
   const commit = (value: string) => settle(value);
-  const choose = (value: string) => { if (readOnly) return; const formatted = codec ? codec.format(value) : value; accepted.current = formatted; pendingAccepted.current = formatted === initialDraft && !pendingAccepted.current ? null : { value: formatted }; change(formatted); void sendDraft(value); };
+  const choose = (value: string) => { if (readOnly) return; if (optionsOnly && value === accepted.current) { unregisterFlush.current?.(); unregisterFlush.current = null; setEdited(false); change(value); return; } const formatted = codec ? codec.format(value) : value; accepted.current = formatted; pendingAccepted.current = formatted === initialDraft && !pendingAccepted.current ? null : { value: formatted }; change(formatted); void sendDraft(value); };
   const canSyncExternal = () => pendingAccepted.current === null;
   const revert = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     unregisterFlush.current?.(); unregisterFlush.current = null;
-    edited.current = false;
+    setEdited(false);
     spinPending.current = false;
     change(accepted.current);
   };
@@ -120,7 +124,7 @@ export function useInputDraft({ block, pointer, data, readOnly, initialDraft, to
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     unregisterFlush.current?.(); unregisterFlush.current = null;
-    edited.current = false;
+    setEdited(false);
     spinPending.current = false;
     change(initialDraft);
     finish();

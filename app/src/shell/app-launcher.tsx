@@ -2,16 +2,25 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type Keybo
 import { createPortal } from "react-dom";
 import {
   AppIcon, BUILTIN_APP_IDS, EmptyState, GroupHeading, IconTile, LayoutGrid,
-  focusRescued, useAnchoredOverlay, useIconGridColumns, useShellSelector, type ShellStore,
+  focusRescued, openContextMenu, useAnchoredOverlay, useIconGridColumns, useShellSelector,
+  type CoreReply, type CoreRequest, type ShellStore,
 } from "@kaleidoscope/ui";
 
-export function AppLauncher({ store, anchor, onClose, onSelect }: {
+const NO_SHORTCUTS: readonly { desktop_id: string; app_id: string }[] = [];
+
+export function AppLauncher({ store, anchor, activeDesktopId, onCall, onClose, onSelect }: {
   store: ShellStore;
   anchor: HTMLElement;
+  activeDesktopId: string;
+  onCall: (request: CoreRequest) => Promise<CoreReply | undefined>;
   onClose: () => void;
   onSelect: (appId: string) => void;
 }) {
   const apps = useShellSelector(store, (snapshot) => snapshot?.shared.apps);
+  const shortcuts = useShellSelector(store, (snapshot) =>
+    snapshot?.shared.desktop_shortcuts?.filter((shortcut) => shortcut.desktop_id === activeDesktopId) ?? NO_SHORTCUTS,
+  sameShortcutReferences);
+  const shortcutAppIds = useMemo(() => new Set(shortcuts.map((shortcut) => shortcut.app_id)), [shortcuts]);
   const panel = useRef<HTMLDivElement>(null);
   const grid = useRef<HTMLDivElement>(null);
   const tiles = useRef<Array<HTMLButtonElement | null>>([]);
@@ -119,6 +128,15 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
             store={store} app={app} key={app.id} tabIndex={start + index === focusedIndex ? 0 : -1}
             onFocus={() => setFocusedId(app.id)}
             onClick={() => { closeAndFocus(); onSelect(app.id); }}
+            onContextMenu={(event) => openContextMenu(event, [{
+              id: `desktop-shortcut-add-${app.id}`,
+              label: "바탕화면에 추가",
+              disabled: shortcutAppIds.has(app.id),
+              onSelect: () => {
+                closeAndFocus();
+                void onCall({ op: "desktop.shortcut.add", desktop_id: activeDesktopId, app_id: app.id });
+              },
+            }])}
             ref={(element) => { tiles.current[start + index] = element; }}
           />)}
         </div>
@@ -127,13 +145,17 @@ export function AppLauncher({ store, anchor, onClose, onSelect }: {
   </div>, document.body);
 }
 
-const LauncherTile = memo(function LauncherTile({ store, app, ...props }: {
+export const LauncherTile = memo(function LauncherTile({ store, app, ...props }: {
   store: ShellStore;
   app: NonNullable<ReturnType<ShellStore["getSnapshot"]>>["shared"]["apps"][number];
 } & Omit<React.ComponentProps<typeof IconTile>, "icon" | "name" | "badge">) {
   const badge = useShellSelector(store, (snapshot) => snapshot?.app_badges?.[app.id] ?? 0);
   return <IconTile {...props} name={app.name} badge={badge} icon={<AppIcon store={store} appId={app.id} appVersion={app.current_version} size="tile" placeholder="skeleton" />} />;
 });
+
+function sameShortcutReferences<T>(left: readonly T[], right: readonly T[]): boolean {
+  return left === right || (left.length === right.length && left.every((item, index) => item === right[index]));
+}
 
 function availableSpace(anchor: HTMLElement, taskbar: HTMLElement) {
   const rect = taskbar.getBoundingClientRect();

@@ -93,15 +93,52 @@ test("내용 높이 쌓기의 마지막 미디어와 좁은 오류는 접히지 
       <div class="ks-data-section-child"><div class="ks-data-stack is-column"><div class="ks-data-stack-item is-fill"><div class="ks-image-view" style="--ks-image-ratio:16/9;--ks-image-natural-height:90px"></div></div></div></div>
       <div class="ks-data-section-child"><div class="ks-data-stack is-column"><div class="ks-data-stack-item is-fill"><div class="ks-media-player is-video" style="--ks-media-ratio:9/16"><video></video><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div></div></div>
       <div class="ks-data-stack-item" style="width:153px"><div class="ks-image-view is-failed"><div style="height:140px">오류와 다시 받기</div></div></div>
-      <div class="ks-data-button-card-preview" style="width:153px"><div class="ks-image-view is-failed"><div style="height:140px">오류</div></div></div>`;
+      <div class="ks-data-button-card-preview" style="width:153px"><div class="ks-image-view is-failed"><div style="height:140px">오류</div></div></div>
+      <div class="ks-data-stack-item" style="width:900px"><div class="ks-image-view"></div></div>
+      <div class="ks-data-stack-item" style="width:900px"><div class="ks-image-view is-failed"><div style="height:120px">오류와 다시 받기</div></div></div>
+      <div class="ks-data-window-body" style="width:900px;height:300px"><div class="ks-image-view is-failed"><div style="height:120px">오류</div></div></div>`;
     document.body.append(fixture);
   });
   const heights = await page.locator("#media-content-size-fixture").evaluate((fixture) => {
     const size = (selector: string) => [...fixture.querySelectorAll(selector)].map((element) => { const rect = element.getBoundingClientRect(); return { width: rect.width, height: rect.height }; });
     return { images: size(".ks-image-view"), video: size("video") };
   });
-  for (const [actual, expected] of heights.images.map((size, index) => [size.height, [size.width * 3 / 4, 90, 140, size.width * 9 / 16][index]])) {
+  for (const [actual, expected] of heights.images.map((size, index) => [size.height, [size.width * 3 / 4, 90, 140, size.width * 9 / 16, 480, 480, 300][index]])) {
     expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1);
   }
+  // 넓은 자리에서 실패 상자는 대기 높이를 지켜 뒤 내용을 밀지 않는다.
+  expect(Math.abs(heights.images[5].height - heights.images[4].height)).toBeLessThanOrEqual(1);
   expect(Math.abs(heights.video[0].height - 480)).toBeLessThanOrEqual(1);
+});
+
+test("넓은 실패 상자는 내용을 가운데 두고, 세로 비율에서도 내용이 상자 안에 남는다", async ({ page }) => {
+  await page.goto("/?preview=block-gallery");
+  await page.evaluate(() => {
+    const fixture = document.createElement("div");
+    fixture.id = "media-failed-gap-fixture";
+    const state = `<div class="ks-data-state"><div class="ks-empty-state"><span class="ks-empty-state-icon"></span><span class="ks-empty-state-text">이미지를 불러오지 못했습니다</span><span class="ks-empty-state-action"><button type="button">다시 받기</button></span></div></div>`;
+    fixture.innerHTML = `
+      <div class="ks-data-stack-item" style="width:1400px"><div class="ks-image-view is-failed">${state}</div></div>
+      <div class="ks-data-stack-item" style="width:900px"><div class="ks-image-view is-failed" style="--ks-image-ratio:0.5625">${state}</div></div>`;
+    document.body.append(fixture);
+  });
+  const boxes = await page.locator("#media-failed-gap-fixture").evaluate((fixture) => {
+    return [...fixture.querySelectorAll(".ks-image-view.is-failed")].map((view) => {
+      const box = view.getBoundingClientRect();
+      const icon = view.querySelector(".ks-empty-state-icon")!.getBoundingClientRect();
+      const button = view.querySelector("button")!.getBoundingClientRect();
+      return {
+        height: box.height,
+        topGap: icon.top - box.top,
+        bottomGap: box.bottom - button.bottom,
+        inside: icon.top >= box.top - 0.5 && button.bottom <= box.bottom + 0.5,
+      };
+    });
+  });
+  expect(Math.abs(boxes[0].height - 480)).toBeLessThanOrEqual(1);
+  expect(Math.abs(boxes[1].height - 480)).toBeLessThanOrEqual(1);
+  for (const box of boxes) {
+    expect(box.inside).toBe(true);
+    expect(Math.abs(box.topGap - box.bottomGap)).toBeLessThanOrEqual(1);
+  }
 });

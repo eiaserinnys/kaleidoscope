@@ -926,3 +926,61 @@ describe("shell server link control", () => {
     store.dispose();
   });
 });
+
+describe("바탕화면 아이콘", () => {
+  const now = "2026-11-07T00:00:00Z";
+
+  function snapshotWithShortcuts() {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.desktop_shortcuts = [
+      { id: "desktop-1/md-viewer", desktop_id: "desktop-1", app_id: "md-viewer", column: 0, row: 0, created_at: now, updated_at: now },
+      { id: "desktop-1/md-editor", desktop_id: "desktop-1", app_id: "md-editor", column: 1, row: 0, created_at: now, updated_at: now },
+    ];
+    return snapshot;
+  }
+
+  function openWindowCalls(calls: { mock: { calls: readonly unknown[][] } }) {
+    return calls.mock.calls.filter(([request]) => (request as { op?: string } | undefined)?.op === "window.open");
+  }
+
+  it("두 번 누르면 이미 열린 앱이라도 새 창을 한 번만 연다", async () => {
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot: snapshotWithShortcuts() });
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const tile = document.querySelector<HTMLButtonElement>('[data-desktop-shortcut-id="desktop-1/md-viewer"]');
+    expect(tile).not.toBeNull();
+    calls.mockClear();
+
+    fireEvent.doubleClick(tile!);
+
+    await waitFor(() => expect(openWindowCalls(calls)).toHaveLength(1));
+    expect(openWindowCalls(calls)[0][0]).toMatchObject({ op: "window.open", desktop_id: "desktop-1", app_id: "md-viewer" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(openWindowCalls(calls)).toHaveLength(1);
+    store.dispose();
+  });
+
+  it("Enter는 새 창을 한 번만 열고 Space는 타일을 고르기만 한다", async () => {
+    const transport = createFakeTransport({ ...makeTestSeed(), snapshot: snapshotWithShortcuts() });
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    const viewer = document.querySelector<HTMLButtonElement>('[data-desktop-shortcut-id="desktop-1/md-viewer"]')!;
+    const editor = document.querySelector<HTMLButtonElement>('[data-desktop-shortcut-id="desktop-1/md-editor"]')!;
+    calls.mockClear();
+
+    fireEvent.keyDown(viewer, { key: "Enter", code: "Enter" });
+    await waitFor(() => expect(openWindowCalls(calls)).toHaveLength(1));
+    expect(openWindowCalls(calls)[0][0]).toMatchObject({ op: "window.open", app_id: "md-viewer" });
+
+    calls.mockClear();
+    fireEvent.keyDown(editor, { key: " ", code: "Space" });
+    expect(editor.getAttribute("aria-pressed")).toBe("true");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(openWindowCalls(calls)).toHaveLength(0);
+    store.dispose();
+  });
+});

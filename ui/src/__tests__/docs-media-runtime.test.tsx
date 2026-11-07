@@ -80,6 +80,83 @@ it("확대 그림은 수정자 없는 휠은 스크롤에 남기고 Ctrl 휠로 
   await waitFor(() => expect(view.container.querySelector<HTMLElement>(".ks-image-frame")?.style.transform).toContain("scale(1.25)"));
 });
 
+it("확대해 더 큰 판을 기다리는 동안 이전 그림과 조작부를 유지한다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("devicePixelRatio", 1);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400, left: 0, top: 0 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", zoom: true, src: { permission: "media", path: "image.png" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  let releaseBig: ((reply: unknown) => void) | null = null;
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? (request.max_px ?? 0) >= 1024
+      ? new Promise((resolve) => { releaseBig = resolve; }) as never
+      : Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 1200, height: 800 } }) as never
+    : original(request as never));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")?.getAttribute("src")).toContain("YQ=="));
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view")!;
+  fireEvent(host, new WheelEvent("wheel", { deltaY: -100, ctrlKey: true, bubbles: true, cancelable: true }));
+  await waitFor(() => expect(view.container.querySelector<HTMLElement>(".ks-image-frame")?.style.transform).toContain("scale(1.25)"));
+  await waitFor(() => expect(releaseBig).toBeTypeOf("function"));
+  expect(view.container.querySelector(".ks-image-frame img")?.getAttribute("src")).toContain("YQ==");
+  expect(view.container.querySelector(".ks-image-controls")).toBeTruthy();
+  await act(async () => releaseBig!({ op: "data.media", media: { mime: "image/png", data_base64: "Yg==", width: 1200, height: 800 } }));
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")?.getAttribute("src")).toContain("Yg=="));
+  expect(view.container.querySelector(".ks-image-controls")).toBeTruthy();
+});
+
+it("실패한 그림은 이미 알던 비율을 유지하고 자연 높이는 두지 않는다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("devicePixelRatio", 1);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { expr: "$state.src" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op !== "data.media" ? original(request as never)
+    : "path" in request.media && request.media.path === "second.png"
+      ? Promise.reject({ id: "MEDIA_LOAD_NOT_FOUND", code: "not_found", message: "없는 그림", details: [] }) as never
+      : Promise.resolve({ op: "data.media", media: { mime: "image/png", data_base64: "YQ==", width: 160, height: 90 } }) as never);
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  const send = (path: string) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "ready", value: { permission: "media", path } } } } }));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  send("first.png");
+  await waitFor(() => expect(view.container.querySelector(".ks-image-frame img")).toBeTruthy());
+  const image = view.container.querySelector<HTMLImageElement>(".ks-image-frame img")!;
+  Object.defineProperties(image, { naturalWidth: { value: 160 }, naturalHeight: { value: 90 } });
+  fireEvent.load(image);
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view")!;
+  expect(host.style.getPropertyValue("--ks-image-natural-height")).toBe("90px");
+  send("second.png");
+  await waitFor(() => expect(host.classList.contains("is-failed")).toBe(true));
+  expect(Number(host.style.getPropertyValue("--ks-image-ratio"))).toBeCloseTo(160 / 90);
+  expect(host.style.getPropertyValue("--ks-image-natural-height")).toBe("");
+});
+
+it("원천 결속 실패도 그림 자리 안에 그린다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { expr: "$state.src" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "failed", id: "SHELL_DATA_SOURCE_FAILED", message: "원천을 읽지 못했습니다", retry: [] } } } }));
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view.is-failed");
+  expect(host).toBeTruthy();
+  expect(host?.textContent).toContain("원천을 읽지 못했습니다");
+});
+
+it("로그인 필요도 그림 자리 안에 그린다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { expr: "$state.src" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "login_required", permission: "media" } } } }));
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view.is-failed");
+  expect(host).toBeTruthy();
+  expect(host?.textContent).toContain("로그인이 필요합니다");
+});
+
 it("미디어의 폴더 미선택 오류에서 합성 선택을 막는다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { permission: "docs", path: "file.wav" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));

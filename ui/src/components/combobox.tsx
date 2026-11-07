@@ -84,7 +84,16 @@ export function Combobox({ inputProps, inputRef, options, ready, loading = false
   const layout = useComboboxLayout(open ? anchor : null, surface, options, loading, close, activeOption?.description);
   const activeId = activeOption && rows.some((row) => row.index === index) ? `${id}-option-${activeOption.index}` : undefined;
   useLayoutEffect(() => { if (open && index >= 0) virtual.scrollToIndex(index, { align: "auto" }); }, [open, index, virtual]);
-  const choose = useCallback((option: InputOption) => { selectAfterChoose.current = optionsOnly; chooseRef.current(option.value); close(); }, [optionsOnly, close]);
+  const choose = useCallback((option: InputOption) => {
+    selectAfterChoose.current = optionsOnly;
+    if (surface.current?.contains(document.activeElement)) {
+      suppressFocus.current = true;
+      try { anchor?.focus({ preventScroll: true }); }
+      finally { suppressFocus.current = false; }
+    }
+    chooseRef.current(option.value);
+    close();
+  }, [optionsOnly, close, anchor]);
   useLayoutEffect(() => {
     if (!selectAfterChoose.current) return;
     selectAfterChoose.current = false;

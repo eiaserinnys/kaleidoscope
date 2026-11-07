@@ -475,6 +475,55 @@ it("앱 배지 변경은 해당 타일과 앱 열기 단추만 갱신한다", as
   store.dispose();
 });
 
+async function addDesktopShortcuts(store: ReturnType<typeof createShellStore>, transport: ReturnType<typeof createFakeTransport>, definitions: AppDefinition[]) {
+  const current = store.getSnapshot()!;
+  const now = "2026-11-07T00:00:00Z";
+  const shortcuts = definitions.map((app, column) => ({
+    id: `desktop-1/${app.id}`, desktop_id: "desktop-1", app_id: app.id, column, row: 0, created_at: now, updated_at: now,
+  }));
+  await act(async () => transport.emit({
+    event: "state.changed",
+    snapshot: { ...current, shared: { ...current.shared, desktop_shortcuts: shortcuts } },
+  }));
+  await settleRenders();
+}
+
+it("바탕화면 아이콘은 창을 올리거나 옮겨도 다시 그리지 않는다", async () => {
+  const { store, transport } = await setup([definition, whenDefinition]);
+  tileRenders.clear();
+  await addDesktopShortcuts(store, transport, [definition, whenDefinition]);
+  expect(tileRenders.get(definition.name)).toBe(1);
+  expect(tileRenders.get(whenDefinition.name)).toBe(1);
+  tileRenders.clear(); frameRenders.count = 0;
+
+  await act(async () => { await store.call({ op: "window.raise", window_id: "window-b" }); });
+  for (let frame = 0; frame < 5; frame += 1) {
+    await act(async () => {
+      await store.call({ op: "window.set_rect", window_id: "window-a", rect: { x: 20 + frame, y: 30 + frame, width: 620, height: 400 } });
+    });
+  }
+  await settleRenders();
+
+  expect(tileRenders.size).toBe(0);
+  store.dispose();
+});
+
+it("바탕화면 아이콘 배지는 해당 타일만 다시 그린다", async () => {
+  const { store, transport } = await setup([definition, whenDefinition]);
+  await addDesktopShortcuts(store, transport, [definition, whenDefinition]);
+  tileRenders.clear(); frameRenders.count = 0;
+
+  const current = store.getSnapshot()!;
+  await act(async () => transport.emit({ event: "state.changed", snapshot: { ...current, app_badges: { [definition.id]: 1 } } }));
+  await settleRenders();
+
+  expect(screen.getByRole("button", { name: `${definition.name}, 알림 1개` })).toBeTruthy();
+  expect(tileRenders.get(definition.name)).toBe(1);
+  expect(tileRenders.get(whenDefinition.name) ?? 0).toBe(0);
+  expect(frameRenders.count).toBe(0);
+  store.dispose();
+});
+
 it("커멘트 종료는 내용 칸 초점만 해제하고 행 초점은 유지한다", async () => {
   const { store } = await setup();
   const first = document.querySelector<HTMLElement>('[data-window-id="window-a"]')!.closest<HTMLElement>(".ks-window")!;

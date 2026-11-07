@@ -32,6 +32,13 @@ export function filterInputOptions(options: InputOption[], query: string): Input
   return normalized ? options.filter((option) => option.searchValue.includes(normalized) || option.searchLabel.includes(normalized)) : options;
 }
 
+export function resolveInputOption(options: InputOption[], text: string): string | null {
+  const value = options.find((option) => option.value === text);
+  if (value) return value.value;
+  const key = text.trim().toLowerCase();
+  return options.find((option) => option.searchValue === key || option.searchLabel === key)?.value ?? null;
+}
+
 export function inputOptionsError(failure: InputOptionsFailure) {
   const args = { index: String(failure.index), key: failure.key, received: failure.received };
   switch (failure.reason) {

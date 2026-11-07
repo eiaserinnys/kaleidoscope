@@ -201,6 +201,14 @@ export function Shell({ store }: { store: ShellStore }) {
     </SystemWindow>,
   } : undefined;
 
+  const selectApp = useCallback((appId: string) => {
+    const latest = store.getSnapshot();
+    const workspace = latest ? selectWorkspace(latest) : undefined;
+    const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
+    if (!latest || !desktop) return;
+    void runCommand({ op: "window.open", desktop_id: desktop.id, app_id: appId, rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, appId)) });
+  }, [newWindowRect, runCommand, store]);
+
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
@@ -226,13 +234,6 @@ export function Shell({ store }: { store: ShellStore }) {
   const openAppMenu = (anchor: HTMLElement) => {
     closeMenu();
     setLauncher((current) => current?.anchor === anchor ? null : { anchor });
-  };
-  const selectApp = (appId: string) => {
-    const latest = store.getSnapshot();
-    const workspace = latest ? selectWorkspace(latest) : undefined;
-    const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
-    if (!latest || !desktop) return;
-    void runCommand({ op: "window.open", desktop_id: desktop.id, app_id: appId, rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, appId)) });
   };
 
   const openWorkspaceMenu = (anchor: HTMLElement) => {
@@ -418,6 +419,7 @@ export function Shell({ store }: { store: ShellStore }) {
         launcherOpen={launcher !== null}
         onAreaChange={reportArea}
         onCall={runCommand}
+        onOpenApp={selectApp}
         onOpenApps={openAppMenu}
         windowActions={windowActions}
         onChooseAgent={(anchor) => openSettings(anchor, "agent")}
@@ -427,7 +429,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
-      {launcher ? <AppLauncher store={store} anchor={launcher.anchor} onClose={closeLauncher} onSelect={selectApp} /> : null}
+      {launcher ? <AppLauncher store={store} anchor={launcher.anchor} activeDesktopId={activeDesktop.id} onCall={runCommand} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}

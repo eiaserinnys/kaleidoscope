@@ -1,0 +1,423 @@
+{
+  "id": "bare-layout-edges-1063",
+  "name": "구역 없는 배치 끝선",
+  "description": "몸통 스크롤바가 생길 때 구역·입력·글·단추의 오른쪽 끝이 움직이는지, 보상이 닿으면 안 되는 부모가 그대로인지 잰다",
+  "requires": {
+    "blocks": 42,
+    "modules": {}
+  },
+  "permissions": [],
+  "state": {
+    "직접 입력": "",
+    "메시지": "",
+    "중첩 입력": "",
+    "깊은 입력": "",
+    "구역 안 중첩 입력": "",
+    "반복 구역 입력": "",
+    "가상 반복 입력": "",
+    "탭 입력": "",
+    "분할 왼쪽 입력": "",
+    "구역 안 구역 입력": "",
+    "대화상자 입력": "",
+    "dlg": false
+  },
+  "window_size": {
+    "width": 480,
+    "height": 360
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "gap": "medium",
+    "fill": [],
+    "children": [
+      {
+        "type": "text",
+        "value": "몸통 글: 구역 없이 몸통에 바로 놓인 글도 몸통 스크롤바가 생기면 오른쪽 끝이 움직이지 않아야 한다."
+      },
+      {
+        "type": "input",
+        "placeholder": "직접 입력",
+        "value": {
+          "state": "직접 입력"
+        },
+        "on_change": {
+          "set_state": "직접 입력"
+        }
+      },
+      {
+        "type": "button",
+        "label": "굵게",
+        "variant": "row",
+        "icon": "copy",
+        "on_click": {
+          "copy_text": "굵게"
+        }
+      },
+      {
+        "type": "stack",
+        "direction": "row",
+        "gap": "small",
+        "fill": [0],
+        "children": [
+          {
+            "type": "input",
+            "placeholder": "메시지",
+            "value": {
+              "state": "메시지"
+            },
+            "on_change": {
+              "set_state": "메시지"
+            }
+          },
+          {
+            "type": "button",
+            "label": "보내기",
+            "on_click": {
+              "copy_text": "보내기"
+            }
+          }
+        ]
+      },
+      {
+        "type": "stack",
+        "direction": "column",
+        "gap": "small",
+        "fill": [],
+        "children": [
+          {
+            "type": "input",
+            "placeholder": "중첩 입력",
+            "value": {
+              "state": "중첩 입력"
+            },
+            "on_change": {
+              "set_state": "중첩 입력"
+            }
+          },
+          {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "fill": [],
+            "children": [
+              {
+                "type": "input",
+                "placeholder": "깊은 입력",
+                "value": {
+                  "state": "깊은 입력"
+                },
+                "on_change": {
+                  "set_state": "깊은 입력"
+                }
+              }
+            ]
+          },
+          {
+            "type": "section",
+            "title": "중첩 구역",
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "small",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "중첩 구역 안쪽 글: 세로 쌓기가 겹친 자리에 놓인 구역도 오른쪽 끝이 몸통 끝이다."
+                },
+                {
+                  "type": "input",
+                  "placeholder": "구역 안 중첩 입력",
+                  "value": {
+                    "state": "구역 안 중첩 입력"
+                  },
+                  "on_change": {
+                    "set_state": "구역 안 중첩 입력"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "repeat",
+        "items": [
+          { "key": "0" },
+          { "key": "1" },
+          { "key": "2" }
+        ],
+        "key": "key",
+        "layout": "column",
+        "gap": "small",
+        "template": {
+          "type": "section",
+          "title": "반복 구역",
+          "child": {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "children": [
+              {
+                "type": "text",
+                "value": "세로 반복의 구역도 오른쪽 끝이 몸통 끝이다."
+              },
+              {
+                "type": "input",
+                "placeholder": "반복 구역 입력",
+                "value": {
+                  "state": "반복 구역 입력"
+                },
+                "on_change": {
+                  "set_state": "반복 구역 입력"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "repeat",
+        "items": [
+          { "key": "0" },
+          { "key": "1" },
+          { "key": "2" }
+        ],
+        "key": "key",
+        "layout": "row",
+        "gap": "small",
+        "template": {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "text",
+              "value": "가로 반복 칸"
+            }
+          ]
+        }
+      },
+      {
+        "type": "repeat",
+        "items": [
+          { "key": "0" },
+          { "key": "1" },
+          { "key": "2" },
+          { "key": "3" }
+        ],
+        "key": "key",
+        "layout": "column",
+        "gap": "small",
+        "virtual": true,
+        "template": {
+          "type": "section",
+          "title": "가상 반복 구역",
+          "child": {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "children": [
+              {
+                "type": "input",
+                "placeholder": "가상 반복 입력",
+                "value": {
+                  "state": "가상 반복 입력"
+                },
+                "on_change": {
+                  "set_state": "가상 반복 입력"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "stack",
+        "direction": "column",
+        "gap": "small",
+        "align": "start",
+        "children": [
+          {
+            "type": "text",
+            "value": "정렬 조상"
+          },
+          {
+            "type": "button",
+            "label": "왼쪽 단추",
+            "on_click": {
+              "copy_text": "왼쪽 단추"
+            }
+          }
+        ]
+      },
+      {
+        "type": "stack",
+        "direction": "column",
+        "gap": "small",
+        "place": "center",
+        "children": [
+          {
+            "type": "text",
+            "value": "가운데 자리 글"
+          },
+          {
+            "type": "button",
+            "label": "가운데 단추",
+            "on_click": {
+              "copy_text": "가운데 단추"
+            }
+          }
+        ]
+      },
+      {
+        "type": "tabs",
+        "tabs": [
+          {
+            "label": "비고",
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "small",
+              "children": [
+                {
+                  "type": "input",
+                  "placeholder": "탭 입력",
+                  "value": {
+                    "state": "탭 입력"
+                  },
+                  "on_change": {
+                    "set_state": "탭 입력"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "split",
+        "direction": "row",
+        "sizes": [1, 1],
+        "children": [
+          {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "children": [
+              {
+                "type": "input",
+                "placeholder": "분할 왼쪽 입력",
+                "value": {
+                  "state": "분할 왼쪽 입력"
+                },
+                "on_change": {
+                  "set_state": "분할 왼쪽 입력"
+                }
+              }
+            ]
+          },
+          {
+            "type": "stack",
+            "direction": "column",
+            "gap": "small",
+            "children": [
+              {
+                "type": "text",
+                "value": "분할 오른쪽"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "section",
+        "title": "바깥 구역",
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "section",
+              "title": "안쪽 구역",
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "small",
+                "children": [
+                  {
+                    "type": "input",
+                    "placeholder": "구역 안 구역 입력",
+                    "value": {
+                      "state": "구역 안 구역 입력"
+                    },
+                    "on_change": {
+                      "set_state": "구역 안 구역 입력"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "properties",
+        "fields": [
+          { "label": "이름", "value": "값" },
+          { "label": "상태", "value": "진행" }
+        ]
+      },
+      {
+        "type": "dialog",
+        "open": {
+          "state": "dlg"
+        },
+        "title": "대화상자",
+        "on_close": [
+          {
+            "set_state": "dlg",
+            "value": false
+          }
+        ],
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "input",
+              "placeholder": "대화상자 입력",
+              "value": {
+                "state": "대화상자 입력"
+              },
+              "on_change": {
+                "set_state": "대화상자 입력"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "text",
+        "value": "채움 글 1: 창 폭이 좁아지면 이 글은 여러 줄로 접히며 높이가 늘어난다. 몸통이 스크롤하는 상태를 만들기 위한 글이다."
+      },
+      {
+        "type": "text",
+        "value": "채움 글 2: 창 폭이 좁아지면 이 글은 여러 줄로 접히며 높이가 늘어난다. 몸통이 스크롤하는 상태를 만들기 위한 글이다."
+      },
+      {
+        "type": "text",
+        "value": "채움 글 3: 창 폭이 좁아지면 이 글은 여러 줄로 접히며 높이가 늘어난다. 몸통이 스크롤하는 상태를 만들기 위한 글이다."
+      },
+      {
+        "type": "button",
+        "label": "저장",
+        "on_click": {
+          "copy_text": "저장"
+        }
+      }
+    ]
+  }
+}

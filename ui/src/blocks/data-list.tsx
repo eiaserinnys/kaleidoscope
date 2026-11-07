@@ -14,7 +14,7 @@ import { useLoadMore } from "./load-more";
 import type { BindingMore } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
-import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, listGroups, isObject, keepRovingRow, useRoving, useVirtualRows, type ListGroup } from "./data-view-common";
+import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, listGroups, isObject, keepRovingRow, useRoving, useScrollbarFlapHold, useVirtualRows, type ListGroup } from "./data-view-common";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
 import { ICON_NAMES } from "../contract/limits";
@@ -149,6 +149,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     return result;
   }, [grouped, items.length, block.grouped, activeColumns]);
   const rowKeys = useMemo(() => rows.map((row) => row.kind === "items" ? row.items.map((item) => item.key) : []), [rows]);
+  useScrollbarFlapHold(scroll, grid, rows.length);
   const [headingHeight, setHeadingHeight] = useState(0);
   useLayoutEffect(() => {
     if (!block.grouped || !scroll.current) return;

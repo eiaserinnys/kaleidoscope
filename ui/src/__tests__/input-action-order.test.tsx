@@ -253,3 +253,26 @@ it.each([
   await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.saved).toBe(nextValue));
   expect(spy.mock.calls.filter(([r]) => r.op === "data.act" && r.pointer.endsWith("on_change") && r.event === nextValue)).toHaveLength(1);
 });
+
+it("이름이 보이는 목록 전용에서 고치지 않고 Enter를 누르면 제출은 값을 받는다", async () => {
+  const definition: AppDefinition = {
+    ...mdEditorDefinition, requires: { blocks: 4, modules: {} },
+    state: { draft: "code-77", saved: "" },
+    ui: { type: "stack", direction: "column", children: [
+      { type: "input", placeholder: "선택", value: { state: "draft" }, on_change: { set_state: "draft" }, on_submit: [{ set_state: "saved", value: { expr: "$state.draft" } }], options: [{ value: "code-77", label: "Zombie 마지막" }], options_only: true },
+    ] },
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { ...definition.state };
+  const transport = createFakeTransport(seed);
+  const spy = vi.spyOn(transport, "call");
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="editor-window" />);
+  const input = await screen.findByPlaceholderText("선택") as HTMLInputElement;
+  expect(input.value).toBe("Zombie 마지막");
+  fireEvent.focus(input);
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe("code-77"));
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(spy.mock.calls.some(([request]) => request.op === "data.act" && request.pointer.endsWith("on_submit") && request.event === "code-77")).toBe(true));
+});

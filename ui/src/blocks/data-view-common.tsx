@@ -37,6 +37,40 @@ export function dateText(value: unknown) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
 }
+// 스크롤 막대가 나타나면 칸 폭이 줄어 행 높이가 달라지고, 다시 막대가 사라지는 왕복이 이어진다.
+// 짧은 시간에 세 번 왕복하면 스크롤 막대를 남겨 왕복을 끊는다. 다시 그리지 않도록 요소 스타일만 고친다.
+const FLAP_WINDOW_MS = 500;
+const FLAP_LIMIT = 3;
+export function useScrollbarFlapHold(scroll: RefObject<HTMLDivElement | null>, enabled: boolean, marker: number) {
+  useEffect(() => {
+    const element = scroll.current;
+    if (!enabled || !element) return;
+    let outerWidth = element.offsetWidth;
+    let outerHeight = element.offsetHeight;
+    let clientWidth = element.clientWidth;
+    let flips = 0;
+    let last = 0;
+    const observer = new ResizeObserver(() => {
+      const width = element.offsetWidth;
+      const height = element.offsetHeight;
+      if (width !== outerWidth || height !== outerHeight) {
+        // 창이나 칸 자체가 바뀌면 왕복이 아니라 배치 변경이다.
+        outerWidth = width; outerHeight = height; clientWidth = element.clientWidth;
+        flips = 0; last = 0; element.style.overflowY = "";
+        return;
+      }
+      const current = element.clientWidth;
+      if (current === clientWidth) return;
+      clientWidth = current;
+      const now = Date.now();
+      flips = now - last <= FLAP_WINDOW_MS ? flips + 1 : 1;
+      last = now;
+      if (flips >= FLAP_LIMIT) element.style.overflowY = "scroll";
+    });
+    observer.observe(element);
+    return () => { observer.disconnect(); element.style.overflowY = ""; };
+  }, [scroll, enabled, marker]);
+}
 type RowKeys = readonly (readonly (string | number)[])[];
 export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false, getItemKey?: (index: number) => string | number, viewport?: { element: HTMLDivElement; margin: number } | null, rowKeys?: RowKeys, scrollPadding?: { start: number; end: number }) {
   const local = useRef<HTMLDivElement>(null);
