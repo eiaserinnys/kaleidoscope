@@ -734,7 +734,7 @@ export class WindowData {
       const problem = toCoreError(error);
       const shown = label ? { ...problem, message: `${label}: ${problem.message}` } : problem;
       // 같은 문구로 다시 실패해도 화면 읽기 도구가 새 알림으로 읽도록 알림을 새로 그린다.
-      if (this.actionFailure?.pointer === pointer) this.noticeRevision += 1;
+      if (!options?.input && this.actionFailure?.pointer === pointer) this.noticeRevision += 1;
       this.actionFailure = { pointer, problem: shown, retrying: false };
       this.setNotice(shown);
       return false;
