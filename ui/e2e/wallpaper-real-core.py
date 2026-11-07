@@ -134,6 +134,21 @@ night_record = upload(night["id"], night_png, "night.png")
 scroll_settings()
 page.screenshot(path=str(sb.out / "settings-wide-light-night.png"))
 
+page.set_viewport_size({"width": 760, "height": 680})
+page.wait_for_timeout(300)
+scroll_settings()
+page.screenshot(path=str(sb.out / "settings-narrow-light.png"))
+page.emulate_media(color_scheme="dark")
+page.wait_for_timeout(400)
+scroll_settings()
+page.screenshot(path=str(sb.out / "settings-narrow-dark.png"))
+page.set_viewport_size({"width": 1440, "height": 900})
+page.wait_for_timeout(400)
+scroll_settings()
+page.screenshot(path=str(sb.out / "settings-wide-dark.png"))
+page.emulate_media(color_scheme="light")
+page.wait_for_timeout(300)
+
 # 올리는 동안의 화면은 요청을 붙잡아, 실패한 화면은 서버가 받지 않는 그림으로 재현한다.
 held = []
 seen = []
@@ -185,21 +200,6 @@ wait_idle()
        const input = document.querySelector('input[aria-label="배경 그림 파일"]');
        return input ? { disabled: input.disabled, files: input.files.length, type: input.type } : null;
      }""")}, ensure_ascii=False, indent=2), encoding="utf-8")
-
-page.set_viewport_size({"width": 760, "height": 680})
-page.wait_for_timeout(300)
-scroll_settings()
-page.screenshot(path=str(sb.out / "settings-narrow-light.png"))
-page.emulate_media(color_scheme="dark")
-page.wait_for_timeout(400)
-scroll_settings()
-page.screenshot(path=str(sb.out / "settings-narrow-dark.png"))
-page.set_viewport_size({"width": 1440, "height": 900})
-page.wait_for_timeout(400)
-scroll_settings()
-page.screenshot(path=str(sb.out / "settings-wide-dark.png"))
-page.emulate_media(color_scheme="light")
-page.wait_for_timeout(300)
 
 APP_ID = "wallpaper-window"
 page.get_by_test_id("system-window-settings").get_by_role("button", name="창 닫기").click()
