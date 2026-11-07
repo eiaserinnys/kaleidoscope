@@ -36,19 +36,35 @@ fn form(app: Vec<u8>, store: Vec<u8>, extra: Option<(&str, Vec<u8>)>) -> Form {
     f
 }
 async fn start(dir: &Path) -> (String, tokio::task::JoinHandle<()>) {
+    start_with_invite(dir, None).await
+}
+async fn start_with_invite(
+    dir: &Path,
+    invite: Option<&str>,
+) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = format!("http://{}", listener.local_addr().unwrap());
-    let router = kaleidoscope_store_server::router(dir.to_owned());
+    let router = kaleidoscope_store_server::router_with_invite(
+        dir.to_owned(),
+        invite.map(str::to_owned),
+    );
     let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     (address, task)
 }
 async fn publish(client: &Client, base: &str, form: Form) -> (StatusCode, Value) {
-    let r = client
-        .post(format!("{base}/publish"))
-        .multipart(form)
-        .send()
-        .await
-        .unwrap();
+    publish_with_header(client, base, form, None).await
+}
+async fn publish_with_header(
+    client: &Client,
+    base: &str,
+    form: Form,
+    invite: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut request = client.post(format!("{base}/publish")).multipart(form);
+    if let Some(invite) = invite {
+        request = request.header("x-kaleidoscope-invite", invite);
+    }
+    let r = request.send().await.unwrap();
     let status = r.status();
     (status, r.json().await.unwrap())
 }
@@ -63,6 +79,72 @@ async fn get(client: &Client, base: &str, path: &str) -> Value {
         .json()
         .await
         .unwrap()
+}
+
+#[tokio::test]
+async fn invite_header_guards_reads_and_direct_publish() {
+    let dir = TempDir::new().unwrap();
+    let invite = "8e307891-fd5a-4d75-be0f-a80ab5df0602";
+    let (base, _task) = start_with_invite(dir.path(), Some(invite)).await;
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap();
+    let wrong = "00000000-0000-0000-0000-000000000000";
+    for path in ["index.json", "apps/example/index.json"] {
+        let missing = client.get(format!("{base}/{path}")).send().await.unwrap();
+        assert_eq!(missing.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            missing.json::<Value>().await.unwrap()["id"],
+            "STORESERVER_AUTH_INVITE_INVALID"
+        );
+        let rejected = client
+            .get(format!("{base}/{path}"))
+            .header("x-kaleidoscope-invite", wrong)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            rejected.json::<Value>().await.unwrap()["id"],
+            "STORESERVER_AUTH_INVITE_INVALID"
+        );
+    }
+    for invite_header in [None, Some(wrong)] {
+        let (status, error) = publish_with_header(
+            &client,
+            &base,
+            form(app("보기"), store("요약"), None),
+            invite_header,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(error["id"], "STORESERVER_AUTH_INVITE_INVALID");
+    }
+    let header = "  8E307891-FD5A-4D75-BE0F-A80AB5DF0602 ";
+    let (status, result) = publish_with_header(
+        &client,
+        &base,
+        form(app("보기"), store("요약"), None),
+        Some(header),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(result["release"], 1);
+    let index = client
+        .get(format!("{base}/index.json"))
+        .header("x-kaleidoscope-invite", header)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(index.status(), StatusCode::OK);
+    let detail = client
+        .get(format!("{base}/apps/example/index.json"))
+        .header("x-kaleidoscope-invite", header)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(detail.status(), StatusCode::OK);
 }
 
 #[tokio::test]

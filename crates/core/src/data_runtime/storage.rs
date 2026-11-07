@@ -33,6 +33,18 @@ pub(super) struct MetaSlot {
     needed: bool,
 }
 
+/// 창의 저장 항목에 지금 실린 값을 읽는다. 아직 읽지 않았거나 실패했으면 None.
+pub(super) fn value(inner: &Inner, window: &str, entry: &str) -> Option<serde_json::Value> {
+    let windows = inner.data_runtimes.windows.lock().unwrap();
+    windows
+        .get(window)?
+        .storage
+        .get(entry)?
+        .value
+        .as_ref()
+        .map(|value| value.content.clone())
+}
+
 pub(super) fn initial_slots(definition: &AppDefinition) -> (BTreeMap<String, Slot>, MetaSlot) {
     let mut names = BTreeSet::new();
     let mut meta = false;
@@ -530,11 +542,13 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
         let window = window.to_string();
         thread::spawn(move || {
             let result = crate::app_storage::read(&inner, &window, &entry);
-            let pending = {
+            let (pending, invites) = {
                 let mut windows = inner.data_runtimes.windows.lock().unwrap();
                 let Some(runtime) = windows.get_mut(&window) else {
                     return;
                 };
+                let store_invites =
+                    runtime.definition.id == "store" && entry == "invites";
                 let Some(slot) = runtime.storage.get_mut(&entry) else {
                     return;
                 };
@@ -542,10 +556,12 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                     return;
                 }
                 slot.in_flight = false;
-                match result {
+                let invites = match result {
                     Ok(value) => {
+                        let invites = store_invites.then(|| value.content.clone());
                         slot.value = Some(value);
                         slot.status = Status::Ready;
+                        invites
                     }
                     Err(err) => {
                         slot.value = None;
@@ -553,11 +569,18 @@ pub(super) fn load(inner: &Arc<Inner>, window: &str, selected: Option<&str>) {
                             message: err.message,
                             id: err.id,
                         };
+                        None
                     }
-                }
-                replan(&inner, &window, runtime, Some(&entry))
+                };
+                (
+                    replan(&inner, &window, runtime, Some(&entry)),
+                    invites,
+                )
             };
             jobs(&inner, pending);
+            if let Some(value) = invites {
+                crate::store::sync_store_invites(&inner, &value);
+            }
             inner.layout_signal.notify();
         });
     }
@@ -608,11 +631,12 @@ pub(super) fn written(
     content: Value,
     revision: String,
 ) {
-    let pending = {
+    let (pending, invites, refresh) = {
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         let Some(runtime) = windows.get_mut(window) else {
             return;
         };
+        let store_app = runtime.definition.id == "store";
         let kind = match runtime
             .definition
             .storage
@@ -625,6 +649,8 @@ pub(super) fn written(
         let Some(slot) = runtime.storage.get_mut(entry) else {
             return;
         };
+        let invites = (store_app && entry == "invites").then(|| content.clone());
+        let refresh = store_app && matches!(entry, "servers" | "custom_url");
         let value = StorageReadReply {
             kind,
             content,
@@ -639,9 +665,18 @@ pub(super) fn written(
         slot.in_flight = false;
         slot.value = Some(value);
         slot.status = Status::Ready;
-        replan(inner, window, runtime, Some(entry))
+        (
+            replan(inner, window, runtime, Some(entry)),
+            invites,
+            refresh,
+        )
     };
     jobs(inner, pending);
+    if let Some(value) = invites {
+        crate::store::sync_store_invites(inner, &value);
+    } else if refresh {
+        crate::data_runtime::store_servers_changed(inner);
+    }
     inner.layout_signal.notify();
 }
 

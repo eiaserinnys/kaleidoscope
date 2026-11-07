@@ -10,12 +10,13 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) struct AllowedServerTransport;
 
-impl Transport for AllowedServerTransport {
-    fn get(
+impl AllowedServerTransport {
+    fn request(
         &self,
         origin: &str,
         paths: &[String],
         path: &str,
+        invite: Option<&str>,
         limit: u64,
     ) -> Result<PublicResponse, PublicHttpError> {
         if !kaleidoscope_contract::validate::allowed_public_http_path(paths, path) {
@@ -28,8 +29,11 @@ impl Transport for AllowedServerTransport {
             .timeout(REQUEST_TIMEOUT)
             .build()
             .map_err(|error| PublicHttpError::Transport(error.to_string()))?;
-        let mut response = client
-            .get(format!("{origin}{path}"))
+        let mut request = client.get(format!("{origin}{path}"));
+        if let Some(invite) = invite {
+            request = request.header(super::fetch::INVITE_HEADER, invite);
+        }
+        let mut response = request
             .send()
             .map_err(|error| PublicHttpError::Transport(error.without_url().to_string()))?;
         let status = response.status().as_u16();
@@ -68,5 +72,28 @@ impl Transport for AllowedServerTransport {
             mime,
             bytes,
         })
+    }
+}
+
+impl Transport for AllowedServerTransport {
+    fn get(
+        &self,
+        origin: &str,
+        paths: &[String],
+        path: &str,
+        limit: u64,
+    ) -> Result<PublicResponse, PublicHttpError> {
+        self.request(origin, paths, path, None, limit)
+    }
+
+    fn get_with_invite(
+        &self,
+        origin: &str,
+        paths: &[String],
+        path: &str,
+        invite: &str,
+        limit: u64,
+    ) -> Result<PublicResponse, PublicHttpError> {
+        self.request(origin, paths, path, Some(invite), limit)
     }
 }

@@ -126,6 +126,10 @@ error_catalog! { ENTRIES;
         class: InvalidRequest, place: "스토어 파일 읽기", cause: "다른 주소로 이동한다",
         message: "스토어 파일 {target}이 다른 주소로 이동합니다. 이동 없이 파일을 주는 주소를 사용하세요.", fix: "이동 없는 주소를 사용하세요"
     }
+    STORECLIENT_FETCH_INVITE_REJECTED(target) {
+        class: Unauthorized, place: "스토어 파일 읽기", cause: "초대코드가 없거나 맞지 않는다",
+        message: "스토어가 초대코드를 확인하지 못해 {target} 요청을 거부했습니다. 스토어 설정의 초대코드를 확인하세요.", fix: "스토어 초대코드를 확인하세요"
+    }
     STORECLIENT_FETCH_NOT_FOUND(target) {
         class: NotFound, place: "스토어 파일 읽기", cause: "파일이 없다",
         message: "스토어에서 {target}을 찾지 못했습니다. 목록을 새로 읽거나 앱 ID와 판을 확인하세요.", fix: "앱 ID와 판을 확인하세요"

@@ -751,6 +751,9 @@ pub struct DeviceState {
     // 이 기기에서 접근을 허용한 정규화된 스토어 주소.
     #[serde(default)]
     pub store_servers: Vec<String>,
+    /// 정규화된 스토어 주소 → 사설 스토어 초대코드. 주소와 코드 모두 소문자로 맞춘다.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub store_invites: BTreeMap<String, String>,
 }
 
 /// (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.

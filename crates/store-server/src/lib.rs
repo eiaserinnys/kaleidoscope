@@ -4,7 +4,7 @@ mod validation;
 use axum::{
     body::{to_bytes, Body},
     extract::{DefaultBodyLimit, FromRequest, Multipart, Path, Request, State},
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -17,10 +17,14 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+/// 사설 스토어 초대코드를 담는 요청 헤더 이름.
+pub const INVITE_HEADER: &str = "x-kaleidoscope-invite";
+
 #[derive(Clone)]
 struct AppState {
     dir: PathBuf,
     publish_lock: Arc<Mutex<()>>,
+    invite: Option<String>,
 }
 struct Failure(StatusCode, CoreError);
 impl IntoResponse for Failure {
@@ -34,10 +38,18 @@ pub fn initialize(dir: &FsPath) -> Result<(), CoreError> {
     storage::initialize(dir)
 }
 pub fn router(dir: PathBuf) -> Router {
+    router_with_invite(dir, None)
+}
+/// `invite`가 있으면 읽기와 직접 게시 요청에 초대코드 헤더를 요구한다.
+pub fn router_with_invite(dir: PathBuf, invite: Option<String>) -> Router {
     initialize(&dir).expect("스토어 자료 폴더 준비");
+    let invite = invite
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty());
     let state = AppState {
         dir,
         publish_lock: Arc::new(Mutex::new(())),
+        invite,
     };
     Router::new()
         .route("/index.json", get(index))
@@ -47,10 +59,29 @@ pub fn router(dir: PathBuf) -> Router {
         .layer(DefaultBodyLimit::disable())
         .with_state(state)
 }
+fn check_invite(state: &AppState, headers: &HeaderMap) -> Result<(), Failure> {
+    let Some(expected) = state.invite.as_deref() else {
+        return Ok(());
+    };
+    let actual = headers
+        .get(INVITE_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.trim().to_ascii_lowercase());
+    if actual.as_deref() == Some(expected) {
+        Ok(())
+    } else {
+        Err(Failure(
+            StatusCode::FORBIDDEN,
+            e::STORESERVER_AUTH_INVITE_INVALID(),
+        ))
+    }
+}
 async fn publish(
     State(state): State<AppState>,
+    headers: HeaderMap,
     request: Request,
 ) -> ResultResponse<impl IntoResponse> {
+    check_invite(&state, &headers)?;
     let (parts, body) = request.into_parts();
     let bytes = to_bytes(body, 22 * 1024 * 1024).await.map_err(|_| {
         Failure(
@@ -143,13 +174,16 @@ async fn publish(
         Json(response),
     ))
 }
-async fn index(State(state): State<AppState>) -> ResultResponse<Response> {
+async fn index(State(state): State<AppState>, headers: HeaderMap) -> ResultResponse<Response> {
+    check_invite(&state, &headers)?;
     read(&state, "index.json")
 }
 async fn app_file(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(path): Path<String>,
 ) -> ResultResponse<Response> {
+    check_invite(&state, &headers)?;
     if validation::secret_path(&path) {
         return Err(Failure(
             StatusCode::BAD_REQUEST,

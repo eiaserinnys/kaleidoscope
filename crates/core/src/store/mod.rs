@@ -20,16 +20,106 @@ pub(crate) use media::{media_key, read_media};
 pub(crate) fn client(inner: &crate::Inner, server: &str) -> Result<StoreClient<std::sync::Arc<dyn fetch::Transport>>, CoreError> {
     let server = StoreUrl::parse(server)?;
     let allowed = authorize(&server, &inner.state.lock().unwrap().device.store_servers)?;
+    let invite = invite_for_server(inner, &server);
     #[cfg(test)]
     if let Some(transport) = inner.store_transport.lock().unwrap().clone() {
-        return Ok(StoreClient::new(server, transport));
+        return Ok(StoreClient::new(server, transport).with_invite(invite));
     }
     let transport: std::sync::Arc<dyn fetch::Transport> = if allowed {
         std::sync::Arc::new(transport::AllowedServerTransport)
     } else {
         std::sync::Arc::new(fetch::PublicTransport)
     };
-    Ok(StoreClient::new(server, transport))
+    Ok(StoreClient::new(server, transport).with_invite(invite))
+}
+
+/// 설정 앱이 연 `invites` 값을 먼저 읽고, 없으면 기기에 저장한 값을 읽는다.
+pub(crate) fn invite_for_server(inner: &crate::Inner, server: &StoreUrl) -> Option<String> {
+    let windows: Vec<String> = inner
+        .state
+        .lock()
+        .unwrap()
+        .shared
+        .windows
+        .iter()
+        .filter(|window| window.app_id == "store")
+        .map(|window| window.id.clone())
+        .collect();
+    for window in windows {
+        if let Some(value) = crate::data_runtime::storage_value(inner, &window, "invites") {
+            if let Some(invite) = parse_store_invites(&value).get(server.as_str()) {
+                return Some(invite.clone());
+            }
+        }
+    }
+    inner
+        .state
+        .lock()
+        .unwrap()
+        .device
+        .store_invites
+        .get(server.as_str())
+        .cloned()
+}
+
+/// 사설 스토어 초대코드 값을 `주소 → 코드`로 정리한다.
+/// `[{"server","invite"}]` 배열과 `{주소: 코드}` 객체를 모두 받는다.
+pub(crate) fn parse_store_invites(value: &serde_json::Value) -> BTreeMap<String, String> {
+    let mut invites = BTreeMap::new();
+    let mut insert = |server: Option<&str>, invite: Option<&str>| {
+        let (Some(server), Some(invite)) = (server, invite) else {
+            return;
+        };
+        let Ok(server) = StoreUrl::parse(server) else {
+            return;
+        };
+        let invite = invite.trim().to_ascii_lowercase();
+        if invite.is_empty() {
+            return;
+        }
+        invites.insert(server.as_str().to_string(), invite);
+    };
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                insert(
+                    item.get("server").and_then(serde_json::Value::as_str),
+                    item.get("invite").and_then(serde_json::Value::as_str),
+                );
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (server, invite) in map {
+                insert(Some(server), invite.as_str());
+            }
+        }
+        _ => {}
+    }
+    invites
+}
+
+/// 설정 앱이 저장한 초대코드를 기기 상태에 반영하고, 바뀌면 스토어 원천을 다시 읽는다.
+pub(crate) fn sync_store_invites(inner: &std::sync::Arc<crate::Inner>, value: &serde_json::Value) {
+    let invites = parse_store_invites(value);
+    let changed = {
+        let mut state = inner.state.lock().unwrap();
+        if state.device.store_invites == invites {
+            false
+        } else {
+            let previous = std::mem::replace(&mut state.device.store_invites, invites);
+            if inner
+                .save_state_locked(&state, false, true, false)
+                .is_err()
+            {
+                state.device.store_invites = previous;
+                return;
+            }
+            true
+        }
+    };
+    if changed {
+        crate::data_runtime::store_servers_changed(inner);
+    }
 }
 
 /// 목록에 있으면 전용 전송, 공개 형식이면 기존 공개 전송을 고른다.
