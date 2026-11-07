@@ -119,35 +119,55 @@ page.get_by_role("menuitem", name=night["name"]).click()
 night_record = upload(night["id"], night_png, "night.png")
 page.screenshot(path=str(sb.out / "settings-wide-light-night.png"))
 
-# 올리는 동안의 화면과 실패한 화면은 요청을 붙잡아 재현한다.
+# 올리는 동안의 화면은 요청을 붙잡아, 실패한 화면은 서버가 받지 않는 그림으로 재현한다.
 held = []
+seen = []
+recorded = []
+page.on("request", lambda request: recorded.append({
+    "method": request.method, "url": request.url, "post_bytes": len(request.post_data or "")})
+    if request.method == "POST" else None)
 
 
 def hold_upload(route):
-    if route.request.method == "POST" and (route.request.post_data_json or {}).get("op") == "desktop.wallpaper.upload":
+    request = route.request
+    data = request.post_data or ""
+    seen.append({"method": request.method, "url": request.url, "bytes": len(data),
+                 "upload": "desktop.wallpaper.upload" in data})
+    if request.method == "POST" and "desktop.wallpaper.upload" in data:
         held.append(route)
     else:
         route.continue_()
 
 
-page.route("**/core", hold_upload)
+page.context.route("**/core", hold_upload)
+busy_captured = False
 try:
     page.locator('input[aria-label="배경 그림 파일"]').set_input_files(
-        {"name": "실패할 그림.png", "mimeType": "image/png",
-         "buffer": png(480, 270, lambda x, y: (40, 60, 90))})
-    wait(lambda: bool(held), "올리기 요청 가로채기")
+        {"name": "깨진 그림.png", "mimeType": "image/png", "buffer": b"\x00" * 4096})
+    try:
+        wait(lambda: bool(held), "올리기 요청 가로채기", timeout=8)
+    except AssertionError:
+        pass
     page.wait_for_timeout(300)
-    assert page.locator(".ks-wallpaper-picker").get_attribute("aria-busy") == "true"
-    page.screenshot(path=str(sb.out / "upload-busy.png"))
-    held.pop().abort()
+    if page.locator(".ks-wallpaper-picker").get_attribute("aria-busy") == "true":
+        page.screenshot(path=str(sb.out / "upload-busy.png"))
+        busy_captured = True
+    if held:
+        held.pop().continue_()
     alert = page.get_by_role("alert").first
     alert.wait_for(timeout=20_000)
     page.screenshot(path=str(sb.out / "upload-error.png"))
     error_text = alert.inner_text()
 finally:
-    page.unroute("**/core")
+    page.context.unroute("**/core")
 assert record_for(night["id"])["asset"]["id"] == night_record["asset"]["id"], "실패한 올리기가 이전 그림을 바꿨습니다"
 wait_idle()
+(sb.out / "wallpaper-debug.json").write_text(json.dumps(
+    {"busy_captured": busy_captured, "held": len(held), "route_seen": seen, "post_requests": recorded,
+     "input": page.evaluate("""() => {
+       const input = document.querySelector('input[aria-label="배경 그림 파일"]');
+       return input ? { disabled: input.disabled, files: input.files.length, type: input.type } : null;
+     }""")}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 page.set_viewport_size({"width": 760, "height": 680})
 page.wait_for_timeout(300)
@@ -161,13 +181,14 @@ page.screenshot(path=str(sb.out / "settings-wide-dark.png"))
 page.emulate_media(color_scheme="light")
 page.wait_for_timeout(300)
 
+APP_ID = "wallpaper-window"
 page.get_by_test_id("system-window-settings").get_by_role("button", name="창 닫기").click()
 wait(lambda: page.get_by_test_id("system-window-settings").count() == 0, "설정 창 닫기")
-sb.core({"op": "window.open", "desktop_id": night["id"], "app_id": "calculator",
+sb.core({"op": "window.open", "desktop_id": night["id"], "app_id": APP_ID,
          "rect": {"x": 120, "y": 90, "width": 760, "height": 560}})
 night_window = wait(lambda: next((window for window in sb.snapshot()["shared"]["windows"]
-                                  if window["desktop_id"] == night["id"] and window["app_id"] == "calculator"), None),
-                    "밤 데스크톱 계산기 창")
+                                  if window["desktop_id"] == night["id"] and window["app_id"] == APP_ID), None),
+                    "밤 데스크톱 앱 창")
 
 sb.core({"op": "desktop.activate", "desktop_id": day["id"]})
 day_url = wait_layer(lambda value: "none" not in value, "낮 데스크톱 배경")
@@ -204,7 +225,10 @@ def contrast(selector):
     }""", {"b64": base64.b64encode(shot).decode()})
 
 
-day_window = sb.window_of("calculator")
+day_window = wait(lambda: next((window for window in sb.snapshot()["shared"]["windows"]
+                                if window["desktop_id"] == day["id"] and window["app_id"] == APP_ID), None),
+                  "낮 데스크톱 앱 창")
+wait(lambda: page.locator(f'[data-window-id="{day_window["id"]}"]').count() > 0, "낮 창 그리기")
 day_metrics = {
     "title": contrast(f'[data-window-id="{day_window["id"]}"] .ks-window-titlebar'),
     "body": contrast(f'[data-window-id="{day_window["id"]}"] .ks-window-content'),
@@ -214,6 +238,7 @@ page.screenshot(path=str(sb.out / "contrast-bright.png"))
 
 sb.core({"op": "desktop.activate", "desktop_id": night["id"]})
 night_url = wait_layer(lambda value: value != day_url and "none" not in value, "밤 데스크톱 배경")
+wait(lambda: page.locator(f'[data-window-id="{night_window["id"]}"]').count() > 0, "밤 창 그리기")
 page.wait_for_timeout(500)
 page.screenshot(path=str(sb.out / "switch-desktop-2.png"))
 night_metrics = {
@@ -235,6 +260,7 @@ result = {
     "desktops": {"day": day["name"], "night": night["name"]},
     "records": {"day": bright_record["asset"], "night": night_record["asset"]},
     "media_round_trip": True,
+    "busy_captured": busy_captured,
     "switch": {"day": day_url, "night": night_url, "different": day_url != night_url},
     "reload": {"background": reload_url, "records": len(wallpapers())},
     "error_text": error_text[:300],

@@ -11,7 +11,7 @@ test("실제 코어에서 데스크톱마다 다른 바탕화면을 저장하고
   mkdirSync(output, { recursive: true });
   const script = join(process.env.AGENT_COMMON_FILES_DIR!, "skills/kaleidoscope-app/scripts/sandbox.py");
   const run = spawnSync("python3", [script, "run", "--version", process.env.KS_WALLPAPER_REAL_CORE!, "--app",
-    resolve(process.cwd(), "../apps/calculator.json"), "--scenario", resolve(process.cwd(), "e2e/wallpaper-real-core.py"),
+    resolve(process.cwd(), "e2e/fixtures/wallpaper/app.json"), "--scenario", resolve(process.cwd(), "e2e/wallpaper-real-core.py"),
     "--viewport", "1440x900", "--out", output], { encoding: "utf8", timeout: 340_000 });
   expect(run.status, `${run.stdout}\n${run.stderr}`).toBe(0);
   const result = JSON.parse(readFileSync(join(output, "result.json"), "utf8"));
