@@ -514,7 +514,8 @@
 
 .ks-shell-notice-layer > .ks-notice {
   position: absolute;
-  top: calc(var(--ks-control-height) + 2 * var(--ks-space-2) + var(--ks-space-3));
+  /* 하단 막대(.ks-taskbar)의 bottom과 height 계산을 따라 그 위에 --ks-space-2만큼 띄운다. 창 머리를 덮지 않는다. */
+  bottom: calc(var(--ks-space-3) + var(--ks-control-height) + var(--ks-space-1) * 2 + var(--ks-space-2));
   left: 50%;
   width: max-content;
   max-width: calc(100% - 2 * var(--ks-space-3));
