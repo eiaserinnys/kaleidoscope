@@ -352,6 +352,27 @@ error_catalog! { ENTRIES;
         message: "동작 경로 {pointer}의 계산이나 검사가 실패했습니다. 앱 정의의 동작 설정과 입력값을 확인하세요. 원인: {reason}",
         fix: "앱 정의의 동작 설정과 입력값을 확인하세요"
     }
+    DATA_SHELL_OPEN_APP_ID_INVALID(value) {
+        class: InvalidRequest,
+        place: "쉘 열기 동작 실행",
+        cause: "app_id 바인딩이 비어 있지 않은 문자열을 내지 않았다",
+        message: "쉘 열기 동작의 앱 ID가 올바르지 않습니다. 앱 정의의 app_id 바인딩이 비어 있지 않은 문자열을 내도록 고치세요. 받은 값: {value}",
+        fix: "app_id 바인딩이 비어 있지 않은 문자열을 내도록 고치세요"
+    }
+    DATA_SHELL_SHORTCUT_APP_ID_INVALID(value) {
+        class: InvalidRequest,
+        place: "쉘 바탕화면 아이콘 동작 실행",
+        cause: "app_id 바인딩이 비어 있지 않은 문자열을 내지 않았다",
+        message: "쉘 바탕화면 아이콘 동작의 앱 ID가 올바르지 않습니다. 앱 정의의 app_id 바인딩이 비어 있지 않은 문자열을 내도록 고치세요. 받은 값: {value}",
+        fix: "app_id 바인딩이 비어 있지 않은 문자열을 내도록 고치세요"
+    }
+    DATA_SHELL_ACT_WINDOW_NOT_FOUND() {
+        class: NotFound,
+        place: "쉘 동작 실행",
+        cause: "동작을 실행하는 앱 창이 없다",
+        message: "쉘 동작을 실행할 창이 더 이상 없습니다. 앱 열기에서 앱을 다시 여세요.",
+        fix: "앱 열기에서 앱을 다시 여세요"
+    }
     DATA_ACT_WORKER_WINDOW_NOT_FOUND(action) {
         class: NotFound,
         place: "서버 작업 동작 실행",

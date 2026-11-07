@@ -154,6 +154,7 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
     if let Some(error) = stack_fill_error { return Err(error); }
 
     validate_store_contract(&definition)?;
+    validate_shell_contract(&definition)?;
 
     if definition.client.as_ref().and_then(|client| client.capabilities.as_ref())
         .is_some_and(|capabilities| capabilities.contains(&crate::client::ClientCapability::ReceiveMessage))
@@ -425,6 +426,22 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
             },
             _ => unreachable!(),
         }
+    }
+    Ok(())
+}
+
+/// 쉘 동작을 쓰는 자리가 `requires.modules.shell`을 선언했는지 확인한다.
+fn validate_shell_contract(definition: &AppDefinition) -> Result<(), CoreError> {
+    let used = data::ui_actions(definition)
+        .into_iter()
+        .any(|(_, group)| match group {
+            Actions::Many(list) => list.iter().any(|action| {
+                matches!(action, Action::ShellOpen(_) | Action::ShellAddShortcut(_))
+            }),
+            _ => false,
+        });
+    if used && definition.requires.modules.get("shell").copied().unwrap_or(0) < 1 {
+        return Err(crate::errors::APP_SHELL_MODULE_REQUIRED(&definition.id));
     }
     Ok(())
 }
@@ -2171,6 +2188,12 @@ fn validate_actions(
                     Action::StoreRemove(action) => {
                         let spec = &action.store_remove;
                         validate_binding_shape(&spec.id, definition, details, &format!("{at}/store.remove/id"));
+                    }
+                    Action::ShellOpen(action) => {
+                        validate_binding_shape(&action.shell_open.app_id, definition, details, &format!("{at}/shell.open/app_id"));
+                    }
+                    Action::ShellAddShortcut(action) => {
+                        validate_binding_shape(&action.shell_add_shortcut.app_id, definition, details, &format!("{at}/shell.add_shortcut/app_id"));
                     }
                     Action::Client(action) => {
                         if list.len() != 1 {

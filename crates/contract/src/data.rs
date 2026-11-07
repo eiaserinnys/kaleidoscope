@@ -546,6 +546,8 @@ pub enum Action {
     StoreAllowServer(StoreAllowServerAction),
     StoreInstall(StoreInstallAction),
     StoreRemove(StoreRemoveAction),
+    ShellOpen(ShellOpenAction),
+    ShellAddShortcut(ShellAddShortcutAction),
     Client(ClientAction),
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
@@ -577,6 +579,18 @@ pub struct StoreRemoveAction { #[serde(rename = "store.remove")] pub store_remov
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct StoreRemoveSpec { pub permission: String, pub id: Binding }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ShellOpenAction { #[serde(rename = "shell.open")] pub shell_open: ShellAppSpec }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ShellAppSpec { pub app_id: Binding }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ShellAddShortcutAction { #[serde(rename = "shell.add_shortcut")] pub shell_add_shortcut: ShellAppSpec }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -2368,6 +2382,11 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
         Action::StoreAllowServer(action) => vec![("store.allow_server/server".into(), &action.store_allow_server.server)],
         Action::StoreInstall(action) => vec![("store.install/server".into(), &action.store_install.server), ("store.install/id".into(), &action.store_install.id), ("store.install/release".into(), &action.store_install.release)],
         Action::StoreRemove(action) => vec![("store.remove/id".into(), &action.store_remove.id)],
+        Action::ShellOpen(action) => vec![("shell.open/app_id".into(), &action.shell_open.app_id)],
+        Action::ShellAddShortcut(action) => vec![(
+            "shell.add_shortcut/app_id".into(),
+            &action.shell_add_shortcut.app_id,
+        )],
         Action::Call(call) => {
             let mut out = vec![("call/path".to_string(), &call.call.path)];
             for (key, value) in &call.call.query {

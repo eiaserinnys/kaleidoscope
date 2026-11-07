@@ -109,6 +109,8 @@ pub enum Step {
     StoreAllowServer { permission: String, server: Value },
     StoreInstall { permission: String, server: Value, id: Value, release: Value },
     StoreRemove { permission: String, id: Value },
+    ShellOpen { app_id: String },
+    ShellAddShortcut { app_id: String },
     Worker {
         action: String,
         args: Option<Value>,
@@ -132,6 +134,25 @@ pub enum Step {
         query: BTreeMap<String, String>,
         body: Option<Value>,
     },
+}
+
+/// 단계를 계산하지 못한 까닭. 쉘 동작의 앱 ID 오류는 등록된 오류를 그대로 돌려주고,
+/// 나머지는 동작 경로를 붙여 `DATA_ACT_STEP_INVALID`로 돌려준다.
+enum StepError {
+    Reason(String),
+    Shell(kaleidoscope_contract::CoreError),
+}
+
+impl From<String> for StepError {
+    fn from(reason: String) -> Self {
+        Self::Reason(reason)
+    }
+}
+
+impl From<&str> for StepError {
+    fn from(reason: &str) -> Self {
+        Self::Reason(reason.into())
+    }
 }
 
 impl CompiledApp {
@@ -528,7 +549,28 @@ impl CompiledApp {
         })
     }
 
-    pub fn action_step(&self, pointer: &str, index: usize, env: &Env<'_>) -> Result<Step, String> {
+    pub fn action_step(
+        &self,
+        pointer: &str,
+        index: usize,
+        env: &Env<'_>,
+    ) -> Result<Step, kaleidoscope_contract::CoreError> {
+        match self.action_step_reason(pointer, index, env) {
+            Ok(step) => Ok(step),
+            Err(StepError::Reason(reason)) => Err(kaleidoscope_contract::errors::DATA_ACT_STEP_INVALID(
+                pointer,
+                &reason,
+            )),
+            Err(StepError::Shell(error)) => Err(error),
+        }
+    }
+
+    fn action_step_reason(
+        &self,
+        pointer: &str,
+        index: usize,
+        env: &Env<'_>,
+    ) -> Result<Step, StepError> {
         let actions = self.actions.get(pointer).ok_or("없는 동작입니다")?;
         let vars = Variables::new(
             env.state,
@@ -573,6 +615,26 @@ impl CompiledApp {
                             id: self.binding(&spec.id, &format!("{base}/store.remove/id"), env.state, &vars)?,
                         })
                     }
+                    Action::ShellOpen(action) => Ok(Step::ShellOpen {
+                        app_id: self.shell_app_id(
+                            &action.shell_open.app_id,
+                            &format!("{base}/shell.open/app_id"),
+                            env.state,
+                            &vars,
+                            |value| kaleidoscope_contract::errors::DATA_SHELL_OPEN_APP_ID_INVALID(value),
+                        )?,
+                    }),
+                    Action::ShellAddShortcut(action) => Ok(Step::ShellAddShortcut {
+                        app_id: self.shell_app_id(
+                            &action.shell_add_shortcut.app_id,
+                            &format!("{base}/shell.add_shortcut/app_id"),
+                            env.state,
+                            &vars,
+                            |value| {
+                                kaleidoscope_contract::errors::DATA_SHELL_SHORTCUT_APP_ID_INVALID(value)
+                            },
+                        )?,
+                    }),
                     Action::Client(_)
                     | Action::PickFiles(_)
                     | Action::SaveFile(_)
@@ -666,6 +728,23 @@ impl CompiledApp {
             }
             _ => Err("없는 동작 단계입니다".into()),
         }
+    }
+
+    /// 쉘 동작의 `app_id` 바인딩이 비어 있지 않은 문자열인지 확인한다.
+    fn shell_app_id(
+        &self,
+        binding: &Binding,
+        pointer: &str,
+        state: &BTreeMap<String, Value>,
+        vars: &Variables,
+        invalid: impl Fn(&Value) -> kaleidoscope_contract::CoreError,
+    ) -> Result<String, StepError> {
+        let value = self.binding(binding, pointer, state, vars)?;
+        value
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| StepError::Shell(invalid(&value)))
     }
 
     fn binding(
