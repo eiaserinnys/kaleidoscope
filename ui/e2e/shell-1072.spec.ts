@@ -73,3 +73,25 @@ for (const kind of ["list", "table"]) test(`보이던 선택 행은 ${kind} 높�
   })).toBe(true);
   if (kind === "list") await capture(app, "item3-selected-row-360");
 });
+
+for (const kind of ["list", "table"]) test(`${kind}에서 고르면 상세가 열려도 고른 행이 보인다`, async ({ page }) => {
+  await page.setViewportSize({ width: 392, height: 900 });
+  const id = `shell-detail-1072-${kind}`;
+  await page.goto(`/?preview=${id}`);
+  const app = page.getByTestId(`app-window-${id}`);
+  expect((await app.boundingBox())!.width).toBe(360);
+  const list = app.locator(kind === "list" ? ".ks-list" : ".ks-table-scroll").first();
+  await expect(list).toBeVisible();
+  const row = kind === "list" ? list.getByRole("option", { name: "자료 16", exact: true }) : list.getByRole("row").filter({ hasText: "자료 16" });
+  await expect(row).toBeVisible();
+  const before = await list.evaluate(el => el.clientHeight);
+  expect(before).toBeGreaterThan(480);
+  await row.click();
+  await expect(app.getByText("선택한 자료의 상세")).toBeVisible();
+  await expect.poll(() => list.evaluate(el => el.clientHeight)).toBeLessThan(before);
+  await expect.poll(() => row.evaluate(el => {
+    const r = el.getBoundingClientRect(), viewport = el.closest(".ks-list, .ks-table-scroll")!.getBoundingClientRect();
+    return r.top >= viewport.top && r.bottom <= viewport.bottom;
+  })).toBe(true);
+  if (kind === "list") await capture(app, "item3-selected-detail-360");
+});

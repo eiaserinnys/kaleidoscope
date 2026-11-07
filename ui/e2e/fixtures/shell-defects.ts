@@ -17,6 +17,14 @@ export const shellDefectFixtures = [
     { type: "table", columns: [{ field: "title", label: "제목" }], rows: Array.from({ length: 40 }, (_, i) => ({ key: String(i), title: `자료 ${i + 1}` })), selected: { state: "selected" }, on_select: { set_state: "selected" } },
     { type: "list", items: [{ key: "detail", title: "상세 내용" }] },
   ] } },
+  ...(["list", "table"] as const).map(kind => ({ ...base, id: `shell-detail-1072-${kind}`, name: "선택한 자료", state: { selected: "", show: false }, ui: {
+    type: "split", direction: "row", column_below: 700, children: [
+      kind === "list"
+        ? { type: "list", items: Array.from({ length: 40 }, (_, i) => ({ key: String(i), title: `자료 ${i + 1}` })), selected: { state: "selected" }, on_select: [{ set_state: "selected" }, { set_state: "show", value: true }] }
+        : { type: "table", columns: [{ field: "title", label: "제목" }], rows: Array.from({ length: 40 }, (_, i) => ({ key: String(i), title: `자료 ${i + 1}` })), selected: { state: "selected" }, on_select: [{ set_state: "selected" }, { set_state: "show", value: true }] },
+      { type: "when", value: { state: "show" }, child: { type: "list", items: [{ key: "detail", title: "선택한 자료의 상세" }] } },
+    ],
+  } })),
   ...[false, true].map(section => ({ ...base, id: `shell-map-1072-${section ? "section" : "direct"}`, name: "지도와 자료", state: {}, ui: {
     type: "split", direction: "row", column_below: 700, children: [
       section ? { type: "section", title: "관측 지도", child: { type: "map", points: [{ key: "quake", lat: 35, lng: 128, label: "관측 지점" }] } } : { type: "map", points: [{ key: "quake", lat: 35, lng: 128, label: "관측 지점" }] },
