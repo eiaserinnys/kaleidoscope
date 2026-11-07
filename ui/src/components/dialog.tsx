@@ -71,11 +71,12 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   useLayoutEffect(() => {
     const finished = wasBusy.current && !busy;
     wasBusy.current = busy;
-    // 진행이 끝났다고 다른 창에 입력 중인 사용자의 초점을 가져오지 않는다.
-    if (finished && !windowModal && document.activeElement === document.body) {
+    // 진행이 끝나면 초점을 대화상자로 되돌리되, 이 대화상자가 맡은 자리 밖에서 쓰는 초점은 가져오지 않는다.
+    const focused = document.activeElement;
+    if (finished && !windowModal && !root.current?.contains(focused) && (focused === document.body || host.contains(focused))) {
       if (root.current) dialogActionFocus(root.current)?.focus();
     }
-  }, [busy, windowModal]);
+  }, [busy, host, windowModal]);
   const heading = <div className="ks-dialog-title" id={titleId} title={windowModal ? title : undefined}>{title}</div>;
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
   return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay} onMouseDown={(event) => { if (!busy && !windowModal && event.target === event.currentTarget) { event.preventDefault(); onCancel(); } }}>
