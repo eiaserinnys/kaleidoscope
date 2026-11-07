@@ -1,9 +1,11 @@
+use serde_json::{json, Value};
 use std::{thread, time::Duration};
+use windows::Win32::Foundation::POINT;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_MOUSE, KEYEVENTF_KEYUP, MOUSEEVENTF_LEFTDOWN,
     MOUSEEVENTF_LEFTUP, MOUSEINPUT,
 };
-use windows::Win32::UI::WindowsAndMessaging::SetCursorPos;
+use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
 
 pub(crate) fn drag(
     from: (i32, i32),
@@ -57,8 +59,22 @@ pub(crate) fn drag(
 }
 
 pub(crate) fn click(x: i32, y: i32) -> Result<(), String> {
+    click_with_report(x, y).map(|_| ())
+}
+
+/// 클릭을 한 번 보내고, 보낸 그대로를 기록으로 돌려준다.
+///
+/// 다시 클릭하지 않는다. 실패하면 어디까지 갔는지(커서 좌표와 SendInput
+/// 반환 수)를 오류 문자열에 담는다.
+pub(crate) fn click_with_report(x: i32, y: i32) -> Result<Value, String> {
     unsafe {
-        SetCursorPos(x, y).map_err(|error| error.to_string())?;
+        SetCursorPos(x, y).map_err(|error| format!("SetCursorPos({x},{y}): {error}"))?;
+        let mut cursor = POINT::default();
+        let mut report = json!({"requested": {"x": x, "y": y}, "requested_inputs": 2});
+        report["cursor"] = match GetCursorPos(&mut cursor) {
+            Ok(()) => json!({"x": cursor.x, "y": cursor.y}),
+            Err(error) => json!({"error": error.to_string()}),
+        };
         let click = [
             INPUT {
                 r#type: INPUT_MOUSE,
@@ -87,11 +103,13 @@ pub(crate) fn click(x: i32, y: i32) -> Result<(), String> {
                 },
             },
         ];
-        if SendInput(&click, std::mem::size_of::<INPUT>() as i32) != click.len() as u32 {
-            return Err("could not click the agent input".into());
+        let inserted = SendInput(&click, std::mem::size_of::<INPUT>() as i32);
+        report["inserted_inputs"] = json!(inserted);
+        if inserted != click.len() as u32 {
+            return Err(format!("could not click the agent input; {report}"));
         }
+        Ok(report)
     }
-    Ok(())
 }
 
 pub(super) fn press_key(key: u16) -> Result<(), String> {

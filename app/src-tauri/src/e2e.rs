@@ -270,6 +270,19 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         "shell.restored",
         json!({"visible": core.shell_visible()}),
     )?;
+    // 최소화/복원은 창 활성화만 되돌리므로 주 웹뷰 입력 포커스도 함께 복원한다.
+    #[cfg(windows)]
+    {
+        let focus = native_target::focus_main_webview(app);
+        record(
+            log,
+            "shell.focus",
+            match &focus {
+                Ok(focus) => focus.clone(),
+                Err(error) => json!({"passed": false, "error": error}),
+            },
+        )?;
+    }
     let snapshot = match call(core, CoreRequest::StateGet {})? {
         CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),
