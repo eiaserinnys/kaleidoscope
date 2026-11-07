@@ -80,7 +80,11 @@ const settingsDefinition: AppDefinition = {
 };
 if (harnessParams.get("app") === "empty-group") settingsDefinition.storage!.entries = settingsDefinition.storage!.entries.filter((entry) => !entry.key.includes("{workspace_id}"));
 const iconScenario = harnessParams.has("app-icons");
-const definitions = ([mdEditorJson, htmlReportJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, marketJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[]).map((definition) => {
+const withDefaultPermissions = (definition: AppDefinition): AppDefinition => ({
+  ...definition,
+  permissions: (definition as Partial<AppDefinition>).permissions ?? [],
+});
+const definitions = ([mdEditorJson, htmlReportJson, webBrowserJson, explorerJson, agentJson, calculatorJson, weatherJson, marketJson, pasJson, ...(settingsPreview ? [settingsDefinition] : []), ...(shareScenario === "table" || shareScenario === "list" ? [shareDefinition] : [])] as AppDefinition[]).map(withDefaultPermissions).map((definition) => {
   if (!iconScenario || !["web-browser", "explorer"].includes(definition.id)) return definition;
   const asset = definition.id === "web-browser" ? "sample-mono" : "sample-color";
   return { ...definition, name: definition.id === "web-browser" ? "긴 제목을 가진 웹 브라우저와 자료 탐색 작업" : definition.name, icon: { asset, version: 1 }, assets: [...(definition.assets ?? []), { id: asset, version: 1 }] };

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,13 +23,38 @@ async function permissionCenterMetrics(page: Page) {
   return page.evaluate(() => {
     const explorer = document.querySelector<HTMLElement>('[data-testid="app-window-explorer"]');
     const body = explorer?.querySelector<HTMLElement>(".ks-data-window-body");
+    const emptyState = explorer?.querySelector<HTMLElement>(".ks-explorer-empty .ks-empty-state");
+    const icon = explorer?.querySelector<HTMLElement>(".ks-explorer-empty .ks-empty-state-icon");
     const button = explorer?.querySelector<HTMLElement>(".ks-explorer-empty button");
-    if (!body || !button) throw new Error("탐색기 허용 화면의 본문이나 단추를 찾지 못했습니다");
+    const alert = explorer?.querySelector<HTMLElement>(".ks-explorer-empty [role=alert]");
+    if (!body || !emptyState || !icon || !button) throw new Error("탐색기 허용 화면의 본문, 아이콘 또는 단추를 찾지 못했습니다");
+    const space3 = Number.parseFloat(getComputedStyle(emptyState).getPropertyValue("--ks-space-3"));
+    if (!Number.isFinite(space3)) throw new Error("--ks-space-3 값을 읽지 못했습니다");
     const bodyBounds = body.getBoundingClientRect();
-    const buttonBounds = button.getBoundingClientRect();
+    const groupTop = icon.getBoundingClientRect().top;
+    const groupBottom = (alert ?? button).getBoundingClientRect().bottom;
     const bodyCenter = bodyBounds.top + bodyBounds.height / 2;
-    const buttonCenter = buttonBounds.top + buttonBounds.height / 2;
-    return { bodyCenter, buttonCenter, delta: buttonCenter - bodyCenter };
+    const groupCenter = (groupTop + groupBottom) / 2;
+    const expectedCenter = alert ? bodyCenter : bodyCenter - space3;
+    return { bodyCenter, groupTop, groupBottom, groupCenter, expectedCenter, delta: groupCenter - expectedCenter, hasError: Boolean(alert) };
+  });
+}
+
+async function treeSnapshot(tree: Locator) {
+  return tree.evaluate((element) => {
+    const list = element.querySelector<HTMLElement>(".ks-file-tree-list");
+    if (!list) throw new Error("파일 트리 스크롤 영역을 찾지 못했습니다");
+    return {
+      scrollTop: list.scrollTop,
+      rows: Array.from(element.querySelectorAll<HTMLElement>('[role="treeitem"]')).map((row) => ({
+        path: row.dataset.filePath ?? row.dataset.folderPath ?? null,
+        className: row.className,
+        current: row.getAttribute("aria-current"),
+        selected: row.getAttribute("aria-selected"),
+        expanded: row.getAttribute("aria-expanded"),
+        name: row.textContent,
+      })),
+    };
   });
 }
 
@@ -93,14 +117,14 @@ test("centers the PC permission action in wide and narrow windows, including fai
   const allow = explorer.getByRole("button", { name: "이 PC의 파일 읽기 허용" });
   await expect(allow).toBeVisible();
   const wideInitial = await permissionCenterMetrics(page);
-  expect(Math.abs(wideInitial.delta)).toBeLessThanOrEqual(8);
+  expect(Math.abs(wideInitial.delta)).toBeLessThanOrEqual(1);
   await screenshot(page, "permission-wide-1440x900.png");
 
   await allow.click();
   const alert = explorer.getByRole("alert");
   await expect(alert).toHaveText("파일 권한 pc: 앱 정의 permissions에 scope pc로 선언되지 않았습니다. 앱 정의에서 이 권한의 scope를 pc로 고치세요. DESK_PC_ACCESS_PERMISSION_UNDECLARED");
   const wideFailed = await permissionCenterMetrics(page);
-  expect(Math.abs(wideFailed.delta)).toBeLessThanOrEqual(8);
+  expect(Math.abs(wideFailed.delta)).toBeLessThanOrEqual(1);
   const failurePlacement = await page.evaluate(() => {
     const root = document.querySelector<HTMLElement>('[data-testid="app-window-explorer"]')!;
     const button = root.querySelector<HTMLElement>(".ks-explorer-empty button")!.getBoundingClientRect();
@@ -112,13 +136,13 @@ test("centers the PC permission action in wide and narrow windows, including fai
 
   await page.setViewportSize({ width: 720, height: 600 });
   const narrowFailed = await permissionCenterMetrics(page);
-  expect(Math.abs(narrowFailed.delta)).toBeLessThanOrEqual(8);
+  expect(Math.abs(narrowFailed.delta)).toBeLessThanOrEqual(1);
   await screenshot(page, "permission-failed-narrow-720x600.png");
 
   await page.goto("/harness.html?long-folder");
   await expect(explorer.getByRole("button", { name: "이 PC의 파일 읽기 허용" })).toBeVisible();
   const narrowInitial = await permissionCenterMetrics(page);
-  expect(Math.abs(narrowInitial.delta)).toBeLessThanOrEqual(8);
+  expect(Math.abs(narrowInitial.delta)).toBeLessThanOrEqual(1);
   await screenshot(page, "permission-narrow-720x600.png");
   await writeFile(path.join(artifactDir, "permission-center-measurements.json"), JSON.stringify({
     wideInitial, wideFailed, narrowFailed, narrowInitial,
@@ -358,7 +382,9 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   expect(afterB[0].id).toBe(openedA?.id);
   expect(afterB[0].state.current_file).toBe("b.md");
   await editor.locator(".ks-window-titlebar").click();
-  const invariantBefore = await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-before.png") });
+  await expect(editorFileTree.locator('[data-file-path="b.md"]')).toHaveAttribute("aria-current", "page");
+  const invariantBefore = await treeSnapshot(editorFileTree);
+  await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-before.png") });
 
   await raiseExplorer(page);
   await folders.getByRole("treeitem", { name: "문서" }).click();
@@ -392,11 +418,9 @@ test("web view overlap and explorer open behavior in the shell harness", async (
   await page.setViewportSize({ width: 960, height: 600 });
   await screenshot(page, "md-editor-invariant-narrow-after-others.png");
   await page.setViewportSize({ width: 1440, height: 900 });
-  const invariantAfter = await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-after.png") });
-  const beforeHash = createHash("sha256").update(invariantBefore).digest("hex");
-  const afterHash = createHash("sha256").update(invariantAfter).digest("hex");
-  expect(afterHash).toBe(beforeHash);
-  await writeFile(path.join(artifactDir, "md-editor-file-tree-invariant.sha256"), `${beforeHash}\n`);
+  const invariantAfter = await treeSnapshot(editorFileTree);
+  await editorFileTree.screenshot({ path: path.join(artifactDir, "md-editor-file-tree-after.png") });
+  expect(invariantAfter).toEqual(invariantBefore);
   await screenshot(page, "md-editor-invariant-wide-1440x900.png");
   await screenshot(page, "explorer-and-browser-wide-1440x900.png");
   const toolbarMetrics = await page.evaluate(() => {
