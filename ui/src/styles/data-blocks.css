@@ -1,8 +1,11 @@
 .ks-data-window { display: flex; flex-direction: column; position: relative; container-name: ks-data-window; container-type: size; }
 .ks-data-window-body { isolation: isolate; --ks-fill-textarea-height: 100%; --ks-fill-textarea-max: none; --ks-fill-media-max: none; flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; container: ks-window-body / scroll-state; }
-/* 몸통이 세로로 스크롤할 때만 몸통 최상위 여백 소유자의 오른쪽 여백을 스크롤바 폭만큼 줄여, 스크롤바가 생겨도 입력과 단추의 끝선이 움직이지 않게 한다. 내용을 넓히지 않으니 넘치는 폭이 없다. */
+/* 몸통이 세로로 스크롤할 때만 몸통 끝에 놓인 여백 소유자의 오른쪽 여백을 스크롤바 폭만큼 줄여, 스크롤바가 생겨도 입력과 단추의 끝선이 움직이지 않게 한다. 내용을 넓히지 않으니 넘치는 폭이 없다.
+   구역이 몸통 끝에 놓이는 자리는 몸통 직속, 세로 쌓기 내용 칸, 세로 반복 항목 셋이다. 오른쪽 끝이 몸통 끝이 아닌 부모는 뺀다. */
 @container ks-window-body scroll-state(scrollable: block) {
-  :is(.ks-data-window-body > .ks-data-section, .ks-data-window-body > .ks-data-stack.is-column > .ks-data-stack-item > .ks-data-section) { padding-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); }
+  :is(.ks-data-window-body > .ks-data-section,
+    .ks-data-window-body .ks-data-stack.is-column:not(.is-center, .align-start, .align-center, .align-end, .align-start *, .align-center *, .align-end *, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *, .ks-split-pane *, .ks-repeat.is-row *, .ks-repeat.is-grid *, .ks-repeat.is-virtual *) > .ks-data-stack-item > .ks-data-section,
+    .ks-data-window-body .ks-repeat.is-column:not(.is-center, .align-start, .align-center, .align-end, .align-start *, .align-center *, .align-end *, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *, .ks-split-pane *, .ks-repeat.is-row *, .ks-repeat.is-grid *, .ks-repeat.is-virtual *) > .ks-repeat-content > .ks-repeat-item > .ks-data-section) { padding-inline-end: calc(var(--ks-space-3) - var(--ks-space-2)); }
 }
 .ks-data-window-notice:has(> .ks-window-status) { position: absolute; left: 50%; bottom: var(--ks-space-3); transform: translateX(-50%); z-index: 1; width: max-content; max-width: calc(100% - 2 * var(--ks-space-3)); pointer-events: none; }
 .ks-window-status > .ks-notice { background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
