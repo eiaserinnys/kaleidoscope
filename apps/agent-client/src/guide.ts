@@ -32,7 +32,7 @@ export function cleanReplay(items: Item[]): Item[] {
       text = text.slice(0, start) + text.slice(end + SHARE_CLOSE.length);
       start = text.indexOf(shareStart);
     }
-    text = text.replace(/!\[[^\]]*\]\(data:[^)]*\)/g, "");
+    text = text.replace(/(!\[[^\]]*\]|\[@[^\]]+\])\(data:[^)]*\)/g, "");
     if (text.trimStart().startsWith(LEGACY_GUIDE_HEAD)) {
       const lines = LEGACY_TOOL_LINES.map((line) => ({ line, index: text.indexOf(line) }))
         .filter(({ index }) => index >= 0).sort((a, b) => a.index - b.index);
@@ -45,7 +45,7 @@ export function cleanReplay(items: Item[]): Item[] {
 }
 
 export function cleanTitle(title: string): string {
-  const starts = [title.indexOf(GUIDE_OPEN), title.indexOf(SHARE_OPEN), title.search(/!\[[^\]]*\]\(data:/)].filter((index) => index >= 0);
+  const starts = [title.indexOf(GUIDE_OPEN), title.indexOf(SHARE_OPEN), title.search(/(!\[[^\]]*\]|\[@[^\]]+\])\(data:/)].filter((index) => index >= 0);
   const start = starts.length ? Math.min(...starts) : -1;
   return (start < 0 ? title : title.slice(0, start)).trim();
 }

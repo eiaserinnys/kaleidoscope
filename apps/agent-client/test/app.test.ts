@@ -157,6 +157,10 @@ test("세션 전환 중 대화를 숨기고 실패하면 대화상자와 오류�
   assert.equal(views.at(-1).history_items[0].title, "12345678");
   (app as any).receive({...base, sessions:[{sessionId:"123456789", title:"![첨부](data:image/png;base64,QUJD", cwd:"/work"}]});
   assert.equal(views.at(-1).history_items[0].title, "12345678");
+  (app as any).receive({...base, sessions:[{sessionId:"123456789", title:"[@image](data:image/png;base64,QUJD", cwd:"/work"}]});
+  assert.equal(views.at(-1).history_items[0].title, "12345678");
+  (app as any).receive({...base, sessions:[{sessionId:"other", title:"제목 [@image](data:image/png;base64,QUJD)", cwd:"/work"}]});
+  assert.equal(views.at(-1).history_items[0].title, "제목");
   (app as any).receive(base);
   (app as any).session.loadSession = async () => {};
   handlers.get("open_history")!({});

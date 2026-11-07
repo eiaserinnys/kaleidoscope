@@ -581,12 +581,12 @@ test("Codex 꼴 리플레이에서 같이 보기와 데이터 그림만 지우�
   const id = f.writes.at(-1).id;
   const chunk = (messageId: string, text: string) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "user_message_chunk", messageId, content: { type: "text", text } } } });
   const intro = "디렉터가 kaleidoscope 쉘에서 「같이 보기」로 켠 창에 지금 보이는 내용입니다. 쉘이 디렉터의 말 뒤에 붙였고 디렉터가 쓴 글이 아닙니다. 지난번 말 뒤로 달라진 것만 담았습니다. 지금 모습 전체는 MCP get_shared_view로 읽을 수 있습니다. 이미지나 웹 화면이 보이는 창은 모습이 바뀌었을 때 「같이 보기 - 앱 이름.png」 첨부로 함께 옵니다.";
-  await f.emit(chunk("one", `  사용자 말\n<kaleidoscope-share>\n${intro}\n\n화면 글\n</kaleidoscope-share>\n![화면](data:image/png;base64,QUJD)\n![링크](https://example.com/image.png)  `));
+  await f.emit(chunk("one", `  사용자 말\n<kaleidoscope-share>\n${intro}\n\n화면 글\n</kaleidoscope-share>\n![화면](data:image/png;base64,QUJD)\n[@image](data:image/png;base64,QUJD)\n![링크](https://example.com/image.png)  `));
   await f.emit(chunk("two", "다른 말<kaleidoscope-share>직접 쓴 화면 글</kaleidoscope-share>"));
   await f.emit(chunk("three", `<kaleidoscope-share>\n${intro}\n\n화면만\n</kaleidoscope-share>\n![화면](data:image/png;base64,QUJD)`));
   await f.emit(chunk("four", "이 표지를 설명해 줘: `<kaleidoscope-share>` 뒤의 내용은 무슨 뜻인가요?"));
   await f.emit({ jsonrpc: "2.0", id, result: {} });
-  assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["사용자 말\n\n\n![링크](https://example.com/image.png)", "다른 말<kaleidoscope-share>직접 쓴 화면 글</kaleidoscope-share>", "이 표지를 설명해 줘: `<kaleidoscope-share>` 뒤의 내용은 무슨 뜻인가요?"]);
+  assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["사용자 말\n\n\n\n![링크](https://example.com/image.png)", "다른 말<kaleidoscope-share>직접 쓴 화면 글</kaleidoscope-share>", "이 표지를 설명해 줘: `<kaleidoscope-share>` 뒤의 내용은 무슨 뜻인가요?"]);
   assert.equal((f.getCheckpoint() as any).guideSent, false);
 });
 
