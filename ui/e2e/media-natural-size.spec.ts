@@ -110,3 +110,35 @@ test("내용 높이 쌓기의 마지막 미디어와 좁은 오류는 접히지 
   expect(Math.abs(heights.images[5].height - heights.images[4].height)).toBeLessThanOrEqual(1);
   expect(Math.abs(heights.video[0].height - 480)).toBeLessThanOrEqual(1);
 });
+
+test("넓은 실패 상자는 내용을 가운데 두고, 세로 비율에서도 내용이 상자 안에 남는다", async ({ page }) => {
+  await page.goto("/?preview=block-gallery");
+  await page.evaluate(() => {
+    const fixture = document.createElement("div");
+    fixture.id = "media-failed-gap-fixture";
+    const state = `<div class="ks-data-state"><div class="ks-empty-state"><span class="ks-empty-state-icon"></span><span class="ks-empty-state-text">이미지를 불러오지 못했습니다</span><span class="ks-empty-state-action"><button type="button">다시 받기</button></span></div></div>`;
+    fixture.innerHTML = `
+      <div class="ks-data-stack-item" style="width:1400px"><div class="ks-image-view is-failed">${state}</div></div>
+      <div class="ks-data-stack-item" style="width:900px"><div class="ks-image-view is-failed" style="--ks-image-ratio:0.5625">${state}</div></div>`;
+    document.body.append(fixture);
+  });
+  const boxes = await page.locator("#media-failed-gap-fixture").evaluate((fixture) => {
+    return [...fixture.querySelectorAll(".ks-image-view.is-failed")].map((view) => {
+      const box = view.getBoundingClientRect();
+      const icon = view.querySelector(".ks-empty-state-icon")!.getBoundingClientRect();
+      const button = view.querySelector("button")!.getBoundingClientRect();
+      return {
+        height: box.height,
+        topGap: icon.top - box.top,
+        bottomGap: box.bottom - button.bottom,
+        inside: icon.top >= box.top - 0.5 && button.bottom <= box.bottom + 0.5,
+      };
+    });
+  });
+  expect(Math.abs(boxes[0].height - 480)).toBeLessThanOrEqual(1);
+  expect(Math.abs(boxes[1].height - 480)).toBeLessThanOrEqual(1);
+  for (const box of boxes) {
+    expect(box.inside).toBe(true);
+    expect(Math.abs(box.topGap - box.bottomGap)).toBeLessThanOrEqual(1);
+  }
+});
