@@ -115,7 +115,7 @@ const shareAppId = shareScenario === "editor" ? "md-editor" : shareScenario === 
 const shareWindows: AppWindow[] = [shareAppId, "workspace-pas"].map((appId, index): AppWindow => ({
   id: `${appId}-window`, desktop_id: "desktop-1", app_id: appId, app_version: 1,
   rect: { x: index ? 745 : 16, y: 16, width: 700, height: 510 }, z: index + 1,
-  state: appId === "md-editor" ? { current_file: "README.md" } : appId === "web-browser" ? { url: "https://www.google.com/" } : { selected: "1" },
+  state: appId === "md-editor" ? { source: 1, current_file: "README.md", current_document: null } : appId === "web-browser" ? { url: "https://www.google.com/" } : { selected: "1" },
   created_at: timestamp, updated_at: timestamp,
 }));
 const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : requestedAppWindow ? [{

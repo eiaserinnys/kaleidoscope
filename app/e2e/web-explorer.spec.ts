@@ -1,9 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { pathsFor, requiredRuntimeDir } from "./runtime.ts";
 
-const artifactDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../.local/artifacts/20261030-explorer-pc");
+const { artifactsDir: artifactDir } = pathsFor(requiredRuntimeDir());
 
 interface HarnessWindow extends Window {
   __kaleidoscopeHarness?: {

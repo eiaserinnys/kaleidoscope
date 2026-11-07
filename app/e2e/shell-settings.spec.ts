@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
+import { pathsFor, requiredRuntimeDir } from "./runtime.ts";
 
-const captures = "/home/eias/workspace/.local/tmp/card1005";
+const { artifactsDir: captures } = pathsFor(requiredRuntimeDir());
 const base = "/harness.html?preview=shell-settings";
 
 test("설정 창을 열고 앱 창과 오가며 크기와 초점을 보존한다", async ({ page }) => {

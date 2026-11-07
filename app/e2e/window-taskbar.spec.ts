@@ -1,10 +1,11 @@
 import { expect as baseExpect, test } from "@playwright/test";
+import { coreUrl } from "./runtime.ts";
 
 const expect = baseExpect.configure({ timeout: 30_000 });
 
 test.beforeEach(async ({ page }) => {
   test.setTimeout(240_000);
-  await page.goto("/?core=http://127.0.0.1:7420");
+  await page.goto(`/?core=${coreUrl}`);
 });
 
 test.describe("125% 화면 배율", () => {

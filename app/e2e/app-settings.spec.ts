@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { pathsFor, requiredRuntimeDir } from "./runtime.ts";
 
-const captures = "/home/eias/workspace/.local/tmp/card818/ku1/captures";
+const { artifactsDir: captures } = pathsFor(requiredRuntimeDir());
 test.beforeEach(async ({ page }) => {
   await page.goto("/harness.html?preview=app-settings");
   await page.getByRole("button", { name: "앱 설정", exact: true }).click();

@@ -19,7 +19,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tower_http::cors::CorsLayer;
 
-const DEV_UI_ORIGIN: &str = "http://localhost:1420";
+const DEFAULT_UI_ORIGIN: &str = "http://localhost:1420";
 
 #[derive(Clone)]
 struct AppState {
@@ -111,6 +111,75 @@ mod host_tests {
         host.open_url("http://localhost/second").unwrap();
         assert_eq!(std::fs::read_to_string(path).unwrap(), "http://localhost/second");
     }
+
+    #[test]
+    fn devbridge_uses_the_configured_ui_origin() {
+        let configured = parse_args(
+            ["--data-dir", "data", "--port", "1234", "--ui-origin", "http://localhost:18456"]
+                .into_iter()
+                .map(Into::into),
+        )
+        .unwrap();
+        assert_eq!(configured.ui_origin, "http://localhost:18456");
+
+        let default = parse_args(
+            ["--data-dir", "data", "--port", "1234"]
+                .into_iter()
+                .map(Into::into),
+        )
+        .unwrap();
+        assert_eq!(default.ui_origin, super::DEFAULT_UI_ORIGIN);
+    }
+}
+
+#[cfg(test)]
+mod origin_tests {
+    use super::restrict_origin;
+    use axum::body::Body;
+    use axum::http::{HeaderValue, Request, StatusCode};
+    use axum::middleware;
+    use axum::routing::get;
+    use axum::Router;
+    use tower::ServiceExt;
+
+    fn app(ui_origin: &str) -> Router {
+        Router::new()
+            .route("/", get(|| async { "ok" }))
+            .layer(middleware::from_fn_with_state(
+                HeaderValue::from_str(ui_origin).unwrap(),
+                restrict_origin,
+            ))
+    }
+
+    #[tokio::test]
+    async fn configured_origin_is_allowed() {
+        let response = app("http://localhost:18456")
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("origin", "http://localhost:18456")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn other_origin_is_forbidden() {
+        let response = app("http://localhost:18456")
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .header("origin", "http://localhost:1420")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
 }
 
 struct Args {
@@ -120,6 +189,7 @@ struct Args {
     device_name: String,
     seeds: Vec<PathBuf>,
     oauth_open_url_file: Option<PathBuf>,
+    ui_origin: String,
 }
 
 #[tokio::main]
@@ -149,8 +219,10 @@ async fn run() -> Result<(), String> {
         },
     )
     .await?;
+    let ui_origin = HeaderValue::from_str(&args.ui_origin)
+        .map_err(|_| "--ui-origin 값이 올바르지 않습니다".to_string())?;
     let config = CoreConfig {
-        media_origin: Some("http://localhost:1420".into()),
+        media_origin: Some(args.ui_origin.clone()),
         embedded_server: Some(kaleidoscope_core::EmbeddedServerInfo {
             server_url: embedded.server_url.clone(),
             device_id: embedded.device_id.clone(),
@@ -178,7 +250,7 @@ async fn run() -> Result<(), String> {
         events,
     };
     let cors = CorsLayer::new()
-        .allow_origin(HeaderValue::from_static(DEV_UI_ORIGIN))
+        .allow_origin(ui_origin.clone())
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([
             header::CONTENT_TYPE,
@@ -201,7 +273,7 @@ async fn run() -> Result<(), String> {
         .route("/events", get(get_events))
         .with_state(state)
         .layer(cors)
-        .layer(middleware::from_fn(restrict_origin));
+        .layer(middleware::from_fn_with_state(ui_origin, restrict_origin));
 
     let address = format!("127.0.0.1:{}", args.port);
     let listener = tokio::net::TcpListener::bind(&address)
@@ -222,11 +294,15 @@ async fn run() -> Result<(), String> {
     Ok(())
 }
 
-async fn restrict_origin(request: Request, next: Next) -> Response {
+async fn restrict_origin(
+    State(allowed_origin): State<HeaderValue>,
+    request: Request,
+    next: Next,
+) -> Response {
     if request
         .headers()
         .get(header::ORIGIN)
-        .is_some_and(|origin| origin.as_bytes() != DEV_UI_ORIGIN.as_bytes())
+        .is_some_and(|origin| origin.as_bytes() != allowed_origin.as_bytes())
     {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -341,6 +417,7 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
     let mut device_name = "devbridge".to_string();
     let mut seeds = Vec::new();
     let mut oauth_open_url_file = None;
+    let mut ui_origin = DEFAULT_UI_ORIGIN.to_string();
 
     while let Some(argument) = args.next() {
         match argument.to_string_lossy().as_ref() {
@@ -384,6 +461,13 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
             "--oauth-open-url-file" => {
                 oauth_open_url_file = Some(PathBuf::from(args.next().ok_or_else(|| "--oauth-open-url-file 값이 필요합니다".to_string())?));
             }
+            "--ui-origin" => {
+                ui_origin = args
+                    .next()
+                    .ok_or_else(|| "--ui-origin 값이 필요합니다".to_string())?
+                    .to_string_lossy()
+                    .into_owned();
+            }
             other => return Err(format!("알 수 없는 인자입니다: {other}")),
         }
     }
@@ -395,5 +479,6 @@ fn parse_args(args: impl Iterator<Item = OsString>) -> Result<Args, String> {
         device_name,
         seeds,
         oauth_open_url_file,
+        ui_origin,
     })
 }

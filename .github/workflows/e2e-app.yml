@@ -1,0 +1,96 @@
+name: App E2E
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'ui/**'
+      - 'crates/**'
+      - 'apps/**'
+      - 'examples/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.cargo/**'
+      - 'rust-toolchain*'
+      - '.github/scripts/**'
+      - '.github/workflows/e2e-app.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'ui/**'
+      - 'crates/**'
+      - 'apps/**'
+      - 'examples/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.cargo/**'
+      - 'rust-toolchain*'
+      - '.github/scripts/**'
+      - '.github/workflows/e2e-app.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  app-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - name: Rust 캐시 복원
+        id: rust-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: app-e2e-rust-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain*') }}
+      - name: 개발용 다리 빌드
+        run: cargo build --locked -p kaleidoscope-devbridge
+      - name: Rust 캐시 저장
+        if: steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+      - name: 프론트엔드 의존성 설치
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_ENV: development
+      - name: Chromium 설치
+        run: pnpm --dir app exec playwright install --with-deps chromium
+      - name: app E2E
+        run: pnpm --dir app e2e
+        timeout-minutes: 20
+      - name: 실패 산출물 업로드
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: app-e2e-attempt-${{ github.run_attempt }}
+          path: app/test-results/**
+          retention-days: 7
