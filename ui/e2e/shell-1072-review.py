@@ -3,6 +3,7 @@
 KS_1072_STORE_ROOT에는 앱별 app.json, store.json과 assets가 있는 폴더를 지정한다.
 KS_1072_XOPS_DEF와 KS_1072_XOPS_CLIENT에는 xops 정의와 클라이언트 파일을 지정한다.
 연결 원천은 sandbox 실행 시 로컬 표본 서버로 지정한다. 결과는 sandbox --out에 남는다.
+KS_1072_ONLY에는 다시 확인할 시나리오 이름을 쉼표로 구분해 지정할 수 있다.
 """
 import base64
 import hashlib
@@ -106,12 +107,19 @@ def capture_map():
         frame = win.locator(".ks-map-frame").first
         frame.wait_for(state="visible", timeout=30000)
         frame.scroll_into_view_if_needed()
+        if width == 880:
+            win.locator(".ks-data-window-body").evaluate("el => { el.scrollTop += 170; }")
+            page.wait_for_timeout(300)  # noqa: F821
         metrics[f"map-{width}"] = frame.evaluate("""el => {
           const r = el.getBoundingClientRect(), canvas = el.querySelector('.ks-map-canvas').getBoundingClientRect();
-          const style = getComputedStyle(el);
-          return {height:r.height, canvasHeight:canvas.height, bottomGap:r.bottom-canvas.bottom-parseFloat(style.paddingBottom)-parseFloat(style.borderBottomWidth)};
+          const style = getComputedStyle(el), table = el.closest('.ks-split')?.querySelector('.ks-table-scroll');
+          const viewport = el.closest('.ks-data-window').getBoundingClientRect(), list = table?.getBoundingClientRect();
+          return {height:r.height, canvasHeight:canvas.height, bottomGap:r.bottom-canvas.bottom-parseFloat(style.paddingBottom)-parseFloat(style.borderBottomWidth),
+            tableVisible: !!list && list.top < viewport.bottom && list.bottom > viewport.top};
         }""")
         shot(win, f"item4-earth-map-{width}")
+        if width == 880:
+            assert metrics[f"map-{width}"]["tableVisible"], "880px 지도 아래 표가 보이지 않음"
     sb.core({"op": "window.close", "window_id": wid})  # noqa: F821
 
 
@@ -146,9 +154,18 @@ def capture_xops():
         resize(wid, width, height)
         metrics[f"xops-{width}"] = win.locator(".ks-split").first.evaluate("""el => ({stacked:el.classList.contains('is-stacked'), panes:[...el.querySelectorAll(':scope > .ks-split-pane')].map(p => p.getBoundingClientRect().height)})""")
         shot(win, f"item3-split-xops-{width}")
+        if width == 360:
+            reply = win.locator("textarea").first
+            reply.scroll_into_view_if_needed()
+            metrics["xops-reply-360"] = reply.evaluate("el => ({height:el.getBoundingClientRect().height, visible:el.getBoundingClientRect().height > 0})")
+            shot(win, "item3-split-xops-360-reply")
+            assert metrics["xops-reply-360"]["height"] > 20, "답글 입력 높이가 부족함"
 
 
+only = set(os.environ.get("KS_1072_ONLY", "preview,binding,timeline,map,xops").split(","))
 for name, capture in [("preview", preview_split), ("binding", capture_binding), ("timeline", capture_timeline), ("map", capture_map), ("xops", capture_xops)]:
+    if name not in only:
+        continue
     try:
         capture()
     except Exception as error:
