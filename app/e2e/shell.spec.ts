@@ -1,18 +1,16 @@
 import { expect, test } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { coreUrl, pathsFor, requiredRuntimeDir } from "./runtime.ts";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const docsDir = process.env.KALEIDOSCOPE_E2E_DOCS;
+const { docsDir } = pathsFor(requiredRuntimeDir());
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/?core=http://127.0.0.1:7420");
+  await page.goto(`/?core=${coreUrl}`);
 });
 
 test("creates desktops, edits files, imports an app, and rejects an outside path", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
-  if (!docsDir) throw new Error("KALEIDOSCOPE_E2E_DOCS is required");
   const measurements: Record<string, unknown> = {};
 
   const captureMatrix = async (state: string) => {

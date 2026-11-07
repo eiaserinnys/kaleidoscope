@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { pathsFor, requiredRuntimeDir } from "./runtime.ts";
 
-const captures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../.local/tmp/card818-kl-focus");
+const { artifactsDir: captures } = pathsFor(requiredRuntimeDir());
 
 test("저장된 설정의 미적용 알림과 다시 시도", async ({ page }) => {
   await page.route("**/src/harness.tsx*", async (route) => {

@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e": "node e2e/run.mjs",
     "tauri": "tauri",
     "test": "pnpm --dir ../ui test src/__tests__/shell-events.test.tsx"
   },

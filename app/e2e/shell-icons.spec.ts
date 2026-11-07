@@ -1,11 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { pathsFor, requiredRuntimeDir } from "./runtime.ts";
+
+const { artifactsDir } = pathsFor(requiredRuntimeDir());
 
 test.use({ deviceScaleFactor: 2 });
 
 test("런처와 창의 앱 아이콘이 테마와 앱 판을 따른다", async ({ page }) => {
-  const output = process.env.KS_ICON_CAPTURE_DIR ?? "/tmp/ks-icon-979/captures";
+  const output = artifactsDir;
   mkdirSync(output, { recursive: true });
   const metrics: unknown[] = [];
   for (const width of [1000, 360]) {
@@ -39,7 +42,7 @@ test("런처와 창의 앱 아이콘이 테마와 앱 판을 따른다", async (
 });
 
 test("목록 아이콘의 단색 SVG도 테마색을 따른다", async ({ page }) => {
-  const output = process.env.KS_ICON_CAPTURE_DIR ?? "/tmp/ks-icon-979/captures";
+  const output = artifactsDir;
   mkdirSync(output, { recursive: true });
   const metrics: unknown[] = [];
   for (const width of [1000, 360]) {
@@ -84,7 +87,7 @@ test("아이콘을 기다리는 동안에도 창 머리와 메뉴의 자리를 �
   await expect(bar.locator(".ks-icon-skeleton-chrome")).toBeVisible();
   const before = await bar.locator(".ks-window-title").boundingBox();
   await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
-  const output = process.env.KS_ICON_CAPTURE_DIR ?? "/tmp/ks-icon-979/captures";
+  const output = artifactsDir;
   mkdirSync(output, { recursive: true });
   await page.screenshot({ path: path.join(output, "shell-icons-loading.png") });
   await page.evaluate(() => (window as unknown as { releaseIcons: () => void }).releaseIcons());

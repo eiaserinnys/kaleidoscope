@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-const captureDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../.local/tmp/card814/captures");
+import { pathsFor, requiredRuntimeDir } from "./runtime.ts";
+const { artifactsDir: captureDir } = pathsFor(requiredRuntimeDir());
 const capture = async (page: Page, name: string) => { await mkdir(captureDir, { recursive: true }); await page.screenshot({ path: path.join(captureDir, name), animations: "disabled" }); };
 
 type ShareCall = { window_id: string; view: { text: string; visual: boolean } };
@@ -110,11 +110,20 @@ test("웹 화면과 다른 데스크톱, 밝고 어두운 화면", async ({ page
   await capture(page, "share-dark-wide.png");
   const wideMetrics = await measureTitle(frame);
   for (const metrics of [narrowMetrics, wideMetrics]) {
-    expect(metrics.buttons).toHaveLength(4);
-    expect(Math.abs(metrics.buttons[0].centerDelta)).toBeLessThanOrEqual(1);
-    expect(Math.abs(metrics.buttons[1].centerDelta)).toBeLessThanOrEqual(1);
-    expect(metrics.buttons[0].width).toBe(metrics.buttons[1].width);
-    expect(metrics.buttons[0].height).toBe(metrics.buttons[1].height);
+    expect(metrics.buttons.map((button) => button.name)).toEqual([
+      "커멘트",
+      "같이 보기 끄기",
+      "창 최소화",
+      "창 최대화",
+      "창 닫기",
+    ]);
+    const byName = new Map(metrics.buttons.map((button) => [button.name, button]));
+    const share = byName.get("같이 보기 끄기")!;
+    const minimize = byName.get("창 최소화")!;
+    expect(Math.abs(share.centerDelta)).toBeLessThanOrEqual(1);
+    expect(Math.abs(minimize.centerDelta)).toBeLessThanOrEqual(1);
+    expect(share.width).toBe(minimize.width);
+    expect(share.height).toBe(minimize.height);
   }
   await writeFile(path.join(captureDir, "metrics.json"), JSON.stringify({ wide: wideMetrics, narrow: narrowMetrics }, null, 2));
   await page.setViewportSize({ width: 960, height: 600 });
