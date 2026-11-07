@@ -7,6 +7,26 @@ vi.mock("../../../app/node_modules/@tauri-apps/api/core.js", () => ({ isTauri: (
 vi.mock("../../../app/node_modules/@tauri-apps/api/webview.js", () => ({ getCurrentWebview: () => ({ listen: vi.fn(async (name: string, receive: typeof native.receive) => { native.event = name; native.receive = receive; return native.stop; }) }) }));
 afterEach(() => { document.body.innerHTML = ""; vi.clearAllMocks(); });
 
+it("창 안 대화상자는 창 순환 단축키를 막지 않는다", async () => {
+  const actions = { desktop: vi.fn(), cycleWindow: vi.fn() } as unknown as ShellWindowActions;
+  const dispose = installShellShortcuts(actions);
+  await Promise.resolve();
+  const frame = document.createElement("div");
+  frame.className = "ks-window-frame ks-window-frame-active";
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  host.dataset.windowId = "window-a";
+  const dialog = document.createElement("div");
+  dialog.className = "ks-dialog";
+  dialog.setAttribute("role", "dialog");
+  host.appendChild(dialog);
+  frame.appendChild(host);
+  document.body.append(frame);
+  native.receive?.({ payload: { code: "PageDown", shift: false } });
+  expect(actions.cycleWindow).toHaveBeenCalledExactlyOnceWith(1);
+  dispose();
+});
+
 it("네이티브 입력도 같은 실행기와 모달 정책을 거치고 해제한다", async () => {
   const actions = { desktop: vi.fn(), cycleWindow: vi.fn() } as unknown as ShellWindowActions;
   const dispose = installShellShortcuts(actions);

@@ -1044,7 +1044,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     await setState(store, "window-a", "open", true);
     const reopened = await windowA.findByRole("dialog", { name: "변경 확인" });
     await userEvent.click(within(reopened).getByRole("button", { name: "확인" }));
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     const actions = transport.getCalls().filter((call) => call.op === "data.act").map((call) => call.pointer);
     expect(actions).toContain("/ui/on_close");
     expect(actions).toContain("/ui/on_confirm");

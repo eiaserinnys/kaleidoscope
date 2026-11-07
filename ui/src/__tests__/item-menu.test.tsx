@@ -180,7 +180,7 @@ it("확인 메뉴 취소와 Escape는 행으로 초점을 돌린다", async () =
     fireEvent.contextMenu(row);
     fireEvent.click(await screen.findByRole("menuitem", { name: "보관" }));
     if (action === "cancel") fireEvent.click(await screen.findByRole("button", { name: "취소" }));
-    else fireEvent.keyDown(document, { key: "Escape" });
+    else fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     await waitFor(() => expect(document.activeElement).toBe(row));
   }
 });

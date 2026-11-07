@@ -1,5 +1,5 @@
 export { AppWindowContent } from "./render/app-window-content";
-export { hasVisibleShortcutOverlay } from "./runtime/shortcuts";
+export { hasShellBlockingOverlay, hasVisibleShortcutOverlay } from "./runtime/shortcuts";
 export { knownFolderNames } from "./data/default-folder";
 export { Button, EmptyState, ErrorId, ErrorNotice, IconButton, Notice, StatusText } from "./components/primitives";
 export { TooltipProvider } from "./components/tooltip";
@@ -105,5 +105,5 @@ export { IconTile, useIconGridColumns } from "./components/icon-tile";
 export { CountBadge } from "./components/badge";
 export { useAnchoredOverlay } from "./components/anchored-overlay";
 export { GroupHeading } from "./blocks/data-view-common";
-export { focusRescued } from "./components/focus-rescue";
+export { focusRescued, holdsUserFocus } from "./components/focus-rescue";
 export { SettingsRow } from "./components/settings-row";

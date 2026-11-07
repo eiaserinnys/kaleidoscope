@@ -38,9 +38,28 @@ function matches(event: KeyboardEvent, shortcut: Shortcut): boolean {
   return event.shiftKey === required.has("shift") && event.altKey === required.has("alt") && event.ctrlKey === required.has("ctrl") && event.metaKey === required.has("meta");
 }
 
+const overlaySelector = '[role="dialog"], [role="menu"], dialog[open]';
+
+function visibleOverlay(overlay: Element): boolean {
+  return !overlay.closest('[hidden], [inert], [aria-hidden="true"]');
+}
+
+// 창이 소유한 대화상자는 그 창의 것이다. 쉘 전체 대화상자와 메뉴는 창 임자가 없다.
+function windowDialog(overlay: Element): boolean {
+  return overlay.matches(".ks-dialog") && Boolean(ownerOf(overlay));
+}
+
 export function hasVisibleShortcutOverlay(owner?: string, controlled = false): boolean {
-  const overlays = document.querySelectorAll('[role="dialog"], [role="menu"], dialog[open]');
-  return [...overlays].some((overlay) => (!controlled || ownerOf(overlay) === owner) && !overlay.closest('[hidden], [inert], [aria-hidden="true"]'));
+  return [...document.querySelectorAll(overlaySelector)].some((overlay) => {
+    if (!visibleOverlay(overlay)) return false;
+    if (controlled) return ownerOf(overlay) === owner;
+    return windowDialog(overlay) ? Boolean(overlay.closest(".ks-window-frame-active")) : true;
+  });
+}
+
+/** 쉘 전체를 막는 덮개가 있으면 참. 창이 소유한 대화상자는 막지 않는다. */
+export function hasShellBlockingOverlay(): boolean {
+  return [...document.querySelectorAll(overlaySelector)].some((overlay) => visibleOverlay(overlay) && !windowDialog(overlay));
 }
 
 function onKeyDown(event: KeyboardEvent) {

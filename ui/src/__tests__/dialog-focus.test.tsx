@@ -206,7 +206,7 @@ it("다른 창의 항목 메뉴 덮개에서 누른 Escape는 이 창의 대화�
   menu.remove();
 });
 
-it("임자가 없는 바닥 요소에서 누른 Escape는 지금처럼 대화상자를 닫는다", () => {
+it("임자가 없는 바닥 요소에서 누른 Escape는 임자가 있는 창의 대화상자를 닫지 않는다", () => {
   const host = document.createElement("div");
   host.className = "ks-data-window";
   host.dataset.windowId = "window-a";
@@ -217,8 +217,109 @@ it("임자가 없는 바닥 요소에서 누른 Escape는 지금처럼 대화상
   const onCancel = vi.fn();
   render(<Dialog host={host} windowId="window-a" title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={onCancel} onConfirm={() => {}} />);
   fireEvent.keyDown(outside, { key: "Escape" });
-  expect(onCancel).toHaveBeenCalledTimes(1);
+  expect(onCancel).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toBeTruthy();
   cleanup();
   host.remove();
   outside.remove();
+});
+
+it("창 제목 줄 단추에 초점이 있어도 Escape는 그 창의 대화상자를 닫는다", () => {
+  const frame = document.createElement("div");
+  frame.className = "ks-window-frame ks-window-frame-active";
+  const shell = document.createElement("section");
+  shell.className = "ks-window";
+  shell.dataset.windowId = "window-a";
+  const titleButton = document.createElement("button");
+  titleButton.textContent = "창 닫기";
+  shell.appendChild(titleButton);
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  host.dataset.windowId = "window-a";
+  shell.appendChild(host);
+  frame.appendChild(shell);
+  document.body.appendChild(frame);
+  const onCancel = vi.fn();
+  render(<Dialog host={host} windowId="window-a" title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={onCancel} onConfirm={() => {}} />);
+  fireEvent.keyDown(titleButton, { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledTimes(1);
+  cleanup();
+  frame.remove();
+});
+
+it("태스크바 항목에 초점이 있으면 Escape는 그 항목의 창 대화상자를 닫지 않는다", () => {
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  host.dataset.windowId = "window-a";
+  document.body.appendChild(host);
+  const taskbar = document.createElement("nav");
+  taskbar.className = "ks-taskbar";
+  const item = document.createElement("button");
+  item.className = "ks-taskbar-window";
+  item.dataset.windowId = "window-a";
+  taskbar.appendChild(item);
+  document.body.appendChild(taskbar);
+  const onCancel = vi.fn();
+  render(<Dialog host={host} windowId="window-a" title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={onCancel} onConfirm={() => {}} />);
+  fireEvent.keyDown(item, { key: "Escape" });
+  expect(onCancel).not.toHaveBeenCalled();
+  cleanup();
+  host.remove();
+  taskbar.remove();
+});
+
+it("맨 위 창의 대화상자는 바닥에서 누른 Escape로 닫힌다", () => {
+  const frame = document.createElement("div");
+  frame.className = "ks-window-frame ks-window-frame-active";
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  host.dataset.windowId = "window-a";
+  frame.appendChild(host);
+  document.body.appendChild(frame);
+  const onCancel = vi.fn();
+  render(<Dialog host={host} windowId="window-a" title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={onCancel} onConfirm={() => {}} />);
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledTimes(1);
+  cleanup();
+  frame.remove();
+});
+
+it("가려진 창의 대화상자는 바닥에서 누른 Escape로 닫히지 않는다", () => {
+  const frame = document.createElement("div");
+  frame.className = "ks-window-frame";
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  host.dataset.windowId = "window-a";
+  frame.appendChild(host);
+  document.body.appendChild(frame);
+  const onCancel = vi.fn();
+  render(<Dialog host={host} windowId="window-a" title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={onCancel} onConfirm={() => {}} />);
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  expect(onCancel).not.toHaveBeenCalled();
+  cleanup();
+  frame.remove();
+});
+
+it("바닥에서 누른 Escape는 맨 위 창의 대화상자만 닫는다", () => {
+  const frames = ["window-a", "window-b"].map((windowId, index) => {
+    const frame = document.createElement("div");
+    frame.className = `ks-window-frame${index === 1 ? " ks-window-frame-active" : ""}`;
+    const host = document.createElement("div");
+    host.className = "ks-data-window";
+    host.dataset.windowId = windowId;
+    frame.appendChild(host);
+    document.body.appendChild(frame);
+    return { windowId, host, frame };
+  });
+  const cancelA = vi.fn();
+  const cancelB = vi.fn();
+  render(<>
+    <Dialog host={frames[0].host} windowId="window-a" title="가" body={<input aria-label="가 입력" />} ok="확인" onCancel={cancelA} onConfirm={() => {}} />
+    <Dialog host={frames[1].host} windowId="window-b" title="나" body={<input aria-label="나 입력" />} ok="확인" onCancel={cancelB} onConfirm={() => {}} />
+  </>);
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  expect(cancelA).not.toHaveBeenCalled();
+  expect(cancelB).toHaveBeenCalledTimes(1);
+  cleanup();
+  frames.forEach(({ frame }) => frame.remove());
 });

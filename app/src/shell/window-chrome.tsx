@@ -10,6 +10,7 @@ export interface WindowChromeProps {
   onRectCommit: (rect: Rect) => Promise<boolean>; testId: string; frameRef?: Ref<HTMLDivElement>;
   contentRef?: Ref<HTMLDivElement>; pointerGuard?: (event: PointerEvent<HTMLElement>) => boolean;
   sharing?: boolean; commenting?: boolean; children: ReactNode; overlays?: ReactNode; outerOverlays?: ReactNode;
+  windowId?: string;
 }
 
 type Gesture = {
@@ -24,7 +25,7 @@ type Gesture = {
 const MIN_WIDTH = "--ks-window-min-width";
 const MIN_HEIGHT = "--ks-window-min-height";
 
-export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, title, meta, icon, titleActions, menuEntries, onRaise, onMinimize, onMaximize, onRestore, onClose, onRectCommit, testId, frameRef, contentRef, pointerGuard, sharing, commenting, children, overlays, outerOverlays }: WindowChromeProps) {
+export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, title, meta, icon, titleActions, menuEntries, onRaise, onMinimize, onMaximize, onRestore, onClose, onRectCommit, testId, frameRef, contentRef, pointerGuard, sharing, commenting, children, overlays, outerOverlays, windowId }: WindowChromeProps) {
   const titleRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const previewRef = useRef<Rect | null>(null);
@@ -121,7 +122,7 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
 
   return <section className={`ks-window${preview ? " ks-window-gesturing" : ""}${sharing ? " ks-window-sharing" : ""}`}
     data-maximized={maximized ? "true" : "false"} data-minimized={minimized ? "true" : "false"} data-commenting={commenting || undefined}
-    data-testid={testId} inert={minimized}
+    data-testid={testId} data-window-id={windowId} inert={minimized}
     onPointerDownCapture={(event) => {
       if (pointerGuard?.(event)) return;
       if (isTop) return;
