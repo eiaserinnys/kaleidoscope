@@ -145,7 +145,7 @@ export function WallpaperSettings({ snapshot, store }: { snapshot: ShellSnapshot
     <div className="ks-wallpaper-picker" aria-busy={busy || undefined}>
       <WallpaperPreview activeDesktopId={activeDesktop?.id} desktopId={selected.id} snapshot={snapshot} store={store} wallpaper={wallpaper} />
       <div className="ks-wallpaper-actions">
-        <Button aria-label="그림 고르기" aria-busy={busy || undefined} aria-disabled={busy || undefined} disabled={busy || !connected} onClick={() => input.current?.click()}>
+        <Button aria-label="그림 고르기" className={busy ? "is-progress" : undefined} aria-busy={busy || undefined} aria-disabled={busy || undefined} disabled={busy || !connected} onClick={() => input.current?.click()}>
           <span>그림 고르기</span>{busy ? <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span> : null}
         </Button>
         <Button aria-label="기본 배경" aria-disabled={busy || undefined} disabled={busy || !wallpaper} onClick={() => void reset()}>
