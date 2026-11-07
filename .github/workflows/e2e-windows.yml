@@ -58,11 +58,73 @@ jobs:
       - name: 러너 창 내리기
         shell: pwsh
         run: |
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Text;
+          using System.Runtime.InteropServices;
+          public class KsRunnerWindow {
+            public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lparam);
+            [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lparam);
+            [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hwnd, StringBuilder text, int count);
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int count);
+            [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+            [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wparam, IntPtr lparam);
+          }
+          "@
+          function Get-RunnerWindow {
+            $windows = New-Object System.Collections.Generic.List[object]
+            $callback = [KsRunnerWindow+EnumWindowsProc]{
+              param([IntPtr] $hwnd, [IntPtr] $lparam)
+              if ([KsRunnerWindow]::IsWindowVisible($hwnd)) {
+                $class = New-Object System.Text.StringBuilder 256
+                [void][KsRunnerWindow]::GetClassName($hwnd, $class, 256)
+                $title = New-Object System.Text.StringBuilder 1024
+                [void][KsRunnerWindow]::GetWindowText($hwnd, $title, 1024)
+                $owner = 0
+                [void][KsRunnerWindow]::GetWindowThreadProcessId($hwnd, [ref]$owner)
+                $windows.Add([pscustomobject]@{
+                  Handle = $hwnd; Class = $class.ToString(); Title = $title.ToString(); ProcessId = [int]$owner
+                })
+              }
+              return $true
+            }
+            [void][KsRunnerWindow]::EnumWindows($callback, [IntPtr]::Zero)
+            return $windows
+          }
+          function Format-RunnerWindow($windows) {
+            foreach ($window in $windows) {
+              Write-Host ("window handle={0} pid={1} class={2} title={3}" -f $window.Handle, $window.ProcessId, $window.Class, $window.Title)
+            }
+          }
+          # 이 스크립트를 돌리는 프로세스와 그 조상은 닫지 않는다.
+          $ownProcess = New-Object System.Collections.Generic.HashSet[int]
+          $current = $PID
+          while ($current -and $ownProcess.Add([int]$current)) {
+            $parent = (Get-CimInstance Win32_Process -Filter "ProcessId = $current" -ErrorAction SilentlyContinue).ParentProcessId
+            if (-not $parent) { break }
+            $current = [int]$parent
+          }
           (New-Object -ComObject Shell.Application).MinimizeAll()
           Start-Sleep -Seconds 1
-          Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object {
-            Write-Host "$($_.ProcessName): $($_.MainWindowTitle)"
+          $before = Get-RunnerWindow
+          Format-RunnerWindow $before
+          # 최소화되지 않고 남는 창(#32770 등)을 WM_CLOSE로 닫는다.
+          # 작업 표시줄, 바탕 화면, 이 스크립트의 콘솔 창은 닫지 않는다.
+          $keepClass = @(
+            'Shell_TrayWnd', 'Shell_SecondaryTrayWnd', 'Progman', 'WorkerW', 'TaskListThumbnailWnd',
+            'ConsoleWindowClass', 'CASCADIA_HOSTING_WINDOW_CLASS', 'PseudoConsoleWindow'
+          )
+          $closed = 0
+          foreach ($window in $before) {
+            if ($ownProcess.Contains($window.ProcessId)) { continue }
+            if ($keepClass -contains $window.Class) { continue }
+            [void][KsRunnerWindow]::PostMessage($window.Handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+            $closed++
           }
+          Start-Sleep -Milliseconds 200
+          Write-Host ("closed {0} leftover windows" -f $closed)
+          Format-RunnerWindow (Get-RunnerWindow)
       - name: 미디어 전송 실측 데이터 초기화
         shell: pwsh
         run: ./app/e2e-windows/reset-app-data.ps1
@@ -140,6 +202,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw '재시도 정책 시험 컴파일 실패' }
           & "$env:RUNNER_TEMP/drag-retry-tests.exe"
           if ($LASTEXITCODE -ne 0) { throw '재시도 정책 시험 실패' }
+      - name: PC 접근 클릭 판정 시험
+        shell: pwsh
+        run: |
+          rustc --edition 2021 --test app/src-tauri/src/e2e/ui/pc_access.rs -o "$env:RUNNER_TEMP/pc-access-tests.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'PC 접근 클릭 판정 시험 컴파일 실패' }
+          & "$env:RUNNER_TEMP/pc-access-tests.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'PC 접근 클릭 판정 시험 실패' }
       - name: 탐색기 창 선택 자체 시험
         shell: pwsh
         run: ./app/e2e-windows/close-revealed-folder.ps1 -SelfTest
