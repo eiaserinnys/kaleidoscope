@@ -136,8 +136,12 @@ fn adding_and_removing_private_addresses_write_effective_list() {
     let item = json!({"key":"http://one", "title":"http://one"});
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&item, modifiers:None };
     assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(),
+        Step::SetStorage { entry:"invites".into(), doc:None, value:json!({}) });
+    assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 1, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one","http://two"]) });
     assert_eq!(app.action_step("/settings/ui/children/2/children/0/on_submit", 0, &env).unwrap(),
+        Step::SetStorage { entry:"invites".into(), doc:None, value:json!({}) });
+    assert_eq!(app.action_step("/settings/ui/children/2/children/0/on_submit", 1, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one","http://two"]) });
     assert_eq!(app.action_step("/settings/ui/children/1/on_remove", 0, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!([]) });
@@ -145,7 +149,7 @@ fn adding_and_removing_private_addresses_write_effective_list() {
     same_state.insert("new_server".into(), json!("http://one/"));
     let legacy_with_slash = map(json!({"servers":null,"custom_url":"http://one/"}));
     let env = Env { state:&same_state, storage:&legacy_with_slash, ..env };
-    assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(),
+    assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 1, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one/"]) });
 }
 
@@ -377,8 +381,8 @@ fn settings_reject_addresses_without_http_scheme() {
     let event = Value::Null;
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&invalid_storage, storage_meta:&empty, apps:None, event:&event, item:&event, modifiers:None };
     let submit = "/settings/ui/children/2/children/0/on_submit";
-    assert_eq!(app.action_step(submit, 0, &env).unwrap(), Step::SetStorage { entry:"servers".into(), doc:None, value:json!([]) });
-    assert_eq!(app.action_step(submit, 1, &env).unwrap(), Step::SetStorage { entry:"invites".into(), doc:None, value:json!({}) });
+    assert_eq!(app.action_step(submit, 0, &env).unwrap(), Step::SetStorage { entry:"invites".into(), doc:None, value:json!({}) });
+    assert_eq!(app.action_step(submit, 1, &env).unwrap(), Step::SetStorage { entry:"servers".into(), doc:None, value:json!([]) });
     assert_eq!(app.action_step(submit, 2, &env).unwrap(), Step::SetState { key:"new_invite".into(), value:json!("") });
     assert_eq!(app.action_step(submit, 3, &env).unwrap(), Step::SetState { key:"new_server".into(), value:json!("private.local") });
     state.insert("new_server".into(), json!("https://private.local"));
@@ -471,15 +475,15 @@ fn invite_code_is_stored_separately_from_the_clean_store_address() {
         assert_eq!(
             app.action_step(path, index, &env).unwrap(),
             Step::SetStorage {
-                entry:"servers".into(), doc:None,
-                value:json!(["https://one.example","https://store.example/team"]),
+                entry:"invites".into(), doc:None,
+                value:json!({"https://two.example":"old-code","https://store.example/team":"ab12-cd34"}),
             }
         );
         assert_eq!(
             app.action_step(path, index + 1, &env).unwrap(),
             Step::SetStorage {
-                entry:"invites".into(), doc:None,
-                value:json!({"https://two.example":"old-code","https://store.example/team":"ab12-cd34"}),
+                entry:"servers".into(), doc:None,
+                value:json!(["https://one.example","https://store.example/team"]),
             }
         );
     }
@@ -492,14 +496,14 @@ fn invite_code_is_stored_separately_from_the_clean_store_address() {
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&Value::Null, modifiers:None };
     assert_eq!(
         app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(),
-        Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["https://one.example"]) }
-    );
-    assert_eq!(
-        app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 1, &env).unwrap(),
         Step::SetStorage {
             entry:"invites".into(), doc:None,
             value:json!({"https://two.example":"old-code","https://one.example":"new-code"}),
         }
+    );
+    assert_eq!(
+        app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 1, &env).unwrap(),
+        Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["https://one.example"]) }
     );
 
     let item = json!({"key":"https://store.example/team"});

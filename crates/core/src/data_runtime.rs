@@ -708,7 +708,9 @@ fn prepare(
         _ => None,
     };
     let source = runtime.sources.get_mut(name)?;
-    if source.in_flight || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_) | SourcePlan::StoreInvalid(_)) {
+    if (!force && source.in_flight)
+        || matches!(source.plan, SourcePlan::Idle | SourcePlan::Invalid(_) | SourcePlan::StoreInvalid(_))
+    {
         return None;
     }
     if let Some(crate::startup_readiness::Readiness::Pending(reason)) = startup {

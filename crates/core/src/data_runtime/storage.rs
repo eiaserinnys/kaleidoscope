@@ -631,7 +631,7 @@ pub(super) fn written(
     content: Value,
     revision: String,
 ) {
-    let (pending, invites, refresh) = {
+    let (pending, invites) = {
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         let Some(runtime) = windows.get_mut(window) else {
             return;
@@ -650,7 +650,6 @@ pub(super) fn written(
             return;
         };
         let invites = (store_app && entry == "invites").then(|| content.clone());
-        let refresh = store_app && matches!(entry, "servers" | "custom_url");
         let value = StorageReadReply {
             kind,
             content,
@@ -665,17 +664,11 @@ pub(super) fn written(
         slot.in_flight = false;
         slot.value = Some(value);
         slot.status = Status::Ready;
-        (
-            replan(inner, window, runtime, Some(entry)),
-            invites,
-            refresh,
-        )
+        (replan(inner, window, runtime, Some(entry)), invites)
     };
     jobs(inner, pending);
     if let Some(value) = invites {
         crate::store::sync_store_invites(inner, &value);
-    } else if refresh {
-        crate::data_runtime::store_servers_changed(inner);
     }
     inner.layout_signal.notify();
 }

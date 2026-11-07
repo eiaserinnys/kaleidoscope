@@ -263,3 +263,89 @@ fn store_device_permissions_are_saved_and_restored_with_server_state() {
     assert_eq!(crate::storage::load_device(temp.path()).unwrap().store_servers, ["http://127.0.0.1:9090"]);
     core.shutdown();
 }
+
+#[test]
+fn forced_refresh_while_a_store_index_is_in_flight_uses_the_new_invite() {
+    struct GatedTransport {
+        calls: Arc<Mutex<Vec<Option<String>>>>,
+        started: mpsc::Sender<()>,
+        release: Mutex<mpsc::Receiver<()>>,
+        first: Vec<u8>,
+        second: Vec<u8>,
+    }
+    impl GatedTransport {
+        fn answer(&self, invite: Option<&str>) -> Result<kaleidoscope_data::public_http::PublicResponse, kaleidoscope_data::public_http::PublicHttpError> {
+            let index = {
+                let mut calls = self.calls.lock().unwrap();
+                calls.push(invite.map(str::to_owned));
+                calls.len()
+            };
+            if index == 1 {
+                self.started.send(()).unwrap();
+                self.release.lock().unwrap().recv_timeout(Duration::from_secs(10)).unwrap();
+            }
+            let body = if invite == Some("code-2") { self.second.clone() } else { self.first.clone() };
+            Ok(kaleidoscope_data::public_http::PublicResponse {
+                status: 200, headers: BTreeMap::new(), rate_limit: None, retry_after: None,
+                mime: "application/json".into(), bytes: body,
+            })
+        }
+    }
+    impl crate::store::fetch::Transport for GatedTransport {
+        fn get(&self, _: &str, _: &[String], _: &str, _: u64) -> Result<kaleidoscope_data::public_http::PublicResponse, kaleidoscope_data::public_http::PublicHttpError> {
+            self.answer(None)
+        }
+        fn get_with_invite(&self, _: &str, _: &[String], _: &str, invite: &str, _: u64) -> Result<kaleidoscope_data::public_http::PublicResponse, kaleidoscope_data::public_http::PublicHttpError> {
+            self.answer(Some(invite))
+        }
+    }
+
+    let server = "https://private.example/appstore";
+    let (fixture, _, _) = crate::store::tests::fixture();
+    let first = fixture.files.lock().unwrap()["/appstore/index.json"].2.clone();
+    let second = {
+        let mut index: Value = serde_json::from_slice(&first).unwrap();
+        index["generated_at"] = json!("second");
+        index.to_string().into_bytes()
+    };
+    let definition = json!({
+        "id":"invite-refresh-test","name":"스토어",
+        "requires":{"blocks":4,"modules":{"store":3}},
+        "permissions":[{"module":"store","id":"catalog","label":"스토어"}],
+        "state":{"servers":[server]},
+        "sources":{"catalog":{"kind":"store","store":"indexes","permission":"catalog","servers":{"state":"servers"}}},
+        "ui":{"type":"stack","direction":"column","children":[{"type":"text","value":{"expr":"$data.catalog"}}]}
+    });
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![definition.to_string()], &Arc::new(FakeHost::default()));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "invite-refresh-test");
+    mark_connected(&core);
+    let (started, started_rx) = mpsc::channel();
+    let (release, release_rx) = mpsc::channel();
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    *core.inner.store_transport.lock().unwrap() = Some(Arc::new(GatedTransport {
+        calls: calls.clone(),
+        started,
+        release: Mutex::new(release_rx),
+        first,
+        second,
+    }));
+    core.handle(CoreRequest::DataAttach { window_id: window.clone(), dormant: vec![] }).unwrap();
+    started_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(*calls.lock().unwrap(), [None], "초대코드 없는 첫 요청이 도는 중이다");
+
+    crate::store::sync_store_invites(&core.inner, &json!({ server: "code-2" }));
+    release.send(()).unwrap();
+
+    let read = || crate::data_runtime::binding_value(&core.inner, &window, "/ui/children/0/value");
+    wait_until(|| {
+        matches!(read(), Some(kaleidoscope_contract::data::BindingValue::Ready { value, .. })
+            if value["stores"][0]["generated_at"] == "second")
+    });
+    assert_eq!(
+        *calls.lock().unwrap(),
+        [None, Some("code-2".into())],
+        "in-flight 중에도 강제 갱신이 새 초대코드로 요청을 시작한다"
+    );
+}
