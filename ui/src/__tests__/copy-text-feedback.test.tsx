@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest";
 import { ButtonBlock } from "../blocks/data-input";
 
-const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true) }));
+const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), hasActionFailure: vi.fn().mockReturnValue(false) }));
 vi.mock("../data/window-data", () => ({
   useWindowData: () => runtime,
   useBinding: (_pointer: string, binding: unknown) => ({ status: "ready", value: binding }),
@@ -12,7 +12,7 @@ vi.mock("../components/data-icons", () => ({
   DataIcon: ({ name }: { name: string }) => <svg data-icon-name={name} />,
 }));
 
-afterEach(() => { cleanup(); runtime.act.mockReset().mockResolvedValue(true); vi.useRealTimers(); });
+afterEach(() => { cleanup(); runtime.act.mockReset().mockResolvedValue(true); runtime.hasActionFailure.mockReset().mockReturnValue(false); vi.useRealTimers(); });
 
 it("성공한 아이콘 복사 단추는 1.5초 동안 확인 아이콘과 읽기 알림을 보인다", async () => {
   vi.useFakeTimers();

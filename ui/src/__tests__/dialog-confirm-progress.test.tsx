@@ -62,6 +62,38 @@ it("빠른 확정 응답에는 진행 표시가 뜨지 않는다", async () => {
   view.store.dispose();
 });
 
+it("지난 실패를 다시 보내면 250ms를 기다리지 않고 바로 진행을 보이고 400ms 넘게 유지한다", async () => {
+  let confirms = 0;
+  const view = await openDialog(async () => {
+    confirms += 1;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    throw new Error("저장하지 못했습니다");
+  });
+  view.confirmButton.focus();
+  fireEvent.click(view.confirmButton);
+  await sleep(120);
+  // 첫 실패는 빠르게 끝나므로 재시도가 아니면 진행을 보이지 않는다.
+  expect(view.confirmButton.getAttribute("aria-busy")).toBeNull();
+  await screen.findByText(/저장하지 못했습니다/);
+  await waitFor(() => expect(view.confirmButton.getAttribute("aria-disabled")).toBeNull(), { timeout: 3000 });
+  expect(confirms).toBe(1);
+
+  const started = Date.now();
+  fireEvent.click(view.confirmButton);
+  // 다시 보내는 순간 화면을 바꾸지 않고 바로 진행을 보인다.
+  expect(view.confirmButton.getAttribute("aria-busy")).toBe("true");
+  expect(view.confirmButton.getAttribute("aria-disabled")).toBe("true");
+  expect(view.confirmButton.querySelector(".ks-button-progress")).not.toBeNull();
+  expect(document.activeElement).toBe(view.confirmButton);
+  await sleep(250);
+  expect(view.confirmButton.getAttribute("aria-busy")).toBe("true");
+  await waitFor(() => expect(view.confirmButton.getAttribute("aria-busy")).toBeNull(), { timeout: 3000 });
+  expect(Date.now() - started).toBeGreaterThanOrEqual(390);
+  expect(confirms).toBe(2);
+  expect(screen.getByRole("dialog")).toBe(view.dialog);
+  view.store.dispose();
+});
+
 it("느린 확정 응답은 250ms 뒤에 진행을 보이고 400ms 넘게 보이며 그동안 Escape로 닫히지 않는다", async () => {
   const view = await openDialog(async () => {
     await new Promise((resolve) => setTimeout(resolve, 700));

@@ -184,7 +184,7 @@ it("서식 없는 소수 step도 부동소수 오차 없이 증감한다", () =>
   } finally { cleanup(); vi.useRealTimers(); }
 });
 
-const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, loading: false, act: vi.fn().mockResolvedValue(true), holdInput: () => () => undefined }));
+const runtime = vi.hoisted(() => ({ values: {} as Record<string, unknown>, loading: false, act: vi.fn().mockResolvedValue(true), hasActionFailure: vi.fn().mockReturnValue(false), holdInput: () => () => undefined }));
 const previewRender = vi.hoisted(() => vi.fn());
 vi.mock("../data/window-state", async (importOriginal) => ({ ...(await importOriginal<typeof import("../data/window-state")>()), useWindowVisible: () => true, useWindowStateValue: () => null }));
 vi.mock("../render/render-block", () => ({ renderBlock: (...args: unknown[]) => previewRender(...args) }));
@@ -192,7 +192,7 @@ vi.mock("../data/window-data", () => ({
   useWindowData: () => runtime,
   useBinding: (pointer: string, binding: unknown) => runtime.loading && pointer === "/button/label" ? { status: "loading" } : ({ status: "ready", value: binding && typeof binding === "object" && "client" in binding ? runtime.values[(binding as { client: string }).client] : binding && typeof binding === "object" && "state" in binding ? 120 : binding }),
 }));
-afterEach(() => { cleanup(); runtime.values = {}; runtime.loading = false; runtime.act.mockClear(); previewRender.mockClear(); });
+afterEach(() => { cleanup(); runtime.values = {}; runtime.loading = false; runtime.act.mockClear(); runtime.hasActionFailure.mockReset().mockReturnValue(false); previewRender.mockClear(); });
 
 it("자동 높이는 테두리를 더하고 폭이 바뀔 때 다시 재며 고정 행에는 적용하지 않는다", () => {
   let notify!: ResizeObserverCallback;
@@ -612,6 +612,36 @@ it("빠른 단추 동작은 진행 표시를 보이지 않는다", async () => {
     const control = screen.getByRole("button", { name: "실행" });
     await act(async () => { fireEvent.click(control); });
     await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(control.querySelector(".ks-button-progress")).toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+
+it("지난 실패를 다시 보내는 단추는 250ms를 기다리지 않고 바로 진행을 보인다", async () => {
+  vi.useFakeTimers();
+  try {
+    runtime.hasActionFailure.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    // 첫 누름은 빠르게 실패한다. 재시도가 아니므로 250ms 안에 진행을 보이지 않는다.
+    runtime.act.mockResolvedValueOnce(false);
+    const button = { type: "button", label: "저장", on_click: { client: "go" } };
+    render(<ButtonBlock block={button as never} context={{} as never} pointer="/button" />);
+    const control = screen.getByRole("button", { name: "저장" }) as HTMLButtonElement;
+    await act(async () => { fireEvent.click(control); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(control.querySelector(".ks-button-progress")).toBeNull();
+    expect(runtime.hasActionFailure).toHaveBeenNthCalledWith(1, "/button/on_click");
+
+    // 다시 누르면 기다리지 않고 진행을 보이고, 응답이 와도 최소 400ms 유지한다.
+    let finish!: (value: boolean) => void;
+    runtime.act.mockImplementationOnce(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+    fireEvent.click(control);
+    expect(runtime.hasActionFailure).toHaveBeenNthCalledWith(2, "/button/on_click");
+    expect(control.getAttribute("aria-busy")).toBe("true");
+    expect(control.querySelector(".ks-button-progress")).toBeTruthy();
+    await act(async () => { finish(true); });
+    expect(control.querySelector(".ks-button-progress")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(399); });
+    expect(control.querySelector(".ks-button-progress")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(control.querySelector(".ks-button-progress")).toBeNull();
   } finally { vi.useRealTimers(); }
 });

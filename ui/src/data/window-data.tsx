@@ -184,6 +184,7 @@ export class WindowData {
   private noticeOwner: object | null = null;
   private noticeId: string | null = null;
   private noticeRole: "alert" | "status" = "alert";
+  private noticeRevision = 0;
   private actionFailure: { pointer: string; problem: CoreError; retrying: boolean } | null = null;
   private statusSequence = 0;
   private unsubscribe?: () => void;
@@ -330,6 +331,9 @@ export class WindowData {
   getNotice = () => this.noticeRole === "status" ? this.statusMessage : this.notice;
   getNoticeId = () => this.noticeRole === "status" ? null : this.noticeId;
   getNoticeRole = () => this.noticeRole;
+  getNoticeRevision = () => this.noticeRevision;
+  /** 같은 동작이 지금 화면에 그 실패를 그대로 보이고 있는가. 재시도인지 가르는 데 쓴다. */
+  hasActionFailure = (pointer: string) => this.actionFailure?.pointer === pointer && this.noticeProblem === this.actionFailure.problem;
   getStatusSequence = () => this.statusSequence;
   setNotice = (problem: CoreError | string | null, owner: object | null = null) => {
     this.statusMessage = null;
@@ -729,6 +733,8 @@ export class WindowData {
     } catch (error) {
       const problem = toCoreError(error);
       const shown = label ? { ...problem, message: `${label}: ${problem.message}` } : problem;
+      // 같은 문구로 다시 실패해도 화면 읽기 도구가 새 알림으로 읽도록 알림을 새로 그린다.
+      if (this.actionFailure?.pointer === pointer) this.noticeRevision += 1;
       this.actionFailure = { pointer, problem: shown, retrying: false };
       this.setNotice(shown);
       return false;

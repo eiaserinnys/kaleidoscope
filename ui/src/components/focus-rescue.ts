@@ -50,6 +50,14 @@ export function busyDialogAction(element: HTMLElement | null): element is HTMLEl
     && !element.closest('[hidden], [inert]'));
 }
 
+/** 쓰기 입력, 프레임, 덮개처럼 다른 창이 가져가면 안 되는 초점인가. */
+export function holdsUserFocus(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false;
+  return (element.matches(writableControlSelector) && usableFocus(element))
+    || (element.matches("iframe") && usableFocus(element))
+    || Boolean(element.closest("[data-ks-overlay]"));
+}
+
 /** 대화상자가 열리거나 다시 초점을 받을 때 갈 곳: 본문의 쓰기 입력, 없으면 바닥 단추. */
 export function dialogFirstFocus(root: HTMLElement): HTMLElement | null {
   const input = [...root.querySelectorAll<HTMLElement>(`.ks-dialog-body :is(${writableControlSelector})`)]

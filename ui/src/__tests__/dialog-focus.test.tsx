@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { StrictMode, useState } from "react";
 import { Dialog } from "../components/dialog";
 import { isUnclaimedFocus } from "../components/focus-rescue";
@@ -99,4 +99,65 @@ it("대화상자가 처음 주는 초점은 쉘이 준 초점으로 표시한다
   const input = within(dialog).getByRole("textbox", { name: "이름" });
   expect(document.activeElement).toBe(input);
   expect(isUnclaimedFocus(input)).toBe(true);
+});
+
+it("다른 창 입력에서 누른 Escape는 이 창의 대화상자를 닫지 않는다", () => {
+  const hostB = document.createElement("div");
+  hostB.className = "ks-data-window";
+  hostB.dataset.windowId = "window-b";
+  const outside = document.createElement("input");
+  outside.setAttribute("aria-label", "다른 입력");
+  hostB.appendChild(outside);
+  document.body.appendChild(hostB);
+  outside.focus();
+  const hostA = document.createElement("div");
+  hostA.className = "ks-data-window";
+  hostA.dataset.windowId = "window-a";
+  document.body.appendChild(hostA);
+  const onCancel = vi.fn();
+  render(<Dialog host={hostA} windowId="window-a" title="확인" body={<input aria-label="이름" />} ok="확인" onCancel={onCancel} onConfirm={() => {}} />);
+  expect(document.activeElement).toBe(outside);
+  fireEvent.keyDown(outside, { key: "Escape" });
+  expect(onCancel).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  cleanup();
+  hostA.remove();
+  hostB.remove();
+});
+
+it("대화상자가 둘 열려 있으면 Escape는 초점이 있는 창의 대화상자만 닫는다", () => {
+  const hostA = document.createElement("div");
+  hostA.className = "ks-data-window";
+  hostA.dataset.windowId = "window-a";
+  document.body.appendChild(hostA);
+  const hostB = document.createElement("div");
+  hostB.className = "ks-data-window";
+  hostB.dataset.windowId = "window-b";
+  document.body.appendChild(hostB);
+  const cancelA = vi.fn();
+  const cancelB = vi.fn();
+  render(<>
+    <Dialog host={hostA} windowId="window-a" title="가" body={<input aria-label="가 입력" />} ok="확인" onCancel={cancelA} onConfirm={() => {}} />
+    <Dialog host={hostB} windowId="window-b" title="나" body={<input aria-label="나 입력" />} ok="확인" onCancel={cancelB} onConfirm={() => {}} />
+  </>);
+  const inputA = within(hostA).getByRole("textbox", { name: "가 입력" });
+  inputA.focus();
+  fireEvent.keyDown(inputA, { key: "Escape" });
+  expect(cancelA).toHaveBeenCalledTimes(1);
+  expect(cancelB).not.toHaveBeenCalled();
+  cleanup();
+  hostA.remove();
+  hostB.remove();
+});
+
+it("임자가 없는 쉘 전체 대화상자는 Escape로 닫힌다", () => {
+  const onCancel = vi.fn();
+  render(<Dialog host={document.body} title="업데이트" body="새 판이 있습니다." ok="확인" onCancel={onCancel} onConfirm={() => {}} />);
+  const outside = document.createElement("button");
+  outside.textContent = "쉘 단추";
+  document.body.appendChild(outside);
+  outside.focus();
+  fireEvent.keyDown(outside, { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledTimes(1);
+  outside.remove();
 });

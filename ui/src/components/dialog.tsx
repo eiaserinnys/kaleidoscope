@@ -4,7 +4,7 @@ import { Button } from "./primitives";
 import { LoaderCircle } from "./icons";
 import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
-import { bookmarkTarget, dialogActionFocus, dialogFirstFocus, focusBookmark, focusRescued, lastFocusInWindow, usableFocus, writableControlSelector, type FocusBookmark } from "./focus-rescue";
+import { bookmarkTarget, dialogActionFocus, dialogFirstFocus, focusBookmark, focusRescued, holdsUserFocus, lastFocusInWindow, type FocusBookmark } from "./focus-rescue";
 
 export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, windowId, busy = false, rootProps, ownerAnchor, noticeSlotRef }: { ownerAnchor?: Element | null; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; windowId?: string; busy?: boolean }) {
   const titleId = useId();
@@ -21,6 +21,8 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const native = event as KeyboardEvent;
     const owner = windowId ?? ownerOf(host);
     const targetOwner = native.target instanceof Element ? ownerOf(native.target) : undefined;
+    // 다른 창에서 누른 키는 이 창의 대화상자를 닫지 않는다. 쉘 전체 대화상자처럼 임자가 없는 경우는 지금처럼 둔다.
+    if (owner && targetOwner && targetOwner !== owner) return;
     if (native.isTrusted === false && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
     if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); if (!busyRef.current) onCancelRef.current(); return; }
     if (event.key !== "Tab" || !root.current) return;
@@ -42,8 +44,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     background.forEach((element) => { element.setAttribute("inert", ""); });
     const owner = windowId ?? ownerOf(host);
     // 에이전트가 새 창을 열어 대화상자가 뜰 때 다른 창에 입력 중이면 그 초점을 가져오지 않는다.
-    const foreign = previous !== null && !host.contains(previous) && ((previous.matches(writableControlSelector) && usableFocus(previous))
-      || (previous.matches("iframe") && usableFocus(previous)) || Boolean(previous.closest("[data-ks-overlay]")));
+    const foreign = previous !== null && !host.contains(previous) && holdsUserFocus(previous);
     if (!windowModal && !foreign && (!owner || !preserveWindowActionFocus(owner))) {
       const target = root.current ? dialogFirstFocus(root.current) : null;
       if (target) focusRescued(target);

@@ -204,3 +204,56 @@ it("정보 알림이 떠 있는 동안에도 같은 동작의 지난 실패를 �
   expect(data.getNoticeRole()).toBe("status");
   done();
 });
+
+it("재시도 판정은 지금 화면에 그 실패가 보일 때만 참이다", async () => {
+  const { data, control, done } = setup({ type: "button", label: "저장", on_click: [{ set_state: "saved", value: true }] }, { saved: false });
+  control.fail = true;
+  await data.act("/ui/on_click", null);
+  expect(data.hasActionFailure("/ui/on_click")).toBe(true);
+  expect(data.hasActionFailure("/ui/on_close")).toBe(false);
+
+  // 알림을 닫으면 재시도로 보지 않는다.
+  data.setNotice(null);
+  expect(data.hasActionFailure("/ui/on_click")).toBe(false);
+
+  // 다시 실패하면 다시 재시도다.
+  await data.act("/ui/on_click", null);
+  expect(data.hasActionFailure("/ui/on_click")).toBe(true);
+
+  // 다른 알림이 덮어도 재시도로 보지 않는다.
+  data.setNotice("다른 알림");
+  expect(data.hasActionFailure("/ui/on_click")).toBe(false);
+
+  // 성공하면 거둔다.
+  data.setNotice(null);
+  control.fail = true;
+  await data.act("/ui/on_click", null);
+  expect(data.hasActionFailure("/ui/on_click")).toBe(true);
+  control.fail = false;
+  await data.act("/ui/on_click", null);
+  expect(data.hasActionFailure("/ui/on_click")).toBe(false);
+  done();
+});
+
+it("같은 문구로 다시 실패하면 알림 판을 올리고 다른 경로의 알림은 올리지 않는다", async () => {
+  const { data, control, done } = setup({
+    type: "stack", direction: "column", children: [
+      { type: "button", label: "첫째", on_click: [{ set_state: "first", value: true }] },
+      { type: "button", label: "둘째", on_click: [{ set_state: "second", value: true }] },
+    ],
+  }, { first: false, second: false });
+  const start = data.getNoticeRevision();
+  control.fail = true;
+  control.message = "같은 실패";
+  await data.act("/ui/children/0/on_click", null);
+  expect(data.getNoticeRevision()).toBe(start);
+  await data.act("/ui/children/0/on_click", null);
+  expect(data.getNoticeRevision()).toBe(start + 1);
+  await data.act("/ui/children/0/on_click", null);
+  expect(data.getNoticeRevision()).toBe(start + 2);
+  await data.act("/ui/children/1/on_click", null);
+  expect(data.getNoticeRevision()).toBe(start + 2);
+  data.setNotice("직접 알림");
+  expect(data.getNoticeRevision()).toBe(start + 2);
+  done();
+});

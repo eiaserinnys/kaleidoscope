@@ -191,7 +191,9 @@ export function ButtonBlock({ block, context, pointer }: Props<"button">) {
     setConfirm(false);
     setBusy(true);
     progressShownAt.current = null;
-    progressTimer.current = setTimeout(() => { setShowProgress(true); progressTimer.current = null; }, BUTTON_PROGRESS_DELAY_MS);
+    // 지난 실패를 다시 보내는 것이면 결과를 기다리지 않고 바로 진행을 보인다. 처음 누름은 지금처럼 잠시 기다린다.
+    if (data.hasActionFailure(`${pointer}/on_click`)) setShowProgress(true);
+    else progressTimer.current = setTimeout(() => { setShowProgress(true); progressTimer.current = null; }, BUTTON_PROGRESS_DELAY_MS);
     const succeeded = await data.act(`${pointer}/on_click`, null, undefined, modifiers);
     if (!mounted.current) return;
     if (progressTimer.current) clearTimeout(progressTimer.current);

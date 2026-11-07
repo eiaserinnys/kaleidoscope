@@ -285,6 +285,22 @@ it("상태 알림은 대화상자 슬롯과 창 자리를 오가도 시간을 �
   slot.remove();
 });
 
+it("같은 문구로 다시 실패하면 실패 알림 요소를 새로 그린다", async () => {
+  const failDefinition = { ...definition, state: { saved: false }, ui: { type: "button", label: "저장", on_click: [{ set_state: "saved", value: true }] } } as AppDefinition;
+  data = new windowData.WindowData(store, "viewer-window", failDefinition);
+  cleanup();
+  vi.mocked(windowData.useWindowData).mockReturnValue(data);
+  vi.spyOn(store, "call").mockRejectedValue({ id: "TEST_ACTION_FAILED", code: "server", message: "저장하지 못했습니다", details: [] });
+  render(<WindowNotice />);
+  await act(async () => { await data.act("/ui/on_click", null); });
+  const first = screen.getByRole("alert");
+  expect(first.textContent).toContain("저장하지 못했습니다");
+  await act(async () => { await data.act("/ui/on_click", null); });
+  const second = screen.getByRole("alert");
+  expect(second.textContent).toContain("저장하지 못했습니다");
+  expect(second).not.toBe(first);
+});
+
 it('실제 재수신 중 다시 받기는 진행 표시와 잠금을 유지한다', () => {
   const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
   const fail = { state: 'failed', has_value: true, message: '읽기 실패' };
