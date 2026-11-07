@@ -84,3 +84,97 @@ jobs:
       - run: cargo test -p kaleidoscope-core windows_process_finds_new_user_path_without_restart -- --test-threads=2
       - name: Verify process file URI with a Unicode Windows path
         run: cargo test -p kaleidoscope-core process_file_uri_returns_only_a_window_blob_file_address -- --test-threads=2
+
+  macos-app:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      # macOS 러너에서 release 빌드를 매번 처음부터 하지 않도록 캐시한다. 저장은 main push에서만 해서 PR마다 캐시가 늘지 않게 한다.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir app build
+      - run: cargo check -p kaleidoscope-app
+      - run: cargo test -p kaleidoscope-app --lib
+      - name: macOS 앱 번들 빌드
+        run: pnpm --dir app tauri build
+      - name: 앱 번들 확인
+        run: |
+          app=target/release/bundle/macos/kaleidoscope.app
+          bin="$app/Contents/MacOS/kaleidoscope-app"
+          test -d "$app"
+          test -x "$bin"
+          archs=$(lipo -archs "$bin")
+          echo "아키텍처: $archs"
+          case " $archs " in
+            *" arm64 "*) ;;
+            *) echo "arm64 실행 파일이 아닙니다" >&2; exit 1 ;;
+          esac
+          codesign -dv "$app" || true
+      - name: 앱 실행 확인
+        run: |
+          bin=target/release/bundle/macos/kaleidoscope.app/Contents/MacOS/kaleidoscope-app
+          data_dir="$HOME/Library/Application Support/me.eiaserinnys.kaleidoscope"
+          token="$data_dir/local-orchestrator.token"
+          log="$RUNNER_TEMP/kaleidoscope-app.log"
+          "$bin" >"$log" 2>&1 &
+          pid=$!
+          for _ in $(seq 1 30); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "앱이 시작 직후 종료되었습니다" >&2
+              cat "$log"
+              exit 1
+            fi
+            if [ -s "$token" ]; then break; fi
+            sleep 1
+          done
+          if [ ! -s "$token" ]; then
+            echo "내장 서버 토큰이 만들어지지 않았습니다: $token" >&2
+            kill "$pid" 2>/dev/null || true
+            cat "$log"
+            exit 1
+          fi
+          sleep 15
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "앱이 실행 중에 종료되었습니다" >&2
+            cat "$log"
+            exit 1
+          fi
+          lsof -nP -a -p "$pid" -iTCP -sTCP:LISTEN || true
+          port=$(lsof -nP -a -p "$pid" -iTCP@127.0.0.1 -sTCP:LISTEN -Fn | sed -n 's/^n127\.0\.0\.1://p' | head -n 1)
+          if [ -z "$port" ]; then
+            echo "내장 서버가 127.0.0.1에서 대기하지 않습니다" >&2
+            kill "$pid" 2>/dev/null || true
+            cat "$log"
+            exit 1
+          fi
+          status=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/" || true)
+          echo "내장 서버 포트 $port, 응답 $status"
+          if [ -z "$status" ] || [ "$status" = "000" ]; then
+            echo "내장 서버가 응답하지 않습니다" >&2
+            kill "$pid" 2>/dev/null || true
+            cat "$log"
+            exit 1
+          fi
+          kill "$pid"
+          wait "$pid" 2>/dev/null || true
+          cat "$log"
+      - name: 앱 번들 압축
+        run: ditto -c -k --keepParent target/release/bundle/macos/kaleidoscope.app "$RUNNER_TEMP/kaleidoscope-macos-arm64.zip"
+      - name: 앱 번들 올리기
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: kaleidoscope-macos-arm64
+          path: ${{ runner.temp }}/kaleidoscope-macos-arm64.zip
+          retention-days: 7
