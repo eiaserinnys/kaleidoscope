@@ -49,17 +49,32 @@ Connections support device-local OAuth login and server-side relay requests. OAu
 
 ## Get started
 
-kaleidoscope is under active development. Windows is the first supported desktop target; macOS support is planned.
+kaleidoscope is under active development. Windows is the first supported desktop target. macOS on Apple Silicon can be built from source, with the limits below.
 
 ### 1. Install the shell
 
 Download the [Windows installer](https://kaleidoscope.eiaserinnys.me/releases/kaleidoscope_x64-setup.exe). It is not Authenticode-signed, so Windows may show a SmartScreen warning. Installed shells update themselves from the same place. Before installing an update, the shell shows what changed and asks for confirmation.
 
+On a Mac with Apple Silicon, build the shell from source after installing the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) and the tools listed under [Development](#development):
+
+```bash
+pnpm install --frozen-lockfile
+pnpm --dir app tauri build
+```
+
+The app is written to `target/release/bundle/macos/kaleidoscope.app`. It is not signed or notarized, so after copying it to another Mac, clear the quarantine flag before opening it: `xattr -dr com.apple.quarantine kaleidoscope.app`. The macOS build does not yet include:
+
+- embedded web pages (the `web_view` block and the web browser app)
+- window capture and web control for shared windows
+- automatic updates
+- an installer and code signing
+- program installation in the Agent app; install Node.js and each agent CLI yourself
+
 The shell starts its built-in server on launch. Its database and token are kept in the app data folder as `local-orchestrator.db` and `local-orchestrator.token`.
 
 ### 2. Start the Agent app
 
-Open **에이전트** (Agent) from the app grid (`앱 열기` at the left of the bottom bar), pick an agent and a working folder, and approve its command the first time on that PC. The defaults are Claude Code, Codex, Gemini CLI, and Antigravity, launched through the Agent Client Protocol. If the command's program is missing, the window offers to install it and then starts the agent. Sign in once with each agent CLI you plan to use.
+Open **에이전트** (Agent) from the app grid (`앱 열기` at the left of the bottom bar), pick an agent and a working folder, and approve its command the first time on that PC. The defaults are Claude Code, Codex, Gemini CLI, and Antigravity, launched through the Agent Client Protocol. If the command's program is missing, the window offers to install it on Windows and then starts the agent. Sign in once with each agent CLI you plan to use.
 
 The approval lets that command run with your account's permissions; the working folder is not a sandbox. Agents that accept HTTP MCP servers receive the shell's MCP tools, so you can ask one to build an app and it opens as a new window. The list of agents is stored in the Agent app's `agents` storage entry; change it with the MCP tool `write_app_storage`. The defaults are in [`apps/agent.json`](apps/agent.json).
 
@@ -77,7 +92,7 @@ The server listens on `127.0.0.1:4219`. On first start it creates a token next t
 
 On Windows, you can instead download `kaleidoscope-orchestrator-x86_64-pc-windows-msvc.zip` from [Releases](https://github.com/eiaserinnys/kaleidoscope/releases). It contains the server and the built-in app definitions in `apps/`; run the server from that folder so built-in app workers work before any shell connects. With Docker, `docker compose up -d --build` builds an image that keeps the database, token, and backups in a volume and publishes port 4219 on the host's loopback address.
 
-App workers run Python 3 (`python3` on Linux, `python` on Windows), which must be on the server's PATH. The Docker image includes Python and Node.js. For devices on another machine, put the server behind an HTTPS reverse proxy and use that address in the shell.
+App workers run Python 3 (`python3` on Linux and macOS, `python` on Windows), which must be on the server's PATH. This includes the shell's built-in server; on macOS, an app opened from Finder may not get your shell's PATH. The Docker image includes Python and Node.js. For devices on another machine, put the server behind an HTTPS reverse proxy and use that address in the shell.
 
 ### Run a private app store
 
@@ -205,7 +220,7 @@ For desktop development on a supported host, install the [Tauri prerequisites](h
 pnpm --dir app tauri dev
 ```
 
-Use `tauri build` instead of `tauri dev` for an installer. A redistributed build also needs its own updater endpoints and signing key in `app/src-tauri/tauri.conf.json`. Windows release builds and native end-to-end checks run in GitHub Actions.
+Use `tauri build` instead of `tauri dev` for an installer. A redistributed build also needs its own updater endpoints and signing key in `app/src-tauri/tauri.conf.json`. Windows release builds and native end-to-end checks run in GitHub Actions, along with an Apple Silicon build and launch check.
 
 | Path | Contents |
 | --- | --- |
