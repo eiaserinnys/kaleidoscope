@@ -47,6 +47,14 @@ it("타일 접근 이름에 알림 수를 더한다", () => {
   expect(screen.getByRole("button", { name: "별도 이름, 알림 2개" })).toBeTruthy();
 });
 
+it("아이콘 타일의 점 표시는 빨간 점만 보이고 접근 이름을 바꾸지 않는다", () => {
+  const { container } = render(<IconTile name="앱" icon={<i />} dot />);
+  const tile = screen.getByRole("button", { name: "앱" });
+  expect(tile.querySelector(".ks-icon-tile-icon.ks-badge-anchor .ks-badge.is-count.is-dot")).not.toBeNull();
+  expect(tile.querySelector(".is-dot")?.textContent).toBe("");
+  expect(container.textContent).not.toContain("알림");
+});
+
 it("점 배지는 1 미만이면 숨기고 알림 수와 관계없이 글자 없이 보인다", () => {
   const { container, rerender } = render(<CountBadge count={0} dot />);
   expect(container.querySelector(".is-dot")).toBeNull();

@@ -1154,6 +1154,10 @@ pub struct ListItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub image: Option<MediaRef>,
+    /// 아이콘 격자 보기(`layout: "icons"`)에서 아이콘 오른쪽 위에 빨간 점을 표시한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub dot: Option<bool>,
 }
 
 /// 묶음 하나(`grouped`인 `list`와 `feed`). 머리에 제목과 부가 정보(개수 등)를 보인다.

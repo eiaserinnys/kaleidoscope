@@ -8046,10 +8046,11 @@ mod tests {
             r#"{"event":"data.update","window_id":"w","view":{"sources":{"cards":{"state":"loading","has_value":false}},"values":{"/ui/children/1/items":{"status":"login_required","permission":"shay"},"/ui/items":{"status":"loading"},"/ui/title":{"status":"ready","value":"가"}}}}"#
         );
         let item: data::ListItem = serde_json::from_str(
-            r##"{"key":"a","title":"가","badges":["새로",{"text":"완료","color":"#2f7d4f"}],"image":{"permission":"m","path":"/p.png"},"extra":1}"##,
+            r##"{"key":"a","title":"가","dot":true,"badges":["새로",{"text":"완료","color":"#2f7d4f"}],"image":{"permission":"m","path":"/p.png"},"extra":1}"##,
         )
         .expect("블록이 받는 모양은 모르는 필드를 넘긴다");
         assert_eq!(item.badges.len(), 2);
+        assert_eq!(item.dot, Some(true));
         let actions: data::Actions = serde_json::from_str(r#"{"set_state":"card"}"#).unwrap();
         assert!(matches!(actions, data::Actions::One(_)));
         let actions: data::Actions = serde_json::from_str(
