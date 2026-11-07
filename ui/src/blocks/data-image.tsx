@@ -24,7 +24,7 @@ export function ImageBlock({ block, pointer }: { block: Data; pointer: string })
   useEffect(() => { if (binding.status !== "ready") preview?.(bindingError); }, [preview, binding.status, bindingError]);
   if (binding.status === "loading") return <div {...blockRoot} className="ks-image-view"><ImageLoading /></div>;
   if (binding.status !== "ready") return preview ? <div {...blockRoot} className="ks-image-view"><PreviewFailure error={bindingError ?? "이미지를 불러오지 못했습니다"} /></div>
-    : <div {...blockRoot} className={`ks-image-view${binding.status === "failed" ? " is-failed" : ""}`}><DataState value={binding} /></div>;
+    : <div {...blockRoot} className="ks-image-view is-failed"><DataState value={binding} /></div>;
   return <ImageView media={isMedia(binding.value) ? binding.value : null} fit={block.fit ?? "contain"} zoomable={!!block.zoom && !preview} />;
 }
 function ImageLoading() {

@@ -145,6 +145,18 @@ it("원천 결속 실패도 그림 자리 안에 그린다", async () => {
   expect(host?.textContent).toContain("원천을 읽지 못했습니다");
 });
 
+it("로그인 필요도 그림 자리 안에 그린다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: {} }, permissions: [], state: {}, ui: { type: "image", src: { expr: "$state.src" } } };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/src": { status: "login_required", permission: "media" } } } }));
+  const host = view.container.querySelector<HTMLElement>(".ks-image-view.is-failed");
+  expect(host).toBeTruthy();
+  expect(host?.textContent).toContain("로그인이 필요합니다");
+});
+
 it("미디어의 폴더 미선택 오류에서 합성 선택을 막는다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { permission: "docs", path: "file.wav" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
