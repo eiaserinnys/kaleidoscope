@@ -3,7 +3,7 @@ use crate::connections;
 use kaleidoscope_contract::{
     data::{self, BindingValue},
     registry::{LayoutDataError, LAYOUT_DATA_ERRORS_MAX},
-    LinkStatus,
+    CoreRequest, LinkStatus,
 };
 use kaleidoscope_data::{Env, Step};
 
@@ -25,6 +25,21 @@ fn flush_pending_state(
         *steps = 0;
     }
     Ok(())
+}
+
+/// 쉘 동작을 실행하는 창이 놓인 데스크톱. 활성 데스크톱이 아니라 부른 창의 데스크톱을 쓴다.
+fn shell_desktop_id(inner: &Arc<Inner>, window_id: &str) -> Result<String, CoreError> {
+    let state = inner.state.lock().unwrap();
+    state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .map(|window| window.desktop_id.clone())
+        .ok_or_else(|| {
+            errors::DATA_SHELL_ACT_WINDOW_NOT_FOUND()
+                .and_details(vec![format!("window: {}", window_id)])
+        })
 }
 
 pub(crate) fn act(
@@ -152,7 +167,6 @@ pub(crate) fn act(
                         modifiers: modifiers.as_ref(),
                     },
                 )
-                .map_err(|reason| errors::DATA_ACT_STEP_INVALID(pointer, &reason))
         })();
         let step = match step {
             Ok(step) => step,
@@ -173,6 +187,24 @@ pub(crate) fn act(
             }
             Step::StoreRemove { permission, id } => {
                 crate::store::install::remove(inner, window_id, &permission, id)?;
+            }
+            Step::ShellOpen { app_id } => {
+                let desktop_id = shell_desktop_id(inner, window_id)?;
+                crate::Core { inner: Arc::clone(inner), owner: false }.apply_state_change(|state| {
+                    crate::state_commands::handle(
+                        state,
+                        CoreRequest::WindowOpen { desktop_id, app_id, rect: None },
+                    )
+                })?;
+            }
+            Step::ShellAddShortcut { app_id } => {
+                let desktop_id = shell_desktop_id(inner, window_id)?;
+                crate::Core { inner: Arc::clone(inner), owner: false }.apply_state_change(|state| {
+                    crate::state_commands::handle(
+                        state,
+                        CoreRequest::DesktopShortcutAdd { desktop_id, app_id },
+                    )
+                })?;
             }
             Step::Worker { action, args } => {
                 let worker_action = action.clone();

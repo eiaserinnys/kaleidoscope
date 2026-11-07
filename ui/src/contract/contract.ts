@@ -12,7 +12,7 @@ export type ActWindowArgs = { window_id: string, view_id: string, action: Window
 /**
  * 동작 하나.
  */
-export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction | WorkerAction | StoreAllowServerAction | StoreInstallAction | StoreRemoveAction | ClientAction | PickFilesAction | SaveFileAction | CopyTextAction;
+export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction | WorkerAction | StoreAllowServerAction | StoreInstallAction | StoreRemoveAction | ShellOpenAction | ShellAddShortcutAction | ClientAction | PickFilesAction | SaveFileAction | CopyTextAction;
 
 /**
  * 블록 이벤트에 거는 동작. 상태 키 하나에 이벤트 값을 쓰는 짧은 꼴(`{ "set_state": "키" }`)이나 동작 목록이다.
@@ -1405,6 +1405,12 @@ preferences?: AccountPreferences | null,
  * 커멘트가 없음을 뜻한다. 서버를 바꾸면 preferences처럼 비우고 새 스냅샷을 기다린다.
  */
 app_comments?: { [key in string]: AppCommentAppMeta } | null, };
+
+export type ShellAddShortcutAction = { "shell.add_shortcut": ShellAppSpec, };
+
+export type ShellAppSpec = { app_id: Binding, };
+
+export type ShellOpenAction = { "shell.open": ShellAppSpec, };
 
 /**
  * 화면이 보는 상태 전체.

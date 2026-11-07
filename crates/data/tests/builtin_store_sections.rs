@@ -87,8 +87,8 @@ fn another_store_install_cannot_be_updated() {
     let apps: Vec<kaleidoscope_contract::store::InstalledAppValue> = serde_json::from_value(json!([{"id":"same","name":"메모","version":1,"origin":{"store_url":"https://a.example","store_app_id":"same","release":1,"digest":"abc"},"latest":{"release":2,"compatible":true},"installed_version":1,"modified":false,"icon":null}])).unwrap();
     let empty = BTreeMap::new();
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/3/child/end/0/disabled"), json!(true));
-    assert_ne!(value(&values, "/ui/children/2/children/3/child/end/0/label"), "업데이트");
+    assert_eq!(value(&values, "/ui/children/2/children/4/child/end/0/disabled"), json!(true));
+    assert_ne!(value(&values, "/ui/children/2/children/4/child/end/0/label"), "업데이트");
     assert!(value(&values, "/ui/children/2/children/1/child/children/0/fields/7/value").as_str().unwrap().contains("다른 스토어"));
 }
 
@@ -180,8 +180,8 @@ fn removed_stores_remain_removable_in_installed_and_updates() {
     assert!(matches!(app.plan_source_with_apps("detail", &state, &data, &empty, &empty, Some(&apps)), SourcePlan::StoreApp { id, .. } if id == "gone"));
     let data_meta = map(json!({"detail":{"state":"loading"}}));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(false));
 }
 
 #[test]
@@ -297,24 +297,24 @@ fn delete_button_shows_only_for_store_installed_apps() {
     let with_origin = installed(json!({"store_url":"https://default.example","store_app_id":"notes","release":1,"digest":"abc"}));
 
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &ready_meta, Some(&[]), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/3/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(true));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &ready_meta, Some(&no_origin), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/3/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(true));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &ready_meta, Some(&with_origin), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/3/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(false));
-
-    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&[]), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(true));
-    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&no_origin), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(true));
-    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&with_origin), &BTreeMap::new(), None, &mut |_, _| {});
     assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(true));
     assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(false));
+
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&[]), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(true));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&no_origin), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(true));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&with_origin), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(false));
 }
 
 #[test]
@@ -352,4 +352,66 @@ fn settings_reject_addresses_without_http_scheme() {
     let rows = value(&values, "/settings/ui/children/1/items");
     assert_eq!(rows[0]["meta"], "사설 1");
     assert_eq!(rows[1]["meta"], "사설 2");
+}
+
+#[test]
+fn shortcut_row_shows_for_installed_apps_and_tracks_the_selection() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let mut state = definition.state.clone();
+    // 이전에 저장한 창 상태에는 이 키가 없다.
+    state.remove("shortcut_added");
+    state.insert("selected".into(), json!("notes"));
+    let empty = BTreeMap::new();
+    let data = map(json!({"catalog":{"stores":[{"server":"https://default.example","state":"ready","items":[]}]},"detail":{"release":2,"compatible":true}}));
+    let installed: Vec<kaleidoscope_contract::store::InstalledAppValue> = serde_json::from_value(json!([
+        {"id":"notes","name":"기본 메모","version":1,"origin":null,"latest":null,"installed_version":null,"modified":false,"icon":null},
+        {"id":"weather","name":"날씨","version":1,"origin":null,"latest":null,"installed_version":null,"modified":false,"icon":null}
+    ])).unwrap();
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&installed), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/3/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/3/child/end/0/label"), "바탕화면에 추가");
+    assert_eq!(value(&values, "/ui/children/2/children/3/child/end/0/disabled"), json!(false));
+    let raw: Value = serde_json::from_str(include_str!("../../../apps/store.json")).unwrap();
+    let end = &raw["ui"]["children"][2]["children"][3]["child"]["end"];
+    assert_eq!(end[0]["on_click"][0], json!({"shell.add_shortcut":{"app_id":{"state":"selected"}}}));
+    assert_eq!(end[1]["label"], "열기");
+    assert_eq!(end[1]["variant"], "primary");
+    assert_eq!(end[1]["on_click"][0], json!({"shell.open":{"app_id":{"state":"selected"}}}));
+
+    state.insert("shortcut_added".into(), json!("notes"));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&installed), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/3/child/end/0/label"), "바탕화면에 있음");
+    assert_eq!(value(&values, "/ui/children/2/children/3/child/end/0/disabled"), json!(true));
+
+    state.insert("selected".into(), json!("weather"));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&installed), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/3/child/end/0/label"), "바탕화면에 추가");
+    assert_eq!(value(&values, "/ui/children/2/children/3/child/end/0/disabled"), json!(false));
+
+    state.insert("selected".into(), json!("missing"));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&installed), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/3/value"), json!(false));
+}
+
+#[test]
+fn shortcut_row_actions_compile_to_shell_steps() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let mut state = definition.state.clone();
+    state.insert("selected".into(), json!("notes"));
+    let empty = BTreeMap::new();
+    let event = Value::Null;
+    let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&empty, storage_meta:&empty, apps:None, event:&event, item:&event, modifiers:None };
+    let add = "/ui/children/2/children/3/child/end/0/on_click";
+    let open = "/ui/children/2/children/3/child/end/1/on_click";
+    assert_eq!(app.action_step(add, 0, &env).unwrap(), Step::ShellAddShortcut { app_id:"notes".into() });
+    assert_eq!(app.action_step(add, 1, &env).unwrap(), Step::SetState { key:"shortcut_added".into(), value:json!("notes") });
+    assert_eq!(app.action_step(open, 0, &env).unwrap(), Step::ShellOpen { app_id:"notes".into() });
+    assert!(matches!(app.action_step(add, 2, &env), Err(error) if error.id.as_deref() == Some("DATA_ACT_STEP_INVALID")));
+
+    state.insert("selected".into(), json!(5));
+    let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&empty, storage_meta:&empty, apps:None, event:&event, item:&event, modifiers:None };
+    assert_eq!(app.action_step(open, 0, &env).unwrap_err().id.as_deref(), Some("DATA_SHELL_OPEN_APP_ID_INVALID"));
+    assert_eq!(app.action_step(add, 0, &env).unwrap_err().id.as_deref(), Some("DATA_SHELL_SHORTCUT_APP_ID_INVALID"));
 }

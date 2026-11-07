@@ -203,7 +203,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         version: 4,
         updated_at: "2026-11-05T03:14:31Z",
         blocks: crate::LIST_GROUP_STATUS_BLOCK_SET_VERSION,
-        modules: &[("assets", 1), ("storage", 2), ("store", 3)],
+        modules: &[("assets", 1), ("storage", 2), ("store", 3), ("shell", 1)],
         assets: &[("builtin-icon-store", 2)],
     },
 ];

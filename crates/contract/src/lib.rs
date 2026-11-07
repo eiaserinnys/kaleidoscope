@@ -251,7 +251,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 43;
+pub const CONTRACT_VERSION: u32 = 44;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -397,6 +397,8 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// - `process` 1판: 로컬 프로그램 실행, 명세마다 허용.
 /// - `process` 2판: 1판 + 권한의 `command`, 프로그램마다 한 번 허용.
 /// - `http` 3판: 권한의 `access: readwrite`, client `http.request`(헤더, 쓰기 메서드, 응답 상태와 헤더).
+/// - `shell` 1판: 앱 창에서 다른 앱을 새 창으로 여는 `shell.open`과 그 창의 데스크톱에 앱 아이콘을 놓는
+///   `shell.add_shortcut`.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 4),
     ("agent", 3),
@@ -410,6 +412,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("client", CLIENT_FILE_OPEN_VERSION),
     ("process", 2),
     ("store", 3),
+    ("shell", 1),
 ];
 
 /// 단추 강조 바인딩과 새 아이콘을 처음 지원한 블록 세트 판.

@@ -2,7 +2,7 @@
   "id": "store",
   "name": "앱스토어",
   "description": "스토어의 앱을 찾아 설치하고, 설치한 앱을 업데이트하거나 지웁니다",
-  "requires": {"blocks": 43, "modules": {"store": 3, "storage": 2, "assets": 1}},
+  "requires": {"blocks": 43, "modules": {"store": 3, "storage": 2, "assets": 1, "shell": 1}},
   "badge": {"expr": "$count($apps[origin != null and $not(modified) and latest.compatible = true and latest.release > origin.release])"},
   "icon": {"asset": "builtin-icon-store", "version": 2},
   "assets": [{"id": "builtin-icon-store", "version": 2}],
@@ -40,7 +40,7 @@
       }
     ]
   },
-  "state": {"category": "", "query": "", "selected": null, "selected_name": "", "selected_store": null, "new_server": "", "selected_key": null},
+  "state": {"category": "", "query": "", "selected": null, "selected_name": "", "selected_store": null, "new_server": "", "selected_key": null, "shortcut_added": null},
   "sources": {
     "catalog": {
       "kind": "store",
@@ -177,6 +177,31 @@
             "type": "when",
             "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state != 'ready'"},
             "child": {"type": "text", "value": {"expr": "$data.detail.name"}}
+          },
+          {
+            "type": "when",
+            "value": {"expr": "$state.selected != null and $count($apps[id = $state.selected]) > 0"},
+            "child": {
+              "type": "toolbar",
+              "start": [],
+              "end": [
+                {
+                  "type": "button",
+                  "label": {"expr": "$state.shortcut_added = $state.selected ? '바탕화면에 있음' : '바탕화면에 추가'"},
+                  "disabled": {"expr": "$state.shortcut_added = $state.selected"},
+                  "on_click": [
+                    {"shell.add_shortcut": {"app_id": {"state": "selected"}}},
+                    {"set_state": "shortcut_added", "value": {"state": "selected"}}
+                  ]
+                },
+                {
+                  "type": "button",
+                  "variant": "primary",
+                  "label": "열기",
+                  "on_click": [{"shell.open": {"app_id": {"state": "selected"}}}]
+                }
+              ]
+            }
           },
           {
             "type": "when",
