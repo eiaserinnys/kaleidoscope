@@ -74,7 +74,9 @@ def capture_timeline():
             break
         page.wait_for_timeout(400)  # noqa: F821
     page.wait_for_timeout(1000)  # noqa: F821
-    win.get_by_text("고급", exact=True).first.click()
+    advanced = win.get_by_text("고급", exact=True)
+    if advanced.count() and advanced.first.is_visible():
+        advanced.first.click()
     page.wait_for_timeout(1000)  # noqa: F821
     for width, height in [(1200, 760), (360, 600)]:
         resize(wid, width, height)
@@ -116,7 +118,9 @@ def capture_map():
 def capture_xops():
     definition = json.loads(Path(os.environ["KS_1072_XOPS_DEF"]).read_text(encoding="utf-8"))
     metrics["xops-original-sizes"] = definition["ui"]["sizes"]
-    definition["ui"]["sizes"] = [32, 68]
+    # 보관본에는 아이콘 자산 바이트가 없으므로 시험 창의 아이콘 참조만 제거한다.
+    definition.pop("icon", None)
+    definition["assets"] = [asset for asset in definition["assets"] if asset["id"] != "xops-icon"]
     client = Path(os.environ["KS_1072_XOPS_CLIENT"]).read_bytes()
     upload = {"id": "xops-attach", "version": 1, "format": "javascript", "sha256": hashlib.sha256(client).hexdigest(),
               "source": "시험", "license": "개인 앱 코드", "data_base64": base64.b64encode(client).decode()}
@@ -130,6 +134,13 @@ def capture_xops():
     win = sb.window("xops")  # noqa: F821
     page.wait_for_timeout(1500)  # noqa: F821
     win.locator("[role=option]").first.click()
+    page.wait_for_timeout(1000)  # noqa: F821
+    resize(wid, 360, 600)
+    metrics["xops-360-original"] = win.locator(".ks-split").first.evaluate("""el => ({stacked:el.classList.contains('is-stacked'), panes:[...el.querySelectorAll(':scope > .ks-split-pane')].map(p => p.getBoundingClientRect().height)})""")
+    shot(win, "item3-split-xops-360-original")
+    definition["ui"]["sizes"] = [32, 68]
+    result = sb.mcp.call("upload_app", {"definition": definition, "open": False})  # noqa: F821
+    assert not result["is_error"], result["text"][:500]
     page.wait_for_timeout(1000)  # noqa: F821
     for width, height in [(360, 600), (1200, 800)]:
         resize(wid, width, height)
