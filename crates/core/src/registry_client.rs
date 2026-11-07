@@ -942,6 +942,7 @@ impl RegistryClient for HttpRegistryClient {
             .requests()?
             .post(format!("{server_url}{DEVICE_LAYOUT_CHANGES_PATH}"))
             .bearer_auth(token)
+            .header(REGISTRY_HEADER, REGISTRY_VERSION.to_string())
             .json(changes)
             .send_registry()?;
         let status = response.status();

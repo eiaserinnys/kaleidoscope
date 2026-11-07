@@ -6,6 +6,46 @@ fn app() -> AppDefinition {
     parse_app_definition(r#"{"id":"personal-test","name":"시험","requires":{"blocks":6,"modules":{"storage":1}},"permissions":[],"state":{},"storage":{"entries":[{"id":"setting","key":"setting","kind":"json","default":0,"schema":{"type":"integer"},"label":"값","presentation":"hidden"}]},"ui":{"type":"text","value":"시험"}}"#).unwrap()
 }
 
+#[test]
+fn transfer_shortcuts_keeps_remote_values_and_deleted_apps() {
+    let local = AppState::in_memory("local");
+    let remote = AppState::in_memory("remote");
+    let local_account = local.mcp_account_id().unwrap();
+    let remote_account = remote.mcp_account_id().unwrap();
+    let changes: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[{"id":"w", "name":"작업", "created_at":"now", "updated_at":"now"}],
+        "desktops":[{"id":"d", "workspace_id":"w", "name":"화면", "position":0, "created_at":"now", "updated_at":"now"}],
+        "desktop_shortcuts":[{"id":"d/deleted-app", "desktop_id":"d", "app_id":"deleted-app", "column":1, "row":0, "created_at":"now", "updated_at":"now"}]
+    })).unwrap();
+    local.apply_layout_changes(None, &changes).unwrap();
+    remote
+        .import_data(&remote_account, local.export_data(&local_account).unwrap())
+        .unwrap();
+    let mut remote_shortcut = changes.desktop_shortcuts[0].clone();
+    remote_shortcut.column = 4;
+    remote
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                desktop_shortcuts: vec![remote_shortcut],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    remote
+        .import_data(&remote_account, local.export_data(&local_account).unwrap())
+        .unwrap();
+    assert_eq!(
+        remote
+            .export_data(&remote_account)
+            .unwrap()
+            .layout
+            .desktop_shortcuts[0]
+            .column,
+        4
+    );
+}
+
 fn app_with_collection() -> AppDefinition {
     let mut definition = app();
     definition.requires.modules.insert("storage".into(), 3);

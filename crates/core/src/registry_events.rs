@@ -244,6 +244,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
             workspaces,
             desktops,
             windows,
+            desktop_shortcuts,
         } => {
             let device_id = match inner.link_file.lock().unwrap().as_ref() {
                 Some(file) => file.device_id.clone(),
@@ -260,6 +261,7 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
                         workspaces,
                         desktops,
                         windows,
+                        desktop_shortcuts,
                         ..Default::default()
                     },
                 );

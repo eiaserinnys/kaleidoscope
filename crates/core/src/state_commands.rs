@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use kaleidoscope_contract::{
-    errors, AppWindow, CoreError, CoreReply, CoreRequest, Desktop, JsonValue, Rect, Workspace,
-    WINDOW_STATE_MAX_BYTES,
+    errors, AppWindow, CoreError, CoreReply, CoreRequest, Desktop, DesktopShortcut, JsonValue,
+    Rect, Workspace, WINDOW_STATE_MAX_BYTES,
 };
 
 use crate::app_commands;
@@ -157,6 +157,10 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .windows
                 .retain(|window| !desktop_ids.contains(&window.desktop_id));
             state
+                .shared
+                .desktop_shortcuts
+                .retain(|s| !desktop_ids.contains(&s.desktop_id));
+            state
                 .device
                 .grants
                 .retain(|grant| !window_ids.contains(&grant.window_id));
@@ -295,6 +299,10 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .windows
                 .retain(|window| window.desktop_id != desktop_id);
             state
+                .shared
+                .desktop_shortcuts
+                .retain(|s| s.desktop_id != desktop_id);
+            state
                 .device
                 .grants
                 .retain(|grant| !window_ids.contains(&grant.window_id));
@@ -347,6 +355,70 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .active_desktop_ids
                 .insert(desktop.workspace_id.clone(), desktop.id.clone());
             Ok(CoreReply::DesktopActivate {})
+        }
+        CoreRequest::DesktopShortcutAdd { desktop_id, app_id } => {
+            if !state.shared.desktops.iter().any(|d| d.id == desktop_id) {
+                return Err(errors::DESK_SHORTCUT_ADD_DESKTOP_NOT_FOUND()
+                    .and_details(vec![format!("desktop_id: {desktop_id}")]));
+            }
+            let id = format!("{desktop_id}/{app_id}");
+            if let Some(shortcut) = state.shared.desktop_shortcuts.iter().find(|s| s.id == id) {
+                return Ok(CoreReply::DesktopShortcutAdd {
+                    shortcut: shortcut.clone(),
+                });
+            }
+            if !state.shared.apps.iter().any(|app| app.id == app_id) {
+                return Err(errors::DESK_SHORTCUT_ADD_APP_NOT_FOUND(&app_id));
+            }
+            let column =
+                (0..)
+                    .find(|column| {
+                        !state.shared.desktop_shortcuts.iter().any(|s| {
+                            s.desktop_id == desktop_id && s.row == 0 && s.column == *column
+                        })
+                    })
+                    .expect("빈 열");
+            let now = timestamp();
+            let shortcut = DesktopShortcut {
+                id,
+                desktop_id,
+                app_id,
+                column,
+                row: 0,
+                created_at: now.clone(),
+                updated_at: now,
+            };
+            state.shared.desktop_shortcuts.push(shortcut.clone());
+            Ok(CoreReply::DesktopShortcutAdd { shortcut })
+        }
+        CoreRequest::DesktopShortcutMove {
+            shortcut_id,
+            column,
+            row,
+        } => {
+            let shortcut = state
+                .shared
+                .desktop_shortcuts
+                .iter_mut()
+                .find(|s| s.id == shortcut_id)
+                .ok_or_else(|| errors::DESK_SHORTCUT_MOVE_NOT_FOUND(&shortcut_id))?;
+            let (Ok(column_value), Ok(row_value)) = (u32::try_from(column), u32::try_from(row))
+            else {
+                return Err(errors::DESK_SHORTCUT_MOVE_POSITION_INVALID(column, row));
+            };
+            shortcut.column = column_value;
+            shortcut.row = row_value;
+            shortcut.updated_at = timestamp();
+            Ok(CoreReply::DesktopShortcutMove {
+                shortcut: shortcut.clone(),
+            })
+        }
+        CoreRequest::DesktopShortcutRemove { shortcut_id } => {
+            state
+                .shared
+                .desktop_shortcuts
+                .retain(|s| s.id != shortcut_id);
+            Ok(CoreReply::DesktopShortcutRemove {})
         }
         CoreRequest::WindowOpen {
             desktop_id,

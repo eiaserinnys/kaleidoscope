@@ -1,4 +1,8 @@
 error_catalog! { ENTRIES;
+    DESK_SHORTCUT_ADD_DESKTOP_NOT_FOUND() { class: NotFound, place: "바탕화면 아이콘 추가", cause: "대상 데스크톱이 없다", message: "아이콘을 추가할 데스크톱이 없습니다. 남은 데스크톱을 선택한 뒤 다시 추가하세요.", fix: "남은 데스크톱을 선택하세요" }
+    DESK_SHORTCUT_ADD_APP_NOT_FOUND(app_id) { class: NotFound, place: "바탕화면 아이콘 추가", cause: "대상 앱이 없다", message: "앱 {app_id}이 설치되어 있지 않아 아이콘을 추가할 수 없습니다. 앱을 설치한 뒤 다시 추가하세요.", fix: "앱을 설치하세요" }
+    DESK_SHORTCUT_MOVE_NOT_FOUND(shortcut_id) { class: NotFound, place: "바탕화면 아이콘 이동", cause: "이동할 아이콘이 없다", message: "이동할 아이콘 {shortcut_id}이 없습니다. 앱을 바탕화면에 다시 추가하세요.", fix: "앱을 바탕화면에 다시 추가하세요" }
+    DESK_SHORTCUT_MOVE_POSITION_INVALID(column, row) { class: InvalidRequest, place: "바탕화면 아이콘 이동", cause: "위치가 허용 범위 밖이다", message: "아이콘 위치 열 {column}, 행 {row}은 사용할 수 없습니다. 0 이상의 위치로 다시 이동하세요.", fix: "허용 범위의 위치로 다시 이동하세요" }
     DESK_DEFAULT_FOLDER_PERMISSION_INVALID(permission) { class: InvalidRequest, place: "기본 폴더 권한 검사", cause: "파일 권한에 기본 폴더가 선언되지 않았다", message: "파일 권한 {permission}에 사용할 기본 폴더가 없습니다. 앱 작성자에게 폴더 범위와 default_folder 선언을 확인해 달라고 요청하세요.", fix: "앱 정의의 파일 권한을 확인하세요" }
     DESK_DEFAULT_FOLDER_RESOLVE_FAILED(folder) { class: Io, place: "기본 폴더 경로 확인", cause: "기본 폴더의 경로를 읽지 못했다", message: "{folder} 폴더의 경로를 읽지 못했습니다. 파일 관리자에서 폴더가 열리는지 확인하거나 다른 폴더를 선택하세요.", fix: "파일 관리자에서 폴더를 확인하거나 다른 폴더를 선택하세요" }
     DESK_DEFAULT_FOLDER_NOT_DIRECTORY(folder) { class: Io, place: "기본 폴더 종류 확인", cause: "기본 경로가 폴더가 아니다", message: "{folder} 폴더의 경로가 폴더가 아닙니다. 기기의 폴더 설정을 확인하거나 다른 폴더를 선택하세요.", fix: "기기의 폴더 설정을 확인하거나 다른 폴더를 선택하세요" }

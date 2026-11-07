@@ -51,7 +51,7 @@ async fn v5_migration_attaches_existing_rows_and_preserves_existing_credentials_
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, storage::APP_COMMENTS_SCHEMA_VERSION);
+    assert_eq!(version, storage::DESKTOP_SHORTCUTS_SCHEMA_VERSION);
 
     let (
         account_id,
@@ -259,6 +259,7 @@ async fn second_account_workspaces_connections_and_devices_are_hidden_from_mcp_p
         workspaces,
         desktops,
         windows,
+        ..
     } = state.layout_snapshot("old-device").unwrap()
     else {
         panic!("expected layout snapshot")

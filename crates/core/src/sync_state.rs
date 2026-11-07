@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use kaleidoscope_contract::{CoreError, ErrorCode, SharedState, errors};
+use kaleidoscope_contract::{errors, CoreError, ErrorCode, SharedState};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::{self, LinkFile};
@@ -12,6 +12,7 @@ use crate::{CoreState, Inner};
 pub(crate) enum EntityKind {
     Workspace,
     Desktop,
+    DesktopShortcut,
     Window,
 }
 
@@ -73,6 +74,7 @@ impl SyncState {
         }
         mark_kind!(workspaces, EntityKind::Workspace);
         mark_kind!(desktops, EntityKind::Desktop);
+        mark_kind!(desktop_shortcuts, EntityKind::DesktopShortcut);
         mark_kind!(windows, EntityKind::Window);
     }
 
@@ -82,6 +84,9 @@ impl SyncState {
         }
         for item in &shared.desktops {
             self.mark(EntityKind::Desktop, &item.id);
+        }
+        for item in &shared.desktop_shortcuts {
+            self.mark(EntityKind::DesktopShortcut, &item.id);
         }
         for item in &shared.windows {
             self.mark(EntityKind::Window, &item.id);

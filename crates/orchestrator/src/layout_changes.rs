@@ -1,6 +1,6 @@
 use super::*;
 use kaleidoscope_contract::{
-    errors, registry::LayoutChanges, AppWindow, CoreError, Desktop, Workspace,
+    errors, registry::LayoutChanges, AppWindow, CoreError, Desktop, DesktopShortcut, Workspace,
 };
 
 const MAX_ID_LEN: usize = 128;
@@ -10,6 +10,13 @@ pub(super) fn validate_changes(changes: &LayoutChanges) -> bool {
 }
 
 pub(super) fn validate_changes_error(changes: &LayoutChanges) -> Result<(), CoreError> {
+    if changes
+        .desktop_shortcuts
+        .iter()
+        .any(|s| s.id != format!("{}/{}", s.desktop_id, s.app_id))
+    {
+        return Err(errors::SERVER_LAYOUT_CHANGE_BODY_INVALID());
+    }
     for desktop in &changes.desktops {
         if let Some(id) = desktop
             .sharing
@@ -71,6 +78,14 @@ impl AppState {
             changes.deleted_workspaces.iter().cloned().collect();
         let deleted_desktop_ids: HashSet<_> = changes.deleted_desktops.iter().cloned().collect();
         let deleted_window_ids: HashSet<_> = changes.deleted_windows.iter().cloned().collect();
+        let deleted_shortcut_ids: HashSet<_> =
+            changes.deleted_desktop_shortcuts.iter().cloned().collect();
+        let mut shortcut_ids: HashSet<String> = changes
+            .desktop_shortcuts
+            .iter()
+            .map(|s| s.id.clone())
+            .collect();
+        shortcut_ids.extend(changes.deleted_desktop_shortcuts.iter().cloned());
         let mut workspace_ids: HashSet<String> = changes
             .workspaces
             .iter()
@@ -149,6 +164,22 @@ impl AppState {
                 }
             }
         }
+        for shortcut in &changes.desktop_shortcuts {
+            if deleted_shortcut_ids.contains(&shortcut.id)
+                || !desktop_exists(&tx, &shortcut.desktop_id, &account_id)?
+            {
+                continue;
+            }
+            let data = serde_json::to_string(shortcut)
+                .map_err(|_| errors::SERVER_LAYOUT_CHANGE_APPLY_FAILED())?;
+            let old: Option<String> = tx.query_row("SELECT s.data FROM desktop_shortcuts s JOIN desktops d ON d.id=s.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE s.id=?1 AND w.account_id=?2", params![shortcut.id, account_id], |row| row.get(0)).optional().map_err(layout_change_db_error)?;
+            if old.as_deref() != Some(data.as_str()) {
+                let inserted = tx.execute("INSERT INTO desktop_shortcuts(id,desktop_id,app_id,data,created_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(id) DO UPDATE SET desktop_id=excluded.desktop_id,app_id=excluded.app_id,data=excluded.data,created_at=excluded.created_at WHERE EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE d.id=desktop_shortcuts.desktop_id AND w.account_id=?6)", params![shortcut.id, shortcut.desktop_id, shortcut.app_id, data, shortcut.created_at, account_id]).map_err(layout_change_db_error)?;
+                if inserted > 0 {
+                    changed.desktop_shortcuts.push(shortcut.clone());
+                }
+            }
+        }
         for window in &changes.windows {
             if deleted_window_ids.contains(&window.id) {
                 continue;
@@ -181,6 +212,11 @@ impl AppState {
             }
         }
 
+        for id in &changes.deleted_desktop_shortcuts {
+            if tx.execute("DELETE FROM desktop_shortcuts WHERE id=?1 AND EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE d.id=desktop_shortcuts.desktop_id AND w.account_id=?2)", params![id, account_id]).map_err(layout_change_db_error)? > 0 {
+                changed.deleted_desktop_shortcuts.push(id.clone());
+            }
+        }
         for id in &changes.deleted_windows {
             if tx
                 .execute("DELETE FROM windows WHERE id=?1 AND EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE d.id=windows.desktop_id AND w.account_id=?2)", params![id, account_id])
@@ -192,6 +228,7 @@ impl AppState {
         }
         for id in &changes.deleted_desktops {
             let existed = desktop_exists(&tx, id, &account_id)?;
+            delete_shortcut_children(&tx, id, &account_id, &mut shortcut_ids, &mut changed)?;
             let children = child_ids(&tx, "windows", "desktop_id", id, &account_id)?;
             for child in children {
                 window_ids.insert(child.clone());
@@ -220,6 +257,13 @@ impl AppState {
             if count <= 1 && workspace_exists(&tx, id, &account_id)? {
                 for desktop in child_ids(&tx, "desktops", "workspace_id", id, &account_id)? {
                     desktop_ids.insert(desktop.clone());
+                    shortcut_ids.extend(child_ids(
+                        &tx,
+                        "desktop_shortcuts",
+                        "desktop_id",
+                        &desktop,
+                        &account_id,
+                    )?);
                     for window in child_ids(&tx, "windows", "desktop_id", &desktop, &account_id)? {
                         window_ids.insert(window);
                     }
@@ -233,6 +277,7 @@ impl AppState {
             deleted_values.extend(Self::delete_workspace_values(&tx, &account_id, id)?);
             let children = child_ids(&tx, "desktops", "workspace_id", id, &account_id)?;
             for child in &children {
+                delete_shortcut_children(&tx, child, &account_id, &mut shortcut_ids, &mut changed)?;
                 for window in child_ids(&tx, "windows", "desktop_id", child, &account_id)? {
                     window_ids.insert(window.clone());
                     if tx
@@ -296,6 +341,15 @@ impl AppState {
                 reply.deleted_windows.push(id);
             }
         }
+        for id in shortcut_ids {
+            if let Some(value) =
+                entity_by_id::<DesktopShortcut>(&tx, "desktop_shortcuts", &id, &account_id)?
+            {
+                reply.desktop_shortcuts.push(value);
+            } else {
+                reply.deleted_desktop_shortcuts.push(id);
+            }
+        }
         sort_changes(&mut reply);
         sort_changes(&mut changed);
         tx.commit().map_err(layout_change_db_error)?;
@@ -332,6 +386,7 @@ fn entity_by_id<T: for<'de> Deserialize<'de>>(
         "workspaces" => "SELECT data FROM workspaces WHERE id=?1 AND account_id=?2",
         "desktops" => "SELECT d.data FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE d.id=?1 AND w.account_id=?2",
         "windows" => "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.id=?1 AND w.account_id=?2",
+        "desktop_shortcuts" => "SELECT s.data FROM desktop_shortcuts s JOIN desktops d ON d.id=s.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE s.id=?1 AND w.account_id=?2",
         _ => return Err(errors::SERVER_LAYOUT_CANONICAL_ENTITY_TABLE_UNSUPPORTED()),
     };
     let raw: Option<String> = tx
@@ -353,6 +408,7 @@ fn child_ids(
 ) -> Result<Vec<String>, CoreError> {
     let query = match (table, parent) {
         ("windows", "desktop_id") => "SELECT v.id FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE v.desktop_id=?1 AND w.account_id=?2 ORDER BY v.id",
+        ("desktop_shortcuts", "desktop_id") => "SELECT s.id FROM desktop_shortcuts s JOIN desktops d ON d.id=s.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE s.desktop_id=?1 AND w.account_id=?2 ORDER BY s.id",
         ("desktops", "workspace_id") => "SELECT d.id FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE d.workspace_id=?1 AND w.account_id=?2 ORDER BY d.id",
         _ => return Err(errors::SERVER_LAYOUT_CHILD_RELATION_UNSUPPORTED()),
     };
@@ -384,6 +440,12 @@ fn desktop_exists(tx: &Transaction<'_>, id: &str, account_id: &str) -> Result<bo
     .map_err(|_| errors::SERVER_LAYOUT_DESKTOP_LOOKUP_FAILED())
 }
 fn sort_changes(changes: &mut LayoutChanges) {
+    changes.desktop_shortcuts.sort_by(|a, b| {
+        a.created_at
+            .cmp(&b.created_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    changes.deleted_desktop_shortcuts.sort();
     changes.workspaces.sort_by(|a, b| {
         a.created_at
             .cmp(&b.created_at)
@@ -402,6 +464,22 @@ fn sort_changes(changes: &mut LayoutChanges) {
     changes.deleted_workspaces.sort();
     changes.deleted_desktops.sort();
     changes.deleted_windows.sort();
+}
+
+fn delete_shortcut_children(
+    tx: &Transaction<'_>,
+    desktop: &str,
+    account: &str,
+    ids: &mut HashSet<String>,
+    changed: &mut LayoutChanges,
+) -> Result<(), CoreError> {
+    for id in child_ids(tx, "desktop_shortcuts", "desktop_id", desktop, account)? {
+        ids.insert(id.clone());
+        tx.execute("DELETE FROM desktop_shortcuts WHERE id=?1", [&id])
+            .map_err(layout_change_db_error)?;
+        changed.deleted_desktop_shortcuts.push(id);
+    }
+    Ok(())
 }
 
 fn layout_change_db_error(error: rusqlite::Error) -> CoreError {

@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 pub(super) const PREFERENCES_SCHEMA_VERSION: i64 = 15;
 pub(super) const INSTALLATION_SCHEMA_VERSION: i64 = 16;
 pub(super) const APP_COMMENTS_SCHEMA_VERSION: i64 = 17;
+pub(super) const DESKTOP_SHORTCUTS_SCHEMA_VERSION: i64 = 18;
 
 pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
@@ -17,7 +18,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > APP_COMMENTS_SCHEMA_VERSION {
+    } else if version > DESKTOP_SHORTCUTS_SCHEMA_VERSION {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -306,6 +307,12 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE INDEX IF NOT EXISTS app_comments_by_app ON app_comments(account_id,app_id,created_at,id);
             CREATE TABLE IF NOT EXISTS app_comment_replies (account_id TEXT NOT NULL, comment_id TEXT NOT NULL, id TEXT NOT NULL, author TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(account_id,comment_id,id), FOREIGN KEY(account_id,comment_id) REFERENCES app_comments(account_id,id) ON DELETE CASCADE);
             PRAGMA user_version=17; COMMIT;")?;
+    }
+    if version < DESKTOP_SHORTCUTS_SCHEMA_VERSION {
+        db.execute_batch("BEGIN IMMEDIATE;
+            CREATE TABLE IF NOT EXISTS desktop_shortcuts (id TEXT PRIMARY KEY, desktop_id TEXT NOT NULL, app_id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS desktop_shortcuts_by_desktop ON desktop_shortcuts(desktop_id);
+            PRAGMA user_version=18; COMMIT;")?;
     }
     Ok(())
 }

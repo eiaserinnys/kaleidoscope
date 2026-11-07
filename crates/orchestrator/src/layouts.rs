@@ -40,6 +40,7 @@ pub(super) async fn put_layout(
 pub(super) async fn post_layout_changes(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,
+    headers: axum::http::HeaderMap,
     body: Result<Json<LayoutChanges>, JsonRejection>,
 ) -> Response {
     let Ok(Json(changes)) = body else {
@@ -73,7 +74,7 @@ pub(super) async fn post_layout_changes(
         }
     }
     match state.apply_layout_changes(Some(&device.0), &changes) {
-        Ok((reply, changed)) => {
+        Ok((mut reply, changed)) => {
             if !changed.is_empty() {
                 if let Ok(account_id) = state.device_account_id(&device.0) {
                     state.send_event_for_account(
@@ -82,6 +83,16 @@ pub(super) async fn post_layout_changes(
                     );
                 }
             }
+            let version = headers
+                .get(registry::REGISTRY_HEADER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            project_shortcuts(
+                version,
+                &mut reply.desktop_shortcuts,
+                &mut reply.deleted_desktop_shortcuts,
+            );
             Json(reply).into_response()
         }
         Err(error) => http::error_response(StatusCode::INTERNAL_SERVER_ERROR, error),
@@ -98,6 +109,7 @@ impl AppState {
             "workspaces" => "SELECT data FROM workspaces WHERE account_id=?1 ORDER BY created_at,id",
             "desktops" => "SELECT d.data FROM desktops d JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY d.created_at,d.id",
             "windows" => "SELECT v.data FROM windows v JOIN desktops d ON d.id=v.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY v.created_at,v.id",
+            "desktop_shortcuts" => "SELECT s.data FROM desktop_shortcuts s JOIN desktops d ON d.id=s.desktop_id JOIN workspaces w ON w.id=d.workspace_id WHERE w.account_id=?1 ORDER BY s.created_at,s.id",
             _ => return Err(errors::SERVER_LAYOUT_ENTITIES_TABLE_UNSUPPORTED()),
         };
         read_entities(db, query, Some(account_id))
@@ -622,6 +634,17 @@ impl AppState {
             } if !has(id) => None,
             other => Some(other),
         }
+    }
+}
+
+pub(super) fn project_shortcuts(
+    version: u32,
+    shortcuts: &mut Vec<kaleidoscope_contract::DesktopShortcut>,
+    deleted: &mut Vec<String>,
+) {
+    if version < registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION {
+        shortcuts.clear();
+        deleted.clear();
     }
 }
 
