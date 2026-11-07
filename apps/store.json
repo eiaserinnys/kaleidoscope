@@ -140,12 +140,13 @@
                     {"label": "제작자", "value": {"expr": "$data.detail.publisher"}, "format": "text"},
                     {"label": "분류", "value": {"expr": "$data.detail.category"}, "format": "text"},
                     {"label": "판", "value": {"expr": "$string($data.detail.release)"}, "format": "text"},
-                    {"label": "올린 날", "value": {"expr": "$data.detail.releases[release = $data.detail.release].published_at"}, "format": "date"},
+                    {"label": "올린 날", "value": {"expr": "$fromMillis($toMillis($data.detail.releases[release = $data.detail.release].published_at), '[Y0001]년 [M1]월 [D1]일', '+0900')"}, "format": "text"},
                     {
                       "label": "권한",
-                      "value": {"expr": "( $d := $data.detail; $p := [$d.permissions.{ \"text\": label ? label : module, \"color\": module = 'process' ? '#a9363d' : '#6b7280' }]; $b := [$d.badges[$ = 'worker'].{ \"text\": \"서버 실행 코드\", \"color\": \"#a9363d\" }]; $all := $append($p, $b); $count($all) = 0 ? [{ \"text\": \"없음\", \"color\": \"#6b7280\" }] : $all )"},
+                      "value": {"expr": "( $d := $data.detail; $p := [$d.permissions.{ \"text\": label ? label : module, \"color\": module = 'process' ? '#a9363d' : '#6b7280' }]; $b := [$d.badges[$ = 'worker'].{ \"text\": \"서버 실행 코드\", \"color\": \"#a9363d\" }]; $all := $append($p, $b); $count($all) = 0 ? null : $all )"},
                       "format": "badge"
                     },
+                    {"label": "권한", "value": {"expr": "$count($data.detail.permissions) + $count($data.detail.badges[$ = 'worker']) = 0 ? '없음' : null"}, "format": "text"},
                     {
                       "label": "요구 쉘",
                       "value": {"expr": "$data.detail.compatible ? null : '블록 세트 ' & $string($data.detail.requires.blocks) & ', 쉘을 올려야 설치합니다'"},
