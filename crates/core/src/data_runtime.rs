@@ -1405,6 +1405,15 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
     inner.layout_signal.notify();
 }
 
+/// 창의 저장 항목에 지금 실린 값을 읽는다. 아직 읽지 않았거나 실패했으면 None.
+pub(crate) fn storage_value(
+    inner: &Inner,
+    window: &str,
+    entry: &str,
+) -> Option<serde_json::Value> {
+    storage::value(inner, window, entry)
+}
+
 pub(crate) fn store_servers_changed(inner: &Arc<Inner>) {
     let retries: Vec<_> = {
         let windows = inner.data_runtimes.windows.lock().unwrap();

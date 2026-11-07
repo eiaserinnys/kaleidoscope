@@ -791,7 +791,11 @@ pc_access: Array<PcAccess>,
 /**
  * 이 기기에서 허용한 앱별 기본 폴더.
  */
-default_folder_access: Array<DefaultFolderAccess>, process_access: Array<ProcessAccess>, store_servers: Array<string>, };
+default_folder_access: Array<DefaultFolderAccess>, process_access: Array<ProcessAccess>, store_servers: Array<string>, 
+/**
+ * 정규화된 스토어 주소 → 사설 스토어 초대코드. 주소와 코드 모두 소문자로 맞춘다.
+ */
+store_invites?: { [key in string]: string }, };
 
 export type DeviceStorage = { prefixes: Array<string>, 
 /**

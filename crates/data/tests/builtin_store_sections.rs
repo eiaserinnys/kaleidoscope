@@ -346,7 +346,9 @@ fn settings_reject_addresses_without_http_scheme() {
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&invalid_storage, storage_meta:&empty, apps:None, event:&event, item:&event, modifiers:None };
     let submit = "/settings/ui/children/2/children/0/on_submit";
     assert_eq!(app.action_step(submit, 0, &env).unwrap(), Step::SetStorage { entry:"servers".into(), doc:None, value:json!([]) });
-    assert_eq!(app.action_step(submit, 2, &env).unwrap(), Step::SetState { key:"new_server".into(), value:json!("private.local") });
+    assert_eq!(app.action_step(submit, 1, &env).unwrap(), Step::SetStorage { entry:"invites".into(), doc:None, value:json!({}) });
+    assert_eq!(app.action_step(submit, 2, &env).unwrap(), Step::SetState { key:"new_invite".into(), value:json!("") });
+    assert_eq!(app.action_step(submit, 3, &env).unwrap(), Step::SetState { key:"new_server".into(), value:json!("private.local") });
     state.insert("new_server".into(), json!("https://private.local"));
     let storage = map(json!({"servers":["http://one", "https://two"], "custom_url":""}));
     let values = app.evaluate_with_data_meta(&state, &empty, &storage, &empty, &empty, &BTreeMap::new(), None);
@@ -419,20 +421,66 @@ fn shortcut_row_actions_compile_to_shell_steps() {
 }
 
 #[test]
-fn invite_code_becomes_the_last_path_segment_of_the_added_store() {
+fn invite_code_is_stored_separately_from_the_clean_store_address() {
     let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let mut state = definition.state.clone();
     state.insert("new_server".into(), json!(" https://store.example/team/ "));
     state.insert("new_invite".into(), json!(" AB12-cd34 "));
-    let storage = map(json!({"servers":["https://one.example"]}));
+    let storage = map(json!({"servers":["https://one.example"], "invites":{"https://two.example":"old-code"}}));
     let empty = BTreeMap::new();
     let event = Value::Null;
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&Value::Null, modifiers:None };
-    let expected = Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["https://one.example","https://store.example/team/ab12-cd34"]) };
-    assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(), expected);
-    assert_eq!(app.action_step("/settings/ui/children/2/children/0/on_submit", 0, &env).unwrap(), expected);
-    assert_eq!(app.action_step("/settings/ui/children/2/children/1/on_submit", 0, &env).unwrap(), expected);
-    assert_eq!(app.action_step("/settings/ui/children/2/children/1/on_submit", 1, &env).unwrap(),
+    for (path, index) in [
+        ("/settings/ui/children/2/children/2/children/0/on_click", 0),
+        ("/settings/ui/children/2/children/0/on_submit", 0),
+        ("/settings/ui/children/2/children/1/on_submit", 0),
+    ] {
+        assert_eq!(
+            app.action_step(path, index, &env).unwrap(),
+            Step::SetStorage {
+                entry:"servers".into(), doc:None,
+                value:json!(["https://one.example","https://store.example/team"]),
+            }
+        );
+        assert_eq!(
+            app.action_step(path, index + 1, &env).unwrap(),
+            Step::SetStorage {
+                entry:"invites".into(), doc:None,
+                value:json!({"https://two.example":"old-code","https://store.example/team":"ab12-cd34"}),
+            }
+        );
+    }
+    assert_eq!(app.action_step("/settings/ui/children/2/children/1/on_submit", 2, &env).unwrap(),
         Step::SetState { key:"new_invite".into(), value:json!("") });
+
+    let mut state = definition.state.clone();
+    state.insert("new_server".into(), json!("https://one.example/"));
+    state.insert("new_invite".into(), json!(" NEW-code "));
+    let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&Value::Null, modifiers:None };
+    assert_eq!(
+        app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(),
+        Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["https://one.example"]) }
+    );
+    assert_eq!(
+        app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 1, &env).unwrap(),
+        Step::SetStorage {
+            entry:"invites".into(), doc:None,
+            value:json!({"https://two.example":"old-code","https://one.example":"new-code"}),
+        }
+    );
+
+    let item = json!({"key":"https://store.example/team"});
+    let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&item, modifiers:None };
+    assert_eq!(
+        app.action_step("/settings/ui/children/1/on_remove", 0, &env).unwrap(),
+        Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["https://one.example"]) }
+    );
+    assert_eq!(
+        app.action_step("/settings/ui/children/1/on_remove", 1, &env).unwrap(),
+        Step::SetStorage {
+            entry:"invites".into(), doc:None,
+            value:json!({"https://two.example":"old-code"}),
+        }
+    );
 }

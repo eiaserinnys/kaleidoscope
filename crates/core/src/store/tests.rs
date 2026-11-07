@@ -483,3 +483,82 @@ fn verifies_every_manifest_file_including_unlisted_screenshots() {
         "STORECLIENT_BUNDLE_HASH_MISMATCH"
     );
 }
+
+#[test]
+fn invite_is_normalized_and_sent_through_the_shared_transport() {
+    struct Observed {
+        invites: Arc<Mutex<Vec<Option<String>>>>,
+    }
+    impl Transport for Observed {
+        fn get(
+            &self,
+            _: &str,
+            _: &[String],
+            _: &str,
+            _: u64,
+        ) -> Result<PublicResponse, PublicHttpError> {
+            self.invites.lock().unwrap().push(None);
+            Err(PublicHttpError::Transport("멈춤".into()))
+        }
+        fn get_with_invite(
+            &self,
+            _: &str,
+            _: &[String],
+            _: &str,
+            invite: &str,
+            _: u64,
+        ) -> Result<PublicResponse, PublicHttpError> {
+            self.invites.lock().unwrap().push(Some(invite.into()));
+            Err(PublicHttpError::Transport("멈춤".into()))
+        }
+    }
+    let invites = Arc::new(Mutex::new(Vec::new()));
+    let client = StoreClient::with_transport(
+        "https://example.com/appstore",
+        Arc::new(Observed { invites: invites.clone() }),
+    )
+    .unwrap()
+    .with_invite(Some("  8E307891-FD5A-4D75-BE0F-A80AB5DF0602 ".into()));
+    assert_eq!(id(client.index("catalog").unwrap_err()), "STORECLIENT_FETCH_TRANSPORT_FAILED");
+    assert_eq!(
+        *invites.lock().unwrap(),
+        vec![Some("8e307891-fd5a-4d75-be0f-a80ab5df0602".into())]
+    );
+}
+
+#[test]
+fn rejected_invite_is_reported_as_an_invite_error() {
+    let (mock, _, _) = fixture();
+    let client = client(mock.clone()).with_invite(Some("code".into()));
+    for status in [401, 403] {
+        mock.files.lock().unwrap().insert(
+            "/appstore/index.json".into(),
+            (status, "text/plain", Vec::new()),
+        );
+        assert_eq!(
+            id(client.index("catalog").unwrap_err()),
+            "STORECLIENT_FETCH_INVITE_REJECTED"
+        );
+    }
+}
+
+#[test]
+fn store_invites_accept_arrays_and_objects_with_normalized_keys_and_codes() {
+    assert_eq!(
+        super::parse_store_invites(&json!([
+            {"server":"https://EXAMPLE.com/appstore/", "invite":"  AbC-123 "},
+            {"server":"https://other.example/", "invite":"   "},
+            {"server":"not a url", "invite":"x"},
+            {"invite":"missing"}
+        ])),
+        BTreeMap::from([("https://example.com/appstore".into(), "abc-123".into())])
+    );
+    assert_eq!(
+        super::parse_store_invites(&json!({
+            "https://Example.com/shop/": " XyZ ",
+            "https://skip.example": ""
+        })),
+        BTreeMap::from([("https://example.com/shop".into(), "xyz".into())])
+    );
+    assert!(super::parse_store_invites(&json!(null)).is_empty());
+}

@@ -30,6 +30,9 @@ impl From<CoreError> for StoreFailure {
     }
 }
 
+/// 사설 스토어 초대코드를 담는 요청 헤더 이름.
+pub(crate) const INVITE_HEADER: &str = "x-kaleidoscope-invite";
+
 pub(crate) trait Transport: Send + Sync {
     fn get(
         &self,
@@ -38,10 +41,33 @@ pub(crate) trait Transport: Send + Sync {
         path: &str,
         limit: u64,
     ) -> Result<PublicResponse, PublicHttpError>;
+
+    /// 초대코드를 붙여 읽는다. 헤더를 다루지 않는 전송은 보통 읽기로 넘긴다.
+    fn get_with_invite(
+        &self,
+        origin: &str,
+        paths: &[String],
+        path: &str,
+        invite: &str,
+        limit: u64,
+    ) -> Result<PublicResponse, PublicHttpError> {
+        let _ = invite;
+        self.get(origin, paths, path, limit)
+    }
 }
 impl<T: Transport + ?Sized> Transport for std::sync::Arc<T> {
     fn get(&self, origin: &str, paths: &[String], path: &str, limit: u64) -> Result<PublicResponse, PublicHttpError> {
         (**self).get(origin, paths, path, limit)
+    }
+    fn get_with_invite(
+        &self,
+        origin: &str,
+        paths: &[String],
+        path: &str,
+        invite: &str,
+        limit: u64,
+    ) -> Result<PublicResponse, PublicHttpError> {
+        (**self).get_with_invite(origin, paths, path, invite, limit)
     }
 }
 pub(crate) struct PublicTransport;
@@ -55,11 +81,35 @@ impl Transport for PublicTransport {
     ) -> Result<PublicResponse, PublicHttpError> {
         public_http::get_typed(origin, paths, path, &BTreeMap::new(), limit)
     }
+    fn get_with_invite(
+        &self,
+        origin: &str,
+        paths: &[String],
+        path: &str,
+        invite: &str,
+        limit: u64,
+    ) -> Result<PublicResponse, PublicHttpError> {
+        if invite.is_empty() {
+            return self.get(origin, paths, path, limit);
+        }
+        let headers = BTreeMap::from([(INVITE_HEADER.to_string(), invite.to_string())]);
+        public_http::request_typed(
+            origin,
+            paths,
+            path,
+            &BTreeMap::new(),
+            kaleidoscope_contract::data::HttpMethod::Get,
+            &headers,
+            None,
+            limit,
+        )
+    }
 }
 
 pub(crate) struct StoreClient<T = PublicTransport> {
     pub(super) server: StoreUrl,
     pub(super) transport: T,
+    pub(super) invite: Option<String>,
 }
 impl<T: Transport> StoreClient<T> {
     #[cfg(test)]
@@ -67,7 +117,18 @@ impl<T: Transport> StoreClient<T> {
         Ok(Self::new(StoreUrl::parse(server)?, transport))
     }
     pub(super) fn new(server: StoreUrl, transport: T) -> Self {
-        Self { server, transport }
+        Self {
+            server,
+            transport,
+            invite: None,
+        }
+    }
+    /// 사설 스토어 초대코드를 붙인다. 빈 값은 붙이지 않는다.
+    pub(crate) fn with_invite(mut self, invite: Option<String>) -> Self {
+        self.invite = invite
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty());
+        self
     }
     pub(super) fn bytes(&self, relative: &str, limit: u64) -> Result<PublicResponse, StoreFailure> {
         let path = self.server.path(relative)?;
@@ -76,28 +137,32 @@ impl<T: Transport> StoreClient<T> {
         } else {
             format!("{}/", self.server.prefix)
         }];
-        let response = self
-            .transport
-            .get(&self.server.origin, &allowed, &path, limit)
-            .map_err(|error| {
-                let err = match error {
-                    PublicHttpError::InvalidAddress => super::path_error(relative),
-                    PublicHttpError::PrivateAddress => errors::STORECLIENT_SERVER_PERMISSION_REQUIRED(self.server.as_str()),
-                    PublicHttpError::TooLarge => errors::STORECLIENT_FETCH_TOO_LARGE(
-                        relative,
-                        kaleidoscope_contract::size::format_byte_limit(limit),
-                    ),
-                    PublicHttpError::Transport(reason) => {
-                        errors::STORECLIENT_FETCH_TRANSPORT_FAILED()
-                            .and_details(vec![format!("파일: {relative}"), format!("원인: {reason}")])
-                    }
-                };
-                StoreFailure::from(err)
-            })?;
+        let response = match self.invite.as_deref() {
+            Some(invite) => self
+                .transport
+                .get_with_invite(&self.server.origin, &allowed, &path, invite, limit),
+            None => self.transport.get(&self.server.origin, &allowed, &path, limit),
+        }
+        .map_err(|error| {
+            let err = match error {
+                PublicHttpError::InvalidAddress => super::path_error(relative),
+                PublicHttpError::PrivateAddress => errors::STORECLIENT_SERVER_PERMISSION_REQUIRED(self.server.as_str()),
+                PublicHttpError::TooLarge => errors::STORECLIENT_FETCH_TOO_LARGE(
+                    relative,
+                    kaleidoscope_contract::size::format_byte_limit(limit),
+                ),
+                PublicHttpError::Transport(reason) => {
+                    errors::STORECLIENT_FETCH_TRANSPORT_FAILED()
+                        .and_details(vec![format!("파일: {relative}"), format!("원인: {reason}")])
+                }
+            };
+            StoreFailure::from(err)
+        })?;
         let status = response.status;
         if !(200..300).contains(&status) {
             let mut error = match status {
                 300..=399 => errors::STORECLIENT_FETCH_REDIRECT_REJECTED(relative),
+                401 | 403 => errors::STORECLIENT_FETCH_INVITE_REJECTED(relative),
                 404 => errors::STORECLIENT_FETCH_NOT_FOUND(relative),
                 _ => errors::STORECLIENT_FETCH_HTTP_REJECTED()
                     .and_details(vec![format!("파일: {relative}")]),
