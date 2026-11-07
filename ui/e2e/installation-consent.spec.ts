@@ -185,27 +185,49 @@ test("경고와 일반 권한의 내용이 한 선에 맞는다", async ({ page 
   expect(Math.max(...Object.values(positions)) - Math.min(...Object.values(positions))).toBeLessThanOrEqual(1);
 });
 
-test("열두 경로를 펼쳐도 요약은 제자리에 있어 같은 곳을 눌러 접는다", async ({ page }) => {
+test("설치 동의 창은 창 중앙에 놓이고 열두 경로를 펼치고 접을 수 있다", async ({ page }) => {
   for (const width of [1000, 360]) {
     await page.setViewportSize({ width, height: 780 });
     await page.goto("/installation-consent.html");
     await page.evaluate(async () => {
       await (window as any).installationHarness.ready;
-      (window as any).installationHarness.show("light", { permissions: [{ module: "http", id: "web", label: "자료", base_url: "https://example.org", paths: Array.from({ length: 12 }, (_, i) => `/자료/경로-${i}`) }] });
+      (window as any).installationHarness.show("light", { permissions: [
+        { module: "files", id: "docs", label: "고칠 그림", access: "read", scope: "folder" },
+        { module: "http", id: "web", label: "글자 읽기 언어 자료", base_url: "https://cdn.jsdelivr.net", paths: Array.from({ length: 12 }, (_, i) => `/자료/경로-${i}`) },
+      ] });
     });
     const dialog = page.getByRole("dialog");
     const details = dialog.locator("details");
     const summary = details.locator("summary");
-    const before = (await summary.boundingBox())!;
-    const point = { x: before.x + before.width / 2, y: before.y + before.height / 2 };
-    await page.mouse.click(point.x, point.y);
+    const centers = () => dialog.evaluate((node) => {
+      const overlay = node.closest(".ks-window-consent-overlay") as HTMLElement;
+      const box = overlay.getBoundingClientRect();
+      const style = getComputedStyle(overlay);
+      const px = (value: string) => Number.parseFloat(value);
+      const contentCenterX = (box.left + px(style.paddingLeft) + box.right - px(style.paddingRight)) / 2;
+      const contentCenterY = (box.top + px(style.paddingTop) + box.bottom - px(style.paddingBottom)) / 2;
+      const rect = node.getBoundingClientRect();
+      const dialogCenterX = (rect.left + rect.right) / 2;
+      const dialogCenterY = (rect.top + rect.bottom) / 2;
+      return { contentCenterX, contentCenterY, dialogCenterX, dialogCenterY };
+    });
+    const before = await centers();
+    const beforeDiff = { x: Math.abs(before.dialogCenterX - before.contentCenterX), y: Math.abs(before.dialogCenterY - before.contentCenterY) };
+    console.log(`installation-consent-center-${width}:`, JSON.stringify({ state: "closed", ...before, diff: beforeDiff }));
+    expect(beforeDiff.x).toBeLessThanOrEqual(1);
+    expect(beforeDiff.y).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `test-results/installation-consent-omni-image-${width}-light.png` });
+    await summary.click();
     await expect(details).toHaveAttribute("open", "");
-    const after = (await summary.boundingBox())!;
-    console.log(`installation-summary-${width}:`, JSON.stringify({ before: before.y, after: after.y }));
-    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
     await expect(details.locator(".ks-install-path")).toHaveCount(12);
     await expect(details.locator(".ks-install-paths")).not.toContainText("https://");
-    await page.mouse.click(point.x, point.y);
+    const after = await centers();
+    const afterDiff = { x: Math.abs(after.dialogCenterX - after.contentCenterX), y: Math.abs(after.dialogCenterY - after.contentCenterY) };
+    console.log(`installation-consent-center-${width}:`, JSON.stringify({ state: "open", ...after, diff: afterDiff }));
+    expect(afterDiff.x).toBeLessThanOrEqual(1);
+    expect(afterDiff.y).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `test-results/installation-consent-omni-image-open-${width}-light.png` });
+    await summary.click();
     await expect(details).not.toHaveAttribute("open", "");
   }
 });
