@@ -103,7 +103,7 @@ fn adding_and_removing_private_addresses_write_effective_list() {
     let event = Value::Null;
     let item = json!({"key":"http://one", "title":"http://one"});
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&item, modifiers:None };
-    assert_eq!(app.action_step("/settings/ui/children/2/children/1/children/0/on_click", 0, &env).unwrap(),
+    assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one","http://two"]) });
     assert_eq!(app.action_step("/settings/ui/children/2/children/0/on_submit", 0, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one","http://two"]) });
@@ -113,7 +113,7 @@ fn adding_and_removing_private_addresses_write_effective_list() {
     same_state.insert("new_server".into(), json!("http://one/"));
     let legacy_with_slash = map(json!({"servers":null,"custom_url":"http://one/"}));
     let env = Env { state:&same_state, storage:&legacy_with_slash, ..env };
-    assert_eq!(app.action_step("/settings/ui/children/2/children/1/children/0/on_click", 0, &env).unwrap(),
+    assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(),
         Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["http://one/"]) });
 }
 
@@ -323,8 +323,10 @@ fn settings_address_input_and_add_button_are_separate_vertical_children() {
     let settings = &definition["settings"]["ui"];
     assert_eq!(settings["direction"], "column");
     let input = &settings["children"][2]["children"][0];
-    let button = &settings["children"][2]["children"][1]["children"][0];
+    let invite = &settings["children"][2]["children"][1];
+    let button = &settings["children"][2]["children"][2]["children"][0];
     assert_eq!(input["type"], "input");
+    assert_eq!(invite["on_submit"], button["on_click"]);
     assert!(input.get("label_position").is_none());
     assert_eq!(input["on_submit"], button["on_click"]);
     assert_eq!(settings["gap"], "large");
@@ -338,17 +340,17 @@ fn settings_reject_addresses_without_http_scheme() {
     let mut state = definition.state.clone();
     state.insert("new_server".into(), json!("private.local"));
     let values = app.evaluate_with_data_meta(&state, &empty, &empty, &empty, &empty, &BTreeMap::new(), None);
-    assert_eq!(value(&values, "/settings/ui/children/2/children/1/children/0/disabled"), json!(true));
+    assert_eq!(value(&values, "/settings/ui/children/2/children/2/children/0/disabled"), json!(true));
     let invalid_storage = map(json!({"servers":[], "custom_url":""}));
     let event = Value::Null;
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&invalid_storage, storage_meta:&empty, apps:None, event:&event, item:&event, modifiers:None };
     let submit = "/settings/ui/children/2/children/0/on_submit";
     assert_eq!(app.action_step(submit, 0, &env).unwrap(), Step::SetStorage { entry:"servers".into(), doc:None, value:json!([]) });
-    assert_eq!(app.action_step(submit, 1, &env).unwrap(), Step::SetState { key:"new_server".into(), value:json!("private.local") });
+    assert_eq!(app.action_step(submit, 2, &env).unwrap(), Step::SetState { key:"new_server".into(), value:json!("private.local") });
     state.insert("new_server".into(), json!("https://private.local"));
     let storage = map(json!({"servers":["http://one", "https://two"], "custom_url":""}));
     let values = app.evaluate_with_data_meta(&state, &empty, &storage, &empty, &empty, &BTreeMap::new(), None);
-    assert_eq!(value(&values, "/settings/ui/children/2/children/1/children/0/disabled"), json!(false));
+    assert_eq!(value(&values, "/settings/ui/children/2/children/2/children/0/disabled"), json!(false));
     let rows = value(&values, "/settings/ui/children/1/items");
     assert_eq!(rows[0]["meta"], "사설 1");
     assert_eq!(rows[1]["meta"], "사설 2");
@@ -414,4 +416,23 @@ fn shortcut_row_actions_compile_to_shell_steps() {
     let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&empty, storage_meta:&empty, apps:None, event:&event, item:&event, modifiers:None };
     assert_eq!(app.action_step(open, 0, &env).unwrap_err().id.as_deref(), Some("DATA_SHELL_OPEN_APP_ID_INVALID"));
     assert_eq!(app.action_step(add, 0, &env).unwrap_err().id.as_deref(), Some("DATA_SHELL_SHORTCUT_APP_ID_INVALID"));
+}
+
+#[test]
+fn invite_code_becomes_the_last_path_segment_of_the_added_store() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let mut state = definition.state.clone();
+    state.insert("new_server".into(), json!(" https://store.example/team/ "));
+    state.insert("new_invite".into(), json!(" AB12-cd34 "));
+    let storage = map(json!({"servers":["https://one.example"]}));
+    let empty = BTreeMap::new();
+    let event = Value::Null;
+    let env = Env { state:&state, data:&empty, data_meta:&empty, storage:&storage, storage_meta:&empty, apps:None, event:&event, item:&Value::Null, modifiers:None };
+    let expected = Step::SetStorage { entry:"servers".into(), doc:None, value:json!(["https://one.example","https://store.example/team/ab12-cd34"]) };
+    assert_eq!(app.action_step("/settings/ui/children/2/children/2/children/0/on_click", 0, &env).unwrap(), expected);
+    assert_eq!(app.action_step("/settings/ui/children/2/children/0/on_submit", 0, &env).unwrap(), expected);
+    assert_eq!(app.action_step("/settings/ui/children/2/children/1/on_submit", 0, &env).unwrap(), expected);
+    assert_eq!(app.action_step("/settings/ui/children/2/children/1/on_submit", 1, &env).unwrap(),
+        Step::SetState { key:"new_invite".into(), value:json!("") });
 }
