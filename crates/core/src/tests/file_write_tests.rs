@@ -16,6 +16,12 @@ impl crate::AttachmentOpener for RecordingAttachmentOpener {
     }
 }
 
+/// macOS의 `/var`처럼 임시 폴더가 심볼릭 링크를 지나도 폴더 선택이 저장하는 실제 경로와 맞춘다.
+/// Windows에서는 화면에 보이는 경로처럼 `\\?\` 접두사를 붙이지 않는다.
+fn temp_root(temp: &TempDir) -> PathBuf {
+    dunce::canonicalize(temp.path()).unwrap()
+}
+
 fn writable_core(temp: &TempDir, root: &Path, host: &Arc<FakeHost>) -> (Core, String) {
     host.choose(Some(root.to_path_buf()));
     let core = seeded_core(&temp.path().join("data"), host);
@@ -32,7 +38,7 @@ fn writable_core(temp: &TempDir, root: &Path, host: &Arc<FakeHost>) -> (Core, St
 #[test]
 fn files_reveal_passes_the_grant_display_path_to_the_opener() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("note.txt"), "hello").unwrap();
 
@@ -96,7 +102,7 @@ fn mkdir(core: &Core, window: &str, name: &str) -> Result<CoreReply, CoreError> 
 #[test]
 fn copy_reports_source_in_reply_but_emits_only_created_destination() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     fs::write(root.join("note.txt"), "hello").unwrap();
     let host = Arc::new(FakeHost::default());
@@ -129,7 +135,7 @@ fn copy_reports_source_in_reply_but_emits_only_created_destination() {
 #[test]
 fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     fs::write(root.join("note.txt"), "hello").unwrap();
     let host = Arc::new(FakeHost::default());
@@ -409,7 +415,7 @@ fn file_write_commands_validate_names_and_emit_grant_relative_changes() {
 #[test]
 fn missing_granted_folder_keeps_not_found_class_and_os_diagnostic() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     let host = Arc::new(FakeHost::default());
     let (core, window) = writable_core(&temp, &root, &host);
@@ -437,7 +443,7 @@ fn missing_granted_folder_keeps_not_found_class_and_os_diagnostic() {
 #[test]
 fn replaced_granted_folder_keeps_path_outside_root_class() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     let host = Arc::new(FakeHost::default());
     let (core, window) = writable_core(&temp, &root, &host);
@@ -462,7 +468,7 @@ fn replaced_granted_folder_keeps_path_outside_root_class() {
 #[test]
 fn file_write_batches_skip_selected_descendants_and_keep_request_order() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir_all(root.join("move-source")).unwrap();
     fs::create_dir(root.join("move-dest")).unwrap();
     fs::write(root.join("move-source/note.txt"), "move").unwrap();
@@ -563,7 +569,7 @@ fn result_paths(results: &[kaleidoscope_contract::FileOpResult]) -> Vec<&str> {
 #[test]
 fn file_write_commands_reject_read_pc_roots_and_protected_ancestors() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     let host = Arc::new(FakeHost::default());
     host.choose(Some(root.clone()));
@@ -603,7 +609,10 @@ fn file_write_commands_reject_read_pc_roots_and_protected_ancestors() {
         .iter_mut()
         .find(|grant| grant.window_id == window && grant.permission == "docs")
         .unwrap()
-        .root_path = temp.path().to_string_lossy().to_string();
+        .root_path = fs::canonicalize(temp.path())
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
     let CoreReply::FilesRemove { results } = core
         .handle(CoreRequest::FilesRemove {
             window_id: window.clone(),
@@ -643,7 +652,7 @@ fn file_write_commands_reject_read_pc_roots_and_protected_ancestors() {
 #[test]
 fn file_write_copy_rejects_an_ancestor_containing_the_core_data_directory() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     let host = Arc::new(FakeHost::default());
     host.choose(Some(root.clone()));
@@ -666,7 +675,10 @@ fn file_write_copy_rejects_an_ancestor_containing_the_core_data_directory() {
         .iter_mut()
         .find(|grant| grant.window_id == window && grant.permission == "docs")
         .unwrap()
-        .root_path = temp.path().to_string_lossy().to_string();
+        .root_path = fs::canonicalize(temp.path())
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
 
     let CoreReply::FilesCopy { results } = core
         .handle(CoreRequest::FilesCopy {
@@ -691,7 +703,7 @@ fn file_write_copy_rejects_an_ancestor_containing_the_core_data_directory() {
 #[test]
 fn file_write_commands_reject_read_and_pc_permissions() {
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     let host = Arc::new(FakeHost::default());
     host.choose(Some(root));
@@ -744,7 +756,7 @@ fn file_write_commands_reject_links() {
     use std::os::unix::fs::symlink;
 
     let temp = TempDir::new().unwrap();
-    let root = temp.path().join("documents");
+    let root = temp_root(&temp).join("documents");
     fs::create_dir(&root).unwrap();
     fs::write(root.join("target.txt"), "target").unwrap();
     symlink(root.join("target.txt"), root.join("link.txt")).unwrap();
