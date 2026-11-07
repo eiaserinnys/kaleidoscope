@@ -1,6 +1,8 @@
 import { SHELL_WINDOW_GEOMETRY_TOKEN_INVALID, type Rect, type ShellSnapshot, type WindowSize } from "@kaleidoscope/ui";
 
 const RESIZE_CORNER_SIZE = 12;
+/** 바탕 영역 가장자리에서 창과 아이콘이 비켜서는 안쪽 여백. */
+export const DESKTOP_USABLE_PADDING = RESIZE_CORNER_SIZE;
 export const TASKBAR_HEIGHT = 40;
 const TASKBAR_RESERVED_BOTTOM = RESIZE_CORNER_SIZE + TASKBAR_HEIGHT + RESIZE_CORNER_SIZE;
 

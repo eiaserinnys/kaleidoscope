@@ -12,7 +12,7 @@ import {
   cellFromRect, layoutDesktopIcons, nearestFreeCell, readingOrder,
   type DesktopIconCell, type DesktopIconPlacement, type DesktopIconShortcut,
 } from "./desktop-icon-layout";
-import { usableWindowArea } from "./window-geometry";
+import { DESKTOP_USABLE_PADDING, usableWindowArea } from "./window-geometry";
 
 const DRAG_THRESHOLD = 4;
 const DRAG_CLICK_SUPPRESS_MS = 400;
@@ -25,6 +25,11 @@ interface DragState {
   startX: number;
   startY: number;
   moved: boolean;
+  /** 바탕 영역 경계 안에 타일을 붙잡아 두는 변위 한계. */
+  minDx: number;
+  maxDx: number;
+  minDy: number;
+  maxDy: number;
 }
 
 interface FocusAfterRemove {
@@ -101,12 +106,18 @@ export const DesktopIcons = memo(function DesktopIcons({ store, desktopId, area,
   const pointerDown = useCallback((id: string, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return;
     setSelectedId(id);
+    const bounds = layer.current?.getBoundingClientRect();
+    const tile = event.currentTarget.getBoundingClientRect();
     dragRef.current = {
       id,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       moved: false,
+      minDx: bounds ? bounds.left - tile.left : -Infinity,
+      maxDx: bounds ? bounds.right - tile.right : Infinity,
+      minDy: bounds ? bounds.top - tile.top : -Infinity,
+      maxDy: bounds ? bounds.bottom - tile.bottom : Infinity,
     };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }, []);
@@ -118,7 +129,11 @@ export const DesktopIcons = memo(function DesktopIcons({ store, desktopId, area,
       current.moved = true;
     }
     event.preventDefault();
-    setDrag({ id: current.id, dx: event.clientX - current.startX, dy: event.clientY - current.startY });
+    setDrag({
+      id: current.id,
+      dx: clampBetween(event.clientX - current.startX, current.minDx, current.maxDx),
+      dy: clampBetween(event.clientY - current.startY, current.minDy, current.maxDy),
+    });
   }, []);
   const pointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const current = dragRef.current;
@@ -265,10 +280,18 @@ export const DesktopIcons = memo(function DesktopIcons({ store, desktopId, area,
 
   if (!visible.length || usable.width <= 0 || usable.height <= 0) return null;
 
+  // 층은 격자보다 사방으로 안쪽 여백만큼 크게 잡아 클리핑 경계를 바탕 영역 가장자리에 둔다.
+  // 안쪽 여백이 격자의 시작 좌표와 폭을 예전 그대로 유지한다.
   return <div
     className="ks-desktop-icons"
     ref={layer}
-    style={{ left: usable.x, top: usable.y, width: usable.width, height: usable.height }}
+    style={{
+      left: 0,
+      top: 0,
+      width: area.width,
+      height: DESKTOP_USABLE_PADDING * 2 + usable.height,
+      padding: DESKTOP_USABLE_PADDING,
+    }}
   >
     <div
       className="ks-icon-grid ks-desktop-icon-grid"
@@ -352,6 +375,10 @@ const DesktopIconEntry = memo(function DesktopIconEntry({ store, app, placement,
     tabIndex={tabIndex}
   />;
 });
+
+function clampBetween(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
 function readGridMetrics(grid: HTMLElement, rowHeight: number) {
   const style = getComputedStyle(grid);

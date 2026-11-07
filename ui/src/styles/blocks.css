@@ -362,13 +362,16 @@
   -webkit-line-clamp: 2;
 }
 
-/* 바탕화면 아이콘은 배경 위에서도 이름이 읽히도록 얇은 판을 깐다. */
+/* 바탕화면 아이콘은 배경 위에서도 이름이 읽히도록 얇은 판을 깐다.
+   판은 글자 폭에 맞추고, 타일 안쪽 폭을 넘는 긴 이름만 2줄로 끊는다. */
 .ks-icon-tile.is-desktop .ks-icon-tile-name {
+  width: auto;
+  max-width: 100%;
   border-radius: var(--ks-radius-small);
   background: var(--ks-material-bar);
   backdrop-filter: blur(var(--ks-blur-bar));
   box-shadow: inset 0 0 0 var(--ks-line-width) var(--ks-color-glass-edge);
-  padding: 0 var(--ks-space-1);
+  padding: 2px var(--ks-space-2);
 }
 
 .ks-explorer-detail-name {

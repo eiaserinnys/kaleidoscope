@@ -49,6 +49,33 @@ test("바탕화면 아이콘을 데스크톱별로 추가하고 끌어 옮기고
   await expect(icon(page, "calculator")).toBeVisible();
   await expect(icon(page, "weather")).toHaveCount(0);
 
+  // 0열 0행 아이콘을 왼쪽 위로 끌어도 바탕 영역 경계에서 잘리지 않는다.
+  const layer = page.locator(`${activeCanvas} .ks-desktop-icons`);
+  const firstIcon = icon(page, "md-editor");
+  const layerBox = await layer.boundingBox();
+  const firstTile = await firstIcon.boundingBox();
+  if (!layerBox || !firstTile) throw new Error("바탕화면 아이콘 층을 찾지 못했습니다");
+  const startX = firstTile.x + firstTile.width / 2;
+  const startY = firstTile.y + firstTile.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 120, startY - 120, { steps: 12 });
+  await expect(firstIcon).toHaveCSS("transform", /matrix/);
+  const dragging = await firstIcon.boundingBox();
+  if (!dragging) throw new Error("끌고 있는 아이콘을 찾지 못했습니다");
+  // 끌기 중인 타일과 선택 표시가 바탕 영역 밖으로 나가 잘리지 않는다.
+  expect(dragging.x).toBeGreaterThanOrEqual(layerBox.x - 0.5);
+  expect(dragging.y).toBeGreaterThanOrEqual(layerBox.y - 0.5);
+  expect(dragging.x + dragging.width).toBeLessThanOrEqual(layerBox.x + layerBox.width + 0.5);
+  expect(dragging.y + dragging.height).toBeLessThanOrEqual(layerBox.y + layerBox.height + 0.5);
+  // 클리핑 경계는 격자 시작선(12, 60)이 아니라 상단 바 아래끝과 화면 왼쪽 끝이다.
+  expect(dragging.x).toBeLessThanOrEqual(layerBox.x + 1);
+  expect(dragging.y).toBeLessThanOrEqual(layerBox.y + 1);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(firstIcon).toHaveAttribute("data-column", "0");
+  await expect(firstIcon).toHaveAttribute("data-row", "0");
+
   // 끌어서 3열 2행으로 옮긴다. 놓은 뒤 코어 응답이 저장 좌표를 확정한다.
   const editor = icon(page, "md-editor");
   const grid = page.locator(`${activeCanvas} .ks-desktop-icon-grid`);
