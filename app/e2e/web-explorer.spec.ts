@@ -41,14 +41,21 @@ async function permissionCenterMetrics(page: Page) {
 }
 
 async function treeSnapshot(tree: Locator) {
-  return tree.evaluate((element) => Array.from(element.querySelectorAll<HTMLElement>('[role="treeitem"]')).map((row) => ({
-    path: row.dataset.filePath ?? row.dataset.folderPath ?? null,
-    className: row.className,
-    current: row.getAttribute("aria-current"),
-    selected: row.getAttribute("aria-selected"),
-    expanded: row.getAttribute("aria-expanded"),
-    name: row.textContent,
-  })));
+  return tree.evaluate((element) => {
+    const list = element.querySelector<HTMLElement>(".ks-file-tree-list");
+    if (!list) throw new Error("파일 트리 스크롤 영역을 찾지 못했습니다");
+    return {
+      scrollTop: list.scrollTop,
+      rows: Array.from(element.querySelectorAll<HTMLElement>('[role="treeitem"]')).map((row) => ({
+        path: row.dataset.filePath ?? row.dataset.folderPath ?? null,
+        className: row.className,
+        current: row.getAttribute("aria-current"),
+        selected: row.getAttribute("aria-selected"),
+        expanded: row.getAttribute("aria-expanded"),
+        name: row.textContent,
+      })),
+    };
+  });
 }
 
 async function controls(page: Page) {
