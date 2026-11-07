@@ -513,6 +513,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
 
   await editorWindow.getByRole("treeitem", { name: "notes", exact: true }).click();
   const treeList = editorWindow.locator(".ks-file-tree-list");
+  await expect(treeList.getByRole("treeitem", { name: "노트-1.md" })).toBeVisible();
   const treeScrollbar = await treeList.evaluate((element) => {
     const node = element as HTMLElement;
     const bounds = node.getBoundingClientRect();
@@ -530,9 +531,12 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await captureMatrix("tree-scrollbar-after-drag");
 
   const treeHeader = await editorWindow.locator(".ks-file-tree-header").boundingBox();
-  const splitHandle = await editorWindow.locator(".ks-split-handle").boundingBox();
-  if (!treeHeader || !splitHandle) throw new Error("분할 기준선을 측정하지 못했습니다");
-  const dividerGap = Math.abs(treeHeader.x + treeHeader.width - splitHandle.x);
+  const splitLineX = await editorWindow.locator(".ks-split-handle").evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.x + Number.parseFloat(getComputedStyle(element, "::after").left);
+  });
+  if (!treeHeader || !Number.isFinite(splitLineX)) throw new Error("분할 기준선을 측정하지 못했습니다");
+  const dividerGap = Math.abs(treeHeader.x + treeHeader.width - splitLineX);
   expect(dividerGap).toBeLessThanOrEqual(0.5);
   await editor.click();
   const editorContent = editorWindow.locator(".ks-editor-content");
