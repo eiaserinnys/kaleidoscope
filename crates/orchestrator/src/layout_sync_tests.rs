@@ -1,12 +1,77 @@
 use super::*;
 use axum::body::Body;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures::StreamExt;
 use kaleidoscope_contract::{
+    assets::AssetDep,
     registry::{DeviceLayout, LayoutChanges},
-    AppWindow, Desktop, Rect, SentShareContext, Workspace,
+    AppWindow, Desktop, DesktopShortcut, DesktopWallpaper, Rect, SentShareContext, Workspace,
 };
 use std::collections::BTreeMap;
 use tower::ServiceExt;
+
+const WALLPAPER_PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+fn wallpaper(desktop_id: &str, asset: &str, version: u32, updated_at: &str) -> DesktopWallpaper {
+    DesktopWallpaper {
+        id: desktop_id.into(),
+        desktop_id: desktop_id.into(),
+        asset: AssetDep {
+            id: asset.into(),
+            version,
+        },
+        updated_at: updated_at.into(),
+    }
+}
+
+fn insert_wallpaper_asset(state: &AppState, id: &str, version: u32) {
+    let account = state.mcp_account_id().unwrap();
+    let bytes = STANDARD.decode(WALLPAPER_PNG_BASE64).unwrap();
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "INSERT INTO asset_versions(account_id,id,version,format,sha256,source,license,byte_size,created_at,bytes) VALUES(?1,?2,?3,'png',?4,'시험','user-provided',?5,'now',?6)",
+            params![account, id, version, sha256_hex(&bytes), bytes.len() as i64, bytes],
+        )
+        .unwrap();
+}
+
+// 판 15 연결이 받는 배치 모양. 배경 필드가 오면 거부한다.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct V15Changes {
+    #[serde(default)]
+    workspaces: Vec<Workspace>,
+    #[serde(default)]
+    desktops: Vec<Desktop>,
+    #[serde(default)]
+    windows: Vec<AppWindow>,
+    #[serde(default)]
+    desktop_shortcuts: Vec<DesktopShortcut>,
+    #[serde(default)]
+    deleted_workspaces: Vec<String>,
+    #[serde(default)]
+    deleted_desktops: Vec<String>,
+    #[serde(default)]
+    deleted_windows: Vec<String>,
+    #[serde(default)]
+    deleted_desktop_shortcuts: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "event", deny_unknown_fields)]
+enum V15LayoutEvent {
+    #[serde(rename = "layout.snapshot")]
+    Snapshot {
+        workspaces: Vec<Workspace>,
+        desktops: Vec<Desktop>,
+        windows: Vec<AppWindow>,
+        desktop_shortcuts: Vec<DesktopShortcut>,
+    },
+    #[serde(rename = "layout.changed")]
+    Changed { changes: V15Changes },
+}
 
 const EDITOR: &str = include_str!("fixtures/editor-app.json");
 const LEGACY_APP: &str = include_str!("fixtures/simple-app.json");
@@ -1098,4 +1163,321 @@ async fn desktop_delete_removes_child_window_from_database_reply_and_event() {
                 && changes.deleted_desktops == vec!["d"]
                 && changes.deleted_windows == vec!["x"]
     ));
+}
+
+#[test]
+fn wallpapers_survive_shortcut_updates_and_parent_deletion_cascades() {
+    let state = AppState::in_memory("secret");
+    insert_wallpaper_asset(&state, "wall-asset", 1);
+    let seed: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업")],
+        "desktops":[desktop("d", "w")],
+        "desktop_wallpapers":[{"id":"d", "desktop_id":"d", "asset":{"id":"wall-asset","version":1}, "updated_at":"now"}]
+    }))
+    .unwrap();
+    state.apply_layout_changes(None, &seed).unwrap();
+    let account = state.mcp_account_id().unwrap();
+    assert_eq!(
+        state
+            .export_data(&account)
+            .unwrap()
+            .layout
+            .desktop_wallpapers
+            .len(),
+        1
+    );
+
+    // 판 15 쉘은 바로가기만 올린다. 배경은 서버에 그대로 남는다.
+    let shortcut: DesktopShortcut = serde_json::from_value(json!({
+        "id":"d/app", "desktop_id":"d", "app_id":"app", "column":0, "row":0,
+        "created_at":"now", "updated_at":"now"
+    }))
+    .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                desktop_shortcuts: vec![shortcut],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let layout = state.export_data(&account).unwrap().layout;
+    assert_eq!(layout.desktop_wallpapers.len(), 1);
+    assert_eq!(layout.desktop_wallpapers[0].asset.id, "wall-asset");
+
+    let (reply, changed) = state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                deleted_desktops: vec!["d".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(reply.deleted_desktop_wallpapers, vec!["d"]);
+    assert_eq!(changed.deleted_desktop_wallpapers, vec!["d"]);
+    assert!(state
+        .export_data(&account)
+        .unwrap()
+        .layout
+        .desktop_wallpapers
+        .is_empty());
+}
+
+#[test]
+fn wallpapers_without_owned_parent_or_asset_are_returned_as_deletions() {
+    let state = AppState::in_memory("secret");
+    insert_device(&state, "foreign", "다른 계정");
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "INSERT INTO accounts(id,display_name,created_at) VALUES('other','다른 계정','now')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE devices SET account_id='other' WHERE id='foreign'",
+            [],
+        )
+        .unwrap();
+    }
+    insert_wallpaper_asset(&state, "wall-asset", 1);
+    let seed: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업")],
+        "desktops":[desktop("d", "w"), desktop("d2", "w")],
+        "desktop_wallpapers":[{"id":"d", "desktop_id":"d", "asset":{"id":"wall-asset","version":1}, "updated_at":"now"}]
+    }))
+    .unwrap();
+    state.apply_layout_changes(None, &seed).unwrap();
+
+    let mut foreign = seed.desktop_wallpapers[0].clone();
+    foreign.updated_at = "later".into();
+    let (reply, changed) = state
+        .apply_layout_changes(
+            Some("foreign"),
+            &LayoutChanges {
+                desktop_wallpapers: vec![foreign],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(reply.deleted_desktop_wallpapers, vec!["d"]);
+    assert!(changed.is_empty());
+
+    let (reply, _) = state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                desktop_wallpapers: vec![wallpaper("d2", "missing-asset", 1, "now")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(reply.deleted_desktop_wallpapers, vec!["d2"]);
+
+    let account = state.mcp_account_id().unwrap();
+    let layout = state.export_data(&account).unwrap().layout;
+    assert_eq!(layout.desktop_wallpapers.len(), 1);
+    assert_eq!(layout.desktop_wallpapers[0].updated_at, "now");
+}
+
+#[tokio::test]
+async fn legacy_stream_and_post_project_wallpapers_by_registry_version() {
+    use http_body_util::BodyExt;
+    let state = AppState::in_memory("secret");
+    let token14 = insert_device(&state, "v14", "판 14 기기");
+    let token15 = insert_device(&state, "v15", "판 15 기기");
+    let token16 = insert_device(&state, "v16", "판 16 기기");
+    insert_wallpaper_asset(&state, "wall-asset", 1);
+    let seed: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업")],
+        "desktops":[desktop("d", "w")],
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":0, "row":0, "created_at":"now", "updated_at":"now"}],
+        "desktop_wallpapers":[{"id":"d", "desktop_id":"d", "asset":{"id":"wall-asset","version":1}, "updated_at":"now"}]
+    }))
+    .unwrap();
+    state.apply_layout_changes(None, &seed).unwrap();
+
+    // 판 14 연결: 바로가기도 배경도 없는 실제 바이트.
+    let mut v14 = open_device_stream(
+        &state,
+        &token14,
+        registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION - 1,
+    )
+    .await;
+    let snapshot = next_layout_snapshot(&mut v14).await;
+    assert!(snapshot.get("desktop_shortcuts").is_none());
+    assert!(snapshot.get("desktop_wallpapers").is_none());
+    let _: LegacyLayoutEvent =
+        serde_json::from_slice(&serde_json::to_vec(&snapshot).unwrap()).unwrap();
+
+    // 판 15 연결: 바로가기만 받고 배경 필드는 오지 않는다.
+    let mut v15 = open_device_stream(
+        &state,
+        &token15,
+        registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION,
+    )
+    .await;
+    let snapshot = next_layout_snapshot(&mut v15).await;
+    assert!(snapshot.get("desktop_wallpapers").is_none());
+    assert!(matches!(
+        serde_json::from_slice::<V15LayoutEvent>(&serde_json::to_vec(&snapshot).unwrap()).unwrap(),
+        V15LayoutEvent::Snapshot { desktop_shortcuts, .. } if desktop_shortcuts.len() == 1
+    ));
+
+    // 판 16 연결: 둘 다 받는다.
+    let mut v16 = open_device_stream(&state, &token16, registry::WALLPAPER_REGISTRY_VERSION).await;
+    let snapshot = next_layout_snapshot(&mut v16).await;
+    assert_eq!(snapshot["desktop_shortcuts"].as_array().unwrap().len(), 1);
+    assert_eq!(snapshot["desktop_wallpapers"].as_array().unwrap().len(), 1);
+
+    // 배경만 바뀐 이벤트는 판 15 연결로 가지 않는다.
+    let account = state.mcp_account_id().unwrap();
+    let (_, actual) = state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                desktop_wallpapers: vec![wallpaper("d", "wall-asset", 1, "later")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state.send_event_for_account(DeviceEvent::LayoutChanged { changes: actual }, &account);
+    let event = next_sse_event(&mut v16).await;
+    assert_eq!(event["event"], "layout.changed");
+    assert_eq!(event["changes"]["desktop_wallpapers"].as_array().unwrap().len(), 1);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(400), next_sse_event(&mut v15))
+            .await
+            .is_err(),
+        "판 15 연결이 배경 이벤트를 받았습니다"
+    );
+
+    // 판 15 쉘이 바로가기만 올리면 응답에 배경 필드가 없고 저장된 배경은 남는다.
+    let v15_body = json!({
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":4, "row":0, "created_at":"now", "updated_at":"later"}]
+    });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/device/layout/changes")
+        .header(header::AUTHORIZATION, format!("Bearer {token15}"))
+        .header(
+            registry::REGISTRY_HEADER,
+            registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION.to_string(),
+        )
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&v15_body).unwrap()))
+        .unwrap();
+    let response = router(state.clone()).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
+    assert!(!std::str::from_utf8(&bytes).unwrap().contains("desktop_wallpapers"));
+    let reply: V15Changes = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(reply.desktop_shortcuts.len(), 1);
+    assert_eq!(reply.desktop_shortcuts[0].column, 4);
+    assert_eq!(
+        state
+            .export_data(&account)
+            .unwrap()
+            .layout
+            .desktop_wallpapers
+            .len(),
+        1
+    );
+
+    // 판 16 쉘은 배경을 올리고 응답에서 그대로 돌려받는다.
+    let v16_body = json!({
+        "desktop_wallpapers":[{"id":"d", "desktop_id":"d", "asset":{"id":"wall-asset","version":1}, "updated_at":"post"}],
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":5, "row":0, "created_at":"now", "updated_at":"post"}]
+    });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/device/layout/changes")
+        .header(header::AUTHORIZATION, format!("Bearer {token16}"))
+        .header(
+            registry::REGISTRY_HEADER,
+            registry::WALLPAPER_REGISTRY_VERSION.to_string(),
+        )
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(&v16_body).unwrap()))
+        .unwrap();
+    let response = router(state.clone()).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let reply: LayoutChanges = serde_json::from_slice(
+        &response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes(),
+    )
+    .unwrap();
+    assert_eq!(reply.desktop_wallpapers.len(), 1);
+    assert_eq!(reply.desktop_wallpapers[0].updated_at, "post");
+}
+
+#[tokio::test]
+async fn transfer_layout_snapshot_projects_wallpapers_by_registry_version() {
+    let remote = AppState::in_memory("secret");
+    let old_token = insert_device(&remote, "old", "판 15 기기");
+    let new_token = insert_device(&remote, "new", "판 16 기기");
+    let mut old_stream = open_device_stream(
+        &remote,
+        &old_token,
+        registry::DESKTOP_SHORTCUTS_REGISTRY_VERSION,
+    )
+    .await;
+    next_layout_snapshot(&mut old_stream).await;
+    let mut new_stream = open_device_stream(
+        &remote,
+        &new_token,
+        registry::WALLPAPER_REGISTRY_VERSION,
+    )
+    .await;
+    next_layout_snapshot(&mut new_stream).await;
+
+    let local = AppState::in_memory("local");
+    insert_wallpaper_asset(&local, "wall-asset", 1);
+    let seed: LayoutChanges = serde_json::from_value(json!({
+        "workspaces":[workspace("w", "작업")],
+        "desktops":[desktop("d", "w")],
+        "desktop_shortcuts":[{"id":"d/app", "desktop_id":"d", "app_id":"app", "column":0, "row":0, "created_at":"now", "updated_at":"now"}],
+        "desktop_wallpapers":[{"id":"d", "desktop_id":"d", "asset":{"id":"wall-asset","version":1}, "updated_at":"now"}]
+    }))
+    .unwrap();
+    local.apply_layout_changes(None, &seed).unwrap();
+    let bundle = local.export_data(&local.mcp_account_id().unwrap()).unwrap();
+    let account = remote.mcp_account_id().unwrap();
+    remote.import_data(&account, bundle).unwrap();
+    assert_eq!(
+        remote
+            .export_data(&account)
+            .unwrap()
+            .layout
+            .desktop_wallpapers
+            .len(),
+        1
+    );
+
+    let old_snapshot = next_layout_snapshot(&mut old_stream).await;
+    assert!(old_snapshot.get("desktop_wallpapers").is_none());
+    assert!(matches!(
+        serde_json::from_slice::<V15LayoutEvent>(
+            &serde_json::to_vec(&old_snapshot).unwrap()
+        )
+        .unwrap(),
+        V15LayoutEvent::Snapshot { desktop_shortcuts, .. } if desktop_shortcuts.len() == 1
+    ));
+
+    let new_snapshot = next_layout_snapshot(&mut new_stream).await;
+    assert_eq!(
+        new_snapshot["desktop_wallpapers"].as_array().unwrap().len(),
+        1
+    );
 }

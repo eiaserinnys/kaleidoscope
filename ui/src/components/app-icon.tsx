@@ -48,7 +48,7 @@ export const IconImage = memo(function IconImage({ image, size }: { image: IconI
   return <img draggable={false} alt="" aria-hidden="true" className="ks-app-icon" src={image.url} style={{ ...dimensions, objectFit: "contain" }} />;
 });
 
-function serverContext(link: NonNullable<ReturnType<ShellStore["getSnapshot"]>>["link"]): string {
+export function serverContext(link: NonNullable<ReturnType<ShellStore["getSnapshot"]>>["link"]): string {
   if (link.state === "unlinked") return "unlinked";
   return `${link.state === "connected" || link.state === "offline" ? "server" : link.state}:${link.server_url}`;
 }

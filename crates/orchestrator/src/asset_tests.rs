@@ -1,7 +1,114 @@
 use super::*;
+use axum::{
+    body::{to_bytes, Body},
+    http::Request,
+};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::assets::{AssetFormat, AssetUpload};
 use sha2::{Digest, Sha256};
+use tower::ServiceExt;
+
+const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+fn device(state: &AppState, id: &str) -> String {
+    let token = format!("token-{id}");
+    state
+        .lock_db()
+        .unwrap()
+        .execute(
+            "INSERT INTO devices(id,name,account_id,token_sha256,created_at) VALUES(?1,?1,(SELECT account_id FROM mcp_principal WHERE id=1),?2,'now')",
+            params![id, sha256_hex(token.as_bytes())],
+        )
+        .unwrap();
+    token
+}
+
+fn png_upload(id: &str, bytes: &[u8]) -> AssetUpload {
+    AssetUpload {
+        id: id.into(),
+        version: 1,
+        format: AssetFormat::Png,
+        sha256: format!("{:x}", Sha256::digest(bytes)),
+        source: "시험".into(),
+        license: "user-provided".into(),
+        data_base64: STANDARD.encode(bytes),
+    }
+}
+
+async fn post_upload(state: &AppState, token: &str, upload: &AssetUpload) -> (StatusCode, Vec<u8>) {
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/device/assets")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(serde_json::to_vec(upload).unwrap()))
+        .unwrap();
+    let response = router(state.clone()).oneshot(request).await.unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), 64 * 1024 * 1024)
+        .await
+        .unwrap()
+        .to_vec();
+    (status, body)
+}
+
+#[tokio::test]
+async fn device_asset_post_and_get_round_trip_png() {
+    let state = AppState::in_memory("secret");
+    let token = device(&state, "assets");
+    let bytes = STANDARD.decode(PNG_BASE64).unwrap();
+    let (status, body) = post_upload(&state, &token, &png_upload("wall-1", &bytes)).await;
+    assert_eq!(status, StatusCode::OK);
+    let record: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(record["meta"]["id"], "wall-1");
+    assert_eq!(record["meta"]["format"], "png");
+    assert_eq!(record["meta"]["byte_size"], bytes.len());
+
+    let request = Request::builder()
+        .uri("/api/device/assets/wall-1/1")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let response = router(state).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[header::CONTENT_TYPE], "image/png");
+    let served = to_bytes(response.into_body(), 64 * 1024 * 1024)
+        .await
+        .unwrap();
+    assert_eq!(served.as_ref(), bytes.as_slice());
+}
+
+#[tokio::test]
+async fn device_asset_post_rejects_body_over_32_mib() {
+    let state = AppState::in_memory("secret");
+    let token = device(&state, "assets");
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/device/assets")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(vec![
+            b' ';
+            registry::DEVICE_ASSETS_BODY_MAX_BYTES + 1
+        ]))
+        .unwrap();
+    let response = router(state).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
+async fn device_asset_post_rejects_originals_over_20_mib() {
+    let state = AppState::in_memory("secret");
+    let token = device(&state, "assets");
+    let bytes = vec![
+        0u8;
+        (kaleidoscope_contract::data::MEDIA_MAX_BYTES + 1) as usize
+    ];
+    let (status, body) = post_upload(&state, &token, &png_upload("huge", &bytes)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let error: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(error["id"], "ASSET_UPLOAD_BYTES_TOO_LARGE");
+}
 
 fn upload(id: &str, svg: &str) -> AssetUpload {
     AssetUpload {

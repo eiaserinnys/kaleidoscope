@@ -46,6 +46,7 @@ mod store;
 mod storage;
 mod sync_state;
 mod update_changes;
+mod wallpaper;
 pub use update_changes::update_changes;
 mod web;
 mod window_control;
@@ -761,6 +762,19 @@ impl Core {
             CoreRequest::AppIcon { app_id, app_version } => Ok(CoreReply::AppIcon {
                 media: media::app_icon(&self.inner, &app_id, app_version)?,
             }),
+            CoreRequest::DesktopWallpaperUpload {
+                desktop_id,
+                format,
+                data_base64,
+            } => {
+                let wallpaper = wallpaper::upload(&self.inner, &desktop_id, format, data_base64)?;
+                self.apply_state_change(|state| state_commands::store_wallpaper(state, wallpaper))
+            }
+            CoreRequest::DesktopWallpaperMedia { desktop_id } => {
+                Ok(CoreReply::DesktopWallpaperMedia {
+                    media: media::wallpaper(&self.inner, &desktop_id)?,
+                })
+            }
             request @ (CoreRequest::ConversationGet { .. }
             | CoreRequest::ConversationHistory { .. }
             | CoreRequest::ConversationCreate { .. }

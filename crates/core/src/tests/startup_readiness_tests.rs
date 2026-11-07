@@ -58,6 +58,7 @@ fn storage_read_after_workspace_push(
             desktops: vec![],
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     ));
     wait_until(|| !client.layout_changes.lock().unwrap().is_empty());

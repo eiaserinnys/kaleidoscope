@@ -212,6 +212,17 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
             "asset unavailable",
         ))
     }
+    fn asset_post(
+        &self,
+        _url: &str,
+        _token: &str,
+        _upload: &kaleidoscope_contract::assets::AssetUpload,
+    ) -> Result<kaleidoscope_contract::assets::AssetRecord, RegistryError> {
+        Err(RegistryError::failure(
+            FailureStage::Send,
+            "asset upload unavailable",
+        ))
+    }
     fn storage_list(
         &self,
         _url: &str,
@@ -691,6 +702,25 @@ impl RegistryClient for HttpRegistryClient {
             return Err(RegistryError::NotFound);
         }
         storage_success_json(response)
+    }
+    fn asset_post(
+        &self,
+        url: &str,
+        token: &str,
+        upload: &kaleidoscope_contract::assets::AssetUpload,
+    ) -> Result<kaleidoscope_contract::assets::AssetRecord, RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!(
+                "{}{}",
+                url.trim_end_matches('/'),
+                kaleidoscope_contract::registry::DEVICE_ASSETS_PATH
+            ))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(120))
+            .json(upload)
+            .send_registry()?;
+        success_json(response)
     }
     fn asset_get(
         &self,

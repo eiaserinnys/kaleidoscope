@@ -1,7 +1,7 @@
 use super::*;
 use kaleidoscope_contract::errors;
 use kaleidoscope_contract::registry::DeviceLayout;
-use kaleidoscope_contract::{AppWindow, Desktop, Workspace};
+use kaleidoscope_contract::{AppWindow, Desktop, DesktopWallpaper, Workspace};
 
 impl AppState {
     pub(super) fn layout_snapshot(&self, device_id: &str) -> Result<DeviceEvent, CoreError> {
@@ -21,11 +21,17 @@ impl AppState {
         let windows = AppState::load_account_entities::<AppWindow>(&db, "windows", &account_id)?;
         let desktop_shortcuts =
             AppState::load_account_entities(&db, "desktop_shortcuts", &account_id)?;
+        let desktop_wallpapers = AppState::load_account_entities::<DesktopWallpaper>(
+            &db,
+            "desktop_wallpapers",
+            &account_id,
+        )?;
         Ok(DeviceEvent::LayoutSnapshot {
             workspaces,
             desktops,
             windows,
             desktop_shortcuts,
+            desktop_wallpapers,
         })
     }
 

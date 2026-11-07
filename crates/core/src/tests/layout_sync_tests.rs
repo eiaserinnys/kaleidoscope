@@ -167,7 +167,7 @@ fn rejected_shortcut_batch_remains_pending() {
     let (workspace, desktop) = active_ids(&core);
     let CoreReply::DesktopShortcutAdd { shortcut } = core.handle(CoreRequest::DesktopShortcutAdd { desktop_id:desktop, app_id:"agent".into() }).unwrap() else { unreachable!() };
     client.layout_change_replies.lock().unwrap().push_back(Err(RegistryError::Validation(kaleidoscope_contract::errors::SERVER_LAYOUT_CHANGE_BODY_INVALID())));
-    crate::registry_events::apply_event(&core.inner, 0, DeviceEvent::LayoutSnapshot { workspaces:vec![], desktops:vec![], windows:vec![], desktop_shortcuts:vec![] });
+    crate::registry_events::apply_event(&core.inner, 0, DeviceEvent::LayoutSnapshot { workspaces:vec![], desktops:vec![], windows:vec![], desktop_shortcuts:vec![], desktop_wallpapers:vec![] });
     wait_until(|| !core.inner.state.lock().unwrap().sync.contains(crate::sync_state::EntityKind::Workspace, &workspace));
     assert!(core.inner.state.lock().unwrap().sync.contains(crate::sync_state::EntityKind::DesktopShortcut, &shortcut.id));
     core.inner.generation.fetch_add(1, Ordering::SeqCst);
@@ -438,6 +438,7 @@ fn first_snapshot_replaces_empty_local_workspace_and_selects_server_workspace() 
             desktops: vec![desktop.clone()],
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     let current = snapshot(&core);
@@ -675,6 +676,7 @@ fn share_remote_layout_cannot_enable_or_disable_local_permission() {
             desktops: vec![legacy_desktop.clone()],
             windows: first_snapshot.shared.windows,
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     assert!(snapshot(&second).sharing.is_empty());
@@ -800,6 +802,7 @@ fn another_core_keeps_synced_share_baselines_after_local_opt_in() {
             desktops: first_snapshot.shared.desktops.clone(),
             windows: first_snapshot.shared.windows.clone(),
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     let second_snapshot = snapshot(&second);
@@ -855,6 +858,7 @@ fn first_sync_keeps_populated_local_work_and_pending_wins_in_both_events() {
             desktops: local.desktops.clone(),
             windows: local.windows.clone(),
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     assert_eq!(
@@ -911,6 +915,7 @@ fn snapshot_from_empty_server_uploads_all_local_entities_and_migrates_remote_win
             desktops: vec![],
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     for (kind, id) in [

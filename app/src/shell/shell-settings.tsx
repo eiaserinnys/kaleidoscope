@@ -3,6 +3,7 @@ import { Button, ErrorId, ErrorNotice, IconButton, Notice, TextInput, SettingsRo
 import { Check, Copy, LoaderCircle } from "../../../ui/src/components/icons";
 import { serverLabel } from "./server-label";
 import { AccountSettings } from "./account-settings";
+import { WallpaperSettings } from "./wallpaper-settings";
 
 type Entry = { kind: "gear" | "server" | "agent"; sequence: number };
 
@@ -96,6 +97,7 @@ export function ShellSettings({ snapshot, entry, call, store }: {
           </div></div>
         </div> : null}
       </section>
+      <WallpaperSettings snapshot={snapshot} store={store} />
       <AccountSettings store={store} />
     </div>
   </section>;

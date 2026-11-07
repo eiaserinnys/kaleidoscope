@@ -274,7 +274,7 @@ fn migration_preserves_personal_app_without_origin() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::DESKTOP_SHORTCUTS_SCHEMA_VERSION
+        storage::DESKTOP_WALLPAPERS_SCHEMA_VERSION
     );
     let origin: Option<String> = db
         .query_row(

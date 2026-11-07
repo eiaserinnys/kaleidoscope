@@ -61,6 +61,11 @@ pub fn router(state: AppState) -> Router {
             "/apps/{app_id}/worker",
             post(super::worker_http::device_invoke).layer(body_limit(2 * 1024 * 1024)),
         )
+        .route(
+            "/assets",
+            post(super::assets::device_post)
+                .layer(body_limit(registry::DEVICE_ASSETS_BODY_MAX_BYTES)),
+        )
         .route("/assets/{id}/{version}", get(super::assets::device_get))
         .route(
             "/app-values/{app_id}",

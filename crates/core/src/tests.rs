@@ -48,6 +48,7 @@ mod startup_readiness_tests;
 mod shell_actions_tests;
 mod store_allow_tests;
 mod store_runtime_tests;
+mod wallpaper_tests;
 mod window_control_tests;
 
 const MD_EDITOR: &str = include_str!("../../../apps/md-editor.json");
@@ -1963,6 +1964,10 @@ struct FakeRegistryClient {
     store_install_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
     store_remove_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
     asset_bytes: Mutex<Option<Vec<u8>>>,
+    asset_uploads: Mutex<Vec<kaleidoscope_contract::assets::AssetUpload>>,
+    asset_post_replies:
+        Mutex<VecDeque<Result<kaleidoscope_contract::assets::AssetRecord, RegistryError>>>,
+    asset_gets: AtomicUsize,
     storage_reads: AtomicUsize,
     preferences_replies: Mutex<VecDeque<Result<kaleidoscope_contract::preferences::AccountPreferences, RegistryError>>>,
     preferences_requests: Mutex<Vec<(String, Value)>>,
@@ -2029,6 +2034,29 @@ impl RegistryClient for FakeRegistryClient {
         }
         Ok(())
     }
+    fn asset_post(
+        &self,
+        _: &str,
+        _: &str,
+        upload: &kaleidoscope_contract::assets::AssetUpload,
+    ) -> Result<kaleidoscope_contract::assets::AssetRecord, RegistryError> {
+        self.asset_uploads.lock().unwrap().push(upload.clone());
+        if let Some(reply) = self.asset_post_replies.lock().unwrap().pop_front() {
+            return reply;
+        }
+        Ok(kaleidoscope_contract::assets::AssetRecord {
+            meta: kaleidoscope_contract::assets::AssetMeta {
+                id: upload.id.clone(),
+                version: upload.version,
+                format: upload.format,
+                sha256: upload.sha256.clone(),
+                source: upload.source.clone(),
+                license: upload.license.clone(),
+                byte_size: 0,
+                created_at: "now".into(),
+            },
+        })
+    }
     fn asset_get(
         &self,
         _: &str,
@@ -2036,6 +2064,7 @@ impl RegistryClient for FakeRegistryClient {
         _: &str,
         _: u32,
     ) -> Result<crate::registry_client::AssetDownload, RegistryError> {
+        self.asset_gets.fetch_add(1, Ordering::SeqCst);
         use sha2::{Digest, Sha256};
         let bytes = self
             .asset_bytes

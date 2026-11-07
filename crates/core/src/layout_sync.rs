@@ -59,6 +59,12 @@ pub(crate) fn batch(
                     None => changes.deleted_desktop_shortcuts.push(key.id.clone()),
                 }
             }
+            EntityKind::DesktopWallpaper => {
+                match shared.desktop_wallpapers.iter().find(|v| v.id == key.id) {
+                    Some(value) => changes.desktop_wallpapers.push(value.clone()),
+                    None => changes.deleted_desktop_wallpapers.push(key.id.clone()),
+                }
+            }
             EntityKind::Window => match shared.windows.iter().find(|v| v.id == key.id) {
                 Some(value) => changes.windows.push(value.clone()),
                 None => changes.deleted_windows.push(key.id.clone()),
@@ -123,7 +129,9 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                     }
                     let before = crate::conversation_reconcile::workspace_names(state);
                     for (key, sent_seq) in &sent {
-                        if (!valid && key.kind != EntityKind::DesktopShortcut)
+                        if (!valid
+                            && key.kind != EntityKind::DesktopShortcut
+                            && key.kind != EntityKind::DesktopWallpaper)
                             || (valid && state.sync.pending.get(key) == Some(sent_seq))
                         {
                             state.sync.pending.remove(key);
@@ -159,9 +167,10 @@ fn run(inner: Arc<Inner>, generation: u64, epoch: u64) {
                     }
                 }
                 if !valid
-                    && sent
-                        .keys()
-                        .any(|key| key.kind == EntityKind::DesktopShortcut)
+                    && sent.keys().any(|key| {
+                        key.kind == EntityKind::DesktopShortcut
+                            || key.kind == EntityKind::DesktopWallpaper
+                    })
                 {
                     thread::sleep(Duration::from_secs(LAYOUT_RETRY_SECS));
                 }

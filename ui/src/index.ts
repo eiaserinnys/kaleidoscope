@@ -79,6 +79,7 @@ export type {
   CoreRequest,
   PickFilesSpec,
   Desktop,
+  DesktopWallpaper,
   Rect,
   ShellSnapshot,
   ServerMode,

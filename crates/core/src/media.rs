@@ -193,6 +193,44 @@ fn get_asset(inner: &Arc<Inner>, asset: &str, version: u32, max_px: Option<u32>)
     Ok(as_data(&result))
 }
 
+/// 데스크톱 배경 그림. 배경이 없으면 `None`이고, 읽기에 실패하면 오류다.
+pub(crate) fn wallpaper(
+    inner: &Arc<Inner>,
+    desktop_id: &str,
+) -> Result<Option<MediaData>, CoreError> {
+    let wallpaper = inner
+        .state
+        .lock()
+        .unwrap()
+        .shared
+        .desktop_wallpapers
+        .iter()
+        .find(|wallpaper| wallpaper.desktop_id == desktop_id)
+        .cloned();
+    let Some(wallpaper) = wallpaper else {
+        return Ok(None);
+    };
+    match get_asset(inner, &wallpaper.asset.id, wallpaper.asset.version, None) {
+        Ok(media) => Ok(Some(media)),
+        Err(error) if error.id.as_deref() == Some("MEDIA_LOAD_ASSET_DOWNLOAD_STATUS_REJECTED") => {
+            Err(errors::DESK_WALLPAPER_ASSET_NOT_FOUND(
+                &wallpaper.asset.id,
+                wallpaper.asset.version,
+            )
+            .and_details(details_with_message(error)))
+        }
+        Err(error) => {
+            Err(errors::DESK_WALLPAPER_MEDIA_READ_FAILED().and_details(details_with_message(error)))
+        }
+    }
+}
+
+fn details_with_message(error: CoreError) -> Vec<String> {
+    let mut details = vec![error.message];
+    details.extend(error.details);
+    details
+}
+
 pub(crate) fn get(
     inner: &Arc<Inner>,
     window: &str,

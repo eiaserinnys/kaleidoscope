@@ -76,6 +76,7 @@ impl AppState {
         bundle.layout.desktops = rows(&db, "데스크톱", "SELECT d.data FROM desktops d JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
         bundle.layout.windows = rows(&db, "창", "SELECT n.data FROM windows n JOIN desktops d ON n.desktop_id=d.id JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
         bundle.layout.desktop_shortcuts = rows(&db, "바탕화면 아이콘", "SELECT s.data FROM desktop_shortcuts s JOIN desktops d ON s.desktop_id=d.id JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
+        bundle.layout.desktop_wallpapers = rows(&db, "배경 그림", "SELECT p.data FROM desktop_wallpapers p JOIN desktops d ON p.desktop_id=d.id JOIN workspaces w ON d.workspace_id=w.id WHERE w.account_id=?1", account)?;
         let mut stmt = db.prepare("SELECT b.app_id,i.key,i.kind,i.content,i.workspace_id FROM app_storage_items i JOIN app_storage_buckets b ON i.bucket_id=b.id WHERE b.account_id=?1").map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_EXPORT_DATABASE_FAILED("저장값")))?;
         let rows = stmt
             .query_map([account], |r| {
@@ -139,6 +140,7 @@ impl AppState {
             || !bundle.layout.deleted_desktops.is_empty()
             || !bundle.layout.deleted_windows.is_empty()
             || !bundle.layout.deleted_desktop_shortcuts.is_empty()
+            || !bundle.layout.deleted_desktop_wallpapers.is_empty()
         {
             return Err(kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DELETIONS_PRESENT());
         }
@@ -310,6 +312,44 @@ impl AppState {
                 Some(&shortcut.desktop_id),
                 Some(&shortcut.app_id),
                 &shortcut.created_at,
+                &mut result,
+            )?;
+        }
+        for wallpaper in bundle.layout.desktop_wallpapers {
+            let owns: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM desktops d JOIN workspaces w ON d.workspace_id=w.id WHERE d.id=?1 AND w.account_id=?2)", params![wallpaper.desktop_id, account], |r| r.get(0)).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
+            let asset_owned: bool = if kaleidoscope_contract::builtin::is_bundled_asset(
+                &wallpaper.asset.id,
+                wallpaper.asset.version,
+            ) {
+                true
+            } else {
+                tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM asset_versions WHERE account_id=?1 AND id=?2 AND version=?3)",
+                    params![account, wallpaper.asset.id, wallpaper.asset.version],
+                    |r| r.get(0),
+                )
+                .map_err(|error| {
+                    db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+                    )
+                })?
+            };
+            if !owns || !asset_owned || blocked_desktops.contains(&wallpaper.desktop_id) {
+                result
+                    .skipped
+                    .push(format!("desktop_wallpapers:{}", wallpaper.id));
+                continue;
+            }
+            insert_layout(
+                &tx,
+                "desktop_wallpapers",
+                &wallpaper.id,
+                &serde_json::to_string(&wallpaper).unwrap(),
+                account,
+                Some(&wallpaper.desktop_id),
+                None,
+                &wallpaper.updated_at,
                 &mut result,
             )?;
         }
@@ -573,6 +613,10 @@ fn insert_layout(
         "desktop_shortcuts" => tx.execute(
             "INSERT INTO desktop_shortcuts(id,desktop_id,app_id,data,created_at) VALUES(?1,?2,?3,?4,?5)",
             params![id, parent, app, data, created],
+        ),
+        "desktop_wallpapers" => tx.execute(
+            "INSERT INTO desktop_wallpapers(id,desktop_id,data,updated_at) VALUES(?1,?2,?3,?4)",
+            params![id, parent, data, created],
         ),
         _ => tx.execute(
             "INSERT INTO windows(id,desktop_id,app_id,data,created_at) VALUES(?1,?2,?3,?4,?5)",

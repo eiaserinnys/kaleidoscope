@@ -116,6 +116,7 @@ fn offline_changes_wait_for_snapshot_and_changed_during_send_stays_pending() {
             desktops: vec![],
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     wait_until(|| !client.layout_changes.lock().unwrap().is_empty());
@@ -171,6 +172,7 @@ fn rejected_batch_clears_sent_pending() {
             desktops: vec![],
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     wait_until(|| {
@@ -211,6 +213,7 @@ fn snapshot_keeps_pending_deletion_and_server_order() {
             desktops: before.desktops,
             windows: vec![],
             desktop_shortcuts: vec![],
+            desktop_wallpapers: vec![],
         },
     );
     let after = snapshot(&core);
