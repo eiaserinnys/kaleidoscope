@@ -97,6 +97,7 @@
   gap: var(--ks-space-2);
   background: var(--ks-material-shellbar);
   padding: 0 var(--ks-space-3);
+  backdrop-filter: blur(var(--ks-blur-bar)) saturate(1.08);
 }
 
 .ks-workspace-control {
@@ -643,7 +644,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  aspect-ratio: 16 / 9;
+  height: calc(var(--ks-space-6) * 4);
   border: var(--ks-line-width) solid var(--ks-color-border);
   border-radius: var(--ks-radius-small);
   background: var(--ks-color-background) var(--ks-wallpaper) center / cover no-repeat;

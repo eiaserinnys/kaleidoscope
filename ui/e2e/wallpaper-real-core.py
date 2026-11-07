@@ -96,7 +96,6 @@ night_png = png(480, 270, dark)
 
 page.locator('.ks-shell-bar button[aria-label="설정"]').click()
 page.get_by_role("heading", name="바탕화면").wait_for(timeout=20_000)
-page.get_by_test_id("system-window-settings").get_by_role("button", name="창 최대화").click()
 page.wait_for_timeout(300)
 
 
@@ -111,8 +110,7 @@ def scroll_settings():
     page.wait_for_timeout(200)
 
 
-# 바탕화면 구역이 창 아래로 잘리지 않게 창을 키우고 그 구역까지 내린다.
-scroll_settings()
+# 기본 창 크기에서 「이 PC」, 「바탕화면」, 「계정」이 한눈에 들어온다.
 page.screenshot(path=str(sb.out / "settings-wide-light.png"))
 
 
@@ -130,26 +128,20 @@ def upload(desktop_id, data, name):
 
 
 bright_record = upload(day["id"], bright_png, "bright.png")
-scroll_settings()
 page.screenshot(path=str(sb.out / "settings-wide-light-bright.png"))
-scroll_settings()
 page.get_by_role("button", name="바탕화면 데스크톱").click()
 page.get_by_role("menuitem", name=night["name"]).click()
 night_record = upload(night["id"], night_png, "night.png")
-scroll_settings()
 page.screenshot(path=str(sb.out / "settings-wide-light-night.png"))
 
 page.set_viewport_size({"width": 760, "height": 900})
 page.wait_for_timeout(300)
-scroll_settings()
 page.screenshot(path=str(sb.out / "settings-narrow-light.png"))
 page.emulate_media(color_scheme="dark")
 page.wait_for_timeout(400)
-scroll_settings()
 page.screenshot(path=str(sb.out / "settings-narrow-dark.png"))
 page.set_viewport_size({"width": 1440, "height": 900})
 page.wait_for_timeout(400)
-scroll_settings()
 page.screenshot(path=str(sb.out / "settings-wide-dark.png"))
 page.emulate_media(color_scheme="light")
 page.wait_for_timeout(300)
@@ -176,7 +168,6 @@ def hold_upload(route):
 
 page.context.route("**/core", hold_upload)
 busy_captured = False
-scroll_settings()
 try:
     page.locator('input[aria-label="배경 그림 파일"]').set_input_files(
         {"name": "깨진 그림.png", "mimeType": "image/png", "buffer": b"\x00" * 4096})
