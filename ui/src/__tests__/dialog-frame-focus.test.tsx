@@ -84,6 +84,19 @@ it("글을 끌어 고른 뒤에는 초점을 되돌리지 않아 선택이 남�
   expect(document.activeElement).not.toBe(input);
 });
 
+it("click 없이 끝난 글 누름의 초점 기억은 다음 입력 누름에 되살아나지 않는다", () => {
+  const { dialog } = open(<><input aria-label="첫째" /><input aria-label="둘째" /><p style={{ userSelect: "text" }}>읽을 글</p></>);
+  const first = screen.getByRole("textbox", { name: "첫째" });
+  const second = screen.getByRole("textbox", { name: "둘째" });
+  first.focus();
+  // 오른쪽 누름처럼 mousedown만 오고 click은 오지 않는다.
+  fireEvent.mouseDown(dialog.querySelector("p")!, { button: 2 });
+  fireEvent.mouseDown(second);
+  second.focus();
+  fireEvent.click(second);
+  expect(document.activeElement).toBe(second);
+});
+
 it("덮개 바깥을 누르면 지금처럼 취소한다", () => {
   const { overlay, onCancel } = open("내용");
   expect(fireEvent.mouseDown(overlay)).toBe(false);

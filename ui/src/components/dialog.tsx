@@ -93,6 +93,8 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
   return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay}
     onMouseDown={(event) => {
+      // 오른쪽 누름이나 틀 밖까지 끈 선택은 click이 오지 않으므로 기억한 초점은 다음 누름까지만 산다.
+      rememberedFocus.current = null;
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (!busy && !windowModal && target === event.currentTarget) { event.preventDefault(); onCancel(); return; }
