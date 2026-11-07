@@ -259,8 +259,7 @@ it("같은 문구로 다시 실패하면 알림 판을 올리고 다른 경로�
 });
 
 it("입력 동작의 재실패는 알림 요소를 새로 그리지 않는다", async () => {
-  const { data, control, done } = setup({ type: "text", value: "내용" });
-  await data.ready;
+  const { data, control, done } = setup({ type: "input", label: "이름", value: { state: "text" }, on_change: { set_state: "text" } }, { text: "" });
   control.fail = true;
   await data.act("/ui/on_change", "가", undefined, undefined, undefined, { input: true });
   const start = data.getNoticeRevision();
