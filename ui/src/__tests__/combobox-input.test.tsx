@@ -34,7 +34,7 @@ it.each(["Enter", "Escape"])("없는 이름의 %s는 값과 목록을 함께 되
   fireEvent.focus(input);
   fireEvent.change(input, { target: { value: "없는 이름" } });
   fireEvent.keyDown(input, { key });
-  expect(input.value).toBe("value-1");
+  expect(input.value).toBe("항목 1");
   expect(input.getAttribute("aria-expanded")).toBe("false");
 });
 
@@ -44,7 +44,7 @@ it("한 행만 남으면 일부 이름 Enter도 고르고 선택한 글 전체�
   input.focus();
   fireEvent.change(input, { target: { value: "zom" } });
   fireEvent.keyDown(input, { key: "Enter" });
-  expect(input.value).toBe("value-503");
+  expect(input.value).toBe("Zombie 마지막");
   expect(input.selectionStart).toBe(0);
   expect(input.selectionEnd).toBe(input.value.length);
 });
@@ -110,7 +110,7 @@ it("목록 전용은 고른 글을 전체 선택하고 이름 Enter 확정 뒤 �
   fireEvent.change(input, { target: { value: "Zombie 마지막" } });
   fireEvent.keyDown(input, { key: "Enter" });
   expect(input.getAttribute("aria-expanded")).toBe("false");
-  expect(input.value).toBe("value-503");
+  expect(input.value).toBe("Zombie 마지막");
 });
 
 it("쉘 안의 좁은 앱 창에서는 설명을 목록 아래로 놓는다", async () => {
@@ -132,12 +132,16 @@ it("쉘 안의 좁은 앱 창에서는 설명을 목록 아래로 놓는다", as
 
 function setup(optionsOnly = false) {
   const choices = Array.from({ length: 504 }, (_, index) => ({ value: `value-${index}`, label: index === 503 ? "Zombie 마지막" : `항목 ${index}`, ...(index === 0 ? {} : { description: `설명 ${index}` }) }));
-  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 33, modules: {} }, state: { draft: "value-1", saved: "" }, ui: { type: "stack", direction: "column", children: [
+  return setupDefinition({ type: "stack", direction: "column", children: [
     { type: "input", placeholder: "선택", value: { state: "draft" }, options: choices, options_only: optionsOnly, on_change: { set_state: "draft" } },
     { type: "button", label: "확인", on_click: [{ set_state: "saved", value: { expr: "$state.draft" } }] },
-  ] } };
+  ] }, { draft: "value-1", saved: "" });
+}
+
+function setupDefinition(ui: AppDefinition["ui"], state: AppDefinition["state"]) {
+  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 33, modules: {} }, state, ui };
   const seed = makeTestSeed({ definitions: [definition] });
-  seed.snapshot.shared.windows[0].state = { ...definition.state };
+  seed.snapshot.shared.windows[0].state = { ...state };
   const transport = createFakeTransport(seed);
   const originalCall = transport.call.bind(transport);
   const spy = vi.spyOn(transport, "call");
@@ -148,7 +152,8 @@ function setup(optionsOnly = false) {
 
 it("일반 자동완성은 이름과 다른 선택값을 계속 표시한다", async () => {
   setup();
-  const input = await screen.findByRole("combobox");
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  expect(input.value).toBe("value-1");
   fireEvent.focus(input);
   const selected = screen.getByRole("option", { selected: true });
   expect(selected.querySelector(".ks-menu-item-description")?.textContent).toBe("value-1");
@@ -168,7 +173,7 @@ it("504개 중 입력으로 거르고 방향키와 Enter로 고른 뒤 버튼이
   fireEvent.keyDown(input, { key: "Enter" });
   fireEvent.click(screen.getByRole("button", { name: "확인" }));
   await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.saved).toBe("value-503"));
-  expect(input.value).toBe("value-503");
+  expect(input.value).toBe("Zombie 마지막");
   expect(spy.mock.calls.filter(([r]) => r.op === "data.act" && r.pointer.endsWith("on_change"))).toHaveLength(1);
 });
 
@@ -178,7 +183,7 @@ it("목록 전용 입력의 불일치는 blur에 되돌리고 보내지 않는�
   fireEvent.focus(input);
   fireEvent.change(input, { target: { value: "목록 밖" } });
   fireEvent.blur(input);
-  expect(input.value).toBe("value-1");
+  expect(input.value).toBe("항목 1");
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
   expect(spy.mock.calls.filter(([r]) => r.op === "data.act" && r.pointer.endsWith("on_change"))).toHaveLength(0);
 });
@@ -187,13 +192,13 @@ it("설명을 읽은 뒤 바깥으로 나가면 목록 밖 입력을 되돌린�
   const { spy } = setup(true);
   const input = await screen.findByRole("combobox") as HTMLInputElement;
   fireEvent.focus(input);
-  fireEvent.change(input, { target: { value: "항목 50" } });
+  fireEvent.change(input, { target: { value: "Zombie" } });
   fireEvent.keyDown(input, { key: "ArrowDown" });
   const description = document.querySelector<HTMLElement>(".ks-combobox-description")!;
   fireEvent.blur(input, { relatedTarget: description });
   description.focus();
   fireEvent.pointerDown(screen.getByRole("button", { name: "확인" }));
-  expect(input.value).toBe("value-1");
+  expect(input.value).toBe("항목 1");
   expect(spy.mock.calls.filter(([request]) => request.op === "data.act")).toHaveLength(0);
 });
 
@@ -288,9 +293,9 @@ it("포커스 중 바깥에서 바뀐 값은 입력을 떠날 때 반영된다",
   await act(async () => transport.emit({ event: "state.changed", sequence: 100, snapshot: {
     ...snapshot, shared: { ...snapshot.shared, windows: snapshot.shared.windows.map((item) => item.id === "editor-window" ? { ...item, state: { ...item.state, draft: "value-2" } } : item) },
   } }));
-  expect(input.value).toBe("value-1");
+  expect(input.value).toBe("항목 1");
   fireEvent.blur(input);
-  expect(input.value).toBe("value-2");
+  expect(input.value).toBe("항목 2");
 });
 
 it.each(["value-3", "value-1"])("연속 선택 뒤 첫 응답이 와도 미일치 초안은 마지막 선택 %s로 돌아간다", async (lastValue) => {
@@ -309,7 +314,7 @@ it.each(["value-3", "value-1"])("연속 선택 뒤 첫 응답이 와도 미일�
   await waitFor(() => expect(spy.mock.calls.some(([request]) => request.op === "data.act" && request.event === lastValue)).toBe(true));
   fireEvent.change(input, { target: { value: "목록 밖" } });
   fireEvent.blur(input);
-  expect(input.value).toBe(lastValue);
+  expect(input.value).toBe(lastValue === "value-3" ? "항목 3" : "항목 1");
   await act(async () => { releaseSecond(); await second; });
   await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe(lastValue));
   expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change"))).toHaveLength(2);
@@ -405,4 +410,122 @@ it("설명 공간을 처음부터 예약하고 세 행 여유가 없으면 쉘�
   fireEvent(window, new Event("resize"));
   await waitFor(() => expect(reads()).toBeGreaterThan(changedReads));
   cleanup(); css.cssText = "";
+});
+
+it("행을 누르면 칸에 이름을 보이고 바인딩에는 값을 보낸다", async () => {
+  const { store, spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "zom" } });
+  fireEvent.click(screen.getByRole("option"));
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe("value-503"));
+  expect(input.value).toBe("Zombie 마지막");
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change")).map(([request]) => request.op === "data.act" ? request.event : undefined)).toEqual(["value-503"]);
+});
+
+it("이름 전체를 치고 blur하면 값을 보내고 칸에는 이름을 남긴다", async () => {
+  const { store, spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Zombie 마지막" } });
+  fireEvent.blur(input);
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe("value-503"));
+  expect(input.value).toBe("Zombie 마지막");
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change")).map(([request]) => request.op === "data.act" ? request.event : undefined)).toEqual(["value-503"]);
+});
+
+it("값 글자를 치는 동안은 그대로 보이고 Enter 뒤 이름으로 바뀐다", async () => {
+  const { store, spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "value-50" } });
+  expect(input.value).toBe("value-50");
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act")).toHaveLength(0);
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe("value-50"));
+  expect(input.value).toBe("항목 50");
+});
+
+it("현재 값을 다시 입력하고 Enter하면 다시 보내지 않고 이름을 보인다", async () => {
+  const { spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "value-1" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change"))).toHaveLength(0);
+  expect(input.value).toBe("항목 1");
+});
+
+it("현재 고른 행을 다시 눌러도 다시 보내지 않고 이름을 보인다", async () => {
+  const { spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.click(screen.getByRole("option", { selected: true }));
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act" && request.pointer.endsWith("on_change"))).toHaveLength(0);
+  expect(input.value).toBe("항목 1");
+});
+
+it.each(["blur", "Escape"])("부분 글자 %s는 보내지 않고 이전 이름으로 돌아간다", async (key) => {
+  const { spy } = setup(true);
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Zombie" } });
+  expect(input.value).toBe("Zombie");
+  if (key === "blur") fireEvent.blur(input);
+  else fireEvent.keyDown(input, { key });
+  expect(input.value).toBe("항목 1");
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 350)); });
+  expect(spy.mock.calls.filter(([request]) => request.op === "data.act")).toHaveLength(0);
+});
+
+it("같은 이름 다른 값은 이름을 치면 첫 값을 보내고 그 행을 표시한다", async () => {
+  const choices = [{ value: "code-77", label: "Zombie 마지막" }, { value: "code-78", label: "Zombie 마지막" }];
+  const { store } = setupDefinition({ type: "stack", direction: "column", children: [
+    { type: "input", label: "선택", value: { state: "draft" }, options: choices, options_only: true, on_change: { set_state: "draft" } },
+  ] }, { draft: "code-78" });
+  const input = await screen.findByRole("combobox", { name: "선택" }) as HTMLInputElement;
+  expect(input.value).toBe("Zombie 마지막");
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "Zombie" } });
+  fireEvent.change(input, { target: { value: "Zombie 마지막" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe("code-77"));
+  expect(input.value).toBe("Zombie 마지막");
+  fireEvent.click(input);
+  const selected = screen.getByRole("option", { selected: true });
+  expect(within(selected).getByText("code-77")).toBeTruthy();
+});
+
+it("늦은 응답에도 고른 이름을 유지하고 그 값으로 정착한다", async () => {
+  const { store, spy, originalCall } = setup(true);
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  spy.mockImplementation(async (request) => {
+    if (request.op === "data.act" && request.event === "value-503") await held;
+    return originalCall(request);
+  });
+  const input = await screen.findByRole("combobox") as HTMLInputElement;
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: "zom" } });
+  fireEvent.click(screen.getByRole("option"));
+  expect(input.value).toBe("Zombie 마지막");
+  await act(async () => { await Promise.resolve(); });
+  expect(input.value).toBe("Zombie 마지막");
+  await act(async () => { release(); await held; });
+  await waitFor(() => expect(store.getSnapshot()?.shared.windows[0].state.draft).toBe("value-503"));
+  expect(input.value).toBe("Zombie 마지막");
+});
+
+it("읽기 전용과 잠긴 칸도 이름을 보이고 목록에 없는 값은 값을 보인다", async () => {
+  const choices = [{ value: "value-1", label: "항목 1" }, { value: "value-503", label: "Zombie 마지막" }];
+  setupDefinition({ type: "stack", direction: "column", children: [
+    { type: "input", label: "읽기 전용 선택", value: { state: "readonly" }, options: choices, options_only: true, read_only: true, on_change: { set_state: "readonly" } },
+    { type: "input", label: "잠긴 선택", value: { state: "locked" }, options: choices, options_only: true, disabled: true, on_change: { set_state: "locked" } },
+    { type: "input", label: "모르는 값", value: { state: "unknown" }, options: choices, options_only: true, on_change: { set_state: "unknown" } },
+  ] }, { readonly: "value-503", locked: "value-1", unknown: "value-999" });
+  expect((await screen.findByRole("combobox", { name: "읽기 전용 선택" }) as HTMLInputElement).value).toBe("Zombie 마지막");
+  expect((screen.getByRole("combobox", { name: "잠긴 선택" }) as HTMLInputElement).value).toBe("항목 1");
+  expect((screen.getByRole("combobox", { name: "모르는 값" }) as HTMLInputElement).value).toBe("value-999");
 });

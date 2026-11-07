@@ -27,7 +27,7 @@ test("좁은 앱 창의 설명 경계와 이름 확정, 다시 입력을 지킨�
   expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
   await page.keyboard.type("Zombie 마지막");
   await input.press("Enter");
-  await expect(input).toHaveValue("entry-503");
+  await expect(input).toHaveValue("Zombie 마지막");
   await expect(popup).toHaveCount(0);
   await page.keyboard.type("Zombie");
   await expect(input).toHaveValue("Zombie");
@@ -91,7 +91,7 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     await expect(page.getByText("일치 없음")).toBeVisible();
     if (output) await page.screenshot({ path: join(output, `일치없음-${width}-${theme}.png`) });
     await input.blur();
-    await expect(input).toHaveValue("entry-503");
+    await expect(input).toHaveValue("Zombie 마지막");
     const free = app.getByRole("combobox", { name: "자유 입력" });
     // 도구 왕복이 300ms를 넘어도 같은 브라우저 시각에서 지연 계약을 잰다.
     await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10_000));
@@ -114,6 +114,11 @@ test("긴 선택지를 걸러 선택하고 창 조작과 입력 순서를 지킨
     expect((await run(page, "목록 전용", { kind: "select", choice: { by: "label", value: "Zombie 마지막" } })).applied).toBe(true);
     expect((await run(page, "저장", { kind: "click" })).applied).toBe(true);
     await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.state().saved)).toBe("entry-503");
+    expect((await run(page, "목록 전용", { kind: "type", mode: "replace", text: "Zombie 마지막" })).applied).toBe(true);
+    expect((await run(page, "목록 전용", { kind: "key", key: "Enter" })).applied).toBe(true);
+    await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.state().value)).toBe("entry-503");
+    await expect(input).toHaveValue("Zombie 마지막");
+    expect(await page.evaluate(() => (window as any).inputOptionsHarness.visibleText())).toContain("목록 전용: Zombie 마지막");
   }
   if (output) writeFileSync(join(output, "metrics.json"), JSON.stringify(metrics, null, 2));
 });
@@ -229,4 +234,24 @@ test("세 선택지가 아래에 들어가고 스크롤 뒤에도 칸을 따른�
     await page.screenshot({ path: join(output, "스크롤-1200x470.png") });
     writeFileSync(join(output, "fix2-metrics.json"), JSON.stringify({ metrics, scroll: { input: i, popup: p } }, null, 2));
   }
+});
+
+test("칸에는 고른 이름을 남기고 읽기 전용과 모르는 값도 값을 가른다", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto("/?preview=input-options-fixture");
+  const app = page.getByTestId("app-window-input-options-fixture");
+  const input = app.getByRole("combobox", { name: "목록 전용" });
+  await expect(input).toHaveValue("항목 1");
+  await input.focus();
+  await input.fill("Zombie 마지막");
+  await page.getByRole("option", { name: /Zombie 마지막/ }).click();
+  await expect(input).toHaveValue("Zombie 마지막");
+  await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.state().value)).toBe("entry-503");
+  expect(await page.evaluate(() => (window as any).inputOptionsHarness.calls().filter((call: any) => call.pointer.endsWith("on_change")).map((call: any) => call.event))).toEqual(["entry-503"]);
+  await expect(app.getByRole("combobox", { name: "읽기 전용 선택" })).toHaveValue("항목 7");
+  await expect(app.getByRole("combobox", { name: "모르는 값" })).toHaveValue("목록 밖 값");
+  await app.getByRole("button", { name: "저장" }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).inputOptionsHarness.state().saved)).toBe("entry-503");
+  const text = await page.evaluate(() => (window as any).inputOptionsHarness.visibleText());
+  expect(text).toContain("목록 전용: Zombie 마지막");
 });

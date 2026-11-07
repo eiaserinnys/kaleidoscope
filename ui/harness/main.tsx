@@ -409,6 +409,7 @@ function Harness() {
       act: (viewId: string, action: Parameters<typeof executeWindowAction>[2]) => executeWindowAction(optionsWindow.id, viewId, action, "options-test"),
       state: () => store.getSnapshot()?.shared.windows.find((item) => item.id === optionsWindow.id)?.state,
       calls: () => fakeTransport.getCalls().filter((call) => call.op === "data.act"),
+      visibleText: () => { const app = document.querySelector<HTMLElement>('[data-testid="app-window-input-options-fixture"]'); return app ? describeVisible(app).text : ""; },
     } });
     return unregister;
   }, [optionsWindow?.id]);
