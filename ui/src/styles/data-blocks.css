@@ -9,7 +9,10 @@
 .ks-data-window-notice:has(> .ks-notice) { position: absolute; inset-inline: var(--ks-space-2); bottom: var(--ks-space-2); z-index: 1; }
 :is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice { flex-wrap: nowrap; background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
 :is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice > .ks-notice-message,
-:is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice.has-multiple-actions > .ks-notice-message { min-width: 0; flex: 1 1 0; max-height: calc(100cqh - 4 * var(--ks-space-2) - 2 * var(--ks-line-width)); overflow-y: auto; }
+:is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice.has-multiple-actions > .ks-notice-message { min-width: 0; flex: 1 1 0; overflow-y: auto; }
+/* 창 자리 알림은 창 내용(.ks-data-window) 높이의 절반까지만 차지한다. 글만 그 안에서 스크롤하고 단추 둘은 늘 다 보인다. */
+.ks-data-window-notice > .ks-notice > .ks-notice-message,
+.ks-data-window-notice > .ks-notice.has-multiple-actions > .ks-notice-message { max-height: calc(50cqh - 2 * var(--ks-space-2) - 2 * var(--ks-line-width)); }
 :is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice[role="alert"] { background: linear-gradient(var(--ks-color-danger-surface), var(--ks-color-danger-surface)), var(--ks-color-surface-solid); }
 :is(.ks-data-window-notice, .ks-dialog-notice-slot) .ks-button[aria-disabled="true"] { cursor: default; opacity: .56; }
 /* 대화상자 안의 알림 자리: 알림이 먼저 보이고 본문이 그만큼 줄어든다. 자리 자체는 스크롤하지 않고 메시지만 스크롤해 바닥 단추를 밀지 않는다. */
