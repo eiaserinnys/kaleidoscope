@@ -11,10 +11,10 @@ test("채움 밖 미디어는 원본 비율을 쓰고 채움과 카드 미리보
       <div class="ks-data-stack-item" style="width:320px"><div class="ks-image-view" style="--ks-image-ratio:16/9;--ks-image-natural-height:90px"></div></div>
       <div class="ks-data-stack-item" style="width:320px"><div class="ks-image-view"></div></div>
       <div class="ks-data-stack-item" style="width:320px"><div class="ks-media-player is-video" style="--ks-media-ratio:9/16"><video></video><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div>
-      <div class="ks-data-stack-item" style="width:320px"><div class="ks-media-player"><audio></audio><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div>
+      <div class="ks-data-stack-item" style="width:320px"><div class="ks-media-player is-audio"><audio></audio><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div>
       <div class="ks-data-stack-item is-fill" style="width:320px;height:220px;--ks-fill-textarea-height:100%;--ks-fill-media-max:none"><div class="ks-image-view" style="--ks-image-natural-height:90px"></div></div>
       <div class="ks-data-stack-item is-fill" style="width:320px;height:220px;--ks-fill-textarea-height:100%;--ks-fill-media-max:none"><div class="ks-media-player is-video"><video></video><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div>
-      <div class="ks-data-stack-item is-fill" style="width:320px;height:220px;--ks-fill-textarea-height:100%;--ks-fill-media-max:none"><div class="ks-media-player"><audio></audio><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div>
+      <div class="ks-data-stack-item is-fill" style="width:320px;height:220px;--ks-fill-textarea-height:100%;--ks-fill-media-max:none"><div class="ks-media-player is-audio"><audio></audio><div class="ks-media-controls-container"><div class="ks-media-controls"></div></div></div></div>
       <div class="ks-data-button-card-preview" style="width:320px"><div class="ks-image-view" style="--ks-image-natural-height:90px"></div></div>`;
     document.body.append(fixture);
   });
@@ -45,6 +45,41 @@ test("채움 밖 미디어는 원본 비율을 쓰고 채움과 카드 미리보
   expect(metrics.players[3].glyphMask).not.toBe("none");
   expect(metrics.players[1].glyphHeight).toBe(0);
   expect(Math.abs(metrics.players[3].glyphHeight - (220 - metrics.players[3].controls))).toBeLessThanOrEqual(1);
+});
+
+test("kind 없는 동영상은 원본을 받는 동안 소리 글리프 없이 잠긴 재생 줄을 둔다", async ({ page }) => {
+  await page.goto("/?preview=block-gallery");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let requested = false;
+  await page.route("**/assets/tone.wav**", async (route) => {
+    requested = true;
+    await gate;
+    await route.fulfill({ status: 200, contentType: "video/mp4", body: Buffer.from([0, 0, 0, 0]) });
+  });
+  await page.getByRole("tab", { name: "미디어" }).click();
+  await page.getByRole("tab", { name: "소리", exact: true }).click();
+  await page.getByText("tone.wav", { exact: true }).click();
+  const player = page.locator(".ks-media-player");
+  await expect(player).toHaveCount(1);
+  await expect.poll(() => requested).toBe(true);
+  const loading = await player.evaluate((element) => {
+    const glyph = getComputedStyle(element, "::before");
+    return {
+      mask: glyph.maskImage || glyph.webkitMaskImage,
+      audio: element.classList.contains("is-audio"),
+      video: element.classList.contains("is-video"),
+    };
+  });
+  expect(loading).toEqual({ mask: "none", audio: false, video: false });
+  await expect(player.getByRole("button", { name: "재생" })).toBeDisabled();
+  release();
+  await expect(player).toHaveClass(/is-video/);
+  const loaded = await player.evaluate((element) => {
+    const glyph = getComputedStyle(element, "::before");
+    return glyph.maskImage || glyph.webkitMaskImage;
+  });
+  expect(loaded).toBe("none");
 });
 
 test("내용 높이 쌓기의 마지막 미디어와 좁은 오류는 접히지 않는다", async ({ page }) => {

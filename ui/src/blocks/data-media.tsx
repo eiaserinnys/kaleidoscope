@@ -62,6 +62,8 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
     return () => { currentSourceKey.current = null; el.pause(); el.removeAttribute("src"); el.load(); };
   }, [current]);
   const video = (kind ?? (current?.mime.startsWith("video/") ? "video" : "audio")) === "video";
+  // 원본을 받는 동안과 원본이 없을 때는 소리로 단정하지 않는다. 소리 글리프는 소리임을 안 뒤에만 그린다.
+  const audio = kind === "audio" || (kind === undefined && current !== null && !current.mime.startsWith("video/"));
   const playbackError = () => { setError(shellErrors.SHELL_MEDIA_PLAYBACK_UNSUPPORTED()); setPlaying(false); setTime(0); setDuration(0); };
   // 늦게 온 재생 실패는 재생을 시작한 미디어가 아직 현재 원본일 때만 알린다.
   // URL은 캐시되므로 서로 다른 원본이 같은 데이터 URL을 가질 수 있다.
@@ -95,7 +97,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
     }
   };
   const props = { crossOrigin: current?.playback.kind === "stream" ? "anonymous" as const : undefined, src: current?.url, onError: onMediaError, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
-  return <div {...blockRoot} className={`ks-media-player${video ? " is-video" : ""}`} style={video && ratio ? { "--ks-media-ratio": ratio } as React.CSSProperties : undefined}>
+  return <div {...blockRoot} className={`ks-media-player${video ? " is-video" : ""}${audio ? " is-audio" : ""}`} style={video && ratio ? { "--ks-media-ratio": ratio } as React.CSSProperties : undefined}>
     {video ? <video ref={(el) => { element.current = el; }} {...props} onLoadedMetadata={(event) => { const { videoWidth, videoHeight } = event.currentTarget; if (videoWidth > 0 && videoHeight > 0) setRatio(videoWidth / videoHeight); }} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
     {error ? <Notice role="alert" errorId={(folder.error ?? error).id} actions={error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && src && "permission" in src ? [<Button key="pick" data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(src.permission, () => setAttempt((value) => value + 1)); }}>폴더 선택</Button>] : undefined}>{(folder.error ?? error).message}</Notice> : null}
     <div className="ks-media-controls-container">
