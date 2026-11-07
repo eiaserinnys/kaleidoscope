@@ -35,7 +35,6 @@ test.describe("125% 화면 배율", () => {
     expect(metrics.deviceScaleFactor).toBe(1.25);
     expect(metrics.scrollLeft).toBeGreaterThan(1);
     expect(Math.abs(metrics.remaining)).toBeLessThanOrEqual(1);
-    console.log("125% 목록 끝 측정", JSON.stringify(metrics));
     await testInfo.attach("125-percent-end", { body: JSON.stringify(metrics), contentType: "application/json" });
     await page.screenshot({ path: testInfo.outputPath("125-percent-end.png") });
     for (let count = 12; count > 0; count -= 1) {
@@ -379,7 +378,6 @@ test("전체 다시 열기는 설정을 포함한 겹침과 창 크기를 보존
   });
   const expected = ["a", "system-window-settings", "app-window-md-editor", "c"];
   await expect.poll(ordered).toEqual(expected);
-  console.log("다시 열기 전 겹침 순서", JSON.stringify(await ordered()));
   const before = await b.boundingBox();
   await taskbar.getByRole("button", { name: "모든 창 최소화" }).click();
   await expect(settings).toHaveAttribute("data-minimized", "true");
@@ -391,7 +389,6 @@ test("전체 다시 열기는 설정을 포함한 겹침과 창 크기를 보존
   await expect(settings).toHaveAttribute("data-maximized", "false");
   expect(await b.boundingBox()).toEqual(before);
   await expect.poll(ordered).toEqual(expected);
-  console.log("다시 열기 후 겹침 순서", JSON.stringify(await ordered()));
   await page.screenshot({ path: testInfo.outputPath("restore-all.png") });
   await expect(taskbar.getByRole("button", { name: "모든 창 다시 열기" })).toBeDisabled();
   await taskbar.getByRole("button", { name: "설정" }).click({ button: "right" });

@@ -244,6 +244,16 @@
   display: none;
 }
 
+/* 바탕화면 아이콘은 배경 위, 앱 창 아래에 둔다. 이 층만 자체 쌓임 문맥을 가진다. */
+.ks-desktop-icons {
+  position: absolute;
+  z-index: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  isolation: isolate;
+}
+
 .ks-window {
   position: absolute;
   overflow: visible;
@@ -311,11 +321,6 @@
   padding: 0 var(--ks-space-3);
 }
 
-.ks-taskbar-item:focus-visible {
-  outline: none;
-  border-color: var(--ks-color-focus);
-}
-
 .ks-taskbar-item:hover {
   background: var(--ks-color-taskbar-hover);
 }
@@ -329,6 +334,16 @@
 
 .ks-taskbar-item[data-state="minimized"] {
   color: var(--ks-color-text);
+}
+
+.ks-taskbar-item:active:not(:disabled) {
+  background-color: var(--ks-color-taskbar-hover);
+  background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
+}
+
+.ks-taskbar-item:focus-visible {
+  outline: none;
+  border-color: var(--ks-color-focus);
 }
 
 .ks-taskbar-item-label {
