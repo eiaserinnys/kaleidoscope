@@ -111,7 +111,7 @@ it("대화상자 입력에서 다른 창을 거쳐 돌아오면 입력과 커서
   store.dispose();
 });
 
-it("창 전환 단축키는 대화상자가 열려 있는 동안 창을 바꾸지 않는다", async () => {
+it("창 전환 단축키는 창 대화상자가 열려 있어도 창을 바꾸고 돌아오면 대화상자 초점을 되살린다", async () => {
   const seed = twoWindowSeed(dialogProbe("probe-a", "가"), plainProbe("probe-b", "나"));
   const transport = createFakeTransport(seed);
   const calls = vi.spyOn(transport, "call");
@@ -121,9 +121,12 @@ it("창 전환 단축키는 대화상자가 열려 있는 동안 창을 바꾸�
   const { input } = await windowDialog("가");
 
   fireEvent.keyDown(window, { code: "PageDown", key: "PageDown", ctrlKey: true, altKey: true });
-  await act(async () => { await Promise.resolve(); });
-  expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "window.raise" }));
-  expect(document.activeElement).toBe(input);
+  await waitFor(() => expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "probe-b-window" }));
+  await waitFor(() => expect(screen.getByTestId("app-window-probe-b").contains(document.activeElement)).toBe(true));
+
+  fireEvent.keyDown(window, { code: "PageUp", key: "PageUp", ctrlKey: true, altKey: true });
+  await waitFor(() => expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "probe-a-window" }));
+  await waitFor(() => expect(document.activeElement).toBe(input));
   store.dispose();
 });
 
@@ -183,9 +186,9 @@ it("대화상자에서 Tab과 Shift+Tab이 대화상자 밖으로 나가지 않�
   const { dialog, input } = await windowDialog("가");
   const confirm = within(dialog).getByRole("button", { name: "저장" });
   confirm.focus();
-  fireEvent.keyDown(document, { key: "Tab" });
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Tab" });
   expect(document.activeElement).toBe(input);
-  fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Tab", shiftKey: true });
   expect(document.activeElement).toBe(confirm);
   expect(dialog.contains(document.activeElement)).toBe(true);
   store.dispose();

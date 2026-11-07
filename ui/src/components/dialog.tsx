@@ -6,12 +6,15 @@ import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
 import { bookmarkTarget, dialogActionFocus, dialogFirstFocus, focusBookmark, focusRescued, holdsUserFocus, lastFocusInWindow, type FocusBookmark } from "./focus-rescue";
 
+const interactiveSelector = 'button, a[href], input, textarea, select, label, summary, iframe, [tabindex], [contenteditable], .cm-editor';
+
 export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, windowId, busy = false, rootProps, ownerAnchor, noticeSlotRef }: { ownerAnchor?: Element | null; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; windowId?: string; busy?: boolean }) {
   const titleId = useId();
   const bodyId = useId();
   const root = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const opener = useRef<FocusBookmark | null>(null);
+  const rememberedFocus = useRef<HTMLElement | null>(null);
   const onCancelRef = useRef(onCancel);
   onCancelRef.current = onCancel;
   const busyRef = useRef(busy);
@@ -22,7 +25,16 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const owner = windowId ?? ownerOf(host);
     const targetOwner = native.target instanceof Element ? ownerOf(native.target) : undefined;
     // 다른 창에서 누른 키는 이 창의 대화상자를 닫지 않는다. 쉘 전체 대화상자처럼 임자가 없는 경우는 지금처럼 둔다.
-    if (owner && targetOwner && targetOwner !== owner) return;
+    if (owner) {
+      if (targetOwner && targetOwner !== owner) return;
+      if (!targetOwner) {
+        // 창이 아닌 쉘 단추나 태스크바에서 누른 키는 이 창의 것이 아니다.
+        if (native.target !== document.body && native.target !== document.documentElement) return;
+        // 초점이 바닥에 있으면 맨 위 창의 대화상자만 받는다.
+        const frame = host.closest<HTMLElement>(".ks-window-frame");
+        if (frame && !frame.classList.contains("ks-window-frame-active")) return;
+      }
+    }
     if (native.isTrusted === false && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
     if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); if (!busyRef.current) onCancelRef.current(); return; }
     if (event.key !== "Tab" || !root.current) return;
@@ -79,7 +91,29 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   }, [busy, host, windowModal]);
   const heading = <div className="ks-dialog-title" id={titleId} title={windowModal ? title : undefined}>{title}</div>;
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
-  return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay} onMouseDown={(event) => { if (!busy && !windowModal && event.target === event.currentTarget) { event.preventDefault(); onCancel(); } }}>
+  return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay}
+    onMouseDown={(event) => {
+      // 오른쪽 누름이나 틀 밖까지 끈 선택은 click이 오지 않으므로 기억한 초점은 다음 누름까지만 산다.
+      rememberedFocus.current = null;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!busy && !windowModal && target === event.currentTarget) { event.preventDefault(); onCancel(); return; }
+      if (target === event.currentTarget) return;
+      const interactive = target.closest(interactiveSelector);
+      if (interactive && event.currentTarget.contains(interactive)) return;
+      // 읽고 복사할 글은 끌어 고를 수 있게 두고, 눌렀다 뗄 때만 초점을 되돌린다.
+      if (getComputedStyle(target).userSelect !== "none") {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && root.current?.contains(active)) rememberedFocus.current = active;
+        return;
+      }
+      event.preventDefault();
+    }}
+    onClick={() => {
+      const element = rememberedFocus.current;
+      rememberedFocus.current = null;
+      if (element?.isConnected && window.getSelection()?.isCollapsed) element.focus({ preventScroll: true });
+    }}>
     <div {...rootProps} className="ks-dialog" role="dialog" aria-modal={windowModal ? active : true} aria-labelledby={titleId} aria-describedby={windowModal && body != null ? bodyId : undefined} tabIndex={windowModal ? -1 : undefined} onKeyDown={windowModal ? onKey : undefined} ref={root}>
       {heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={windowModal ? 0 : undefined}>{content}</div> : null}
       {noticeSlotRef ? <div className="ks-dialog-notice-slot" ref={noticeSlotRef} /> : null}

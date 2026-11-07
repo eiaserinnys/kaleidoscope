@@ -88,7 +88,7 @@ export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable
     menuEntries={titleMenu} onRaise={() => void onCall({ op: "window.raise", window_id: appWindow.id })}
     onMinimize={() => onMinimize(appWindow.id)} onMaximize={() => onMaximize(appWindow.id)} onRestore={() => onRestore(appWindow.id)} onClose={closeWindow}
     onRectCommit={async (rect) => Boolean(await onCall({ op: "window.set_rect", window_id: appWindow.id, rect }))}
-    testId={`app-window-${appWindow.app_id}`} frameRef={setFrameHost} contentRef={setContentRef} sharing={sharing} commenting={commenting}
+    testId={`app-window-${appWindow.app_id}`} windowId={appWindow.id} frameRef={setFrameHost} contentRef={setContentRef} sharing={sharing} commenting={commenting}
     outerOverlays={content ? <CommentLayer store={store} window={appWindow} appName={appName} content={content} shellVersion={appConfig.version} chooseAgent={(anchor) => onChooseAgent?.(anchor)} /> : null}
     pointerGuard={(event) => !event.nativeEvent.isTrusted && windowActionActive(appWindow.id)}
     overlays={<><ProcessConsent store={store} windowId={appWindow.id} host={frameHost} /><InstallationConsent store={store} windowId={appWindow.id} host={frameHost} /></>}>

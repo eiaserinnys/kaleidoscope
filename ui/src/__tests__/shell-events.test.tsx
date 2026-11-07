@@ -295,7 +295,7 @@ describe("shell core events", () => {
     render(<Shell store={store} />);
     await store.ready;
 
-    const editorItem = document.querySelector<HTMLButtonElement>('[data-window-id="editor-window"]');
+    const editorItem = document.querySelector<HTMLButtonElement>('.ks-taskbar-window[data-window-id="editor-window"]');
     const editorWindow = screen.getByTestId("app-window-md-editor");
     if (!editorItem) throw new Error("편집기 태스크바 항목을 찾지 못했습니다");
     const titlebarIcons = [...editorWindow.querySelectorAll<SVGElement>(".ks-window-title-actions svg")];
@@ -303,7 +303,7 @@ describe("shell core events", () => {
     const minimizeIcon = within(editorWindow).getByRole("button", { name: "창 최소화" }).querySelector("svg");
     expect(minimizeIcon?.classList.contains("lucide-minus")).toBe(true);
     expect(editorItem.getAttribute("data-state")).toBe("inactive");
-    expect(document.querySelector('[data-window-id="viewer-window"]')?.getAttribute("data-state")).toBe("active");
+    expect(document.querySelector('.ks-taskbar-window[data-window-id="viewer-window"]')?.getAttribute("data-state")).toBe("active");
 
     fireEvent.click(editorItem);
     await waitFor(() => expect(editorItem.getAttribute("data-state")).toBe("active"));

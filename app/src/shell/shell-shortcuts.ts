@@ -1,4 +1,4 @@
-import { hasVisibleShortcutOverlay } from "@kaleidoscope/ui";
+import { hasShellBlockingOverlay } from "@kaleidoscope/ui";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ShellWindowActions } from "./shell-window-actions";
@@ -19,7 +19,7 @@ export function shellShortcut(event: Pick<KeyboardEvent, "code" | "ctrlKey" | "a
 
 export function installShellShortcuts(actions: ShellWindowActions): () => void {
   const execute = (shortcut: Shortcut) => {
-    if (hasVisibleShortcutOverlay()) return;
+    if (hasShellBlockingOverlay()) return;
     switch (shortcut) {
       case "previousDesktop": void actions.desktop(-1); break;
       case "nextDesktop": void actions.desktop(1); break;

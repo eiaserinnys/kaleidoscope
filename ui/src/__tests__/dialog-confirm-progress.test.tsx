@@ -109,7 +109,7 @@ it("느린 확정 응답은 250ms 뒤에 진행을 보이고 400ms 넘게 보이
   expect(view.confirmButton.getAttribute("aria-disabled")).toBe("true");
   expect(view.cancelButton.hasAttribute("disabled")).toBe(false);
   expect(view.confirmButton.hasAttribute("disabled")).toBe(false);
-  fireEvent.keyDown(document, { key: "Escape" });
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
   expect(screen.getByRole("dialog")).toBe(view.dialog);
   await sleep(250);
   expect(view.confirmButton.getAttribute("aria-busy")).toBe("true");

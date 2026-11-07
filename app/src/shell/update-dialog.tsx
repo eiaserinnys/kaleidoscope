@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog, ErrorNotice, SHELL_UPDATE_RESTART_UNSAVED, flushEditors, flushSandboxes, toCoreError, useShellSelector, type CoreError, type ShellStore, type UpdateStatus } from "@kaleidoscope/ui";
+import { useHoldWhileWriting } from "./use-hold-while-writing";
 
 type Ready = Extract<UpdateStatus, { state: "ready" }>;
 
@@ -45,7 +46,8 @@ export function UpdateDialog({ store, host, openRequest, seen }: { store: ShellS
     finally { pending.current = false; setBusy(false); }
   };
   const current = ready.current;
-  if (!open || !current) return null;
+  const hold = useHoldWhileWriting(Boolean(open && current));
+  if (!open || !current || hold) return null;
   return <Dialog host={host} title={`${current.version}판으로 업데이트할까요?`} ok="다시 시작해서 업데이트"
     cancelLabel="나중에" userConsent busy={busy} onCancel={cancel} onConfirm={() => void confirm()}
     overlayClassName="ks-shell-dialog-layer" inertSelector=":scope > .ks-shell-bar, :scope > .ks-desktop-area"

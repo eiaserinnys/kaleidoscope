@@ -20,7 +20,8 @@ export function overlayOwner(element: Element): Owner | undefined {
 }
 
 export function ownerOf(element: Element): string | undefined {
-  return overlayOwner(element)?.windowId ?? element.closest<HTMLElement>(".ks-data-window[data-window-id]")?.dataset.windowId;
+  return overlayOwner(element)?.windowId
+    ?? element.closest<HTMLElement>(".ks-data-window[data-window-id], .ks-window[data-window-id]")?.dataset.windowId;
 }
 
 export function ownedOverlays(windowId: string): Element[] {
