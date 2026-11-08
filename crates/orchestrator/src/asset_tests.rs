@@ -125,12 +125,20 @@ fn upload(id: &str, svg: &str) -> AssetUpload {
 #[test]
 fn asset_versions_are_immutable_and_account_scoped() {
     let state = AppState::in_memory("secret");
-    let item = upload(
-        "icon",
-        "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M1 1\"/></svg>",
-    );
+    let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M1 1\"/></svg>";
+    let item = upload("icon", svg);
     let first = state.upload_asset(&item).unwrap();
     assert_eq!(state.upload_asset(&item).unwrap(), first);
+    let mut resourced = item.clone();
+    resourced.source = "스토어".into();
+    resourced.license = "Apache-2.0".into();
+    let updated = state.upload_asset(&resourced).unwrap();
+    assert_eq!(updated.source, "스토어");
+    assert_eq!(updated.license, "Apache-2.0");
+    let account = state.mcp_account_id().unwrap();
+    let (stored, stored_bytes) = state.get_asset(&account, "icon", 1).unwrap().unwrap();
+    assert_eq!(stored, updated);
+    assert_eq!(stored_bytes, svg.as_bytes());
     assert_eq!(
         state
             .upload_asset(&upload("icon", "<svg/>"))
@@ -144,7 +152,7 @@ fn asset_versions_are_immutable_and_account_scoped() {
     assert!(state
         .upload_asset(&upload("builtin-icon", "<svg/>"))
         .is_err());
-    assert_eq!(state.list_assets().unwrap(), vec![first]);
+    assert_eq!(state.list_assets().unwrap(), vec![updated]);
     state
         .lock_db()
         .unwrap()

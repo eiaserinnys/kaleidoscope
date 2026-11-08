@@ -80,7 +80,7 @@ pub(super) fn insert(
     prepared: &PreparedAsset,
 ) -> Result<AssetMeta, CoreError> {
     let upload = &prepared.upload;
-    if let Some((existing, bytes)) = get_in(tx, account, &upload.id, upload.version, || {
+    if let Some((mut existing, bytes)) = get_in(tx, account, &upload.id, upload.version, || {
         kaleidoscope_contract::errors::ASSET_REGISTER_EXISTING_LOOKUP_FAILED(
             &upload.id,
             upload.version,
@@ -88,10 +88,23 @@ pub(super) fn insert(
     })? {
         if existing.format == upload.format
             && existing.sha256 == upload.sha256
-            && existing.source == upload.source
-            && existing.license == upload.license
             && bytes == prepared.bytes
         {
+            if existing.source != upload.source || existing.license != upload.license {
+                tx.execute(
+                    "UPDATE asset_versions SET source=?1, license=?2 WHERE account_id=?3 AND id=?4 AND version=?5",
+                    params![upload.source, upload.license, account, upload.id, upload.version],
+                )
+                .map_err(|error| {
+                    kaleidoscope_contract::errors::ASSET_REGISTER_INSERT_FAILED(
+                        &upload.id,
+                        upload.version,
+                    )
+                    .and_details(vec![error.to_string()])
+                })?;
+                existing.source = upload.source.clone();
+                existing.license = upload.license.clone();
+            }
             return Ok(existing);
         }
         return Err(
