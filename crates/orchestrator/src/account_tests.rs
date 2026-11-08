@@ -51,7 +51,7 @@ async fn v5_migration_attaches_existing_rows_and_preserves_existing_credentials_
     let version: i64 = db
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, storage::DESKTOP_WALLPAPERS_SCHEMA_VERSION);
+    assert_eq!(version, storage::STORAGE_SCOPE_SCHEMA_VERSION);
 
     let (
         account_id,

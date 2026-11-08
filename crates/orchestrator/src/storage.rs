@@ -9,6 +9,7 @@ pub(super) const INSTALLATION_SCHEMA_VERSION: i64 = 16;
 pub(super) const APP_COMMENTS_SCHEMA_VERSION: i64 = 17;
 pub(super) const DESKTOP_SHORTCUTS_SCHEMA_VERSION: i64 = 18;
 pub(super) const DESKTOP_WALLPAPERS_SCHEMA_VERSION: i64 = 19;
+pub(super) const STORAGE_SCOPE_SCHEMA_VERSION: i64 = 20;
 
 pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
     let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
@@ -19,7 +20,7 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE devices (id TEXT PRIMARY KEY,name TEXT NOT NULL,token_sha256 TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,last_seen_at TEXT,revoked_at TEXT);
             PRAGMA user_version=1;
             COMMIT;")?;
-    } else if version > DESKTOP_WALLPAPERS_SCHEMA_VERSION {
+    } else if version > STORAGE_SCOPE_SCHEMA_VERSION {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 2 {
@@ -320,6 +321,9 @@ pub(super) fn migrate(db: &Connection) -> rusqlite::Result<()> {
             CREATE TABLE IF NOT EXISTS desktop_wallpapers (id TEXT PRIMARY KEY, desktop_id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS desktop_wallpapers_by_desktop ON desktop_wallpapers(desktop_id);
             PRAGMA user_version=19; COMMIT;")?;
+    }
+    if version < STORAGE_SCOPE_SCHEMA_VERSION {
+        super::storage_scope_migration::migrate(db)?;
     }
     Ok(())
 }

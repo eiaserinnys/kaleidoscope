@@ -325,7 +325,7 @@ fn preferences_migration_from_v14_keeps_account_data() {
     let version: i64 = db
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, storage::DESKTOP_WALLPAPERS_SCHEMA_VERSION);
+    assert_eq!(version, storage::STORAGE_SCOPE_SCHEMA_VERSION);
     let exists: bool = db
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM accounts WHERE id=?1)",
