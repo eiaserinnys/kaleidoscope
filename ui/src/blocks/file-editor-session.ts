@@ -199,6 +199,7 @@ export class FileEditorSession {
   async open(path: string | null): Promise<void> {
     // Editor effects are replayed by React StrictMode after their cleanup.
     activeSessions.add(this);
+    if (path === this.snapshot.path) this.pendingPath = undefined;
     if (path === this.snapshot.path && this.snapshot.loaded && !this.snapshot.error) return;
     if (this.snapshot.path !== null && this.snapshot.dirty) {
       this.pendingPath = path;
