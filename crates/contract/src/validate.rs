@@ -74,6 +74,7 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
         || value
             .pointer("/settings/ui")
             .is_some_and(uses_block_set_21_fields);
+    let has_single_window = value.get("single_window").is_some();
     let definition: AppDefinition = serde_json::from_value(value)
         .map_err(|parse_error| crate::errors::APP_DEFINITION_FORMAT_INVALID(&parse_error))?;
     crate::validate_input::validate_input_extensions(&definition)?;
@@ -113,6 +114,14 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
         if size.width < 360 || size.height < 240 {
             return Err(crate::errors::APP_WINDOW_SIZE_TOO_SMALL(size.width, size.height));
         }
+    }
+
+    if (has_single_window || definition.single_window)
+        && definition.requires.blocks < crate::SINGLE_WINDOW_BLOCK_SET_VERSION
+    {
+        return Err(crate::errors::APP_SINGLE_WINDOW_VERSION_LOW(
+            crate::SINGLE_WINDOW_BLOCK_SET_VERSION,
+        ));
     }
 
     if let Some(badge) = &definition.badge {

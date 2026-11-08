@@ -3,8 +3,9 @@
   "name": "날씨",
   "icon": { "asset": "builtin-icon-weather", "version": 2 },
   "description": "현재 날씨와 7일 예보",
+  "single_window": true,
   "requires": {
-    "blocks": 26,
+    "blocks": 54,
     "modules": {
       "http": 1,
       "assets": 1

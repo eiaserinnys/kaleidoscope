@@ -9,7 +9,12 @@ import { revealStackControl } from "./focus-scroll";
 import { isCommenting } from "../comments/session";
 
 export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDivElement | null>; store: ShellStore; windowId: string }) {
-  const top = useShellSelector(store, (snapshot) => isWindowTop(snapshot, windowId));
+  const topZ = useShellSelector(store, (snapshot) =>
+    isWindowTop(snapshot, windowId)
+      ? snapshot?.shared.windows.find((window) => window.id === windowId)?.z ?? 0
+      : -1,
+  );
+  const top = topZ >= 0;
   const updateTop = useRef<(top: boolean) => void>(() => undefined);
   const waiting = useRef<{ pane: HTMLElement; kind: "entry" | "restore" } | null>(null);
   useEffect(() => {
@@ -195,6 +200,6 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       observer.disconnect();
     };
   }, [host, store, windowId]);
-  useEffect(() => { updateTop.current(top); }, [top]);
+  useEffect(() => { updateTop.current(top); }, [top, topZ]);
   return null;
 }

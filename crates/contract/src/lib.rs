@@ -318,7 +318,10 @@ pub const CONTRACT_VERSION: u32 = 45;
 /// - 51판: input 자동 높이의 최대 줄 수.
 /// - 52판: 기기 저장소에 든 파일을 그리는 미디어 참조 `blob`.
 /// - 53판: 확장 아이콘 13개.
-pub const BLOCK_SET_VERSION: u32 = EXTENDED_ICON_BLOCK_SET_VERSION;
+/// - 54판: 앱 정의의 싱글 윈도우(single_window).
+pub const BLOCK_SET_VERSION: u32 = SINGLE_WINDOW_BLOCK_SET_VERSION;
+/// 앱 정의의 single_window를 처음 지원하는 블록 세트 판.
+pub const SINGLE_WINDOW_BLOCK_SET_VERSION: u32 = 54;
 /// 기기 저장소 미디어 참조를 처음 지원하는 블록 세트 판.
 pub const BLOB_MEDIA_BLOCK_SET_VERSION: u32 = 52;
 /// 목록, `button`, `button_grid`가 함께 쓰는 확장 아이콘 이름을 처음 지원하는 블록 세트 판.
@@ -1000,6 +1003,11 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub window_size: Option<WindowSize>,
+    /// (블록 세트 54판) 데스크톱마다 창을 하나만 여는 앱인가. `true`이면 이미 열린 창이 있을 때 새 창을 만들지 않고
+    /// 그 창을 맨 위로 올린다(최소화된 창은 푼다).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(optional, as = "Option<bool>")]
+    pub single_window: bool,
     pub requires: Requires,
     /// 앱이 참조할 수 있는 자산과 고정된 판.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -4692,6 +4700,8 @@ pub enum CoreRequest {
 
     /// 앱의 지금 버전으로 창을 연다. 창 상태는 정의의 `state` 기본값, z는 그 데스크톱 맨 위.
     /// `rect`가 없으면 코어가 정한 기본 위치와 크기로 연다.
+    /// 정의가 `single_window: true`이고 그 데스크톱에 이 앱의 창이 이미 있으면 새 창을 만들지 않고,
+    /// 맨 위(z가 가장 큰) 기존 창의 최소화를 풀어 맨 위로 올린다.
     #[serde(rename = "window.open")]
     WindowOpen {
         desktop_id: String,

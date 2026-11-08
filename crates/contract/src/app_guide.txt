@@ -122,6 +122,7 @@ button.description은 올림 또는 키보드 초점에 보이는 설명 바인�
 아이콘 scissors, flip-horizontal-2, gauge, repeat, list-video, music-2, images, timer, audio-lines, scissors-line-dashed, fast-forward, repeat-2, list-music은 목록, button, button_grid에서 requires.blocks 53 이상이 필요합니다.
 42판부터 button.variant의 row는 폭을 채우고 아이콘과 글을 앞에 붙입니다. 리터럴 row는 icon_only 및 preview와 함께 쓸 수 없습니다.
 42판부터 window_size에 {"width":480,"height":360}처럼 첫 창 크기를 정할 수 있습니다. 최소 폭은 360, 높이는 240이며 생략하면 880×600입니다.
+54판부터 single_window:true를 두면 같은 데스크톱에 이미 열린 창이 있을 때 새 창을 만들지 않고 그 창을 맨 위로 올립니다(최소화된 창은 풉니다). 뷰와 컨텐츠가 하나인 앱에 씁니다.
 43판부터 grouped list의 묶음은 key, status {state: "loading"|"empty"|"error", message?, code?}, action을 선택으로 받습니다. 준비된 묶음은 status를 생략합니다. list.group_actions에 {key, label, on_click}을 선언하고 묶음의 action과 key가 일치하면 상태 아래 단추를 보입니다. on_click의 $item은 원본 묶음 전체, $event는 action 값입니다. 동작 값은 {"expr":"$item.address"}처럼 식으로 읽습니다. 항목이 없어도 status가 있으면 묶음 머리와 상태가 남습니다. requires.blocks를 43 이상으로 선언합니다.
 
 메시지 수신 계약: client.capabilities에 receive_message를 선언하는 앱은 requires.blocks 29와 requires.modules.client 6 이상을 지정합니다. 클라이언트의 onMessage(handler)로 {request_id, text}를 받으며 {status:"accepted"}는 접수 완료이지 답변 완료가 아닙니다. 준비되지 않았으면 {status:"not_ready", reason}을 돌려주고 reason에는 사용자가 할 일을 적습니다. agent 제공자와 receive_message가 둘 다 있으면 대화 제공자 경로를 우선합니다. 초기 코드에서 window.kaleidoscope.onMessage(async (message) => ({ status: "accepted" }))를 한 번 등록합니다. handler는 오래 걸리는 답변 생성을 기다리지 말고 5초 안에 접수 결과를 반환하세요.

@@ -398,11 +398,12 @@ pub(crate) fn open(
         .iter()
         .filter(|w| w.desktop_id == desktop_id && w.app_id == app_id)
         .filter(|w| {
-            state.device.grants.iter().any(|g| {
-                g.window_id == w.id
-                    && g.permission == opens.permission
-                    && g.root_path == grant.root_path
-            })
+            definition.single_window
+                || state.device.grants.iter().any(|g| {
+                    g.window_id == w.id
+                        && g.permission == opens.permission
+                        && g.root_path == grant.root_path
+                })
         })
         .max_by_key(|w| w.z)
         .map(|w| w.id.clone());
@@ -413,6 +414,26 @@ pub(crate) fn open(
                 window_id: id.clone(),
             },
         )?;
+        if let Some(existing) = state
+            .device
+            .grants
+            .iter_mut()
+            .find(|g| g.window_id == id && g.permission == opens.permission)
+        {
+            if existing.root_path != grant.root_path {
+                existing.root_path = grant.root_path.clone();
+                existing.root_name = grant.root_name.clone();
+                existing.granted_at = crate::state_commands::timestamp();
+            }
+        } else {
+            state.device.grants.push(kaleidoscope_contract::Grant {
+                window_id: id.clone(),
+                permission: opens.permission,
+                root_path: grant.root_path.clone(),
+                root_name: grant.root_name.clone(),
+                granted_at: crate::state_commands::timestamp(),
+            });
+        }
         id
     } else {
         let reply = crate::state_commands::handle(

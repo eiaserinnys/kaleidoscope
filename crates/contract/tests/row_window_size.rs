@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{app_definition_schema, validate::parse_app_definition, ROW_WINDOW_SIZE_BLOCK_SET_VERSION};
+use kaleidoscope_contract::{app_definition_schema, validate::parse_app_definition, ROW_WINDOW_SIZE_BLOCK_SET_VERSION, SINGLE_WINDOW_BLOCK_SET_VERSION};
 use serde_json::{json, Value};
 
 fn app() -> Value {
@@ -47,6 +47,30 @@ fn window_size_requires_version_and_minimum() {
     }
     value["window_size"] = json!({"width":360,"height":240});
     parse_app_definition(&value.to_string()).unwrap();
+}
+
+#[test]
+fn single_window_contract_default_and_version() {
+    let mut value = app();
+    let parsed = parse_app_definition(&value.to_string()).unwrap();
+    assert!(!parsed.single_window);
+    assert!(serde_json::to_value(parsed).unwrap().get("single_window").is_none());
+
+    value["single_window"] = json!(true);
+    value["requires"]["blocks"] = json!(SINGLE_WINDOW_BLOCK_SET_VERSION);
+    let parsed = parse_app_definition(&value.to_string()).unwrap();
+    assert!(parsed.single_window);
+    assert_eq!(serde_json::to_value(parsed).unwrap()["single_window"], json!(true));
+    assert!(app_definition_schema().to_string().contains("\"single_window\""));
+
+    value["single_window"] = json!(false);
+    assert!(serde_json::to_value(parse_app_definition(&value.to_string()).unwrap()).unwrap().get("single_window").is_none());
+
+    for declared in [json!(true), json!(false)] {
+        value["single_window"] = declared;
+        value["requires"]["blocks"] = json!(SINGLE_WINDOW_BLOCK_SET_VERSION - 1);
+        assert_eq!(parse_app_definition(&value.to_string()).unwrap_err().id.as_deref(), Some("APP_SINGLE_WINDOW_VERSION_LOW"));
+    }
 }
 
 #[test]

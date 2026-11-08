@@ -179,7 +179,12 @@ badge?: AppBadge,
 /**
  * 앱을 새 창으로 열 때의 초기 크기. (블록 세트 42판)
  */
-window_size?: WindowSize, requires: Requires, 
+window_size?: WindowSize, 
+/**
+ * (블록 세트 54판) 데스크톱마다 창을 하나만 여는 앱인가. `true`이면 이미 열린 창이 있을 때 새 창을 만들지 않고
+ * 그 창을 맨 위로 올린다(최소화된 창은 푼다).
+ */
+single_window?: boolean, requires: Requires, 
 /**
  * 앱이 참조할 수 있는 자산과 고정된 판.
  */
