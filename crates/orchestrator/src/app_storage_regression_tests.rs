@@ -131,6 +131,95 @@ async fn storage_isolated_by_account_and_workspace_owner() {
 }
 
 #[tokio::test]
+async fn global_collection_documents_survive_other_workspace_deletion() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![
+                    Workspace {
+                        id: "workspace-a".into(),
+                        name: "A".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                    Workspace {
+                        id: "workspace-b".into(),
+                        name: "B".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let (written, _, _) = state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-a"),
+            json!("전역 문서"),
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key='documents/메모.md'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        1
+    );
+
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key='documents/메모.md'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        1
+    );
+    let read = state
+        .read_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-b"),
+        )
+        .unwrap();
+    assert_eq!(read.content, json!("전역 문서"));
+    assert_eq!(read.revision, Some(written.revision));
+}
+
+#[tokio::test]
 async fn legacy_workspace_storage_stays_writable_until_deleted_after_canonicalization() {
     let state = AppState::in_memory("secret");
     let account = state.mcp_account_id().unwrap();
