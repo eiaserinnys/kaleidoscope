@@ -398,6 +398,73 @@ fn store_moved_builtin_cache_is_removed_without_closing_windows() {
 }
 
 #[test]
+fn store_builtin_version_7_upgrades_saved_v6_definition_and_open_window() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let (_, desktop) = active_ids(&core);
+    let window_id = open_window(&core, &desktop, "store");
+    let mut state = core.inner.state.lock().unwrap();
+    state
+        .shared
+        .apps
+        .iter_mut()
+        .find(|app| app.id == "store")
+        .unwrap()
+        .current_version = 6;
+    {
+        let version = state
+            .shared
+            .app_versions
+            .iter_mut()
+            .find(|item| item.app_id == "store")
+            .unwrap();
+        version.version = 6;
+        version
+            .definition
+            .storage
+            .as_mut()
+            .expect("저장소 선언")
+            .entries
+            .retain(|entry| entry.id != "invites");
+    }
+    state
+        .shared
+        .windows
+        .iter_mut()
+        .find(|window| window.id == window_id)
+        .unwrap()
+        .app_version = 6;
+
+    crate::app_commands::ensure_builtin(&mut state);
+
+    let app = state.shared.apps.iter().find(|app| app.id == "store").unwrap();
+    assert_eq!(app.current_version, 7);
+    let store_versions: Vec<_> = state
+        .shared
+        .app_versions
+        .iter()
+        .filter(|item| item.app_id == "store")
+        .collect();
+    assert_eq!(store_versions.len(), 1);
+    assert_eq!(store_versions[0].version, 7);
+    assert!(store_versions[0]
+        .definition
+        .storage
+        .as_ref()
+        .expect("저장소 선언")
+        .entries
+        .iter()
+        .any(|entry| entry.id == "invites"));
+    let window = state
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .unwrap();
+    assert_eq!(window.app_version, 7);
+}
+
+#[test]
 fn retired_builtin_is_removed_from_existing_device_state() {
     let temp = TempDir::new().unwrap();
     let folder = TempDir::new().unwrap();
