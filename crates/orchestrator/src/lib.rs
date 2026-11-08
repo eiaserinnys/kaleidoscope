@@ -733,6 +733,7 @@ mod registry_install;
 mod registry_install_tests;
 mod share;
 mod storage;
+mod storage_items;
 mod storage_target;
 mod window_control;
 #[cfg(test)]

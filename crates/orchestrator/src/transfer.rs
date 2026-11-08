@@ -493,8 +493,8 @@ impl AppState {
                 contract::validate_storage_content(entry, &item.content)?;
             }
             let bucket = app_storage::bucket_id(account, &item.app_id);
-            if let Some((kind, content, _)) = app_storage::load_item(&tx, &bucket, &item.key)? {
-                if kind != item.kind || content != item.content {
+            if let Some(existing) = super::storage_items::load_item(&tx, &bucket, &item.key)? {
+                if existing.kind != item.kind || existing.content != item.content {
                     result.skipped.push(label);
                 }
                 continue;
