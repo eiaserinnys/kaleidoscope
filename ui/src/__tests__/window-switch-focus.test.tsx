@@ -176,6 +176,38 @@ it("다른 데스크톱으로 옮기면 그 데스크톱의 맨 위 창이 초�
   store.dispose();
 });
 
+it("이미 맨 위인 창의 앱을 다시 열면 새 창 없이 그 창이 초점을 받는다", async () => {
+  const { snapshot, seed } = probeSeed();
+  const only = snapshot.shared.windows[0];
+  snapshot.shared.windows = [only];
+  snapshot.shared.desktop_shortcuts = [
+    { id: "desktop-1/probe-a", desktop_id: "desktop-1", app_id: "probe-a", column: 0, row: 0, created_at: "2026-11-07T00:00:00Z", updated_at: "2026-11-07T00:00:00Z" },
+  ];
+  const transport = createFakeTransport(seed);
+  const original = transport.call.bind(transport);
+  const calls = vi.spyOn(transport, "call").mockImplementation(((request: Parameters<typeof original>[0]) => {
+    if (request.op === "window.open") {
+      const raised = { ...only, z: only.z + 4 };
+      transport.emit({ event: "state.changed", snapshot: { ...snapshot, shared: { ...snapshot.shared, windows: [raised] } } });
+      return Promise.resolve({ op: "window.open", window: raised });
+    }
+    return original(request);
+  }) as typeof transport.call);
+  const store = createShellStore(transport);
+  render(<Shell store={store} />);
+  await store.ready;
+  const tile = document.querySelector<HTMLButtonElement>('[data-desktop-shortcut-id="desktop-1/probe-a"]')!;
+  tile.focus();
+  expect(document.activeElement).toBe(tile);
+
+  fireEvent.doubleClick(tile);
+
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "window.open", app_id: "probe-a" })));
+  await waitFor(() => expect(screen.getByTestId("app-window-probe-a").contains(document.activeElement)).toBe(true));
+  expect(document.querySelectorAll('[data-testid="app-window-probe-a"]')).toHaveLength(1);
+  store.dispose();
+});
+
 it("에이전트가 연 창은 입력 중인 초점과 커서를 빼앗지 않는다", async () => {
   const { snapshot, seed } = probeSeed();
   const editor = snapshot.shared.windows[0];

@@ -284,15 +284,15 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
-        ("profiler", 6),
+        ("profiler", 7),
         ("agent", 16),
         ("explorer", 5),
         ("md-editor", 6),
         ("html-report", 4),
         ("web-browser", 3),
         ("calculator", 4),
-        ("weather", 4),
-        ("store", 7),
+        ("weather", 5),
+        ("store", 8),
     ] {
         assert!(apps
             .iter()
@@ -398,7 +398,7 @@ fn store_moved_builtin_cache_is_removed_without_closing_windows() {
 }
 
 #[test]
-fn store_builtin_version_7_upgrades_saved_v6_definition_and_open_window() {
+fn store_builtin_version_8_upgrades_saved_v7_definition_and_open_window() {
     let temp = TempDir::new().unwrap();
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let (_, desktop) = active_ids(&core);
@@ -410,7 +410,7 @@ fn store_builtin_version_7_upgrades_saved_v6_definition_and_open_window() {
         .iter_mut()
         .find(|app| app.id == "store")
         .unwrap()
-        .current_version = 6;
+        .current_version = 7;
     {
         let version = state
             .shared
@@ -418,14 +418,10 @@ fn store_builtin_version_7_upgrades_saved_v6_definition_and_open_window() {
             .iter_mut()
             .find(|item| item.app_id == "store")
             .unwrap();
-        version.version = 6;
-        version
-            .definition
-            .storage
-            .as_mut()
-            .expect("저장소 선언")
-            .entries
-            .retain(|entry| entry.id != "invites");
+        version.version = 7;
+        version.definition.single_window = false;
+        version.definition.requires.blocks =
+            kaleidoscope_contract::SINGLE_WINDOW_BLOCK_SET_VERSION - 1;
     }
     state
         .shared
@@ -433,12 +429,12 @@ fn store_builtin_version_7_upgrades_saved_v6_definition_and_open_window() {
         .iter_mut()
         .find(|window| window.id == window_id)
         .unwrap()
-        .app_version = 6;
+        .app_version = 7;
 
     crate::app_commands::ensure_builtin(&mut state);
 
     let app = state.shared.apps.iter().find(|app| app.id == "store").unwrap();
-    assert_eq!(app.current_version, 7);
+    assert_eq!(app.current_version, 8);
     let store_versions: Vec<_> = state
         .shared
         .app_versions
@@ -446,22 +442,15 @@ fn store_builtin_version_7_upgrades_saved_v6_definition_and_open_window() {
         .filter(|item| item.app_id == "store")
         .collect();
     assert_eq!(store_versions.len(), 1);
-    assert_eq!(store_versions[0].version, 7);
-    assert!(store_versions[0]
-        .definition
-        .storage
-        .as_ref()
-        .expect("저장소 선언")
-        .entries
-        .iter()
-        .any(|entry| entry.id == "invites"));
+    assert_eq!(store_versions[0].version, 8);
+    assert!(store_versions[0].definition.single_window);
     let window = state
         .shared
         .windows
         .iter()
         .find(|window| window.id == window_id)
         .unwrap();
-    assert_eq!(window.app_version, 7);
+    assert_eq!(window.app_version, 8);
 }
 
 #[test]
@@ -1914,6 +1903,151 @@ fn window_open_uses_app_window_size_or_default() {
     let state = snapshot(&core);
     let rect = &state.shared.windows.iter().find(|window| window.id == id).unwrap().rect;
     assert_eq!((rect.width, rect.height), (880, 600));
+}
+
+#[test]
+fn single_window_app_reuses_the_open_window_on_the_same_desktop() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let (workspace_id, desktop_id) = active_ids(&core);
+    import(
+        &core,
+        &json!({
+            "id": "single-window-test",
+            "name": "싱글 윈도우 시험",
+            "requires": {"blocks": kaleidoscope_contract::SINGLE_WINDOW_BLOCK_SET_VERSION, "modules": {}},
+            "permissions": [],
+            "state": {"text": "처음"},
+            "single_window": true,
+            "ui": {"type": "button", "label": "실행", "icon": "copy", "variant": "row", "on_click": {"copy_text": "값"}}
+        })
+        .to_string(),
+    );
+    let first = open_window(&core, &desktop_id, "single-window-test");
+    let rect = Rect {
+        x: 12,
+        y: 34,
+        width: 500,
+        height: 400,
+    };
+    core.handle(CoreRequest::WindowSetRect {
+        window_id: first.clone(),
+        rect: rect.clone(),
+    })
+    .unwrap();
+    core.handle(CoreRequest::WindowPatchState {
+        window_id: first.clone(),
+        patch: BTreeMap::from([("text".to_string(), json!("고침"))]),
+    })
+    .unwrap();
+    let editor = open_window(&core, &desktop_id, "md-editor");
+    core.handle(CoreRequest::WindowMinimize {
+        window_id: first.clone(),
+    })
+    .unwrap();
+
+    let reopened = open_window(&core, &desktop_id, "single-window-test");
+
+    assert_eq!(reopened, first);
+    let windows = snapshot(&core).shared.windows;
+    assert_eq!(
+        windows
+            .iter()
+            .filter(|window| window.app_id == "single-window-test")
+            .count(),
+        1
+    );
+    let window = windows.iter().find(|window| window.id == first).unwrap();
+    let editor = windows.iter().find(|window| window.id == editor).unwrap();
+    assert!(window.z > editor.z);
+    assert!(!window.minimized);
+    assert!(!window.maximized);
+    assert_eq!(window.rect, rect);
+    assert_eq!(window.state["text"], json!("고침"));
+
+    let other = match core
+        .handle(CoreRequest::DesktopCreate {
+            workspace_id,
+            name: "다른 데스크톱".into(),
+        })
+        .unwrap()
+    {
+        CoreReply::DesktopCreate { desktop } => desktop,
+        reply => panic!("unexpected reply: {reply:?}"),
+    };
+    let elsewhere = open_window(&core, &other.id, "single-window-test");
+    assert_ne!(elsewhere, first);
+    assert_eq!(
+        snapshot(&core)
+            .shared
+            .windows
+            .iter()
+            .filter(|window| window.app_id == "single-window-test")
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn single_window_reuse_grants_the_opened_file_to_the_reused_window() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let docs = temp.path().join("docs");
+    fs::create_dir_all(&docs).unwrap();
+    fs::write(docs.join("a.md"), "본문").unwrap();
+    let core = open_core(
+        &temp.path().join("data"),
+        vec![test_definition(MD_EDITOR)],
+        &host,
+    );
+    let (_, desktop_id) = active_ids(&core);
+    import(
+        &core,
+        &json!({
+            "id": "single-window-reader",
+            "name": "싱글 윈도우 열람",
+            "requires": {"blocks": kaleidoscope_contract::SINGLE_WINDOW_BLOCK_SET_VERSION, "modules": {"files": 1}},
+            "permissions": [
+                {"module": "files", "id": "docs", "access": "read", "label": "문서 폴더"}
+            ],
+            "state": {"current_file": null},
+            "single_window": true,
+            "opens": {"extensions": ["md"], "permission": "docs", "state": "current_file"},
+            "ui": {"type": "button", "label": "열기", "icon": "copy", "variant": "row", "on_click": {"copy_text": "값"}}
+        })
+        .to_string(),
+    );
+    let reader = open_window(&core, &desktop_id, "single-window-reader");
+    let opener = open_window(&core, &desktop_id, "test-md-editor");
+    host.choose(Some(docs));
+    pick_folder(&core, &opener);
+
+    let CoreReply::FilesOpen { window } = core
+        .handle(CoreRequest::FilesOpen {
+            window_id: opener,
+            permission: "docs".into(),
+            path: "a.md".into(),
+            app_id: "single-window-reader".into(),
+            rect: None,
+        })
+        .unwrap()
+    else {
+        panic!()
+    };
+
+    assert_eq!(window.id, reader);
+    assert_eq!(window.state["current_file"], json!("a.md"));
+    let CoreReply::FilesRead { text, .. } = core
+        .handle(CoreRequest::FilesRead {
+            window_id: reader,
+            permission: "docs".into(),
+            path: "a.md".into(),
+        })
+        .unwrap()
+    else {
+        panic!()
+    };
+    assert_eq!(text, "본문");
 }
 
 #[test]

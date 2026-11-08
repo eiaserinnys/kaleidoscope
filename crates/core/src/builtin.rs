@@ -304,6 +304,7 @@ mod tests {
     fn builtin_app_icon_obeys_declaration_version_and_format_checks() {
         let mut app: serde_json::Value =
             serde_json::from_str(APPS.iter().find(|(id, _)| *id == "weather").unwrap().1).unwrap();
+        app.as_object_mut().unwrap().remove("single_window");
         app["requires"]["blocks"] =
             serde_json::json!(kaleidoscope_contract::APP_ICON_BLOCK_SET_VERSION);
         app["icon"] = serde_json::json!({"asset":"builtin-weather-clear","version":1});

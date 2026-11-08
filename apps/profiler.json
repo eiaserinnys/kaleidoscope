@@ -4,8 +4,9 @@
   "icon": { "asset": "builtin-icon-profiler", "version": 2 },
   "description": "코어 응답 시간과 계산 통계",
   "assets": [{ "id": "builtin-icon-profiler", "version": 2 }],
+  "single_window": true,
   "requires": {
-    "blocks": 26,
+    "blocks": 54,
     "modules": {
       "assets": 1,
       "profiler": 1

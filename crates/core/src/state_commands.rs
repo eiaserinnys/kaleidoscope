@@ -474,6 +474,33 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .max()
                 .map(|z| z.saturating_add(1))
                 .unwrap_or(0);
+            if definition.single_window {
+                if let Some(existing_id) = state
+                    .shared
+                    .windows
+                    .iter()
+                    .filter(|window| window.desktop_id == desktop_id && window.app_id == app.id)
+                    .max_by_key(|window| window.z)
+                    .map(|window| window.id.clone())
+                {
+                    let window = state
+                        .shared
+                        .windows
+                        .iter_mut()
+                        .find(|window| window.id == existing_id)
+                        .unwrap();
+                    window.z = z;
+                    window.minimized = false;
+                    window.updated_at = timestamp();
+                    let window = window.clone();
+                    state.device.active_workspace_id = Some(desktop.workspace_id.clone());
+                    state
+                        .device
+                        .active_desktop_ids
+                        .insert(desktop.workspace_id.clone(), desktop.id.clone());
+                    return Ok(CoreReply::WindowOpen { window });
+                }
+            }
             let rect = rect.unwrap_or_else(|| {
                 let offset = (windows.len() % 8) as i32;
                 let x = 48 + 32 * offset;

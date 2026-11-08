@@ -207,6 +207,10 @@ export function Shell({ store }: { store: ShellStore }) {
     const workspace = latest ? selectWorkspace(latest) : undefined;
     const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
     if (!latest || !desktop) return;
+    // 이미 열린 창을 다시 열 때 새 창이 아니라 그 창이 초점을 받도록, 바탕화면 앱 아이콘이 쥔 초점을 먼저 거둔다.
+    // 앱 열기 패널은 닫히면서 트리거로 초점을 돌려주므로 그 초점은 건드리지 않는다.
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest("[data-desktop-shortcut-id]")) active.blur();
     void runCommand({ op: "window.open", desktop_id: desktop.id, app_id: appId, rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, appId)) });
   }, [newWindowRect, runCommand, store]);
 
