@@ -268,7 +268,7 @@ fn write_item_error(
                 ),
             ])
         }
-        WriteItemError::Revision => kaleidoscope_contract::errors::STORAGE_REVISION_FAILED(key),
+        WriteItemError::Revision(_) => kaleidoscope_contract::errors::STORAGE_REVISION_FAILED(key),
         WriteItemError::Serialize(message) => {
             kaleidoscope_contract::errors::STORAGE_STORED_SERIALIZATION_FAILED(key)
                 .and_details(vec![message])
@@ -569,13 +569,9 @@ impl AppState {
         )?;
         check_workspace_owner(&tx, account_id, workspace_id)?;
         contract::validate_storage_content(&entry, &content)?;
-        let revision = super::storage_items::write_item(
-            &tx,
-            &target,
-            &content,
-            expected_revision.as_deref(),
-        )
-        .map_err(|error| write_item_error(entry_id, &target.key, error))?;
+        let revision =
+            super::storage_items::write_item(&tx, &target, &content, expected_revision.as_deref())
+                .map_err(|error| write_item_error(entry_id, &target.key, error))?;
         tx.commit().map_err(|error| {
             db_error_with(
                 error,
@@ -753,81 +749,6 @@ impl AppState {
 
     pub(super) fn publish_storage_update(&self, update: DeviceEvent, account_id: &str) {
         self.send_event_for_account(update, account_id);
-    }
-
-    pub(super) fn delete_workspace_storage(
-        tx: &Transaction<'_>,
-        account_id: &str,
-        workspace_id: &str,
-    ) -> Result<Vec<(String, contract::StorageChanged)>, CoreError> {
-        let mut statement = tx.prepare("SELECT b.app_id,b.id,i.key,v.definition FROM app_storage_items i JOIN app_storage_buckets b ON b.id=i.bucket_id JOIN apps a ON a.id=b.app_id JOIN app_versions v ON v.app_id=a.id AND v.version=a.current_version WHERE b.account_id=?1") .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_WORKSPACE_DELETE_DATABASE_FAILED()))?;
-        let rows = statement
-            .query_map([account_id], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                ))
-            })
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::STORAGE_WORKSPACE_DELETE_DATABASE_FAILED(),
-                )
-            })?;
-        let found = rows
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|error| {
-                db_error_with(
-                    error,
-                    kaleidoscope_contract::errors::STORAGE_WORKSPACE_DELETE_DATABASE_FAILED(),
-                )
-            })?;
-        drop(statement);
-        let mut deleted = Vec::new();
-        for (app_id, id, key, raw_definition) in found {
-            let definition: AppDefinition =
-                serde_json::from_str(&raw_definition).map_err(|error| {
-                    kaleidoscope_contract::errors::STORAGE_APP_DEFINITION_INVALID(&app_id)
-                        .and_details(vec![error.to_string()])
-                })?;
-            let Some(entry) = definition.storage.as_ref().and_then(|storage| {
-                storage.entries.iter().find(|entry| {
-                    if !entry.key.contains("{workspace_id}") {
-                        return false;
-                    }
-                    let resolved = entry.key.replace("{workspace_id}", workspace_id);
-                    if entry.collection {
-                        key.strip_prefix(&format!("{resolved}/"))
-                            .is_some_and(contract::valid_collection_doc)
-                    } else {
-                        resolved == key && contract::storage_key_matches(&entry.key, &key)
-                    }
-                })
-            }) else {
-                continue;
-            };
-            tx.execute(
-                "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2 AND EXISTS(SELECT 1 FROM app_storage_buckets b WHERE b.id=?1 AND b.account_id=?3)",
-                params![id, key, account_id],
-            )
-            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_WORKSPACE_DELETE_DATABASE_FAILED()))?;
-            deleted.push((
-                app_id,
-                contract::StorageChanged {
-                    bucket_id: id,
-                    item: StorageItemMeta {
-                        entry_id: entry.id.clone(),
-                        key,
-                        kind: entry.kind,
-                        revision: None,
-                        exists: false,
-                    },
-                },
-            ));
-        }
-        Ok(deleted)
     }
 }
 

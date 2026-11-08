@@ -79,32 +79,31 @@ fn declared_ownership(
 /// 자리 표시가 없는 선언이나 선언과 맞지 않는 키는 계정 공용으로 본다.
 fn storage_ownership(storage: Option<&contract::StorageDecl>, key: &str) -> Option<String> {
     let storage = storage?;
-    storage.entries.iter().find_map(|entry| {
-        let matched = if entry.collection {
-            contract::collection_key_matches_template(&entry.key, key)
-        } else {
-            contract::storage_key_matches(&entry.key, key)
-        };
-        if !matched {
-            return None;
-        }
-        Some(workspace_ownership(entry, key))
-    })
-    .flatten()
+    storage
+        .entries
+        .iter()
+        .find_map(|entry| {
+            let matched = if entry.collection {
+                contract::collection_key_matches_template(&entry.key, key)
+            } else {
+                contract::storage_key_matches(&entry.key, key)
+            };
+            if !matched {
+                return None;
+            }
+            Some(workspace_ownership(entry, key))
+        })
+        .flatten()
 }
 
 /// 자리 표시 위치의 실제 값을 꺼내 기존 리졸버로 다시 검증한다.
 fn workspace_ownership(entry: &contract::StorageEntryDecl, key: &str) -> Option<String> {
-    let index = entry
-        .key
-        .split('/')
-        .position(|segment| segment == "{workspace_id}")?;
-    let workspace = key.split('/').nth(index)?;
-    let resolved = super::app_storage::resolve_key(entry, Some(workspace)).ok()?;
+    let workspace = super::storage_target::declared_workspace(entry, key)?;
+    let resolved = super::app_storage::resolve_key(entry, Some(&workspace)).ok()?;
     let matched = if entry.collection {
         contract::collection_key_matches(&resolved, key)
     } else {
         resolved == key
     };
-    matched.then(|| workspace.to_string())
+    matched.then_some(workspace)
 }

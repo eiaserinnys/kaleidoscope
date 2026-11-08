@@ -107,13 +107,9 @@ pub(super) fn write(
         )
     })?;
     super::app_storage::check_workspace_owner(&tx, &target.account_id, request_workspace)?;
-    let revision = super::storage_items::write_item(
-        &tx,
-        target,
-        &content,
-        expected_revision.as_deref(),
-    )
-    .map_err(|error| write_error(doc, error))?;
+    let revision =
+        super::storage_items::write_item(&tx, target, &content, expected_revision.as_deref())
+            .map_err(|error| write_error(doc, error))?;
     tx.commit().map_err(|error| {
         db_error_with(
             error,
@@ -243,7 +239,7 @@ fn write_error(doc: &str, error: super::storage_items::WriteItemError) -> CoreEr
                 ),
             ])
         }
-        WriteItemError::Revision => {
+        WriteItemError::Revision(_) => {
             kaleidoscope_contract::errors::STORAGE_DOCUMENT_REVISION_FAILED(doc)
         }
         WriteItemError::Serialize(message) => {
@@ -276,7 +272,10 @@ fn reset_error(doc: &str, error: super::storage_items::ResetItemError) -> CoreEr
     }
 }
 
-fn move_error(request: &contract::CollectionMove, error: super::storage_items::MoveItemError) -> CoreError {
+fn move_error(
+    request: &contract::CollectionMove,
+    error: super::storage_items::MoveItemError,
+) -> CoreError {
     use super::storage_items::MoveItemError;
     match error {
         MoveItemError::Load(error) => error,

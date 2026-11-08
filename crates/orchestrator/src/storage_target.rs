@@ -61,6 +61,15 @@ pub(super) fn resolve_storage_target(
     })
 }
 
+/// 선언 키의 `{workspace_id}` 자리에 놓인 실제 값을 돌려준다. 자리 표시가 없으면 `None`.
+pub(super) fn declared_workspace(entry: &contract::StorageEntryDecl, key: &str) -> Option<String> {
+    let index = entry
+        .key
+        .split('/')
+        .position(|segment| segment == "{workspace_id}")?;
+    key.split('/').nth(index).map(str::to_string)
+}
+
 /// 모음 prefix와 문서 이름으로 실제 문서 키를 만든다.
 pub(super) fn collection_key(prefix: &str, doc: &str) -> Result<String, CoreError> {
     if !contract::valid_collection_doc(doc) {
@@ -80,7 +89,11 @@ pub(super) fn collection_key(prefix: &str, doc: &str) -> Result<String, CoreErro
 mod tests {
     use super::*;
 
-    fn entry(key: &str, collection: bool, kind: contract::StorageKind) -> contract::StorageEntryDecl {
+    fn entry(
+        key: &str,
+        collection: bool,
+        kind: contract::StorageKind,
+    ) -> contract::StorageEntryDecl {
         let kind = match kind {
             contract::StorageKind::Json => "json",
             contract::StorageKind::Md => "md",
@@ -137,7 +150,10 @@ mod tests {
             Some("메모.md"),
         )
         .unwrap();
-        assert_eq!(workspace_doc.key, "workspaces/workspace-a/documents/메모.md");
+        assert_eq!(
+            workspace_doc.key,
+            "workspaces/workspace-a/documents/메모.md"
+        );
         assert_eq!(
             workspace_doc.scope,
             StorageScope::Workspace("workspace-a".into())

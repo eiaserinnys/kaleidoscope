@@ -55,7 +55,7 @@ async fn embedded_migrates_v14_through_comments_then_restarts() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        19
+        20
     );
     for table in [
         "app_comment_apps",

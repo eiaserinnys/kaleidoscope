@@ -90,13 +90,6 @@ error_catalog! { ENTRIES;
         message: "문서 모음 {prefix}: 서버에서 목록을 읽지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
         fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
     }
-    STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED() {
-        class: Server,
-        place: "작업 삭제 시 기본 앱 저장값 정리",
-        cause: "서버 저장소의 SQL 작업이 실패했다",
-        message: "작업을 지우면서 서버에서 기본 앱의 저장값을 정리하지 못했습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
-        fix: "다시 시도하고, 계속되면 서버 로그에서 이 오류 코드를 찾으세요"
-    }
     STORAGE_APP_VALUES_LIST_DATABASE_FAILED(app_id) {
         class: Server,
         place: "기본 앱 저장값 목록 조회",

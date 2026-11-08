@@ -53,10 +53,8 @@ pub(super) fn load_item(
 
 pub(super) enum WriteItemError {
     Load(CoreError),
-    Conflict {
-        current_revision: Option<String>,
-    },
-    Revision,
+    Conflict { current_revision: Option<String> },
+    Revision(String),
     Serialize(String),
     Database(rusqlite::Error),
 }
@@ -81,8 +79,8 @@ pub(super) fn write_item(
             current_revision: current.map(|item| item.revision),
         });
     }
-    let revision = contract::storage_revision(target.kind, content)
-        .map_err(|_| WriteItemError::Revision)?;
+    let revision =
+        contract::storage_revision(target.kind, content).map_err(WriteItemError::Revision)?;
     let serialized = serde_json::to_string(content)
         .map_err(|error| WriteItemError::Serialize(error.to_string()))?;
     tx.execute(
@@ -108,9 +106,7 @@ pub(super) fn write_item(
 
 pub(super) enum ResetItemError {
     Load(CoreError),
-    Conflict {
-        current_revision: Option<String>,
-    },
+    Conflict { current_revision: Option<String> },
     Database(rusqlite::Error),
 }
 
@@ -143,9 +139,7 @@ pub(super) fn reset_item(
 pub(super) enum MoveItemError {
     Load(CoreError),
     SourceNotFound,
-    Conflict {
-        revision: String,
-    },
+    Conflict { revision: String },
     KindMismatch,
     TargetExists,
     Database(rusqlite::Error),
@@ -180,12 +174,7 @@ pub(super) fn move_item(
     }
     tx.execute(
         "UPDATE app_storage_items SET key=?3, workspace_id=?4 WHERE bucket_id=?1 AND key=?2",
-        params![
-            from.bucket_id,
-            from.key,
-            to.key,
-            to.scope.workspace_id()
-        ],
+        params![from.bucket_id, from.key, to.key, to.scope.workspace_id()],
     )
     .map_err(MoveItemError::Database)?;
     Ok(source.revision)

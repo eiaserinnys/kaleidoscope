@@ -64,7 +64,7 @@ fn write_value_error(key: &str, error: super::storage_items::WriteItemError) -> 
                 ),
             ])
         }
-        WriteItemError::Revision => {
+        WriteItemError::Revision(_) => {
             kaleidoscope_contract::errors::STORAGE_APP_VALUE_REVISION_FAILED(key)
         }
         WriteItemError::Serialize(message) => {
@@ -125,50 +125,6 @@ impl AppState {
         )?;
         tx.set_drop_behavior(rusqlite::DropBehavior::Rollback);
         Ok(result)
-    }
-
-    pub(super) fn delete_workspace_values(
-        tx: &Transaction<'_>,
-        account: &str,
-        workspace: &str,
-    ) -> Result<Vec<(String, AppValueMeta)>, CoreError> {
-        let mut statement = tx.prepare("SELECT b.app_id,i.key,i.kind FROM app_storage_items i JOIN app_storage_buckets b ON b.id=i.bucket_id WHERE b.account_id=?1 AND i.workspace_id=?2").map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
-        let rows = statement
-            .query_map(params![account, workspace], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
-        let items = rows
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
-        drop(statement);
-        tx.execute("DELETE FROM app_storage_items WHERE workspace_id=?1 AND bucket_id IN (SELECT id FROM app_storage_buckets WHERE account_id=?2)", params![workspace, account]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED()))?;
-        items
-            .into_iter()
-            .map(|(app_id, key, kind)| {
-                let kind = match kind.as_str() {
-                    "json" => StorageKind::Json,
-                    "md" => StorageKind::Md,
-                    _ => {
-                        return Err(kaleidoscope_contract::errors::STORAGE_VALUES_KIND_UNKNOWN(
-                            &key, &kind,
-                        ))
-                    }
-                };
-                Ok((
-                    app_id,
-                    AppValueMeta {
-                        key,
-                        kind,
-                        revision: None,
-                    },
-                ))
-            })
-            .collect()
     }
 
     pub(super) fn list_app_values(
@@ -366,11 +322,7 @@ impl AppState {
             }
         }
         let target = super::storage_target::resolve_storage_target(
-            account,
-            app_id,
-            &entry,
-            workspace,
-            None,
+            account, app_id, &entry, workspace, None,
         )?;
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(|error| {
@@ -380,8 +332,9 @@ impl AppState {
             )
         })?;
         super::app_storage::check_workspace_owner(&tx, account, workspace)?;
-        let revision = super::storage_items::write_item(&tx, &target, &content, expected.as_deref())
-            .map_err(|error| write_value_error(key, error))?;
+        let revision =
+            super::storage_items::write_item(&tx, &target, &content, expected.as_deref())
+                .map_err(|error| write_value_error(key, error))?;
         tx.commit().map_err(|error| {
             db_error_with(
                 error,
@@ -451,9 +404,8 @@ impl AppState {
                 workspace,
                 Some(&doc),
             )?;
-            let (_, account, update) = super::collection_storage::reset(
-                self, &target, &entry, workspace, &doc, expected,
-            )?;
+            let (_, account, update) =
+                super::collection_storage::reset(self, &target, &entry, workspace, &doc, expected)?;
             super::app_storage_http::send_storage_update(self, app_id, &account, update);
             return Ok(());
         }
@@ -462,11 +414,7 @@ impl AppState {
             return Err(kaleidoscope_contract::errors::STORAGE_APP_VALUE_KEY_INVALID(key));
         }
         let target = super::storage_target::resolve_storage_target(
-            account,
-            app_id,
-            &entry,
-            workspace,
-            None,
+            account, app_id, &entry, workspace, None,
         )?;
         let mut db = self.lock_db()?;
         let tx = db.transaction().map_err(|error| {
@@ -567,9 +515,8 @@ pub(super) fn move_collection(
         workspace,
         Some(&request.to),
     )?;
-    let (reply, account, update, from_key, to_key) = super::collection_storage::move_document(
-        state, &from, &to, &entry, &request, workspace,
-    )?;
+    let (reply, account, update, from_key, to_key) =
+        super::collection_storage::move_document(state, &from, &to, &entry, &request, workspace)?;
     super::app_storage_http::send_raw_storage_move(
         state, app_id, &account, update, from_key, to_key,
     );
