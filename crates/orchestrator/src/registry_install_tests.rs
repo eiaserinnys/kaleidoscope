@@ -360,6 +360,10 @@ async fn personal_apps_cannot_be_removed_by_device() {
 }
 
 fn bundle_with_asset(id: &str, svg: &str, extra: bool) -> Value {
+    bundle_with_asset_meta(id, svg, extra, "시험", "MIT")
+}
+
+fn bundle_with_asset_meta(id: &str, svg: &str, extra: bool, source: &str, license: &str) -> Value {
     let mut assets = vec![json!({"id":"shared-icon","version":1})];
     if extra {
         assets.insert(0, json!({"id":"new-icon","version":1}));
@@ -380,8 +384,8 @@ fn bundle_with_asset(id: &str, svg: &str, extra: bool) -> Value {
             "<svg/>"
         };
         let digest = sha256_hex(bytes.as_bytes());
-        uploads.push(json!({"id":asset_id,"version":1,"format":"svg","sha256":digest,"source":"시험","license":"MIT","data_base64":STANDARD.encode(bytes)}));
-        files.insert(format!("apps/{id}/1/assets/{asset_id}/1"), json!({"sha256":digest,"bytes":bytes.len(),"format":"svg","source":"시험","license":"MIT"}));
+        uploads.push(json!({"id":asset_id,"version":1,"format":"svg","sha256":digest,"source":source,"license":license,"data_base64":STANDARD.encode(bytes)}));
+        files.insert(format!("apps/{id}/1/assets/{asset_id}/1"), json!({"sha256":digest,"bytes":bytes.len(),"format":"svg","source":source,"license":license}));
     }
     let manifest = json!({"format":1,"store_app_id":id,"release":1,"name":"자산 앱","summary":"시험","description":"시험","category":"시험","publisher":"tester","icon":null,"screenshots":[],"requires":definition["requires"],"permissions":[],"badges":[],"files":files,"published_at":"2026-11-05T00:00:00Z"}).to_string();
     let digest = sha256_hex(manifest.as_bytes());
@@ -413,6 +417,45 @@ async fn conflicting_asset_rolls_back_app_and_other_assets() {
     assert_eq!(error["id"], "ASSET_REGISTER_VERSION_CONFLICT");
     assert!(state.app("asset-second", None).unwrap().is_none());
     assert_eq!(state.list_assets().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn same_asset_bytes_with_updated_source_installs_without_conflict() {
+    let (_dir, state) = setup();
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle_with_asset("asset-source-first", "<svg/>", false)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, reply) = call(
+        &state,
+        "POST",
+        "/api/device/app-installs",
+        bundle_with_asset_meta(
+            "asset-source-second",
+            "<svg/>",
+            false,
+            "스토어",
+            "Apache-2.0",
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert!(state.app("asset-source-second", None).unwrap().is_some());
+    let account = state.mcp_account_id().unwrap();
+    let (meta, bytes) = state
+        .get_asset(&account, "shared-icon", 1)
+        .unwrap()
+        .unwrap();
+    assert_eq!(meta.source, "스토어");
+    assert_eq!(meta.license, "Apache-2.0");
+    assert_eq!(bytes, b"<svg/>");
 }
 
 #[tokio::test]
