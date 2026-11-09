@@ -28,7 +28,7 @@ from PIL import Image, ImageDraw
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
-VIEWPORT = (1440, 900)
+VIEWPORT = [1440, 900]
 SCHEMES = ("light", "dark")
 APPS = (
     # (앱 id, 창 크기, 폴더 권한을 고를지)
@@ -219,13 +219,13 @@ def run_settings(sb, page, output, result):
     for scheme in SCHEMES:
         page.emulate_media(color_scheme=scheme)
         page.wait_for_timeout(400)
-        # 기본 크기, 시스템(안내 글 보임)
+        # 기본 크기, 시스템
         group.get_by_role("button", name="시스템", exact=True).click()
         page.wait_for_timeout(400)
         system = settings_metrics(win)
         out[f"{scheme}-system-default"] = {"metrics": system, "contrast": measure_contrast(page, win, output, f"settings-{scheme}-system")}
         win.screenshot(path=str(output / f"settings-{scheme}-system-window.png"))
-        # 다크를 고르면 안내 글이 사라진다
+        # 다크를 고른 뒤
         group.get_by_role("button", name="다크", exact=True).click()
         page.wait_for_timeout(400)
         chosen = settings_metrics(win)
@@ -363,12 +363,6 @@ def run_interact(sb, page, output, result):
         target.dblclick()
         page.wait_for_timeout(200)
         out[f"dblclick-{name}-selection"] = page.evaluate("() => String(getSelection())")
-    hint = group.get_by_text("운영체제 설정을 따릅니다")
-    system.click()
-    page.wait_for_timeout(300)
-    if hint.count():
-        hint.dblclick()
-        out["dblclick-hint-selection"] = page.evaluate("() => String(getSelection())")
     system.click()
 
 
@@ -406,12 +400,103 @@ def run_content(sb, page, output, result):
         page.wait_for_timeout(500)
 
 
+PLACE_JS = """(win) => {
+  const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, bottom: b.bottom, right: b.right }; };
+  const scroll = win.querySelector('.ks-shell-settings');
+  const groups = [...win.querySelectorAll('.ks-settings-group')];
+  const last = groups[groups.length - 1];
+  const sb = scroll.getBoundingClientRect();
+  const lb = last.getBoundingClientRect();
+  return { viewport: { w: innerWidth, h: innerHeight }, window: r(win), topbar: r(document.querySelector('.ks-shell-bar')),
+    taskbar: r(document.querySelector('.ks-taskbar')), scrollBox: r(scroll),
+    lastGroup: { title: last.querySelector('h3')?.textContent, rect: r(last), hiddenBelow: Math.max(0, lb.bottom - sb.bottom) },
+    scrollTop: scroll.scrollTop, overflowY: getComputedStyle(scroll).overflowY };
+}"""
+
+ROWS_JS = """(win) => [...win.querySelectorAll('.ks-settings-row')].map((row) => {
+  const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, cy: b.y + b.height / 2, right: b.right }; };
+  return { group: row.closest('.ks-settings-group')?.querySelector('h3')?.textContent, label: row.querySelector('.ks-settings-row-label')?.textContent,
+    row: r(row), labelRect: r(row.querySelector('.ks-settings-row-label')), control: r(row.querySelector('.ks-settings-row-control > *')),
+    rowText: r(row.querySelector('.ks-settings-row-text')), meta: row.querySelector('.ks-settings-row-text > :not(.ks-settings-row-label)')?.textContent ?? null };
+})"""
+
+
+def run_r2(sb, page, output, result, tag):
+    out = result.setdefault("r2", {})
+    win = open_settings(page)
+    page.wait_for_timeout(800)
+    group = theme_group(win)
+    group.wait_for(state="visible", timeout=10000)
+    page.screenshot(path=str(output / f"{tag}-sandbox-page-open.png"))
+    out["place-open"] = win.evaluate(PLACE_JS)
+    for scheme in SCHEMES:
+        page.emulate_media(color_scheme=scheme)
+        page.wait_for_timeout(400)
+        seq = {}
+        for name in ("시스템", "라이트", "다크", "시스템"):
+            group.get_by_role("button", name=name, exact=True).click()
+            page.wait_for_timeout(450)
+            m = settings_metrics(win)
+            key = name if name not in seq else name + "-2"
+            seq[key] = {"groups": [(g["title"], round(g["rect"]["y"], 2), round(g["rect"]["h"], 2), round(g["header"]["top"], 2)) for g in m["groups"]],
+                        "scroll": m["scroll"], "hint": m["hint"], "place": win.evaluate(PLACE_JS)}
+            win.screenshot(path=str(output / f"{tag}-sandbox-{scheme}-{key}-window.png"))
+        out[f"sandbox-{scheme}-seq"] = seq
+        out[f"sandbox-{scheme}-rows"] = win.evaluate(ROWS_JS)
+        group.get_by_role("button", name="시스템", exact=True).click()
+        page.wait_for_timeout(400)
+        out[f"sandbox-{scheme}-contrast-system"] = measure_contrast(page, win, output, f"{tag}-sandbox-{scheme}-system-page")
+        group.get_by_role("button", name="다크", exact=True).click()
+        page.wait_for_timeout(400)
+        out[f"sandbox-{scheme}-contrast-dark"] = measure_contrast(page, win, output, f"{tag}-sandbox-{scheme}-darkpick-page")
+        group.get_by_role("button", name="시스템", exact=True).click()
+        page.wait_for_timeout(300)
+        scroller = win.locator(".ks-shell-settings")
+        scroller.evaluate("el => el.scrollTo(0, el.scrollHeight)")
+        page.wait_for_timeout(300)
+        out[f"sandbox-{scheme}-bottom"] = win.evaluate(PLACE_JS)
+        win.screenshot(path=str(output / f"{tag}-sandbox-{scheme}-scrolled-bottom-window.png"))
+        scroller.evaluate("el => el.scrollTo(0, 0)")
+    # 같은 테마를 다시 누르는 동안 끝까지 내린 상태에서 아래 묶음이 튀는지
+    win.get_by_role("button", name="창 닫기").click()
+    page.wait_for_timeout(300)
+
+    for state in ("connected", "embedded"):
+        for scheme in SCHEMES:
+            page.goto(f"http://localhost:1420/harness.html?preview=shell-settings&link={state}", wait_until="load")
+            page.emulate_media(color_scheme=scheme)
+            hwin = open_settings(page)
+            page.wait_for_timeout(800)
+            hgroup = theme_group(hwin)
+            entry = {"metrics": settings_metrics(hwin), "place": hwin.evaluate(PLACE_JS), "rows": hwin.evaluate(ROWS_JS)}
+            hwin.screenshot(path=str(output / f"{tag}-harness-{state}-{scheme}-window.png"))
+            page.screenshot(path=str(output / f"{tag}-harness-{state}-{scheme}-page.png"))
+            heights = {}
+            for name in ("라이트", "다크", "시스템"):
+                try:
+                    hgroup.get_by_role("button", name=name, exact=True).click(timeout=3000)
+                    page.wait_for_timeout(350)
+                    m = settings_metrics(hwin)
+                    heights[name] = [(g["title"], round(g["rect"]["y"], 2), round(g["rect"]["h"], 2)) for g in m["groups"]]
+                except Exception as error:  # noqa: BLE001
+                    heights[name] = f"error: {str(error)[:200]}"
+            entry["switch"] = heights
+            scroller = hwin.locator(".ks-shell-settings")
+            scroller.evaluate("el => el.scrollTo(0, el.scrollHeight)")
+            page.wait_for_timeout(300)
+            entry["bottom"] = hwin.evaluate(PLACE_JS)
+            hwin.screenshot(path=str(output / f"{tag}-harness-{state}-{scheme}-scrolled-bottom-window.png"))
+            out[f"harness-{state}-{scheme}"] = entry
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--src", type=Path, default=ROOT)
     parser.add_argument("--output", type=Path, default=ROOT / "target/visual-check/theme")
-    parser.add_argument("--only", choices=("settings", "apps", "content", "interact", "all"), default="all")
+    parser.add_argument("--only", choices=("settings", "apps", "content", "interact", "r2", "all"), default="all")
+    parser.add_argument("--viewport", default="1440x900")
     args = parser.parse_args()
+    VIEWPORT[0], VIEWPORT[1] = (int(v) for v in args.viewport.split("x"))
     src = args.src.resolve()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -441,7 +526,7 @@ def main():
         try:
             sb.start()
             with sync_playwright() as playwright:
-                browser = sb.open_page(playwright, VIEWPORT)
+                browser = sb.open_page(playwright, tuple(VIEWPORT))
                 page = sb.page
                 if args.only in ("apps", "all"):
                     run_apps(sb, page, output, result, folder)
@@ -449,6 +534,8 @@ def main():
                     run_interact(sb, page, output, result)
                 if args.only in ("content", "all"):
                     run_content(sb, page, output, result)
+                if args.only == "r2":
+                    run_r2(sb, page, output, result, args.viewport)
                 if args.only in ("settings", "all"):
                     run_settings(sb, page, output, result)
                 result["console"] = sb.console[-20:]
@@ -460,7 +547,7 @@ def main():
                     pass
             sb.stop()
 
-    (output / f"result-{args.only}.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    (output / f"result-{args.only}-{args.viewport}.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0
 
 
