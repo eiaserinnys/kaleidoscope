@@ -49,9 +49,14 @@ export function createDocumentEditorTarget(transport: Pick<CoreTransport, "call"
     allowsMissingRevision: true,
     conflictMessage: "다른 곳에서 바뀌었습니다",
     async read(path) {
-      const { result } = await transport.call({ op: "storage.get", window_id: windowId, entry, ...(collection ? { doc: path } : {}) });
-      if (result.kind !== "md" || typeof result.content !== "string") throw SHELL_FILE_MARKDOWN_STORAGE_INVALID({ entry });
-      return { text: result.content, revision: result.revision };
+      try {
+        const { result } = await transport.call({ op: "storage.get", window_id: windowId, entry, ...(collection ? { doc: path } : {}) });
+        if (result.kind !== "md" || typeof result.content !== "string") throw SHELL_FILE_MARKDOWN_STORAGE_INVALID({ entry });
+        return { text: result.content, revision: result.revision };
+      } catch (error) {
+        if (collection && toCoreError(error).id === "STORAGE_DOCUMENT_READ_NOT_FOUND") return { text: "", revision: null };
+        throw error;
+      }
     },
     async write(path, text, revision) {
       const reply = await transport.call({ op: "storage.write", window_id: windowId, entry, ...(collection ? { doc: path } : {}), content: text, expected_revision: revision });

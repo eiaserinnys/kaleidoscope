@@ -861,6 +861,7 @@ export type DisplayTextFormat = "plain" | "markdown" | "time";
 
 /**
  * 저장소 문서를 참조한다. `entry`는 앱의 저장 항목 id이고, 문서 모음에서는 `doc`에 문서 이름을 준다.
+ * 문서 모음의 문서가 아직 없으면 빈 문서로 열리고, 처음 고칠 때 만들어진다(57판).
  */
 export type DocumentRef = { entry: string, doc?: StringOrStateRef, };
 
