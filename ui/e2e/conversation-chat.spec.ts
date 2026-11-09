@@ -111,6 +111,31 @@ test("시작 판은 새 대화와 기존 대화를 제목과 경계로 나누고
   expect(await sections.nth(1).evaluate((element) => getComputedStyle(element).borderTopWidth)).not.toBe("0px");
 });
 
+test("시작과 연결의 오류는 그 구역 안 단추 줄 아래에 뜬다", async ({ page }) => {
+  for (const [width, height] of [[1100, 700], [668, 420], [360, 640]] as const) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/?preview=workspace-pas&conversation=attach-start&start-error=1");
+    await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
+    const chat = page.getByTestId("app-window-workspace-pas");
+    const sections = chat.locator(".ks-agent-chat-start-section");
+    await chat.getByRole("button", { name: "기존 대화" }).click();
+    await page.getByRole("menuitem", { name: /서소영 PAS — 카드 운영과 배포 기록/ }).click();
+    await chat.getByRole("button", { name: "연결", exact: true }).click();
+    const attachError = sections.nth(1).getByRole("alert");
+    await expect(attachError).toContainText("이미 다른 곳에 연결되어 있습니다");
+    const [link, notice] = await Promise.all([chat.getByRole("button", { name: "연결", exact: true }).boundingBox(), attachError.boundingBox()]);
+    expect(notice!.y).toBeGreaterThan(link!.y + link!.height);
+    await page.screenshot({ path: `${path}/start-error-attach-${width}.png` });
+    await chat.getByRole("button", { name: "시작" }).click();
+    const createError = sections.nth(0).getByRole("alert");
+    await expect(createError).toContainText("이미 다른 곳에 연결되어 있습니다");
+    const [start, createNotice, second] = await Promise.all([chat.getByRole("button", { name: "시작" }).boundingBox(), createError.boundingBox(), sections.nth(1).boundingBox()]);
+    expect(createNotice!.y).toBeGreaterThan(start!.y + start!.height);
+    expect(second!.y).toBeGreaterThan(createNotice!.y + createNotice!.height);
+    await page.screenshot({ path: `${path}/start-error-both-${width}.png` });
+  }
+});
+
 test("좁은 창에서도 고른 대화와 연결 단추는 한 줄이다", async ({ page }) => {
   const chat = await open(page, "attach-start");
   await page.setViewportSize({ width: 400, height: 600 });

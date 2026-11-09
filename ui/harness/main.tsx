@@ -282,6 +282,7 @@ const fakeTransport = createFakeTransport({
     getError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
     sendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
     sendDelayMs: Number(params.get("send-delay")) || undefined,
+    startError: params.get("start-error") ? { code: "conflict", id: "CONV_ATTACH_CONFLICT", message: "고른 대화가 이미 다른 곳에 연결되어 있습니다. 대화 목록을 다시 열고 다른 대화를 고르세요.", details: [] } : undefined,
     draft: conversationMode === "draft" ? { request_id: "draft-id", text: "복원된 초안", attachments: [{ name: "메모.txt", mime: "text/plain", data_base64: "aGVsbG8=" }], failed: false } : undefined,
     attached: conversationMode === "attach-attached",
     own: conversationMode === "attach-own" ? { id: "session-own", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : null,

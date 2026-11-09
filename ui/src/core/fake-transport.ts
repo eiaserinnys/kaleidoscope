@@ -60,6 +60,8 @@ export interface FakeConversationSeed {
   getError?: string;
   sendDelayMs?: number;
   sendError?: string;
+  /** 시작과 연결이 이 오류로 실패한다. 시작 판의 오류 자리를 보려고 쓴다. */
+  startError?: CoreError;
   draft?: { request_id: string; text: string; attachments: ConversationUpload[]; failed: boolean };
   /** 연결한 대화임을 표시한다. 없으면 이 작업이 만든 대화다. */
   attached?: boolean;
@@ -447,6 +449,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
         if (conversation.delayMs) await delay(conversation.delayMs);
         if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
+        if (conversation.startError) throw clone(conversation.startError);
         const model = conversation.models.find((item) => item.id === request.model && item.available);
         if (!model) return fail("invalid_request", "고를 수 없는 모델입니다");
         conversation.thread ??= { id: "fake-thread", external: { namespace: "fake", key: request.window_id }, title: "대화", model: { id: model.id, label: model.label, group: model.group }, profile: conversation.profiles?.find((profile) => profile.id === request.profile) ? { id: request.profile!, label: conversation.profiles.find((profile) => profile.id === request.profile)!.label } : undefined, created_at: new Date().toISOString(), archived: false };
@@ -457,6 +460,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
         if (conversation.delayMs) await delay(conversation.delayMs);
         if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
+        if (conversation.startError) throw clone(conversation.startError);
         const candidate = [conversation.own ?? null, ...(conversation.adoptable ?? [])].find((item) => item?.id === request.thread_id);
         if (!candidate) return fail("not_found", "고른 대화를 찾을 수 없습니다");
         const fallback = conversation.models.find((item) => item.available);
