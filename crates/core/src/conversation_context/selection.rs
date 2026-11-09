@@ -55,7 +55,9 @@ impl Context {
                 if e.code == ErrorCode::Conflict =>
             {
                 let existing = self.read(inner, &self.provider.thread_entry)?;
-                if existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id) {
+                if existing.exists
+                    && existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id)
+                {
                     Ok(thread)
                 } else {
                     Err(
@@ -135,6 +137,9 @@ impl Context {
         requested_profile: Option<&str>,
         requested_model: Option<&str>,
     ) -> Result<(ConversationThread, Vec<String>), CoreError> {
+        if self.attached(inner)? {
+            return Err(kaleidoscope_contract::errors::CONV_SWITCH_ATTACHED());
+        }
         let thread = self.thread(inner, namespace)?.ok_or_else(|| {
             kaleidoscope_contract::errors::CONV_SELECTION_THREAD_NOT_FOUND(&self.workspace.name)
         })?;

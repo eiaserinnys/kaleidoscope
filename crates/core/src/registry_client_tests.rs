@@ -263,7 +263,7 @@ fn events_send_supported_header() {
         serde_json::from_str(header.split_once(": ").unwrap().1).unwrap();
     assert_eq!(supported.blocks, kaleidoscope_contract::BLOCK_SET_VERSION);
     assert_eq!(supported.modules.get("storage"), Some(&3));
-    assert_eq!(supported.modules.get("agent"), Some(&3));
+    assert_eq!(supported.modules.get("agent"), Some(&4));
     assert!(request.contains(&format!("{REGISTRY_HEADER}: {REGISTRY_VERSION}")));
 }
 

@@ -15,6 +15,7 @@ pub enum ConversationProtocol {
 pub const MODELS_PATH: &str = "/models";
 pub const PROFILES_PATH: &str = "/profiles";
 pub const THREADS_PATH: &str = "/threads";
+pub const THREADS_ADOPTABLE_PATH: &str = "/threads/adoptable";
 pub const THREADS_BY_KEY_PATH: &str = "/threads/by-key";
 pub const THREAD_EXECUTION_PATH: &str = "/threads/{thread_id}/execution";
 pub const THREAD_ADOPTION_PATH: &str = "/threads/by-key/adoption";
@@ -139,6 +140,27 @@ pub struct ThreadListReply {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub next_cursor: Option<String>,
+}
+
+/// 이 작업에 연결할 수 있는 대화 하나. 제목이 비어 있을 수 있다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AdoptableConversation {
+    pub id: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub profile: Option<ThreadProfile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub model: Option<ThreadModel>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AdoptableReply {
+    pub candidates: Vec<AdoptableConversation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -418,6 +440,14 @@ mod tests {
         let execution: ExecutionThreadRequest =
             serde_json::from_value(execution_json.clone()).unwrap();
         assert_eq!(serde_json::to_value(execution).unwrap(), execution_json);
+
+        let adoptable_json: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/conversation-v1/adoptable.json"))
+                .unwrap();
+        let adoptable: AdoptableReply = serde_json::from_value(adoptable_json.clone()).unwrap();
+        assert_eq!(adoptable.candidates.len(), 2);
+        assert_eq!(adoptable.candidates[1].title, "");
+        assert_eq!(serde_json::to_value(adoptable).unwrap(), adoptable_json);
 
         let legacy: ConversationThread = serde_json::from_str(
             r#"{"id":"legacy","external":{"namespace":"ns","key":"key"},"title":"Legacy","model":{"id":"model","label":"Model"},"created_at":"2026-10-30T12:00:00Z","archived":false}"#,

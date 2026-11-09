@@ -2176,6 +2176,7 @@ struct FakeRegistryClient {
     raw_values_enabled: std::sync::atomic::AtomicBool,
     legacy_storage_not_found: std::sync::atomic::AtomicBool,
     storage_value: Mutex<Option<(Value, String)>>,
+    storage_entries: Mutex<BTreeMap<String, Value>>,
     storage_pause: Mutex<Option<mpsc::Receiver<()>>>,
     storage_workspace: Mutex<String>,
     pair_start: Mutex<Option<Result<PairStartReply, RegistryError>>>,
@@ -2344,7 +2345,7 @@ impl RegistryClient for FakeRegistryClient {
         _: &str,
         _: &str,
         _: &str,
-        _: &str,
+        entry: &str,
         workspace: &str,
     ) -> Result<kaleidoscope_contract::app_storage::StorageReadReply, RegistryError> {
         self.storage_reads.fetch_add(1, Ordering::SeqCst);
@@ -2356,6 +2357,14 @@ impl RegistryClient for FakeRegistryClient {
             let _ = pause.recv_timeout(Duration::from_secs(10));
         }
         *self.storage_workspace.lock().unwrap() = workspace.into();
+        if let Some(content) = self.storage_entries.lock().unwrap().get(entry).cloned() {
+            return Ok(kaleidoscope_contract::app_storage::StorageReadReply {
+                kind: kaleidoscope_contract::app_storage::StorageKind::Json,
+                content,
+                revision: Some("entry".into()),
+                exists: true,
+            });
+        }
         let value = self.storage_value.lock().unwrap().clone();
         Ok(kaleidoscope_contract::app_storage::StorageReadReply {
             kind: kaleidoscope_contract::app_storage::StorageKind::Json,
@@ -2365,6 +2374,18 @@ impl RegistryClient for FakeRegistryClient {
                 .unwrap_or_else(|| json!("one.json")),
             revision: value.as_ref().map(|v| v.1.clone()),
             exists: value.is_some(),
+        })
+    }
+    fn storage_list(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::StorageListReply, RegistryError> {
+        Ok(kaleidoscope_contract::app_storage::StorageListReply {
+            bucket_id: "bucket".into(),
+            items: vec![],
         })
     }
     fn storage_collection_list(
@@ -2424,6 +2445,24 @@ impl RegistryClient for FakeRegistryClient {
         .unwrap();
         *stored = Some((request.content.clone(), revision.clone()));
         Ok(kaleidoscope_contract::app_storage::StorageWriteReply { revision })
+    }
+    fn storage_reset(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        entry: &str,
+        _: &str,
+        request: &kaleidoscope_contract::app_storage::StorageResetRequest,
+    ) -> Result<kaleidoscope_contract::app_storage::StorageResetReply, RegistryError> {
+        let mut stored = self.storage_value.lock().unwrap();
+        if stored.as_ref().map(|v| &v.1) != request.expected_revision.0.as_ref() {
+            return Err(RegistryError::Validation(
+                kaleidoscope_contract::errors::STORAGE_ITEM_WRITE_CONFLICT(entry),
+            ));
+        }
+        *stored = None;
+        Ok(kaleidoscope_contract::app_storage::StorageResetReply { revision: None })
     }
     fn push_layout_changes(
         &self,
@@ -4074,7 +4113,7 @@ fn cancel_and_unlink_clear_only_connection_state() {
 }
 
 #[test]
-fn conversation_commands_resolve_the_window_and_advertise_agent_three() {
+fn conversation_commands_resolve_the_window_and_advertise_agent_four() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let core = seeded_core(temp.path(), &host);
@@ -4089,7 +4128,7 @@ fn conversation_commands_resolve_the_window_and_advertise_agent_three() {
         let request = serde_json::from_value(request).unwrap();
         expect_error(core.handle(request), ErrorCode::NotFound);
     }
-    assert_eq!(snapshot(&core).supported.modules.get("agent"), Some(&3));
+    assert_eq!(snapshot(&core).supported.modules.get("agent"), Some(&4));
 }
 
 #[test]

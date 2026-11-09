@@ -29,7 +29,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>) {
   const view = render(<WindowDataProvider store={store} windowId={window.id} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={context} pointer="/ui" /></WindowDataProvider>);
   return { call, window, rerender: () => view.rerender(<WindowDataProvider store={store} windowId={window.id} definition={definition}><AgentChatBlock block={{ type: "chat" }} context={{ ...context, definition: structuredClone(definition) }} pointer="/ui" /></WindowDataProvider>), emit: (event: CoreEvent) => act(() => { listeners.forEach((fn) => fn(event)); }) };
 }
-const get = (value: ConversationThread | null = thread): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles: [], start: { profile: "", model: null } });
+const get = (value: ConversationThread | null = thread): CoreReply => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles: [], start: { profile: "", model: null }, own: null, adoptable: [] });
 beforeEach(() => { vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null as unknown as CanvasRenderingContext2D); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 

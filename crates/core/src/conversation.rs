@@ -18,6 +18,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         | CoreRequest::ConversationCreate { window_id, .. }
         | CoreRequest::ConversationSwitch { window_id, .. }
         | CoreRequest::ConversationSend { window_id, .. }
+        | CoreRequest::ConversationAttach { window_id, .. }
+        | CoreRequest::ConversationDetach { window_id }
         | CoreRequest::ConversationAttachment { window_id, .. }
         | CoreRequest::ConversationAttachmentOpen { window_id, .. } => window_id,
         _ => return Err(kaleidoscope_contract::errors::CONV_CONVERSATION_REQUEST_INVALID()),
@@ -34,6 +36,19 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         } => {
             return crate::conversation_send::send(inner, &ctx, request_id, text, attachments);
         }
+        CoreRequest::ConversationDetach { .. } => {
+            ctx.detach(inner)?;
+            let namespace = ctx.namespace(inner)?;
+            crate::conversation_stream::leave(
+                inner,
+                &format!(
+                    "{}\u{0}{}\u{0}{}\u{0}",
+                    ctx.client.info.name, namespace, ctx.workspace.id
+                ),
+                &window,
+            );
+            return Ok(CoreReply::ConversationDetach {});
+        }
         request => request,
     };
     ctx.client.require_login()?;
@@ -41,6 +56,14 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
     match request {
         CoreRequest::ConversationGet { profile, .. } => {
             let thread = ctx.thread(inner, &namespace)?;
+            let attached = ctx.attached(inner)?;
+            let (own, adoptable) = if thread.is_none() {
+                let own = ctx.own(&namespace)?;
+                let adoptable = ctx.adoptable(own.as_ref())?;
+                (own, adoptable)
+            } else {
+                (None, Vec::new())
+            };
             let config = ctx.values(
                 inner,
                 &[
@@ -91,8 +114,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 });
             if let Some(thread) = &thread {
                 let key = format!(
-                    "{}\u{0}{}\u{0}{}",
-                    ctx.client.info.name, namespace, ctx.workspace.id
+                    "{}\u{0}{}\u{0}{}\u{0}{}",
+                    ctx.client.info.name, namespace, ctx.workspace.id, thread.id
                 );
                 crate::conversation_stream::watch(
                     inner,
@@ -115,6 +138,9 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                     profile: start_profile,
                     model: start_model,
                 },
+                attached,
+                own,
+                adoptable,
             })
         }
         CoreRequest::ConversationHistory { before, .. } => {
@@ -132,8 +158,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         CoreRequest::ConversationCreate { model, profile, .. } => {
             let thread = ctx.create(inner, &namespace, &model, profile.as_deref())?;
             let key = format!(
-                "{}\u{0}{}\u{0}{}",
-                ctx.client.info.name, namespace, ctx.workspace.id
+                "{}\u{0}{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id, thread.id
             );
             crate::conversation_stream::watch(
                 inner,
@@ -149,8 +175,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let (thread, notices) =
                 ctx.switch(inner, &namespace, profile.as_deref(), model.as_deref())?;
             let key = format!(
-                "{}\u{0}{}\u{0}{}",
-                ctx.client.info.name, namespace, ctx.workspace.id
+                "{}\u{0}{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id, thread.id
             );
             crate::conversation_stream::watch(
                 inner,
@@ -161,6 +187,22 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 "",
             );
             Ok(CoreReply::ConversationSwitch { thread, notices })
+        }
+        CoreRequest::ConversationAttach { thread_id, .. } => {
+            let thread = ctx.attach(inner, &namespace, &thread_id)?;
+            let key = format!(
+                "{}\u{0}{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id, thread.id
+            );
+            crate::conversation_stream::watch(
+                inner,
+                key,
+                &window,
+                ctx.client.clone(),
+                &thread.id,
+                "",
+            );
+            Ok(CoreReply::ConversationAttach { thread })
         }
         CoreRequest::ConversationAttachment {
             item_id,

@@ -4,6 +4,7 @@ use kaleidoscope_contract::{
     app_storage::StorageReadReply,
     conversation::{
         AdoptThreadRequest, ConversationThread, EnsureThreadReply, ModelsReply, ThreadByKeyReply,
+        ThreadInfoReply,
     },
     data::{self, Binding},
     AgentProvider, AppDefinition, CoreError, ErrorCode, Workspace,
@@ -14,6 +15,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+mod attach;
 mod selection;
 
 pub(crate) struct Context {
@@ -296,7 +298,7 @@ impl Context {
         namespace: &str,
     ) -> Result<Option<ConversationThread>, CoreError> {
         let stored = self.read(inner, &self.provider.thread_entry)?;
-        if stored.content.is_null() {
+        if !stored.exists || stored.content.is_null() {
             return Ok(None);
         }
         let value = &stored.content;
@@ -304,6 +306,24 @@ impl Context {
             .get("thread_id")
             .and_then(Value::as_str)
             .ok_or_else(kaleidoscope_contract::errors::CONV_CONTEXT_THREAD_ENTRY_INVALID)?;
+        if entry_attached(value) {
+            if value.get("connection").and_then(Value::as_str) != Some(&self.client.info.name) {
+                return Err(
+                    kaleidoscope_contract::errors::CONV_CONTEXT_SAVED_BINDING_MISMATCH(
+                        &self.workspace.name,
+                    ),
+                );
+            }
+            let reply: Option<ThreadInfoReply> = self.client.json(
+                reqwest::Method::GET,
+                &self.client.path(&["threads", id])?,
+                &BTreeMap::new(),
+                None::<&Value>,
+            )?;
+            return reply.map(|reply| Some(reply.thread)).ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_CONTEXT_ATTACHED_NOT_FOUND(&self.workspace.name)
+            });
+        }
         if value.get("namespace").and_then(Value::as_str) != Some(namespace)
             || value.get("external_key").and_then(Value::as_str) != Some(&self.workspace.id)
             || value.get("connection").and_then(Value::as_str) != Some(&self.client.info.name)
@@ -349,6 +369,14 @@ impl Context {
         }
         Ok(Some(thread))
     }
+}
+
+/// 저장된 대화 연결이 이 작업의 것이 아니라 다른 제공자 대화를 가리키는지.
+pub(crate) fn entry_attached(value: &Value) -> bool {
+    value
+        .get("attached")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 fn required_string_allow_empty(

@@ -26,6 +26,9 @@ pub(crate) fn watch(
     cursor: &str,
 ) {
     let mut streams = inner.conversation_streams.0.lock().unwrap();
+    if let Some((prefix, _)) = key.rsplit_once('\u{0}') {
+        leave_others(&mut streams, &format!("{prefix}\u{0}"), window, Some(&key));
+    }
     let entry = streams.entry(key.clone()).or_insert_with(|| Stream {
         windows: HashSet::new(),
         client,
@@ -39,6 +42,38 @@ pub(crate) fn watch(
         entry.running = true;
         spawn(Arc::downgrade(inner), key);
     }
+}
+
+/// 같은 제공자·작업의 다른 대화 스트림에서 이 창을 뺀다. 창이 없어진 스트림은 지운다.
+pub(crate) fn leave(inner: &Arc<Inner>, prefix: &str, window: &str) {
+    let mut streams = inner.conversation_streams.0.lock().unwrap();
+    leave_others(&mut streams, prefix, window, None);
+}
+
+fn leave_others(
+    streams: &mut HashMap<String, Stream>,
+    prefix: &str,
+    window: &str,
+    keep: Option<&str>,
+) {
+    streams.retain(|key, stream| {
+        if Some(key.as_str()) != keep && key.starts_with(prefix) {
+            stream.windows.remove(window);
+        }
+        !stream.windows.is_empty()
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn windows_by_key(inner: &Arc<Inner>) -> Vec<(String, HashSet<String>)> {
+    inner
+        .conversation_streams
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(key, stream)| (key.clone(), stream.windows.clone()))
+        .collect()
 }
 
 pub(crate) fn state_changed(inner: &Arc<Inner>) {

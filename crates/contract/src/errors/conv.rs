@@ -118,6 +118,13 @@ error_catalog! { ENTRIES;
         message: "작업 이름 {workspace}: 연결된 제공자 대화를 찾을 수 없습니다. 새 대화를 시작하세요.",
         fix: "새 대화를 시작하세요"
     }
+    CONV_CONTEXT_ATTACHED_NOT_FOUND(workspace) {
+        class: NotFound,
+        place: "연결한 대화 읽기",
+        cause: "연결한 제공자 대화가 더 이상 없다",
+        message: "작업 이름 {workspace}: 연결한 대화를 제공자에서 찾지 못했습니다. 대화 바꾸기로 연결을 풀고 다시 고르세요.",
+        fix: "대화 바꾸기로 연결을 풀고 다시 고르세요"
+    }
     CONV_CONTEXT_VALUE_MISSING(field) {
         class: InvalidRequest,
         place: "대화 설정 읽기",
@@ -208,6 +215,34 @@ error_catalog! { ENTRIES;
         cause: "프로필 변경에 필요한 대상 프로필이 없다",
         message: "바꿀 대화 프로필을 확인할 수 없습니다. 프로필을 선택한 뒤 다시 시도하세요.",
         fix: "대화 프로필을 선택하세요"
+    }
+    CONV_ATTACH_ALREADY_BOUND(workspace) {
+        class: BindingConflict,
+        place: "기존 대화 연결",
+        cause: "이 작업에 이미 대화가 저장되어 있다",
+        message: "작업 이름 {workspace}: 이미 연결된 대화가 있습니다. 대화 바꾸기로 연결을 푼 뒤 다시 연결하세요.",
+        fix: "대화 바꾸기로 연결을 푸세요"
+    }
+    CONV_ATTACH_NOT_FOUND() {
+        class: NotFound,
+        place: "기존 대화 연결",
+        cause: "고른 대화를 제공자가 찾지 못했다",
+        message: "고른 대화를 제공자에서 찾지 못했습니다. 대화 목록을 다시 열고 다른 대화를 고르세요.",
+        fix: "대화 목록을 다시 열고 다시 고르세요"
+    }
+    CONV_ATTACH_CONFLICT() {
+        class: Conflict,
+        place: "기존 대화 연결",
+        cause: "고른 대화가 이미 다른 곳에 연결되어 있다",
+        message: "고른 대화가 이미 다른 곳에 연결되어 있습니다. 대화 목록을 다시 열고 다른 대화를 고르세요.",
+        fix: "다른 대화를 고르세요"
+    }
+    CONV_SWITCH_ATTACHED() {
+        class: InvalidRequest,
+        place: "대화 프로필 전환",
+        cause: "연결한 대화의 프로필이나 모델을 바꾸려 했다",
+        message: "연결한 대화의 프로필이나 모델은 이 창에서 바꿀 수 없습니다. 대화 바꾸기로 연결을 푼 뒤 새 대화를 시작하세요.",
+        fix: "대화 바꾸기로 연결을 푸세요"
     }
     CONV_RECONCILE_REQUEST_INVALID() {
         class: InvalidRequest,
