@@ -2293,19 +2293,7 @@ pub fn all_exprs(definition: &AppDefinition) -> Vec<(String, &str)> {
         }
     }
     if let Some(agent) = &definition.agent {
-        for (field, binding) in [
-            ("namespace", &agent.namespace),
-            ("profile", &agent.profile),
-            ("collection", &agent.collection),
-            ("model_order", &agent.model_order),
-            ("selected_model", &agent.selected_model),
-            ("title_template", &agent.title_template),
-            (
-                "initial_instruction_template",
-                &agent.initial_instruction_template,
-            ),
-            ("instructions_template", &agent.instructions_template),
-        ] {
+        for (field, binding) in agent.bindings() {
             if let Binding::Expr(expr) = binding {
                 out.push((format!("/agent/{field}"), expr.expr.as_str()));
             }
