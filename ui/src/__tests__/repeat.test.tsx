@@ -325,6 +325,25 @@ it("격자와 열 반복은 불러오는 중 받은 뒤 배치의 뼈대를, 행
   store.dispose();
 });
 
+it("자식이 모두 when인 쌓기 템플릿도 불러오는 중 막대를 그린다", async () => {
+  const definition: AppDefinition = {
+    id: "repeat-when-loading", name: "조건부 반복", requires: { blocks: 15, modules: {} }, permissions: [], state: {},
+    ui: { type: "repeat", items: { expr: "[]" }, key: "id", template: { type: "stack", direction: "column", children: [
+      { type: "when", value: { item: "visible" }, child: { type: "text", value: { item: "title" } } },
+      { type: "when", value: { item: "visible" }, child: { type: "text", value: "내용" } },
+    ] } },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const store = createShellStore(transport);
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-repeat")).not.toBeNull());
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: {
+    "/ui/items": { status: "loading" },
+  } } }));
+  expect(view.container.querySelectorAll(".ks-repeat-skeleton-item .ks-repeat-skeleton-line")).toHaveLength(6);
+  store.dispose();
+});
+
 it("더 받을 것이 없는 빈 반복은 is-empty로 표시하고 항목이 생기면 사라진다", async () => {
   const definition: AppDefinition = { id: "repeat-empty", name: "빈 반복", requires: { blocks: 14, modules: {} }, permissions: [], state: { rows: [] as Array<{ id: string }> },
     ui: { type: "repeat", items: { state: "rows" }, key: "id", template: { type: "text", value: { item: "id" } } } };

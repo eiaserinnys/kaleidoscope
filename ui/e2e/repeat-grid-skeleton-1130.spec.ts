@@ -4,7 +4,7 @@ const WINDOW_ID = "repeat-empty-center-window";
 const WHEN_POINTER = "/ui/children/1/value";
 const ITEMS_POINTER = "/ui/children/2/items";
 
-const items = Array.from({ length: 12 }, (_, index) => ({ key: `entry-${index + 1}`, name: `항목 ${index + 1}` }));
+const items = Array.from({ length: 12 }, (_, index) => ({ key: `entry-${index + 1}`, name: `항목 ${index + 1}`, on: true }));
 
 const loading = { [WHEN_POINTER]: { status: "loading" }, [ITEMS_POINTER]: { status: "loading" } } as const;
 const ready = { [WHEN_POINTER]: { status: "ready", value: false }, [ITEMS_POINTER]: { status: "ready", value: items } } as const;
@@ -16,7 +16,7 @@ async function emitState(page: Page, values: Record<string, unknown>) {
 }
 
 // 픽스처를 고치지 않고 하네스로 창 정의만 바꿔 끼운다. 되돌릴 필요가 없도록 시험마다 새 페이지에서 한 번만 바꾼다.
-type RepeatPatch = { layout?: "column"; virtual?: boolean; item_width?: "small"; gap?: "small" };
+type RepeatPatch = { layout?: "column"; virtual?: boolean; item_width?: "small"; gap?: "small"; whenTemplate?: boolean };
 
 async function patchRepeat(page: Page, patch: RepeatPatch) {
   await page.evaluate(async (patch) => {
@@ -28,12 +28,39 @@ async function patchRepeat(page: Page, patch: RepeatPatch) {
     if (patch.virtual !== undefined) repeat.virtual = patch.virtual;
     if (patch.gap !== undefined) repeat.gap = patch.gap;
     if (patch.item_width !== undefined) repeat.grid.item_width = patch.item_width;
+    if (patch.whenTemplate) repeat.template = { type: "when", value: { item: "on" }, child: repeat.template };
     version.version += 1;
     const appWindow = snapshot.shared.windows.find((item: any) => item.id === "repeat-empty-center-window");
     appWindow.app_version = version.version;
     harness.emit({ event: "state.changed", snapshot });
   }, patch);
 }
+
+test("1180×720 열 반복의 when 템플릿도 불러오는 중 칸 높이와 막대를 유지한다", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1182, height: 762 });
+  await page.goto("/?preview=repeat-empty-center");
+  await page.addStyleTag({ content: "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }" });
+  const app = page.getByTestId("app-window-repeat-empty-center");
+  await expect(app.getByText("받은 항목", { exact: true })).toBeVisible();
+  await patchRepeat(page, { layout: "column", whenTemplate: true });
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+
+  await emitState(page, loading);
+  await expect(app.locator(".ks-repeat.is-loading.is-column")).toBeVisible();
+  const loadingMeasure = await measure(app);
+  const visibleBars = await app.locator(".ks-repeat-skeleton-item .ks-repeat-skeleton-line:visible").count();
+  await app.screenshot({ path: testInfo.outputPath("when-column-1180x720-불러오는 중.png") });
+
+  await emitState(page, ready);
+  await expect(app.locator(".ks-repeat-item")).toHaveCount(items.length);
+  const readyMeasure = await measure(app);
+  await app.screenshot({ path: testInfo.outputPath("when-column-1180x720-항목 있음.png") });
+  console.log(`when column 1180x720: ${JSON.stringify({ loading: loadingMeasure.skeletonCells.slice(0, 3), ready: readyMeasure.readyCells.slice(0, 3), visibleBars })}`);
+
+  expect(loadingMeasure.skeletonCells).toHaveLength(3);
+  expect(Math.abs(loadingMeasure.skeletonCells[0].height - readyMeasure.readyCells[0].height), "when 칸 높이 차이").toBeLessThanOrEqual(2);
+  expect(visibleBars, "보이는 뼈대 막대").toBeGreaterThan(0);
+});
 
 type Box = { top: number; left: number; width: number; height: number };
 type Scroll = { scrollHeight: number; clientHeight: number };
