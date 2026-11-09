@@ -1,5 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
 import type { AdoptableConversation, Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload, ShellSnapshot } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
 import { DataState } from "../components/data-state";
@@ -338,8 +338,18 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   };
   const selectedStartProfile = profiles.find((item) => item.id === selectedProfile);
   const selectorsDisabled = busy || switching || loadingChoices || attaching;
-  const selectorRow = (modifier?: string) => (
-    <div className={`ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar${modifier ? ` ${modifier}` : ""}`}>
+  const revealSelectorFocus = (event: FocusEvent<HTMLDivElement>) => {
+    const toolbar = event.currentTarget;
+    const bounds = toolbar.getBoundingClientRect();
+    const focused = event.target.getBoundingClientRect();
+    const style = getComputedStyle(toolbar);
+    const left = bounds.left + parseFloat(style.scrollPaddingInlineStart);
+    const right = bounds.right - parseFloat(style.scrollPaddingInlineEnd);
+    if (focused.left < left) toolbar.scrollLeft += focused.left - left;
+    else if (focused.right > right) toolbar.scrollLeft += focused.right - right;
+  };
+  const selectors = (
+    <>
       <Select
         groups={profileGroups}
         value={agent ? thread?.profile?.id : selectedProfile}
@@ -371,9 +381,16 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
         disabled={selectorsDisabled || modelOptions.length === 0}
         onChange={selectModel}
       />
-      {agent && switching
-        ? <span className="ks-agent-chat-change-hint">바꾸는 중</span>
-        : agent && busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
+    </>
+  );
+  const selectorRow = (modifier?: string) => (
+    <div className={`ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar${modifier ? ` ${modifier}` : ""}`} onFocus={agent ? revealSelectorFocus : undefined}>
+      {agent ? <div className="ks-agent-chat-settings-content">
+        <div className="ks-data-toolbar-group">{selectors}</div>
+        {switching
+          ? <span className="ks-agent-chat-change-hint">바꾸는 중</span>
+          : busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
+      </div> : selectors}
     </div>
   );
 
@@ -530,10 +547,12 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const conversationTitle = attached ? `${title} · ${thread?.model.label ?? ""}` : title;
   const conversationToolbar = () => (
     <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar">
-      <Tooltip content={conversationTitle}>
-        <span tabIndex={0} className="ks-agent-chat-change-hint">{conversationTitle}</span>
-      </Tooltip>
-      <IconButton className="ks-agent-chat-change" aria-label="대화 바꾸기" tooltip="대화 바꾸기" disabled={busy || switching || detaching} onClick={() => void changeConversation()}><DataIcon name="arrow-right-left" /></IconButton>
+      <div className="ks-data-toolbar-group ks-agent-chat-conversation-content">
+        <Tooltip content={conversationTitle}>
+          <span tabIndex={0} className="ks-agent-chat-change-hint">{conversationTitle}</span>
+        </Tooltip>
+        <IconButton className="ks-agent-chat-change" aria-label="대화 바꾸기" tooltip="대화 바꾸기" disabled={busy || switching || detaching} onClick={() => void changeConversation()}><DataIcon name="arrow-right-left" /></IconButton>
+      </div>
     </div>
   );
 

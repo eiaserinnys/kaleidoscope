@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { chromium, expect, test, type Page } from "@playwright/test";
 
 const path = process.env.KS_CONVERSATION_CAPTURES ?? "/tmp/ks-conversation-captures";
 async function open(page: Page, mode: string) {
@@ -169,10 +169,11 @@ test("자기 대화는 두 막대에서 제목과 자연 폭 선택기를 지킨
       await page.setViewportSize({ width, height: width === 1100 ? 700 : 600 });
       const metrics = await settings.evaluate((element) => {
         const style = getComputedStyle(element);
-        const buttons = [...element.querySelectorAll<HTMLButtonElement>(":scope > button")];
+        const buttons = [...element.querySelectorAll<HTMLButtonElement>(".ks-select-button")];
         const controls = buttons.map((button) => ({ name: button.getAttribute("aria-label"), text: button.textContent, width: button.getBoundingClientRect().width }));
         const hint = element.querySelector<HTMLElement>(".ks-agent-chat-change-hint");
-        const gaps = parseFloat(style.columnGap) * (element.children.length - 1);
+        const group = element.querySelector<HTMLElement>(".ks-data-toolbar-group")!;
+        const gaps = parseFloat(getComputedStyle(group).columnGap) * (buttons.length - 1);
         const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
         return { innerWidth: element.clientWidth - padding, controls, hintWidth: hint?.getBoundingClientRect().width ?? 0, gaps, scroll: element.scrollWidth - element.clientWidth, height: element.getBoundingClientRect().height };
       });
@@ -199,6 +200,102 @@ test("자기 대화는 두 막대에서 제목과 자연 폭 선택기를 지킨
       expect(await change.evaluate((element) => element.classList.contains("ks-icon-button"))).toBe(true);
     }
   }
+});
+
+test.describe("실제 스크롤바가 있는 대화 머리", () => {
+  test("막대 높이와 안내 글은 공간에 맞게 유지된다", async () => {
+    const browser = await chromium.launch({ ignoreDefaultArgs: ["--hide-scrollbars"] });
+    const page = await browser.newPage({ baseURL: `http://127.0.0.1:${process.env.KS_E2E_PORT ?? 5173}` });
+    try {
+    const chat = await open(page, "ready");
+    await expect(chat.getByText("기존 기록")).toBeVisible();
+    const settings = chat.locator(".ks-agent-chat-toolbar").nth(1);
+    const profile = chat.getByRole("button", { name: "프로필" });
+    const place = chat.getByRole("button", { name: "실행 위치" });
+    const model = chat.getByRole("button", { name: "모델" });
+    await profile.click();
+    await page.getByRole("menuitem", { name: "키키" }).click();
+    await chat.getByRole("button", { name: "바꾸기", exact: true }).click();
+    await expect(profile).toContainText("키키");
+    await place.click();
+    await page.getByRole("menuitem", { name: "eias-linegames" }).click();
+    await chat.getByRole("button", { name: "바꾸기", exact: true }).click();
+    await expect(model).toContainText("Argon");
+    await page.setViewportSize({ width: 360, height: 600 });
+    const dimensions = await settings.evaluate((element) => {
+      const toolbar = element as HTMLElement;
+      const bounds = toolbar.getBoundingClientRect();
+      const button = toolbar.querySelector<HTMLButtonElement>('[aria-label="프로필"]')!.getBoundingClientRect();
+      const reference = document.createElement("div");
+      reference.className = "ks-data-toolbar";
+      reference.style.width = `${bounds.width}px`;
+      const group = document.createElement("div");
+      group.className = "ks-data-toolbar-group is-start";
+      for (const control of toolbar.querySelectorAll(".ks-select-button")) group.appendChild(control.cloneNode(true));
+      reference.appendChild(group);
+      document.body.appendChild(reference);
+      const refBounds = reference.getBoundingClientRect();
+      const refButton = reference.querySelector("button")!.getBoundingClientRect();
+      const result = {
+        height: toolbar.offsetHeight, scrollbar: toolbar.offsetHeight - toolbar.clientHeight - parseFloat(getComputedStyle(toolbar).borderBottomWidth),
+        top: button.top - bounds.top, bottom: bounds.bottom - button.bottom,
+        reference: { height: reference.offsetHeight, top: refButton.top - refBounds.top, bottom: refBounds.bottom - refButton.bottom },
+      };
+      reference.remove();
+      return result;
+    });
+    console.log(`실제 스크롤바 막대: ${JSON.stringify(dimensions)}`);
+    await page.screenshot({ path: `${path}/real-scrollbar-long-360.png` });
+    expect(dimensions.scrollbar).toBeGreaterThan(0);
+    expect(dimensions.height).toBe(49);
+    expect(dimensions.top).toBeCloseTo(dimensions.reference.top, 1);
+    expect(dimensions.bottom).toBeCloseTo(dimensions.reference.bottom, 1);
+    await place.focus();
+    await page.keyboard.press("Tab");
+    await expect(model).toBeFocused();
+    const focus = await settings.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const button = element.querySelector('[aria-label="모델"]')!.getBoundingClientRect();
+      return { right: bounds.right - button.right, scrollLeft: element.scrollLeft };
+    });
+    console.log(`모델 초점: ${JSON.stringify(focus)}`);
+    await page.screenshot({ path: `${path}/real-scrollbar-focus-360.png` });
+    expect(focus.right).toBeGreaterThanOrEqual(2);
+
+    await page.evaluate(() => (window as any).conversationHarness.setBusy(true));
+    await expect(profile).toBeDisabled();
+    for (const width of [360, 370, 400, 510, 1100]) {
+      await page.setViewportSize({ width, height: 600 });
+      const hint = await settings.locator(".ks-agent-chat-change-hint").evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const parent = element.parentElement!.getBoundingClientRect();
+        return { width: rect.width, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, visible: rect.width > 0 && rect.height > 0 && rect.top < parent.bottom && rect.bottom > parent.top, fits: rect.left >= parent.left && rect.right <= parent.right };
+      });
+      console.log(`안내 글 busy ${width}: ${JSON.stringify(hint)}`);
+      expect(!hint.visible || (hint.fits && hint.scrollWidth <= hint.clientWidth && hint.width >= hint.scrollWidth)).toBe(true);
+      await page.screenshot({ path: `${path}/hint-busy-${width}.png` });
+    }
+    await page.evaluate(() => (window as any).conversationHarness.setBusy(false));
+    await expect(profile).toBeEnabled();
+    for (const [index, width] of [360, 370, 400, 510, 1100].entries()) {
+      await page.setViewportSize({ width, height: 600 });
+      await profile.click();
+      await page.getByRole("menuitem", { name: index % 2 === 0 ? "서소영" : "키키" }).click();
+      await chat.getByRole("button", { name: "바꾸기", exact: true }).click();
+      const hint = await settings.locator(".ks-agent-chat-change-hint").evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const parent = element.parentElement!.getBoundingClientRect();
+        return { width: rect.width, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, visible: rect.width > 0 && rect.height > 0 && rect.top < parent.bottom && rect.bottom > parent.top, fits: rect.left >= parent.left && rect.right <= parent.right };
+      });
+      console.log(`안내 글 switching ${width}: ${JSON.stringify(hint)}`);
+      expect(!hint.visible || (hint.fits && hint.scrollWidth <= hint.clientWidth && hint.width >= hint.scrollWidth)).toBe(true);
+      await page.screenshot({ path: `${path}/hint-switching-${width}.png` });
+      await expect(profile).toBeEnabled();
+    }
+    } finally {
+      await browser.close();
+    }
+  });
 });
 
 test("연결하는 중에는 시작과 고른 줄을 잠근다", async ({ page }) => {
