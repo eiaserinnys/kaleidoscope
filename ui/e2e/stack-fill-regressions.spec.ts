@@ -50,3 +50,62 @@ test("채움이 최소에 닿아도 결정 줄을 남기고 위 내용만 스크
   await expect(button).toBeFocused();
   await app.screenshot({path:info.outputPath("action-tail.png")});
 });
+
+test("결정 줄이 붙은 stack에서 fill 칸이 결정 줄 위까지 채운다", async ({ page }, info) => {
+  await page.setViewportSize({ width: 1040, height: 700 });
+  await page.goto("/?preview=stack-action-tail-fill");
+  const app = page.getByTestId("app-window-stack-action-tail-fill");
+  const m = await app.evaluate(root => {
+    const header = [...root.querySelectorAll(".ks-data-section > .ks-data-section-header")].find(h => h.textContent!.trim() === "메모")!;
+    const section = header.parentElement as HTMLElement;
+    const item = section.parentElement as HTMLElement;
+    const content = item.parentElement as HTMLElement;
+    const wrapper = content.parentElement as HTMLElement;
+    const toolbar = root.querySelector(".ks-data-toolbar") as HTMLElement;
+    const child = section.querySelector(":scope > .ks-data-section-child") as HTMLElement;
+    const rect = (el: HTMLElement) => el.getBoundingClientRect();
+    return {
+      wrapper: wrapper.className, content: content.className,
+      wrapperHeight: rect(wrapper).height, contentHeight: rect(content).height,
+      itemBottom: rect(item).bottom, contentBottom: rect(content).bottom,
+      memoHeight: rect(section).height, toolbarTop: rect(toolbar).top,
+      childScroll: child.scrollHeight - child.clientHeight,
+    };
+  });
+  // 스크롤 래퍼가 배분된 높이를 갖고(기준 0), 그 안의 fill 칸이 래퍼 바닥까지 자란다.
+  expect(m.wrapper).toContain("ks-stack-scroll");
+  expect(m.content).toContain("ks-stack-scroll-content");
+  expect(Math.abs(m.contentHeight - m.wrapperHeight)).toBeLessThanOrEqual(1);
+  expect(Math.abs(m.itemBottom - m.contentBottom)).toBeLessThanOrEqual(1);
+  expect(m.toolbarTop - m.itemBottom).toBeLessThanOrEqual(16);
+  expect(m.childScroll).toBeLessThanOrEqual(1);
+  await app.screenshot({ path: info.outputPath("action-tail-fill-wide.png") });
+});
+
+test("좁은 창에서 결정 줄이 붙은 stack은 쌓인 꼴로 결정 줄을 남긴다", async ({ page }, info) => {
+  await page.setViewportSize({ width: 380, height: 700 });
+  await page.goto("/?preview=stack-action-tail-fill");
+  const app = page.getByTestId("app-window-stack-action-tail-fill");
+  await expect(app.locator(".ks-split.is-stacked")).toHaveCount(1);
+  const button = app.getByRole("button", { name: "지우기", exact: true });
+  await expect(button).toBeVisible();
+  const m = await app.evaluate(root => {
+    const header = [...root.querySelectorAll(".ks-data-section > .ks-data-section-header")].find(h => h.textContent!.trim() === "메모")!;
+    const section = header.parentElement as HTMLElement;
+    const content = section.parentElement!.parentElement as HTMLElement;
+    const wrapper = content.parentElement as HTMLElement;
+    const toolbar = root.querySelector(".ks-data-toolbar") as HTMLElement;
+    const rect = (el: HTMLElement) => el.getBoundingClientRect();
+    return {
+      wrapperHeight: rect(wrapper).height, contentHeight: rect(content).height,
+      memoHeight: rect(section).height, memoBottom: rect(section).bottom, toolbarTop: rect(toolbar).top,
+    };
+  });
+  // 쌓인 꼴에서도 내용이 래퍼를 채우고, 결정 줄은 접히지 않고 메모 아래에 남는다.
+  expect(m.wrapperHeight).toBeGreaterThan(0);
+  expect(m.memoHeight).toBeGreaterThan(0);
+  expect(Math.abs(m.contentHeight - m.wrapperHeight)).toBeLessThanOrEqual(1);
+  expect(m.toolbarTop).toBeGreaterThanOrEqual(m.memoBottom);
+  expect((await button.boundingBox())!.height).toBeGreaterThan(0);
+  await app.screenshot({ path: info.outputPath("action-tail-fill-narrow.png") });
+});
