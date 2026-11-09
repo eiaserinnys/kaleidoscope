@@ -286,3 +286,16 @@ it("repeat은 명시한 gap을 항목 간격으로 표시한다", async () => {
   expect(view.container.querySelector(".ks-repeat")?.classList.contains("gap-large")).toBe(true);
   store.dispose();
 });
+
+it("더 받을 것이 없는 빈 반복은 is-empty로 표시하고 항목이 생기면 사라진다", async () => {
+  const definition: AppDefinition = { id: "repeat-empty", name: "빈 반복", requires: { blocks: 14, modules: {} }, permissions: [], state: { rows: [] as Array<{ id: string }> },
+    ui: { type: "repeat", items: { state: "rows" }, key: "id", template: { type: "text", value: { item: "id" } } } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = definition.state;
+  const store = createShellStore(createFakeTransport(seed));
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-repeat")?.classList.contains("is-empty")).toBe(true));
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { rows: [{ id: "a" }] } }); });
+  await waitFor(() => expect(view.container.querySelector(".ks-repeat.is-empty")).toBeNull());
+  store.dispose();
+});
