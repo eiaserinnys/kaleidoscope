@@ -694,7 +694,7 @@ describe("실제 Shell의 블록 렌더 격리", () => {
     fireEvent.pointerDown(title, { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 130, clientY: 130 });
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 130, clientY: 130 });
-    const resize = window.querySelector(".ks-window-resize-corner")!;
+    const resize = window.querySelector(".ks-window-resize-south-east")!;
     fireEvent.pointerDown(resize, { pointerId: 2, button: 0, clientX: 400, clientY: 300 });
     fireEvent.pointerMove(window, { pointerId: 2, clientX: 440, clientY: 330 });
     fireEvent.pointerUp(window, { pointerId: 2, clientX: 440, clientY: 330 });

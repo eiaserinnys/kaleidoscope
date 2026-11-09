@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """설정 창의 「화면」 묶음과 테마 줄, 라이트와 다크에서 쉘과 기본 앱 창의 글자 대비를 확인하고 캡처한다.
 
-  python3 -P scripts/visual-check/check_theme.py --src <쉘 판 폴더> [--output 산출폴더] [--only settings|apps|all]
+  python3 -P scripts/visual-check/check_theme.py --src <쉘 판 폴더> [--output 산출폴더] [--only settings|apps|content|material|interact|r2|all]
 
 - --src: 바이너리(kaleidoscope-orchestrator, kaleidoscope-devbridge)와 node_modules가 준비된 쉘 판.
   kaleidoscope-app 스킬의 `sandbox.py prepare --ref <sha>` 캐시 폴더(~/.cache/kaleidoscope-sandbox/<sha>)를 주거나,
@@ -12,6 +12,9 @@
 - 글자 대비는 화면 픽셀로 잰다. 보통 화면과 글자만 투명하게 만든 화면을 찍어, 글자 자리의 배경색 중앙값 위에
   글자 색(투명도와 조상 opacity 반영)을 얹어 WCAG 대비를 계산한다. 4.5 미만(큰 글자 3 미만)을 낮은 대비로 남기고,
   낮은 대비 글자에 빨간 상자를 그린 `*-low.png`를 함께 남긴다.
+- `--only material`: 창 두 개를 겹쳐 뒤 창의 내용 바탕만 밝은색과 어두운색으로 바꾼 장면과, 앞 창만 남긴
+  기본 배경 그림 위 장면에서 창 머리(맨 위 창과 맨 위 아닌 창의 제목·메타)와 본문 글자의 대비를 잰다.
+  재질 알파를 바꿀 때 이 장면으로 전후를 비교한다.
 """
 import argparse
 import importlib.util
@@ -336,6 +339,84 @@ def run_apps(sb, page, output, result, folder):
         page.wait_for_timeout(500)
 
 
+def open_material_window(sb, page, desktop, rect):
+    opened = sb.core({"op": "window.open", "desktop_id": desktop, "app_id": "md-editor", "rect": rect})
+    if "window" not in opened:
+        raise AssertionError(f"창을 열지 못했습니다: {opened}")
+    window_id = opened["window"]["id"]
+    definition = json.loads((ROOT / "apps" / "md-editor.json").read_text(encoding="utf-8"))
+    for perm in (p["id"] for p in definition.get("permissions", []) if p.get("module") == "files"):
+        sb.core({"op": "files.pick_folder", "window_id": window_id, "permission": perm})
+    root = page.locator(f'section.ks-window[data-window-id="{window_id}"]')
+    root.wait_for(state="visible", timeout=60000)
+    page.wait_for_timeout(1200)
+    root.get_by_role("tab", name="내 폴더").click(timeout=20000)
+    page.wait_for_timeout(1500)
+    root.get_by_text("긴 문서.md").first.click(timeout=20000)
+    page.wait_for_timeout(2500)
+    return window_id, root
+
+
+def run_material(sb, page, output, result):
+    """창 재질 뒤에 밝거나 어두운 내용의 창, 기본 배경 그림이 올 때 창 머리와 본문 글자 대비를 잰다.
+
+    겹친 창 장면은 앞 창의 반투명 재질이 뒤 창의 내용을 얼마나 비추는지 재기 위한 것이다.
+    뒤 창의 내용 바탕만 밝은색과 어두운색으로 바꾼다(제품 화면이 아니라 측정 장면).
+    """
+    out = result.setdefault("material", {})
+    snapshot = sb.snapshot()
+    workspace = snapshot["device"]["active_workspace_id"]
+    desktop = snapshot["device"]["active_desktop_ids"][workspace]
+    errors = []
+    back_id, back = None, None
+    try:
+        back_id, back = open_material_window(sb, page, desktop, {"x": 120, "y": 80, "width": 700, "height": 480})
+    except Exception as error:  # noqa: BLE001 - 장면을 못 만들면 사유를 남기고 다음 장면으로 간다
+        errors.append(f"뒤 창: {str(error)[:300]}")
+    try:
+        front_id, front = open_material_window(sb, page, desktop, {"x": 340, "y": 280, "width": 700, "height": 480})
+    except Exception as error:  # noqa: BLE001
+        errors.append(f"앞 창: {str(error)[:300]}")
+        out["errors"] = errors
+        return
+    out["windows"] = {"front": front_id, "back": back_id}
+    for scheme in SCHEMES:
+        page.emulate_media(color_scheme=scheme)
+        page.wait_for_timeout(500)
+        # 측정용 색을 넣기 전, 운영 형태(문서를 연 편집기 두 창이 배경 그림 위에 겹친) 화면을 남긴다.
+        page.screenshot(path=str(output / f"material-{scheme}-overlap.png"))
+        if back_id is not None:
+            for scene, color in (("bright-content", "#ffffff"), ("dark-content", "#141018")):
+                page.emulate_media(color_scheme=scheme)
+                page.wait_for_timeout(400)
+                style = page.add_style_tag(content=(
+                    f'section.ks-window[data-window-id="{back_id}"] .ks-window-content {{ background: {color} !important; }}'))
+                page.wait_for_timeout(500)
+                shot = f"material-{scheme}-{scene}"
+                page.screenshot(path=str(output / f"{shot}.png"))
+                out[f"{scheme}-{scene}"] = {
+                    "back_title": measure_contrast(page, back.locator(".ks-window-titlebar"), output, f"{shot}-back-title"),
+                    "front_title": measure_contrast(page, front.locator(".ks-window-titlebar"), output, f"{shot}-front-title"),
+                    "front_body": measure_contrast(page, front.locator(".ks-window-content"), output, f"{shot}-front-body"),
+                }
+                style.evaluate("el => el.remove()")
+                page.wait_for_timeout(200)
+    if back_id is not None:
+        sb.core({"op": "window.close", "window_id": back_id})
+        wait_until(lambda: page.locator(f'section.ks-window[data-window-id="{back_id}"]').count() == 0, 20, "뒤 창 닫기")
+        back_id = None
+    for scheme in SCHEMES:
+        page.emulate_media(color_scheme=scheme)
+        page.wait_for_timeout(500)
+        shot = f"material-{scheme}-wallpaper"
+        page.screenshot(path=str(output / f"{shot}.png"))
+        out[f"{scheme}-wallpaper"] = {
+            "front_title": measure_contrast(page, front.locator(".ks-window-titlebar"), output, f"{shot}-front-title"),
+            "front_body": measure_contrast(page, front.locator(".ks-window-content"), output, f"{shot}-front-body"),
+        }
+    out["errors"] = errors
+
+
 def run_interact(sb, page, output, result):
     """새 테마 줄의 키보드 초점, 화살표와 Space 선택, 더블클릭 글자 선택을 본다."""
     out = result.setdefault("interact", {})
@@ -493,7 +574,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--src", type=Path, default=ROOT)
     parser.add_argument("--output", type=Path, default=ROOT / "target/visual-check/theme")
-    parser.add_argument("--only", choices=("settings", "apps", "content", "interact", "r2", "all"), default="all")
+    parser.add_argument("--only", choices=("settings", "apps", "content", "material", "interact", "r2", "all"), default="all")
     parser.add_argument("--viewport", default="1440x900")
     args = parser.parse_args()
     VIEWPORT[0], VIEWPORT[1] = (int(v) for v in args.viewport.split("x"))
@@ -534,6 +615,8 @@ def main():
                     run_interact(sb, page, output, result)
                 if args.only in ("content", "all"):
                     run_content(sb, page, output, result)
+                if args.only in ("material", "all"):
+                    run_material(sb, page, output, result)
                 if args.only == "r2":
                     run_r2(sb, page, output, result, args.viewport)
                 if args.only in ("settings", "all"):

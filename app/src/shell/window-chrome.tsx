@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
 import { IconButton, Maximize2, Minus, Minimize2, X, openContextMenu, type MenuEntry, type Rect } from "@kaleidoscope/ui";
-import { fitWindowRect, usableWindowArea } from "./window-geometry";
+import { fitWindowRect, resizeWindowRect, usableWindowArea, RESIZE_EDGES, type WindowResizeEdge } from "./window-geometry";
 
 export interface WindowChromeProps {
   area: { width: number; height: number }; rect: Rect; maximized: boolean; minimized: boolean;
@@ -14,7 +14,7 @@ export interface WindowChromeProps {
 }
 
 type Gesture = {
-  kind: "move" | "east" | "south" | "corner";
+  kind: "move" | WindowResizeEdge;
   pointerId: number;
   startX: number;
   startY: number;
@@ -69,18 +69,10 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
         y: gesture.startRect.y + dy,
       }, area);
     } else {
-      const minWidth = tokenPixels(MIN_WIDTH, titleRef.current);
-      const minHeight = tokenPixels(MIN_HEIGHT, titleRef.current);
-      const usable = usableWindowArea(area);
-      const maxWidth = usable.x + usable.width - gesture.startRect.x;
-      const maxHeight = usable.y + usable.height - gesture.startRect.y;
-      next = {
-        ...gesture.startRect,
-        width: gesture.kind === "south" ? gesture.startRect.width : clamp(Math.round(gesture.startRect.width + dx), Math.min(minWidth, maxWidth), maxWidth),
-        height: gesture.kind === "east"
-          ? gesture.startRect.height
-          : clamp(Math.round(gesture.startRect.height + dy), Math.min(minHeight, maxHeight), maxHeight),
-      };
+      next = resizeWindowRect(gesture.startRect, RESIZE_EDGES[gesture.kind], dx, dy, {
+        width: tokenPixels(MIN_WIDTH, titleRef.current),
+        height: tokenPixels(MIN_HEIGHT, titleRef.current),
+      }, usableWindowArea(area));
     }
 
     previewRef.current = next;
@@ -93,13 +85,8 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
     gestureRef.current = null;
     const next = fitWindowRect(previewRef.current ?? gesture.startRect, area);
     previewRef.current = next;
-    const changed = gesture.kind === "move"
-      ? next.x !== gesture.startRect.x || next.y !== gesture.startRect.y
-      : gesture.kind === "east"
-        ? next.width !== gesture.startRect.width
-        : gesture.kind === "south"
-          ? next.height !== gesture.startRect.height
-          : next.width !== gesture.startRect.width || next.height !== gesture.startRect.height;
+    const changed = next.x !== gesture.startRect.x || next.y !== gesture.startRect.y
+      || next.width !== gesture.startRect.width || next.height !== gesture.startRect.height;
     if (changed) {
       void onRectCommit(next).then((accepted) => {
         if (!accepted && !gestureRef.current && previewRef.current === next) {
@@ -126,6 +113,9 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
     onPointerDownCapture={(event) => {
       if (pointerGuard?.(event)) return;
       if (isTop) return;
+      // 최소화와 닫기는 누르는 순간 창을 올리지 않는다. 올리기 요청이 뒤늦게 도착하면
+      // 펼쳐지거나 닫으려던 창이 다시 나타난다.
+      if (event.target instanceof Element && event.target.closest('[data-window-control="minimize"], [data-window-control="close"]')) return;
       // 사용자가 다른 창을 고르면 가려지는 창의 입력칸이 초점을 쥐고 있지 않게 한다.
       // 초점이 없으면 맨 위가 되는 순간 window-focus가 이 창의 마지막 초점이나 첫 내용으로 옮긴다.
       const active = document.activeElement;
@@ -150,18 +140,23 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
         <div className="ks-window-title-group"><span className="ks-window-title" title={title}>{title}</span>
           {meta ? <span className="ks-window-title-meta" title={meta}>{meta}</span> : null}</div>
         <div className="ks-window-title-actions">{titleActions}
-          <IconButton aria-label="창 최소화" title="창 최소화" onClick={onMinimize}><Minus size="chrome" /></IconButton>
+          <IconButton aria-label="창 최소화" data-window-control="minimize" title="창 최소화" onClick={onMinimize}><Minus size="chrome" /></IconButton>
           <IconButton aria-label={maximized ? "이전 크기로 복원" : "창 최대화"} title={maximized ? "이전 크기로 복원" : "창 최대화"} onClick={maximized ? onRestore : onMaximize}>{maximized ? <Minimize2 size="chrome" /> : <Maximize2 size="chrome" />}</IconButton>
-          <IconButton aria-label="창 닫기" title="창 닫기" onClick={onClose}><X size="chrome" /></IconButton>
+          <IconButton aria-label="창 닫기" data-window-control="close" title="창 닫기" onClick={onClose}><X size="chrome" /></IconButton>
         </div>
       </header>
       <div className="ks-window-content" ref={contentRef} tabIndex={-1}>{children}</div>
       {overlays}
     </div>
     {outerOverlays}
-    {!maximized ? <div aria-hidden="true" className="ks-window-resize-east" onPointerDown={(event) => beginGesture("east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-north" onPointerDown={(event) => beginGesture("north", event)} /> : null}
     {!maximized ? <div aria-hidden="true" className="ks-window-resize-south" onPointerDown={(event) => beginGesture("south", event)} /> : null}
-    {!maximized ? <div aria-hidden="true" className="ks-window-resize-corner" onPointerDown={(event) => beginGesture("corner", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-east" onPointerDown={(event) => beginGesture("east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-west" onPointerDown={(event) => beginGesture("west", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-north-east" onPointerDown={(event) => beginGesture("north-east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-north-west" onPointerDown={(event) => beginGesture("north-west", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-south-east" onPointerDown={(event) => beginGesture("south-east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-south-west" onPointerDown={(event) => beginGesture("south-west", event)} /> : null}
   </section>;
 }
 
@@ -169,8 +164,4 @@ function tokenPixels(name: string, element: HTMLElement | null): number {
   if (!element || typeof getComputedStyle !== "function") return 0;
   const value = getComputedStyle(element).getPropertyValue(name).trim();
   return Number.parseFloat(value) || 0;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }
