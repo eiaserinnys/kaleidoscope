@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 34판, 261105)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 46판, 261109)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -121,6 +121,13 @@
 //! # 계약 26판: 창 상태 이행 식과 머리 없는 탭
 //! 앱 판을 올릴 때 옛 상태에 없는 키의 값을 계산하는 `state_migrate`, 파일을 열 때 경로와 같이 쓰는 `opens.set_state`,
 //! 방문한 탭을 유지하는 `tabs.keep_mounted`와 탭 줄을 숨기는 `tabs.header`를 더한다. 새 필드는 블록 세트 15판이다.
+//!
+//! # 계약 46판: 기존 대화 연결
+//! 작업이 새 대화를 시작하는 것 말고 제공자에 이미 있는 대화를 연결할 수 있다. `conversation.get`은 연결할 수 있는
+//! 대화 목록(`adoptable`), 이 작업이 가진 대화(`own`), 지금 연결한 대화인지(`attached`)를 함께 돌려준다.
+//! `conversation.attach`와 `conversation.detach`를 더하고, 모듈 `agent` 4판은 연결한 대화에 말마다 덧붙이는 글
+//! (`attached_instructions_template`)을 받는다. 연결한 대화는 이 작업의 것이 아니므로 이름, 프로필, 모델,
+//! 지침을 바꾸지 않는다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -251,7 +258,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 45;
+pub const CONTRACT_VERSION: u32 = 46;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -385,6 +392,7 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// - `agent` 1판과 2판: 옛 서버 중계용이며 18판부터 사용하지 않는다.
 /// - `web` 1판: 창 안에 웹 페이지를 띄우는 웹 화면(`web.*` 명령). 쉘이 그린 화면 위에 따로 뜬다.
 /// - `agent` 3판: `conversation-v1` 제공자 설정과 `window_id` 기반 대화 명령. 옛 `workspace_id` 명령은 이행 중 유지한다.
+/// - `agent` 4판: 3판 + 연결한 대화에 말마다 덧붙이는 글(`attached_instructions_template`).
 /// - `storage` 1판: 계정 × 앱 저장소의 선언과 읽기, CAS 쓰기, 초기화.
 /// - `storage` 2판: 1판 + 저장 항목의 설정 화면 보조 글과 선택지 바인딩.
 /// - `connection` 1판: 서버에 등록한 이름 붙인 연결(`connection` 권한). 원천 받기, 동작의 연결 부르기,
@@ -404,7 +412,7 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 ///   `shell.add_shortcut`.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 4),
-    ("agent", 3),
+    ("agent", 4),
     ("web", 1),
     ("connection", realtime::REALTIME_CONNECTION_VERSION),
     ("storage", 3),
@@ -1293,6 +1301,11 @@ pub struct AgentProvider {
     #[schemars(schema_with = "agent_binding_schema")]
     #[ts(as = "AgentBinding")]
     pub instructions_template: Binding,
+    /// 연결한 대화에 말마다 덧붙이는 글. `{workspace.id}`, `{workspace.name}`을 바꿔 넣는다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "agent_optional_binding_schema")]
+    #[ts(optional, as = "Option<AgentBinding>")]
+    pub attached_instructions_template: Option<Binding>,
     /// 현재 작업에 thread id를 저장하는 JSON 항목 id.
     pub thread_entry: String,
 }
@@ -1305,6 +1318,17 @@ fn agent_binding_schema(generator: &mut schemars::SchemaGenerator) -> schemars::
     );
     schema.insert("description".into(), serde_json::json!("리터럴 또는 $storage와 $storage_meta를 읽는 식. $state, $data, $event, $item은 사용할 수 없다."));
     schema
+}
+
+fn agent_optional_binding_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut binding = agent_binding_schema(generator);
+    binding.insert("description".into(), serde_json::json!("연결한 대화에 말마다 덧붙이는 글. {workspace.id}, {workspace.name}을 바꿔 넣는다."));
+    schemars::Schema::from(
+        serde_json::json!({"anyOf": [serde_json::to_value(&binding).unwrap(), {"type": "null"}]})
+            .as_object()
+            .cloned()
+            .unwrap(),
+    )
 }
 
 /// 저장소 문서를 참조한다. `entry`는 앱의 저장 항목 id이고, 문서 모음에서는 `doc`에 문서 이름을 준다.
@@ -5043,6 +5067,12 @@ pub enum CoreRequest {
         #[ts(optional)]
         model: Option<String>,
     },
+    /// 제공자에 이미 있는 대화를 이 창의 작업에 연결한다.
+    #[serde(rename = "conversation.attach")]
+    ConversationAttach { window_id: String, thread_id: String },
+    /// 연결을 풀고 이 작업이 가진 대화로 돌아간다. 제공자의 대화는 그대로 둔다.
+    #[serde(rename = "conversation.detach")]
+    ConversationDetach { window_id: String },
     /// 요청 식별자와 글, 첨부를 제공자에 보낸다.
     #[serde(rename = "conversation.send")]
     ConversationSend {
@@ -5989,6 +6019,16 @@ pub enum CoreReply {
         models: Vec<conversation::ConversationModel>,
         profiles: Vec<conversation::ConversationProfile>,
         start: conversation::ConversationStart,
+        /// 지금 대화가 이 작업에 연결한 다른 대화인지.
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        attached: bool,
+        /// 이 작업이 가진 대화. 연결 중이거나 대화가 없으면 null.
+        #[serde(default)]
+        own: Option<conversation::ConversationThread>,
+        /// 이 작업에 연결할 수 있는 다른 대화.
+        #[serde(default)]
+        adoptable: Vec<conversation::AdoptableConversation>,
     },
     #[serde(rename = "conversation.history")]
     ConversationHistory {
@@ -6006,6 +6046,12 @@ pub enum CoreReply {
         thread: conversation::ConversationThread,
         notices: Vec<String>,
     },
+    #[serde(rename = "conversation.attach")]
+    ConversationAttach {
+        thread: conversation::ConversationThread,
+    },
+    #[serde(rename = "conversation.detach")]
+    ConversationDetach {},
     #[serde(rename = "conversation.send")]
     ConversationSend {},
     #[serde(rename = "conversation.attachment")]

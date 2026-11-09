@@ -124,6 +124,22 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
         ));
     }
 
+    if definition
+        .agent
+        .as_ref()
+        .and_then(|agent| agent.attached_instructions_template.as_ref())
+        .is_some()
+        && definition
+            .requires
+            .modules
+            .get("agent")
+            .copied()
+            .unwrap_or(0)
+            < 4
+    {
+        return Err(crate::errors::APP_AGENT_ATTACHED_INSTRUCTIONS_VERSION_LOW(4));
+    }
+
     if let Some(badge) = &definition.badge {
         if definition.requires.blocks < crate::APP_BADGE_BLOCK_SET_VERSION {
             return Err(crate::errors::APP_BADGE_VERSION_LOW(crate::APP_BADGE_BLOCK_SET_VERSION, crate::APP_BADGE_BLOCK_SET_VERSION));

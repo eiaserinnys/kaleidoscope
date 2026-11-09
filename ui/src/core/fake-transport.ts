@@ -1,4 +1,5 @@
 import type {
+  AdoptableConversation,
   AppDefinition,
   AppWindow,
   ConversationItem, ConversationModel, ConversationThread, ConversationUpload,
@@ -60,6 +61,12 @@ export interface FakeConversationSeed {
   sendDelayMs?: number;
   sendError?: string;
   draft?: { request_id: string; text: string; attachments: ConversationUpload[]; failed: boolean };
+  /** 연결한 대화임을 표시한다. 없으면 이 작업이 만든 대화다. */
+  attached?: boolean;
+  /** 이 작업이 이미 가진 대화. 시작 판에서 다시 연결할 수 있다. */
+  own?: ConversationThread | null;
+  /** 연결할 수 있는 다른 대화. */
+  adoptable?: AdoptableConversation[];
 }
 
 export interface FakeTransport extends CoreTransport {
@@ -428,7 +435,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (conversation.getError) return fail("server", conversation.getError);
         if (conversation.draft) emit({ event: "conversation.draft", window_id: request.window_id, ...conversation.draft });
         watchConversation();
-        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models), profiles: clone(conversation.profiles ?? []), start: clone(conversation.start ?? { profile: conversation.profiles?.find((profile) => profile.available)?.id ?? "", model: conversation.models.find((model) => model.available)?.id ?? null }) };
+        return { op: "conversation.get", thread: clone(conversation.thread), items: clone(conversation.items), cursor: "1", next_before: conversationOlderPages.length ? "older-0" : undefined, models: clone(conversation.models), profiles: clone(conversation.profiles ?? []), start: clone(conversation.start ?? { profile: conversation.profiles?.find((profile) => profile.available)?.id ?? "", model: conversation.models.find((model) => model.available)?.id ?? null }), attached: Boolean(conversation.attached), own: conversation.thread ? null : clone(conversation.own ?? null), adoptable: conversation.thread ? [] : clone(conversation.adoptable ?? []) };
       }
       case "conversation.history": {
         if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
@@ -445,6 +452,32 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         conversation.thread ??= { id: "fake-thread", external: { namespace: "fake", key: request.window_id }, title: "대화", model: { id: model.id, label: model.label, group: model.group }, profile: conversation.profiles?.find((profile) => profile.id === request.profile) ? { id: request.profile!, label: conversation.profiles.find((profile) => profile.id === request.profile)!.label } : undefined, created_at: new Date().toISOString(), archived: false };
         watchConversation();
         return { op: "conversation.create", thread: clone(conversation.thread) };
+      }
+      case "conversation.attach": {
+        if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
+        if (conversation.delayMs) await delay(conversation.delayMs);
+        if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
+        const candidate = [conversation.own ?? null, ...(conversation.adoptable ?? [])].find((item) => item?.id === request.thread_id);
+        if (!candidate) return fail("not_found", "고른 대화를 찾을 수 없습니다");
+        const fallback = conversation.models.find((item) => item.available);
+        conversation.thread = {
+          id: candidate.id,
+          external: { namespace: "fake-attached", key: candidate.id },
+          title: candidate.title,
+          model: candidate.model ?? { id: fallback?.id ?? "", label: fallback?.label ?? "", group: fallback?.group },
+          profile: candidate.profile,
+          created_at: "updated_at" in candidate ? candidate.updated_at : candidate.created_at,
+          archived: false,
+        };
+        conversation.attached = true;
+        watchConversation();
+        return { op: "conversation.attach", thread: clone(conversation.thread) };
+      }
+      case "conversation.detach": {
+        if (!conversation) return fail("unavailable", "대화를 사용할 수 없습니다");
+        conversation.thread = null;
+        conversation.attached = false;
+        return { op: "conversation.detach" };
       }
       case "conversation.switch": {
         if (!conversation?.thread) return fail("not_found", "대화가 없습니다");

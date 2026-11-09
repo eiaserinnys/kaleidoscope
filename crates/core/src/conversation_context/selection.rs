@@ -135,6 +135,9 @@ impl Context {
         requested_profile: Option<&str>,
         requested_model: Option<&str>,
     ) -> Result<(ConversationThread, Vec<String>), CoreError> {
+        if self.attached(inner)? {
+            return Err(kaleidoscope_contract::errors::CONV_SWITCH_ATTACHED());
+        }
         let thread = self.thread(inner, namespace)?.ok_or_else(|| {
             kaleidoscope_contract::errors::CONV_SELECTION_THREAD_NOT_FOUND(&self.workspace.name)
         })?;

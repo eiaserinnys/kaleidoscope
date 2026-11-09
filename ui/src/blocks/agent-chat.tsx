@@ -1,6 +1,6 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload, ShellSnapshot } from "../contract/contract";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { AdoptableConversation, Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload, ShellSnapshot } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
 import { DataState } from "../components/data-state";
 import { Button, EmptyState, Notice, StatusText } from "../components/primitives";
@@ -57,6 +57,12 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const [switchError, setSwitchError] = useState<CoreError | null>(null);
   const [creating, setCreating] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [attached, setAttached] = useState(false);
+  const [own, setOwn] = useState<ConversationThread | null>(null);
+  const [adoptable, setAdoptable] = useState<AdoptableConversation[]>([]);
+  const [attachId, setAttachId] = useState("");
+  const [attaching, setAttaching] = useState(false);
+  const [attachError, setAttachError] = useState<CoreError | null>(null);
   const [loadingChoices, setLoadingChoices] = useState(false);
   const [pendingSwitch, setPendingSwitch] = useState<{ profile?: string; model?: string; label: string } | null>(null);
   const [notices, setNotices] = useState<string[]>([]);
@@ -152,6 +158,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     const events = initialEvents;
     conversationQueue.current = events;
     setCreating(false);
+    setAttaching(false);
     if (!quiet) setLoading(true);
     setLoadError(null);
     setLoginRequired(false);
@@ -164,6 +171,10 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
         threadId.current = reply.thread?.id ?? null;
         setAgent(Boolean(reply.thread));
         setThread(reply.thread);
+        setAttached(reply.attached ?? false);
+        setOwn(reply.own ?? null);
+        setAdoptable(reply.adoptable ?? []);
+        setAttachId(reply.own?.id ?? "");
         setItems(uniqueItems(reply.items));
         acknowledge(reply.items);
         setNextBefore(reply.next_before);
@@ -324,7 +335,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   };
   const selectedStartProfile = profiles.find((item) => item.id === selectedProfile);
   const selectorsDisabled = busy || switching || loadingChoices;
-  const selectorRow = (
+  const selectorRow = (trailing?: ReactNode) => (
     <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar">
       <Select
         groups={profileGroups}
@@ -360,6 +371,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       {agent && switching
         ? <span className="ks-agent-chat-change-hint">바꾸는 중</span>
         : agent && busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
+      {trailing}
     </div>
   );
 
@@ -383,6 +395,65 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       if (conversationQueue.current === events) conversationQueue.current = null;
     }
   };
+
+  const selectAttach = (value: JsonValue) => {
+    if (typeof value !== "string" || attaching) return;
+    setAttachId(value);
+  };
+
+  const attach = async () => {
+    if (!attachId || attaching) return;
+    setAttaching(true);
+    setAttachError(null);
+    const events: CoreEvent[] = [];
+    conversationQueue.current = events; creatingConversation.current = true;
+    try {
+      await context.store.call({ op: "conversation.attach", window_id: windowId, thread_id: attachId });
+      await load(events);
+    } catch (reason) {
+      const error = toCoreError(reason);
+      if (!handleError(error)) setAttachError(error);
+      setAttaching(false);
+    } finally {
+      creatingConversation.current = false;
+      if (conversationQueue.current === events) conversationQueue.current = null;
+    }
+  };
+
+  const changeConversation = async () => {
+    try {
+      await context.store.call({ op: "conversation.detach", window_id: windowId });
+      await load();
+    } catch (reason) {
+      const error = toCoreError(reason);
+      if (!handleError(error)) setSwitchError(error);
+    }
+  };
+
+  const attachChoices = [
+    ...(own ? [{ value: own.id, label: `${own.title || "이름 없는 대화"} (이 작업)` }] : []),
+    ...adoptable.map((candidate) => ({
+      value: candidate.id,
+      label: `${candidate.title || "이름 없는 대화"}${candidate.profile ? ` · ${candidate.profile.label}` : ""}`,
+    })),
+  ];
+  const attachRow = attachChoices.length ? (
+    <div className="ks-agent-chat-start-action">
+      <div className="ks-agent-chat-attach-row">
+        <Select
+          groups={[{ options: attachChoices }]}
+          value={attachId}
+          label="기존 대화"
+          placeholder="기존 대화 선택"
+          disabled={attaching}
+          onChange={selectAttach}
+        />
+        <Button disabled={!attachId || attaching} onClick={() => void attach()}>연결</Button>
+        {attaching ? <StatusText>연결하는 중</StatusText> : null}
+      </div>
+      {attachError ? <Notice role="alert" errorId={attachError.id}>{attachError.message}</Notice> : null}
+    </div>
+  ) : null;
 
   const send = async (returnFocus = false) => {
     const submittedDraft = draft;
@@ -434,19 +505,27 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   if (!agent) {
     return (
       <div {...blockRoot} className="ks-agent-chat-start" ref={startRef}>
-        {selectorRow}
-        <div className="ks-agent-chat-start-action">
-          <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
-          {creating ? <StatusText>시작하는 중</StatusText> : null}
-          {createError ? <Notice role="alert" errorId={createError.id}>{createError.message}</Notice> : null}
-        </div>
+        {own ? null : selectorRow()}
+        {own ? null : (
+          <div className="ks-agent-chat-start-action">
+            <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
+            {creating ? <StatusText>시작하는 중</StatusText> : null}
+            {createError ? <Notice role="alert" errorId={createError.id}>{createError.message}</Notice> : null}
+          </div>
+        )}
+        {attachRow}
       </div>
     );
   }
 
   return (
     <section {...blockRoot} className="ks-agent-chat" ref={shareRef}>
-      {selectorRow}
+      {attached ? (
+        <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar">
+          <span className="ks-agent-chat-change-hint">{`${thread?.title || "이름 없는 대화"} · ${thread?.model.label ?? ""}`}</span>
+          <Button onClick={() => void changeConversation()}>대화 바꾸기</Button>
+        </div>
+      ) : selectorRow(<Button onClick={() => void changeConversation()}>대화 바꾸기</Button>)}
       {notices.length ? <Notice>{notices.join("\n")}</Notice> : null}
       {switchError ? <Notice role="alert" errorId={switchError.id}>{switchError.message}</Notice> : null}
       <ChatHistory

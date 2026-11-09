@@ -2362,9 +2362,21 @@ impl RegistryClient for FakeRegistryClient {
             content: value
                 .as_ref()
                 .map(|v| v.0.clone())
-                .unwrap_or_else(|| json!("one.json")),
+                .unwrap_or(Value::Null),
             revision: value.as_ref().map(|v| v.1.clone()),
             exists: value.is_some(),
+        })
+    }
+    fn storage_list(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<kaleidoscope_contract::app_storage::StorageListReply, RegistryError> {
+        Ok(kaleidoscope_contract::app_storage::StorageListReply {
+            bucket_id: "bucket".into(),
+            items: vec![],
         })
     }
     fn storage_collection_list(
@@ -4041,7 +4053,7 @@ fn cancel_and_unlink_clear_only_connection_state() {
 }
 
 #[test]
-fn conversation_commands_resolve_the_window_and_advertise_agent_three() {
+fn conversation_commands_resolve_the_window_and_advertise_agent_four() {
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let core = seeded_core(temp.path(), &host);
@@ -4056,7 +4068,7 @@ fn conversation_commands_resolve_the_window_and_advertise_agent_three() {
         let request = serde_json::from_value(request).unwrap();
         expect_error(core.handle(request), ErrorCode::NotFound);
     }
-    assert_eq!(snapshot(&core).supported.modules.get("agent"), Some(&3));
+    assert_eq!(snapshot(&core).supported.modules.get("agent"), Some(&4));
 }
 
 #[test]

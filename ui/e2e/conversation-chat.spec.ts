@@ -48,6 +48,27 @@ test("모델을 골라 시작", async ({ page }) => {
   await expect(chat.getByRole("textbox", { name: "메시지" })).toBeVisible();
 });
 
+test("기존 대화 연결 — 시작 판과 대화 머리 네 상태", async ({ page }) => {
+  let chat = await open(page, "attach-start");
+  await expect(chat.getByRole("button", { name: "시작" })).toBeVisible();
+  await expect(chat.getByRole("button", { name: "기존 대화" })).toContainText("기존 대화 선택");
+  await capture(page, "attach-start");
+  chat = await open(page, "attach-own");
+  await expect(chat.getByRole("button", { name: "기존 대화" })).toContainText("서소영 PAS — 카드 운영 기록 (이 작업)");
+  await expect(chat.getByRole("button", { name: "시작" })).toHaveCount(0);
+  await expect(chat.getByRole("button", { name: "프로필" })).toHaveCount(0);
+  await capture(page, "attach-own");
+  chat = await open(page, "ready");
+  await expect(chat.getByRole("button", { name: "프로필" })).toBeVisible();
+  await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeVisible();
+  await capture(page, "attach-owned-header");
+  chat = await open(page, "attach-attached");
+  await expect(chat.getByText("서소영 PAS — 카드 운영 기록 2026년 11월 · Sol")).toBeVisible();
+  await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeVisible();
+  await expect(chat.getByRole("button", { name: "프로필" })).toHaveCount(0);
+  await capture(page, "attach-attached-header");
+});
+
 test("프로필과 다른 노드 모델 변경은 확인하고 답변 중에는 잠근다", async ({ page }) => {
   const chat = await open(page, "ready");
   await expect(chat.getByText("기존 기록")).toBeVisible();
@@ -55,13 +76,13 @@ test("프로필과 다른 노드 모델 변경은 확인하고 답변 중에는 
   await page.getByRole("menuitem", { name: "키키" }).click();
   await expect(chat.getByRole("dialog")).toContainText("키키(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.");
   await capture(page, "profile-switch-confirm");
-  await chat.getByRole("button", { name: "바꾸기" }).click();
+  await chat.getByRole("button", { name: "바꾸기", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).conversationHarness.calls().some((c: any) => c.op === "conversation.switch" && c.profile === "profile-b"))).toBe(true);
   await expect(chat.getByRole("button", { name: "실행 위치" })).toBeEnabled();
   await chat.getByRole("button", { name: "실행 위치" }).click();
   await page.getByRole("menuitem", { name: "eias-linegames" }).click();
   await expect(chat.getByRole("dialog")).toContainText("eias-linegames의 Argon(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.");
-  await chat.getByRole("button", { name: "바꾸기" }).click();
+  await chat.getByRole("button", { name: "바꾸기", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as any).conversationHarness.calls().some((c: any) => c.op === "conversation.switch" && c.model === "n1:eias-linegames:argon"))).toBe(true);
   await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: true, tool: null } }));
   await expect(chat.getByRole("button", { name: "프로필" })).toBeDisabled();

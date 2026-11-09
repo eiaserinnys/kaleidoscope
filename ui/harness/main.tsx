@@ -265,7 +265,7 @@ const fakeTransport = createFakeTransport({
   },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: conversationMode || pasMode ? {
-    thread: conversationMode === "start" || conversationMode === "login-start" || pasMode === "empty" ? null : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
+    thread: ["start", "login-start", "attach-start", "attach-own"].includes(conversationMode ?? "") || pasMode === "empty" ? null : conversationMode === "attach-attached" ? { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록 2026년 11월", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
     items: historyCount === null ? [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }] : makeLongConversation(historyCount),
     olderPages: [[{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }], [{ id: "older", kind: "assistant", text: "더 이전 기록", at: timestamp, attachments: [] }]],
     profiles: [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }],
@@ -280,6 +280,16 @@ const fakeTransport = createFakeTransport({
     sendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
     sendDelayMs: Number(params.get("send-delay")) || undefined,
     draft: conversationMode === "draft" ? { request_id: "draft-id", text: "복원된 초안", attachments: [{ name: "메모.txt", mime: "text/plain", data_base64: "aGVsbG8=" }], failed: false } : undefined,
+    attached: conversationMode === "attach-attached",
+    own: conversationMode === "attach-own" ? { id: "session-own", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : null,
+    adoptable: conversationMode === "attach-start" || conversationMode === "attach-own" ? [
+      { id: "session-1", title: "서소영 PAS — 카드 운영과 배포 기록", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-08T09:00:00Z" },
+      { id: "session-2", title: "엠버 앤 블레이드 밸런스 회의", profile: { id: "profile-b", label: "키키" }, updated_at: "2026-11-07T09:00:00Z" },
+      { id: "session-3", title: "kaleidoscope 셸 설계 검토", updated_at: "2026-11-06T09:00:00Z" },
+      { id: "session-4", title: "소울스트림 세션 회고 — 10월 넷째 주 정리", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-05T09:00:00Z" },
+      { id: "session-5", title: "", updated_at: "2026-11-04T09:00:00Z" },
+      { id: "session-6", title: "발행 파이프라인 점검과 남은 작업 목록", profile: { id: "profile-b", label: "키키" }, updated_at: "2026-11-03T09:00:00Z" },
+    ] : undefined,
   } : undefined,
   files: {
     "settings.json": "{\r\n  \"theme\": \"system\"\r\n}\r\n",

@@ -77,7 +77,7 @@ function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinit
     },
   };
 }
-const get = (value: ConversationThread | null = thread, profile = "profile-a"): Extract<CoreReply, { op: "conversation.get" }> => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" } });
+const get = (value: ConversationThread | null = thread, profile = "profile-a"): Extract<CoreReply, { op: "conversation.get" }> => ({ op: "conversation.get", thread: value, items: [item("1", "기록")], cursor: "c", next_before: "older", models, profiles, start: { profile, model: "m" }, own: null, adoptable: [] });
 const error = (code: CoreError["code"]): CoreError => code === "binding_conflict"
   ? { id: "CONV_CONTEXT_SAVED_BINDING_MISMATCH", code, message: "workspace: 저장된 대화 연결 정보가 현재 설정과 맞지 않습니다. 에이전트에게 이 오류 코드를 전하세요.", details: [] }
   : code === "login_required"
@@ -414,6 +414,74 @@ describe("대화 제공자 화면", () => {
     setup(async () => { throw error("not_found"); });
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
+  });
+  it("시작 판은 기존 대화 연결 줄을 시작 줄과 함께 보이고 후보가 없으면 숨긴다", async () => {
+    const adoptable = [
+      { id: "session-1", title: "다른 대화", updated_at: "2026-11-07T09:00:00Z" },
+      { id: "session-2", title: "서소영 PAS", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-08T09:00:00Z" },
+    ];
+    setup(async (request) => request.op === "conversation.get" ? { ...get(null), adoptable } : (() => { throw new Error(request.op); })());
+    expect(await screen.findByRole("button", { name: "시작" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "기존 대화" })).toBeTruthy();
+    cleanup();
+    setup(async (request) => request.op === "conversation.get" ? { ...get(null), adoptable: [] } : (() => { throw new Error(request.op); })());
+    expect(await screen.findByRole("button", { name: "시작" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "기존 대화" })).toBeNull();
+  });
+  it("이 작업의 대화가 있으면 시작 줄을 숨기고 그 대화를 먼저 고른 채로 보인다", async () => {
+    const own = { ...thread, title: "작업 1 PAS" };
+    setup(async (request) => request.op === "conversation.get"
+      ? { ...get(null), own, adoptable: [{ id: "session-2", title: "", updated_at: "2026-11-07T09:00:00Z" }] }
+      : (() => { throw new Error(request.op); })());
+    const attach = await screen.findByRole("button", { name: "기존 대화" });
+    expect(attach.textContent).toContain("작업 1 PAS (이 작업)");
+    expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "프로필" })).toBeNull();
+  });
+  it("연결을 누르면 고른 대화 id로 연결하고 그 대화를 연다", async () => {
+    let attached = false;
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") return attached ? { ...get(thread), attached: true } : { ...get(null), adoptable: [
+        { id: "session-1", title: "다른 대화", updated_at: "2026-11-07T09:00:00Z" },
+        { id: "session-2", title: "서소영 PAS", updated_at: "2026-11-08T09:00:00Z" },
+      ] };
+      if (request.op === "conversation.attach") { attached = true; return { op: "conversation.attach", thread }; }
+      throw new Error(request.op);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "기존 대화" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "서소영 PAS" }));
+    fireEvent.click(screen.getByRole("button", { name: "연결" }));
+    await screen.findByRole("textbox", { name: "메시지" });
+    expect(state.call).toHaveBeenCalledWith({ op: "conversation.attach", window_id: state.window.id, thread_id: "session-2" });
+  });
+  it("연결한 대화 머리는 고르기 칸 없이 이름과 모델을 보이고 대화 바꾸기를 둔다", async () => {
+    setup(async (request) => request.op === "conversation.get" ? { ...get(thread), attached: true } : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    expect(screen.getByText("대화 · 모델")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "대화 바꾸기" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "프로필" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "모델" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "실행 위치" })).toBeNull();
+    cleanup();
+    setup(async (request) => request.op === "conversation.get" ? { ...get({ ...thread, title: "" }), attached: true } : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    expect(screen.getByText("이름 없는 대화 · 모델")).toBeTruthy();
+  });
+  it("대화 바꾸기는 대화 머리에서 연결을 풀고 시작 판으로 돌아간다", async () => {
+    let attached = true;
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") return attached
+        ? get(thread)
+        : { ...get(null), adoptable: [{ id: "session-2", title: "서소영 PAS", updated_at: "2026-11-08T09:00:00Z" }] };
+      if (request.op === "conversation.detach") { attached = false; return { op: "conversation.detach" }; }
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    expect(screen.getByRole("button", { name: "프로필" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "대화 바꾸기" }));
+    expect(await screen.findByRole("button", { name: "기존 대화" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "메시지" })).toBeNull();
+    expect(state.call).toHaveBeenCalledWith({ op: "conversation.detach", window_id: state.window.id });
   });
 
 });

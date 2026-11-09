@@ -527,7 +527,9 @@ fn conversation_get_uses_thread_and_conversation_items() {
         "next_before":"cursor-0",
         "models":[{"id":"model-1","label":"Model 1","available":true}],
         "profiles":[{"id":"profile-1","label":"Profile 1","available":true}],
-        "start":{"profile":"profile-1","model":"model-1"}
+        "start":{"profile":"profile-1","model":"model-1"},
+        "own":null,
+        "adoptable":[]
     });
     let parsed: CoreReply = serde_json::from_value(provider_reply.clone()).unwrap();
     assert_eq!(serde_json::to_value(parsed).unwrap(), provider_reply);

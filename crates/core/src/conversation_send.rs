@@ -102,6 +102,11 @@ pub(crate) fn send(
         Some((block, views)) => (text.trim().to_string(), Some(block), Some(views)),
         None => (text.trim().to_string(), None, None),
     };
+    let context = match (ctx.attached_instructions(inner)?, context) {
+        (Some(prefix), Some(block)) => Some(format!("{prefix}\n\n{block}")),
+        (Some(prefix), None) => Some(prefix),
+        (None, context) => context,
+    };
     let mut pending = Pending {
         connection: ctx.client.info.name.clone(),
         base_path: ctx.client.base_path.clone(),
