@@ -89,6 +89,14 @@ test("트리와 표도 로딩 행 높이를 실제 행과 맞춘다", async ({ p
     const height = (await loading.nth(index).locator(".ks-row").first().boundingBox())!.height;
     expect(Math.abs(height - heights[index])).toBeLessThanOrEqual(1);
   }
+  // 표 로딩 뼈대의 머리 막대와 행 막대가 같은 시작선과 끝선을 쓴다.
+  const bars = await loading.nth(1).evaluate((element) => {
+    const header = element.querySelector(".ks-table-header .ks-data-skeleton")!.getBoundingClientRect();
+    const row = element.querySelector(".ks-table-row .ks-data-skeleton")!.getBoundingClientRect();
+    return { headerLeft: header.left, headerRight: header.right, rowLeft: row.left, rowRight: row.right };
+  });
+  expect(Math.abs(bars.headerLeft - bars.rowLeft)).toBeLessThanOrEqual(1);
+  expect(Math.abs(bars.headerRight - bars.rowRight)).toBeLessThanOrEqual(1);
 });
 
 test("빈 목록은 채움 칸 가운데에 놓인다", async ({ page }) => {

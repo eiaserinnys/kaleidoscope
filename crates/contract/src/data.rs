@@ -902,6 +902,10 @@ pub struct TableCellContent {
     #[serde(default)]
     #[ts(optional, as = "Option<Vec<Badge>>")]
     pub badges: Vec<Badge>,
+    /// 참이면 제목을 보통 굵기와 흐린 색으로 보여 덜 띄게 한다. "자료 없음"처럼 중요하지 않은 칸에 쓴다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub muted: Option<bool>,
 }
 
 /// 표에서 고른 행과 열의 안정 식별자.

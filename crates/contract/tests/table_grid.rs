@@ -80,6 +80,17 @@ fn 동적_열의_알려진_초기값을_검사한다() {
 }
 
 #[test]
+fn 표_내용_칸의_muted는_선택_필드다() {
+    let muted: data::TableCellContent =
+        serde_json::from_value(json!({"title":"자료 없음","muted":true})).unwrap();
+    assert_eq!(muted.muted, Some(true));
+    let plain: data::TableCellContent = serde_json::from_value(json!({"title":"한 줄"})).unwrap();
+    assert_eq!(plain.muted, None);
+    let wire = serde_json::to_value(plain).unwrap();
+    assert!(wire.get("muted").is_none());
+}
+
+#[test]
 fn 새_열과_칸_필드는_각각_새_판을_요구한다() {
     let old = json!({"type":"table", "rows":[], "columns":[{"field":"name","label":"이름"}]});
     let mut bound = old.clone(); bound["columns"] = json!({"state":"columns"});

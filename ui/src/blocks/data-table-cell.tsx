@@ -8,7 +8,8 @@ import { Badges, isObject } from "./data-view-common";
 function parseContent(value: unknown) {
   return value == null ? null : isObject(value) && typeof value.title === "string" &&
     (value.subtitle == null || typeof value.subtitle === "string") &&
-    (value.color == null || typeof value.color === "string") ? value : undefined;
+    (value.color == null || typeof value.color === "string") &&
+    (value.muted == null || typeof value.muted === "boolean") ? value : undefined;
 }
 
 export function contentCellError(value: unknown, column: Column) {
@@ -24,7 +25,7 @@ export const ContentCell = memo(function ContentCell({ value, column }: { value:
     </span>;
   }
   const color = validColor(content?.color) ? content.color : undefined;
-  return <span className={`ks-table-content${color ? " has-color" : ""}`} style={{ ...(color ? { "--ks-table-color": color, "--ks-table-on": badgeForeground(color) } : {}), "--ks-table-lines": column.max_lines ?? 3 } as CSSProperties}>
+  return <span className={`ks-table-content${color ? " has-color" : ""}${content?.muted === true ? " is-muted" : ""}`} style={{ ...(color ? { "--ks-table-color": color, "--ks-table-on": badgeForeground(color) } : {}), "--ks-table-lines": column.max_lines ?? 3 } as CSSProperties}>
     {content && <><span className="ks-table-content-title">{String(content.title)}</span>
       {typeof content.subtitle === "string" && <span className="ks-table-content-subtitle">{content.subtitle}</span>}
       <Badges values={content.badges} /></>}

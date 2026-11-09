@@ -330,7 +330,10 @@ pub const CONTRACT_VERSION: u32 = 46;
 /// - 55판: 트리 항목 확인 상자와 기본 펼침.
 /// - 56판: repeat 안 블록의 행 동작이 그 행 항목을 넘긴다.
 /// - 57판: 문서 모음의 없는 문서를 markdown 블록이 빈 문서로 열고 처음 고칠 때 만든다.
-pub const BLOCK_SET_VERSION: u32 = MISSING_DOCUMENT_EMPTY_BLOCK_SET_VERSION;
+/// - 58판: 표 내용 칸의 muted(덜 띄는 칸).
+pub const BLOCK_SET_VERSION: u32 = TABLE_CELL_MUTED_BLOCK_SET_VERSION;
+/// 표 내용 칸의 muted(덜 띄는 칸)를 처음 지원하는 블록 세트 판.
+pub const TABLE_CELL_MUTED_BLOCK_SET_VERSION: u32 = 58;
 /// 문서 모음의 없는 문서를 markdown 블록이 빈 문서로 열고 처음 고칠 때 만드는 것을 처음 지원하는 블록 세트 판.
 pub const MISSING_DOCUMENT_EMPTY_BLOCK_SET_VERSION: u32 = 57;
 /// repeat 안 블록의 행 동작이 그 행 항목을 넘기는 것을 처음 지원하는 블록 세트 판.
