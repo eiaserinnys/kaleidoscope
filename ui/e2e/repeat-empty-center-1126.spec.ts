@@ -54,7 +54,7 @@ function measure(app: Locator) {
       centerStack: rect(window_.querySelector<HTMLElement>(".ks-data-stack.is-center")),
       centerText: rect(window_.querySelector<HTMLElement>(".ks-data-stack.is-center .ks-data-text")),
       state: rect(window_.querySelector<HTMLElement>(".ks-data-state")),
-      skeleton: rect(window_.querySelector<HTMLElement>(".ks-data-skeleton")),
+      skeleton: rect(window_.querySelector<HTMLElement>(".ks-repeat.is-loading")),
       repeat: repeat === null ? null : { ...rect(repeat), className: repeat.className, scrollHeight: repeat.scrollHeight, clientHeight: repeat.clientHeight },
       repeatItems: window_.querySelectorAll(".ks-repeat-item").length,
     };
@@ -75,7 +75,7 @@ for (const [width, height] of [[1180, 720], [360, 240]] as const) {
     for (const state of states) {
       await emitState(page, state.values);
       if (state.name === "불러오는 중") {
-        await expect(app.locator(".ks-data-skeleton")).toBeVisible();
+        await expect(app.locator(".ks-repeat.is-loading")).toBeVisible();
       } else if (state.name === "첫 실패") {
         await expect(app.locator(".ks-data-state")).toBeVisible();
         await expect(app.locator(".ks-data-state")).toContainText(FAILURE_MESSAGE);
@@ -154,7 +154,7 @@ for (const [name, empty] of [["빈 상태", true], ["불러오는 중", false]] 
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
     // 실제 앱은 불러오는 중 다음에 빈 상태가 온다. 빈 상태에서 반복은 그때 처음 붙어 숨은 채로 열 수를 잰다.
     await emitState(page, states[0].values);
-    await expect(app.locator(".ks-data-skeleton")).toBeVisible();
+    await expect(app.locator(".ks-repeat.is-loading")).toBeVisible();
     if (empty) {
       await emitState(page, states[2].values);
       await expect(app.locator(".ks-data-stack.is-center")).toContainText(EMPTY_TEXT);
