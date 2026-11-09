@@ -1,5 +1,5 @@
 import { memo, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
-import { ChevronRight, FileText } from "../icons";
+import { Check, ChevronRight, FileText } from "../icons";
 import type { TreeRowModel } from "./tree-model";
 
 export interface TreeRowProps {
@@ -13,15 +13,17 @@ export interface TreeRowProps {
   draggable?: boolean;
   focused: boolean;
   menuTarget?: boolean;
+  checkEnabled?: boolean;
   measure: (element: Element | null) => void;
   onFocus: (id: string) => void;
   onKeyDown: (row: TreeRowModel, event: KeyboardEvent<HTMLButtonElement>) => void;
   onActivate: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
+  onCheck?: (row: TreeRowModel) => void;
   onContextMenu?: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
   onDoubleClick?: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
 }
 
-function TreeRowView({ row, commentKey, index, start, selected, multiSelected, dropState, draggable, focused, menuTarget = false, measure, onFocus, onKeyDown, onActivate, onContextMenu, onDoubleClick }: TreeRowProps) {
+function TreeRowView({ row, commentKey, index, start, selected, multiSelected, dropState, draggable, focused, menuTarget = false, checkEnabled = false, measure, onFocus, onKeyDown, onActivate, onCheck, onContextMenu, onDoubleClick }: TreeRowProps) {
   const { node } = row;
   return <div
     className="ks-tree-virtual-row"
@@ -44,7 +46,9 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
       className="ks-file-tree-entry"
       data-index={index}
     >{node.content}</div> : <button
+      aria-checked={node.checked}
       aria-current={node.currentOnSelection && selected ? "page" : undefined}
+      aria-disabled={node.checked !== undefined && !checkEnabled ? true : undefined}
       aria-expanded={row.hasChildren ? row.expanded : undefined}
       aria-level={row.depth + 1}
       aria-posinset={row.position}
@@ -71,9 +75,15 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
       <span aria-hidden="true" className={`ks-file-tree-icon${row.hasChildren ? " is-directory" : ""}`}>
         {row.hasChildren
           ? <ChevronRight className={`ks-chevron${row.expanded ? " is-expanded" : ""}`} size="inline" />
-          : node.leading ?? <FileText size="inline" />}
+          : node.checked !== undefined
+            ? <span
+              className={`ks-tree-check${node.checked ? " is-checked" : ""}`}
+              data-tree-check=""
+              onClick={checkEnabled ? (event) => { event.preventDefault(); event.stopPropagation(); onCheck?.(row); } : undefined}
+            >{node.checked ? <Check size="chrome" /> : null}</span>
+            : node.leading ?? <FileText size="inline" />}
       </span>
-      <span className="ks-file-tree-name ks-tree-name">{node.label}</span>
+      <span className={`ks-file-tree-name ks-tree-name${node.checked ? " is-checked" : ""}`}>{node.label}</span>
       {node.meta ? <span className="ks-view-meta">{node.meta}</span> : null}
       {node.trailing}
     </button>}
