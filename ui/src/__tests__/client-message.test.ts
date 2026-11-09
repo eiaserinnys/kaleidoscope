@@ -5,6 +5,9 @@ import type { ShellStore } from "../core/shell-store";
 import type { WindowData } from "../data/window-data";
 import { sandboxSource } from "../blocks/sandbox-frame";
 import { ClientRuntime, deliverClientMessage } from "../runtime/client-runtime";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
+
+afterEach(cleanupFrameScripts);
 
 const input = { request_id: "입력-1", text: "안녕" };
 const timeout = CLIENT_PING_TIMEOUT_SECS * 1000;
@@ -123,7 +126,7 @@ it("프레임 SDK는 선언된 앱에만 onMessage를 주고 handler가 끝난 �
   const make = (capabilities: any[]) => {
     const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "시험", capabilities });
     const script = new DOMParser().parseFromString(source, "text/html").querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
-    new Function(new TextDecoder().decode(Uint8Array.from(atob(script.src.split(",")[1]), (c) => c.charCodeAt(0))))();
+    runFrameScript(new TextDecoder().decode(Uint8Array.from(atob(script.src.split(",")[1]), (c) => c.charCodeAt(0))));
     return (window as any).kaleidoscope;
   };
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});

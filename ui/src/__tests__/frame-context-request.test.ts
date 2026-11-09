@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { sandboxSource } from "../blocks/sandbox-frame";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
 
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.innerHTML = ""; });
+afterEach(cleanupFrameScripts);
 
 for (const kind of ["sandbox", "html"] as const) {
   it(`${kind} 편집은 현재 메뉴 요청의 대상에 초점을 돌려 적용한다`, async () => {
@@ -17,7 +19,7 @@ for (const kind of ["sandbox", "html"] as const) {
     if (kind === "sandbox") {
       const source = sandboxSource("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "request-token" });
       const bridge = new DOMParser().parseFromString(source, "text/html").querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
-      new Function(new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), c => c.charCodeAt(0))))();
+      runFrameScript(new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), c => c.charCodeAt(0))));
     } else await import("../blocks/html-bridge/main");
     const menu = (field: HTMLElement): number => {
       field.focus(); field.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));

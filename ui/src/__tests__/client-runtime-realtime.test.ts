@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRealtime } from "../runtime/realtime-socket";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
+
+afterEach(cleanupFrameScripts);
 
 function deferred<T>() {
   let resolve!: (value:T) => void;
@@ -226,7 +229,7 @@ it("로그인은 선언된 앱 동작 안에서만 호스트에 요청한다", a
   const script = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(script.src.split(",")[1]), (character) => character.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const api = (window as any).kaleidoscope;
   await expect(api.connection.login("live")).rejects.toMatchObject({ id:"CONN_REALTIME_LOGIN_REQUIRED", code:"login_required" });
   api.handle("login", () => { void api.connection.login("live"); });

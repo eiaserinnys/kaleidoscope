@@ -1,5 +1,8 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { clientSource, sandboxErrors } from "../blocks/sandbox-frame";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
+
+afterEach(cleanupFrameScripts);
 
 it("exposes process.file_uri through the process bridge", async () => {
   const html = clientSource(
@@ -10,8 +13,8 @@ it("exposes process.file_uri through the process bridge", async () => {
   const scripts = [...doc.querySelectorAll<HTMLScriptElement>("script")];
   const decode = (script: HTMLScriptElement) => new TextDecoder().decode(Uint8Array.from(atob(script.src.split(",")[1]), (char) => char.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(decode(scripts[0]))();
-  new Function(decode(scripts[1]))();
+  runFrameScript(decode(scripts[0]));
+  runFrameScript(decode(scripts[1]));
 
   const request = post.mock.calls.map(([value]) => value).find((value) => value.type === "ks-client-process" && value.method === "file_uri");
   expect(request?.params).toEqual({ blob_key: "cache/item" });
