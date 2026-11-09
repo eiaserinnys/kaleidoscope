@@ -66,7 +66,7 @@
 /* 같은 분할의 직접 콘텐츠도 구역과 끝선을 맞춘다. 중간 쌓인 칸은 기존 간격만 쓴다. */
 .ks-split:has(> .ks-split-pane > .ks-data-section) > .ks-split-pane:not(:has(> :is(.ks-data-section, .ks-data-tabs, .ks-data-stack, .ks-split))):not(.ks-split.is-stacked > .ks-split-pane:not(:last-child)):not(.ks-data-tab-panel *) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }
 /* 별도 여백 주인이 없는 창 본문 쌓기는 마지막 글의 자연 높이에 여백을 포함한다. */
-.ks-data-window-body > .ks-data-stack.is-column:not(:has(.ks-split, .ks-data-section, .ks-data-tabs)) .ks-data-stack-item:last-child > .ks-data-text:not(.ks-data-stack-item:not(:last-child) *) { padding-block-end: var(--ks-space-3); }
+.ks-data-window-body > .ks-data-stack.is-column .ks-data-stack-item:last-child > .ks-data-text:not(.ks-data-stack-item:not(:last-child) *, .ks-split *, .ks-data-section *, .ks-data-tabs *) { padding-block-end: var(--ks-space-3); }
 :is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body, .ks-data-stack-item.is-fill) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) { display: flex; height: 100%; flex-direction: column; }
 :is(.ks-split-pane, .ks-data-tab-panel, .ks-data-window-body, .ks-data-stack-item.is-fill) > .ks-data-section:has(> .ks-data-section-child > .ks-data-stack:is(.has-fill-list, .has-textarea-fill)) > .ks-data-section-child { flex: 1 1 auto; min-height: 0; overflow: auto; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) :is(
