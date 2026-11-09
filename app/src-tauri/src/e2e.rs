@@ -16,6 +16,7 @@ use tauri::{AppHandle, Manager};
 
 mod client_http;
 mod files_write;
+mod frame_visibility;
 #[cfg(windows)]
 mod media_stream;
 #[cfg(windows)]
@@ -53,6 +54,7 @@ enum ScenarioKind {
     MediaStream,
     Realtime,
     ClientHttp,
+    FrameVisibility,
 }
 
 fn scenario_kind(name: Option<&str>) -> ScenarioKind {
@@ -73,6 +75,7 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
         Some("media-stream") => ScenarioKind::MediaStream,
         Some("realtime") => ScenarioKind::Realtime,
         Some("client-http") => ScenarioKind::ClientHttp,
+        Some("frame-visibility") => ScenarioKind::FrameVisibility,
         _ => ScenarioKind::WebView,
     }
 }
@@ -620,6 +623,9 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Realtime => realtime::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::ClientHttp => client_http::scenario(&app, &core, &out, &mut log),
+                ScenarioKind::FrameVisibility => {
+                    frame_visibility::scenario(&app, &core, &mut log)
+                }
                 ScenarioKind::Update => update::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::FilesWrite => match setting("PICK_FOLDER") {
                     Some(folder) => {
@@ -666,6 +672,10 @@ mod tests {
         assert_eq!(scenario_kind(Some("files-write")), ScenarioKind::FilesWrite);
         assert_eq!(scenario_kind(Some("realtime")), ScenarioKind::Realtime);
         assert_eq!(scenario_kind(Some("client-http")), ScenarioKind::ClientHttp);
+        assert_eq!(
+            scenario_kind(Some("frame-visibility")),
+            ScenarioKind::FrameVisibility
+        );
         assert_eq!(scenario_kind(Some("update")), ScenarioKind::Update);
         #[cfg(windows)]
         assert_eq!(

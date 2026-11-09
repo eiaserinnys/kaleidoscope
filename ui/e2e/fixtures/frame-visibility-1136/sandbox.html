@@ -1,0 +1,22 @@
+<style>
+  html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, sans-serif; color: #111; background: #fff; }
+  body { display: grid; grid-template-rows: auto auto; gap: 8px; padding: 8px; box-sizing: border-box; }
+  #frames, #share { margin: 0; }
+</style>
+<div id="frames">프레임 0</div>
+<div id="share">갱신 0</div>
+<script>
+  // #frames는 앱 자신의 rAF 횟수다. 창이 최소화되면 이 증가가 멈춰야 한다.
+  // #share는 setTimeout 계열로만 바뀌므로 최소화 중에도 같이 보기 글이 갱신되는지 보인다.
+  let frames = 0;
+  let painted = 0;
+  const framesView = document.getElementById('frames');
+  const tick = (time) => {
+    frames += 1;
+    if (time - painted >= 250) { painted = time; framesView.textContent = '프레임 ' + frames; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  let reports = 0;
+  setInterval(() => { reports += 1; document.getElementById('share').textContent = '갱신 ' + reports; }, 300);
+</script>

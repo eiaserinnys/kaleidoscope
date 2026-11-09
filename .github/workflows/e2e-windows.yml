@@ -46,7 +46,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: target/release/kaleidoscope-app.exe
-          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'ui/e2e/fixtures/realtime/**', 'pnpm-lock.yaml', 'examples/**', 'apps/**') }}
+          key: windows-webview-e2e-exe-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/*.rs', 'crates/**/Cargo.toml', 'app/src-tauri/**', 'app/src/**', 'app/index.html', 'app/package.json', 'ui/src/**', 'ui/package.json', 'ui/e2e/fixtures/realtime/**', 'ui/e2e/fixtures/frame-visibility-1136/**', 'pnpm-lock.yaml', 'examples/**', 'apps/**') }}
       - if: steps.executable-cache.outputs.cache-hit != 'true'
         run: cargo build -p kaleidoscope-app --release --features tauri/custom-protocol,e2e
       - name: 실행 파일 캐시 저장
@@ -484,6 +484,33 @@ jobs:
           } finally {
             Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
             if (-not $app.WaitForExit(10000)) { throw '실시간 앱 종료 시간 초과' }
+            $app.Dispose()
+          }
+      - name: 프레임 보임과 캔버스 로딩 시나리오 데이터 초기화
+        shell: pwsh
+        run: ./app/e2e-windows/reset-app-data.ps1
+      - name: 프레임 보임과 캔버스 로딩 시나리오
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-frame-visibility-appdata'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'kaleidoscope-frame-visibility-localappdata'
+          $env:KALEIDOSCOPE_E2E_OUT = Join-Path $env:GITHUB_WORKSPACE 'windows-e2e/frame-visibility'
+          $env:WEBVIEW2_USER_DATA_FOLDER = Join-Path $env:RUNNER_TEMP 'kaleidoscope-frame-visibility-webview'
+          New-Item -ItemType Directory -Force $env:APPDATA, $env:LOCALAPPDATA, $env:KALEIDOSCOPE_E2E_OUT | Out-Null
+          $appPath = Join-Path $env:GITHUB_WORKSPACE 'target/release/kaleidoscope-app.exe'
+          $app = Start-Process -FilePath $appPath -ArgumentList @('--e2e-scenario=frame-visibility', "--e2e-out=$env:KALEIDOSCOPE_E2E_OUT") -RedirectStandardOutput (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stdout.log') -RedirectStandardError (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'stderr.log') -PassThru
+          try {
+            if (-not $app.WaitForExit(180000)) { throw '프레임 보임과 캔버스 로딩 E2E 시간 초과' }
+            $events = @(Get-Content (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            foreach ($event in $events) { Write-Host "$($event.step) : $($event.data | ConvertTo-Json -Compress)" }
+            if ($app.ExitCode -ne 0) { throw "프레임 보임과 캔버스 로딩 E2E 실패: $($app.ExitCode)" }
+            foreach ($id in @('frame-visible-runs', 'frame-hidden-paused', 'frame-share-continues', 'frame-restored-runs', 'canvas-loading-shown')) {
+              $checks = @($events | Where-Object { $_.step -eq 'check.result' -and $_.data.id -eq $id -and $_.data.ok })
+              if ($checks.Count -ne 1) { throw "프레임 보임 검사 누락 또는 실패: $id" }
+            }
+            if (-not ($events | Where-Object { $_.step -eq 'complete' -and $_.data.passed })) { throw '프레임 보임 완료 로그가 없음' }
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
             $app.Dispose()
           }
       - name: 네이티브 쉘 단축키 판정 자체 시험
