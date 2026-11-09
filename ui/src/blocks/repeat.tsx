@@ -1,6 +1,6 @@
 import { encodeCommentKey } from "../comments/key";
 import { useBlockRootProps } from "../comments/block-root";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { BindingMore, Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
@@ -41,7 +41,11 @@ export function RepeatBlock({ block, context, pointer }: { block: Repeat; contex
     return result;
   }, [value, block.key]);
   useDormant(`${pointer}/template`, entries.length === 0);
-  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
+  // 행 반복은 칸 폭을 내용이 정하므로 템플릿 막대로 미리 맞출 수 없다. 나머지는 받은 뒤 배치의 뼈대를 쓴다.
+  if (value.status !== "ready") {
+    const skeleton = (block.layout ?? "column") !== "row" ? skeletonBlock(block.template) : null;
+    return <DataState rootProps={blockRoot} value={value} loading={skeleton != null ? <RepeatLoading block={block} skeleton={skeleton} /> : undefined} />;
+  }
   return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} parentRef={parentRef} follow={follow.status === "ready" ? follow.value : null} more={value.more} />;
 }
 
@@ -53,6 +57,82 @@ const Row = memo(function Row({ item, itemKey, index, parent, parentRef, locator
   return <div className="ks-repeat-item" data-repeat-key={String(itemKey)} data-ks-comment-key={encodeCommentKey(itemKey)}><ItemScopeProvider value={scope}>{renderBlock(template, context, `${pointer}/template`)}</ItemScopeProvider></div>;
 });
 
+// 열 수는 첫 페인트 전에 맞춘다. 빈 반복은 자리가 display: none이라 폭이 0으로 재지므로,
+// 비어 있음이 바뀌는 순간에도 다시 재야 항목이 도착한 첫 프레임부터 여러 열로 그린다.
+function useRepeatGridColumns(root: RefObject<HTMLDivElement | null>, block: Repeat, remeasure: unknown) {
+  const [columns, setColumns] = useState(1);
+  const layout = block.layout ?? "column";
+  useLayoutEffect(() => {
+    if (layout !== "grid" || !root.current) return;
+    const element = root.current;
+    if (typeof block.grid?.columns === "number") {
+      setColumns(block.grid.columns);
+      return;
+    }
+    const itemWidth = block.grid?.item_width ?? "medium";
+    const probe = element.ownerDocument.createElement("span");
+    probe.className = "ks-repeat-grid-width-probe";
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.pointerEvents = "none";
+    probe.style.boxSizing = "border-box";
+    probe.style.width = `var(--ks-repeat-grid-item-width-${itemWidth})`;
+    probe.style.height = "0";
+    const gapToken = { none: "0", small: "var(--ks-space-2)", medium: "var(--ks-space-3)", large: "var(--ks-space-5)" };
+    probe.style.marginInlineEnd = block.gap ? gapToken[block.gap] : "var(--ks-space-3)";
+    element.append(probe);
+    const resize = () => {
+      if (!element.clientWidth) return;
+      const style = getComputedStyle(element);
+      const pane = probe.getBoundingClientRect().width;
+      const gap = parseFloat(getComputedStyle(probe).marginInlineEnd);
+      if (!Number.isFinite(pane) || !Number.isFinite(gap) || pane <= 0) return;
+      const gridWidth = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      setColumns(Math.max(1, Math.floor((gridWidth + gap) / (pane + gap))));
+    };
+    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe.remove(); };
+  }, [layout, block.grid?.columns, block.grid?.item_width, block.gap, remeasure]);
+  return columns;
+}
+
+// 격자와 열 반복은 받은 뒤의 칸 배치를 미리 보여 준다. 칸 수가 같아야 항목이 도착할 때 줄이 흔들리지 않는다.
+// 뼈대 칸에는 .ks-repeat-item을 쓰지 않는다. 더 받기와 커멘트 키가 실제 행을 그 클래스로 찾는다.
+function RepeatLoading({ block, skeleton }: { block: Repeat; skeleton: ReactNode }) {
+  const blockRoot = useBlockRootProps();
+  const root = useRef<HTMLDivElement>(null);
+  const layout = block.layout ?? "column";
+  const columns = useRepeatGridColumns(root, block, null);
+  return <div {...blockRoot} ref={root} role="status" aria-label="불러오는 중"
+    className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""} is-loading`}>
+    <div className="ks-repeat-content" aria-hidden="true" style={layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}>
+      {Array.from({ length: layout === "grid" ? columns * 3 : 3 }, (_, index) => <div className="ks-repeat-skeleton-item" key={index}>{skeleton}</div>)}
+    </div>
+  </div>;
+}
+
+// 뼈대 칸은 템플릿의 겉틀만 얕게 그려 받은 뒤와 같은 줄 높이를 잡는다.
+function skeletonBlock(block: Block): ReactNode {
+  if (block.type === "when") return skeletonBlock(block.child);
+  if (block.type === "section") return <section className="ks-data-section">
+    <div className="ks-data-section-header">
+      {block.title !== undefined ? <span className="ks-data-section-title">{skeletonLine()}</span> : null}
+      {block.meta !== undefined ? <span className="ks-data-section-meta">{skeletonLine()}</span> : null}
+    </div>
+    <div className="ks-data-section-child">{skeletonBlock(block.child)}</div>
+  </section>;
+  if (block.type === "stack") return <div className={`ks-data-stack is-${block.direction} gap-${block.gap ?? "none"}`}>
+    {block.children.slice(0, 4).map((child, index) => <div className="ks-data-stack-item" key={index}>{skeletonBlock(child)}</div>)}
+  </div>;
+  if (block.type === "text") return <div className={`ks-data-text is-${block.style ?? "body"}`}>{skeletonLine()}</div>;
+  return <div className="ks-repeat-skeleton-block" />;
+}
+
+function skeletonLine() {
+  // 줄 상자는 글꼴의 줄 높이가 정한다. 보통 공백은 인라인 블록 안에서 접혀 높이가 사라지므로 줄바꿈 없는 공백을 쓴다.
+  return <span className="ks-repeat-skeleton-line">{"\u00a0"}</span>;
+}
+
 function RepeatReady({ block, context, pointer, entries, parent, parentRef, follow, more }: {
   block: Repeat; context: BlockContext; pointer: string; entries: Entry[]; parent?: JsonValue; parentRef: { current: ItemScope | null }; follow: JsonValue; more?: BindingMore;
 }) {
@@ -60,7 +140,6 @@ function RepeatReady({ block, context, pointer, entries, parent, parentRef, foll
   const blockRoot = useBlockRootProps();
   const scroll = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<{ element: HTMLDivElement; margin: number } | null>(null);
-  const [columns, setColumns] = useState(1);
   const [resume, setResume] = useState(0);
   const pauseUntil = useRef(0);
   const draggingScrollbar = useRef(false);
@@ -101,39 +180,7 @@ function RepeatReady({ block, context, pointer, entries, parent, parentRef, foll
     for (let element: HTMLElement | null = root; element; element = element.parentElement) observer?.observe(element);
     return () => { observer?.disconnect(); observed?.removeEventListener("scroll", update); };
   }, [block.virtual, horizontal, entries.length]);
-  // 열 수는 첫 페인트 전에 맞춘다. 빈 반복은 자리가 display: none이라 폭이 0으로 재지므로,
-  // 비어 있음이 바뀌는 순간에도 다시 재야 항목이 도착한 첫 프레임부터 여러 열로 그린다.
-  useLayoutEffect(() => {
-    if (layout !== "grid" || !scroll.current) return;
-    const element = scroll.current;
-    if (typeof block.grid?.columns === "number") {
-      setColumns(block.grid.columns);
-      return;
-    }
-    const itemWidth = block.grid?.item_width ?? "medium";
-    const probe = element.ownerDocument.createElement("span");
-    probe.className = "ks-repeat-grid-width-probe";
-    probe.setAttribute("aria-hidden", "true");
-    probe.style.position = "absolute";
-    probe.style.visibility = "hidden";
-    probe.style.pointerEvents = "none";
-    probe.style.boxSizing = "border-box";
-    probe.style.width = `var(--ks-repeat-grid-item-width-${itemWidth})`;
-    probe.style.height = "0";
-    const gapToken = { none: "0", small: "var(--ks-space-2)", medium: "var(--ks-space-3)", large: "var(--ks-space-5)" };
-    probe.style.marginInlineEnd = block.gap ? gapToken[block.gap] : "var(--ks-space-3)";
-    element.append(probe);
-    const resize = () => {
-      if (!element.clientWidth) return;
-      const style = getComputedStyle(element);
-      const pane = probe.getBoundingClientRect().width;
-      const gap = parseFloat(getComputedStyle(probe).marginInlineEnd);
-      if (!Number.isFinite(pane) || !Number.isFinite(gap) || pane <= 0) return;
-      const gridWidth = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      setColumns(Math.max(1, Math.floor((gridWidth + gap) / (pane + gap))));
-    };
-    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe.remove(); };
-  }, [layout, block.grid?.columns, block.grid?.item_width, block.gap, empty]);
+  const columns = useRepeatGridColumns(scroll, block, empty);
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => encodeCommentKey(entries[index].key), [entries]);
   const rowKeys = useMemo(() => Array.from({ length: Math.ceil(entries.length / rowSize) }, (_, i) => entries.slice(i * rowSize, (i + 1) * rowSize).map((entry) => entry.key)), [entries, rowSize]);

@@ -287,6 +287,63 @@ it("repeat은 명시한 gap을 항목 간격으로 표시한다", async () => {
   store.dispose();
 });
 
+it("격자와 열 반복은 불러오는 중 받은 뒤 배치의 뼈대를, 행 반복은 기존 뼈대를 쓴다", async () => {
+  const template = { type: "text" as const, value: "한 줄" as const };
+  const definition = {
+    id: "repeat-grid-loading", name: "격자 뼈대", requires: { blocks: 15, modules: {} }, permissions: [], state: {},
+    ui: { type: "stack", direction: "column", children: [
+      { type: "repeat", items: { expr: "[]" }, key: "id", layout: "grid", grid: { columns: 4 }, template },
+      { type: "repeat", items: { expr: "[]" }, key: "id", template },
+      { type: "repeat", items: { expr: "[]" }, key: "id", layout: "row", template },
+    ] },
+  } as AppDefinition;
+  const seed = makeTestSeed({ definitions: [definition] });
+  const transport = createFakeTransport(seed);
+  const store = createShellStore(transport);
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-repeat")).not.toBeNull());
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: {
+    "/ui/children/0/items": { status: "loading" },
+    "/ui/children/1/items": { status: "loading" },
+    "/ui/children/2/items": { status: "loading" },
+  } } }));
+  const loading = view.container.querySelectorAll<HTMLElement>(".ks-repeat.is-loading");
+  // 격자와 열 반복은 받은 뒤 칸 배치를 미리 그린다.
+  expect(loading).toHaveLength(2);
+  const grid = loading[0];
+  expect(grid.classList.contains("is-grid")).toBe(true);
+  expect(grid.getAttribute("role")).toBe("status");
+  expect(grid.querySelectorAll(".ks-repeat-skeleton-item")).toHaveLength(12);
+  expect(grid.querySelector(".ks-repeat-item")).toBeNull();
+  const column = loading[1];
+  expect(column.classList.contains("is-column")).toBe(true);
+  expect(column.querySelectorAll(".ks-repeat-skeleton-item")).toHaveLength(3);
+  expect(column.querySelector(".ks-repeat-item")).toBeNull();
+  // 행 반복은 칸 폭을 내용이 정하므로 기존 일반 뼈대를 그대로 쓴다.
+  expect(view.container.querySelector(".ks-data-skeleton")).not.toBeNull();
+  expect(view.container.querySelector(".ks-repeat.is-loading.is-row")).toBeNull();
+  store.dispose();
+});
+
+it("자식이 모두 when인 쌓기 템플릿도 불러오는 중 막대를 그린다", async () => {
+  const definition: AppDefinition = {
+    id: "repeat-when-loading", name: "조건부 반복", requires: { blocks: 15, modules: {} }, permissions: [], state: {},
+    ui: { type: "repeat", items: { expr: "[]" }, key: "id", template: { type: "stack", direction: "column", children: [
+      { type: "when", value: { item: "visible" }, child: { type: "text", value: { item: "title" } } },
+      { type: "when", value: { item: "visible" }, child: { type: "text", value: "내용" } },
+    ] } },
+  };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const store = createShellStore(transport);
+  const view = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-repeat")).not.toBeNull());
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: {
+    "/ui/items": { status: "loading" },
+  } } }));
+  expect(view.container.querySelectorAll(".ks-repeat-skeleton-item .ks-repeat-skeleton-line")).toHaveLength(6);
+  store.dispose();
+});
+
 it("더 받을 것이 없는 빈 반복은 is-empty로 표시하고 항목이 생기면 사라진다", async () => {
   const definition: AppDefinition = { id: "repeat-empty", name: "빈 반복", requires: { blocks: 14, modules: {} }, permissions: [], state: { rows: [] as Array<{ id: string }> },
     ui: { type: "repeat", items: { state: "rows" }, key: "id", template: { type: "text", value: { item: "id" } } } };
