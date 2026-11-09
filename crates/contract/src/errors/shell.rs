@@ -96,6 +96,13 @@ error_catalog! { ENTRIES;
         message: "저장하지 못한 편집이 있어 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.",
         fix: "내용을 저장한 뒤 다시 시작하세요"
     }
+    SHELL_CLIENT_RESTART_UNSAVED() {
+        class: Io,
+        place: "클라이언트 다시 시작 전 저장",
+        cause: "앱 화면의 저장을 마치지 못했다",
+        message: "저장하지 못한 내용이 있어 클라이언트를 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.",
+        fix: "내용을 저장한 뒤 다시 시작하세요"
+    }
     SHELL_STATE_REPLY_INVALID() {
         class: Io,
         place: "쉘 초기 상태 응답",
