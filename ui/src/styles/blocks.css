@@ -199,6 +199,14 @@
   transition: transform 120ms ease;
 }
 
+.ks-tree-chevron-trigger {
+  display: inline-grid;
+  padding: var(--ks-space-1);
+  margin: calc(-1 * var(--ks-space-1));
+  place-items: center;
+  border-radius: var(--ks-radius-small);
+}
+
 .ks-chevron.is-expanded {
   transform: rotate(90deg);
 }

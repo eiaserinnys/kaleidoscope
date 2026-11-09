@@ -232,6 +232,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     handlers.current.onContextMenu(row.id === END_ACTION_ID ? null : row, event.currentTarget, { x: event.clientX, y: event.clientY }, focus, event);
   }, [focus]);
   const doubleClick = useCallback((row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => handlers.current.onDoubleClick?.(row, event.currentTarget), []);
+  const toggleExpanded = useCallback((row: TreeRowModel) => handlers.current.onExpandedChange(row.id, !row.expanded), []);
 
   const previousScrolledSelection = useRef<string | null>(null);
   useEffect(() => {
@@ -464,6 +465,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
           onDoubleClick={onDoubleClick ? doubleClick : undefined}
           onFocus={onFocus}
           onKeyDown={keyDown}
+          onToggleExpand={toggleExpanded}
           menuTarget={menuTargetId === row.id}
           multiSelected={selection ? selection.includes(row.id) : undefined}
           draggable={drag?.enabled && row.node.content === undefined}

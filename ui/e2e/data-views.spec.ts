@@ -453,6 +453,22 @@ test("확인 트리의 확인 상자와 기본 펼침을 밝은 화면과 어두
     await expect(note).not.toHaveAttribute("aria-checked");
     await capture(page, `gallery-tree-check-${scheme}`);
 
+    const today = app.getByRole("treeitem", { name: "오늘 할 일" });
+    await expect(today).toHaveAttribute("aria-expanded", "true");
+    await today.click();
+    await expect(today).toHaveAttribute("aria-expanded", "false");
+    await expect(today).toHaveAttribute("aria-selected", "true");
+    await expect(milk).toBeHidden();
+    await today.click();
+    await expect(today).toHaveAttribute("aria-expanded", "true");
+    await expect(milk).toBeVisible();
+    await today.locator(".ks-chevron").click();
+    await expect(today).toHaveAttribute("aria-expanded", "false");
+    await expect(milk).toBeHidden();
+    await today.locator(".ks-chevron").click();
+    await expect(today).toHaveAttribute("aria-expanded", "true");
+    await expect(milk).toBeVisible();
+
     await milk.locator("[data-tree-check]").click();
     await expect(milk).toHaveAttribute("aria-checked", "true");
     await expect(app.locator(".ks-tree-check.is-checked")).toHaveCount(2);
