@@ -25,6 +25,16 @@ import * as shellErrors from "../contract/shell-errors";
 
 export type AgentChatBlockData = Extract<Block, { type: "chat" }>;
 
+function revealInStart(panel: HTMLElement | null, element: HTMLElement | null) {
+  if (!panel || !element) return;
+  const style = getComputedStyle(panel);
+  const top = panel.getBoundingClientRect().top + parseFloat(style.paddingBlockStart);
+  const bottom = panel.getBoundingClientRect().bottom - parseFloat(style.paddingBlockEnd);
+  const box = element.getBoundingClientRect();
+  if (box.bottom > bottom) panel.scrollTop += Math.min(box.bottom - bottom, box.top - top);
+  else if (box.top < top) panel.scrollTop -= top - box.top;
+}
+
 export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBlockData; context: BlockContext; pointer: string }) {
   const blockRoot = useBlockRootProps();
   const loadingBinding = useBinding(`${pointer}/loading`, block.loading ?? false);
@@ -82,6 +92,15 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startRef = useRef<HTMLDivElement>(null);
+  const createNoticeRef = useRef<HTMLDivElement>(null);
+  const attachNoticeRef = useRef<HTMLDivElement>(null);
+  // 시작이나 연결이 실패하면 그 알림이 시작 판 안에 보이게 판만 스크롤한다. 창이나 쉘은 움직이지 않는다.
+  useLayoutEffect(() => {
+    if (createError) revealInStart(startRef.current, createNoticeRef.current);
+  }, [createError]);
+  useLayoutEffect(() => {
+    if (attachError) revealInStart(startRef.current, attachNoticeRef.current);
+  }, [attachError]);
   const restoreFocus = useRef(false);
   const followTail = useRef(true);
   const loadGeneration = useRef(0);
@@ -469,22 +488,22 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   ];
   const attachSection = attachChoices.length ? (
     <section className="ks-agent-chat-start-section" aria-labelledby={`${windowId}-attach-title`}>
-      <h2 id={`${windowId}-attach-title`} className="ks-data-section-title ks-agent-chat-start-title">기존 대화</h2>
+      <div className="ks-agent-chat-start-head">
+        <h2 id={`${windowId}-attach-title`} className="ks-data-section-title ks-agent-chat-start-title">기존 대화</h2>
+        {attaching ? <StatusText>연결하는 중</StatusText> : null}
+      </div>
       <div className="ks-agent-chat-start-row is-single">
         <Select
           groups={[{ options: attachChoices }]}
           value={attachId}
           label="기존 대화"
-          placeholder="기존 대화 선택"
+          placeholder="선택"
           disabled={attaching || creating}
           onChange={selectAttach}
         />
-        <div className="ks-agent-chat-start-submit">
-          {attaching ? <StatusText>연결하는 중</StatusText> : null}
-          <Button disabled={!attachId || attaching || creating} onClick={() => void attach()}>연결</Button>
-        </div>
+        <Button className="ks-agent-chat-start-submit" disabled={!attachId || attaching || creating} onClick={() => void attach()}>연결</Button>
       </div>
-      {attachError ? <Notice role="alert" errorId={attachError.id}>{attachError.message}</Notice> : null}
+      {attachError ? <div ref={attachNoticeRef}><Notice role="alert" errorId={attachError.id}>{attachError.message}</Notice></div> : null}
     </section>
   ) : null;
 
@@ -540,17 +559,17 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       <div {...blockRoot} className="ks-agent-chat-start" ref={startRef}>
         {own ? null : (
           <section className="ks-agent-chat-start-section" aria-labelledby={`${windowId}-new-title`}>
-            <h2 id={`${windowId}-new-title`} className="ks-data-section-title ks-agent-chat-start-title">새 대화</h2>
+            <div className="ks-agent-chat-start-head">
+              <h2 id={`${windowId}-new-title`} className="ks-data-section-title ks-agent-chat-start-title">새 대화</h2>
+              {creating ? <StatusText>시작하는 중</StatusText> : null}
+            </div>
             <div className="ks-agent-chat-start-row">
               {startField("프로필", profileSelect)}
               {placeSelect ? startField("실행 위치", placeSelect) : null}
               {startField("모델", modelSelect)}
-              <div className="ks-agent-chat-start-submit">
-                {creating ? <StatusText>시작하는 중</StatusText> : null}
-                <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || attaching || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
-              </div>
+              <Button className="ks-agent-chat-start-submit" disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || attaching || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
             </div>
-            {createError ? <Notice role="alert" errorId={createError.id}>{createError.message}</Notice> : null}
+            {createError ? <div ref={createNoticeRef}><Notice role="alert" errorId={createError.id}>{createError.message}</Notice></div> : null}
           </section>
         )}
         {attachSection}

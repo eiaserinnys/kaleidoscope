@@ -254,6 +254,17 @@ const demoSnapshot: ShellSnapshot = conversationMode ? connectedSnapshot : ["rea
   : pasMode === "offline"
     ? { ...mdViewerSnapshot, link: { state: "offline", mode: "remote", server_url: "https://kaleidoscope.example", device_name: "개발 PC", reason: null } }
     : mdViewerSnapshot;
+type FakeConversation = NonNullable<Parameters<typeof createFakeTransport>[0]["conversation"]>;
+// names=real이면 디렉터 창의 실제 길이 값(실행 위치, 모델, 첫 기존 대화)으로 본다(카드 #1106).
+function withRealNames(conversation: FakeConversation | undefined): FakeConversation | undefined {
+  if (params.get("names") !== "real" || !conversation) return conversation;
+  const place = <T extends { id: string; label: string } | undefined>(group: T): T => group?.id === "eiaserinnys" ? { ...group, label: "eias-linegames-wsl" } : group;
+  return {
+    ...conversation,
+    models: conversation.models.map((model) => ({ ...model, label: model.id === "sol" ? "Gemini - 4 Argon" : model.label, group: place(model.group) })),
+    adoptable: conversation.adoptable?.map((candidate, index) => index === 0 ? { ...candidate, title: "서소영 영구 세션", profile: candidate.profile && { ...candidate.profile, label: "서소영 (PAS)" } } : candidate),
+  };
+}
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
@@ -267,7 +278,7 @@ const fakeTransport = createFakeTransport({
     ].map((body, index) => [`tile-${index}.svg`, `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>${body}</svg>`)}`])),
   },
   folder: { root_path: "/fake/docs", root_name: "문서" },
-  conversation: conversationMode || pasMode ? {
+  conversation: withRealNames(conversationMode || pasMode ? {
     thread: ["start", "login-start", "attach-start", "attach-own"].includes(conversationMode ?? "") || pasMode === "empty" ? null : conversationMode === "attach-attached" ? { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록 2026년 11월", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
     items: historyCount === null ? [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }] : makeLongConversation(historyCount),
     olderPages: [[{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }], [{ id: "older", kind: "assistant", text: "더 이전 기록", at: timestamp, attachments: [] }]],
@@ -278,7 +289,7 @@ const fakeTransport = createFakeTransport({
       { id: "sol", label: "Sol", available: true, group: { id: "eiaserinnys", label: "eiaserinnys" } },
       { id: "n1:eias-linegames:argon", label: "Argon", available: true, group: { id: "eias-linegames", label: "eias-linegames" } },
     ],
-    loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: pasMode === "loading" ? 5000 : historyCount !== null ? 0 : conversationMode ? 350 : 0,
+    loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: pasMode === "loading" ? 5000 : historyCount !== null ? 0 : conversationMode ? Number(params.get("conversation-delay")) || 350 : 0,
     getError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
     sendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
     sendDelayMs: Number(params.get("send-delay")) || undefined,
@@ -295,7 +306,7 @@ const fakeTransport = createFakeTransport({
       { id: "session-6", title: "발행 파이프라인 점검과 남은 작업 목록", profile: { id: "profile-b", label: "키키" }, updated_at: "2026-11-03T09:00:00Z" },
       { id: "session-7", title: "kaleidoscope · 작업 PAS 연결 설계와 쉘 출시 준비, 10월 마지막 주 정리", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-02T09:00:00Z" },
     ] : undefined,
-  } : undefined,
+  } : undefined),
   files: {
     "settings.json": "{\r\n  \"theme\": \"system\"\r\n}\r\n",
     "README.md": "# 첫 문서\n\n편집과 자동 저장을 확인합니다.\n",

@@ -648,9 +648,23 @@
   border-block-start: var(--ks-line-width) solid var(--ks-color-border);
 }
 
+/* 구역 제목 줄 끝에 시작하는 중, 연결하는 중을 둔다. 고르기 줄의 폭과 높이는 그대로다. */
+.ks-agent-chat-start-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--ks-space-2);
+}
+
 .ks-agent-chat-start-title {
+  min-width: 0;
+  flex: 1 1 auto;
   margin: 0;
   line-height: var(--ks-line-body);
+}
+
+.ks-agent-chat-start-head > .ks-status-text {
+  flex: 0 0 auto;
 }
 
 /* 고르기와 그 고르기를 쓰는 단추가 한 줄이다. 좁으면 단추 묶음째 다음 줄 끝으로 간다. */
@@ -684,17 +698,9 @@
   flex: 0 1 auto;
 }
 
-.ks-agent-chat-start-submit {
-  display: flex;
-  min-width: 0;
+.ks-agent-chat-start-row > .ks-agent-chat-start-submit {
   flex: 0 0 auto;
-  align-items: center;
-  gap: var(--ks-space-2);
   margin-inline-start: auto;
-}
-
-.ks-agent-chat-start-submit > .ks-button {
-  flex: 0 0 auto;
 }
 
 .ks-agent-chat-toolbar {
