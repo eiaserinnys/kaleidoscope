@@ -1345,6 +1345,44 @@ pub struct AgentProvider {
     pub thread_entry: String,
 }
 
+impl AgentProvider {
+    /// 대화 설정의 바인딩 자리 전부와 그 필드 이름. 식 모으기(`data::all_exprs`)와 정의 검사가 이 목록
+    /// 하나를 쓴다. 따로 적은 목록에서 `attached_instructions_template`이 빠져, 식으로 적으면 코어가
+    /// 그 식을 만들지 않고 보낼 때마다 「없는 식」으로 거절했다(카드 #1106). 필드를 더하면 아래 분해가
+    /// 컴파일을 멈추니 여기에 더한다.
+    pub fn bindings(&self) -> Vec<(&'static str, &Binding)> {
+        let Self {
+            protocol: _,
+            permission: _,
+            base_path: _,
+            namespace,
+            profile,
+            collection,
+            model_order,
+            selected_model,
+            title_template,
+            initial_instruction_template,
+            instructions_template,
+            attached_instructions_template,
+            thread_entry: _,
+        } = self;
+        let mut bindings = vec![
+            ("namespace", namespace),
+            ("profile", profile),
+            ("collection", collection),
+            ("model_order", model_order),
+            ("selected_model", selected_model),
+            ("title_template", title_template),
+            ("initial_instruction_template", initial_instruction_template),
+            ("instructions_template", instructions_template),
+        ];
+        if let Some(binding) = attached_instructions_template {
+            bindings.push(("attached_instructions_template", binding));
+        }
+        bindings
+    }
+}
+
 fn agent_binding_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
     let mut schema = generator.subschema_for::<Binding>();
     schema.insert(

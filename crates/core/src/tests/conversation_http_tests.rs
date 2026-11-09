@@ -246,16 +246,44 @@ fn pas_definition(attached_template: Option<&str>) -> String {
     definition.to_string()
 }
 
+/// 운영 작업 PAS처럼 연결한 대화의 덧붙임 글을 저장 항목에서 읽는 식으로 둔 정의.
+fn pas_definition_with_attached_expr() -> String {
+    let mut definition: Value = serde_json::from_str(&pas_definition(None)).unwrap();
+    definition["agent"]["attached_instructions_template"] =
+        json!({"expr": "$storage.attached_role"});
+    definition["requires"]["modules"]["agent"] = json!(4);
+    definition["storage"]["entries"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "id": "attached_role",
+            "key": "instructions/attached-role",
+            "kind": "md",
+            "default": "",
+            "label": "연결한 대화에 덧붙일 지시",
+            "presentation": "settings"
+        }));
+    definition.to_string()
+}
+
 fn open_pas(
     base: &str,
     temp: &TempDir,
     attached_template: Option<&str>,
 ) -> (Core, Arc<FakeRegistryClient>, Context) {
+    open_pas_with(base, temp, pas_definition(attached_template))
+}
+
+fn open_pas_with(
+    base: &str,
+    temp: &TempDir,
+    definition: String,
+) -> (Core, Arc<FakeRegistryClient>, Context) {
     let client = registry_client();
     let host = Arc::new(FakeHost::default());
     let core = open_core_with_client(
         &temp.path().join("data"),
-        vec![pas_definition(attached_template)],
+        vec![definition],
         &host,
         client.clone(),
     );
@@ -630,6 +658,38 @@ fn attached_send_prepends_the_configured_instructions() {
             "연결한 대화입니다: 작업 1 ({})",
             ctx.workspace.id
         ))
+    );
+}
+
+#[test]
+fn attached_send_computes_an_expression_template_from_storage() {
+    // 디렉터 화면(쉘 0.6.93, 작업 PAS 8판)에서 연결한 대화로 보내면 CONV_CONTEXT_BINDING_INVALID
+    // 「없는 식입니다」로 거절됐다. 덧붙임 글을 리터럴로만 시험해 식 경로를 놓쳤다.
+    let (base, server) = server_with_requests(vec![
+        (
+            200,
+            thread_info_reply("thread-9", "bucket/attached", "thread-9"),
+        ),
+        (
+            200,
+            json!({"request_id": "r1", "status": "accepted"}).to_string(),
+        ),
+    ]);
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas_with(&base, &temp, pas_definition_with_attached_expr());
+    *registry.storage_value.lock().unwrap() = Some((attached_entry("thread-9"), "r0".into()));
+    registry.storage_entries.lock().unwrap().insert(
+        "attached_role".into(),
+        json!("작업 「{workspace.name}」 창에서 보냈다({workspace.id})"),
+    );
+    crate::conversation_send::send(&core.inner, &ctx, "r1".into(), "안녕".into(), vec![]).unwrap();
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 2);
+    let body: Value = serde_json::from_str(&requests[1].1).unwrap();
+    assert_eq!(body["text"], json!("안녕"));
+    assert_eq!(
+        body["context"],
+        json!(format!("작업 「작업 1」 창에서 보냈다({})", ctx.workspace.id))
     );
 }
 

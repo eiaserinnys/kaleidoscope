@@ -143,3 +143,40 @@ fn conversation_get_reports_attached_own_and_adoptable() {
     assert!(value["adoptable"][0].get("profile").is_none());
     assert!(value["adoptable"][0].get("model").is_none());
 }
+
+#[test]
+fn attached_instructions_expression_is_compiled_and_checked_like_other_agent_fields() {
+    // 식 모으기에서 이 필드가 빠져 운영 작업 PAS의 연결한 대화 보내기가 「없는 식」으로 거절됐다(카드 #1106).
+    let mut value = definition(4, false);
+    value["requires"]["modules"]["storage"] = json!(2);
+    value["storage"]["entries"].as_array_mut().unwrap().push(json!({
+        "id": "attached_role",
+        "key": "instructions/attached-role",
+        "kind": "md",
+        "default": "",
+        "label": "연결한 대화에 덧붙일 지시",
+        "presentation": "settings"
+    }));
+    value["agent"]["attached_instructions_template"] = json!({"expr": "$storage.attached_role"});
+    let parsed = parse_app_definition(&value.to_string()).unwrap();
+    assert!(kaleidoscope_contract::data::all_exprs(&parsed)
+        .iter()
+        .any(|(pointer, expr)| pointer == "/agent/attached_instructions_template"
+            && *expr == "$storage.attached_role"));
+
+    value["agent"]["attached_instructions_template"] = json!({"expr": "$state.role"});
+    let error = parse_app_definition(&value.to_string()).unwrap_err();
+    assert!(
+        error.details.iter().any(|detail| detail.contains("attached_instructions_template")
+            && detail.contains("창마다 다를 수 없으니")),
+        "{error:?}"
+    );
+
+    value["agent"]["attached_instructions_template"] = json!("{workspace.title}에서 보냈다");
+    let error = parse_app_definition(&value.to_string()).unwrap_err();
+    assert!(
+        error.details.iter().any(|detail| detail.contains("attached_instructions_template")
+            && detail.contains("{workspace.id}와 {workspace.name}만")),
+        "{error:?}"
+    );
+}

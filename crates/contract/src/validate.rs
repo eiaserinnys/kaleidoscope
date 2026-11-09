@@ -1843,20 +1843,7 @@ fn validate_agent_provider(
         ));
     }
 
-    let fields = [
-        ("namespace", &agent.namespace),
-        ("profile", &agent.profile),
-        ("collection", &agent.collection),
-        ("model_order", &agent.model_order),
-        ("selected_model", &agent.selected_model),
-        ("title_template", &agent.title_template),
-        (
-            "initial_instruction_template",
-            &agent.initial_instruction_template,
-        ),
-        ("instructions_template", &agent.instructions_template),
-    ];
-    for (field, binding) in fields {
+    for (field, binding) in agent.bindings() {
         let pointer = format!("{at}/{field}");
         validate_binding_shape(binding, definition, details, &pointer);
         let window_dependent = match binding {
@@ -1876,7 +1863,10 @@ fn validate_agent_provider(
         if let Some(value) = static_binding_value(binding, definition) {
             if matches!(
                 field,
-                "title_template" | "initial_instruction_template" | "instructions_template"
+                "title_template"
+                    | "initial_instruction_template"
+                    | "instructions_template"
+                    | "attached_instructions_template"
             ) {
                 if let Some(template) = value.as_str() {
                     if let Err(reason) = validate_workspace_template(template) {
