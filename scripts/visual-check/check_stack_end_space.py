@@ -106,10 +106,23 @@ TEXT_END_SPACE_JS = """(el) => {
   };
 }"""
 
-SCROLL_END_JS = """() => {
-  for (const node of document.querySelectorAll('.ks-data-window-body, .ks-stack-scroll, .ks-data-stack-item.is-fill')) {
-    node.scrollTop = node.scrollHeight;
+# 넘침이 있는 스크롤 칸을 모두 끝까지 내린다. 바깥 칸을 내린 뒤에야 안쪽 목록이 넘칠 수 있어
+# 두 번 돌고, 실제로 내린 칸의 수를 돌려준다.
+SCROLL_END_JS = """async () => {
+  const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  const scrolled = new Set();
+  for (let pass = 0; pass < 2; pass++) {
+    for (const node of document.querySelectorAll('.ks-harness-apps *')) {
+      const overflowY = getComputedStyle(node).overflowY;
+      if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight + 1) {
+        node.scrollTop = node.scrollHeight;
+        scrolled.add(node);
+      }
+    }
+    await frame();
+    await frame();
   }
+  return scrolled.size;
 }"""
 
 
@@ -205,13 +218,12 @@ def main():
                 for width, height in SIZES:
                     app = open_scene(page, args.port, ui, width, height)
                     for state in ("default", "end"):
-                        if state == "end":
-                            page.evaluate(SCROLL_END_JS)
+                        scrolled = page.evaluate(SCROLL_END_JS) if state == "end" else 0
                         measurement = app.evaluate(TEXT_END_SPACE_JS if kind == "text" else TAIL_SPACE_JS)
                         key = f"{name}-{width}x{height}-{state}"
                         page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
                         checks = judge(kind, measurement, input_gap)
-                        scenes[key] = {"measurement": measurement, "checks": checks}
+                        scenes[key] = {"measurement": measurement, "checks": checks, "scrolled": scrolled}
                         failed = [check for check, ok in checks.items() if not ok]
                         failures.extend(f"{key}.{check}" for check in failed)
                         print(key, measurement, "FAIL " + ",".join(failed) if failed else "ok")
