@@ -3,6 +3,7 @@
 :is(.ks-data-tab-panel, .ks-data-section-child) > .ks-data-stack.is-column {
   &:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-markdown-view, .ks-timeline, .ks-chart, .ks-map)):where(:not(:has(> .ks-data-stack-item.is-fill > .ks-no-items, > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-no-items))) {
     height: auto;
+    &:not(.has-fill-list, .has-textarea-fill) > .ks-stack-scroll { --ks-fill-list-basis: auto; }
     :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 0 0 auto; overflow: visible; }
   }
   &.has-fill-list {

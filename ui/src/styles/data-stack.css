@@ -42,6 +42,6 @@
 .ks-data-stack-item.is-fill > .ks-data-stack.is-column.has-explicit-fill,
 .ks-stack-scroll > .ks-stack-scroll-content { --ks-fill-textarea-height: inherit; --ks-fill-textarea-max: inherit; --ks-fill-media-max: inherit; }
 /* 직접 자식 관계는 본문 안에서도 쌓기 정본을 유지한다. 결정 줄과 스크롤 영역은 겹치지 않는다. */
-.ks-data-stack.is-column.has-action-tail > .ks-data-stack-item.is-fill.ks-stack-scroll { flex: 1 1 var(--ks-fill-list-basis, 0); min-height: 0; min-width: 0; overflow: auto; }
+.ks-data-stack.is-column.has-action-tail > .ks-data-stack-item.is-fill.ks-stack-scroll { flex: 1 1 var(--ks-fill-list-basis, auto); min-height: 0; min-width: 0; overflow: auto; }
 .ks-stack-scroll > .ks-stack-scroll-content { height: var(--ks-fill-textarea-height); min-height: 100%; }
 .ks-data-stack.has-action-tail > .ks-data-stack-item:not(.ks-stack-scroll) { flex: 0 0 auto; }
