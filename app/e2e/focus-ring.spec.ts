@@ -89,7 +89,11 @@ test.describe("입력 방식에 따른 초점 링", () => {
 
     // 키보드로 창을 바꾸면 새 창의 초점에 링이 보인다.
     await page.keyboard.press("Control+Alt+PageDown");
-    await expect.poll(async () => (await focusState(page)).windowId).not.toBe(second);
+    // 창을 바꾸는 동안 초점이 잠깐 창 밖(body)에 머물 수 있으니, 다른 계산기 창 안에 내려앉을 때까지 기다린다.
+    await expect.poll(async () => {
+      const state = await focusState(page);
+      return state.window === "app-window-calculator" && state.windowId !== second ? state.windowId : null;
+    }).not.toBeNull();
     const switched = await focusState(page);
     await testInfo.attach("shortcut-switched-focus", { body: JSON.stringify(switched), contentType: "application/json" });
     expect(switched.window).toBe("app-window-calculator");
