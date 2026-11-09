@@ -131,3 +131,39 @@ for (const [width, height] of [[1180, 720], [360, 240]] as const) {
     if (height <= 300) expect(populated.repeat!.scrollHeight).toBeGreaterThan(populated.repeat!.clientHeight);
   });
 }
+
+async function firstFrameColumns(page: Page, values: Record<string, unknown>) {
+  return page.evaluate(({ windowId, values, testId }) => new Promise<{ columns: number; items: number }>((resolve) => {
+    (window as any).conversationHarness.emit({ event: "data.update", window_id: windowId, view: { sources: {}, values } });
+    requestAnimationFrame(() => {
+      const root = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`)!;
+      const rows = Array.from(root.querySelectorAll<HTMLElement>(".ks-repeat-item"));
+      const lefts = new Set(rows.map((element) => Math.round(element.getBoundingClientRect().left)));
+      resolve({ columns: lefts.size, items: rows.length });
+    });
+  }), { windowId: WINDOW_ID, values, testId: "app-window-repeat-empty-center" });
+}
+
+for (const [name, empty] of [["빈 상태", true], ["불러오는 중", false]] as const) {
+  test(`${name}에서 항목이 오면 첫 프레임부터 여러 열로 그린다`, async ({ page }) => {
+    await page.setViewportSize({ width: 1182, height: 762 });
+    await page.goto("/?preview=repeat-empty-center");
+    await page.addStyleTag({ content: "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }" });
+    const app = page.getByTestId("app-window-repeat-empty-center");
+    await expect(app.getByText("받은 항목", { exact: true })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    // 실제 앱은 불러오는 중 다음에 빈 상태가 온다. 빈 상태에서 반복은 그때 처음 붙어 숨은 채로 열 수를 잰다.
+    await emitState(page, states[0].values);
+    await expect(app.locator(".ks-data-skeleton")).toBeVisible();
+    if (empty) {
+      await emitState(page, states[2].values);
+      await expect(app.locator(".ks-data-stack.is-center")).toContainText(EMPTY_TEXT);
+      await expect(app.locator(".ks-repeat.is-empty")).toHaveCount(1);
+    }
+    const first = await firstFrameColumns(page, states[3].values);
+    await expect(app.locator(".ks-repeat-item")).toHaveCount(items.length);
+    console.log(`${name} → 항목 있음 첫 프레임: ${JSON.stringify(first)}`);
+    expect(first.items).toBe(items.length);
+    expect(first.columns).toBe(4);
+  });
+}
