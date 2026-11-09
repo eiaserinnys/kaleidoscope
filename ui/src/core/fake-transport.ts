@@ -555,6 +555,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "update.restart":
         if (seed.updateRestartError) return fail("io", seed.updateRestartError);
         return { op: "update.restart" };
+      case "theme.set":
+        snapshot = { ...snapshot, theme: request.theme };
+        emitState();
+        return { op: "theme.set" };
       case "desktop.activate": {
         const desktop = snapshot.shared.desktops.find((item) => item.id === request.desktop_id);
         if (!desktop) return fail("not_found", "데스크톱을 찾을 수 없습니다");

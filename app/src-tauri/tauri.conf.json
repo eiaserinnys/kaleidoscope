@@ -16,6 +16,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "kaleidoscope",
         "width": 1440,
         "height": 900,

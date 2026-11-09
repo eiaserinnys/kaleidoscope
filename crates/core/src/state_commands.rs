@@ -197,10 +197,6 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
                 .insert(workspace.id.clone(), desktop_id);
             Ok(CoreReply::WorkspaceActivate {})
         }
-        CoreRequest::DeviceThemeSet { theme } => {
-            state.device.theme = theme;
-            Ok(CoreReply::DeviceThemeSet {})
-        }
         CoreRequest::DesktopCreate { workspace_id, name } => {
             if !state
                 .shared

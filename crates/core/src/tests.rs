@@ -131,6 +131,7 @@ struct FakeHost {
     selected: Mutex<Option<PathBuf>>,
     roots: Mutex<Vec<crate::PcRoot>>,
     opened_urls: Mutex<Vec<String>>,
+    applied_themes: Mutex<Vec<kaleidoscope_contract::ThemePreference>>,
 }
 
 impl FakeHost {
@@ -140,6 +141,9 @@ impl FakeHost {
 }
 
 impl Host for FakeHost {
+    fn apply_theme(&self, theme: kaleidoscope_contract::ThemePreference) {
+        self.applied_themes.lock().unwrap().push(theme);
+    }
     fn pick_folder(&self) -> Option<PathBuf> {
         self.selected.lock().unwrap().clone()
     }
@@ -183,19 +187,33 @@ fn external_links_only_open_http_or_https() {
 }
 
 #[test]
-fn device_theme_starts_at_system_and_survives_restart() {
+fn theme_is_device_wide_and_survives_restart_and_server_switch() {
+    use kaleidoscope_contract::{ServerMode, ThemePreference};
     let temp = TempDir::new().unwrap();
     let host = Arc::new(FakeHost::default());
     let core = open_core(temp.path(), vec![], &host);
-    assert_eq!(snapshot(&core).device.theme, kaleidoscope_contract::ThemePreference::System);
-    core.handle(CoreRequest::DeviceThemeSet {
-        theme: kaleidoscope_contract::ThemePreference::Dark,
-    })
-    .unwrap();
-    assert_eq!(snapshot(&core).device.theme, kaleidoscope_contract::ThemePreference::Dark);
+    assert_eq!(snapshot(&core).theme, ThemePreference::System);
+    core.handle(CoreRequest::ThemeSet { theme: ThemePreference::Dark }).unwrap();
+    assert_eq!(snapshot(&core).theme, ThemePreference::Dark);
+    assert_eq!(core.theme(), ThemePreference::Dark);
+    assert_eq!(host.applied_themes.lock().unwrap().as_slice(), &[ThemePreference::Dark]);
+
+    // 서버를 바꾸면 서버별 상태는 갈아 끼우지만 테마는 그대로다.
+    let remote = LinkFile {
+        revoked: false,
+        format: 1,
+        mode: ServerMode::Remote,
+        server_url: "https://remote.example".into(),
+        device_id: "device".into(),
+        device_name: "시험".into(),
+        token: "token".into(),
+    };
+    crate::server_switch::activate(&core.inner, remote, 0).unwrap();
+    assert_eq!(snapshot(&core).theme, ThemePreference::Dark);
     drop(core);
+
     let reopened = open_core(temp.path(), vec![], &host);
-    assert_eq!(snapshot(&reopened).device.theme, kaleidoscope_contract::ThemePreference::Dark);
+    assert_eq!(snapshot(&reopened).theme, ThemePreference::Dark);
 }
 
 fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) -> Core {

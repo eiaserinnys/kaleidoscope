@@ -8,7 +8,6 @@
     "allow-shell-close-ready",
     "allow-shell-finish-close",
     "core:event:allow-listen",
-    "core:event:allow-unlisten",
-    "core:window:allow-set-theme"
+    "core:event:allow-unlisten"
   ]
 }

@@ -44,13 +44,11 @@ import { makeNewWindowRect, windowSizeForApp } from "./window-geometry";
 import { createShellWindowActions, selectDesktop, selectWorkspace } from "./shell-window-actions";
 import { installShellShortcuts } from "./shell-shortcuts";
 import { installNativeClose } from "../core/native-close";
-import { useDeviceTheme } from "../core/native-theme";
 
 type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
 
 export function Shell({ store }: { store: ShellStore }) {
   useWindowControlHost(store);
-  useDeviceTheme(store);
   const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
   const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);

@@ -4,14 +4,15 @@ import { sourceHash } from "./html-bridge/identity";
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { registerFramePointHandler } from "../share/frame-point";
 import type { ParentToFrame } from "./html-bridge/frame-protocol";
-import { onThemeChange } from "../styles/theme";
 
 export function useHtmlThemeResend(send: (message: ParentToFrame) => void): void {
   useEffect(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!media) return;
     let scheduled = 0;
     const update = () => { if (scheduled) cancelAnimationFrame(scheduled); scheduled = requestAnimationFrame(() => send({ type: "ks-html-theme", tokens: htmlViewTokens() })); };
-    const stop = onThemeChange(update);
-    return () => { stop(); if (scheduled) cancelAnimationFrame(scheduled); };
+    media.addEventListener("change", update);
+    return () => { media.removeEventListener("change", update); if (scheduled) cancelAnimationFrame(scheduled); };
   }, [send]);
 }
 

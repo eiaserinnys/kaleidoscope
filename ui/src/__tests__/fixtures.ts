@@ -94,7 +94,6 @@ export function makeTestSnapshot(options: {
       default_folder_access: [],
       process_access: [],
       store_servers: [],
-      theme: "system",
     },
     supported: { blocks: 1, modules: { files: 1 } },
     embedded_available: false,
@@ -102,6 +101,7 @@ export function makeTestSnapshot(options: {
     link: { state: "unlinked" },
     sharing: [],
     update: { state: "unavailable" },
+    theme: "system",
   };
 }
 

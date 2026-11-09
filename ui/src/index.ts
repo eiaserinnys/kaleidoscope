@@ -64,7 +64,6 @@ export { flushEditors, flushWindowEditors } from "./blocks/file-editor-session";
 export { flushSandboxes } from "./blocks/sandbox-flush";
 export { runSavedTransition } from "./lifecycle/window-transition";
 export { toCoreError } from "./core/core-transport";
-export { currentTheme, onThemeChange, setThemePreference, type Theme } from "./styles/theme";
 export type { CoreTransport, ReplyFor, RequestFor } from "./core/core-transport";
 export type {
   AppCommentAnchor,

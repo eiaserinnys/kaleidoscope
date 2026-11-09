@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shell-close-ready"
+description = "Enables the shell_close_ready command without any pre-configured scope."
+commands.allow = ["shell_close_ready"]
+
+[[permission]]
+identifier = "deny-shell-close-ready"
+description = "Denies the shell_close_ready command without any pre-configured scope."
+commands.deny = ["shell_close_ready"]

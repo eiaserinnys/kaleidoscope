@@ -130,9 +130,10 @@
 //! 지침을 바꾸지 않는다.
 //!
 //! # 계약 47판: 화면 테마
-//! 기기마다 쉘의 밝기 테마를 고른다. [`DeviceState::theme`]은 `system`(운영체제를 따름, 기본), `light`, `dark`이고
-//! `device.theme.set`으로 바꾼다. 기기 밖으로 나가지 않으므로 같은 서버에 붙은 다른 기기는 제 테마를 따로 쓴다.
-//! 화면은 이 값과 운영체제 설정에서 지금 보일 테마 하나를 정해 쉘, 블록, HTML 보기에 같이 적용한다.
+//! 기기마다 쉘의 밝기 테마를 고른다. [`ShellSnapshot::theme`]은 `system`(운영체제를 따름, 기본), `light`, `dark`이고
+//! `theme.set`으로 바꾼다. 서버와 상관없는 이 기기 전체의 설정이라 서버별 보관 상태([`DeviceState`]) 밖에 두며,
+//! 서버를 바꿔도 그대로이고 다른 기기로 가지 않는다. 호스트가 이 값을 네이티브 창 테마로 적용하면 창 안의 웹 내용
+//! (쉘, 블록, HTML 보기, sandbox, client 프레임)은 `prefers-color-scheme`로 그 테마를 따른다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -780,9 +781,6 @@ pub struct DeviceState {
     /// 정규화된 스토어 주소 → 사설 스토어 초대코드. 주소와 코드 모두 소문자로 맞춘다.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub store_invites: BTreeMap<String, String>,
-    /// (계약 47판) 이 기기에서 고른 화면 테마. 옛 상태에는 없으므로 `system`으로 읽는다.
-    #[serde(default)]
-    pub theme: ThemePreference,
 }
 
 /// (계약 47판) 쉘의 밝기 테마 선택. `system`은 운영체제 설정을 따른다.
@@ -889,6 +887,8 @@ pub struct ShellSnapshot {
     pub sharing: Vec<String>,
     /// (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
     pub update: UpdateStatus,
+    /// (계약 47판) 이 기기에서 고른 화면 테마. 서버별 상태가 아니라 기기 전역 값이다.
+    pub theme: ThemePreference,
 }
 
 /// (10판) 이 쉘 자신의 새 판 받기 상태. `state`로 가른다. 위 「쉘 업데이트」 절.
@@ -4739,9 +4739,9 @@ pub enum CoreRequest {
     WorkspaceDelete { workspace_id: String },
     #[serde(rename = "workspace.activate")]
     WorkspaceActivate { workspace_id: String },
-    /// (계약 47판) 이 기기의 화면 테마를 바꾼다. 기기 상태라 서버로 가지 않는다.
-    #[serde(rename = "device.theme.set")]
-    DeviceThemeSet { theme: ThemePreference },
+    /// (계약 47판) 이 기기의 화면 테마를 바꾼다. 서버로 가지 않고 서버를 바꿔도 남는다.
+    #[serde(rename = "theme.set")]
+    ThemeSet { theme: ThemePreference },
 
     /// 데스크톱을 워크스페이스 끝에 만들고 지금 보는 것으로 바꾼다.
     #[serde(rename = "desktop.create")]
@@ -5937,8 +5937,8 @@ pub enum CoreReply {
     WorkspaceDelete {},
     #[serde(rename = "workspace.activate")]
     WorkspaceActivate {},
-    #[serde(rename = "device.theme.set")]
-    DeviceThemeSet {},
+    #[serde(rename = "theme.set")]
+    ThemeSet {},
 
     #[serde(rename = "desktop.create")]
     DesktopCreate { desktop: Desktop },
