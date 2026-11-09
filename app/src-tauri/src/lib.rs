@@ -276,6 +276,53 @@ async fn core_bytes(
     Ok(tauri::ipc::Response::new(result))
 }
 
+/// 이 기기를 부를 이름. 기기 목록과 서버 짝짓기에 쓰인다.
+/// macOS 앱은 Finder에서 열면 `COMPUTERNAME`도 `HOSTNAME`도 받지 못해, 시스템 설정의 컴퓨터 이름을 읽는다.
+fn device_name() -> String {
+    #[cfg(target_os = "macos")]
+    let computer_name = mac_computer_name;
+    #[cfg(not(target_os = "macos"))]
+    let computer_name = || None;
+    pick_device_name(
+        env::var("COMPUTERNAME").ok(),
+        env::var("HOSTNAME").ok(),
+        computer_name,
+    )
+}
+
+/// 앞에서부터 비지 않은 이름을 고르고, 서버 짝짓기가 받는 100자 안으로 자른다.
+/// 컴퓨터 이름은 환경 변수가 둘 다 비었을 때만 읽는다.
+fn pick_device_name(
+    computer_name_env: Option<String>,
+    hostname_env: Option<String>,
+    computer_name: impl FnOnce() -> Option<String>,
+) -> String {
+    let usable = |name: Option<String>| {
+        name.map(|name| name.trim().chars().take(100).collect::<String>())
+            .filter(|name| !name.is_empty())
+    };
+    usable(computer_name_env)
+        .or_else(|| usable(hostname_env))
+        .or_else(|| usable(computer_name()))
+        .unwrap_or_else(|| "kaleidoscope".into())
+}
+
+/// 시스템 설정 > 일반 > 정보에 보이는 컴퓨터 이름. 읽지 못하면 `None`이다.
+#[cfg(target_os = "macos")]
+fn mac_computer_name() -> Option<String> {
+    use std::process::{Command, Stdio};
+    let output = Command::new("/usr/sbin/scutil")
+        .args(["--get", "ComputerName"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout).ok()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -283,9 +330,7 @@ pub fn run() {
         .setup(|app| {
             app.manage(close::CloseState::default());
             let data_dir = app.path().app_data_dir()?;
-            let device_name = env::var("COMPUTERNAME")
-                .or_else(|_| env::var("HOSTNAME"))
-                .unwrap_or_else(|_| "kaleidoscope".into());
+            let device_name = device_name();
             let embedded =
                 tauri::async_runtime::block_on(kaleidoscope_orchestrator::EmbeddedServer::start(
                     kaleidoscope_orchestrator::EmbeddedConfig {
@@ -317,9 +362,7 @@ pub fn run() {
                     data_dir,
                     seed_definitions: vec![],
                     server_url: SERVER_URL.into(),
-                    device_name: env::var("COMPUTERNAME")
-                        .or_else(|_| env::var("HOSTNAME"))
-                        .unwrap_or_else(|_| "kaleidoscope".into()),
+                    device_name,
                 },
                 Arc::new(DialogHost {
                     app: app.handle().clone(),
@@ -434,5 +477,51 @@ mod tests {
                 "{permission} is missing"
             );
         }
+    }
+
+    fn name(value: &str) -> Option<String> {
+        Some(value.into())
+    }
+
+    #[test]
+    fn device_name_prefers_env_in_order() {
+        let mac = || panic!("환경 변수가 있으면 컴퓨터 이름을 읽지 않는다");
+        assert_eq!(
+            super::pick_device_name(name("WIN-PC"), name("host"), mac),
+            "WIN-PC"
+        );
+        assert_eq!(super::pick_device_name(None, name("host"), mac), "host");
+        assert_eq!(
+            super::pick_device_name(None, None, || name("Seung의 노트북")),
+            "Seung의 노트북"
+        );
+        assert_eq!(super::pick_device_name(None, None, || None), "kaleidoscope");
+    }
+
+    #[test]
+    fn device_name_skips_blank_and_trims() {
+        assert_eq!(
+            super::pick_device_name(name(""), name("  \t"), || name("  맥북\n")),
+            "맥북"
+        );
+        assert_eq!(
+            super::pick_device_name(name(" "), None, || name("\n")),
+            "kaleidoscope"
+        );
+    }
+
+    #[test]
+    fn device_name_is_capped_to_pairing_limit() {
+        let long = "가".repeat(150);
+        let picked = super::pick_device_name(None, None, || Some(long.clone()));
+        assert_eq!(picked.chars().count(), 100);
+        assert!(long.starts_with(&picked));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn mac_computer_name_reads_scutil() {
+        let name = super::mac_computer_name().expect("scutil --get ComputerName");
+        assert!(!name.trim().is_empty());
     }
 }
