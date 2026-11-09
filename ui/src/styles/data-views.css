@@ -159,11 +159,22 @@
 .ks-table-rows .ks-table-header > div[role="columnheader"]:last-child > button { padding-inline-end: var(--ks-space-3); }
 .ks-table-rows .ks-table-row > .ks-table-cell:first-child { padding-inline-start: var(--ks-space-3); }
 .ks-table-rows .ks-table-row > .ks-table-cell:last-child { padding-inline-end: var(--ks-space-3); }
+/* 바닥 줄 글자도 첫 칸 글자와 같은 선에서 시작하고 끝난다. */
+.ks-table-rows > .ks-load-more { padding-inline: var(--ks-space-3); }
 .ks-table-grid .ks-table-header > div { padding: var(--ks-space-1) var(--ks-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-table-grid .ks-grid-corner { position: sticky; left: 0; z-index: 3; }
 .ks-table-grid .ks-table-header, .ks-grid-row { column-gap: var(--ks-space-2); }
 .ks-table-grid .ks-table-header { margin-bottom: var(--ks-space-1); }
-.ks-table-grid > .ks-table-inner { padding-inline: var(--ks-space-1); }
+.ks-table-grid > .ks-table-inner { padding-inline-end: var(--ks-focus-width); }
+/* 격자 표: 첫 열(행 머리 포함)과 마지막 열의 바깥 글자 시작선·끝선을 창 몸통 여백에 맞춘다.
+   안쪽 여백을 늘리면 Home이 첫 칸을 드러낸 뒤 남은 스크롤을 0으로 되돌리지 못하므로 칸 여백으로 맞춘다. */
+.ks-table-grid .ks-table-header > div:first-child { padding-inline-start: var(--ks-space-3); }
+.ks-table-grid .ks-table-header > div:last-child { padding-inline-end: var(--ks-space-3); }
+.ks-table-grid .ks-grid-row > .ks-table-cell:first-child { padding-inline-start: var(--ks-space-3); }
+.ks-table-grid .ks-grid-row > .ks-table-cell:last-child { padding-inline-end: var(--ks-space-3); }
+/* 내용 칸 상자는 자기 안쪽 여백(space-2)을 이미 가지므로 바깥 여백만 space-1로 둔다. */
+.ks-table-grid .ks-grid-row > .ks-table-cell:first-child:has(> .ks-table-content) { padding-inline-start: var(--ks-space-1); }
+.ks-table-grid .ks-grid-row > .ks-table-cell:last-child:has(> .ks-table-content) { padding-inline-end: var(--ks-space-1); }
 .ks-grid-row { align-items: stretch; padding: 0 0 var(--ks-space-2); border: 0; border-radius: 0; }
 .ks-grid-row:hover:not([data-menu-target]) { background-image: none; }
 /* 줄 높이는 그 줄에서 가장 높은 칸이 정하고, 배지 줄 자리를 미리 잡지 않는다. 상자는 줄 높이까지 늘어난다. */
