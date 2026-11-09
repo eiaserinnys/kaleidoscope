@@ -78,14 +78,11 @@ fn import_definition(core: &Core, definition: Value) -> Result<(), String> {
     Ok(())
 }
 
-// 같이 보기 글에서 샌드박스 앱이 남기는 "프레임 N"과 "갱신 M"을 읽는다.
+// 같이 보기 글에서 샌드박스 앱이 남기는 "프레임 N"과 "갱신 M" 줄을 읽는다.
+// 글 머리의 창 제목(「[프레임 보임 시험]」)에도 "프레임 "이 있으므로 줄 머리로만 찾는다.
 fn parse_count(text: &str, prefix: &str) -> Option<u64> {
-    let start = text.find(prefix)? + prefix.len();
-    let digits: String = text[start..]
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect();
-    digits.parse().ok()
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix(prefix)?.parse().ok())
 }
 
 fn view_counts(view: &VisibleView) -> Result<(u64, u64), String> {
@@ -512,5 +509,20 @@ return {{
         Err("one or more frame visibility checks failed".into())
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_count;
+
+    // 42681871091 실행에서 실제로 받은 같이 보기 글이다. 창 제목의 "프레임 "을 먼저 집으면
+    // 숫자를 읽지 못해 보이는 동안의 rAF 증가를 판정하지 못했다.
+    #[test]
+    fn parse_count_skips_window_title_with_the_same_word() {
+        let text = "[프레임 보임 시험]\n\n프레임 1846\n갱신 96";
+        assert_eq!(parse_count(text, "프레임 "), Some(1846));
+        assert_eq!(parse_count(text, "갱신 "), Some(96));
+        assert_eq!(parse_count("[프레임 보임 시험]", "프레임 "), None);
     }
 }
