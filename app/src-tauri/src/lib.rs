@@ -492,8 +492,8 @@ mod tests {
         );
         assert_eq!(super::pick_device_name(None, name("host"), mac), "host");
         assert_eq!(
-            super::pick_device_name(None, None, || name("Seung의 노트북")),
-            "Seung의 노트북"
+            super::pick_device_name(None, None, || name("내 MacBook")),
+            "내 MacBook"
         );
         assert_eq!(super::pick_device_name(None, None, || None), "kaleidoscope");
     }
