@@ -1,4 +1,5 @@
 //! 선언형/raw 앱 저장소가 함께 쓰는 문서 모음 SQL 경로.
+use super::storage_target::StorageTarget;
 use super::*;
 use kaleidoscope_contract::app_storage as contract;
 
@@ -25,7 +26,7 @@ pub(super) fn list(
                 prefix,
                 format!("{prefix}/"),
                 upper,
-                kind_name(kind)
+                super::storage_items::kind_name(kind)
             ],
             |row| {
                 Ok((
@@ -67,35 +68,19 @@ pub(super) fn list(
     })
 }
 
-fn collection_key(prefix: &str, doc: &str) -> Result<String, CoreError> {
-    if !contract::valid_collection_doc(doc) {
-        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_NAME_INVALID(doc));
-    }
-    let key = format!("{prefix}/{doc}");
-    if contract::collection_key_matches(prefix, &key) {
-        Ok(key)
-    } else {
-        Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_KEY_INVALID(
-            doc,
-        ))
-    }
-}
-
 pub(super) fn read(
     db: &Connection,
-    bucket_id: &str,
-    prefix: &str,
+    target: &StorageTarget,
     doc: &str,
     entry: &contract::StorageEntryDecl,
 ) -> Result<contract::StorageReadReply, CoreError> {
-    let key = collection_key(prefix, doc)?;
-    match super::app_storage::load_item(db, bucket_id, &key)? {
-        Some((kind, content, revision)) if kind == entry.kind => {
-            contract::validate_storage_content(entry, &content)?;
+    match super::storage_items::load_item(db, &target.bucket_id, &target.key)? {
+        Some(item) if item.kind == entry.kind => {
+            contract::validate_storage_content(entry, &item.content)?;
             Ok(contract::StorageReadReply {
-                kind,
-                content,
-                revision: Some(revision),
+                kind: item.kind,
+                content: item.content,
+                revision: Some(item.revision),
                 exists: true,
             })
         }
@@ -106,16 +91,13 @@ pub(super) fn read(
 
 pub(super) fn write(
     state: &AppState,
-    account_id: &str,
-    app_id: &str,
+    target: &StorageTarget,
     entry: &contract::StorageEntryDecl,
-    prefix: &str,
+    request_workspace: Option<&str>,
     doc: &str,
-    workspace_id: Option<&str>,
     content: Value,
     expected_revision: Option<String>,
 ) -> Result<(contract::StorageWriteReply, String, contract::StorageUpdate), CoreError> {
-    let key = collection_key(prefix, doc)?;
     contract::validate_storage_content(entry, &content)?;
     let mut db = state.lock_db()?;
     let tx = db.transaction().map_err(|error| {
@@ -124,29 +106,10 @@ pub(super) fn write(
             kaleidoscope_contract::errors::STORAGE_COLLECTION_WRITE_DATABASE_FAILED(doc),
         )
     })?;
-    super::app_storage::check_workspace_owner(&tx, account_id, workspace_id)?;
-    let bucket = super::app_storage::bucket_id(account_id, app_id);
-    let old = super::app_storage::load_item(&tx, &bucket, &key)?;
-    let current = old.as_ref().map(|(_, _, revision)| revision.clone());
-    if current != expected_revision {
-        return Err(
-            kaleidoscope_contract::errors::STORAGE_DOCUMENT_WRITE_CONFLICT(doc).and_details(vec![
-                format!("current_revision={}", current.as_deref().unwrap_or("null")),
-            ]),
-        );
-    }
-    let revision = contract::storage_revision(entry.kind, &content)
-        .map_err(|_| kaleidoscope_contract::errors::STORAGE_DOCUMENT_REVISION_FAILED(doc))?;
-    tx.execute(
-        "INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT(account_id,app_id) DO NOTHING",
-        params![bucket, account_id, app_id],
-    )
-    .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_COLLECTION_WRITE_DATABASE_FAILED(doc)))?;
-    tx.execute(
-        "INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(bucket_id,key) DO UPDATE SET kind=excluded.kind,content=excluded.content,revision=excluded.revision,updated_at=excluded.updated_at,workspace_id=excluded.workspace_id",
-        params![bucket,key,kind_name(entry.kind),serde_json::to_string(&content).map_err(|error|kaleidoscope_contract::errors::STORAGE_DOCUMENT_SERIALIZATION_FAILED(doc).and_details(vec![error.to_string()]))?,revision,timestamp(),workspace_id],
-    )
-    .map_err(|error| db_error_with(error, kaleidoscope_contract::errors::STORAGE_COLLECTION_WRITE_DATABASE_FAILED(doc)))?;
+    super::app_storage::check_workspace_owner(&tx, &target.account_id, request_workspace)?;
+    let revision =
+        super::storage_items::write_item(&tx, target, &content, expected_revision.as_deref())
+            .map_err(|error| write_error(doc, error))?;
     tx.commit().map_err(|error| {
         db_error_with(
             error,
@@ -155,10 +118,10 @@ pub(super) fn write(
     })?;
     let update = contract::StorageUpdate::Changed {
         changed: contract::StorageChanged {
-            bucket_id: bucket,
+            bucket_id: target.bucket_id.clone(),
             item: contract::StorageItemMeta {
                 entry_id: entry.id.clone(),
-                key,
+                key: target.key.clone(),
                 kind: entry.kind,
                 revision: Some(revision.clone()),
                 exists: true,
@@ -167,22 +130,19 @@ pub(super) fn write(
     };
     Ok((
         contract::StorageWriteReply { revision },
-        account_id.to_string(),
+        target.account_id.clone(),
         update,
     ))
 }
 
 pub(super) fn reset(
     state: &AppState,
-    account_id: &str,
-    app_id: &str,
+    target: &StorageTarget,
     entry: &contract::StorageEntryDecl,
-    prefix: &str,
+    request_workspace: Option<&str>,
     doc: &str,
-    workspace_id: Option<&str>,
     expected_revision: Option<String>,
 ) -> Result<(contract::StorageResetReply, String, contract::StorageUpdate), CoreError> {
-    let key = collection_key(prefix, doc)?;
     let mut db = state.lock_db()?;
     let tx = db.transaction().map_err(|error| {
         db_error_with(
@@ -190,27 +150,9 @@ pub(super) fn reset(
             kaleidoscope_contract::errors::STORAGE_COLLECTION_RESET_DATABASE_FAILED(doc),
         )
     })?;
-    super::app_storage::check_workspace_owner(&tx, account_id, workspace_id)?;
-    let bucket = super::app_storage::bucket_id(account_id, app_id);
-    let old = super::app_storage::load_item(&tx, &bucket, &key)?;
-    let current = old.as_ref().map(|(_, _, revision)| revision.clone());
-    if current != expected_revision {
-        return Err(
-            kaleidoscope_contract::errors::STORAGE_DOCUMENT_RESET_CONFLICT(doc).and_details(vec![
-                format!("current_revision={}", current.as_deref().unwrap_or("null")),
-            ]),
-        );
-    }
-    tx.execute(
-        "DELETE FROM app_storage_items WHERE bucket_id=?1 AND key=?2",
-        params![bucket, key],
-    )
-    .map_err(|error| {
-        db_error_with(
-            error,
-            kaleidoscope_contract::errors::STORAGE_COLLECTION_RESET_DATABASE_FAILED(doc),
-        )
-    })?;
+    super::app_storage::check_workspace_owner(&tx, &target.account_id, request_workspace)?;
+    super::storage_items::reset_item(&tx, target, expected_revision.as_deref())
+        .map_err(|error| reset_error(doc, error))?;
     tx.commit().map_err(|error| {
         db_error_with(
             error,
@@ -219,10 +161,10 @@ pub(super) fn reset(
     })?;
     let update = contract::StorageUpdate::Changed {
         changed: contract::StorageChanged {
-            bucket_id: bucket,
+            bucket_id: target.bucket_id.clone(),
             item: contract::StorageItemMeta {
                 entry_id: entry.id.clone(),
-                key,
+                key: target.key.clone(),
                 kind: entry.kind,
                 revision: None,
                 exists: false,
@@ -231,19 +173,18 @@ pub(super) fn reset(
     };
     Ok((
         contract::StorageResetReply { revision: None },
-        account_id.to_string(),
+        target.account_id.clone(),
         update,
     ))
 }
 
 pub(super) fn move_document(
     state: &AppState,
-    account_id: &str,
-    app_id: &str,
+    from: &StorageTarget,
+    to: &StorageTarget,
     entry: &contract::StorageEntryDecl,
-    prefix: &str,
     request: &contract::CollectionMove,
-    workspace_id: Option<&str>,
+    request_workspace: Option<&str>,
 ) -> Result<
     (
         contract::CollectionMoveReply,
@@ -254,8 +195,6 @@ pub(super) fn move_document(
     ),
     CoreError,
 > {
-    let from_key = collection_key(prefix, &request.from)?;
-    let to_key = collection_key(prefix, &request.to)?;
     let mut db = state.lock_db()?;
     let tx = db.transaction().map_err(|error| {
         db_error_with(
@@ -263,38 +202,9 @@ pub(super) fn move_document(
             kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_DATABASE_FAILED(&request.from),
         )
     })?;
-    super::app_storage::check_workspace_owner(&tx, account_id, workspace_id)?;
-    let bucket = super::app_storage::bucket_id(account_id, app_id);
-    let source = super::app_storage::load_item(&tx, &bucket, &from_key)?;
-    let Some((kind, _content, revision)) = source else {
-        return Err(
-            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_SOURCE_NOT_FOUND(&request.from),
-        );
-    };
-    if revision != request.expected_revision {
-        return Err(
-            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_CONFLICT(&request.from)
-                .and_details(vec![format!("current_revision={revision}")]),
-        );
-    }
-    if kind != entry.kind {
-        return Err(
-            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_KIND_MISMATCH(&request.from),
-        );
-    }
-    if super::app_storage::load_item(&tx, &bucket, &to_key)?.is_some() {
-        return Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_TARGET_EXISTS(&request.to));
-    }
-    tx.execute(
-        "UPDATE app_storage_items SET key=?3 WHERE bucket_id=?1 AND key=?2",
-        params![bucket, from_key, to_key],
-    )
-    .map_err(|error| {
-        db_error_with(
-            error,
-            kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_DATABASE_FAILED(&request.from),
-        )
-    })?;
+    super::app_storage::check_workspace_owner(&tx, &from.account_id, request_workspace)?;
+    let revision = super::storage_items::move_item(&tx, from, to, &request.expected_revision)
+        .map_err(|error| move_error(request, error))?;
     tx.commit().map_err(|error| {
         db_error_with(
             error,
@@ -302,7 +212,7 @@ pub(super) fn move_document(
         )
     })?;
     let moved = contract::StorageMoved {
-        bucket_id: bucket,
+        bucket_id: from.bucket_id.clone(),
         entry_id: entry.id.clone(),
         from_doc: request.from.clone(),
         to_doc: request.to.clone(),
@@ -310,16 +220,81 @@ pub(super) fn move_document(
     };
     Ok((
         contract::CollectionMoveReply { revision },
-        account_id.to_string(),
+        from.account_id.clone(),
         contract::StorageUpdate::Moved { moved },
-        from_key,
-        to_key,
+        from.key.clone(),
+        to.key.clone(),
     ))
 }
 
-fn kind_name(kind: contract::StorageKind) -> &'static str {
-    match kind {
-        contract::StorageKind::Json => "json",
-        contract::StorageKind::Md => "md",
+fn write_error(doc: &str, error: super::storage_items::WriteItemError) -> CoreError {
+    use super::storage_items::WriteItemError;
+    match error {
+        WriteItemError::Load(error) => error,
+        WriteItemError::Conflict { current_revision } => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_WRITE_CONFLICT(doc).and_details(vec![
+                format!(
+                    "current_revision={}",
+                    current_revision.as_deref().unwrap_or("null")
+                ),
+            ])
+        }
+        WriteItemError::Revision(_) => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_REVISION_FAILED(doc)
+        }
+        WriteItemError::Serialize(message) => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_SERIALIZATION_FAILED(doc)
+                .and_details(vec![message])
+        }
+        WriteItemError::Database(error) => db_error_with(
+            error,
+            kaleidoscope_contract::errors::STORAGE_COLLECTION_WRITE_DATABASE_FAILED(doc),
+        ),
+    }
+}
+
+fn reset_error(doc: &str, error: super::storage_items::ResetItemError) -> CoreError {
+    use super::storage_items::ResetItemError;
+    match error {
+        ResetItemError::Load(error) => error,
+        ResetItemError::Conflict { current_revision } => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_RESET_CONFLICT(doc).and_details(vec![
+                format!(
+                    "current_revision={}",
+                    current_revision.as_deref().unwrap_or("null")
+                ),
+            ])
+        }
+        ResetItemError::Database(error) => db_error_with(
+            error,
+            kaleidoscope_contract::errors::STORAGE_COLLECTION_RESET_DATABASE_FAILED(doc),
+        ),
+    }
+}
+
+fn move_error(
+    request: &contract::CollectionMove,
+    error: super::storage_items::MoveItemError,
+) -> CoreError {
+    use super::storage_items::MoveItemError;
+    match error {
+        MoveItemError::Load(error) => error,
+        MoveItemError::SourceNotFound => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_SOURCE_NOT_FOUND(&request.from)
+        }
+        MoveItemError::Conflict { revision } => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_CONFLICT(&request.from)
+                .and_details(vec![format!("current_revision={revision}")])
+        }
+        MoveItemError::KindMismatch => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_MOVE_KIND_MISMATCH(&request.from)
+        }
+        MoveItemError::TargetExists => {
+            kaleidoscope_contract::errors::STORAGE_DOCUMENT_TARGET_EXISTS(&request.to)
+        }
+        MoveItemError::Database(error) => db_error_with(
+            error,
+            kaleidoscope_contract::errors::STORAGE_COLLECTION_MOVE_DATABASE_FAILED(&request.from),
+        ),
     }
 }
