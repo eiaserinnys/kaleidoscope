@@ -21,6 +21,8 @@ mod media_stream;
 #[cfg(windows)]
 mod folder_drag;
 #[cfg(windows)]
+mod native_close;
+#[cfg(windows)]
 mod native_target;
 mod realtime;
 #[cfg(windows)]
@@ -43,6 +45,8 @@ enum ScenarioKind {
     CommentCapture,
     #[cfg(windows)]
     WebControlProbe,
+    #[cfg(windows)]
+    NativeClose,
     Update,
     FilesWrite,
     #[cfg(windows)]
@@ -61,6 +65,8 @@ fn scenario_kind(name: Option<&str>) -> ScenarioKind {
         Some("comment-capture") => ScenarioKind::CommentCapture,
         #[cfg(windows)]
         Some("web-control-probe") => ScenarioKind::WebControlProbe,
+        #[cfg(windows)]
+        Some("native-close") => ScenarioKind::NativeClose,
         Some("update" | "update-reject") => ScenarioKind::Update,
         Some("files-write") => ScenarioKind::FilesWrite,
         #[cfg(windows)]
@@ -567,6 +573,8 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 ScenarioKind::WebControlProbe => {
                     web_control_probe::scenario(&app, &core, &out, &mut log)
                 }
+                #[cfg(windows)]
+                ScenarioKind::NativeClose => native_close::scenario(&app, &core, &mut log),
                 ScenarioKind::WebView => scenario(&app, &core, &out, &mut log),
                 ScenarioKind::Realtime => realtime::scenario(&app, &core, &out, &mut log),
                 ScenarioKind::ClientHttp => client_http::scenario(&app, &core, &out, &mut log),
@@ -595,6 +603,14 @@ pub fn start(app: AppHandle, core: Arc<Core>) {
                 1
             }
         };
+        // 네이티브 닫기 시나리오는 닫기 요청 뒤 오직 셸의 저장 완료 경로가 프로세스를 끝낸다.
+        // 여기서 공통 종료를 부르면 저장하지 않고 닫히는 결함을 가린다.
+        #[cfg(windows)]
+        if selected == ScenarioKind::NativeClose && status == 0 {
+            loop {
+                thread::sleep(Duration::from_secs(60));
+            }
+        }
         app.exit(status);
     });
 }
@@ -618,6 +634,11 @@ mod tests {
         assert_eq!(
             scenario_kind(Some("web-control-probe")),
             ScenarioKind::WebControlProbe
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            scenario_kind(Some("native-close")),
+            ScenarioKind::NativeClose
         );
         assert_eq!(scenario_kind(None), ScenarioKind::WebView);
     }
