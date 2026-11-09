@@ -217,6 +217,9 @@ button {
   outline-offset: var(--ks-focus-offset);
 }
 
+/* 화면이 열릴 때 자리를 잡으려고 포커스를 받는 제목에는 테두리를 그리지 않는다. */
+:is(h1, h2, h3)[tabindex="-1"]:focus-visible { outline: none; }
+
 .ks-focus-rescue-empty:focus-visible { outline: none; }
 
 .ks-app-window-content { isolation: isolate; }

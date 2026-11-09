@@ -393,6 +393,38 @@ fn store_source_and_consent_install_update_modified_and_remove() {
 }
 
 #[test]
+fn store_consent_reports_the_installed_release_only_when_updating() {
+    let (_temp, core, _, window) = store_caller();
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, installed_release, .. } = event {
+        tx.send((request_id.clone(), digest.clone(), *installed_release)).unwrap();
+    }));
+    let fresh = install_example(core.clone(), window.clone());
+    let (request, digest, installed_release) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(installed_release, None, "새 설치는 업데이트로 묻지 않는다");
+    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: false }).unwrap();
+    assert!(!fresh.join().unwrap().unwrap());
+
+    let prepared = crate::store::client(&core.inner, "https://example.com/appstore").unwrap()
+        .prepare("example", 3, "apps/example/3/manifest.json").unwrap();
+    let mut previous: Value = serde_json::from_str(&prepared.definition_json).unwrap();
+    previous["permissions"] = json!([{"module":"process","id":"run","label":"실행"}]);
+    previous["requires"]["modules"]["process"] = json!(1);
+    let mut installed = registry_app(1, &previous.to_string());
+    installed.app.origin = Some(kaleidoscope_contract::store::StoreOrigin {
+        store_url: "https://example.com/appstore".into(), store_app_id: "example".into(), release: 2, digest: "old-digest".into(),
+    });
+    installed.app.installed_version = Some(1);
+    crate::app_commands::import_registry(&mut core.inner.state.lock().unwrap(), installed);
+
+    let update = install_example(core.clone(), window.clone());
+    let (request, digest, installed_release) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(installed_release, Some(2), "깔린 판의 스토어 판을 알린다");
+    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: false }).unwrap();
+    assert!(!update.join().unwrap().unwrap());
+}
+
+#[test]
 fn server_consent_persists_only_after_approval_and_cancels_on_close() {
     use std::io::{Read, Write};
     use std::net::TcpListener;

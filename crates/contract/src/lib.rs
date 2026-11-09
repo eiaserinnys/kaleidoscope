@@ -6412,8 +6412,21 @@ pub enum CoreEvent {
     },
     #[serde(rename = "store.server_permission")]
     StoreServerPermission { window_id: String, request_id: String, app_name: String, server: String },
+    /// 앱을 설치하기 전에 사용자에게 확인을 구한다. `installed_release`는 같은 스토어 앱이 이미 깔려 있을 때
+    /// 그 스토어 판이며, 새로 설치하는 앱이면 없다. 스토어가 판을 올리는지 화면이 이 값으로 가른다.
     #[serde(rename = "app.install_permission")]
-    AppInstallPermission { window_id: String, request_id: String, app_name: String, release: u32, store_url: String, digest: String, definition: AppDefinition },
+    AppInstallPermission {
+        window_id: String,
+        request_id: String,
+        app_name: String,
+        release: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        installed_release: Option<u32>,
+        store_url: String,
+        digest: String,
+        definition: AppDefinition,
+    },
     /// 쉘이 사용자에게 실행 허용을 묻는다.
     #[serde(rename = "process.permission")]
     ProcessPermission {

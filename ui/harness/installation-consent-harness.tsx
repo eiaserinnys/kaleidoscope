@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { createFakeTransport, createShellStore } from "../src/index";
-import type { AppDefinition, CoreRequest } from "../src/contract/contract";
+import type { AppDefinition, CoreRequest, ProcessSpec } from "../src/contract/contract";
 import { makeTestSeed } from "../src/__tests__/fixtures";
 import { WindowFrame } from "../../app/src/shell/window-frame";
 import "../src/styles/index.css";
@@ -38,9 +38,13 @@ const sample = {
 const light = { ...sample, id: "clock", name: "간단한 시계", permissions: [], storage: undefined, client: undefined, worker: undefined, agent: undefined };
 Object.assign(window, { installationHarness: {
   ready: store.ready,
-  show: (kind: string, overrides: Partial<AppDefinition> = {}) => {
+  show: (kind: string, overrides: Partial<AppDefinition> = {}, installedRelease?: number) => {
     const definition = { ...(kind === "heavy" ? sample : light), ...overrides };
-    fake.emit({ event: "app.install_permission", window_id: appWindow.id, request_id: kind, app_name: definition.name, release: 3, store_url: "https://apps.example.org/store", digest: "sha256-test-digest", definition });
+    fake.emit({ event: "app.install_permission", window_id: appWindow.id, request_id: kind, app_name: definition.name, release: 3, installed_release: installedRelease, store_url: "https://apps.example.org/store", digest: "sha256-test-digest", definition });
+  },
+  showProcess: (scope: "spec" | "command", spec: Partial<ProcessSpec> = {}) => {
+    fake.emit({ event: "process.permission", window_id: appWindow.id, request_id: `process-${scope}`, scope,
+      spec: { name: spec.name ?? "긴 프로그램 이름", command: spec.command ?? "fixture-agent", args: spec.args ?? ["--serve", "a b"], env: spec.env ?? { LANG: "ko_KR.UTF-8" } } });
   },
   answers,
 } });

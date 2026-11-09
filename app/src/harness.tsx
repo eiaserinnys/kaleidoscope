@@ -50,6 +50,7 @@ const pcAllowErrorScenario = harnessParams.has("pc-allow-error");
 const settingsPreview = harnessParams.get("preview") === "app-settings";
 const shellSettingsPreview = harnessParams.get("preview") === "shell-settings";
 const settingsSample = harnessParams.get("app") === "sample" || harnessParams.get("app") === "empty-group";
+const fillWindow = harnessParams.has("fill-window");
 const requestedAppWindow = ["agent", "calculator", "html-report", "explorer"].includes(harnessParams.get("window") ?? "") ? harnessParams.get("window")! : null;
 const shareScenario = new URLSearchParams(window.location.search).get("share");
 const entries = Array.from({ length: 80 }, (_, i) => ({ key: String(i + 1), title: `항목 ${i + 1}`, value: `값 ${i + 1}` }));
@@ -118,7 +119,7 @@ const shareWindows: AppWindow[] = [shareAppId, "workspace-pas"].map((appId, inde
   state: appId === "md-editor" ? { source: 1, current_file: "README.md", current_document: null } : appId === "web-browser" ? { url: "https://www.google.com/" } : { selected: "1" },
   created_at: timestamp, updated_at: timestamp,
 }));
-const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : requestedAppWindow ? [{
+const windows: AppWindow[] = settingsPreview ? [{ id: "settings-window", desktop_id: "desktop-1", app_id: "settings-preview", app_version: 1, rect: fillWindow ? { x: 0, y: 0, width: window.innerWidth, height: window.innerHeight } : { x: 348, y: 16, width: 720, height: 900 }, z: 1, state: {}, created_at: timestamp, updated_at: timestamp }] : shareScenario ? shareWindows : requestedAppWindow ? [{
   id: `${requestedAppWindow}-window`, desktop_id: "desktop-1", app_id: requestedAppWindow, app_version: 1,
   rect: { x: 48, y: 48, width: requestedAppWindow === "html-report" ? 760 : 520, height: requestedAppWindow === "html-report" ? 520 : 480 }, z: 1,
   state: requestedAppWindow === "calculator" ? structuredClone(calculatorJson.state) as AppWindow["state"] : requestedAppWindow === "html-report" ? structuredClone(htmlReportJson.state) : { agent_id: null },
@@ -275,7 +276,7 @@ const transport: FakeTransport = createFakeTransport({
   ]) : requestedAppWindow === "html-report" ? [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }] : undefined,
   files,
 });
-if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsPreview && (harnessParams.has("slow-link") || harnessParams.has("slow-preferences") || harnessParams.has("fail-answer")))) {
+if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsPreview && (harnessParams.has("slow-link") || harnessParams.has("slow-preferences") || harnessParams.has("fail-answer") || harnessParams.has("fail-link")))) {
   const call = transport.call.bind(transport);
   let failAnswer = harnessParams.has("fail-answer");
   transport.call = (async (request: CoreRequest) => {
@@ -284,6 +285,9 @@ if (harnessParams.has("reset-review") || pcAllowErrorScenario || (shellSettingsP
     }
     if (request.op === "storage.reset") await new Promise((resolve) => setTimeout(resolve, 1200));
     if (shellSettingsPreview && harnessParams.has("slow-link") && request.op === "link.sync_local_to_remote") await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (shellSettingsPreview && harnessParams.has("fail-link") && request.op === "link.sync_local_to_remote") {
+      return Promise.reject({ id: "SERVER_LINK_SYNC_FAILED", code: "server", message: "가져오지 못했습니다. 다시 시도하세요.", details: [] });
+    }
     if (shellSettingsPreview && harnessParams.has("slow-preferences") && (request.op === "shell.preferences.set_default" || request.op === "shell.preferences.answer")) await new Promise((resolve) => setTimeout(resolve, 2000));
     if (shellSettingsPreview && request.op === "shell.preferences.answer" && failAnswer) {
       failAnswer = false;
