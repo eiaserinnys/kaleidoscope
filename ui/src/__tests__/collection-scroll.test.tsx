@@ -9,6 +9,23 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualRows } from "../blocks/data-view-common";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import { mockVirtualLayout } from "./virtual-layout";
+import type { Virtualizer } from "@tanstack/react-virtual";
+
+// 이 파일은 자료가 바뀔 때 블록이 스크롤 위치를 지키는지 본다. 행 높이 측정은 대상이 아니다.
+// 가짜 배치는 모든 행을 40px로 재지만 블록의 행 추정 높이는 다르다(표 32, 트리는 컨트롤 높이 32, 피드 72).
+// 가상화기는 스크롤 중에 새로 붙은 행을 재지 않고, 마지막 스크롤 150ms 뒤 타이머로 스크롤이 끝났다고 본다.
+// 노드가 바빠 시험이 그 시간을 넘기면 화면 위쪽에 새로 붙은 행의 첫 측정만큼 scrollTop을 보정해 800이 832가 된다.
+// 행을 늘 추정 높이로 재게 해 보정이 시각과 무관하게 0이 되게 한다.
+vi.mock("@tanstack/react-virtual", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-virtual")>();
+  return {
+    ...actual,
+    measureElement: (element: Element, _entry: ResizeObserverEntry | undefined, instance: Virtualizer<Element, Element>) => {
+      const index = instance.indexFromElement(element);
+      return instance.itemSizeCache.get(instance.options.getItemKey(index)) ?? instance.options.estimateSize(index);
+    },
+  };
+});
 
 beforeEach(() => {
   mockVirtualLayout();
