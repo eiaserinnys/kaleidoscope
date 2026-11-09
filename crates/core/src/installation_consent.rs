@@ -17,11 +17,15 @@ pub(crate) struct Consents { pending: Mutex<HashMap<String, Pending>> }
 pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, release: u32, store_url: &str, digest: &str, definition: &AppDefinition) -> Result<bool, CoreError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (reply, receiver) = mpsc::sync_channel(1);
+    let installed_release;
     {
         let state = inner.state.lock().unwrap();
         if !state.shared.windows.iter().any(|w| w.id == window && w.app_id == app && w.app_version == version) {
             return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED());
         }
+        // 사용자가 아는 판은 스토어 릴리스다. 앱 목록 항목도 `origin.release`를 보여 준다.
+        installed_release = state.shared.apps.iter().find(|item| item.id == definition.id)
+            .and_then(|item| item.origin.as_ref()).map(|origin| origin.release);
         let mut pending = inner.installation_consents.pending.lock().unwrap();
         if inner.shutting_down.load(Ordering::SeqCst) { return Ok(false); }
         pending.insert(request_id.clone(), Pending {
@@ -29,7 +33,7 @@ pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, re
         });
     }
     inner.emit(&CoreEvent::AppInstallPermission {
-        window_id: window.into(), request_id, app_name: definition.name.clone(), release,
+        window_id: window.into(), request_id, app_name: definition.name.clone(), release, installed_release,
         store_url: store_url.into(), digest: digest.into(), definition: definition.clone(),
     });
     Ok(receiver.recv().unwrap_or(false))

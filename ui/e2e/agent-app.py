@@ -215,7 +215,7 @@ def main():
                     button.press('Enter')
                     dialog = app.get_by_role('dialog')
                     dialog.wait_for(timeout=30000)
-                    assert f'{label} 설치 프로그램을(를) 실행할까요?' in dialog.inner_text()
+                    assert f'{label} 설치 프로그램을 실행할까요?' in dialog.inner_text()
                     capture(sb, app, f'install-{command}-permission')
                     if success:
                         page.keyboard.press('Escape')

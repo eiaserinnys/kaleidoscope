@@ -41,11 +41,12 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
   }
   const place = workerLocation === "embedded" ? "embedded" : workerLocation ? "remote" : "unknown";
   const groups = describeInstallScope(request.definition, place, place === "remote" ? new URL(workerLocation).host : undefined);
+  const installed = request.installed_release;
   return <Dialog key={request.request_id} host={host} windowId={windowId} userConsent windowModal active={active}
     overlayClassName="ks-window-consent-overlay ks-install-consent" inertSelector=":scope > .ks-window-content"
-    title="이 앱을 설치할까요?" ok="허용하고 설치" onCancel={cancel} onConfirm={confirm}
+    title={installed === undefined ? "이 앱을 설치할까요?" : "이 앱을 업데이트할까요?"} ok={installed === undefined ? "허용하고 설치" : "허용하고 업데이트"} onCancel={cancel} onConfirm={confirm}
     body={<>
-      <div><strong className="ks-consent-value">{request.app_name}</strong> · {request.release}판<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>
+      <div><strong className="ks-consent-value">{request.app_name}</strong> · {installed === undefined ? `${request.release}판` : `${installed}판에서 ${request.release}판으로`}<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>
       {groups.length === 0 ? <span>이 앱은 창 안에서만 동작합니다</span> : groups.map((group) => {
         const details = group.details;
         const hostPaths = details?.label === "자세히" ? details.hosts.map(({ host, paths }) => {

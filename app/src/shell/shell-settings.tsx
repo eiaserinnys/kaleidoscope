@@ -24,6 +24,7 @@ export function ShellSettings({ snapshot, entry, call, store }: {
   const revokedUrl = link.state === "revoked" ? link.server_url : null;
   const [url, setUrl] = useState(revokedUrl ?? "");
   const [localTransfer, setTransfer] = useState<TransferResult | null>(null);
+  const [transferFailed, setTransferFailed] = useState(false);
   const [busy, setBusy] = useState<CoreRequest["op"] | null>(null);
   const [copyResult, setCopyResult] = useState<"copied" | "failed" | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -48,10 +49,11 @@ export function ShellSettings({ snapshot, entry, call, store }: {
   }, [link.state, busy]);
 
   const run = async (request: CoreRequest) => {
-    setBusy(request.op); clearCopyTimer(); setCopyResult(null); setTransfer(null);
+    setBusy(request.op); clearCopyTimer(); setCopyResult(null); setTransfer(null); setTransferFailed(false);
     try {
       const reply = await call(request);
       if (reply?.op === "link.sync_local_to_remote") setTransfer(reply.result);
+      else if (request.op === "link.sync_local_to_remote") setTransferFailed(true);
     } finally { setBusy(null); }
   };
   const startRemote = (next: string) => {
@@ -89,7 +91,7 @@ export function ShellSettings({ snapshot, entry, call, store }: {
         {copyResult === "failed" ? <ErrorNotice error={SHELL_SERVER_PAIRING_CODE_COPY_FAILED()} /> : null}
         {remote && snapshot.embedded_available ? <SettingsRow label="내 PC 앱과 데이터" control={<Button aria-label="가져오기" aria-busy={busy === "link.sync_local_to_remote" || undefined} className={busy === "link.sync_local_to_remote" ? "is-progress" : undefined} disabled={busy !== null || link.state !== "connected"} onClick={() => void run({ op: "link.sync_local_to_remote" })}><span>가져오기</span>{busy === "link.sync_local_to_remote" ? <Progress /> : null}</Button>} /> : null}
         {snapshot.transfer_error ? <Notice role="alert">{snapshot.transfer_error}</Notice> : null}
-        {remote && transfer && !snapshot.transfer_error ? <Notice role="status">가져오기 완료 {transfer.imported}개{transfer.skipped.length > 0 ? <details className="shell-server-skipped"><summary>건너뜀 {transfer.skipped.length}개</summary><div className="shell-server-skipped-list">{transfer.skipped.map((item) => <div key={item}>{item}</div>)}</div></details> : null}</Notice> : null}
+        {remote && transfer && !snapshot.transfer_error && !transferFailed ? <Notice role="status">가져오기 완료 {transfer.imported}개{transfer.skipped.length > 0 ? <details className="shell-server-skipped"><summary>건너뜀 {transfer.skipped.length}개</summary><div className="shell-server-skipped-list">{transfer.skipped.map((item) => <div key={item}>{item}</div>)}</div></details> : null}</Notice> : null}
         {showAddress ? <div className="ks-settings-entry">
           <div className="ks-settings-label-row"><label htmlFor={`${id}-url`}>원격 서버 주소</label></div>
           <div className="ks-settings-control"><div className="ks-settings-inline">

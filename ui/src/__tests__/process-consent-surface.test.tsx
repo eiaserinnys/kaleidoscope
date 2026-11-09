@@ -49,8 +49,13 @@ function setup(top = "editor-window", scope: "spec" | "command" = "spec") {
 it("프로그램 단위 허용은 프로그램 이름과 이후 인자에 관한 안내를 보인다", () => {
   const { emit } = setup("editor-window", "command"); emit();
   const dialog = screen.getByRole("dialog");
-  expect(within(dialog).getByText("이 앱이 이 PC에서 test-command을(를) 실행하게 할까요?")).toBeTruthy();
+  expect(within(dialog).getByText("이 앱이 이 PC에서 test-command 프로그램을 실행하게 할까요?")).toBeTruthy();
   expect(within(dialog).getByText("앞으로는 인자가 달라도 다시 묻지 않습니다.")).toBeTruthy();
+});
+
+it("이름 실행 동의는 이름의 받침에 맞는 목적격 조사를 쓴다", () => {
+  const { emit } = setup(); emit();
+  expect(within(screen.getByRole("dialog")).getByText("이 PC에서 긴 프로그램 이름을 실행할까요?")).toBeTruthy();
 });
 
 it("앞 창의 허용 표면 자체에 먼저 포커스하고 Enter로 허용하지 않는다", () => {

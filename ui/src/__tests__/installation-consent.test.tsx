@@ -38,7 +38,7 @@ async function setup() {
   const appWindow = snapshot.shared.windows[0];
   render(<WindowFrame area={{ width: 960, height: 552 }} appName="앱" isTop sharing={false} shareable={false} store={store}
     onCall={async () => undefined} onMinimize={() => {}} onMaximize={() => {}} onRestore={() => {}} window={appWindow}><button>본문</button></WindowFrame>);
-  const emit = (app = definition, id = "request") => act(() => receive({ event: "app.install_permission", window_id: appWindow.id, request_id: id, app_name: id === "request" ? "자료 수집" : id, release: 3, store_url: "https://store.example.org/apps", digest: `digest-${id}`, definition: app } as CoreEvent));
+  const emit = (app = definition, id = "request", installedRelease?: number) => act(() => receive({ event: "app.install_permission", window_id: appWindow.id, request_id: id, app_name: id === "request" ? "자료 수집" : id, release: 3, installed_release: installedRelease, store_url: "https://store.example.org/apps", digest: `digest-${id}`, definition: app } as CoreEvent));
   const change = (next: (value: ShellSnapshot) => ShellSnapshot) => act(() => { snapshot = next(snapshot); receive({ event: "state.changed", snapshot, sequence: 2 }); });
   call.mockClear();
   return { appWindow, call, store, emit, change, receive };
@@ -56,6 +56,28 @@ it("창 밖에 닿는 권한과 출처를 읽고 상세를 열 수 있다", asyn
   expect(Array.from(details.querySelectorAll(".ks-install-path"), (item) => item.textContent)).toEqual(["/one", "/two"]);
   expect(within(dialog).getByText("코드 보기").closest("details")?.querySelector("pre")?.textContent).toBe("print('hello')");
   expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "취소" }));
+  store.dispose();
+});
+
+it("이미 설치된 판이 있으면 업데이트로 묻는다", async () => {
+  const { emit, store } = await setup();
+  emit(definition, "update", 2);
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("이 앱을 업데이트할까요?");
+  expect(dialog.textContent).not.toContain("이 앱을 설치할까요?");
+  expect(dialog.textContent).toContain("update · 2판에서 3판으로");
+  expect(within(dialog).getByRole("button", { name: "허용하고 업데이트" })).toBeTruthy();
+  expect(within(dialog).queryByRole("button", { name: "허용하고 설치" })).toBeNull();
+  store.dispose();
+});
+
+it("새로 설치하는 앱은 설치로 묻는다", async () => {
+  const { emit, store } = await setup();
+  emit();
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("이 앱을 설치할까요?");
+  expect(dialog.textContent).not.toContain("업데이트할까요?");
+  expect(within(dialog).getByRole("button", { name: "허용하고 설치" })).toBeTruthy();
   store.dispose();
 });
 

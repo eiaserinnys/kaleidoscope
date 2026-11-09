@@ -2,13 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { BUILTIN_APP_IDS, Dialog, ErrorNotice, defaultMessageApp, messageApps, toCoreError, type CoreError, type ShellStore } from "@kaleidoscope/ui";
 import { useMessageSnapshot } from "./use-message-snapshot";
 import { useHoldWhileWriting } from "./use-hold-while-writing";
-
-export function directionParticle(name: string): string {
-  const last = name.codePointAt(name.length - 1);
-  if (last === undefined || last < 0xac00 || last > 0xd7a3) return "로";
-  const final = (last - 0xac00) % 28;
-  return final !== 0 && final !== 8 ? "으로" : "로";
-}
+import { directionParticle } from "./korean-particle";
 
 export function MessageAppPrompt({ store, host }: { store: ShellStore; host: HTMLElement }) {
   const snapshot = useMessageSnapshot(store);

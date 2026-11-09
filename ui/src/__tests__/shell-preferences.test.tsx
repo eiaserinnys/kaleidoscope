@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
-import { directionParticle } from "../../../app/src/shell/message-app-prompt";
+import { directionParticle } from "../../../app/src/shell/korean-particle";
 import type { AppDefinition, CoreRequest, LinkStatus } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
@@ -76,6 +76,22 @@ describe("쉘 기본 에이전트 설정", () => {
     expect(screen.queryByText("가져오기 완료 3개")).toBeNull();
     store.dispose();
   });
+  it("가져오기 호출이 거절되면 이전 성공 결과를 숨긴다", async () => {
+    const { transport, store } = setup(); await store.ready;
+    const current = store.getSnapshot()!;
+    act(() => transport.emit({ event: "state.changed", snapshot: { ...current, embedded_available: true, last_transfer: { imported: 3, skipped: [] } } }));
+    const original = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(((request: CoreRequest) => request.op === "link.sync_local_to_remote"
+      ? Promise.reject({ id: "SERVER_LINK_SYNC_FAILED", code: "server", message: "가져오지 못했습니다", details: [] })
+      : original(request as never)) as typeof transport.call);
+    fireEvent.click(screen.getByRole("button", { name: /^설정$/ }));
+    expect(screen.getByText("가져오기 완료 3개")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
+    expect(await screen.findByText("가져오지 못했습니다")).toBeTruthy();
+    expect(screen.queryByText("가져오기 완료 3개")).toBeNull();
+    store.dispose();
+  });
+
   it("선택을 서버에 즉시 저장하고 응답 전에는 확정값을 표시한다", async () => {
     const { transport, store } = setup(); await store.ready;
     const original = transport.call.bind(transport);
