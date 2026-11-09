@@ -197,6 +197,7 @@ const snapshot: ShellSnapshot = {
   supported: { blocks: 10, modules: { files: 2, web: 1, storage: 2, assets: 1, http: 1 } },
   link: linkStatus(shareScenario ? "connected" : new URLSearchParams(window.location.search).get("link")),
   sharing: [],
+  theme: "system",
   update: harnessParams.get("update") === "ready"
     ? { state: "ready", current_version: harnessParams.get("update-changes") === "long" ? "0.6.44" : "0.6.50", version: "0.6.53", changes: harnessParams.get("update-changes") === "empty" ? [] : [
       { version: "0.6.53", items: ["앱을 설치할 때 묻는 권한을 알아보기 쉬운 문장으로 보여 줍니다"] },

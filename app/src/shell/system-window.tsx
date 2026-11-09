@@ -30,7 +30,7 @@ export function SystemWindow({ area, state, title, icon, lastRect, testId, child
     if (rect || !area.width || !area.height) return;
     const style = getComputedStyle(document.documentElement);
     const width = Number.parseFloat(style.getPropertyValue("--ks-window-min-width")) * 1.5;
-    const height = Number.parseFloat(style.getPropertyValue("--ks-window-min-height")) * 2.5;
+    const height = Number.parseFloat(style.getPropertyValue("--ks-window-min-height")) * 3;
     if (!Number.isFinite(width) || !Number.isFinite(height)) throw SHELL_WINDOW_GEOMETRY_TOKEN_INVALID();
     const usable = usableWindowArea(area);
     const next = fitWindowRect({ x: usable.x + (usable.width - width) / 2, y: usable.y + (usable.height - height) / 2, width, height }, area);

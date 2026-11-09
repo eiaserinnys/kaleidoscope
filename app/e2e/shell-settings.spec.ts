@@ -94,6 +94,8 @@ test("최소 창에서 연결 상태와 결과를 확인한다", async ({ page }
       await checkFirstLine();
     }
   }
+  // 1440x900 기본 크기 창은 가져오기 결과까지 스크롤 없이 담는다. 스크롤이 생겨도 좌우 여백이 같은지 보려고 낮은 화면에서 연다.
+  await page.setViewportSize({ width: 1440, height: 600 });
   await page.goto(`${base}&link=connected&transfer-skips&slow-link`);
   await page.locator(".ks-shell-bar").getByRole("button", { name: "설정", exact: true }).click();
   await expect(page.getByText("가져오기 완료 3개")).toBeVisible();

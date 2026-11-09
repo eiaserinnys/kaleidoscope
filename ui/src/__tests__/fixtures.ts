@@ -101,6 +101,7 @@ export function makeTestSnapshot(options: {
     link: { state: "unlinked" },
     sharing: [],
     update: { state: "unavailable" },
+    theme: "system",
   };
 }
 

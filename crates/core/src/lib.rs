@@ -110,6 +110,9 @@ pub trait Host: Send + Sync + 'static {
     fn updater(&self) -> Option<&dyn UpdateHost> {
         None
     }
+    /// 고른 화면 테마를 네이티브 창에 적용한다. 창 안의 웹 내용은 `prefers-color-scheme`로 따른다.
+    /// 창이 없는 호스트(개발용 다리, 시험)는 아무 일도 하지 않는다.
+    fn apply_theme(&self, _theme: kaleidoscope_contract::ThemePreference) {}
 }
 
 /// 절대 경로는 코어 내부에서만 쓴다.
@@ -199,6 +202,8 @@ pub(crate) struct CoreState {
     pub(crate) device: DeviceState,
     pub(crate) link: LinkStatus,
     pub(crate) update: UpdateStatus,
+    /// 기기 전역 화면 테마. 서버별 보관 상태 밖(`theme.json`)에 둔다.
+    pub(crate) theme: kaleidoscope_contract::ThemePreference,
     pub(crate) sync: sync_state::SyncState,
     pub(crate) share: share::ShareState,
 }
@@ -329,6 +334,21 @@ impl Core {
         realtime_host::state_changed(&self.inner);
     }
 
+    /// 이 기기에서 고른 화면 테마. 호스트가 첫 창을 만들 때 읽는다.
+    pub fn theme(&self) -> kaleidoscope_contract::ThemePreference {
+        self.inner.state.lock().unwrap().theme
+    }
+
+    fn set_theme(&self, theme: kaleidoscope_contract::ThemePreference) -> Result<CoreReply, CoreError> {
+        theme::save(&self.inner.data_dir, theme)?;
+        self.apply_state_change(|state| {
+            state.theme = theme;
+            Ok(CoreReply::ThemeSet {})
+        })?;
+        self.inner.host.apply_theme(theme);
+        Ok(CoreReply::ThemeSet {})
+    }
+
     pub fn shell_visible(&self) -> bool {
         self.inner
             .data_runtimes
@@ -407,6 +427,7 @@ impl Core {
             link,
             share: share::ShareState::default(),
             update: UpdateStatus::Unavailable {},
+            theme: theme::load(&config.data_dir)?,
         };
         // 이전 실행의 서버 지원 여부는 현재 연결의 스냅샷으로 다시 확인한다.
         state.shared.app_comments = None;
@@ -979,6 +1000,7 @@ impl Core {
             }
             CoreRequest::ShareUnfreeze {} => Ok(share::unfreeze(&self.inner)),
             CoreRequest::UpdateRestart {} => self.restart_for_update(),
+            CoreRequest::ThemeSet { theme } => self.set_theme(theme),
             CoreRequest::DataAttach { window_id, dormant } => {
                 data_runtime::attach(&self.inner, &window_id, Some(dormant))
             }
@@ -1314,9 +1336,11 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         link: state.link.clone(),
         sharing: share::shared_window_order(state),
         update: state.update.clone(),
+        theme: state.theme,
     }
 }
 
 mod server_switch;
+mod theme;
 mod store_latest;
 mod app_badges;

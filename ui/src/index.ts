@@ -84,6 +84,7 @@ export type {
   Rect,
   ShellSnapshot,
   ServerMode,
+  ThemePreference,
   TransferResult,
   UpdateStatus,
   Workspace,

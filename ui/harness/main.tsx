@@ -162,6 +162,7 @@ const initialSnapshot: ShellSnapshot = {
   link: { state: "unlinked" },
   sharing: [],
   update: { state: "unavailable" },
+  theme: "system",
 };
 
 const sampleDocument = `# kaleidoscope 작업 메모

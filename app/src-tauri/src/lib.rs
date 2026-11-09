@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use kaleidoscope_core::kaleidoscope_contract::{
-    errors, CoreError, CoreReply, CoreRequest, TAURI_EVENT,
+    errors, CoreError, CoreReply, CoreRequest, ThemePreference, TAURI_EVENT,
 };
 use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -39,7 +39,24 @@ struct DialogHost {
     web: Arc<web_host::TauriWebHost>,
 }
 
+/// 코어의 테마 선택을 네이티브 창 테마로 옮긴다. `None`이면 운영체제를 따른다.
+/// Windows에서는 창 테마가 바뀌면 그 창의 WebView2 선호 색 구성도 같이 바뀌어, 웹 내용이 `prefers-color-scheme`로 따른다.
+fn native_theme(theme: ThemePreference) -> Option<tauri::Theme> {
+    match theme {
+        ThemePreference::System => None,
+        ThemePreference::Light => Some(tauri::Theme::Light),
+        ThemePreference::Dark => Some(tauri::Theme::Dark),
+    }
+}
+
 impl Host for DialogHost {
+    fn apply_theme(&self, theme: ThemePreference) {
+        if let Some(window) = self.app.get_window("main") {
+            if let Err(error) = window.set_theme(native_theme(theme)) {
+                eprintln!("창 테마를 바꾸지 못했습니다: {error}");
+            }
+        }
+    }
     fn pick_folder(&self) -> Option<PathBuf> {
         let parent = self
             .app
@@ -265,8 +282,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             app.manage(close::CloseState::default());
-            #[cfg(windows)]
-            native_webview::configure_main(app.handle())?;
             let data_dir = app.path().app_data_dir()?;
             let device_name = env::var("COMPUTERNAME")
                 .or_else(|_| env::var("HOSTNAME"))
@@ -329,6 +344,21 @@ pub fn run() {
                     std::process::exit(1);
                 }
             };
+
+            // 첫 창은 코어가 고른 테마로 만든다. 설정 파일로 미리 만들면 운영체제 테마로 한 번 그렸다가 바뀐다.
+            let main_config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .ok_or("main window config missing")?
+                .clone();
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &main_config)?
+                .theme(native_theme(core.theme()))
+                .build()?;
+            #[cfg(windows)]
+            native_webview::configure_main(app.handle())?;
 
             let event_app = app.handle().clone();
             core.subscribe(Box::new(move |event| {

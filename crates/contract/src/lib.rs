@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 46판, 261109)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 47판, 261109)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -128,6 +128,12 @@
 //! `conversation.attach`와 `conversation.detach`를 더하고, 모듈 `agent` 4판은 연결한 대화에 말마다 덧붙이는 글
 //! (`attached_instructions_template`)을 받는다. 연결한 대화는 이 작업의 것이 아니므로 이름, 프로필, 모델,
 //! 지침을 바꾸지 않는다.
+//!
+//! # 계약 47판: 화면 테마
+//! 기기마다 쉘의 밝기 테마를 고른다. [`ShellSnapshot::theme`]은 `system`(운영체제를 따름, 기본), `light`, `dark`이고
+//! `theme.set`으로 바꾼다. 서버와 상관없는 이 기기 전체의 설정이라 서버별 보관 상태([`DeviceState`]) 밖에 두며,
+//! 서버를 바꿔도 그대로이고 다른 기기로 가지 않는다. 호스트가 이 값을 네이티브 창 테마로 적용하면 창 안의 웹 내용
+//! (쉘, 블록, HTML 보기, sandbox, client 프레임)은 `prefers-color-scheme`로 그 테마를 따른다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -259,7 +265,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 46;
+pub const CONTRACT_VERSION: u32 = 47;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -780,6 +786,17 @@ pub struct DeviceState {
     pub store_invites: BTreeMap<String, String>,
 }
 
+/// (계약 47판) 쉘의 밝기 테마 선택. `system`은 운영체제 설정을 따른다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ThemePreference {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 /// (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -873,6 +890,8 @@ pub struct ShellSnapshot {
     pub sharing: Vec<String>,
     /// (10판) 이 쉘 자신의 새 판 받기 상태. 코어의 메모리에만 있다.
     pub update: UpdateStatus,
+    /// (계약 47판) 이 기기에서 고른 화면 테마. 서버별 상태가 아니라 기기 전역 값이다.
+    pub theme: ThemePreference,
 }
 
 /// (10판) 이 쉘 자신의 새 판 받기 상태. `state`로 가른다. 위 「쉘 업데이트」 절.
@@ -4723,6 +4742,9 @@ pub enum CoreRequest {
     WorkspaceDelete { workspace_id: String },
     #[serde(rename = "workspace.activate")]
     WorkspaceActivate { workspace_id: String },
+    /// (계약 47판) 이 기기의 화면 테마를 바꾼다. 서버로 가지 않고 서버를 바꿔도 남는다.
+    #[serde(rename = "theme.set")]
+    ThemeSet { theme: ThemePreference },
 
     /// 데스크톱을 워크스페이스 끝에 만들고 지금 보는 것으로 바꾼다.
     #[serde(rename = "desktop.create")]
@@ -5918,6 +5940,8 @@ pub enum CoreReply {
     WorkspaceDelete {},
     #[serde(rename = "workspace.activate")]
     WorkspaceActivate {},
+    #[serde(rename = "theme.set")]
+    ThemeSet {},
 
     #[serde(rename = "desktop.create")]
     DesktopCreate { desktop: Desktop },

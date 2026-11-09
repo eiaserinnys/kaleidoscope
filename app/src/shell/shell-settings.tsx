@@ -4,6 +4,7 @@ import { Check, Copy, LoaderCircle } from "../../../ui/src/components/icons";
 import { serverLabel } from "./server-label";
 import { AccountSettings } from "./account-settings";
 import { WallpaperSettings } from "./wallpaper-settings";
+import { ThemeSettings } from "./theme-settings";
 
 type Entry = { kind: "gear" | "server" | "agent"; sequence: number };
 
@@ -97,6 +98,7 @@ export function ShellSettings({ snapshot, entry, call, store }: {
           </div></div>
         </div> : null}
       </section>
+      <ThemeSettings store={store} />
       <WallpaperSettings snapshot={snapshot} store={store} />
       <AccountSettings store={store} />
     </div>

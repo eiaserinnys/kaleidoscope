@@ -169,7 +169,7 @@ mod tests {
             "shared": {"apps": [], "app_versions": [], "workspaces": [], "desktops": [], "windows": []},
             "device": {"active_workspace_id": null, "active_desktop_ids": {}, "grants": []},
             "supported": {"blocks": 1, "modules": {}},
-            "link": {"state": "unlinked"}, "sharing": [], "update": {"state": "unavailable"}
+            "link": {"state": "unlinked"}, "sharing": [], "update": {"state": "unavailable"}, "theme": "system"
         })).unwrap();
         assert!(check_restored(
             &snapshot,
