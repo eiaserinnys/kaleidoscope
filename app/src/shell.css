@@ -2,10 +2,8 @@
   --ks-wallpaper: url("./assets/wallpaper.webp");
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ks-wallpaper: url("./assets/wallpaper-dark.webp");
-  }
+:root[data-theme="dark"] {
+  --ks-wallpaper: url("./assets/wallpaper-dark.webp");
 }
 
 .app-root {
@@ -38,9 +36,7 @@
   background: linear-gradient(180deg, color-mix(in srgb, var(--ks-color-surface-raised) 26%, transparent), transparent 22%, color-mix(in srgb, var(--ks-color-surface) 23%, transparent));
 }
 
-@media (prefers-color-scheme: dark) {
-  .app-root::after { display: none; }
-}
+:root[data-theme="dark"] .app-root::after { display: none; }
 
 .ks-brand {
   display: inline-flex;

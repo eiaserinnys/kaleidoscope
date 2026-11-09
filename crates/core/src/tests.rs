@@ -182,6 +182,22 @@ fn external_links_only_open_http_or_https() {
     assert_eq!(host.opened_urls.lock().unwrap().len(), 1);
 }
 
+#[test]
+fn device_theme_starts_at_system_and_survives_restart() {
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(FakeHost::default());
+    let core = open_core(temp.path(), vec![], &host);
+    assert_eq!(snapshot(&core).device.theme, kaleidoscope_contract::ThemePreference::System);
+    core.handle(CoreRequest::DeviceThemeSet {
+        theme: kaleidoscope_contract::ThemePreference::Dark,
+    })
+    .unwrap();
+    assert_eq!(snapshot(&core).device.theme, kaleidoscope_contract::ThemePreference::Dark);
+    drop(core);
+    let reopened = open_core(temp.path(), vec![], &host);
+    assert_eq!(snapshot(&reopened).device.theme, kaleidoscope_contract::ThemePreference::Dark);
+}
+
 fn open_core(data_dir: &Path, definitions: Vec<String>, host: &Arc<FakeHost>) -> Core {
     Core::open(
         CoreConfig {

@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 46판, 261109)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 47판, 261109)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -128,6 +128,11 @@
 //! `conversation.attach`와 `conversation.detach`를 더하고, 모듈 `agent` 4판은 연결한 대화에 말마다 덧붙이는 글
 //! (`attached_instructions_template`)을 받는다. 연결한 대화는 이 작업의 것이 아니므로 이름, 프로필, 모델,
 //! 지침을 바꾸지 않는다.
+//!
+//! # 계약 47판: 화면 테마
+//! 기기마다 쉘의 밝기 테마를 고른다. [`DeviceState::theme`]은 `system`(운영체제를 따름, 기본), `light`, `dark`이고
+//! `device.theme.set`으로 바꾼다. 기기 밖으로 나가지 않으므로 같은 서버에 붙은 다른 기기는 제 테마를 따로 쓴다.
+//! 화면은 이 값과 운영체제 설정에서 지금 보일 테마 하나를 정해 쉘, 블록, HTML 보기에 같이 적용한다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -259,7 +264,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 46;
+pub const CONTRACT_VERSION: u32 = 47;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -775,6 +780,20 @@ pub struct DeviceState {
     /// 정규화된 스토어 주소 → 사설 스토어 초대코드. 주소와 코드 모두 소문자로 맞춘다.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub store_invites: BTreeMap<String, String>,
+    /// (계약 47판) 이 기기에서 고른 화면 테마. 옛 상태에는 없으므로 `system`으로 읽는다.
+    #[serde(default)]
+    pub theme: ThemePreference,
+}
+
+/// (계약 47판) 쉘의 밝기 테마 선택. `system`은 운영체제 설정을 따른다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ThemePreference {
+    #[default]
+    System,
+    Light,
+    Dark,
 }
 
 /// (계약 14판) 이 기기에서 앱 하나의 `scope: pc` 권한 하나를 허용한 기록. 기기 밖으로 나가지 않는다.
@@ -4720,6 +4739,9 @@ pub enum CoreRequest {
     WorkspaceDelete { workspace_id: String },
     #[serde(rename = "workspace.activate")]
     WorkspaceActivate { workspace_id: String },
+    /// (계약 47판) 이 기기의 화면 테마를 바꾼다. 기기 상태라 서버로 가지 않는다.
+    #[serde(rename = "device.theme.set")]
+    DeviceThemeSet { theme: ThemePreference },
 
     /// 데스크톱을 워크스페이스 끝에 만들고 지금 보는 것으로 바꾼다.
     #[serde(rename = "desktop.create")]
@@ -5915,6 +5937,8 @@ pub enum CoreReply {
     WorkspaceDelete {},
     #[serde(rename = "workspace.activate")]
     WorkspaceActivate {},
+    #[serde(rename = "device.theme.set")]
+    DeviceThemeSet {},
 
     #[serde(rename = "desktop.create")]
     DesktopCreate { desktop: Desktop },

@@ -98,51 +98,50 @@
   --ks-material-overlay: rgb(110 82 117 / 10%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --ks-color-share: #b394ff;
-    --ks-color-positive: #9fc394;
-    --ks-color-warning: #f2c66d;
-    --ks-color-background: #1d1822;
-    --ks-color-surface: rgb(255 255 255 / 7%);
-    --ks-color-surface-raised: rgb(255 255 255 / 11%);
-    --ks-color-surface-solid: #2a2230;
-    --ks-color-border: rgb(230 214 240 / 13%);
-    --ks-color-divider: rgb(230 214 240 / 8%);
-    --ks-color-glass-edge: rgb(255 255 255 / 16%);
-    --ks-color-text: #ece3f2;
-    --ks-color-muted: #b8a7c5;
-    --ks-color-hover: rgb(231 220 239 / 8%);
-    --ks-color-pressed: rgb(231 220 239 / 16%);
-    --ks-color-taskbar-hover: rgb(231 220 239 / 16%);
-    --ks-color-accent: #c6aee3;
-    --ks-color-accent-soft: #a47dba;
-    --ks-color-accent-contrast: #241b2c;
-    --ks-color-selection: rgb(164 125 186 / 22%);
-    --ks-color-selected-surface: rgb(164 125 186 / 18%);
-    --ks-color-taskbar-active: rgb(164 125 186 / 36%);
-    --ks-shadow-taskbar-active: inset 0 0 0 1px rgb(255 255 255 / 16%);
-    --ks-color-focus: #b99bd8;
-    --ks-color-danger: #ff9ba1;
-    --ks-color-danger-contrast: #241b2c;
-    --ks-color-danger-surface: rgb(90 40 52 / 55%);
-    --ks-color-notice: rgb(65 51 76 / 80%);
-    --ks-color-code: rgb(255 255 255 / 7%);
-    --ks-color-scroll-thumb: rgb(220 200 235 / 26%);
-    --ks-color-window-active-edge: rgb(140 165 133 / 50%);
-    --ks-material-window: rgb(39 32 45 / 72%);
-    --ks-material-window-body: rgb(39 32 45 / 82%);
-    --ks-material-shellbar: linear-gradient(180deg, rgb(29 24 34 / 76%), rgb(29 24 34 / 54%));
-    --ks-material-bar: rgb(77 55 95 / 58%);
-    --ks-material-popover: rgb(65 51 76 / 91%);
-    --ks-material-dialog: rgb(65 51 76 / 91%);
-    --ks-material-overlay: rgb(10 6 14 / 25%);
-    --ks-shadow-popover: 0 14px 40px rgb(0 0 0 / 40%);
-    --ks-shadow-window: 0 24px 55px -24px rgb(0 0 0 / 55%), 0 3px 8px rgb(0 0 0 / 20%), inset 0 0 0 1px rgb(255 255 255 / 6%);
-    --ks-shadow-bar: 0 7px 21px rgb(0 0 0 / 35%), inset 0 0 0 1px rgb(255 255 255 / 6%);
-    --ks-shadow-selected: inset 0 0 0 1px rgb(255 255 255 / 8%);
-  }
+/* 테마는 문서 루트의 data-theme(styles/theme.ts)이 정한다. 운영체제 설정을 직접 읽지 않는다. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ks-color-share: #b394ff;
+  --ks-color-positive: #9fc394;
+  --ks-color-warning: #f2c66d;
+  --ks-color-background: #1d1822;
+  --ks-color-surface: rgb(255 255 255 / 7%);
+  --ks-color-surface-raised: rgb(255 255 255 / 11%);
+  --ks-color-surface-solid: #2a2230;
+  --ks-color-border: rgb(230 214 240 / 13%);
+  --ks-color-divider: rgb(230 214 240 / 8%);
+  --ks-color-glass-edge: rgb(255 255 255 / 16%);
+  --ks-color-text: #ece3f2;
+  --ks-color-muted: #b8a7c5;
+  --ks-color-hover: rgb(231 220 239 / 8%);
+  --ks-color-pressed: rgb(231 220 239 / 16%);
+  --ks-color-taskbar-hover: rgb(231 220 239 / 16%);
+  --ks-color-accent: #c6aee3;
+  --ks-color-accent-soft: #a47dba;
+  --ks-color-accent-contrast: #241b2c;
+  --ks-color-selection: rgb(164 125 186 / 22%);
+  --ks-color-selected-surface: rgb(164 125 186 / 18%);
+  --ks-color-taskbar-active: rgb(164 125 186 / 36%);
+  --ks-shadow-taskbar-active: inset 0 0 0 1px rgb(255 255 255 / 16%);
+  --ks-color-focus: #b99bd8;
+  --ks-color-danger: #ff9ba1;
+  --ks-color-danger-contrast: #241b2c;
+  --ks-color-danger-surface: rgb(90 40 52 / 55%);
+  --ks-color-notice: rgb(65 51 76 / 80%);
+  --ks-color-code: rgb(255 255 255 / 7%);
+  --ks-color-scroll-thumb: rgb(220 200 235 / 26%);
+  --ks-color-window-active-edge: rgb(140 165 133 / 50%);
+  --ks-material-window: rgb(39 32 45 / 72%);
+  --ks-material-window-body: rgb(39 32 45 / 82%);
+  --ks-material-shellbar: linear-gradient(180deg, rgb(29 24 34 / 76%), rgb(29 24 34 / 54%));
+  --ks-material-bar: rgb(77 55 95 / 58%);
+  --ks-material-popover: rgb(65 51 76 / 91%);
+  --ks-material-dialog: rgb(65 51 76 / 91%);
+  --ks-material-overlay: rgb(10 6 14 / 25%);
+  --ks-shadow-popover: 0 14px 40px rgb(0 0 0 / 40%);
+  --ks-shadow-window: 0 24px 55px -24px rgb(0 0 0 / 55%), 0 3px 8px rgb(0 0 0 / 20%), inset 0 0 0 1px rgb(255 255 255 / 6%);
+  --ks-shadow-bar: 0 7px 21px rgb(0 0 0 / 35%), inset 0 0 0 1px rgb(255 255 255 / 6%);
+  --ks-shadow-selected: inset 0 0 0 1px rgb(255 255 255 / 8%);
 }
 
 @supports not (backdrop-filter: blur(1px)) {
@@ -152,12 +151,10 @@
     --ks-material-dialog: rgb(248 242 249 / 95%);
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ks-material-window-body: rgb(39 32 45 / 88%);
-      --ks-material-popover: rgb(65 51 76 / 95%);
-      --ks-material-dialog: rgb(65 51 76 / 95%);
-    }
+  :root[data-theme="dark"] {
+    --ks-material-window-body: rgb(39 32 45 / 88%);
+    --ks-material-popover: rgb(65 51 76 / 95%);
+    --ks-material-dialog: rgb(65 51 76 / 95%);
   }
 }
 
