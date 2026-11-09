@@ -60,3 +60,55 @@ export function windowSizeForApp(snapshot: ShellSnapshot, appId: string): Window
   const app = snapshot.shared.apps.find((item) => item.id === appId);
   return snapshot.shared.app_versions.find((version) => version.app_id === appId && version.version === app?.current_version)?.definition.window_size;
 }
+
+export type WindowResizeEdge = "north" | "south" | "east" | "west" | "north-east" | "north-west" | "south-east" | "south-west";
+
+export interface ResizeEdges {
+  north?: boolean;
+  south?: boolean;
+  east?: boolean;
+  west?: boolean;
+}
+
+export const RESIZE_EDGES: Record<WindowResizeEdge, ResizeEdges> = {
+  north: { north: true },
+  south: { south: true },
+  east: { east: true },
+  west: { west: true },
+  "north-east": { north: true, east: true },
+  "north-west": { north: true, west: true },
+  "south-east": { south: true, east: true },
+  "south-west": { south: true, west: true },
+};
+
+/** 크기 조절 손잡이가 움직인 거리로 창 rect를 계산한다. 서쪽과 북쪽은 반대쪽 끝을 고정한다. */
+export function resizeWindowRect(
+  startRect: Rect,
+  edges: ResizeEdges,
+  dx: number,
+  dy: number,
+  min: { width: number; height: number },
+  usable: Rect,
+): Rect {
+  const rightEnd = startRect.x + startRect.width;
+  const bottomEnd = startRect.y + startRect.height;
+  const maxRight = usable.x + usable.width;
+  const maxBottom = usable.y + usable.height;
+
+  let { x, y, width, height } = startRect;
+  if (edges.east) width = clamp(Math.round(startRect.width + dx), Math.min(min.width, maxRight - startRect.x), maxRight - startRect.x);
+  if (edges.south) height = clamp(Math.round(startRect.height + dy), Math.min(min.height, maxBottom - startRect.y), maxBottom - startRect.y);
+  if (edges.west) {
+    x = clamp(Math.round(startRect.x + dx), usable.x, rightEnd - min.width);
+    width = rightEnd - x;
+  }
+  if (edges.north) {
+    y = clamp(Math.round(startRect.y + dy), usable.y, bottomEnd - min.height);
+    height = bottomEnd - y;
+  }
+  return { x, y, width, height };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}

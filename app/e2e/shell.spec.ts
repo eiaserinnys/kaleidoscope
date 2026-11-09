@@ -643,7 +643,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await expect(editorWindow).toHaveCSS("left", "12px");
   await expect(editorWindow).toHaveCSS("top", "12px");
 
-  const maxCorner = await editorWindow.locator(".ks-window-resize-corner").boundingBox();
+  const maxCorner = await editorWindow.locator(".ks-window-resize-south-east").boundingBox();
   if (!maxCorner) throw new Error("창 모서리 크기 조절 영역을 찾지 못했습니다");
   await page.mouse.move(maxCorner.x + 6, maxCorner.y + 6);
   await page.mouse.down();
@@ -703,7 +703,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   measurements.resizeHandles960 = {
     east: await dragResizeHandle(".ks-window-resize-east", -40, 0),
     south: await dragResizeHandle(".ks-window-resize-south", 0, -40),
-    corner: await dragResizeHandle(".ks-window-resize-corner", -30, -30),
+    corner: await dragResizeHandle(".ks-window-resize-south-east", -30, -30),
   };
   const beforeReload = await windowGaps();
   await page.reload();

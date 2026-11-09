@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
 import { IconButton, Maximize2, Minus, Minimize2, X, openContextMenu, type MenuEntry, type Rect } from "@kaleidoscope/ui";
-import { fitWindowRect, usableWindowArea } from "./window-geometry";
+import { fitWindowRect, resizeWindowRect, usableWindowArea, RESIZE_EDGES, type WindowResizeEdge } from "./window-geometry";
 
 export interface WindowChromeProps {
   area: { width: number; height: number }; rect: Rect; maximized: boolean; minimized: boolean;
@@ -14,7 +14,7 @@ export interface WindowChromeProps {
 }
 
 type Gesture = {
-  kind: "move" | "east" | "south" | "corner";
+  kind: "move" | WindowResizeEdge;
   pointerId: number;
   startX: number;
   startY: number;
@@ -69,18 +69,10 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
         y: gesture.startRect.y + dy,
       }, area);
     } else {
-      const minWidth = tokenPixels(MIN_WIDTH, titleRef.current);
-      const minHeight = tokenPixels(MIN_HEIGHT, titleRef.current);
-      const usable = usableWindowArea(area);
-      const maxWidth = usable.x + usable.width - gesture.startRect.x;
-      const maxHeight = usable.y + usable.height - gesture.startRect.y;
-      next = {
-        ...gesture.startRect,
-        width: gesture.kind === "south" ? gesture.startRect.width : clamp(Math.round(gesture.startRect.width + dx), Math.min(minWidth, maxWidth), maxWidth),
-        height: gesture.kind === "east"
-          ? gesture.startRect.height
-          : clamp(Math.round(gesture.startRect.height + dy), Math.min(minHeight, maxHeight), maxHeight),
-      };
+      next = resizeWindowRect(gesture.startRect, RESIZE_EDGES[gesture.kind], dx, dy, {
+        width: tokenPixels(MIN_WIDTH, titleRef.current),
+        height: tokenPixels(MIN_HEIGHT, titleRef.current),
+      }, usableWindowArea(area));
     }
 
     previewRef.current = next;
@@ -93,13 +85,8 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
     gestureRef.current = null;
     const next = fitWindowRect(previewRef.current ?? gesture.startRect, area);
     previewRef.current = next;
-    const changed = gesture.kind === "move"
-      ? next.x !== gesture.startRect.x || next.y !== gesture.startRect.y
-      : gesture.kind === "east"
-        ? next.width !== gesture.startRect.width
-        : gesture.kind === "south"
-          ? next.height !== gesture.startRect.height
-          : next.width !== gesture.startRect.width || next.height !== gesture.startRect.height;
+    const changed = next.x !== gesture.startRect.x || next.y !== gesture.startRect.y
+      || next.width !== gesture.startRect.width || next.height !== gesture.startRect.height;
     if (changed) {
       void onRectCommit(next).then((accepted) => {
         if (!accepted && !gestureRef.current && previewRef.current === next) {
@@ -162,9 +149,14 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
       {overlays}
     </div>
     {outerOverlays}
-    {!maximized ? <div aria-hidden="true" className="ks-window-resize-east" onPointerDown={(event) => beginGesture("east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-north" onPointerDown={(event) => beginGesture("north", event)} /> : null}
     {!maximized ? <div aria-hidden="true" className="ks-window-resize-south" onPointerDown={(event) => beginGesture("south", event)} /> : null}
-    {!maximized ? <div aria-hidden="true" className="ks-window-resize-corner" onPointerDown={(event) => beginGesture("corner", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-east" onPointerDown={(event) => beginGesture("east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-west" onPointerDown={(event) => beginGesture("west", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-north-east" onPointerDown={(event) => beginGesture("north-east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-north-west" onPointerDown={(event) => beginGesture("north-west", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-south-east" onPointerDown={(event) => beginGesture("south-east", event)} /> : null}
+    {!maximized ? <div aria-hidden="true" className="ks-window-resize-south-west" onPointerDown={(event) => beginGesture("south-west", event)} /> : null}
   </section>;
 }
 
@@ -172,8 +164,4 @@ function tokenPixels(name: string, element: HTMLElement | null): number {
   if (!element || typeof getComputedStyle !== "function") return 0;
   const value = getComputedStyle(element).getPropertyValue(name).trim();
   return Number.parseFloat(value) || 0;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }
