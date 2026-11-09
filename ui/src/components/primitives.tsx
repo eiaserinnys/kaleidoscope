@@ -1,4 +1,5 @@
 import { Fragment, type MouseEvent, type ReactNode, type Ref } from "react";
+import { LinkedText } from "./external-link";
 import { Tooltip } from "./tooltip";
 import type { CoreError } from "../contract/contract";
 
@@ -177,7 +178,7 @@ export function Notice({
       event.stopPropagation();
       onDismiss();
     } : undefined}>
-      <span className="ks-notice-message">{children}{errorId ? <> <ErrorId id={errorId} /></> : null}</span>
+      <span className="ks-notice-message">{typeof children === "string" ? <LinkedText text={children} /> : children}{errorId ? <> <ErrorId id={errorId} /></> : null}</span>
       {actions ? <span className="ks-notice-actions">{actions}</span> : null}
       {details ? <div className="ks-notice-details">{details}</div> : null}
     </div>

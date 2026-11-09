@@ -164,14 +164,16 @@
 }
 
 .ks-notice-message {
-  min-width: min(100%, calc(var(--ks-space-6) * 3));
-  flex: 1 1 calc(var(--ks-space-6) * 3);
+  /* 단추 수와 상관없이 한 값을 쓴다. 좁은 창에서는 100%까지 줄고, 넓은 창에서는 이 값에서 자란다. */
+  min-width: min(100%, calc(var(--ks-pane-min-size) * 1.75));
+  flex: 1 1 min(100%, calc(var(--ks-pane-min-size) * 1.75));
   font-size: var(--ks-type-body);
 }
 
-.ks-notice.has-multiple-actions .ks-notice-message {
-  min-width: min(100%, calc(var(--ks-space-6) * 6));
-  flex-basis: calc(var(--ks-space-6) * 6);
+.ks-notice-message a {
+  color: var(--ks-color-accent);
+  text-decoration: underline;
+  text-underline-offset: var(--ks-space-1);
 }
 
 .ks-error-id {
@@ -188,6 +190,8 @@
   flex-wrap: wrap;
   white-space: nowrap;
   align-items: center;
+  /* 글이 단추를 다음 줄로 밀어냈을 때 단추를 오른쪽 끝에 둔다. */
+  margin-inline-start: auto;
   gap: var(--ks-space-2);
 }
 

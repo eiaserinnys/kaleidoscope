@@ -26,7 +26,15 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
   const error = column.format === "content" ? contentCellError(raw, column) : null;
   return <span role="gridcell" aria-label={`${rowLabel}, ${column.label}, ${error ? `오류: ${error.message}, ${error.id}` : raw == null ? "빈 칸" : title}`} aria-selected={selected} aria-colindex={columnIndex + 1} data-focus-index={index}
     tabIndex={focused ? 0 : -1} className={`ks-table-cell ks-grid-cell${numericColumn(column) ? " is-numeric" : ""}${selected ? " is-selected" : ""}`}
-    onFocus={() => handlers.current.focus(rowKey, column.field)}
+    // 키보드로 들어온 초점에만 점선 테두리를 친다. 마우스로 다시 누를 때 남는 :focus-visible은 걷고,
+    // Tab으로 격자에 들어온 초점은 여기서 표시를 세운다(CSS는 data-keyboard-focus만 본다).
+    onFocus={(event) => {
+      if (event.currentTarget.matches(":focus-visible")) {
+        event.currentTarget.closest('[role="grid"]')?.querySelectorAll("[data-keyboard-focus]").forEach((cell) => cell.removeAttribute("data-keyboard-focus"));
+        event.currentTarget.setAttribute("data-keyboard-focus", "");
+      }
+      handlers.current.focus(rowKey, column.field);
+    }}
     onKeyDown={(event) => handlers.current.key(event, rowKey, column.field)}
     onMouseDown={(event) => { if (event.detail >= 2) event.preventDefault(); }}
     onPointerDown={(event) => { press.current = { x: event.clientX, y: event.clientY }; }}

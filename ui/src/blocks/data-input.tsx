@@ -124,7 +124,11 @@ export function SelectBlock({ block, pointer }: Props<"select">) {
   });
   const props = { rootProps: hasLabel ? undefined : blockRoot, value: value.status === "ready" ? value.value : null, placeholder: placeholderText, segmented: block.style === "segmented", label: labelText, disabled: disabled.status !== "ready" || Boolean(disabled.value), onChange: (next: JsonValue) => { void data.act(`${pointer}/on_change`, next); } };
   const select = hasGroups ? <Select {...props} groups={groups} /> : <Select {...props} items={entries.filter(validOption)} />;
-  return hasLabel ? <><label {...blockRoot} className={`ks-field ks-select-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}{select}</label><BindingFailureNotice rootProps={blockRoot} value={label} /></> : select;
+  if (!hasLabel) return select;
+  // 분할 고르기는 안쪽 단추가 이름표의 대상이 된다. label로 묶으면 첫 단추가 이름표 글자를 이름으로 빼앗고,
+  // 이름표를 눌러도 첫 단추가 눌린다. 그래서 분할 고르기일 때만 묶개를 div로 두고 이름은 role=group의 aria-label로 준다.
+  const Field = block.style === "segmented" ? "div" : "label";
+  return <><Field {...blockRoot} className={`ks-field ks-select-field${fieldPosition(block.label_position)}`}>{block.label_position !== "hidden" ? <span className="ks-field-label" data-ks-share-skip="">{labelText}</span> : null}{select}</Field><BindingFailureNotice rootProps={blockRoot} value={label} /></>;
 }
 
 export function ToggleBlock({ block, pointer }: Props<"toggle">) {
