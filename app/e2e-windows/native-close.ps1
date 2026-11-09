@@ -9,6 +9,15 @@ $ErrorActionPreference = 'Stop'
 if (-not $env:GITHUB_WORKSPACE) { throw 'GITHUB_WORKSPACE가 없습니다.' }
 if (-not (Test-Path $AppPath)) { throw "앱 실행 파일이 없습니다: $AppPath" }
 
+# Alt+F4 실행은 앱 안에서 Alt와 F4를 누른 뒤 70ms 뒤에 놓는데, 그 사이 저장을 마친 앱이 끝나
+# 놓는 입력이 빠진다. 그러면 Alt가 시스템에 눌린 채 남아 다음 실행과 뒤 단계의 글자 입력이 Alt 조합이
+# 된다. 실행 전후에 수식 키를 놓는다. 눌리지 않은 키를 놓는 입력은 아무 일도 하지 않는다.
+Add-Type -Namespace KaleidoscopeE2e -Name Keys -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);'
+function Release-Modifiers {
+  # Alt, Shift, Ctrl, 왼쪽 Windows 키. 2 = KEYEVENTF_KEYUP
+  foreach ($vk in @(0x12, 0x10, 0x11, 0x5B)) { [KaleidoscopeE2e.Keys]::keybd_event([byte]$vk, 0, 2, [UIntPtr]::Zero) }
+}
+
 function Get-Events([string]$Out) {
   $path = Join-Path $Out 'events.jsonl'
   if (-not (Test-Path $path)) { return @() }
@@ -33,6 +42,7 @@ function Invoke-NativeCloseRun {
   $env:KALEIDOSCOPE_E2E_NATIVE_CLOSE_METHOD = $Method
   $env:KALEIDOSCOPE_E2E_SAVE_FAILURE = if ($SaveFailure) { '1' } else { '' }
 
+  Release-Modifiers
   $app = Start-Process -FilePath $AppPath -ArgumentList @('--e2e-scenario=native-close', "--e2e-out=$out") -RedirectStandardOutput (Join-Path $out 'stdout.log') -RedirectStandardError (Join-Path $out 'stderr.log') -PassThru
   $timedOut = $false
   $exitCode = $null
@@ -50,6 +60,7 @@ function Invoke-NativeCloseRun {
       [void]$app.WaitForExit(10000)
     }
     $app.Dispose()
+    Release-Modifiers
   }
   if ($timedOut) { throw "시간 초과로 강제 정리된 실행은 성공이 아님: $Name" }
 
