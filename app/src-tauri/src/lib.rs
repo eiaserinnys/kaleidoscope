@@ -1,3 +1,4 @@
+mod close;
 #[cfg(any(windows, test))]
 mod context_menu;
 #[cfg(feature = "e2e")]
@@ -263,6 +264,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            app.manage(close::CloseState::default());
             #[cfg(windows)]
             native_webview::configure_main(app.handle())?;
             let data_dir = app.path().app_data_dir()?;
@@ -350,12 +352,21 @@ pub fn run() {
             e2e::start(app.handle().clone(), core);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![core, core_bytes])
-        .on_window_event(|window, event| {
-            #[cfg(windows)]
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                shell_shortcuts::clear();
+        .invoke_handler(tauri::generate_handler![
+            core,
+            core_bytes,
+            close::shell_close_ready,
+            close::shell_finish_close
+        ])
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main"
+                && matches!(payload.event(), tauri::webview::PageLoadEvent::Started)
+            {
+                close::set_ready(webview.app_handle(), false);
             }
+        })
+        .on_window_event(|window, event| {
+            close::handle_close_requested(window, event);
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Resized(_)) {
                 if let (Some(core), Ok(minimized)) = (
                     window.app_handle().try_state::<Arc<Core>>(),
@@ -386,5 +397,12 @@ mod tests {
             serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
         assert_eq!(value["webviews"], serde_json::json!(["main"]));
         assert!(value.get("windows").is_none());
+        let permissions = value["permissions"].as_array().unwrap();
+        for permission in ["allow-shell-close-ready", "allow-shell-finish-close"] {
+            assert!(
+                permissions.iter().any(|item| item == permission),
+                "{permission} is missing"
+            );
+        }
     }
 }

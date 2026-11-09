@@ -280,4 +280,8 @@ pub const RETIRED: &[(&str, &str)] = &[
         "CONV_CONTEXT_ADOPTION_CONFLICT",
         "도달하지 못하는 분기를 제거하고 기존 응답 분류를 유지했다",
     ),
+    (
+        "STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED",
+        "작업 삭제의 저장 항목 정리를 소유 열 기준 한 번으로 합쳐 STORAGE_WORKSPACE_DELETE_DATABASE_FAILED로 통합했다",
+    ),
 ];

@@ -43,6 +43,7 @@ import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect, windowSizeForApp } from "./window-geometry";
 import { createShellWindowActions, selectDesktop, selectWorkspace } from "./shell-window-actions";
 import { installShellShortcuts } from "./shell-shortcuts";
+import { installNativeClose } from "../core/native-close";
 
 type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
 
@@ -57,6 +58,8 @@ export function Shell({ store }: { store: ShellStore }) {
   const settingsRect = useRef<Rect | null>(null);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
+  // 데스크톱 쉘이 떠 있는 동안에만 네이티브 닫기 요청을 저장 절차에 잇는다.
+  useEffect(() => installNativeClose(store, setNotice), [store]);
   const [renamingWorkspaceId, setRenamingWorkspaceId] = useState<string | null>(null);
   const [renamingDesktopId, setRenamingDesktopId] = useState<string | null>(null);
   const [updateOpenRequest, setUpdateOpenRequest] = useState(0);
