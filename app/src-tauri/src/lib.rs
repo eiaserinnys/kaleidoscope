@@ -5,6 +5,8 @@ mod context_menu;
 mod e2e;
 #[cfg(windows)]
 mod freeze_cover;
+#[cfg(any(target_os = "macos", all(unix, test)))]
+mod login_path;
 #[cfg(windows)]
 mod native_webview;
 #[cfg(windows)]
@@ -336,6 +338,9 @@ fn mac_computer_name() -> Option<String> {
 }
 
 pub fn run() {
+    // 런타임과 스레드가 뜨기 전에 PATH를 정해 두어야 모든 자식 프로세스가 같은 PATH를 받는다.
+    #[cfg(target_os = "macos")]
+    login_path::apply();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
