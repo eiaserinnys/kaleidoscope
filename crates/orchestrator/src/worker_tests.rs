@@ -436,6 +436,24 @@ async fn inter_app_calls_enforce_declarations_and_return_storage() {
 }
 
 #[tokio::test]
+async fn worker_that_ignores_large_input_still_succeeds() {
+    let (state, account) = setup("import json; print(json.dumps({'result': 'ok'}))");
+    let result = state
+        .invoke_worker(
+            &account,
+            "worker-test",
+            WorkerInvokeRequest {
+                action: "run".into(),
+                workspace_id: None,
+                args: Some(json!({"blob": "x".repeat(1 << 20)})),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.result, json!("ok"));
+}
+
+#[tokio::test]
 async fn worker_builtin_webhook_and_test_action_reach_agent_and_service() {
     use kaleidoscope_contract::worker::BuiltinRuntimeSpec;
     let dir = tempfile::tempdir().unwrap();

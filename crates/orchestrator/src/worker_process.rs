@@ -92,11 +92,20 @@ pub(super) async fn execute(
             .stdin()
             .take()
             .ok_or_else(|| std::io::Error::other("stdin 없음"))?;
-        stdin.write_all(input).await?;
-        drop(stdin);
+        let write = async move {
+            if let Err(error) = stdin.write_all(input).await {
+                // 워커가 입력을 다 읽기 전에 끝나 파이프가 닫힌 것은 워커의 선택이고,
+                // 결과는 종료 상태와 출력이 정한다. Windows의 ERROR_NO_DATA도 BrokenPipe로 온다.
+                if error.kind() != std::io::ErrorKind::BrokenPipe {
+                    return Err(error);
+                }
+            }
+            Ok(())
+        };
         let mut out = Vec::new();
         let mut err = Vec::new();
-        let (status, _, _) = tokio::try_join!(
+        let (_, status, _, _) = tokio::try_join!(
+            write,
             child.0.wait(),
             stdout.read_to_end(&mut out),
             stderr.read_to_end(&mut err)
