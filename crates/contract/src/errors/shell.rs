@@ -89,6 +89,13 @@ error_catalog! { ENTRIES;
         message: "저장하지 못한 내용이 있어 작업을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.",
         fix: "내용을 저장한 뒤 다시 지우세요"
     }
+    SHELL_PROGRAM_CLOSE_UNSAVED() {
+        class: Io,
+        place: "프로그램 닫기 전 저장",
+        cause: "열린 창의 저장을 마치지 못했다",
+        message: "저장하지 못한 내용이 있어 프로그램을 닫지 않았습니다. 저장을 다시 시도하거나 저장 실패 안내를 확인한 뒤 다시 닫으세요.",
+        fix: "저장을 다시 시도하거나 저장 실패 안내를 확인한 뒤 다시 닫으세요"
+    }
     SHELL_UPDATE_RESTART_UNSAVED() {
         class: Io,
         place: "업데이트 재시작 전 저장",

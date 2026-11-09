@@ -300,6 +300,12 @@ jobs:
             $app.Dispose()
             ./app/e2e-windows/close-revealed-folder.ps1 -Folder $env:KALEIDOSCOPE_E2E_PICK_FOLDER -EventsPath (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'events.jsonl')
           }
+      - name: 네이티브 닫기 저장 데이터 초기화
+        shell: pwsh
+        run: ./app/e2e-windows/reset-app-data.ps1
+      - name: 네이티브 닫기 저장 시나리오
+        shell: pwsh
+        run: ./app/e2e-windows/native-close.ps1
       - name: 같이 보기 격리 캡처 시나리오 데이터 초기화
         shell: pwsh
         run: ./app/e2e-windows/reset-app-data.ps1

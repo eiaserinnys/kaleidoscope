@@ -67,6 +67,7 @@ export const SHELL_APP_IMPORT_REPLY_INVALID = (): CoreError => ({ id: "SHELL_APP
 export const SHELL_WINDOW_CLOSE_UNSAVED = (): CoreError => ({ id: "SHELL_WINDOW_CLOSE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 창을 닫지 않았습니다. 내용을 저장한 뒤 다시 닫으세요.`, details: [] });
 export const SHELL_DESKTOP_DELETE_UNSAVED = (): CoreError => ({ id: "SHELL_DESKTOP_DELETE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 데스크톱을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.`, details: [] });
 export const SHELL_WORKSPACE_DELETE_UNSAVED = (): CoreError => ({ id: "SHELL_WORKSPACE_DELETE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 작업을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.`, details: [] });
+export const SHELL_PROGRAM_CLOSE_UNSAVED = (): CoreError => ({ id: "SHELL_PROGRAM_CLOSE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 프로그램을 닫지 않았습니다. 저장을 다시 시도하거나 저장 실패 안내를 확인한 뒤 다시 닫으세요.`, details: [] });
 export const SHELL_UPDATE_RESTART_UNSAVED = (): CoreError => ({ id: "SHELL_UPDATE_RESTART_UNSAVED", code: "io", message: `저장하지 못한 편집이 있어 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.`, details: [] });
 export const SHELL_CLIENT_RESTART_UNSAVED = (): CoreError => ({ id: "SHELL_CLIENT_RESTART_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 클라이언트를 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.`, details: [] });
 export const SHELL_STATE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_STATE_REPLY_INVALID", code: "io", message: `쉘 상태를 불러오지 못했습니다. 쉘을 다시 시작하세요.`, details: [] });

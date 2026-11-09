@@ -147,6 +147,30 @@ pub(super) fn press_key(key: u16) -> Result<(), String> {
     Ok(())
 }
 
+/// 실제 키보드로 문자열을 입력한다. KEYEVENTF_UNICODE라 배열과 무관하게 글자 그대로 들어간다.
+pub(crate) fn type_text(text: &str) -> Result<(), String> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_UNICODE, VIRTUAL_KEY,
+    };
+    let input = |scan: u16, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 { ki: KEYBDINPUT {
+            wVk: VIRTUAL_KEY(0), wScan: scan,
+            dwFlags: if up { KEYEVENTF_UNICODE | KEYEVENTF_KEYUP } else { KEYEVENTF_UNICODE },
+            time: 0, dwExtraInfo: 0,
+        } },
+    };
+    for unit in text.encode_utf16() {
+        let down = unsafe { SendInput(&[input(unit, false)], std::mem::size_of::<INPUT>() as i32) };
+        let up = unsafe { SendInput(&[input(unit, true)], std::mem::size_of::<INPUT>() as i32) };
+        if down != 1 || up != 1 {
+            return Err(format!("SendInput 유니코드 입력을 보내지 못함: {unit}"));
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    Ok(())
+}
+
 pub(crate) fn chord(modifiers: &[u16], key: u16) -> Result<(), String> {
     use windows::Win32::UI::Input::KeyboardAndMouse::{INPUT_KEYBOARD, KEYBDINPUT, VIRTUAL_KEY};
     let input = |key, up| INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT {

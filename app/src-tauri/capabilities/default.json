@@ -5,6 +5,8 @@
   "permissions": [
     "allow-core",
     "allow-core-bytes",
+    "allow-shell-close-ready",
+    "allow-shell-finish-close",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]
