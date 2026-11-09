@@ -46,6 +46,7 @@ import windowBodyGutter from "../e2e/fixtures/window-body-gutter.json";
 import windowBodyGutterLists from "../e2e/fixtures/window-body-gutter-lists.json";
 import windowBodyGutterRow from "../e2e/fixtures/window-body-gutter-row.json";
 import bareLayoutEdges1063 from "../e2e/fixtures/bare-layout-edges-1063.json";
+import progressTrackJson from "../e2e/fixtures/progress-track-app.json";
 import { executeWindowAction, readWindowView, registerControlWindow } from "../src/share/window-control";
 import { describeVisible } from "../src/share/visible";
 
@@ -97,7 +98,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
+const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},

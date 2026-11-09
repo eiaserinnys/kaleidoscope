@@ -1,0 +1,37 @@
+{
+  "id": "progress-track-test",
+  "name": "진행 막대 시험",
+  "requires": { "blocks": 14, "modules": {} },
+  "permissions": [],
+  "state": {},
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "gap": "medium",
+    "children": [
+      {
+        "type": "section",
+        "title": "클로드",
+        "meta": "eias@example.com, max",
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            { "type": "progress", "value": 0, "max": 100, "label": "7일 0% 남음" },
+            { "type": "text", "value": "11/11 21:59에 다시 참", "style": "meta" },
+            { "type": "progress", "value": 50, "max": 100, "label": "5시간 50% 남음" },
+            { "type": "progress", "value": 100, "max": 100, "label": "Fable 100% 남음" }
+          ]
+        }
+      },
+      {
+        "type": "section",
+        "title": "접는 구역",
+        "meta": "접는 머리 메타",
+        "collapsible": true,
+        "child": { "type": "text", "value": "접힌 내용" }
+      }
+    ]
+  }
+}
