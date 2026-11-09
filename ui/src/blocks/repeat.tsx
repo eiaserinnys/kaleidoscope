@@ -67,6 +67,7 @@ function RepeatReady({ block, context, pointer, entries, parent, parentRef, foll
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layout = block.layout ?? "column";
   const horizontal = layout === "row";
+  const empty = entries.length === 0;
   useLayoutEffect(() => {
     const root = scroll.current;
     if (!block.virtual || !root) return;
@@ -100,7 +101,9 @@ function RepeatReady({ block, context, pointer, entries, parent, parentRef, foll
     for (let element: HTMLElement | null = root; element; element = element.parentElement) observer?.observe(element);
     return () => { observer?.disconnect(); observed?.removeEventListener("scroll", update); };
   }, [block.virtual, horizontal, entries.length]);
-  useEffect(() => {
+  // 열 수는 첫 페인트 전에 맞춘다. 빈 반복은 자리가 display: none이라 폭이 0으로 재지므로,
+  // 비어 있음이 바뀌는 순간에도 다시 재야 항목이 도착한 첫 프레임부터 여러 열로 그린다.
+  useLayoutEffect(() => {
     if (layout !== "grid" || !scroll.current) return;
     const element = scroll.current;
     if (typeof block.grid?.columns === "number") {
@@ -130,7 +133,7 @@ function RepeatReady({ block, context, pointer, entries, parent, parentRef, foll
       setColumns(Math.max(1, Math.floor((gridWidth + gap) / (pane + gap))));
     };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => { observer.disconnect(); probe.remove(); };
-  }, [layout, block.grid?.columns, block.grid?.item_width, block.gap]);
+  }, [layout, block.grid?.columns, block.grid?.item_width, block.gap, empty]);
   const rowSize = layout === "grid" ? columns : 1;
   const itemKey = useCallback((index: number) => encodeCommentKey(entries[index].key), [entries]);
   const rowKeys = useMemo(() => Array.from({ length: Math.ceil(entries.length / rowSize) }, (_, i) => entries.slice(i * rowSize, (i + 1) * rowSize).map((entry) => entry.key)), [entries, rowSize]);
@@ -158,7 +161,7 @@ function RepeatReady({ block, context, pointer, entries, parent, parentRef, foll
   };
   const row = (entry: Entry) => <Row key={encodeCommentKey(entry.key)} item={entry.item} itemKey={entry.key} index={entry.index} parent={parent} parentRef={parentRef} locator={locator} template={block.template} context={context} pointer={pointer} />;
   const gridStyle = layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
-  return <div {...blockRoot} ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""}`} onWheel={pause} onTouchMove={pause}
+  return <div {...blockRoot} ref={scroll} className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""}${empty && !more ? " is-empty" : ""}`} onWheel={pause} onTouchMove={pause}
     onPointerDown={(event) => { if (event.target === event.currentTarget) { draggingScrollbar.current = true; pause(); } }}
     onPointerUp={() => { draggingScrollbar.current = false; }} onPointerCancel={() => { draggingScrollbar.current = false; }}
     onScroll={() => { if (draggingScrollbar.current) pause(); }}

@@ -39,6 +39,7 @@ import { blockSet18Fixtures } from "../e2e/fixtures/blocks-18";
 import { previewGridFixtures } from "../e2e/fixtures/preview-grid";
 import { shellDefectFixtures } from "../e2e/fixtures/shell-defects";
 import { stackWhenFillApp } from "../e2e/fixtures/stack-when-fill";
+import { repeatEmptyCenterApp } from "../e2e/fixtures/repeat-empty-center";
 import { inputSpinApp } from "../e2e/fixtures/input-spin";
 import { inputOptionsApp } from "../e2e/fixtures/input-options-app";
 import { inputDateTimeApp } from "../e2e/fixtures/input-date-time-app";
@@ -98,7 +99,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
+const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, repeatEmptyCenterApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
