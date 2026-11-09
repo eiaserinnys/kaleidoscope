@@ -1667,7 +1667,11 @@ export type TableCellAddress = { row: string, column: string, };
 /**
  * 표 내용 칸의 표시 값.
  */
-export type TableCellContent = { title: string, subtitle?: string, color?: string, badges?: Array<Badge>, };
+export type TableCellContent = { title: string, subtitle?: string, color?: string, badges?: Array<Badge>, 
+/**
+ * 참이면 제목을 보통 굵기와 흐린 색으로 보여 덜 띄게 한다. "자료 없음"처럼 중요하지 않은 칸에 쓴다.
+ */
+muted?: boolean, };
 
 /**
  * 표의 열 배열 또는 열 값을 내는 바인딩.

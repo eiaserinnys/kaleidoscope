@@ -154,14 +154,25 @@
 .ks-table-row { padding: var(--ks-space-1) 0; }
 .ks-table-cell { min-width: 0; overflow: hidden; padding-inline: var(--ks-space-2); text-overflow: ellipsis; white-space: nowrap; }
 .ks-table-cell.is-numeric { text-align: end; font-variant-numeric: tabular-nums; }
+/* 모든 줄 표: 첫 열과 마지막 열의 글자 시작선과 끝선을 창 몸통 여백(space-3)에 맞춘다. */
+.ks-table-rows .ks-table-header > div[role="columnheader"]:first-child > button { padding-inline-start: var(--ks-space-3); }
+.ks-table-rows .ks-table-header > div[role="columnheader"]:last-child > button { padding-inline-end: var(--ks-space-3); }
+.ks-table-rows .ks-table-row > .ks-table-cell:first-child { padding-inline-start: var(--ks-space-3); }
+.ks-table-rows .ks-table-row > .ks-table-cell:last-child { padding-inline-end: var(--ks-space-3); }
 .ks-table-grid .ks-table-header > div { padding: var(--ks-space-1) var(--ks-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-table-grid .ks-grid-corner { position: sticky; left: 0; z-index: 3; }
 .ks-table-grid .ks-table-header, .ks-grid-row { column-gap: var(--ks-space-2); }
 .ks-table-grid .ks-table-header { margin-bottom: var(--ks-space-1); }
-.ks-table-grid > .ks-table-inner { padding-inline-end: var(--ks-focus-width); }
+.ks-table-grid > .ks-table-inner { padding-inline: var(--ks-space-1); }
 .ks-grid-row { align-items: stretch; padding: 0 0 var(--ks-space-2); border: 0; border-radius: 0; }
 .ks-grid-row:hover:not([data-menu-target]) { background-image: none; }
-.ks-table-rows.has-content .ks-table-row { min-height: calc((var(--ks-grid-lines) + 2) * var(--ks-type-body) * var(--ks-line-body) + 6 * var(--ks-space-1)); }
+/* 줄 높이는 그 줄에서 가장 높은 칸이 정하고, 배지 줄 자리를 미리 잡지 않는다. 상자는 줄 높이까지 늘어난다. */
+.ks-table-rows.has-content .ks-table-row { align-items: stretch; min-height: var(--ks-control-height); }
+/* 시작선: 머리 글, 칸 글, 칸 상자 안 글자가 한 선에서 시작한다. 상자는 글보다 space-2 바깥에서 시작한다. */
+.ks-table-rows.has-content .ks-table-header button { padding-inline: var(--ks-space-3); }
+.ks-table-rows.has-content .ks-table-cell { padding-inline: var(--ks-space-3); }
+.ks-table-rows.has-content .ks-table-cell:has(> .ks-table-content) { padding-inline: var(--ks-space-1); }
+.ks-table-rows.has-content .ks-table-cell:not(:has(> .ks-table-content)) { padding-block: var(--ks-space-2); }
 /* 제목과 본문, 배지, 묶음 간격 둘, 칸 위아래 여백, 행 사이 간격. */
 .ks-table-grid.has-content .ks-grid-row { min-height: calc((var(--ks-grid-lines) + 1) * var(--ks-type-body) * var(--ks-line-body) + var(--ks-type-meta) * var(--ks-line-body) + 2 * var(--ks-space-1) + 3 * var(--ks-space-2)); }
 .ks-grid-row-header { position: sticky; left: 0; z-index: 1; display: flex; align-items: flex-start; align-self: stretch; margin-block-end: calc(-1 * var(--ks-space-2)); padding-block: var(--ks-space-2) calc(2 * var(--ks-space-2)); }
@@ -179,6 +190,8 @@
 .ks-table-content:not(.has-color, .is-error):not(:empty) { background: var(--ks-color-surface-raised); box-shadow: inset 0 0 0 var(--ks-line-width) var(--ks-color-border); }
 .ks-table-grid .ks-table-content:empty { background: var(--ks-color-divider); }
 .ks-table-content-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+/* 덜 띄는 칸: 상자는 그대로 두고 제목만 보통 굵기와 흐린 색으로 보인다. */
+.ks-table-content.is-muted .ks-table-content-title { font-weight: normal; color: var(--ks-color-muted); }
 .ks-table-content-subtitle { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: var(--ks-table-lines); }
 .ks-table-content .ks-view-badges { overflow: hidden; flex-wrap: nowrap; }
 .ks-table-content .ks-badge { background: var(--ks-color-surface-solid); color: var(--ks-color-text); }
