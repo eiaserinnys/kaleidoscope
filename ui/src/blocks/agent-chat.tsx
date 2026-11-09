@@ -92,9 +92,17 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const historyRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const startRef = useRef<HTMLDivElement>(null);
+  const createHeadRef = useRef<HTMLDivElement>(null);
+  const attachHeadRef = useRef<HTMLDivElement>(null);
   const createNoticeRef = useRef<HTMLDivElement>(null);
   const attachNoticeRef = useRef<HTMLDivElement>(null);
-  // 시작이나 연결이 실패하면 그 알림이 시작 판 안에 보이게 판만 스크롤한다. 창이나 쉘은 움직이지 않는다.
+  // 진행 글이 뜨는 구역 제목 줄과 실패 알림이 시작 판 안에 보이게 판만 스크롤한다. 창이나 쉘은 움직이지 않는다.
+  useLayoutEffect(() => {
+    if (creating) revealInStart(startRef.current, createHeadRef.current);
+  }, [creating]);
+  useLayoutEffect(() => {
+    if (attaching) revealInStart(startRef.current, attachHeadRef.current);
+  }, [attaching]);
   useLayoutEffect(() => {
     if (createError) revealInStart(startRef.current, createNoticeRef.current);
   }, [createError]);
@@ -356,7 +364,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     setPendingSwitch({ model: model.id, label: `${place.label}의 ${model.label}` });
   };
   const selectedStartProfile = profiles.find((item) => item.id === selectedProfile);
-  const selectorsDisabled = busy || switching || loadingChoices || attaching;
+  const selectorsDisabled = busy || switching || loadingChoices || attaching || creating;
   const revealSelectorFocus = (event: FocusEvent<HTMLDivElement>) => {
     const toolbar = event.currentTarget;
     const bounds = toolbar.getBoundingClientRect();
@@ -424,16 +432,19 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     const profile = profiles.find((item) => item.id === selectedProfile);
     const model = models.find((item) => item.id === selectedPreset);
     if (!profile?.available || !model?.available || creating || attaching || loadingChoices) return;
+    // 옛 알림은 누를 때 지우지 않고 결과가 오면 바꾼다. 누르는 순간 판의 높이가 바뀌면 단추가 움직인다.
     setCreating(true);
-    setCreateError(null);
     const events: CoreEvent[] = [];
     conversationQueue.current = events; creatingConversation.current = true;
     try {
       await context.store.call({ op: "conversation.create", window_id: windowId, model: selectedPreset, profile: selectedProfile });
+      setCreateError(null);
+      setAttachError(null);
       await load(events);
     } catch (reason) {
       const error = toCoreError(reason);
-      if (!handleError(error)) setCreateError(error);
+      setCreateError(handleError(error) ? null : error);
+      setAttachError(null);
       setCreating(false);
     } finally {
       creatingConversation.current = false;
@@ -449,15 +460,17 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const attach = async () => {
     if (!attachId || attaching || creating) return;
     setAttaching(true);
-    setAttachError(null);
     const events: CoreEvent[] = [];
     conversationQueue.current = events; creatingConversation.current = true;
     try {
       await context.store.call({ op: "conversation.attach", window_id: windowId, thread_id: attachId });
+      setCreateError(null);
+      setAttachError(null);
       await load(events);
     } catch (reason) {
       const error = toCoreError(reason);
-      if (!handleError(error)) setAttachError(error);
+      setAttachError(handleError(error) ? null : error);
+      setCreateError(null);
       setAttaching(false);
     } finally {
       creatingConversation.current = false;
@@ -488,7 +501,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   ];
   const attachSection = attachChoices.length ? (
     <section className="ks-agent-chat-start-section" aria-labelledby={`${windowId}-attach-title`}>
-      <div className="ks-agent-chat-start-head">
+      <div className="ks-agent-chat-start-head" ref={attachHeadRef}>
         <h2 id={`${windowId}-attach-title`} className="ks-data-section-title ks-agent-chat-start-title">기존 대화</h2>
         {attaching ? <StatusText>연결하는 중</StatusText> : null}
       </div>
@@ -559,7 +572,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       <div {...blockRoot} className="ks-agent-chat-start" ref={startRef}>
         {own ? null : (
           <section className="ks-agent-chat-start-section" aria-labelledby={`${windowId}-new-title`}>
-            <div className="ks-agent-chat-start-head">
+            <div className="ks-agent-chat-start-head" ref={createHeadRef}>
               <h2 id={`${windowId}-new-title`} className="ks-data-section-title ks-agent-chat-start-title">새 대화</h2>
               {creating ? <StatusText>시작하는 중</StatusText> : null}
             </div>

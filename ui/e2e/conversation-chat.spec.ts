@@ -251,7 +251,7 @@ test("자기 대화는 두 막대에서 제목과 자연 폭 선택기를 지킨
 
 test.describe("디렉터 창 크기의 시작 판", () => {
   // 작업 PAS 창 몸통에는 대화 블록만 있고, 디렉터 창 몸통은 636×226이다. 실제 스크롤바와 실제 길이 값으로 본다.
-  async function openBody(width: number, height: number, extra = "") {
+  async function openBody(width: number, height: number, extra = "", pick = true) {
     const browser = await chromium.launch({ ignoreDefaultArgs: ["--hide-scrollbars"] });
     const page = await browser.newPage({ baseURL: `http://127.0.0.1:${process.env.KS_E2E_PORT ?? 5173}`, viewport: { width: 900, height: 700 } });
     await page.goto(`/?preview=workspace-pas&conversation=attach-start&names=real&conversation-delay=1500${extra}`);
@@ -262,11 +262,18 @@ test.describe("디렉터 창 크기의 시작 판", () => {
     const box = (await panel.boundingBox())!;
     expect(Math.abs(box.width - width)).toBeLessThanOrEqual(1);
     expect(Math.abs(box.height - height)).toBeLessThanOrEqual(1);
-    await chat.getByRole("button", { name: "기존 대화" }).click();
-    await page.getByRole("menuitem", { name: /서소영 영구 세션/ }).click();
+    if (pick) {
+      await chat.getByRole("button", { name: "기존 대화" }).click();
+      await page.getByRole("menuitem", { name: /서소영 영구 세션/ }).click();
+    }
     return { browser, page, chat, panel };
   }
   const geometry = (panel: import("@playwright/test").Locator) => panel.evaluate((element) => ({ scrollTop: element.scrollTop, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, clientWidth: element.clientWidth }));
+  // toBeVisible은 판의 스크롤에 잘린 것을 못 잡는다. 판 상자 안에 있는지 직접 본다.
+  async function insidePanel(panel: import("@playwright/test").Locator, target: import("@playwright/test").Locator) {
+    const [outer, inner] = await Promise.all([panel.boundingBox(), target.boundingBox()]);
+    return Boolean(outer && inner && inner.y >= outer.y - 0.5 && inner.y + inner.height <= outer.y + outer.height + 0.5);
+  }
 
   test("시작하는 중과 연결하는 중은 구역 제목 줄에 뜨고 단추와 판을 움직이지 않는다", async () => {
     for (const [width, height] of [[636, 226], [360, 226]] as const) {
@@ -280,7 +287,9 @@ test.describe("디렉터 창 크기의 시작 판", () => {
         if (width === 636) expect(before.panel.scrollHeight).toBeLessThanOrEqual(before.panel.clientHeight);
         await page.screenshot({ path: `${path}/director-start-${width}.png` });
         await link.click();
-        await expect(sections.nth(1).locator(".ks-agent-chat-start-head").getByText("연결하는 중")).toBeVisible();
+        const progress = sections.nth(1).locator(".ks-agent-chat-start-head").getByText("연결하는 중");
+        await expect(progress).toBeVisible();
+        expect(await insidePanel(panel, progress)).toBe(true);
         expect(await link.boundingBox()).toEqual(before.link);
         expect(await picker.boundingBox()).toEqual(before.picker);
         expect(await start.boundingBox()).toEqual(before.start);
@@ -289,18 +298,77 @@ test.describe("디렉터 창 크기의 시작 판", () => {
       } finally {
         await browser.close();
       }
-      const second = await openBody(width, height);
+      const second = await openBody(width, height, "", false);
       try {
         const sections = second.chat.locator(".ks-agent-chat-start-section");
         const start = second.chat.getByRole("button", { name: "시작" });
         const link = second.chat.getByRole("button", { name: "연결", exact: true });
         const before = { start: await start.boundingBox(), link: await link.boundingBox(), panel: await geometry(second.panel) };
         await start.click();
-        await expect(sections.nth(0).locator(".ks-agent-chat-start-head").getByText("시작하는 중")).toBeVisible();
+        const progress = sections.nth(0).locator(".ks-agent-chat-start-head").getByText("시작하는 중");
+        await expect(progress).toBeVisible();
+        expect(await insidePanel(second.panel, progress)).toBe(true);
+        await expect(second.chat.getByRole("button", { name: "프로필" })).toBeDisabled();
+        await expect(second.chat.getByRole("button", { name: "모델" })).toBeDisabled();
         expect(await start.boundingBox()).toEqual(before.start);
         expect(await link.boundingBox()).toEqual(before.link);
         expect(await geometry(second.panel)).toEqual(before.panel);
         await second.page.screenshot({ path: `${path}/director-starting-${width}.png` });
+      } finally {
+        await second.browser.close();
+      }
+    }
+  });
+
+  test("오류 뒤 다시 누르면 진행 글은 판 안에 보이고 옛 알림은 결과가 올 때 바뀐다", async () => {
+    for (const [width, height] of [[636, 226], [360, 226], [360, 200]] as const) {
+      // 연결이 실패한 뒤 새 대화로 바꿔 시작한다. 알림을 보이려고 판이 내려가 새 대화 제목 줄이 판 위로 빠진 상태다.
+      const first = await openBody(width, height, "&start-error=1");
+      try {
+        const sections = first.chat.locator(".ks-agent-chat-start-section");
+        await first.chat.getByRole("button", { name: "연결", exact: true }).click();
+        await expect(sections.nth(1).getByRole("alert")).toContainText("CONV_ATTACH_CONFLICT");
+        await expect.poll(() => insidePanel(first.panel, sections.nth(1).getByRole("alert"))).toBe(true);
+        await first.chat.getByRole("button", { name: "시작" }).click();
+        const progress = sections.nth(0).locator(".ks-agent-chat-start-head").getByText("시작하는 중");
+        await expect(progress).toBeVisible();
+        expect(await insidePanel(first.panel, progress)).toBe(true);
+        expect(await insidePanel(first.panel, first.chat.getByRole("button", { name: "시작" }))).toBe(true);
+        await first.page.screenshot({ path: `${path}/director-starting-after-attach-error-${width}x${height}.png` });
+        // 시작도 실패하면 연결 알림은 걷히고 시작 알림이 그 구역에 뜬다.
+        await expect(sections.nth(0).getByRole("alert")).toContainText("CONV_ATTACH_CONFLICT");
+        await expect(sections.nth(1).getByRole("alert")).toHaveCount(0);
+      } finally {
+        await first.browser.close();
+      }
+      // 시작이 실패한 뒤 다시 누른다. 옛 알림이 누르는 순간 걷히지 않으니 판의 크기는 그대로다.
+      const second = await openBody(width, height, "&start-error=1", false);
+      try {
+        const sections = second.chat.locator(".ks-agent-chat-start-section");
+        const start = second.chat.getByRole("button", { name: "시작" });
+        await start.click();
+        const alert = sections.nth(0).getByRole("alert");
+        await expect(alert).toContainText("CONV_ATTACH_CONFLICT");
+        await expect.poll(() => insidePanel(second.panel, alert)).toBe(true);
+        await expect(start).toBeEnabled();
+        const before = { start: await start.boundingBox(), panel: await geometry(second.panel) };
+        await second.page.screenshot({ path: `${path}/director-start-error-${width}x${height}.png` });
+        await start.click();
+        const progress = sections.nth(0).locator(".ks-agent-chat-start-head").getByText("시작하는 중");
+        await expect(progress).toBeVisible();
+        expect(await insidePanel(second.panel, progress)).toBe(true);
+        expect(await insidePanel(second.panel, start)).toBe(true);
+        await expect(alert).toHaveCount(1);
+        const after = await geometry(second.panel);
+        expect({ scrollHeight: after.scrollHeight, clientHeight: after.clientHeight, clientWidth: after.clientWidth }).toEqual({ scrollHeight: before.panel.scrollHeight, clientHeight: before.panel.clientHeight, clientWidth: before.panel.clientWidth });
+        // 636에서는 제목 줄이 판 안에 있어 판도 단추도 움직이지 않는다. 360에서는 알림을 보이려고 내려간 판이 제목 줄까지만 올라간다.
+        if (width === 636) {
+          expect(after.scrollTop).toBe(before.panel.scrollTop);
+          expect(await start.boundingBox()).toEqual(before.start);
+        } else {
+          expect(after.scrollTop).toBeLessThan(before.panel.scrollTop);
+        }
+        await second.page.screenshot({ path: `${path}/director-start-retry-${width}x${height}.png` });
       } finally {
         await second.browser.close();
       }

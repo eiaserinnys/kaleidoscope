@@ -261,7 +261,7 @@ function withRealNames(conversation: FakeConversation | undefined): FakeConversa
   const place = <T extends { id: string; label: string } | undefined>(group: T): T => group?.id === "eiaserinnys" ? { ...group, label: "eias-linegames-wsl" } : group;
   return {
     ...conversation,
-    models: conversation.models.map((model) => ({ ...model, label: model.id === "sol" ? "Gemini - 4 Argon" : model.label, group: place(model.group) })),
+    models: conversation.models.map((model) => ({ ...model, label: model.id === "sol" ? "Garnet - 4 Argon" : model.label, group: place(model.group) })),
     adoptable: conversation.adoptable?.map((candidate, index) => index === 0 ? { ...candidate, title: "서소영 영구 세션", profile: candidate.profile && { ...candidate.profile, label: "서소영 (PAS)" } } : candidate),
   };
 }
