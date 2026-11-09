@@ -42,7 +42,8 @@ test("모델을 골라 시작", async ({ page }) => {
   await expect(blockedModel).toBeDisabled();
   await expect(blockedModel).toContainText("풀림");
   await capture(page, "start-menu");
-  await chat.getByRole("button", { name: "모델" }).click();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
   await chat.getByRole("button", { name: "시작" }).click();
   await expect(chat.getByText("시작하는 중")).toBeVisible();
   await expect(chat.getByRole("textbox", { name: "메시지" })).toBeVisible();
@@ -72,21 +73,42 @@ test("기존 대화 연결 — 시작 판과 대화 머리 네 상태", async ({
   await capture(page, "attach-attached-header");
 });
 
-test("시작 판은 고른 줄과 시작 줄을 묶고 연결 줄을 띄운다", async ({ page }) => {
+test("시작 판은 새 대화와 기존 대화를 제목과 경계로 나누고 단추를 고른 줄 끝에 둔다", async ({ page }) => {
   const chat = await open(page, "attach-start");
-  const row = chat.locator(".ks-agent-chat-toolbar-start");
-  await expect(row).toBeVisible();
-  expect(await row.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe("0px");
-  const [pickerBox, startBox, attachBox] = await Promise.all([
-    chat.getByRole("button", { name: "프로필" }).boundingBox(),
-    chat.getByRole("button", { name: "시작" }).boundingBox(),
-    chat.getByRole("button", { name: "기존 대화" }).boundingBox(),
-  ]);
-  const pickerToStart = startBox!.y - (pickerBox!.y + pickerBox!.height);
-  const startToAttach = attachBox!.y - (startBox!.y + startBox!.height);
-  expect(pickerToStart).toBeLessThan(startToAttach);
-  expect(startToAttach).toBeGreaterThanOrEqual(24);
-  await page.screenshot({ path: `${path}/attach-start-gaps.png` });
+  await chat.getByRole("button", { name: "기존 대화" }).click();
+  await page.getByRole("menuitem", { name: /서소영 PAS — 카드 운영과 배포 기록/ }).click();
+  const sections = chat.locator(".ks-agent-chat-start-section");
+  await expect(sections).toHaveCount(2);
+  await expect(sections.nth(0).getByRole("heading", { name: "새 대화" })).toBeVisible();
+  await expect(sections.nth(1).getByRole("heading", { name: "기존 대화" })).toBeVisible();
+  for (const label of ["프로필", "실행 위치", "모델"]) await expect(sections.nth(0).locator(".ks-field-label", { hasText: label })).toBeVisible();
+  for (const [width, height] of [[1100, 700], [668, 360], [400, 600], [360, 600]] as const) {
+    await page.setViewportSize({ width, height });
+    const [panel, first, second, model, start, picker, link] = await Promise.all([
+      chat.locator(".ks-agent-chat-start").boundingBox(),
+      sections.nth(0).boundingBox(),
+      sections.nth(1).boundingBox(),
+      chat.getByRole("button", { name: "모델" }).boundingBox(),
+      chat.getByRole("button", { name: "시작" }).boundingBox(),
+      chat.getByRole("button", { name: "기존 대화" }).boundingBox(),
+      chat.getByRole("button", { name: "연결", exact: true }).boundingBox(),
+    ]);
+    // 시작과 연결은 각 구역 안에서 끝선에 맞춰 선다.
+    expect(Math.abs((start!.x + start!.width) - (first!.x + first!.width))).toBeLessThanOrEqual(1);
+    expect(Math.abs((link!.x + link!.width) - (second!.x + second!.width))).toBeLessThanOrEqual(1);
+    // 시작은 고른 줄의 마지막 줄에 붙거나 바로 아래 줄 끝으로 간다. 홀로 떨어지지 않는다.
+    expect(start!.y).toBeGreaterThanOrEqual(model!.y - 1);
+    expect(start!.y - (model!.y + model!.height)).toBeLessThanOrEqual(8);
+    if (width >= 668) expect(Math.abs((start!.y + start!.height) - (model!.y + model!.height))).toBeLessThanOrEqual(1);
+    // 기존 대화 고르기와 연결은 한 줄이다.
+    expect(Math.abs(picker!.y - link!.y)).toBeLessThanOrEqual(1);
+    expect(picker!.x + picker!.width).toBeLessThanOrEqual(link!.x + 1);
+    // 두 구역은 경계선으로 나뉘고 가로로 넘치지 않는다.
+    expect(second!.y).toBeGreaterThan(start!.y + start!.height);
+    expect(first!.x + first!.width).toBeLessThanOrEqual(panel!.x + panel!.width);
+    await page.screenshot({ path: `${path}/attach-start-sections-${width}.png` });
+  }
+  expect(await sections.nth(1).evaluate((element) => getComputedStyle(element).borderTopWidth)).not.toBe("0px");
 });
 
 test("좁은 창에서도 고른 대화와 연결 단추는 한 줄이다", async ({ page }) => {

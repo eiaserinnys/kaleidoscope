@@ -617,34 +617,90 @@
   background: var(--ks-color-surface);
 }
 
+/* 시작 판은 짧은 양식이라 가운데 기둥에 둔다(앱 디자인 지침 4절). 낮은 창에서는 위부터 스크롤한다. */
 .ks-agent-chat-start {
   display: flex;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
+  justify-content: safe center;
+  overflow: auto;
+  padding: var(--ks-space-3) var(--ks-space-4);
   background: var(--ks-color-surface);
+}
+
+.ks-agent-chat-start-section {
+  display: flex;
+  width: min(100%, calc(var(--ks-window-min-width) * 1.5));
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--ks-space-2);
+}
+
+.ks-agent-chat-start-section + .ks-agent-chat-start-section {
+  margin-block-start: var(--ks-space-4);
+  padding-block-start: var(--ks-space-4);
+  border-block-start: var(--ks-line-width) solid var(--ks-color-border);
+}
+
+.ks-agent-chat-start-title {
+  margin: 0;
+  line-height: var(--ks-line-body);
+}
+
+/* 고르기와 그 고르기를 쓰는 단추가 한 줄이다. 좁으면 단추 묶음째 다음 줄 끝으로 간다. */
+.ks-agent-chat-start-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--ks-space-2);
+}
+
+.ks-agent-chat-start-row.is-single {
+  flex-wrap: nowrap;
+}
+
+.ks-agent-chat-start-field.ks-field.is-label-top {
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.ks-agent-chat-start-field.ks-field.is-label-top > .ks-select-button {
+  width: auto;
+  max-width: 100%;
+}
+
+/* 대화 이름은 자연 폭이고, 자리가 모자라면 단추를 지키며 이름이 줄어 말줄임표로 끝난다. */
+.ks-agent-chat-start-row.is-single > .ks-select-button {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.ks-agent-chat-start-submit {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ks-space-2);
+  margin-inline-start: auto;
+}
+
+.ks-agent-chat-start-submit > .ks-button {
+  flex: 0 0 auto;
 }
 
 .ks-agent-chat-toolbar {
   flex: 0 0 auto;
   flex-wrap: nowrap;
   justify-content: flex-start;
-}
-
-.ks-agent-chat-toolbar-start {
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-padding-inline: var(--ks-space-3);
-}
-
-.ks-agent-chat-toolbar-start::-webkit-scrollbar { height: var(--ks-space-1); }
-.ks-agent-chat-toolbar-start::-webkit-scrollbar-thumb { border: 0; }
-
-.ks-agent-chat-toolbar.ks-agent-chat-toolbar-start {
-  border-block-end: none;
 }
 
 .ks-agent-chat-toolbar .ks-button {
@@ -683,47 +739,6 @@
   color: var(--ks-color-muted);
   font-size: var(--ks-type-meta);
   line-height: var(--ks-line-meta);
-}
-
-.ks-agent-chat-start-action {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--ks-space-3);
-  padding: var(--ks-space-2) var(--ks-space-3);
-}
-
-.ks-agent-chat-start-action + .ks-agent-chat-start-action {
-  margin-block-start: var(--ks-space-2);
-}
-
-.ks-agent-chat-attach-row {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--ks-space-2);
-}
-
-.ks-agent-chat-attach-pair {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: var(--ks-space-2);
-}
-
-.ks-agent-chat-attach-pair > .ks-select-button {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.ks-agent-chat-attach-pair > .ks-button:not(.ks-select-button) {
-  flex: 0 0 auto;
-  min-width: auto;
 }
 
 .ks-agent-chat {

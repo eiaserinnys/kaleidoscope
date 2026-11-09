@@ -1,5 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type ReactElement } from "react";
 import type { AdoptableConversation, Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload, ShellSnapshot } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
 import { DataState } from "../components/data-state";
@@ -348,8 +348,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     if (focused.left < left) toolbar.scrollLeft += focused.left - left;
     else if (focused.right > right) toolbar.scrollLeft += focused.right - right;
   };
-  const selectors = (
-    <>
+  const profileSelect = (
       <Select
         groups={profileGroups}
         value={agent ? thread?.profile?.id : selectedProfile}
@@ -358,7 +357,8 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
         disabled={selectorsDisabled || (agent ? !thread?.profile : visibleProfiles.length === 0)}
         onChange={selectProfile}
       />
-      {places.length >= 2 ? (
+  );
+  const placeSelect = places.length >= 2 ? (
         <Select
           groups={[{ options: places.map((place) => ({
             value: place.id,
@@ -372,7 +372,8 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
           disabled={selectorsDisabled}
           onChange={selectPlace}
         />
-      ) : null}
+  ) : null;
+  const modelSelect = (
       <Select
         groups={[{ options: modelOptions }]}
         value={agent ? thread?.model.id : selectedPreset}
@@ -381,17 +382,23 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
         disabled={selectorsDisabled || modelOptions.length === 0}
         onChange={selectModel}
       />
-    </>
   );
-  const selectorRow = (modifier?: string) => (
-    <div className={`ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar${modifier ? ` ${modifier}` : ""}`} onFocus={agent ? revealSelectorFocus : undefined}>
-      {agent ? <div className="ks-agent-chat-settings-content">
-        <div className="ks-data-toolbar-group">{selectors}</div>
+  const selectorRow = () => (
+    <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar" onFocus={revealSelectorFocus}>
+      <div className="ks-agent-chat-settings-content">
+        <div className="ks-data-toolbar-group">{profileSelect}{placeSelect}{modelSelect}</div>
         {switching
           ? <span className="ks-agent-chat-change-hint">바꾸는 중</span>
           : busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
-      </div> : selectors}
+      </div>
     </div>
+  );
+  // 시작 판의 고르기는 도구 막대 밖이라 늘 보이는 이름표를 위에 단다(앱 디자인 지침 3절).
+  const startField = (label: string, control: ReactElement) => (
+    <label className="ks-field ks-select-field is-label-top ks-agent-chat-start-field">
+      <span className="ks-field-label">{label}</span>
+      {control}
+    </label>
   );
 
   const start = async () => {
@@ -460,24 +467,25 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       label: `${candidate.title || "이름 없는 대화"}${candidate.profile ? ` · ${candidate.profile.label}` : ""}`,
     })),
   ];
-  const attachRow = attachChoices.length ? (
-    <div className="ks-agent-chat-start-action">
-      <div className="ks-agent-chat-attach-row">
-        <div className="ks-agent-chat-attach-pair">
-          <Select
-            groups={[{ options: attachChoices }]}
-            value={attachId}
-            label="기존 대화"
-            placeholder="기존 대화 선택"
-            disabled={attaching || creating}
-            onChange={selectAttach}
-          />
+  const attachSection = attachChoices.length ? (
+    <section className="ks-agent-chat-start-section" aria-labelledby={`${windowId}-attach-title`}>
+      <h2 id={`${windowId}-attach-title`} className="ks-data-section-title ks-agent-chat-start-title">기존 대화</h2>
+      <div className="ks-agent-chat-start-row is-single">
+        <Select
+          groups={[{ options: attachChoices }]}
+          value={attachId}
+          label="기존 대화"
+          placeholder="기존 대화 선택"
+          disabled={attaching || creating}
+          onChange={selectAttach}
+        />
+        <div className="ks-agent-chat-start-submit">
+          {attaching ? <StatusText>연결하는 중</StatusText> : null}
           <Button disabled={!attachId || attaching || creating} onClick={() => void attach()}>연결</Button>
         </div>
-        {attaching ? <StatusText>연결하는 중</StatusText> : null}
       </div>
       {attachError ? <Notice role="alert" errorId={attachError.id}>{attachError.message}</Notice> : null}
-    </div>
+    </section>
   ) : null;
 
   const send = async (returnFocus = false) => {
@@ -530,15 +538,22 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   if (!agent) {
     return (
       <div {...blockRoot} className="ks-agent-chat-start" ref={startRef}>
-        {own ? null : selectorRow("ks-agent-chat-toolbar-start")}
         {own ? null : (
-          <div className="ks-agent-chat-start-action">
-            <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || attaching || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
-            {creating ? <StatusText>시작하는 중</StatusText> : null}
+          <section className="ks-agent-chat-start-section" aria-labelledby={`${windowId}-new-title`}>
+            <h2 id={`${windowId}-new-title`} className="ks-data-section-title ks-agent-chat-start-title">새 대화</h2>
+            <div className="ks-agent-chat-start-row">
+              {startField("프로필", profileSelect)}
+              {placeSelect ? startField("실행 위치", placeSelect) : null}
+              {startField("모델", modelSelect)}
+              <div className="ks-agent-chat-start-submit">
+                {creating ? <StatusText>시작하는 중</StatusText> : null}
+                <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || attaching || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
+              </div>
+            </div>
             {createError ? <Notice role="alert" errorId={createError.id}>{createError.message}</Notice> : null}
-          </div>
+          </section>
         )}
-        {attachRow}
+        {attachSection}
       </div>
     );
   }
