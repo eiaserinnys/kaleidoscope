@@ -235,6 +235,34 @@ it("확인 모드 부모 행에서 화살표는 펼침, Space는 확인, Enter�
   expect(parent.getAttribute("aria-expanded")).toBe("true");
 });
 
+it("확인 모드의 path 가상 폴더는 본문 클릭과 Enter로 여전히 펼치고 접는다", async () => {
+  const items = [
+    { key: "a", title: "보고서", path: "분기/보고서", checked: false },
+    { key: "b", title: "자료", path: "분기/자료", checked: true },
+  ];
+  const { calls } = setup({
+    type: "tree",
+    by: "path",
+    items: { state: "items" },
+    on_select: { set_state: "picked" },
+    on_check: [{ set_state: "last" }],
+  } as unknown as Block, { items, picked: null, last: null });
+  const folder = await screen.findByRole("treeitem", { name: "분기" });
+  expect(folder.querySelector("[data-tree-check]")).toBeNull();
+
+  fireEvent.click(folder);
+  expect(folder.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("treeitem", { name: "보고서" })).toBeTruthy();
+
+  folder.focus();
+  fireEvent.keyDown(folder, { key: "Enter" });
+  expect(folder.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("treeitem", { name: "보고서" })).toBeNull();
+
+  await act(async () => { await Promise.resolve(); });
+  expect(calls.mock.calls.some(([request]) => (request as CoreRequest).op === "data.act")).toBe(false);
+});
+
 it("확인 모드가 아닌 데이터 트리는 부모 행에 화살표 한 열만 두고 본문 클릭이 펼침을 바꾼다", async () => {
   setup({ type: "tree", default_expanded: true, items: { state: "items" } } as unknown as Block, { items: parentItems });
   const parent = await screen.findByRole("treeitem", { name: "상위" });
