@@ -38,14 +38,17 @@ function bridgeSource(init: SandboxInit): string {
     const config = ${config};
     const token = config.token;
     const nativeRequestAnimationFrame = window.requestAnimationFrame?.bind(window), nativeCancelAnimationFrame = window.cancelAnimationFrame?.bind(window);
-    let frameVisible = true, queuedFrames = new Map(), nextQueuedFrame = 0;
+    let frameVisible = true, queuedFrames = new Map(), resumedFrames = new Map(), nextQueuedFrame = 0;
     const setFrameVisible = visible => {
       if (!nativeRequestAnimationFrame || !nativeCancelAnimationFrame || frameVisible === visible) return;
       frameVisible = visible;
       if (!visible) return;
-      const queued = [...queuedFrames.values()];
+      const queued = [...queuedFrames.entries()];
       queuedFrames.clear();
-      for (const callback of queued) nativeRequestAnimationFrame(callback);
+      for (const [id, callback] of queued) {
+        const nativeId = nativeRequestAnimationFrame(time => { resumedFrames.delete(id); callback(time); });
+        resumedFrames.set(id, nativeId);
+      }
     };
     if (nativeRequestAnimationFrame && nativeCancelAnimationFrame) {
       window.requestAnimationFrame = callback => {
@@ -56,6 +59,13 @@ function bridgeSource(init: SandboxInit): string {
       };
       window.cancelAnimationFrame = id => {
         if (queuedFrames.delete(id)) return;
+        if (id < 0) {
+          const resumed = resumedFrames.get(id);
+          if (resumed === undefined) return;
+          resumedFrames.delete(id);
+          nativeCancelAnimationFrame(resumed);
+          return;
+        }
         nativeCancelAnimationFrame(id);
       };
     }

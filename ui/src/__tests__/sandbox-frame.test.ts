@@ -370,6 +370,59 @@ it("창이 보이지 않으면 프레임의 애니메이션 콜백을 미루고 
   }
 });
 
+it("복원 때 다시 건 콜백도 실행 전이면 앱이 받은 음수 ID로 취소된다", () => {
+  vi.useFakeTimers();
+  const original = { request: window.requestAnimationFrame, cancel: window.cancelAnimationFrame };
+  let next = 0;
+  const scheduled = new Map<number, FrameRequestCallback>();
+  const request = vi.fn((callback: FrameRequestCallback) => { const id = ++next; scheduled.set(id, callback); return id; });
+  const cancel = vi.fn((id: number) => { scheduled.delete(id); });
+  const pump = () => { const entries = [...scheduled.values()]; scheduled.clear(); for (const callback of entries) callback(16); };
+  window.requestAnimationFrame = request;
+  window.cancelAnimationFrame = cancel;
+  vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  const ran: string[] = [];
+  try {
+    runFrameScript(frameBridgeCode("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "보임" }));
+
+    visibility(false);
+    const cancelled = window.requestAnimationFrame(() => ran.push("취소"));
+    visibility(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    window.cancelAnimationFrame(cancelled);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    pump();
+    expect(ran).toEqual([]);
+    window.cancelAnimationFrame(cancelled);
+    expect(cancel).toHaveBeenCalledTimes(1);
+
+    visibility(false);
+    const executed = window.requestAnimationFrame(() => ran.push("실행"));
+    visibility(true);
+    pump();
+    expect(ran).toEqual(["실행"]);
+    window.cancelAnimationFrame(executed);
+    expect(cancel).toHaveBeenCalledTimes(1);
+
+    visibility(false);
+    const rehidden = window.requestAnimationFrame(() => ran.push("다시 숨김"));
+    visibility(true);
+    visibility(false);
+    window.cancelAnimationFrame(rehidden);
+    expect(cancel).toHaveBeenCalledTimes(2);
+    pump();
+    expect(ran).toEqual(["실행"]);
+
+    visibility(true);
+    pump();
+    expect(ran).toEqual(["실행"]);
+  } finally {
+    window.requestAnimationFrame = original.request;
+    window.cancelAnimationFrame = original.cancel;
+    vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+  }
+});
+
 it("창이 보이지 않아도 프레임 자신의 같이 보기 보고는 계속된다", async () => {
   vi.useFakeTimers();
   const field = document.createElement("textarea");
