@@ -35,7 +35,7 @@ it("클라이언트 상태 메시지는 허용 키만 보내고 지연 중 다�
     return result;
   });
   const client = { state_keys: ["a", "b"], storage_entries: [], commands: {}, capabilities: [] };
-  const runtime = new ClientRuntime(store, { windowId: "editor-window", setNotice: vi.fn() } as unknown as WindowData, definition, client as never);
+  const runtime = new ClientRuntime(store, { windowId: "editor-window", setNotice: vi.fn(), setClientReady: vi.fn() } as unknown as WindowData, definition, client as never);
   const frame = document.createElement("iframe");
   document.body.append(frame);
   Object.assign(runtime, { frame, token: "test-token" });

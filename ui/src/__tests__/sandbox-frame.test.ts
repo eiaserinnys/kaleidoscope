@@ -314,3 +314,131 @@ it("로컬 download 링크는 허용하고 일반 링크 이동은 막는다", (
   expect(prevented("https://example.test/", true)).toBe(true);
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
 });
+
+function frameBridgeCode(raw: string, init: Parameters<typeof sandboxSource>[1]): string {
+  const doc = new DOMParser().parseFromString(sandboxSource(raw, init), "text/html");
+  const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
+  return new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
+}
+
+function visibility(visible: boolean, token = "보임") {
+  window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-visibility", token, visible } }));
+}
+
+it("창이 보이지 않으면 프레임의 애니메이션 콜백을 미루고 다시 보이면 잇는다", () => {
+  vi.useFakeTimers();
+  const original = { request: window.requestAnimationFrame, cancel: window.cancelAnimationFrame };
+  let next = 0;
+  const scheduled = new Map<number, FrameRequestCallback>();
+  const request = vi.fn((callback: FrameRequestCallback) => { const id = ++next; scheduled.set(id, callback); return id; });
+  const cancel = vi.fn((id: number) => { scheduled.delete(id); });
+  const pump = () => { const entries = [...scheduled.values()]; scheduled.clear(); for (const callback of entries) callback(16); };
+  window.requestAnimationFrame = request;
+  window.cancelAnimationFrame = cancel;
+  vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  const ran: number[] = [];
+  try {
+    runFrameScript(frameBridgeCode("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "보임" }));
+
+    window.requestAnimationFrame((time) => ran.push(time));
+    expect(request).toHaveBeenCalledTimes(1);
+    pump();
+    expect(ran).toEqual([16]);
+
+    visibility(false);
+    window.requestAnimationFrame((time) => ran.push(time));
+    expect(request).toHaveBeenCalledTimes(1);
+    pump();
+    expect(ran).toEqual([16]);
+
+    visibility(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    pump();
+    expect(ran).toEqual([16, 16]);
+
+    visibility(false);
+    const queued = window.requestAnimationFrame((time) => ran.push(time));
+    window.cancelAnimationFrame(queued);
+    visibility(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    pump();
+    expect(ran).toEqual([16, 16]);
+  } finally {
+    window.requestAnimationFrame = original.request;
+    window.cancelAnimationFrame = original.cancel;
+    vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+  }
+});
+
+it("복원 때 다시 건 콜백도 실행 전이면 앱이 받은 음수 ID로 취소된다", () => {
+  vi.useFakeTimers();
+  const original = { request: window.requestAnimationFrame, cancel: window.cancelAnimationFrame };
+  let next = 0;
+  const scheduled = new Map<number, FrameRequestCallback>();
+  const request = vi.fn((callback: FrameRequestCallback) => { const id = ++next; scheduled.set(id, callback); return id; });
+  const cancel = vi.fn((id: number) => { scheduled.delete(id); });
+  const pump = () => { const entries = [...scheduled.values()]; scheduled.clear(); for (const callback of entries) callback(16); };
+  window.requestAnimationFrame = request;
+  window.cancelAnimationFrame = cancel;
+  vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  const ran: string[] = [];
+  try {
+    runFrameScript(frameBridgeCode("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "보임" }));
+
+    visibility(false);
+    const cancelled = window.requestAnimationFrame(() => ran.push("취소"));
+    visibility(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    window.cancelAnimationFrame(cancelled);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    pump();
+    expect(ran).toEqual([]);
+    window.cancelAnimationFrame(cancelled);
+    expect(cancel).toHaveBeenCalledTimes(1);
+
+    visibility(false);
+    const executed = window.requestAnimationFrame(() => ran.push("실행"));
+    visibility(true);
+    pump();
+    expect(ran).toEqual(["실행"]);
+    window.cancelAnimationFrame(executed);
+    expect(cancel).toHaveBeenCalledTimes(1);
+
+    visibility(false);
+    const rehidden = window.requestAnimationFrame(() => ran.push("다시 숨김"));
+    visibility(true);
+    visibility(false);
+    window.cancelAnimationFrame(rehidden);
+    expect(cancel).toHaveBeenCalledTimes(2);
+    pump();
+    expect(ran).toEqual(["실행"]);
+
+    visibility(true);
+    pump();
+    expect(ran).toEqual(["실행"]);
+  } finally {
+    window.requestAnimationFrame = original.request;
+    window.cancelAnimationFrame = original.cancel;
+    vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+  }
+});
+
+it("창이 보이지 않아도 프레임 자신의 같이 보기 보고는 계속된다", async () => {
+  vi.useFakeTimers();
+  const field = document.createElement("textarea");
+  field.setAttribute("aria-label", "메모");
+  field.value = "갱신";
+  vi.spyOn(field, "getBoundingClientRect").mockReturnValue({ width: 100, height: 40 } as DOMRect);
+  document.body.append(field);
+  const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
+  try {
+    runFrameScript(frameBridgeCode("<body></body>", { state: {}, stateKeys: [], storageEntries: [], token: "보임" }));
+    visibility(false);
+    post.mockClear();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-sandbox-share", text: expect.stringContaining("갱신") }), "*");
+  } finally {
+    field.remove();
+    vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
+  }
+});

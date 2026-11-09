@@ -240,7 +240,7 @@ it("클라이언트 저장 쓰기의 응답 전에는 flush가 끝나지 않는�
     }),
     nativeFiles: false,
   } as unknown as ShellStore;
-  const data = { windowId: "window-1", failClient: vi.fn(), setNotice: vi.fn() } as unknown as WindowData;
+  const data = { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice: vi.fn() } as unknown as WindowData;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: ["docs"], inputs: {}, actions: [], commands: {} };
   const runtime = new ClientRuntime(store, data, { assets: [], permissions: [] } as unknown as AppDefinition, client as never);
   await runtime.start();

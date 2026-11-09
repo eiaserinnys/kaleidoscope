@@ -22,7 +22,7 @@ it("드롭은 전체 파일을 검사하고 준비된 창의 기존 동작에 �
   const act = vi.fn(async () => true), setNotice = vi.fn((problem: any) => { notice = problem; });
   const clearNoticeIf = vi.fn((problem: any) => { if (notice === problem) notice = null; });
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["open"], commands: {} };
-  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, clearNoticeIf, act } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice, clearNoticeIf, act } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
   await runtime.start();
   const frame = document.querySelector("iframe")!;
   expect(clientFileDropReady(store, "window-1")).toBe(false);
@@ -84,7 +84,7 @@ it("확장자 없는 수락 항목이 섞이면 거절 안내에서 형식 일�
   const store = { getSnapshot: () => ({ device: {}, shared: { windows: [], desktops: [] } }), subscribe: () => () => undefined, subscribeEvents: () => () => undefined, call } as unknown as ShellStore;
   const setNotice = vi.fn(), act = vi.fn();
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["open"], commands: {} };
-  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, act } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice, act } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
   await runtime.start();
   const frame = document.querySelector("iframe")!;
   window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type: "ks-sandbox-ready" } }));
@@ -114,7 +114,7 @@ it("네이티브 창의 브라우저 파일은 읽기, 공유, blob 저장에서
     nativeFiles: true, call, bytes,
   } as unknown as ShellStore;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {}, capabilities: ["share"] };
-  const create = (windowId: string) => new ClientRuntime(store, { windowId, failClient: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  const create = (windowId: string) => new ClientRuntime(store, { windowId, failClient: vi.fn(), setClientReady: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
   const first = create("window-1"), second = create("window-2");
   await first.start(); await second.start();
   const [frame1, frame2] = [...document.querySelectorAll("iframe")];
@@ -160,7 +160,7 @@ it("등록되지 않은 파일은 창의 기존 오류를 읽기와 blob 저장�
     });
     const bytes = vi.fn(async (_request: any, _body?: ArrayBuffer): Promise<ArrayBuffer> => { throw coreError; });
     const store = { getSnapshot: () => ({ device: {}, shared: { windows: [], desktops: [] } }), subscribe: () => () => undefined, subscribeEvents: () => () => undefined, nativeFiles, call, bytes } as unknown as ShellStore;
-    const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+    const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
     await runtime.start();
     const frame = document.querySelector("iframe")!, post = vi.spyOn(frame.contentWindow!, "postMessage");
     const receive = (type: string, extra: object) => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type, ...extra } }));
@@ -203,7 +203,7 @@ it("브라우저 선택과 저장 후 파일은 같은 창에서 읽히고 blob 
   const bytes = vi.fn(async (_request: any, _body?: ArrayBuffer) => new Uint8Array([8]).buffer);
   const store = { getSnapshot: () => ({ device: {}, shared: { windows: [], desktops: [] } }), subscribe: () => () => undefined, subscribeEvents: () => () => undefined, nativeFiles: false, call, bytes } as unknown as ShellStore;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["picked"], commands: {} };
-  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
   await runtime.start();
   const frame = document.querySelector("iframe")!, post = vi.spyOn(frame.contentWindow!, "postMessage");
   const receive = (type: string, extra: object) => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type, ...extra } }));
@@ -242,7 +242,7 @@ it("네이티브 선택과 blob 열기는 코어에서 읽고 blob 저장은 파
   const bytes = vi.fn(async () => new Uint8Array([4, 5, 6]).buffer);
   const store = { getSnapshot: () => ({ device: {}, shared: { windows: [], desktops: [] } }), subscribe: () => () => undefined, subscribeEvents: () => () => undefined, nativeFiles: true, call, bytes } as unknown as ShellStore;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["picked", "saved"], commands: {} };
-  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice: vi.fn() } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
   await runtime.start();
   const frame = document.querySelector("iframe")!, post = vi.spyOn(frame.contentWindow!, "postMessage");
   const receive = (type: string, extra: object) => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type, ...extra } }));
@@ -303,7 +303,7 @@ it("client 폴더 선택은 코어 권한 확인을 거쳐 이름만 돌려주�
   } as unknown as AppDefinition;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["pick"], commands: {} };
   const setNotice = vi.fn();
-  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, clientHost: null } as unknown as WindowData, definition, client as never);
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice, clientHost: null } as unknown as WindowData, definition, client as never);
   await runtime.start();
   const frame = document.querySelector("iframe")!;
   const post = vi.spyOn(frame.contentWindow!, "postMessage");

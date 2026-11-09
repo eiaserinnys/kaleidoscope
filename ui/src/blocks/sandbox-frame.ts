@@ -37,6 +37,38 @@ function bridgeSource(init: SandboxInit): string {
     document.currentScript?.remove();
     const config = ${config};
     const token = config.token;
+    const nativeRequestAnimationFrame = window.requestAnimationFrame?.bind(window), nativeCancelAnimationFrame = window.cancelAnimationFrame?.bind(window);
+    let frameVisible = true, queuedFrames = new Map(), resumedFrames = new Map(), nextQueuedFrame = 0;
+    const setFrameVisible = visible => {
+      if (!nativeRequestAnimationFrame || !nativeCancelAnimationFrame || frameVisible === visible) return;
+      frameVisible = visible;
+      if (!visible) return;
+      const queued = [...queuedFrames.entries()];
+      queuedFrames.clear();
+      for (const [id, callback] of queued) {
+        const nativeId = nativeRequestAnimationFrame(time => { resumedFrames.delete(id); callback(time); });
+        resumedFrames.set(id, nativeId);
+      }
+    };
+    if (nativeRequestAnimationFrame && nativeCancelAnimationFrame) {
+      window.requestAnimationFrame = callback => {
+        if (frameVisible) return nativeRequestAnimationFrame(callback);
+        const id = -(++nextQueuedFrame);
+        queuedFrames.set(id, callback);
+        return id;
+      };
+      window.cancelAnimationFrame = id => {
+        if (queuedFrames.delete(id)) return;
+        if (id < 0) {
+          const resumed = resumedFrames.get(id);
+          if (resumed === undefined) return;
+          resumedFrames.delete(id);
+          nativeCancelAnimationFrame(resumed);
+          return;
+        }
+        nativeCancelAnimationFrame(id);
+      };
+    }
     const fail = (error) => Object.assign(new Error(error.message), { id: error.id, code: error.code });
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), grantListeners = new Map(), pending = new Map(), pendingWrites = new Set();
@@ -345,6 +377,7 @@ function bridgeSource(init: SandboxInit): string {
         const surface = surfaces.get(data.id);
         if (surface) surface.canvas.convertToBlob({ type: 'image/png' }).then(blob => blob.arrayBuffer()).then(bytes => send('ks-client-snapshot-result', { requestId: data.requestId, bytes }, [bytes])).catch(error => send('ks-client-snapshot-result', { requestId: data.requestId, error: String(error) }));
       }
+      if (data.type === 'ks-sandbox-visibility' && data.token === token) setFrameVisible(data.visible !== false);
       if (data.type === 'ks-sandbox-state-sync') { state = { ...data.state }; stateListeners.forEach(fn => fn({ ...state })); }
       if (data.type === 'ks-sandbox-storage-sync') {
         const listeners = storageListeners.get(data.entry);

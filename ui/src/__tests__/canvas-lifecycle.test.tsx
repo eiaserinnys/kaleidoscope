@@ -5,8 +5,9 @@ import { CanvasBlock } from "../blocks/canvas";
 
 const data = vi.hoisted(() => ({
   subscribeClient: () => () => {}, getClientGeneration: () => 0,
+  getClientReady: () => data.clientReady, getClientFailed: () => data.clientFailed,
   attachSurface: vi.fn(() => 1), detachSurface: vi.fn(), resizeSurface: vi.fn(), setSurfaceVisible: vi.fn(), setNotice: vi.fn(), act: vi.fn(),
-  itemSurface: "first", loading: false,
+  itemSurface: "first", loading: false, clientReady: true, clientFailed: false,
 }));
 vi.mock("../data/window-data", () => ({ useWindowData: () => data, useBinding: (pointer: string, value: unknown) => ({ status: "ready", value: pointer.endsWith("/loading") ? data.loading : value && typeof value === "object" && "item" in value ? data.itemSurface : value }) }));
 vi.mock("../data/window-state", () => ({ useWindowGrants: () => [] }));
@@ -168,6 +169,38 @@ it("세로 영상의 좁은 창 무대는 정사각 이상으로 유지하고 �
     expect(view.container.firstElementChild?.getAttribute("style")).toContain("--ks-canvas-ratio: 1");
     expect(view.container.querySelector("canvas")?.style.height).toBe("498px");
     expect(view.container.querySelector("canvas")?.style.width).toBe("280.125px");
+  } finally {
+    if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
+    else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;
+    vi.unstubAllGlobals();
+  }
+});
+
+it("client가 준비되기 전에는 로딩 표현을 보이고 준비되거나 실패하면 지운다", () => {
+  vi.clearAllMocks(); data.loading = false; data.clientReady = false; data.clientFailed = false;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 320, height: 180 } as DOMRect);
+  const original = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, "transferControlToOffscreen");
+  Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", { configurable: true, value: () => ({}) });
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const block = { type: "canvas", surface: "preview", description: "준비된 색상 무대" } as const;
+  try {
+    const view = render(<CanvasBlock block={block} pointer="/ui" />);
+    const root = view.container.querySelector(".ks-canvas")!;
+    expect(root.getAttribute("aria-label")).toBe("준비된 색상 무대, 불러오는 중");
+    expect(root.getAttribute("aria-busy")).toBe("true");
+    expect(root.querySelector('.ks-canvas-loading .ks-data-progress.is-indeterminate[role="progressbar"]')).not.toBeNull();
+
+    data.clientReady = true;
+    view.rerender(<CanvasBlock block={block} pointer="/ui" />);
+    expect(root.getAttribute("aria-label")).toBe("준비된 색상 무대");
+    expect(root.getAttribute("aria-busy")).toBeNull();
+    expect(root.querySelector(".ks-canvas-loading")).toBeNull();
+
+    data.clientReady = false; data.clientFailed = true;
+    view.rerender(<CanvasBlock block={block} pointer="/ui" />);
+    expect(root.getAttribute("aria-label")).toBe("준비된 색상 무대");
+    expect(root.getAttribute("aria-busy")).toBeNull();
+    expect(root.querySelector(".ks-canvas-loading")).toBeNull();
   } finally {
     if (original) Object.defineProperty(HTMLCanvasElement.prototype, "transferControlToOffscreen", original);
     else delete (HTMLCanvasElement.prototype as Partial<HTMLCanvasElement>).transferControlToOffscreen;

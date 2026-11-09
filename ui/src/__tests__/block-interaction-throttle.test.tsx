@@ -23,6 +23,8 @@ const runtime = vi.hoisted(() => {
     setNotice: vi.fn(),
     subscribeClient: vi.fn(() => () => undefined),
     getClientGeneration: vi.fn(() => 0),
+    getClientReady: vi.fn(() => true),
+    getClientFailed: vi.fn(() => false),
     subscribeMedia: vi.fn(() => () => undefined),
     getMediaGeneration: vi.fn(() => 0),
   });
@@ -39,6 +41,8 @@ const runtime = vi.hoisted(() => {
     setNotice: (...args: unknown[]) => state.setNotice(...args),
     subscribeClient: (...args: unknown[]) => state.subscribeClient(...args),
     getClientGeneration: (...args: unknown[]) => state.getClientGeneration(...args),
+    getClientReady: (...args: unknown[]) => state.getClientReady(...args),
+    getClientFailed: (...args: unknown[]) => state.getClientFailed(...args),
     subscribeMedia: (...args: unknown[]) => state.subscribeMedia(...args),
     getMediaGeneration: (...args: unknown[]) => state.getMediaGeneration(...args),
   };

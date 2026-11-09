@@ -1,0 +1,528 @@
+//! 카드 #1136: 창이 최소화되면 샌드박스 프레임의 rAF 콜백이 멈추고 복원되면 잇는지(#913),
+//! 클라이언트 캔버스가 준비되기 전에 기존 로딩 표시가 보이는지(#992)를 실제 Windows
+//! WebView2에서 잰다. 창 틀을 다루는 ui.rs를 건드리지 않도록 시나리오를 따로 둔다.
+use super::*;
+use kaleidoscope_core::kaleidoscope_contract::VisibleView;
+use sha2::{Digest, Sha256};
+use std::time::Instant;
+
+const SANDBOX_APP_ID: &str = "frame-visibility-1136";
+const CANVAS_APP_ID: &str = "canvas-loading-1136";
+const CLIENT_ASSET_ID: &str = "canvas-loading-1136-client";
+const SANDBOX_HTML: &str =
+    include_str!("../../../../ui/e2e/fixtures/frame-visibility-1136/sandbox.html");
+const CLIENT_JS: &str = include_str!("../../../../ui/e2e/fixtures/frame-visibility-1136/client.js");
+const WINDOW_READY_TIMEOUT: Duration = Duration::from_secs(30);
+const REPORT_TIMEOUT: Duration = Duration::from_secs(10);
+const HIDDEN_MEASURE: Duration = Duration::from_millis(1500);
+
+fn snapshot(core: &Core) -> Result<kaleidoscope_core::kaleidoscope_contract::ShellSnapshot, String> {
+    match call(core, CoreRequest::StateGet {})? {
+        CoreReply::StateGet { snapshot, .. } => Ok(snapshot),
+        reply => Err(format!("unexpected state response: {reply:?}")),
+    }
+}
+
+fn open_window(core: &Core, desktop_id: &str, app_id: &str, rect: Rect) -> Result<String, String> {
+    match call(
+        core,
+        CoreRequest::WindowOpen {
+            desktop_id: desktop_id.into(),
+            app_id: app_id.into(),
+            rect: Some(rect),
+        },
+    )? {
+        CoreReply::WindowOpen { window } => Ok(window.id),
+        reply => Err(format!("unexpected window.open response: {reply:?}")),
+    }
+}
+
+fn minimize(core: &Core, window_id: &str) -> Result<(), String> {
+    call(
+        core,
+        CoreRequest::WindowMinimize {
+            window_id: window_id.into(),
+        },
+    )?;
+    Ok(())
+}
+
+fn restore(core: &Core, window_id: &str) -> Result<(), String> {
+    call(
+        core,
+        CoreRequest::WindowRestore {
+            window_id: window_id.into(),
+        },
+    )?;
+    Ok(())
+}
+
+fn share(core: &Core, window_id: &str, on: bool) -> Result<(), String> {
+    call(
+        core,
+        CoreRequest::ShareSet {
+            window_id: window_id.into(),
+            on,
+        },
+    )?;
+    Ok(())
+}
+
+fn import_definition(core: &Core, definition: Value) -> Result<(), String> {
+    call(
+        core,
+        CoreRequest::AppImport {
+            definition_json: definition.to_string(),
+        },
+    )?;
+    Ok(())
+}
+
+// 같이 보기 글에서 샌드박스 앱이 남기는 "프레임 N"과 "갱신 M" 줄을 읽는다.
+// 글 머리의 창 제목(「[프레임 보임 시험]」)에도 "프레임 "이 있으므로 줄 머리로만 찾는다.
+fn parse_count(text: &str, prefix: &str) -> Option<u64> {
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix(prefix)?.parse().ok())
+}
+
+fn view_counts(view: &VisibleView) -> Result<(u64, u64), String> {
+    let frames = parse_count(&view.text, "프레임 ").ok_or("share text has no frame count")?;
+    let reports = parse_count(&view.text, "갱신 ").unwrap_or(0);
+    Ok((frames, reports))
+}
+
+fn latest_counts(window_id: &str) -> Option<(u64, u64)> {
+    let view = ui::latest_share_view(window_id)?;
+    view_counts(&view).ok()
+}
+
+// 실패했을 때 왜 못 봤는지 알 수 있게 마지막 view를 요약한다.
+fn view_summary(window_id: &str) -> String {
+    match ui::latest_share_view(window_id) {
+        Some(view) => format!(
+            "last share.view: visual={} occluded={} text={:?}",
+            view.visual,
+            view.occluded,
+            view.text.chars().take(120).collect::<String>()
+        ),
+        None => "last share.view: none".into(),
+    }
+}
+
+// 프레임 수가 실린 첫 view를 기다린다.
+fn wait_view(window_id: &str, label: &str) -> Result<(u64, u64, VisibleView), String> {
+    let deadline = Instant::now() + WINDOW_READY_TIMEOUT;
+    loop {
+        if let Some(view) = ui::latest_share_view(window_id) {
+            if let Ok((frames, reports)) = view_counts(&view) {
+                return Ok((frames, reports, view));
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("{label}: no share view with frame count in time ({})", view_summary(window_id)));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+// 같이 보기 보고(갱신)가 기준값을 넘을 때까지 기다린다.
+fn wait_reports(
+    window_id: &str,
+    above: u64,
+    label: &str,
+) -> Result<(u64, u64, VisibleView), String> {
+    let deadline = Instant::now() + REPORT_TIMEOUT;
+    let mut observed: Option<(u64, u64)> = None;
+    loop {
+        if let Some(view) = ui::latest_share_view(window_id) {
+            if let Ok((frames, reports)) = view_counts(&view) {
+                observed = Some((frames, reports));
+                if reports > above {
+                    return Ok((frames, reports, view));
+                }
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "{label}: share report did not advance past 갱신 {above} in time (observed {observed:?}, {})",
+                view_summary(window_id)
+            ));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+// 앱의 rAF 루프가 프레임 수를 기준값 너머로 올릴 때까지 기다린다.
+fn wait_frames(
+    window_id: &str,
+    above: u64,
+    label: &str,
+) -> Result<(u64, u64, VisibleView), String> {
+    let deadline = Instant::now() + REPORT_TIMEOUT;
+    let mut observed: Option<(u64, u64)> = None;
+    loop {
+        if let Some(view) = ui::latest_share_view(window_id) {
+            if let Ok((frames, reports)) = view_counts(&view) {
+                observed = Some((frames, reports));
+                if frames > above {
+                    return Ok((frames, reports, view));
+                }
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "{label}: frame count did not advance past {above} in time (observed {observed:?}, {})",
+                view_summary(window_id)
+            ));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+// 창 틀이 최소화·복원 상태를 그렸는지 확인한다. 같이 보기 view의 occluded 판정 대신
+// 화면이 실제로 그 상태로 바뀐 것을 기준으로 삼는다.
+fn wait_minimized(app: &AppHandle, minimized: bool, label: &str) -> Result<(), String> {
+    ui::wait_dom(
+        app,
+        &format!(
+            "const w=document.querySelector('[data-testid=\"app-window-{SANDBOX_APP_ID}\"]');return !!w&&w.dataset.minimized==='{}';",
+            if minimized { "true" } else { "false" }
+        ),
+        label,
+    )
+}
+
+fn sandbox_definition() -> Value {
+    json!({
+        "id": SANDBOX_APP_ID,
+        "name": "프레임 보임 시험",
+        "requires": {"blocks": 11, "modules": {}},
+        "permissions": [],
+        "state": {},
+        "ui": {"type": "sandbox", "title": "프레임 보임 시험", "value": SANDBOX_HTML}
+    })
+}
+
+fn canvas_definition() -> Value {
+    json!({
+        "id": CANVAS_APP_ID,
+        "name": "캔버스 준비 시험",
+        "requires": {"blocks": 12, "modules": {"assets": 1, "client": 1}},
+        "permissions": [],
+        "state": {},
+        "assets": [{"id": CLIENT_ASSET_ID, "version": 1}],
+        "client": {
+            "runtime": "javascript",
+            "entry": {"id": CLIENT_ASSET_ID, "version": 1},
+            "inputs": {}, "outputs": {}, "actions": [], "commands": {},
+            "state_keys": [], "storage_entries": []
+        },
+        "ui": {"type": "canvas", "surface": "stage", "description": "준비된 색상 무대"}
+    })
+}
+
+pub(super) fn scenario(app: &AppHandle, core: &Core, log: &mut File) -> Result<(), String> {
+    record(log, "start", json!({"scenario":"frame-visibility"}))?;
+    // 셸 화면이 서기 전에 보낸 창 열기·같이 보기 요청은 화면이 구독하기 전에 지나가 버린다.
+    // 다른 시나리오처럼 셸 표식이 그려진 뒤에 창을 연다.
+    ui::driver::wait_until("셸 화면", || {
+        Ok(ui::evaluate(app, "return !!document.querySelector('.ks-shell-bar');")? == json!(true))
+    })?;
+    let shell = snapshot(core)?;
+    let workspace = shell
+        .device
+        .active_workspace_id
+        .ok_or("active workspace is missing")?;
+    let desktop_id = shell
+        .device
+        .active_desktop_ids
+        .get(&workspace)
+        .ok_or("active desktop is missing")?
+        .clone();
+    // 앞 시나리오에서 남은 창이 겹쳐 occluded 판정을 흔들지 않게 한다.
+    for window in shell
+        .shared
+        .windows
+        .iter()
+        .filter(|window| window.desktop_id == desktop_id)
+    {
+        call(
+            core,
+            CoreRequest::WindowClose {
+                window_id: window.id.clone(),
+            },
+        )?;
+    }
+
+    import_definition(core, sandbox_definition())?;
+    let window_id = open_window(
+        core,
+        &desktop_id,
+        SANDBOX_APP_ID,
+        Rect {
+            x: 64,
+            y: 64,
+            width: 720,
+            height: 520,
+        },
+    )?;
+    record(log, "frame.window", json!({"window_id": window_id}))?;
+    share(core, &window_id, true)?;
+    // 샌드박스 블록이 그려지고 다리(bridge)의 첫 보고가 블록에 닿아야 같이 보기 글에
+    // 앱이 남기는 "프레임 N"이 실린다. 그 전의 view에는 프레임 값이 없다.
+    ui::wait_dom(
+        app,
+        &format!(
+            "const w=document.querySelector('[data-testid=\"app-window-{SANDBOX_APP_ID}\"]');const s=w&&w.querySelector('.ks-sandbox');return !!s&&Number(s.getAttribute('data-share-seq')||0)>0;"
+        ),
+        "sandbox first share report",
+    )?;
+    record(
+        log,
+        "frame.dom",
+        ui::evaluate(
+            app,
+            &format!(
+                "const w=document.querySelector('[data-testid=\"app-window-{SANDBOX_APP_ID}\"]');const s=w?w.querySelector('.ks-sandbox'):null;return {{window:!!w,minimized:w?w.dataset.minimized:null,block:!!s,seq:s?Number(s.getAttribute('data-share-seq')||0):0,iframe:!!(s&&s.querySelector('iframe'))}};"
+            ),
+        )?,
+    )?;
+
+    let mut failed = false;
+    macro_rules! check {
+        ($id:expr, $body:block) => {{
+            let result: Result<(), String> = (|| $body)();
+            let ok = result.is_ok();
+            if !ok { failed = true; }
+            record(log, "check.result", json!({"id":$id,"ok":ok,"message":result.err().unwrap_or_default()}))?;
+        }};
+    }
+
+    // B1-1: 보이는 동안 앱의 rAF 루프가 돈다.
+    check!("frame-visible-runs", {
+        let (start_frames, start_reports, _) = wait_view(&window_id, "frame visible")?;
+        let (end_frames, end_reports, view) =
+            wait_frames(&window_id, start_frames, "frame visible running")?;
+        record(log, "frame.sample", json!({
+            "phase": "visible",
+            "startFrames": start_frames, "endFrames": end_frames,
+            "delta": end_frames - start_frames,
+            "startReports": start_reports, "endReports": end_reports,
+            "occluded": view.occluded,
+        }))?;
+        if end_frames <= start_frames {
+            return Err(format!("visible frame count did not grow: {start_frames} -> {end_frames}"));
+        }
+        Ok(())
+    });
+
+    // B1-2·3: 최소화가 안정된 뒤(최소화 뒤 첫 보고를 지나) 1.5초 동안 rAF가 늘지 않고,
+    // 그동안 같이 보기 보고(갱신)는 계속 온다.
+    let mut hidden_start_frames = 0u64;
+    let mut hidden_end_frames = 0u64;
+    let mut hidden_start_reports = 0u64;
+    let mut hidden_end_reports = 0u64;
+    check!("frame-hidden-paused", {
+        minimize(core, &window_id)?;
+        wait_minimized(app, true, "window minimized")?;
+        // 최소화 직전에 이미 걸려 있던 rAF 콜백 하나는 아직 돌 수 있다. 그것과 최소화 뒤
+        // 첫 보고가 지나간 자리를 기준선으로 삼는다.
+        thread::sleep(Duration::from_millis(500));
+        let settled_reports = latest_counts(&window_id).map(|counts| counts.1).unwrap_or(0);
+        let (start_frames, start_reports, _) =
+            wait_reports(&window_id, settled_reports, "frame hidden settle")?;
+        let started = Instant::now();
+        let measured: Option<(u64, u64, VisibleView)>;
+        loop {
+            if let Some(view) = ui::latest_share_view(&window_id) {
+                if let Ok((frames, reports)) = view_counts(&view) {
+                    if reports > start_reports && started.elapsed() >= HIDDEN_MEASURE {
+                        measured = Some((frames, reports, view));
+                        break;
+                    }
+                }
+            }
+            if started.elapsed() >= REPORT_TIMEOUT {
+                return Err(format!(
+                    "minimized share report stopped: 갱신 {start_reports} did not advance in time ({})",
+                    view_summary(&window_id)
+                ));
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        let (end_frames, end_reports, view) =
+            measured.ok_or("minimized share measurement did not complete")?;
+        (hidden_start_frames, hidden_start_reports) = (start_frames, start_reports);
+        (hidden_end_frames, hidden_end_reports) = (end_frames, end_reports);
+        record(log, "frame.sample", json!({
+            "phase": "hidden",
+            "startFrames": hidden_start_frames, "endFrames": hidden_end_frames,
+            "delta": hidden_end_frames as i64 - hidden_start_frames as i64,
+            "startReports": hidden_start_reports, "endReports": hidden_end_reports,
+            "measuredMs": started.elapsed().as_millis() as u64,
+            "occluded": view.occluded,
+        }))?;
+        if hidden_end_frames != hidden_start_frames {
+            return Err(format!(
+                "frame count grew while minimized: {hidden_start_frames} -> {hidden_end_frames}"
+            ));
+        }
+        Ok(())
+    });
+    check!("frame-share-continues", {
+        if hidden_end_reports <= hidden_start_reports {
+            return Err(format!(
+                "share report stopped while minimized: 갱신 {hidden_start_reports} -> {hidden_end_reports}"
+            ));
+        }
+        Ok(())
+    });
+
+    // B1-4: 복원하면 rAF가 다시 돈다.
+    check!("frame-restored-runs", {
+        restore(core, &window_id)?;
+        wait_minimized(app, false, "window restored")?;
+        let (start_frames, start_reports, _) =
+            wait_reports(&window_id, hidden_end_reports, "frame restored settle")?;
+        let (end_frames, end_reports, view) =
+            wait_frames(&window_id, start_frames, "frame restored running")?;
+        record(log, "frame.sample", json!({
+            "phase": "restored",
+            "startFrames": start_frames, "endFrames": end_frames,
+            "delta": end_frames - start_frames,
+            "startReports": start_reports, "endReports": end_reports,
+            "occluded": view.occluded,
+        }))?;
+        if end_frames <= start_frames {
+            return Err(format!("restored frame count did not grow: {start_frames} -> {end_frames}"));
+        }
+        Ok(())
+    });
+
+    call(
+        core,
+        CoreRequest::WindowClose {
+            window_id: window_id.clone(),
+        },
+    )?;
+
+    // B2: 캔버스 창을 열기 전에 문서에 관찰기를 심어, 준비 전 로딩 표시가 나타났다가
+    // 사라지는지 기록한다. 관찰기는 캔버스 블록의 aria-busy 변화도 함께 본다.
+    check!("canvas-loading-shown", {
+        ui::evaluate(
+            app,
+            r#"
+const seen = {loadingAdded: 0, loadingRemoved: 0, busySet: 0, busyCleared: 0};
+window.__ksCanvasSeen = seen;
+if (window.__ksCanvasObserver) window.__ksCanvasObserver.disconnect();
+const hasLoading = (node) => node.nodeType === 1 && (node.classList?.contains('ks-canvas-loading') || node.querySelector?.('.ks-canvas-loading'));
+const observer = new MutationObserver((records) => {
+  for (const record of records) {
+    if (record.type === 'childList') {
+      for (const node of record.addedNodes) if (hasLoading(node)) seen.loadingAdded += 1;
+      for (const node of record.removedNodes) if (hasLoading(node)) seen.loadingRemoved += 1;
+    } else if (record.type === 'attributes' && record.attributeName === 'aria-busy' && record.target.classList?.contains('ks-canvas')) {
+      if (record.target.getAttribute('aria-busy')) seen.busySet += 1; else seen.busyCleared += 1;
+    }
+  }
+});
+observer.observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['aria-busy']});
+window.__ksCanvasObserver = observer;
+return true;
+"#,
+        )?;
+        super::realtime::fixture::mcp(
+            app,
+            "upload_asset",
+            json!({
+                "id": CLIENT_ASSET_ID, "version": 1, "format": "javascript",
+                "sha256": format!("{:x}", Sha256::digest(CLIENT_JS.as_bytes())),
+                "source": "ui/e2e/fixtures/frame-visibility-1136/client.js",
+                "license": "MIT",
+                "data_base64": STANDARD.encode(CLIENT_JS.as_bytes())
+            }),
+        )?;
+        import_definition(core, canvas_definition())?;
+        let canvas_window = open_window(
+            core,
+            &desktop_id,
+            CANVAS_APP_ID,
+            Rect {
+                x: 96,
+                y: 96,
+                width: 560,
+                height: 400,
+            },
+        )?;
+        record(log, "canvas.window", json!({"window_id": canvas_window}))?;
+        ui::wait_dom(
+            app,
+            &format!(
+                "const w=document.querySelector('[data-testid=\\\"app-window-{CANVAS_APP_ID}\\\"]');return !!w && !!w.querySelector('.ks-canvas') && !w.querySelector('.ks-canvas-loading') && !w.querySelector('.ks-canvas[aria-busy]');"
+            ),
+            "canvas client ready",
+        )?;
+        let observed = ui::evaluate(
+            app,
+            &format!(
+                r#"
+const seen = window.__ksCanvasSeen || null;
+const w = document.querySelector('[data-testid="app-window-{CANVAS_APP_ID}"]');
+const canvas = w ? w.querySelector('.ks-canvas') : null;
+return {{
+  seen,
+  loadingNow: !!(w && w.querySelector('.ks-canvas-loading')),
+  busyNow: canvas ? canvas.getAttribute('aria-busy') : null,
+  label: canvas ? canvas.getAttribute('aria-label') : null
+}};
+"#
+            ),
+        )?;
+        record(log, "canvas.observe", observed.clone())?;
+        let seen = &observed["seen"];
+        let added = seen["loadingAdded"].as_u64().unwrap_or(0);
+        let removed = seen["loadingRemoved"].as_u64().unwrap_or(0);
+        if added == 0 {
+            return Err("canvas loading overlay never appeared before client ready".into());
+        }
+        if removed == 0 {
+            return Err("canvas loading overlay was not removed after client ready".into());
+        }
+        if observed["loadingNow"].as_bool() != Some(false) {
+            return Err("canvas loading overlay is still visible after client ready".into());
+        }
+        if !observed["busyNow"].is_null() {
+            return Err(format!(
+                "canvas aria-busy remained after client ready: {}",
+                observed["busyNow"]
+            ));
+        }
+        Ok(())
+    });
+
+    record(
+        log,
+        "complete",
+        json!({"scenario":"frame-visibility","passed":!failed}),
+    )?;
+    if failed {
+        Err("one or more frame visibility checks failed".into())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_count;
+
+    // 42681871091 실행에서 실제로 받은 같이 보기 글이다. 창 제목의 "프레임 "을 먼저 집으면
+    // 숫자를 읽지 못해 보이는 동안의 rAF 증가를 판정하지 못했다.
+    #[test]
+    fn parse_count_skips_window_title_with_the_same_word() {
+        let text = "[프레임 보임 시험]\n\n프레임 1846\n갱신 96";
+        assert_eq!(parse_count(text, "프레임 "), Some(1846));
+        assert_eq!(parse_count(text, "갱신 "), Some(96));
+        assert_eq!(parse_count("[프레임 보임 시험]", "프레임 "), None);
+    }
+}
