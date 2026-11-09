@@ -39,7 +39,7 @@ describe("client runtime visibility ping", () => {
       nativeFiles: false,
     } as unknown as ShellStore;
     const failClient = vi.fn();
-    const data = { windowId: "window-1", failClient } as unknown as WindowData;
+    const data = { windowId: "window-1", failClient, setClientReady: vi.fn() } as unknown as WindowData;
     const definition = { assets: [] } as unknown as AppDefinition;
     const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
     const runtime = new ClientRuntime(store, data, definition, client as never);
@@ -79,7 +79,7 @@ describe("client runtime visibility ping", () => {
       nativeFiles: false,
     } as unknown as ShellStore;
     const failClient = vi.fn();
-    const data = { windowId: "window-1", failClient } as unknown as WindowData;
+    const data = { windowId: "window-1", failClient, setClientReady: vi.fn() } as unknown as WindowData;
     const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
     const runtime = new ClientRuntime(store, data, { assets: [] } as unknown as AppDefinition, client as never);
     await runtime.start();
@@ -110,7 +110,7 @@ describe("client runtime visibility ping", () => {
       nativeFiles: false,
     } as unknown as ShellStore;
     const failClient = vi.fn(), setStatus = vi.fn();
-    const data = { windowId: "window-1", failClient, setStatus } as unknown as WindowData;
+    const data = { windowId: "window-1", failClient, setStatus, setClientReady: vi.fn() } as unknown as WindowData;
     const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
     const runtime = new ClientRuntime(store, data, { assets: [] } as unknown as AppDefinition, client as never);
     await runtime.start();
@@ -140,7 +140,7 @@ describe("client runtime visibility ping", () => {
       nativeFiles: false,
     } as unknown as ShellStore;
     const failClient = vi.fn(), setStatus = vi.fn();
-    const data = { windowId: "window-1", failClient, setStatus } as unknown as WindowData;
+    const data = { windowId: "window-1", failClient, setStatus, setClientReady: vi.fn() } as unknown as WindowData;
     const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
     const runtime = new ClientRuntime(store, data, { assets: [] } as unknown as AppDefinition, client as never);
     await runtime.start();
@@ -170,7 +170,7 @@ it("클라이언트에 내용 크기와 가시성, 종료를 전달한다", asyn
   } as unknown as ShellStore;
   const host = document.createElement("div"); document.body.append(host);
   const bounds = vi.spyOn(host, "getBoundingClientRect").mockReturnValue({ width: 400, height: 300 } as DOMRect);
-  const data = { windowId: "window-1", failClient: vi.fn(), clientHost: host, clientDormant: false } as unknown as WindowData;
+  const data = { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), clientHost: host, clientDormant: false } as unknown as WindowData;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
   vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000000");
   let resized = () => {};
@@ -258,7 +258,7 @@ describe("client runtime host services", () => {
     } as unknown as ShellStore;
     const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {}, capabilities: options.capabilities };
     const setNotice = vi.fn();
-    const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setNotice, clientDormant: false } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+    const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice, clientDormant: false } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
     return { runtime, store, setNotice, get current() { return current; }, activate() { current = snapshot(true); listeners.forEach((listener) => listener()); }, hide() { current = snapshot(false); listeners.forEach((listener) => listener()); } };
   };
 

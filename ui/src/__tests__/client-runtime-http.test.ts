@@ -14,7 +14,7 @@ it.each([true, false])("HTTP 이진 요청과 응답을 전달하거나 운반 �
   const bytes = vi.fn(async () => response.buffer);
   const store = { call: vi.fn(async () => ({ op: "data.media", media: { mime: "text/javascript", data_base64: "" } })), bytes: available ? bytes : undefined,
     getSnapshot: () => null, subscribe: () => () => {}, subscribeEvents: () => () => {}, nativeFiles: false } as unknown as ShellStore;
-  const data = { windowId: "window-1", failClient: vi.fn(), clientHost: null } as unknown as WindowData;
+  const data = { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), clientHost: null } as unknown as WindowData;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {} };
   const runtime = new ClientRuntime(store, data, { assets: [] } as unknown as AppDefinition, client as never);
   await runtime.start();

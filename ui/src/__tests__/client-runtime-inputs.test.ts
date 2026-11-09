@@ -26,7 +26,7 @@ it("프레임이 준비되기 전에 원천이 ready가 되어도 준비 뒤 rea
   } as unknown as ShellStore;
   let value: BindingValue = { status: "loading" };
   const getValue = vi.fn(() => value);
-  const data = { windowId: "window-1", getValue, failClient: vi.fn(), clientDormant: false } as unknown as WindowData;
+  const data = { windowId: "window-1", getValue, failClient: vi.fn(), setClientReady: vi.fn(), clientDormant: false } as unknown as WindowData;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: { remote: { expr: "원천" } }, actions: [], commands: {} };
   const runtime = new ClientRuntime(store, data, definition, client as never);
   await runtime.start();

@@ -35,6 +35,8 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
   const surfaceValue = useBinding(`${pointer}/surface`, block.surface);
   const surface = surfaceValue.status === "ready" && typeof surfaceValue.value === "string" ? surfaceValue.value : "";
   const generation = useSyncExternalStore(data.subscribeClient, data.getClientGeneration, data.getClientGeneration);
+  const clientReady = useSyncExternalStore(data.subscribeClient, data.getClientReady, data.getClientReady);
+  const clientFailed = useSyncExternalStore(data.subscribeClient, data.getClientFailed, data.getClientFailed);
   const serialSend = useMemo(() => createSerialSend((value: Record<string, string | number | boolean>) => data.act(`${pointer}/on_pointer`, value)), [data, pointer]);
   const root = useRef<HTMLDivElement>(null);
   const rect = useRef<Rect>({ x: 0, y: 0, width: 0, height: 0 });
@@ -115,9 +117,10 @@ export function CanvasBlock({ block, pointer }: { block: CanvasBlockData; pointe
     serialSend(value, { coalesce: false });
   };
   const label = text || "캔버스";
-  return <div {...blockRoot} ref={root} className="ks-canvas" role="img" aria-label={isLoading ? `${label}, 불러오는 중` : label} aria-busy={isLoading || undefined} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined, "--ks-canvas-native-ratio": aspect } as CSSProperties}
+  const showLoading = !clientFailed && (!clientReady || isLoading);
+  return <div {...blockRoot} ref={root} className="ks-canvas" role="img" aria-label={showLoading ? `${label}, 불러오는 중` : label} aria-busy={showLoading || undefined} style={{ "--ks-canvas-ratio": aspect ? Math.max(aspect, 1) : undefined, "--ks-canvas-native-ratio": aspect } as CSSProperties}
     onPointerDown={(event) => pointerEvent("down", event)} onPointerMove={(event) => pointerEvent("move", event)}
     onPointerUp={(event) => pointerEvent("up", event)} onPointerCancel={(event) => pointerEvent("cancel", event)}>
-    {isLoading ? <div className="ks-canvas-loading" aria-hidden="true">{progressIndicator(null, 1, null)}</div> : null}
+    {showLoading ? <div className="ks-canvas-loading" aria-hidden="true">{progressIndicator(null, 1, null)}</div> : null}
   </div>;
 }

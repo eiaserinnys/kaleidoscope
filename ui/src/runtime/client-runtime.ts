@@ -480,7 +480,7 @@ export class ClientRuntime {
     const message = event.data;
     // 인증된 프레임의 모든 메시지는 프레임이 동작 중이라는 증거다.
     this.lastPong = Date.now();
-    if (message.type === "ks-sandbox-ready") { this.ready = true; notifyRuntime(this.store, this.data.windowId); this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
+    if (message.type === "ks-sandbox-ready") { this.ready = true; this.data.setClientReady(true); notifyRuntime(this.store, this.data.windowId); this.sendLifecycle("ready"); this.sync(); for (const id of this.surfaces.keys()) this.sendSurface(id); for (const entry of this.client.storage_entries) void this.syncStorage(entry); }
     else if (message.type === "ks-client-message-ready" && this.client.capabilities?.includes("receive_message")) {
       this.receiverReady = true; notifyRuntime(this.store, this.data.windowId);
     }
@@ -731,6 +731,7 @@ export class ClientRuntime {
 
   private async dispose() {
     this.stopped = true;
+    this.data.setClientReady(false);
     notifyRuntime(this.store, this.data.windowId, true);
     this.messageReplies.clear();
     const windows = runtimes.get(this.store);

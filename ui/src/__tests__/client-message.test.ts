@@ -21,7 +21,7 @@ function setup(capabilities = ["receive_message"], dormant = false) {
   } as unknown as ShellSnapshot;
   const listeners = new Set<() => void>();
   const store = { getSnapshot: () => snapshot, subscribe: (fn: () => void) => { listeners.add(fn); return () => listeners.delete(fn); }, subscribeEvents: () => () => {}, call: vi.fn(async () => ({ op: "data.media", media: { mime: "text/javascript", data_base64: "Y29uc29sZS5sb2coMSk=" } })), nativeFiles: false } as unknown as ShellStore;
-  const data = { windowId: "window-1", failClient: vi.fn(), clientDormant: dormant } as unknown as WindowData;
+  const data = { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), clientDormant: dormant } as unknown as WindowData;
   const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: [], commands: {}, capabilities };
   const runtime = new ClientRuntime(store, data, definition, client as never);
   const receive = (type: string, extra: object = {}) => {

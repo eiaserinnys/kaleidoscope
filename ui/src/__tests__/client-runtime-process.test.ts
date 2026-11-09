@@ -8,7 +8,7 @@ it("서버 전환을 해당 창의 프레임에 알린다", async () => {
   let receive: (event: any) => void = () => {};
   const call = vi.fn(async () => ({ op: "data.media", media: { mime: "text/javascript", data_base64: "" } }));
   const store = { call, getSnapshot: () => null, subscribe: () => () => {}, subscribeEvents: (listener: any) => { receive = listener; return () => {}; }, nativeFiles: false } as unknown as ShellStore;
-  const data = { windowId: "window-1", failClient: vi.fn(), clientHost: null } as unknown as WindowData;
+  const data = { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), clientHost: null } as unknown as WindowData;
   const client = { entry: { id:"runtime", version:1 }, state_keys:[], storage_entries:[], inputs:{}, actions:[], commands:{}, process_permissions:["run"] };
   const runtime = new ClientRuntime(store, data, { assets:[] } as unknown as AppDefinition, client as never);
   await runtime.start();
@@ -28,7 +28,7 @@ it("프레임이 실행 허용 응답을 흉내 내도 코어에 전달하지 �
   vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000000");
   const call = vi.fn(async () => ({ op: "data.media", media: { mime: "text/javascript", data_base64: "" } }));
   const store = { call, getSnapshot: () => null, subscribe: () => () => {}, subscribeEvents: () => () => {}, nativeFiles: false } as unknown as ShellStore;
-  const data = { windowId: "window-1", failClient: vi.fn(), clientHost: null } as unknown as WindowData;
+  const data = { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), clientHost: null } as unknown as WindowData;
   const client = { entry: { id:"runtime", version:1 }, state_keys:[], storage_entries:[], inputs:{}, actions:[], commands:{}, process_permissions:["run"] };
   const runtime = new ClientRuntime(store, data, { assets:[] } as unknown as AppDefinition, client as never);
   await runtime.start();

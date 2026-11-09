@@ -227,6 +227,7 @@ export class WindowData {
   private ready: Promise<void> = Promise.resolve();
   private runtime: ClientRuntime | null = null;
   private clientFailed = false;
+  private clientReady = false;
   private clientGeneration = 0;
   private clientListeners = new Set<() => void>();
   private mediaGeneration = 0;
@@ -430,7 +431,10 @@ export class WindowData {
   };
   setStatus = (message: string) => { this.statusMessage = message; this.noticeRole = "status"; this.statusSequence += 1; this.noticeListeners.forEach((listener) => listener()); };
   getClientFailed = () => this.clientFailed;
-  failClient = (problem: CoreError) => { this.clientFailed = true; this.setNotice(problem); };
+  getClientReady = () => this.clientReady || !this.definition.client;
+  private notifyClient = () => { this.clientListeners.forEach((listener) => listener()); };
+  setClientReady = (ready: boolean) => { if (this.clientReady === ready) return; this.clientReady = ready; this.notifyClient(); };
+  failClient = (problem: CoreError) => { this.clientFailed = true; this.clientReady = false; this.notifyClient(); this.setNotice(problem); };
   subscribeClient = (listener: () => void) => { this.clientListeners.add(listener); return () => this.clientListeners.delete(listener); };
   getClientGeneration = () => this.clientGeneration;
   subscribeMedia = (listener: () => void) => { this.mediaListeners.add(listener); return () => this.mediaListeners.delete(listener); };
@@ -448,10 +452,10 @@ export class WindowData {
         if (!this.active) return;
         this.resetClientChats();
         this.surfaces.clear();
-        this.clientFailed = false; this.setNotice(null);
+        this.clientFailed = false; this.setClientReady(false); this.setNotice(null);
         this.publishClient(Object.fromEntries(Object.entries(this.definition.client!.outputs).map(([name, output]) => [name, output.default])));
         const runtime = new ClientRuntime(this.store, this, this.definition, this.definition.client!);
-        this.runtime = runtime; this.clientGeneration += 1; this.clientListeners.forEach((listener) => listener());
+        this.runtime = runtime; this.clientGeneration += 1; this.notifyClient();
         this.startRuntime(runtime);
       });
       if (!saved) this.setNotice(shellErrors.SHELL_CLIENT_RESTART_UNSAVED());

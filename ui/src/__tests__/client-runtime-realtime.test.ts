@@ -196,7 +196,7 @@ it("프레임 출처와 토큰을 확인하고 파일 없는 client도 세션을
   });
   const store = { call, bytes:vi.fn(async () => packet.buffer), nativeFiles:false, getSnapshot:() => snapshot, subscribe:() => () => {}, subscribeEvents:() => () => {} };
   const client = { entry:{ id:"script", version:1 }, realtime_permissions:["live"], state_keys:[], storage_entries:[], inputs:{}, actions:[], commands:{} };
-  const data = { windowId:"window", clientHost:null, failClient:vi.fn(), setNotice:vi.fn() };
+  const data = { windowId:"window", clientHost:null, failClient:vi.fn(), setClientReady:vi.fn(), setNotice:vi.fn() };
   const runtime = new ClientRuntime(store as never, data as never, { assets:[], permissions:[] } as never, client as never);
   await runtime.start();
   const frame = document.querySelector<HTMLIFrameElement>(".ks-client-frames iframe")!;

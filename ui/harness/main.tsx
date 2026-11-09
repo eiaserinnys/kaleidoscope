@@ -43,6 +43,7 @@ import { repeatEmptyCenterApp } from "../e2e/fixtures/repeat-empty-center";
 import { inputSpinApp } from "../e2e/fixtures/input-spin";
 import { inputOptionsApp } from "../e2e/fixtures/input-options-app";
 import { inputDateTimeApp } from "../e2e/fixtures/input-date-time-app";
+import { canvasLoadingApp, canvasLoadingMedia, frameVisibilityApp } from "../e2e/fixtures/frame-visibility-1136";
 import windowBodyGutter from "../e2e/fixtures/window-body-gutter.json";
 import windowBodyGutterLists from "../e2e/fixtures/window-body-gutter-lists.json";
 import windowBodyGutterRow from "../e2e/fixtures/window-body-gutter-row.json";
@@ -99,7 +100,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, repeatEmptyCenterApp, inputSpinApp, inputOptionsApp, inputDateTimeApp];
+const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, repeatEmptyCenterApp, inputSpinApp, inputOptionsApp, inputDateTimeApp, frameVisibilityApp, canvasLoadingApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
@@ -276,6 +277,7 @@ const fakeTransport = createFakeTransport({
       "<rect x='3' y='4' width='18' height='16' rx='2'/><path d='M7 9l3 3-3 3M12 15h5'/>",
       "<path d='M9 18V6l10-2v12'/><circle cx='6.5' cy='18' r='2.5'/><circle cx='16.5' cy='16' r='2.5'/>",
     ].map((body, index) => [`tile-${index}.svg`, `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>${body}</svg>`)}`])),
+    ...canvasLoadingMedia,
   },
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: withRealNames(conversationMode || pasMode ? {
