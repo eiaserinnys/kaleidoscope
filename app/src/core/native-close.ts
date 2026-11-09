@@ -45,13 +45,20 @@ export function installNativeClose(store: ShellStore, setNotice: (error: CoreErr
     });
   };
 
+  // 준비는 리스너가 걸린 뒤에만 켠다. 등록이 실패하면 준비를 켜지 않아 닫기가 막히지 않는다.
   void listen(CLOSE_REQUESTED, () => {
     if (!disposed) request();
-  }).then((stop) => {
-    if (disposed) stop();
-    else unlisten = stop;
-  });
-  void invoke("shell_close_ready", { ready: true });
+  }).then(
+    (stop) => {
+      if (disposed) {
+        stop();
+        return;
+      }
+      unlisten = stop;
+      void invoke("shell_close_ready", { ready: true });
+    },
+    () => {},
+  );
 
   return () => {
     disposed = true;

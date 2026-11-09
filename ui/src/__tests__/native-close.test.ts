@@ -128,11 +128,23 @@ describe("네이티브 닫기", () => {
 
   it("마운트할 때 닫기 준비를 켜고 언마운트할 때 리스너와 준비를 해제한다", async () => {
     const { dispose } = await mount();
-    expect(callsTo("shell_close_ready")).toEqual([["shell_close_ready", { ready: true }]]);
+    await vi.waitFor(() =>
+      expect(callsTo("shell_close_ready")).toEqual([["shell_close_ready", { ready: true }]]),
+    );
 
     dispose();
     await vi.waitFor(() => expect(callsTo("shell_close_ready")).toHaveLength(2));
     expect(callsTo("shell_close_ready")[1]).toEqual(["shell_close_ready", { ready: false }]);
     expect(native.stop).toHaveBeenCalledOnce();
+  });
+
+  it("리스너를 걸지 못하면 닫기 준비를 켜지 않는다", async () => {
+    native.listen.mockRejectedValue(new TypeError("listen denied"));
+    const dispose = installNativeClose(storeWith(["window-a"]), () => {});
+    await vi.waitFor(() => expect(native.listen).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callsTo("shell_close_ready")).toEqual([]);
+    dispose();
+    expect(callsTo("shell_close_ready")).toEqual([["shell_close_ready", { ready: false }]]);
   });
 });
