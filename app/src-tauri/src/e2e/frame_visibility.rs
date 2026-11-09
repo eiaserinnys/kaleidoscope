@@ -94,78 +94,105 @@ fn view_counts(view: &VisibleView) -> Result<(u64, u64), String> {
     Ok((frames, reports))
 }
 
-fn wait_view(window_id: &str, occluded: bool, label: &str) -> Result<VisibleView, String> {
+fn latest_counts(window_id: &str) -> Option<(u64, u64)> {
+    let view = ui::latest_share_view(window_id)?;
+    view_counts(&view).ok()
+}
+
+// 실패했을 때 왜 못 봤는지 알 수 있게 마지막 view를 요약한다.
+fn view_summary(window_id: &str) -> String {
+    match ui::latest_share_view(window_id) {
+        Some(view) => format!(
+            "last share.view: visual={} occluded={} text={:?}",
+            view.visual,
+            view.occluded,
+            view.text.chars().take(120).collect::<String>()
+        ),
+        None => "last share.view: none".into(),
+    }
+}
+
+// 프레임 수가 실린 첫 view를 기다린다.
+fn wait_view(window_id: &str, label: &str) -> Result<(u64, u64, VisibleView), String> {
     let deadline = Instant::now() + WINDOW_READY_TIMEOUT;
     loop {
         if let Some(view) = ui::latest_share_view(window_id) {
-            if view.visual
-                && view.occluded == occluded
-                && parse_count(&view.text, "프레임 ").is_some()
-            {
-                return Ok(view);
+            if let Ok((frames, reports)) = view_counts(&view) {
+                return Ok((frames, reports, view));
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err(format!("{label}: no share view with frame count in time ({})", view_summary(window_id)));
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+// 같이 보기 보고(갱신)가 기준값을 넘을 때까지 기다린다.
+fn wait_reports(
+    window_id: &str,
+    above: u64,
+    label: &str,
+) -> Result<(u64, u64, VisibleView), String> {
+    let deadline = Instant::now() + REPORT_TIMEOUT;
+    let mut observed: Option<(u64, u64)> = None;
+    loop {
+        if let Some(view) = ui::latest_share_view(window_id) {
+            if let Ok((frames, reports)) = view_counts(&view) {
+                observed = Some((frames, reports));
+                if reports > above {
+                    return Ok((frames, reports, view));
+                }
             }
         }
         if Instant::now() >= deadline {
             return Err(format!(
-                "{label}: share.view did not reach occluded={occluded} in time"
+                "{label}: share report did not advance past 갱신 {above} in time (observed {observed:?}, {})",
+                view_summary(window_id)
             ));
         }
         thread::sleep(Duration::from_millis(50));
     }
 }
 
-// 최소화 뒤 새 보고가 도착했는지(갱신 증가) 기다린다.
-fn wait_reports_above(
+// 앱의 rAF 루프가 프레임 수를 기준값 너머로 올릴 때까지 기다린다.
+fn wait_frames(
     window_id: &str,
-    occluded: bool,
     above: u64,
     label: &str,
-) -> Result<VisibleView, String> {
+) -> Result<(u64, u64, VisibleView), String> {
     let deadline = Instant::now() + REPORT_TIMEOUT;
+    let mut observed: Option<(u64, u64)> = None;
     loop {
         if let Some(view) = ui::latest_share_view(window_id) {
-            if view.occluded == occluded {
-                if let Ok((_, reports)) = view_counts(&view) {
-                    if reports > above {
-                        return Ok(view);
-                    }
+            if let Ok((frames, reports)) = view_counts(&view) {
+                observed = Some((frames, reports));
+                if frames > above {
+                    return Ok((frames, reports, view));
                 }
             }
         }
         if Instant::now() >= deadline {
             return Err(format!(
-                "{label}: share report did not advance past 갱신 {above} in time"
+                "{label}: frame count did not advance past {above} in time (observed {observed:?}, {})",
+                view_summary(window_id)
             ));
         }
         thread::sleep(Duration::from_millis(50));
     }
 }
 
-// 복원 뒤 rAF가 다시 돌았는지(프레임 증가) 기다린다.
-fn wait_frame_above(
-    window_id: &str,
-    occluded: bool,
-    above: u64,
-    label: &str,
-) -> Result<VisibleView, String> {
-    let deadline = Instant::now() + REPORT_TIMEOUT;
-    loop {
-        if let Some(view) = ui::latest_share_view(window_id) {
-            if view.occluded == occluded {
-                if let Ok((frames, _)) = view_counts(&view) {
-                    if frames > above {
-                        return Ok(view);
-                    }
-                }
-            }
-        }
-        if Instant::now() >= deadline {
-            return Err(format!(
-                "{label}: frame count did not advance past {above} in time"
-            ));
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
+// 창 틀이 최소화·복원 상태를 그렸는지 확인한다. 같이 보기 view의 occluded 판정 대신
+// 화면이 실제로 그 상태로 바뀐 것을 기준으로 삼는다.
+fn wait_minimized(app: &AppHandle, minimized: bool, label: &str) -> Result<(), String> {
+    ui::wait_dom(
+        app,
+        &format!(
+            "const w=document.querySelector('[data-testid=\"app-window-{SANDBOX_APP_ID}\"]');return !!w&&w.dataset.minimized==='{}';",
+            if minimized { "true" } else { "false" }
+        ),
+        label,
+    )
 }
 
 fn sandbox_definition() -> Value {
@@ -199,6 +226,11 @@ fn canvas_definition() -> Value {
 
 pub(super) fn scenario(app: &AppHandle, core: &Core, log: &mut File) -> Result<(), String> {
     record(log, "start", json!({"scenario":"frame-visibility"}))?;
+    // 셸 화면이 서기 전에 보낸 창 열기·같이 보기 요청은 화면이 구독하기 전에 지나가 버린다.
+    // 다른 시나리오처럼 셸 표식이 그려진 뒤에 창을 연다.
+    ui::driver::wait_until("셸 화면", || {
+        Ok(ui::evaluate(app, "return !!document.querySelector('.ks-shell-bar');")? == json!(true))
+    })?;
     let shell = snapshot(core)?;
     let workspace = shell
         .device
@@ -239,6 +271,25 @@ pub(super) fn scenario(app: &AppHandle, core: &Core, log: &mut File) -> Result<(
     )?;
     record(log, "frame.window", json!({"window_id": window_id}))?;
     share(core, &window_id, true)?;
+    // 샌드박스 블록이 그려지고 다리(bridge)의 첫 보고가 블록에 닿아야 같이 보기 글에
+    // 앱이 남기는 "프레임 N"이 실린다. 그 전의 view에는 프레임 값이 없다.
+    ui::wait_dom(
+        app,
+        &format!(
+            "const w=document.querySelector('[data-testid=\"app-window-{SANDBOX_APP_ID}\"]');const s=w&&w.querySelector('.ks-sandbox');return !!s&&Number(s.getAttribute('data-share-seq')||0)>0;"
+        ),
+        "sandbox first share report",
+    )?;
+    record(
+        log,
+        "frame.dom",
+        ui::evaluate(
+            app,
+            &format!(
+                "const w=document.querySelector('[data-testid=\"app-window-{SANDBOX_APP_ID}\"]');const s=w?w.querySelector('.ks-sandbox'):null;return {{window:!!w,minimized:w?w.dataset.minimized:null,block:!!s,seq:s?Number(s.getAttribute('data-share-seq')||0):0,iframe:!!(s&&s.querySelector('iframe'))}};"
+            ),
+        )?,
+    )?;
 
     let mut failed = false;
     macro_rules! check {
@@ -252,18 +303,18 @@ pub(super) fn scenario(app: &AppHandle, core: &Core, log: &mut File) -> Result<(
 
     // B1-1: 보이는 동안 앱의 rAF 루프가 돈다.
     check!("frame-visible-runs", {
-        let shown = wait_view(&window_id, false, "frame visible")?;
-        let (shown_frames, shown_reports) = view_counts(&shown)?;
-        let later = wait_frame_above(&window_id, false, shown_frames, "frame visible running")?;
-        let (later_frames, later_reports) = view_counts(&later)?;
+        let (start_frames, start_reports, _) = wait_view(&window_id, "frame visible")?;
+        let (end_frames, end_reports, view) =
+            wait_frames(&window_id, start_frames, "frame visible running")?;
         record(log, "frame.sample", json!({
             "phase": "visible",
-            "startFrames": shown_frames, "endFrames": later_frames,
-            "delta": later_frames - shown_frames,
-            "startReports": shown_reports, "endReports": later_reports,
+            "startFrames": start_frames, "endFrames": end_frames,
+            "delta": end_frames - start_frames,
+            "startReports": start_reports, "endReports": end_reports,
+            "occluded": view.occluded,
         }))?;
-        if later_frames <= shown_frames {
-            return Err(format!("visible frame count did not grow: {shown_frames} -> {later_frames}"));
+        if end_frames <= start_frames {
+            return Err(format!("visible frame count did not grow: {start_frames} -> {end_frames}"));
         }
         Ok(())
     });
@@ -276,40 +327,43 @@ pub(super) fn scenario(app: &AppHandle, core: &Core, log: &mut File) -> Result<(
     let mut hidden_end_reports = 0u64;
     check!("frame-hidden-paused", {
         minimize(core, &window_id)?;
-        let settle = wait_view(&window_id, true, "frame hidden")?;
-        let (_, settle_reports) = view_counts(&settle)?;
-        let start = wait_reports_above(&window_id, true, settle_reports, "frame hidden settle")?;
-        (hidden_start_frames, hidden_start_reports) = view_counts(&start)?;
+        wait_minimized(app, true, "window minimized")?;
+        // 최소화 직전에 이미 걸려 있던 rAF 콜백 하나는 아직 돌 수 있다. 그것과 최소화 뒤
+        // 첫 보고가 지나간 자리를 기준선으로 삼는다.
+        thread::sleep(Duration::from_millis(500));
+        let settled_reports = latest_counts(&window_id).map(|counts| counts.1).unwrap_or(0);
+        let (start_frames, start_reports, _) =
+            wait_reports(&window_id, settled_reports, "frame hidden settle")?;
         let started = Instant::now();
-        let measured: Option<VisibleView>;
+        let measured: Option<(u64, u64, VisibleView)>;
         loop {
             if let Some(view) = ui::latest_share_view(&window_id) {
-                if view.occluded {
-                    if let Ok((_, reports)) = view_counts(&view) {
-                        if reports > hidden_start_reports
-                            && started.elapsed() >= HIDDEN_MEASURE
-                        {
-                            measured = Some(view);
-                            break;
-                        }
+                if let Ok((frames, reports)) = view_counts(&view) {
+                    if reports > start_reports && started.elapsed() >= HIDDEN_MEASURE {
+                        measured = Some((frames, reports, view));
+                        break;
                     }
                 }
             }
             if started.elapsed() >= REPORT_TIMEOUT {
                 return Err(format!(
-                    "minimized share report stopped: 갱신 {hidden_start_reports} did not advance"
+                    "minimized share report stopped: 갱신 {start_reports} did not advance in time ({})",
+                    view_summary(&window_id)
                 ));
             }
             thread::sleep(Duration::from_millis(50));
         }
-        let end = measured.ok_or("minimized share measurement did not complete")?;
-        (hidden_end_frames, hidden_end_reports) = view_counts(&end)?;
+        let (end_frames, end_reports, view) =
+            measured.ok_or("minimized share measurement did not complete")?;
+        (hidden_start_frames, hidden_start_reports) = (start_frames, start_reports);
+        (hidden_end_frames, hidden_end_reports) = (end_frames, end_reports);
         record(log, "frame.sample", json!({
             "phase": "hidden",
             "startFrames": hidden_start_frames, "endFrames": hidden_end_frames,
             "delta": hidden_end_frames as i64 - hidden_start_frames as i64,
             "startReports": hidden_start_reports, "endReports": hidden_end_reports,
             "measuredMs": started.elapsed().as_millis() as u64,
+            "occluded": view.occluded,
         }))?;
         if hidden_end_frames != hidden_start_frames {
             return Err(format!(
@@ -330,17 +384,20 @@ pub(super) fn scenario(app: &AppHandle, core: &Core, log: &mut File) -> Result<(
     // B1-4: 복원하면 rAF가 다시 돈다.
     check!("frame-restored-runs", {
         restore(core, &window_id)?;
-        let shown = wait_view(&window_id, false, "frame restored")?;
-        let (shown_frames, _) = view_counts(&shown)?;
-        let later = wait_frame_above(&window_id, false, shown_frames, "frame restored running")?;
-        let (later_frames, later_reports) = view_counts(&later)?;
+        wait_minimized(app, false, "window restored")?;
+        let (start_frames, start_reports, _) =
+            wait_reports(&window_id, hidden_end_reports, "frame restored settle")?;
+        let (end_frames, end_reports, view) =
+            wait_frames(&window_id, start_frames, "frame restored running")?;
         record(log, "frame.sample", json!({
             "phase": "restored",
-            "startFrames": shown_frames, "endFrames": later_frames,
-            "delta": later_frames - shown_frames, "endReports": later_reports,
+            "startFrames": start_frames, "endFrames": end_frames,
+            "delta": end_frames - start_frames,
+            "startReports": start_reports, "endReports": end_reports,
+            "occluded": view.occluded,
         }))?;
-        if later_frames <= shown_frames {
-            return Err(format!("restored frame count did not grow: {shown_frames} -> {later_frames}"));
+        if end_frames <= start_frames {
+            return Err(format!("restored frame count did not grow: {start_frames} -> {end_frames}"));
         }
         Ok(())
     });
