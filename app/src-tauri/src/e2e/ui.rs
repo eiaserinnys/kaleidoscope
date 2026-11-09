@@ -1018,7 +1018,8 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
             Ok(rect.y < after_west.y
                 && rect.height > after_west.height
                 && rect.x == after_west.x
-                && rect.width == after_west.width)
+                && rect.width == after_west.width
+                && rect.y + rect.height as i32 == after_west.y + after_west.height as i32)
         })?;
         let after_north = window_rect(core, &target_id)?;
         record(
