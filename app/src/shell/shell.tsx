@@ -65,11 +65,16 @@ export function Shell({ store }: { store: ShellStore }) {
   const [updateOpenRequest, setUpdateOpenRequest] = useState(0);
   const seenUpdates = useRef(new Set<string>());
   const desktopAreaRef = useRef({ width: 0, height: 0 });
+  // 바탕 영역의 크기를 처음 재기 전에 온 앱 열기 요청은 0 크기 창을 저장하지 않도록 기다린다.
+  const desktopAreaReadyRef = useRef<DesktopAreaReady | null>(null);
+  if (!desktopAreaReadyRef.current) desktopAreaReadyRef.current = createDesktopAreaReady();
   const activeDesktopTabRef = useRef<HTMLDivElement>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const reportArea = useCallback((area: { width: number; height: number }) => {
     desktopAreaRef.current = area;
+    if (area.width > 0 && area.height > 0) desktopAreaReadyRef.current?.resolve();
   }, []);
+  const waitForDesktopArea = useCallback(() => desktopAreaReadyRef.current?.promise ?? Promise.resolve(), []);
   const newWindowRect = useCallback((desktopId: string, current: ShellSnapshot, size?: WindowSize) => {
     const count = current.shared.windows.filter((window) => window.desktop_id === desktopId).length;
     return makeNewWindowRect(desktopAreaRef.current, count, size);
@@ -129,31 +134,34 @@ export function Shell({ store }: { store: ShellStore }) {
 
   useEffect(() => store.subscribeEvents((event) => {
     if (event.event !== "app.open_requested") return;
-    const latest = store.getSnapshot();
-    if (!latest?.shared.apps.some((app) => app.id === event.app_id)) return;
-    const workspace = event.workspace_id
-      ? latest.shared.workspaces.find((item) => item.id === event.workspace_id)
-      : selectWorkspace(latest);
-    const desktop = workspace ? selectDesktop(latest, workspace) : undefined;
-    if (!desktop) return;
+    void (async () => {
+      await waitForDesktopArea();
+      const latest = store.getSnapshot();
+      if (!latest?.shared.apps.some((app) => app.id === event.app_id)) return;
+      const workspace = event.workspace_id
+        ? latest.shared.workspaces.find((item) => item.id === event.workspace_id)
+        : selectWorkspace(latest);
+      const desktop = workspace ? selectDesktop(latest, workspace) : undefined;
+      if (!desktop) return;
 
-    const existing = latest.shared.windows
-      .filter((window) => window.desktop_id === desktop.id && window.app_id === event.app_id)
-      .reduce<typeof latest.shared.windows[number] | undefined>(
-        (top, window) => !top || window.z > top.z ? window : top,
-        undefined,
-      );
-    if (existing) {
-      void runCommand({ op: "window.raise", window_id: existing.id });
-    } else {
-      void runCommand({
-        op: "window.open",
-        desktop_id: desktop.id,
-        app_id: event.app_id,
-        rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, event.app_id)),
-      });
-    }
-  }), [newWindowRect, runCommand, store]);
+      const existing = latest.shared.windows
+        .filter((window) => window.desktop_id === desktop.id && window.app_id === event.app_id)
+        .reduce<typeof latest.shared.windows[number] | undefined>(
+          (top, window) => !top || window.z > top.z ? window : top,
+          undefined,
+        );
+      if (existing) {
+        void runCommand({ op: "window.raise", window_id: existing.id });
+      } else {
+        void runCommand({
+          op: "window.open",
+          desktop_id: desktop.id,
+          app_id: event.app_id,
+          rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, event.app_id)),
+        });
+      }
+    })();
+  }), [newWindowRect, runCommand, store, waitForDesktopArea]);
 
   const openSettings = (anchor: HTMLElement, kind: "gear" | "server" | "agent") => {
     closeMenu(); closeLauncher();
@@ -481,6 +489,17 @@ function sameShellChrome(left: ShellSnapshot | null, right: ShellSnapshot | null
     && left.embedded_available === right.embedded_available
     && left.last_transfer === right.last_transfer
     && left.transfer_error === right.transfer_error;
+}
+
+interface DesktopAreaReady {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
+function createDesktopAreaReady(): DesktopAreaReady {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
 function nextName(prefix: string, existing: string[]): string {
