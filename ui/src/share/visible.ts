@@ -130,6 +130,7 @@ export function describeVisible(root: HTMLElement, numbered = false): { text: st
     const block = /^(block|flex|grid|list-item|table|table-row|table-cell|flow-root)/.test(style.display);
     if (block && !inline) newline();
     if (node.getAttribute("aria-selected") === "true" || (node.hasAttribute("aria-current") && node.getAttribute("aria-current") !== "false")) append("› ", true);
+    if (role === "treeitem" && node.hasAttribute("aria-checked")) append(node.getAttribute("aria-checked") === "true" ? "[x] " : "[ ] ", true);
     if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement || role === "checkbox" || role === "switch") {
       const label = node.getAttribute("aria-label") || ("labels" in node ? Array.from((node as HTMLInputElement).labels ?? []).map(labelText).join(" ") : "") || node.getAttribute("placeholder") || "";
       if ((node instanceof HTMLInputElement && node.type === "checkbox") || role === "checkbox" || role === "switch") {

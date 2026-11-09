@@ -423,6 +423,44 @@ test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
   await capture(page, "gallery-badges-dark");
 });
 
+test("확인 트리의 확인 상자와 기본 펼침을 밝은 화면과 어두운 화면에서 캡처한다", async ({ page }) => {
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/?preview=block-gallery");
+    const app = page.getByTestId("app-window-block-gallery");
+    await expect(app.getByRole("tab", { name: "목록" })).toBeVisible();
+    const tab = app.getByRole("tab", { name: "확인 트리" });
+    if (await tab.isVisible()) await tab.click();
+    else {
+      await app.getByRole("button", { name: "탭 더 보기" }).first().click();
+      await page.getByRole("menuitem", { name: "확인 트리" }).click();
+    }
+    const tree = app.getByRole("tree");
+    const milk = app.getByRole("treeitem", { name: "우유 사기" });
+    const laundry = app.getByRole("treeitem", { name: "빨래 널기" });
+    const note = app.getByRole("treeitem", { name: "메모만 남긴 항목" });
+    const book = app.getByRole("treeitem", { name: "책 반납" });
+    await expect(tree).toBeVisible();
+    await expect(milk).toBeVisible();
+    await expect(laundry).toBeVisible();
+    await expect(note).toBeVisible();
+    await expect(book).toBeVisible();
+    expect(await app.locator(".ks-tree-check").count()).toBe(3);
+    expect(await app.locator(".ks-tree-check.is-checked").count()).toBe(1);
+    await expect(milk).toHaveAttribute("aria-checked", "false");
+    await expect(laundry).toHaveAttribute("aria-checked", "true");
+    await expect(note).not.toHaveAttribute("aria-checked");
+    await capture(page, `gallery-tree-check-${scheme}`);
+
+    await milk.locator("[data-tree-check]").click();
+    await expect(milk).toHaveAttribute("aria-checked", "true");
+    await expect(app.locator(".ks-tree-check.is-checked")).toHaveCount(2);
+    await expect(milk).toHaveAttribute("aria-selected", "false");
+    await capture(page, `gallery-tree-check-toggled-${scheme}`);
+  }
+});
+
 test("파일 트리 행의 공통화 전후 모습을 비교한다", async ({ page }) => {
   const { execFileSync } = await import("node:child_process");
   const baselineCss = execFileSync("git", ["show", "781091b:ui/src/styles/blocks.css"], { encoding: "utf8" });

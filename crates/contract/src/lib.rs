@@ -232,6 +232,7 @@ mod validate_input;
 mod validate_button;
 mod validate_list;
 mod validate_file_input;
+mod validate_tree;
 pub mod window_control;
 pub mod worker;
 pub use window_control::*;
@@ -319,7 +320,10 @@ pub const CONTRACT_VERSION: u32 = 45;
 /// - 52판: 기기 저장소에 든 파일을 그리는 미디어 참조 `blob`.
 /// - 53판: 확장 아이콘 13개.
 /// - 54판: 앱 정의의 싱글 윈도우(single_window).
-pub const BLOCK_SET_VERSION: u32 = SINGLE_WINDOW_BLOCK_SET_VERSION;
+/// - 55판: 트리 항목 확인 상자와 기본 펼침.
+pub const BLOCK_SET_VERSION: u32 = TREE_CHECK_BLOCK_SET_VERSION;
+/// 트리 항목 확인 상자(`on_check`, `checked`)와 기본 펼침(`default_expanded`)을 처음 지원하는 블록 세트 판.
+pub const TREE_CHECK_BLOCK_SET_VERSION: u32 = 55;
 /// 앱 정의의 single_window를 처음 지원하는 블록 세트 판.
 pub const SINGLE_WINDOW_BLOCK_SET_VERSION: u32 = 54;
 /// 기기 저장소 미디어 참조를 처음 지원하는 블록 세트 판.
@@ -1826,6 +1830,17 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
+        /// (55판) 항목의 확인 상자를 누르거나 초점을 둔 행에서 Space를 누를 때 실행한다.
+        /// `$event`는 새 확인 값(참/거짓), `$item`은 그 항목이다. 동작 문맥은 `on_select`와 같다.
+        /// 없으면 확인 상자는 보이기만 한다. 폴더 트리 모드와 함께 쓰지 않는다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_check: Option<Actions>,
+        /// (55판) 참이면 자식이 있는 항목을 처음부터 펼친다. 거짓이면 지금처럼 접힌 채로 시작한다.
+        /// 폴더 트리 모드와 함께 쓰지 않는다.
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        default_expanded: bool,
         /// (20판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2678,6 +2693,10 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_check: Option<Actions>,
+        #[serde(default)]
+        default_expanded: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         item_menu: Option<Vec<ItemMenuEntry>>,
     },
     Folder {
@@ -3423,6 +3442,8 @@ impl From<RawBlock> for Block {
                 by,
                 selected,
                 on_select,
+                on_check,
+                default_expanded,
                 item_menu,
             } => Block::Tree {
                 items,
@@ -3431,6 +3452,8 @@ impl From<RawBlock> for Block {
                 by,
                 selected,
                 on_select,
+                on_check,
+                default_expanded,
                 item_menu,
             },
             RawBlock::Folder {
@@ -3859,6 +3882,8 @@ impl From<RawBlock> for Block {
                 by: TreeBy::default(),
                 selected: Some(selected),
                 on_select: Some(Actions::One(on_select)),
+                on_check: None,
+                default_expanded: false,
                 item_menu: None,
             },
             RawBlock::MarkdownEditor { file, document } => Block::Markdown {

@@ -1,5 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Binding, Block, TreeItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { isBadge } from "../components/badge";
@@ -20,6 +20,7 @@ function valid(value: unknown, byPath: boolean): value is TreeItem {
   if (value.title != null && typeof value.title !== "string") return false;
   if (byPath ? typeof value.path !== "string" : value.path != null && typeof value.path !== "string") return false;
   if (value.meta != null && typeof value.meta !== "string") return false;
+  if (value.checked != null && typeof value.checked !== "boolean") return false;
   if (value.children != null && !Array.isArray(value.children) && !isObject(value.children)) return false;
   return asArray(value.badges).every((badge) => isBadge(badge) && (typeof badge === "string" || badge.color == null || typeof badge.color === "string"));
 }
@@ -29,7 +30,7 @@ interface DataNode extends TreeNode {
   children: DataNode[];
 }
 
-function tree(value: unknown, byPath: boolean, parent: string[] = []): DataNode[] {
+function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: ReadonlyMap<string, boolean> = new Map()): DataNode[] {
   const items = asArray(value).filter((item): item is TreeItem => valid(item, byPath));
   if (!byPath) return items.flatMap((item): DataNode[] => {
     const title = item.title ?? item.path?.split("/").pop();
@@ -39,8 +40,9 @@ function tree(value: unknown, byPath: boolean, parent: string[] = []): DataNode[
       item,
       data: item,
       commentKey: [...parent, item.key],
-      children: tree(item.children, false, [...parent, item.key]),
+      children: tree(item.children, false, [...parent, item.key], pending),
       selectable: true,
+      checked: pending.get(item.key) ?? item.checked,
       leading: <FileText size="inline" />,
       meta: item.meta,
       trailing: <Badges values={item.badges} />,
@@ -62,6 +64,7 @@ function tree(value: unknown, byPath: boolean, parent: string[] = []): DataNode[
         commentKey: [item.key],
         children: [],
         selectable: true,
+        checked: pending.get(item.key) ?? item.checked,
         leading: <FileText size="inline" />,
         meta: item.meta,
         trailing: <Badges values={item.badges} />,
@@ -104,12 +107,15 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
-  const nodes = useMemo(() => tree(value, block.by === "path"), [value, block.by]);
+  const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const nodes = useMemo(() => tree(value, block.by === "path", [], pending), [value, block.by, pending]);
   const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
   const selected = typeof selectedValue === "string" ? selectedValue : null;
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(ancestors(nodes, selected) ?? []));
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
+    if (block.default_expanded) return;
     const path = ancestors(nodes, selected);
     if (!path?.length) return;
     setExpanded((old) => {
@@ -118,28 +124,66 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
       path.forEach((id) => next.add(id));
       return next;
     });
-  }, [nodes, selected]);
+  }, [block.default_expanded, nodes, selected]);
 
-  const toggle = (id: string, open: boolean) => setExpanded((old) => {
-    if (old.has(id) === open) return old;
-    const next = new Set(old);
-    if (open) next.add(id); else next.delete(id);
+  const visibleExpanded = useMemo(() => {
+    if (!block.default_expanded) return expanded;
+    const next = new Set<string>();
+    const visit = (list: DataNode[]) => list.forEach((node) => {
+      if (node.children.length) next.add(node.id);
+      visit(node.children);
+    });
+    visit(nodes);
+    collapsed.forEach((id) => next.delete(id));
     return next;
-  });
+  }, [block.default_expanded, collapsed, expanded, nodes]);
+
+  const toggle = (id: string, open: boolean) => {
+    if (block.default_expanded) {
+      setCollapsed((old) => {
+        if (old.has(id) === !open) return old;
+        const next = new Set(old);
+        if (open) next.delete(id); else next.add(id);
+        return next;
+      });
+      return;
+    }
+    setExpanded((old) => {
+      if (old.has(id) === open) return old;
+      const next = new Set(old);
+      if (open) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
   const activate = (row: TreeRowModel) => {
     if (row.hasChildren) toggle(row.id, !row.expanded);
     const item = row.node.data as TreeItem | undefined;
     if (item && block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
   };
+  const check = useCallback((row: TreeRowModel) => {
+    const item = row.node.data as TreeItem | undefined;
+    if (!item || !block.on_check || row.node.checked === undefined) return;
+    const next = !row.node.checked;
+    setPending((old) => new Map(old).set(item.key, next));
+    void data.act(`${pointer}/on_check`, next, item as unknown as JsonValue).finally(() => {
+      setPending((old) => {
+        if (!old.has(item.key)) return old;
+        const cleared = new Map(old);
+        cleared.delete(item.key);
+        return cleared;
+      });
+    });
+  }, [block.on_check, data, pointer]);
 
   if (!nodes.length) return <NoItems rootProps={blockRoot} />;
   return <><TreeView
     rootProps={blockRoot}
     className="ks-data-view ks-data-tree"
-    expanded={expanded}
+    expanded={visibleExpanded}
     label="트리"
     nodes={nodes}
     onActivate={activate}
+    onCheck={block.on_check ? check : undefined}
     onExpandedChange={toggle}
     onContextMenu={(row, anchor, _point, _focus, event) => { if (row) { const item = row.node.data as TreeItem | undefined; menu.open(event, anchor, item as unknown as JsonValue | undefined, item?.key ?? row.id, "제목 복사", row.node.label); } }}
     selectedId={selected === null ? null : `item:${selected}`}

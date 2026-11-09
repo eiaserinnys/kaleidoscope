@@ -2,7 +2,7 @@
   "id": "block-gallery",
   "name": "블록 견본",
   "description": "블록을 탭마다 모아 보인다",
-  "requires": { "blocks": 42, "modules": { "files": 1 } },
+  "requires": { "blocks": 55, "modules": { "files": 1 } },
   "permissions": [
     { "module": "files", "id": "media", "access": "read", "label": "이미지와 소리 폴더" },
     { "module": "files", "id": "notes", "access": "readwrite", "label": "설정 파일 폴더" }
@@ -27,7 +27,9 @@
     "picture": null,
     "sound": null,
     "config": null,
-    "timeline_selection": null
+    "timeline_selection": null,
+    "check_node": null,
+    "checked_keys": ["laundry"]
   },
   "sources": {
     "pictures": { "kind": "folder", "permission": "media", "recursive": true, "extensions": ["png", "jpg", "jpeg", "webp", "gif"] },
@@ -366,6 +368,18 @@
             { "id": "k", "label": "최종 검토", "items": [{ "id": "k1", "label": "결과 검토", "start": "2026-12-14", "end": "2026-12-18", "tone": "success" }] },
             { "id": "l", "label": "후속", "items": [{ "id": "l1", "label": "후속 일정" }] }
           ]
+        }
+      },
+      {
+        "label": "확인 트리",
+        "child": {
+          "type": "tree",
+          "by": "children",
+          "default_expanded": true,
+          "selected": { "state": "check_node" },
+          "on_select": { "set_state": "check_node" },
+          "on_check": [{ "set_state": "checked_keys", "value": { "expr": "$event ? $append($state.checked_keys, [$item.key]) : $state.checked_keys[$ != $item.key]" } }],
+          "items": { "expr": "[{\"key\": \"today\", \"title\": \"오늘 할 일\", \"children\": [{\"key\": \"milk\", \"title\": \"우유 사기\", \"checked\": (\"milk\" in $state.checked_keys)}, {\"key\": \"laundry\", \"title\": \"빨래 널기\", \"checked\": (\"laundry\" in $state.checked_keys)}, {\"key\": \"note\", \"title\": \"메모만 남긴 항목\"}]}, {\"key\": \"later\", \"title\": \"나중에\", \"children\": [{\"key\": \"book\", \"title\": \"책 반납\", \"checked\": (\"book\" in $state.checked_keys), \"meta\": \"11-12\"}]}]" }
         }
       }
     ]

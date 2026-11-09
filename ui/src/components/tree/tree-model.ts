@@ -7,6 +7,7 @@ export interface TreeNode {
   expandable?: boolean;
   selectable?: boolean;
   ariaSelectable?: boolean;
+  checked?: boolean;
   leading?: ReactNode;
   meta?: ReactNode;
   trailing?: ReactNode;
