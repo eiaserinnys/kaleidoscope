@@ -1595,7 +1595,7 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         follow_pause_ms: Option<u32>,
-        /// 템플릿 안 블록이 자기 항목을 넘기는 동작(트리, 목록, 표의 행)에서는 그 항목이 `$item`, repeat 항목이 `$parent_item`이다.
+        /// 템플릿 안 블록이 자기 행을 넘기는 동작(트리, 목록, 표의 행)에서는 `$item`이 그 행이다. repeat 항목은 클라이언트 동작 context의 `parent_item`으로 받는다(56판).
         template: Box<Block>,
     },
     When {
