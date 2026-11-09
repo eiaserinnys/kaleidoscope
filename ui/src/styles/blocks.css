@@ -624,20 +624,24 @@
   flex: 0 0 auto;
   flex-wrap: nowrap;
   justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline: var(--ks-space-3);
 }
+
+.ks-agent-chat-toolbar::-webkit-scrollbar { height: var(--ks-space-1); }
+.ks-agent-chat-toolbar::-webkit-scrollbar-thumb { border: 0; }
 
 .ks-agent-chat-toolbar.ks-agent-chat-toolbar-start {
   border-block-end: none;
 }
 
 .ks-agent-chat-toolbar > .ks-button {
-  min-width: 0;
-  max-width: 100%;
+  flex-shrink: 0;
 }
 
-.ks-agent-chat-toolbar > .ks-button.ks-agent-chat-change {
+.ks-agent-chat-toolbar > .ks-agent-chat-change {
   flex: 0 0 auto;
-  min-width: auto;
   margin-inline-start: auto;
 }
 

@@ -276,6 +276,7 @@
 .ks-data-button.is-row.is-copied > .ks-button svg { color: var(--ks-color-accent); }
 .ks-truncate-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-block: .25em; margin-block: -.25em; }
 .ks-select-button { max-width: 100%; min-width: 0; gap: var(--ks-space-2); }
+.ks-select-button > svg { flex-shrink: 0; }
 .ks-select-choice-label:empty { display: none; }
 .ks-select-button:has(> .ks-select-choice-label:empty) { min-width: calc(var(--ks-space-6) * 2); justify-content: flex-end; }
 .ks-data-button.is-chip > .ks-button,

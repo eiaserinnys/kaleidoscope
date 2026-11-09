@@ -467,6 +467,16 @@ describe("대화 제공자 화면", () => {
     await screen.findByText("기록");
     expect(screen.getByText("이름 없는 대화 · 모델")).toBeTruthy();
   });
+  it("자기 대화는 제목 막대 다음에 설정 막대를 보인다", async () => {
+    setup(async (request) => request.op === "conversation.get" ? get(thread) : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    const toolbars = document.querySelectorAll(".ks-agent-chat-toolbar");
+    expect(toolbars).toHaveLength(2);
+    expect(toolbars[0].textContent).toBe("대화");
+    expect(toolbars[0].querySelector('[aria-label="대화 바꾸기"]')).toBeTruthy();
+    expect(toolbars[1].querySelector('[aria-label="프로필"]')).toBeTruthy();
+    expect(toolbars[1].querySelector('[aria-label="대화 바꾸기"]')).toBeNull();
+  });
   it("대화 바꾸기는 대화 머리에서 연결을 풀고 시작 판으로 돌아간다", async () => {
     let attached = true;
     const state = setup(async (request) => {

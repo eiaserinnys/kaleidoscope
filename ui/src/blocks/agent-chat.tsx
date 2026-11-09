@@ -1,9 +1,10 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AdoptableConversation, Block, ConversationAttachment, ConversationEvent, ConversationItem, ConversationModel, ConversationProfile, ConversationThread, CoreEvent, CoreError, ConversationUpload, ShellSnapshot } from "../contract/contract";
 import { useConversationHistory } from "./conversation-history";
 import { DataState } from "../components/data-state";
-import { Button, EmptyState, Notice, StatusText } from "../components/primitives";
+import { Button, EmptyState, IconButton, Notice, StatusText } from "../components/primitives";
+import { DataIcon } from "../components/data-icons";
 import { MessageSquare } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import type { BlockContext } from "./block-context";
@@ -337,7 +338,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   };
   const selectedStartProfile = profiles.find((item) => item.id === selectedProfile);
   const selectorsDisabled = busy || switching || loadingChoices || attaching;
-  const selectorRow = (trailing?: ReactNode, modifier?: string) => (
+  const selectorRow = (modifier?: string) => (
     <div className={`ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar${modifier ? ` ${modifier}` : ""}`}>
       <Select
         groups={profileGroups}
@@ -373,7 +374,6 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       {agent && switching
         ? <span className="ks-agent-chat-change-hint">바꾸는 중</span>
         : agent && busy ? <span className="ks-agent-chat-change-hint">답변이 끝난 뒤 바꿀 수 있습니다</span> : null}
-      {trailing}
     </div>
   );
 
@@ -513,7 +513,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   if (!agent) {
     return (
       <div {...blockRoot} className="ks-agent-chat-start" ref={startRef}>
-        {own ? null : selectorRow(undefined, "ks-agent-chat-toolbar-start")}
+        {own ? null : selectorRow("ks-agent-chat-toolbar-start")}
         {own ? null : (
           <div className="ks-agent-chat-start-action">
             <Button disabled={!selectedStartProfile?.available || !selectedStartModel?.available || creating || attaching || switching || loadingChoices} variant="emphasis" onClick={() => void start()}>시작</Button>
@@ -526,16 +526,21 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
     );
   }
 
+  const title = thread?.title || "이름 없는 대화";
+  const conversationTitle = attached ? `${title} · ${thread?.model.label ?? ""}` : title;
+  const conversationToolbar = () => (
+    <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar">
+      <Tooltip content={conversationTitle}>
+        <span tabIndex={0} className="ks-agent-chat-change-hint">{conversationTitle}</span>
+      </Tooltip>
+      <IconButton className="ks-agent-chat-change" aria-label="대화 바꾸기" tooltip="대화 바꾸기" disabled={busy || switching || detaching} onClick={() => void changeConversation()}><DataIcon name="arrow-right-left" /></IconButton>
+    </div>
+  );
+
   return (
     <section {...blockRoot} className="ks-agent-chat" ref={shareRef}>
-      {attached ? (
-        <div className="ks-file-tree-header ks-web-toolbar ks-agent-chat-toolbar">
-          <Tooltip content={`${thread?.title || "이름 없는 대화"} · ${thread?.model.label ?? ""}`}>
-            <span tabIndex={0} className="ks-agent-chat-change-hint">{`${thread?.title || "이름 없는 대화"} · ${thread?.model.label ?? ""}`}</span>
-          </Tooltip>
-          <Button className="ks-agent-chat-change" disabled={busy || switching || detaching} onClick={() => void changeConversation()}>대화 바꾸기</Button>
-        </div>
-      ) : selectorRow(<Button className="ks-agent-chat-change" disabled={busy || switching || detaching} onClick={() => void changeConversation()}>대화 바꾸기</Button>)}
+      {conversationToolbar()}
+      {attached ? null : selectorRow()}
       {notices.length ? <Notice>{notices.join("\n")}</Notice> : null}
       {switchError ? <Notice role="alert" errorId={switchError.id}>{switchError.message}</Notice> : null}
       <ChatHistory
