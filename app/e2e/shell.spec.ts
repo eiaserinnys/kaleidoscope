@@ -13,7 +13,22 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   test.setTimeout(120_000);
   const measurements: Record<string, unknown> = {};
 
+  // 창은 영역 폭에 맞춰 밀리고(clamp) 영역이 다시 넓어지면 제자리로 돌아온다.
+  // 복귀는 setViewportSize가 끝난 뒤 리사이즈 관찰자와 렌더를 거쳐 일어나므로,
+  // 캡처 직후 다른 측정을 하기 전에 복귀를 기다릴 때 쓴다.
+  const windowBoxes = async () => page.locator(".ks-window").evaluateAll((elements) => elements
+    .map((element) => {
+      const rect = element.getBoundingClientRect();
+      return { testId: element.getAttribute("data-testid"), x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    })
+    .sort((left, right) => (left.testId ?? "").localeCompare(right.testId ?? "")));
+
   const captureMatrix = async (state: string) => {
+    // 1440x900에서 시작하면 960x600 왕복 뒤 창이 제자리로 돌아오기 전에
+    // 다음 측정이 시작될 수 있다. 시작할 때의 창 상자를 적어 두고 복귀를 기다린다.
+    // 다른 뷰포트에서 시작하는 호출은 창이 없으므로 기다리지 않는다.
+    const startViewport = page.viewportSize();
+    const restingBoxes = startViewport?.width === 1440 && startViewport.height === 900 ? await windowBoxes() : null;
     for (const viewport of [
       { width: 1440, height: 900, label: "1440x900" },
       { width: 960, height: 600, label: "960x600" },
@@ -28,6 +43,7 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     }
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.emulateMedia({ colorScheme: "light" });
+    if (restingBoxes) await expect.poll(windowBoxes).toEqual(restingBoxes);
   };
 
   const captureThemePair = async (state: string) => {
