@@ -203,20 +203,6 @@ return {x:rect.x+24,y:rect.y+16};"#,
         )? == json!(true))
     })?;
 
-    // 저장을 막을 파일 잠금은 입력 전에 잡는다. 자동 저장(1초)보다 먼저 닫기 요청이 오도록 한다.
-    let lock = if save_failure {
-        Some(
-            OpenOptions::new()
-                .read(true)
-                .write(true)
-                .share_mode(0)
-                .open(folder.join(FILE_NAME))
-                .map_err(|error| format!("could not lock {FILE_NAME}: {error}"))?,
-        )
-    } else {
-        None
-    };
-
     native_input::type_text(TYPED)?;
     let input_ms = now_ms();
     record(
@@ -232,6 +218,22 @@ return {x:rect.x+24,y:rect.y+16};"#,
         ),
         "입력한 문자열",
     )?;
+
+    // 저장을 막을 파일 잠금은 입력이 화면에 보인 뒤에 잡는다. 입력 전에 잡으면 편집기가 아직
+    // 읽는 중인 파일(처음 열기, 창 포커스 때 다시 읽기)을 못 읽어 편집기가 오류 화면으로 바뀐다.
+    // 입력 뒤에는 편집 중이라 다시 읽지 않고, 자동 저장(마지막 입력 1초 뒤)보다 먼저 닫기 요청이 간다.
+    let lock = if save_failure {
+        Some(
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .share_mode(0)
+                .open(folder.join(FILE_NAME))
+                .map_err(|error| format!("could not lock {FILE_NAME}: {error}"))?,
+        )
+    } else {
+        None
+    };
 
     let hwnd = main_hwnd(app)?;
     let foreground = unsafe { GetForegroundWindow() };
