@@ -123,6 +123,18 @@ impl Host for DialogHost {
     }
 }
 
+/// 설치본 페이지의 Origin. Tauri가 앱 페이지를 내주는 주소와 같아야 미디어 스트림의 Origin 검사를 지난다.
+/// Windows와 Android는 `http(s)://tauri.localhost`, 그 밖(macOS 등)은 `tauri://localhost`다.
+/// `tauri://`는 비특수 스킴이라 URL에서 유도하면 `"null"`이 나오므로 문자열로 정한다.
+fn release_page_origin(localhost_over_http: bool, use_https: bool) -> String {
+    if localhost_over_http {
+        let scheme = if use_https { "https" } else { "http" };
+        format!("{scheme}://tauri.localhost")
+    } else {
+        "tauri://localhost".into()
+    }
+}
+
 fn pc_roots() -> Vec<PcRoot> {
     use kaleidoscope_core::kaleidoscope_contract::{PcRootKind, PC_KNOWN_FOLDERS};
     let paths = [
@@ -356,7 +368,17 @@ pub fn run() {
                     media_origin: if cfg!(debug_assertions) {
                         app.config().build.dev_url.as_ref().map(|url| url.origin().ascii_serialization())
                     } else {
-                        Some("http://tauri.localhost".into())
+                        let use_https = app
+                            .config()
+                            .app
+                            .windows
+                            .iter()
+                            .find(|window| window.label == "main")
+                            .is_some_and(|window| window.use_https_scheme);
+                        Some(release_page_origin(
+                            cfg!(windows) || cfg!(target_os = "android"),
+                            use_https,
+                        ))
                     },
                     embedded_server: Some(embedded_info),
                     data_dir,
@@ -464,6 +486,16 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::release_page_origin;
+
+    #[test]
+    fn release_page_origin_matches_tauri_protocol_origin() {
+        assert_eq!(release_page_origin(true, false), "http://tauri.localhost");
+        assert_eq!(release_page_origin(true, true), "https://tauri.localhost");
+        assert_eq!(release_page_origin(false, false), "tauri://localhost");
+        assert_eq!(release_page_origin(false, true), "tauri://localhost");
+    }
+
     #[test]
     fn capability_is_restricted_to_main_webview() {
         let value: serde_json::Value =
