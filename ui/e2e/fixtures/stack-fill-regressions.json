@@ -564,5 +564,132 @@
         }
       ]
     }
+  },
+  {
+    "id": "stack-action-tail-fill",
+    "name": "결정 줄 위 채움",
+    "requires": {
+      "blocks": 37,
+      "modules": {}
+    },
+    "permissions": [],
+    "state": {
+      "hint": false,
+      "sel": true
+    },
+    "ui": {
+      "type": "split",
+      "direction": "row",
+      "column_below": 640,
+      "sizes": [
+        58,
+        42
+      ],
+      "children": [
+        {
+          "type": "text",
+          "value": "목록"
+        },
+        {
+          "type": "stack",
+          "direction": "column",
+          "gap": "none",
+          "fill": [
+            1,
+            2,
+            3
+          ],
+          "children": [
+            {
+              "type": "stack",
+              "direction": "column",
+              "gap": "medium",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "머리"
+                }
+              ]
+            },
+            {
+              "type": "when",
+              "value": {
+                "state": "hint"
+              },
+              "child": {
+                "type": "text",
+                "value": "힌트"
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "state": "sel"
+              },
+              "child": {
+                "type": "stack",
+                "direction": "column",
+                "gap": "none",
+                "fill": [
+                  1
+                ],
+                "children": [
+                  {
+                    "type": "section",
+                    "title": "할 일",
+                    "child": {
+                      "type": "stack",
+                      "direction": "column",
+                      "gap": "small",
+                      "children": [
+                        {
+                          "type": "input",
+                          "label": "제목",
+                          "value": "초안 쓰기",
+                          "on_change": []
+                        },
+                        {
+                          "type": "input",
+                          "label": "기다림",
+                          "value": "",
+                          "on_change": []
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "title": "메모",
+                    "child": {
+                      "type": "stack",
+                      "direction": "column",
+                      "fill": [
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "markdown",
+                          "value": "짧은 메모"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "toolbar",
+                    "start": [
+                      {
+                        "type": "button",
+                        "label": "지우기",
+                        "on_click": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
   }
 ]
