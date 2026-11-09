@@ -21,9 +21,7 @@ export function ThemeSettings({ store }: { store: ShellStore }) {
   return <section className="ks-settings-group" aria-labelledby={`${id}-theme`}>
     <h3 className="ks-data-section-title" id={`${id}-theme`}>화면</h3>
     <SettingsRow label={<span>테마</span>}
-      meta={theme === "system" ? <span className="shell-server-meta" id={`${id}-theme-hint`}>운영체제 설정을 따릅니다</span> : null}
       control={<Select label="테마" segmented items={THEMES} value={theme}
-        describedBy={theme === "system" ? `${id}-theme-hint` : undefined}
         onChange={(value) => { if (value === "system" || value === "light" || value === "dark") void change(value); }} />} />
     {error ? <ErrorNotice error={error} /> : null}
   </section>;

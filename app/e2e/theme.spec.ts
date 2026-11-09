@@ -14,11 +14,9 @@ test("고른 테마를 기기에 저장하고 다시 열어도 유지한다", as
   await page.goto(`/?core=${coreUrl}`);
   const group = await themeGroup(page);
   await expect(group.getByRole("button", { name: "시스템", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(group).toHaveAccessibleDescription("운영체제 설정을 따릅니다");
 
   await group.getByRole("button", { name: "다크", exact: true }).click();
   await expect(group.getByRole("button", { name: "다크", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(group).toHaveAccessibleDescription("");
   await page.screenshot({ path: testInfo.outputPath("settings.png") });
 
   await page.reload();
