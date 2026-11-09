@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Dialog, ErrorNotice, SHELL_UPDATE_RESTART_UNSAVED, flushEditors, flushSandboxes, toCoreError, useShellSelector, type CoreError, type ShellStore, type UpdateStatus } from "@kaleidoscope/ui";
+import { Dialog, ErrorNotice, SHELL_UPDATE_RESTART_UNSAVED, runSavedTransition, toCoreError, useShellSelector, type CoreError, type ShellStore, type UpdateStatus } from "@kaleidoscope/ui";
 import { useHoldWhileWriting } from "./use-hold-while-writing";
 
 type Ready = Extract<UpdateStatus, { state: "ready" }>;
@@ -37,11 +37,9 @@ export function UpdateDialog({ store, host, openRequest, seen }: { store: ShellS
     if (pending.current) return;
     pending.current = true; setBusy(true); setError(null);
     try {
-      if (!await flushEditors() || !await flushSandboxes()) {
-        setError(SHELL_UPDATE_RESTART_UNSAVED());
-        return;
-      }
-      await store.call({ op: "update.restart" });
+      const windowIds = store.getSnapshot()?.shared.windows.map((window) => window.id) ?? [];
+      const saved = await runSavedTransition(store, windowIds, async () => { await store.call({ op: "update.restart" }); });
+      if (!saved) { setError(SHELL_UPDATE_RESTART_UNSAVED()); return; }
     } catch (cause) { setError(toCoreError(cause)); }
     finally { pending.current = false; setBusy(false); }
   };

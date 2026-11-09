@@ -68,6 +68,7 @@ export const SHELL_WINDOW_CLOSE_UNSAVED = (): CoreError => ({ id: "SHELL_WINDOW_
 export const SHELL_DESKTOP_DELETE_UNSAVED = (): CoreError => ({ id: "SHELL_DESKTOP_DELETE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 데스크톱을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.`, details: [] });
 export const SHELL_WORKSPACE_DELETE_UNSAVED = (): CoreError => ({ id: "SHELL_WORKSPACE_DELETE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 작업을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.`, details: [] });
 export const SHELL_UPDATE_RESTART_UNSAVED = (): CoreError => ({ id: "SHELL_UPDATE_RESTART_UNSAVED", code: "io", message: `저장하지 못한 편집이 있어 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.`, details: [] });
+export const SHELL_CLIENT_RESTART_UNSAVED = (): CoreError => ({ id: "SHELL_CLIENT_RESTART_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 클라이언트를 다시 시작하지 않았습니다. 내용을 저장한 뒤 다시 시작하세요.`, details: [] });
 export const SHELL_STATE_REPLY_INVALID = (): CoreError => ({ id: "SHELL_STATE_REPLY_INVALID", code: "io", message: `쉘 상태를 불러오지 못했습니다. 쉘을 다시 시작하세요.`, details: [] });
 export const SHELL_HTTP_EXTERNAL_SCHEME_INVALID = (): CoreError => ({ id: "SHELL_HTTP_EXTERNAL_SCHEME_INVALID", code: "invalid_request", message: `이 링크는 웹 주소가 아니라 열 수 없습니다. HTTP 또는 HTTPS 주소를 사용하세요.`, details: [] });
 export const SHELL_HTTP_ERROR_REPLY_INVALID = (): CoreError => ({ id: "SHELL_HTTP_ERROR_REPLY_INVALID", code: "io", message: `코어의 오류 응답을 읽지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });

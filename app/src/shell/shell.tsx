@@ -16,8 +16,7 @@ import {
   Settings,
   TextInput,
   UpdateReady,
-  flushSandboxes,
-  flushWindowEditors,
+  runSavedTransition,
   toCoreError,
   useShellSelector,
   useWindowControlHost,
@@ -109,11 +108,13 @@ export function Shell({ store }: { store: ShellStore }) {
         unsaved = request.op === "desktop.delete" ? SHELL_DESKTOP_DELETE_UNSAVED() : SHELL_WORKSPACE_DELETE_UNSAVED();
       }
       if (windowIds && unsaved) {
-        const [editorsSaved, ...sandboxesSaved] = await Promise.all([flushWindowEditors(windowIds), ...windowIds.map((id) => flushSandboxes(id))]);
-        if (!editorsSaved || !sandboxesSaved.every(Boolean)) {
+        let committed: CoreReply | undefined;
+        const saved = await runSavedTransition(store, windowIds, async () => { committed = await store.call(request as never) as CoreReply; });
+        if (!saved) {
           setNotice(unsaved);
           return undefined;
         }
+        return committed;
       }
       const reply = await store.call(request as never) as CoreReply;
       return reply;

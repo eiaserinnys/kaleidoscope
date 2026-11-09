@@ -13,6 +13,7 @@ export function useLocalDraft<T extends JsonValue>(
   const [draft, setDraft] = useState(current);
   const holding = useRef(false);
   const inFlight = useRef(0);
+  const lastResult = useRef(true);
   const revision = useRef(0);
   const externalChanges = useRef(0);
   const adoptRevision = useRef<number | null>(null);
@@ -30,9 +31,11 @@ export function useLocalDraft<T extends JsonValue>(
       success = dispatch ? await dispatch(value) : await data.act(`${pointer}/on_change`, toJson(value), undefined, undefined, undefined, { input: true });
       if (!success && resetOnFailure && !holding.current && revision.current === sentRevision) setDraft(latest.current);
     } finally {
+      lastResult.current = success;
       inFlight.current -= 1;
       if (success && syncOnSuccess && inFlight.current === 0 && !holding.current && revision.current === sentRevision) setDraft(latest.current);
     }
+    return success;
   }), [data, pointer, resetOnFailure, syncOnSuccess, toJson, dispatch]);
   const enqueue = (value: T, coalesce: boolean) => serialSend({ value, revision: revision.current }, { coalesce });
   const throttled = useMemo(() => createThrottledSend((next: T) => enqueue(next, true), options.intervalMs ?? 100), [options.intervalMs, serialSend]);
@@ -40,7 +43,8 @@ export function useLocalDraft<T extends JsonValue>(
   useEffect(() => data.holdInput(() => {
     options.prepare?.current();
     if (sendOnChange) throttled.flush();
-    return serialSend.idle();
+    const idle = serialSend.idle();
+    return idle ? idle.then((sent) => sent && lastResult.current) : Promise.resolve(lastResult.current);
   }), [data, options.prepare, sendOnChange, serialSend, throttled]);
   useEffect(() => {
     externalChanges.current += 1;
