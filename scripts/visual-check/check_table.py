@@ -35,6 +35,7 @@ REQUIRES_BLOCKS = 55
 ROWS_APP = "visual-check-table-rows"
 TEXT_APP = "visual-check-table-text"
 GRID_APP = "visual-check-table-grid"
+GRID_EDGE_APP = "visual-check-table-grid-edges"
 
 MEASURE_JS = """(args) => {
   const win = document.querySelector(`[data-testid="app-window-${args.appId}"]`);
@@ -55,6 +56,25 @@ MEASURE_JS = """(args) => {
     }
     return relX(element.getBoundingClientRect().left);
   };
+  // 토큰과 실제 계산 값을 같은 형식으로 비교하려고 캔버스로 정규화한다.
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  const norm = (color) => {
+    if (!color) return null;
+    context.fillStyle = "#000";
+    context.fillStyle = color;
+    return String(context.fillStyle);
+  };
+  const probe = document.createElement("span");
+  probe.style.display = "none";
+  document.body.append(probe);
+  const token = (name) => {
+    probe.style.color = "";
+    probe.style.color = `var(${name})`;
+    return norm(getComputedStyle(probe).color);
+  };
+  const tokens = { hover: token("--ks-color-hover"), solid: token("--ks-color-surface-solid") };
+  probe.remove();
   const toolbar = win.querySelector(".ks-data-toolbar .ks-data-text");
   const headers = [...win.querySelectorAll('.ks-table-header > [role="columnheader"]')].map((header) => ({
     x: glyphX(header.querySelector("button") ?? header),
@@ -62,16 +82,39 @@ MEASURE_JS = """(args) => {
   const rows = [...win.querySelectorAll(".ks-row.ks-table-row")].map((row) => {
     const boxes = [];
     const titles = [];
+    const cells = [];
     [...row.children].forEach((cell, index) => {
       if (!cell.classList.contains("ks-table-cell")) return;
+      const cellRect = cell.getBoundingClientRect();
+      const info = {
+        cell: index,
+        hasContent: false,
+        selected: cell.getAttribute("aria-selected") === "true",
+        left: relX(cellRect.left), right: relX(cellRect.right),
+        top: relY(cellRect.top), bottom: relY(cellRect.bottom),
+      };
       const box = cell.querySelector(".ks-table-content");
-      if (!box) return;
-      const rect = box.getBoundingClientRect();
-      boxes.push({ cell: index, top: relY(rect.top), bottom: relY(rect.bottom), height: round(rect.height) });
-      const title = box.querySelector(".ks-table-content-title");
-      if (!title) return;
-      const style = getComputedStyle(title);
-      titles.push({ cell: index, x: glyphX(title), weight: style.fontWeight, color: style.color });
+      if (box) {
+        const rect = box.getBoundingClientRect();
+        info.hasContent = true;
+        info.boxLeft = relX(rect.left);
+        info.boxRight = relX(rect.right);
+        info.boxTop = relY(rect.top);
+        info.boxBottom = relY(rect.bottom);
+        info.hasColor = box.classList.contains("has-color");
+        info.muted = box.classList.contains("is-muted");
+        info.boxBackground = norm(getComputedStyle(box).backgroundColor);
+        info.badges = [...box.querySelectorAll(".ks-badge")].map((badge) => norm(getComputedStyle(badge).backgroundColor));
+        boxes.push({ cell: index, left: relX(rect.left), right: relX(rect.right), top: relY(rect.top), bottom: relY(rect.bottom), height: round(rect.height) });
+        const title = box.querySelector(".ks-table-content-title");
+        if (title) {
+          const titleStyle = getComputedStyle(title);
+          info.titleColor = titleStyle.color;
+          info.titleWeight = titleStyle.fontWeight;
+          titles.push({ cell: index, x: glyphX(title), weight: titleStyle.fontWeight, color: titleStyle.color });
+        }
+      }
+      cells.push(info);
     });
     const style = getComputedStyle(row);
     const rect = row.getBoundingClientRect();
@@ -85,6 +128,7 @@ MEASURE_JS = """(args) => {
       borderBottom: parseFloat(style.borderBottomWidth),
       boxes,
       titles,
+      cells,
       hasBadge: Boolean(row.querySelector(".ks-badge")),
     };
   });
@@ -92,8 +136,32 @@ MEASURE_JS = """(args) => {
     toolbarX: glyphX(toolbar),
     headerX: headers.length ? headers[0].x : null,
     firstCellX: rows.length ? rows[0].glyphX : null,
+    windowWidth: round(winRect.width),
+    tokens,
     headers,
     rows,
+  };
+}"""
+
+SELECT_MEASURE_JS = """(args) => {
+  const win = document.querySelector(`[data-testid="app-window-${args.appId}"]`);
+  if (!win) return { error: "창을 찾지 못했습니다" };
+  const round = (value) => Math.round(value * 100) / 100;
+  const winRect = win.getBoundingClientRect();
+  const relX = (x) => round(x - winRect.left);
+  const relY = (y) => round(y - winRect.top);
+  const row = win.querySelector(".ks-grid-row");
+  const cell = row ? [...row.children].filter((child) => child.classList.contains("ks-grid-cell"))[args.index] : null;
+  if (!cell) return { error: `칸을 찾지 못했습니다: ${args.index}` };
+  const box = cell.querySelector(".ks-table-content");
+  if (!box) return { error: `내용 상자를 찾지 못했습니다: ${args.index}` };
+  const cellRect = cell.getBoundingClientRect();
+  const boxRect = box.getBoundingClientRect();
+  return {
+    index: args.index,
+    selected: cell.getAttribute("aria-selected") === "true",
+    cell: { left: relX(cellRect.left), right: relX(cellRect.right), top: relY(cellRect.top), bottom: relY(cellRect.bottom) },
+    box: { left: relX(boxRect.left), right: relX(boxRect.right), top: relY(boxRect.top), bottom: relY(boxRect.bottom) },
   };
 }"""
 
@@ -133,6 +201,12 @@ def content_rows():
         {"key": "5", "name": "다섯째",
          "info": {"title": "한 줄"},
          "note": {"title": "다른 한 줄"}},
+        {"key": "6", "name": "여섯째",
+         "info": {"title": "색 칸 흐림", "color": "#2f7d4f", "muted": True},
+         "note": {"title": "한 줄"}},
+        {"key": "7", "name": "일곱째",
+         "info": {"title": "색 칸 보통", "color": "#2f7d4f"},
+         "note": {"title": "한 줄"}},
     ]
 
 
@@ -169,10 +243,23 @@ def scenes():
         "columns": content_columns(),
         "rows": content_rows()[:3],
     }, state={"cell": None})
+    # 행 머리 없이 첫 열부터 내용 칸인 격자: 첫 칸 제목과 머리 글자가 같은 선에서 시작하는지 본다.
+    grid_edges = app_definition(GRID_EDGE_APP, "표 검수 · 첫 열 내용", {
+        "type": "table",
+        "selection": "cell",
+        "selected": {"state": "cell"},
+        "on_select": {"set_state": "cell"},
+        "columns": [
+            {"field": "info", "label": "설명", "format": "content", "max_lines": 2},
+            {"field": "note", "label": "메모", "format": "content", "max_lines": 2},
+        ],
+        "rows": content_rows()[:3],
+    }, state={"cell": None})
     return [
         {"app_id": ROWS_APP, "kind": "rows", "definition": rows},
         {"app_id": TEXT_APP, "kind": "text", "definition": text},
         {"app_id": GRID_APP, "kind": "grid", "definition": grid},
+        {"app_id": GRID_EDGE_APP, "kind": "grid-edge", "definition": grid_edges},
     ]
 
 
@@ -219,23 +306,31 @@ def within_one(values):
 def scene_verdicts(kind, coordinates):
     rows = coordinates["rows"]
     headers = coordinates["headers"]
+    tokens = coordinates.get("tokens") or {}
     verdicts = {
         "text_start_line": within_one(
             [coordinates["toolbarX"], coordinates["headerX"], coordinates["firstCellX"]]),
     }
     titles = rows[0]["titles"] if rows else []
-    if kind in ("rows", "grid"):
+    if kind in ("rows", "grid", "grid-edge"):
         # 내용 칸의 제목은 같은 열의 머리 글자와 같은 시작선에서 시작해야 한다.
         verdicts["content_text_aligned_with_header"] = bool(titles) and all(
             title["cell"] < len(headers) and headers[title["cell"]]["x"] is not None
             and abs(headers[title["cell"]]["x"] - title["x"]) <= 1
             for title in titles)
     boxed = [row for row in rows if len(row["boxes"]) >= 2]
-    if kind in ("rows", "grid") and boxed:
+    if kind in ("rows", "grid", "grid-edge") and boxed:
         row = boxed[0]
         verdicts["cell_boxes_aligned"] = (
             within_one([box["top"] for box in row["boxes"]])
             and within_one([box["bottom"] for box in row["boxes"]]))
+    if kind in ("grid", "grid-edge"):
+        # 고른 링, hover, 초점 점선은 칸 테두리(::after inset:0)를 따라가므로 칸과 상자 경계가 같아야 한다.
+        content_cells = [cell for row in rows for cell in row.get("cells", []) if cell["hasContent"]]
+        verdicts["content_box_matches_cell"] = bool(content_cells) and all(
+            all(abs(cell[key] - cell[box_key]) <= 1 for key, box_key in
+                (("left", "boxLeft"), ("right", "boxRight"), ("top", "boxTop"), ("bottom", "boxBottom")))
+            for cell in content_cells)
     if kind == "rows":
         badge_free = [row for row in rows if row["boxes"] and not row["hasBadge"]]
         verdicts["no_reserved_badge_slot"] = bool(badge_free) and all(
@@ -251,7 +346,68 @@ def scene_verdicts(kind, coordinates):
             muted_title and normal_title and muted_title["weight"] == "400"
             and muted_title["weight"] != normal_title["weight"]
             and muted_title["color"] != normal_title["color"])
+        # 색 칸: muted는 굵기만 낮추고 대비색(--ks-table-on)은 그대로 둔다.
+        colored = [cell for row in rows for cell in row.get("cells", []) if cell["hasContent"] and cell.get("hasColor")]
+        muted_colored = [cell for cell in colored if cell.get("muted")]
+        plain_colored = [cell for cell in colored if not cell.get("muted")]
+        muted_pairs = [(muted, plain) for muted in muted_colored for plain in plain_colored
+                       if plain["boxBackground"] == muted["boxBackground"]]
+        verdicts["muted_color_cell_keeps_contrast"] = bool(muted_pairs) and all(
+            muted["titleWeight"] == "400" and muted["titleColor"] == plain["titleColor"]
+            for muted, plain in muted_pairs)
+        # 색 없는 상자 배지는 쉘 기본(hover 바탕), 색 칸 배지는 지금처럼 surface-solid.
+        colorless_badges = [badge for row in rows for cell in row.get("cells", [])
+                            if cell["hasContent"] and not cell.get("hasColor") for badge in cell.get("badges", [])]
+        verdicts["colorless_box_badge_shell_default"] = bool(colorless_badges) and any(
+            badge == tokens.get("hover") and badge != tokens.get("solid") for badge in colorless_badges)
+        color_badges = [badge for row in rows for cell in row.get("cells", [])
+                        if cell["hasContent"] and cell.get("hasColor") for badge in cell.get("badges", [])]
+        verdicts["color_box_badge_solid"] = bool(color_badges) and all(
+            badge == tokens.get("solid") for badge in color_badges)
     return verdicts
+
+
+def edge_right_gap(coordinates):
+    width = coordinates.get("windowWidth")
+    boxes = [box for row in coordinates["rows"] for box in row.get("boxes", [])]
+    if width is None or not boxes:
+        return None
+    return round(width - max(box["right"] for box in boxes), 2)
+
+
+def selection_ring_verdict(selection):
+    if selection.get("error"):
+        return False
+    for label in ("first", "last"):
+        item = selection.get(label)
+        if not item or item.get("error") or not item.get("selected"):
+            return False
+        if not all(abs(item["cell"][key] - item["box"][key]) <= 1
+                   for key in ("left", "right", "top", "bottom")):
+            return False
+    return True
+
+
+def measure_selection(page, application, app_id, output, name, result):
+    row = application.locator(".ks-grid-row").first
+    cells = row.locator(".ks-grid-cell:has(.ks-table-content)")
+    count = cells.count()
+    if not count:
+        return {"error": "내용 칸이 없습니다"}
+    selection = {}
+    for label, index in (("first", 0), ("last", count - 1)):
+        cells.nth(index).click()
+        page.wait_for_function(
+            """([appId, index]) => {
+              const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
+              const row = win && win.querySelector(".ks-grid-row");
+              const cell = row && [...row.children].filter((child) => child.classList.contains("ks-grid-cell"))[index];
+              return cell ? cell.getAttribute("aria-selected") === "true" : false;
+            }""", arg=[app_id, index])
+        selection[label] = page.evaluate(SELECT_MEASURE_JS, {"appId": app_id, "index": index})
+        if label == "last":
+            capture(page, output, f"{app_id}-{name}-last-selected.png", result["captures"])
+    return selection
 
 
 def main():
@@ -299,8 +455,17 @@ def main():
                         if "error" in coordinates:
                             raise AssertionError(coordinates["error"])
                         verdicts = scene_verdicts(scene["kind"], coordinates)
-                        entry["widths"][name] = {"coordinates": coordinates, "verdicts": verdicts}
                         capture(page, output, f"{app_id}-{name}.png", result["captures"])
+                        selection = {}
+                        if scene["kind"] in ("grid", "grid-edge"):
+                            selection = measure_selection(page, application, app_id, output, name, result)
+                            verdicts["selected_ring_matches_box"] = selection_ring_verdict(selection)
+                        entry["widths"][name] = {
+                            "coordinates": coordinates,
+                            "edgeRightGap": edge_right_gap(coordinates),
+                            "selection": selection,
+                            "verdicts": verdicts,
+                        }
                         for verdict, passed in verdicts.items():
                             if not passed:
                                 result["failures"].append(f"{app_id}/{name}: {verdict}")
@@ -309,6 +474,18 @@ def main():
                     if "error" in closed:
                         raise AssertionError(closed["error"])
                     wait_until(lambda: not sb.window_of(app_id), 10, f"{app_id} 창이 닫히지 않았습니다")
+                # 격자 마지막 상자의 오른쪽 끝은 줄 표와 같은 거리에서 끝난다.
+                for name in ("wide", "narrow"):
+                    base = result["scenes"].get(ROWS_APP, {}).get("widths", {}).get(name, {}).get("edgeRightGap")
+                    for app_id in (GRID_APP, GRID_EDGE_APP):
+                        target = result["scenes"].get(app_id, {}).get("widths", {}).get(name)
+                        if target is None:
+                            continue
+                        gap = target.get("edgeRightGap")
+                        passed = base is not None and gap is not None and abs(base - gap) <= 1
+                        target["verdicts"]["right_edge_matches_rows"] = passed
+                        if not passed:
+                            result["failures"].append(f"{app_id}/{name}: right_edge_matches_rows")
                 console = list(sb.console)
                 result["console"] = console[-10:]
         finally:
