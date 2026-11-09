@@ -41,7 +41,8 @@ export function RepeatBlock({ block, context, pointer }: { block: Repeat; contex
     return result;
   }, [value, block.key]);
   useDormant(`${pointer}/template`, entries.length === 0);
-  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} loading={block.layout === "grid" ? <RepeatLoading block={block} /> : undefined} />;
+  // 행 반복은 칸 폭을 내용이 정하므로 템플릿 막대로 미리 맞출 수 없다. 나머지는 받은 뒤 배치의 뼈대를 쓴다.
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} loading={(block.layout ?? "column") !== "row" ? <RepeatLoading block={block} /> : undefined} />;
   return <RepeatReady block={block} context={context} pointer={pointer} entries={entries} parent={parent?.item} parentRef={parentRef} follow={follow.status === "ready" ? follow.value : null} more={value.more} />;
 }
 
@@ -92,16 +93,17 @@ function useRepeatGridColumns(root: RefObject<HTMLDivElement | null>, block: Rep
   return columns;
 }
 
-// 격자 반복은 받은 뒤의 칸 배치를 미리 보여 준다. 칸 수가 같아야 항목이 도착할 때 줄이 흔들리지 않는다.
+// 격자와 열 반복은 받은 뒤의 칸 배치를 미리 보여 준다. 칸 수가 같아야 항목이 도착할 때 줄이 흔들리지 않는다.
 // 뼈대 칸에는 .ks-repeat-item을 쓰지 않는다. 더 받기와 커멘트 키가 실제 행을 그 클래스로 찾는다.
 function RepeatLoading({ block }: { block: Repeat }) {
   const blockRoot = useBlockRootProps();
   const root = useRef<HTMLDivElement>(null);
+  const layout = block.layout ?? "column";
   const columns = useRepeatGridColumns(root, block, null);
   return <div {...blockRoot} ref={root} role="status" aria-label="불러오는 중"
-    className={`ks-data-view ks-repeat is-grid${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""} is-loading`}>
-    <div className="ks-repeat-content" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-      {Array.from({ length: columns * 3 }, (_, index) => <div className="ks-repeat-skeleton-item" key={index}>{skeletonBlock(block.template)}</div>)}
+    className={`ks-data-view ks-repeat is-${layout}${block.virtual ? " is-virtual" : ""}${block.gap ? ` gap-${block.gap}` : ""} is-loading`}>
+    <div className="ks-repeat-content" aria-hidden="true" style={layout === "grid" ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}>
+      {Array.from({ length: layout === "grid" ? columns * 3 : 3 }, (_, index) => <div className="ks-repeat-skeleton-item" key={index}>{skeletonBlock(block.template)}</div>)}
     </div>
   </div>;
 }
