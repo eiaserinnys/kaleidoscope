@@ -6,6 +6,15 @@ import { preserveWindowActionFocus } from "../share/action-context";
 const rescued = new WeakSet<Element>();
 const lastWindowFocus = new WeakMap<HTMLElement, HTMLElement>();
 
+// 쉘이 대신 옮기는 초점에 링을 그릴지 정하려고 마지막 입력 방식을 기억한다.
+// 키보드로 창을 열었거나 탭으로 들어왔을 때만 링을 그리고, 포인터로 열었거나 아직 입력이 없으면 그리지 않는다.
+let keyboardInput = false;
+const modifierKeys = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta", "CapsLock"]);
+document.addEventListener("keydown", (event) => { if (!modifierKeys.has(event.key)) keyboardInput = true; }, true);
+document.addEventListener("pointerdown", () => { keyboardInput = false; }, true);
+
+type FocusOptionsWithVisibility = FocusOptions & { focusVisible?: boolean };
+
 export const writableControlSelector = 'textarea:not(:disabled):not([readonly]), input:not(:disabled):not([readonly]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="file"]), select:not(:disabled), [contenteditable]:not([contenteditable="false"])';
 
 const controlSelector = 'button, input:not([type="hidden"]), textarea, select, a[href], [tabindex], [contenteditable], iframe, canvas';
@@ -123,12 +132,12 @@ export function restoreWindowFocus(content: HTMLElement) {
   focusRescued(target, { preventScroll: true });
 }
 
-export function focusRescued(element: HTMLElement, options?: FocusOptions) {
+export function focusRescued(element: HTMLElement, options?: FocusOptionsWithVisibility) {
   const owner = ownerOf(element);
   if (owner && preserveWindowActionFocus(owner)) return;
   rescued.add(element);
   element.addEventListener("blur", () => rescued.delete(element), { once: true });
-  element.focus(options);
+  element.focus({ ...options, focusVisible: options?.focusVisible ?? keyboardInput } as FocusOptions);
 }
 
 /** 초점이 아직 사용자 것으로 정해지지 않았는가: 문서 본문이거나 쉘이 대신 옮긴 요소. */
