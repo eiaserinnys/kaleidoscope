@@ -375,6 +375,77 @@ fn pc_access_events(value: &Value) -> Vec<pc_access::Event> {
         .unwrap_or_default()
 }
 
+/// 주 웹뷰 DOM 안 요소의 중심을 물리 화면 좌표로 바꾼다. 그 자리에 실제로 그 요소가
+/// 맨 위에 있어야 한다. 다른 창이나 요소가 덮고 있으면 엉뚱한 곳을 누르게 되므로 실패로 남긴다.
+#[cfg(windows)]
+fn native_webview_point(
+    app: &AppHandle,
+    selector: &str,
+    label: &str,
+) -> Result<(i32, i32, Value), String> {
+    let selector = serde_json::to_string(selector).map_err(|error| error.to_string())?;
+    let resolved = evaluate(
+        app,
+        &format!(
+            r#"
+      const element = document.querySelector({selector});
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+      const at = document.elementFromPoint(x, y);
+      return {{ x, y, width: rect.width, height: rect.height,
+        covers: !!at && (at === element || element.contains(at)) }};
+    "#
+        ),
+    )?;
+    if resolved.is_null() {
+        return Err(format!("{label} missing"));
+    }
+    if resolved["covers"] != json!(true) {
+        return Err(format!("{label} is covered at its center: {resolved}"));
+    }
+    let css_x = resolved["x"]
+        .as_f64()
+        .ok_or_else(|| format!("{label} x missing"))?;
+    let css_y = resolved["y"]
+        .as_f64()
+        .ok_or_else(|| format!("{label} y missing"))?;
+    let window = app.get_window("main").ok_or("main window not found")?;
+    let position = window.inner_position().map_err(|error| error.to_string())?;
+    let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    Ok((
+        position.x + (css_x * scale).round() as i32,
+        position.y + (css_y * scale).round() as i32,
+        resolved,
+    ))
+}
+
+#[cfg(windows)]
+fn window_dom_rect(app: &AppHandle, window_id: &str) -> Result<Value, String> {
+    evaluate(
+        app,
+        &format!(
+            r#"
+      const root = document.querySelector('[data-window-id="{window_id}"]');
+      if (!root) return null;
+      const rect = root.getBoundingClientRect();
+      return {{ x: rect.x, y: rect.y, width: rect.width, height: rect.height }};
+    "#
+        ),
+    )
+}
+
+#[cfg(windows)]
+fn window_rect(core: &Core, window_id: &str) -> Result<Rect, String> {
+    snapshot(core)?
+        .shared
+        .windows
+        .iter()
+        .find(|window| window.id == window_id)
+        .map(|window| window.rect)
+        .ok_or_else(|| format!("window {window_id} missing"))
+}
+
 pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), String> {
     let fixture = NotesFixture::create()?;
     let snap = snapshot(core)?;
@@ -758,5 +829,215 @@ pub(super) fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> R
         json!({"window_id": browser_id, "web_update": page.url, "state_url": page.url}),
     )?;
     screen(out, log, "11-address")?;
+
+    // ── 창 조작: 맨 위가 아닌 창의 최소화와 왼쪽·위쪽 가장자리 크기 조절 (실제 입력) ──
+    #[cfg(windows)]
+    {
+        const SETTLE: &str = r#"
+          const target = document.querySelector('[data-window-id="TARGET"]');
+          const cover = document.querySelector('[data-window-id="COVER"]');
+          if (!target || !cover) return false;
+          if (target.getAttribute('data-minimized') !== 'false') return false;
+          const targetFrame = target.querySelector('.ks-window-frame');
+          const coverFrame = cover.querySelector('.ks-window-frame');
+          return !!targetFrame && !!coverFrame
+            && !targetFrame.classList.contains('ks-window-frame-active')
+            && coverFrame.classList.contains('ks-window-frame-active');
+        "#;
+
+        let target_id = open(
+            core,
+            &desktop,
+            "calculator",
+            Rect {
+                x: 120,
+                y: 120,
+                width: 480,
+                height: 360,
+            },
+        )?;
+        let cover_id = open(
+            core,
+            &desktop,
+            "calculator",
+            Rect {
+                x: 760,
+                y: 320,
+                width: 480,
+                height: 360,
+            },
+        )?;
+        let settle = SETTLE
+            .replace("TARGET", &target_id)
+            .replace("COVER", &cover_id);
+        wait_dom(app, &settle, "window control targets")?;
+        let focus = super::native_target::focus_main_webview(app)?;
+        record(log, "ui.window_controls.focus", focus)?;
+
+        // 맨 위가 아닌 창의 최소화 단추를 실제 입력으로 10회 누른다. 회차마다 core로
+        // 복원하고 다른 창을 다시 올려 대상이 늘 맨 위가 아니게 만든다. 누른 그 입력에서
+        // window.raise가 나가면 안 된다.
+        let mut rounds = Vec::new();
+        for round in 1..=10 {
+            if round > 1 {
+                call(
+                    core,
+                    CoreRequest::WindowRestore {
+                        window_id: target_id.clone(),
+                    },
+                )?;
+                call(
+                    core,
+                    CoreRequest::WindowRaise {
+                        window_id: cover_id.clone(),
+                    },
+                )?;
+            }
+            wait_dom(app, &settle, "minimize target restored and not top")?;
+            let selector =
+                format!("[data-window-id=\"{target_id}\"] [data-window-control=\"minimize\"]");
+            let (x, y, bounds) = native_webview_point(
+                app,
+                &selector,
+                &format!("minimize button round {round}"),
+            )?;
+            let wait = super::native_target::wait_main_webview_at(app, x, y)?;
+            let mark = request_mark();
+            let click = super::share_isolate::native_input::click_with_report(x, y)?;
+            wait_until("minimize applied", || {
+                Ok(snapshot(core)?
+                    .shared
+                    .windows
+                    .iter()
+                    .any(|window| window.id == target_id && window.minimized))
+            })?;
+            // 올리기 요청이 뒤늦게 도착해 창이 다시 펼쳐지는지 잠깐 더 본다.
+            thread::sleep(Duration::from_millis(400));
+            let snap = snapshot(core)?;
+            let minimized = snap
+                .shared
+                .windows
+                .iter()
+                .find(|window| window.id == target_id)
+                .map(|window| window.minimized)
+                .unwrap_or(false);
+            let raised: Vec<String> = requests_since(mark)
+                .into_iter()
+                .filter_map(|request| match request {
+                    CoreRequest::WindowRaise { window_id } if window_id == target_id => {
+                        Some(window_id)
+                    }
+                    _ => None,
+                })
+                .collect();
+            record(
+                log,
+                "ui.minimize_race",
+                json!({
+                    "round": round, "point": {"x": x, "y": y}, "bounds": bounds, "wait": wait,
+                    "click": click, "minimized": minimized, "raised": raised,
+                }),
+            )?;
+            if !minimized {
+                return Err(format!(
+                    "non-top minimize click did not leave the window minimized (round {round})"
+                ));
+            }
+            if !raised.is_empty() {
+                return Err(format!(
+                    "non-top minimize click raised the window (round {round}): {raised:?}"
+                ));
+            }
+            rounds.push(json!({"round": round, "minimized": true, "raised": 0}));
+        }
+        record(
+            log,
+            "ui.minimize_race.summary",
+            json!({"rounds": rounds.len(), "minimize_failures": 0, "raised": 0}),
+        )?;
+
+        // 왼쪽과 위쪽 가장자리 손잡이를 실제 입력으로 끈다. 서쪽은 오른쪽 끝, 북쪽은 아래 끝이
+        // 고정되어야 한다. 드래그가 preview를 그리는 것까지 기록에 남긴다.
+        call(
+            core,
+            CoreRequest::WindowRestore {
+                window_id: target_id.clone(),
+            },
+        )?;
+        call(
+            core,
+            CoreRequest::WindowRaise {
+                window_id: cover_id.clone(),
+            },
+        )?;
+        wait_dom(app, &settle, "resize target non-top")?;
+        let before = window_rect(core, &target_id)?;
+
+        let west_selector = format!("[data-window-id=\"{target_id}\"] .ks-window-resize-west");
+        let (west_x, west_y, west_bounds) =
+            native_webview_point(app, &west_selector, "west handle")?;
+        let west_to = (west_x - 40, west_y);
+        let _ = super::native_target::wait_main_webview_at(app, west_x, west_y)?;
+        let mut west_preview = Value::Null;
+        super::share_isolate::native_input::drag((west_x, west_y), west_to, || {
+            west_preview = window_dom_rect(app, &target_id)?;
+            if west_preview.is_null() {
+                return Err("west resize target missing during drag".into());
+            }
+            Ok(())
+        })?;
+        wait_until("west resize committed", || {
+            let rect = window_rect(core, &target_id)?;
+            Ok(rect.x < before.x
+                && rect.width > before.width
+                && rect.x + rect.width as i32 == before.x + before.width as i32)
+        })?;
+        let after_west = window_rect(core, &target_id)?;
+        wait_until("west resize rendered", || {
+            let dom = window_dom_rect(app, &target_id)?;
+            Ok((dom["x"].as_f64().unwrap_or(-1.0) - f64::from(after_west.x)).abs() <= 2.0
+                && (dom["width"].as_f64().unwrap_or(-1.0) - f64::from(after_west.width)).abs()
+                    <= 2.0)
+        })?;
+
+        let north_selector = format!("[data-window-id=\"{target_id}\"] .ks-window-resize-north");
+        let (north_x, north_y, north_bounds) =
+            native_webview_point(app, &north_selector, "north handle")?;
+        let north_to = (north_x, north_y - 30);
+        let _ = super::native_target::wait_main_webview_at(app, north_x, north_y)?;
+        let mut north_preview = Value::Null;
+        super::share_isolate::native_input::drag((north_x, north_y), north_to, || {
+            north_preview = window_dom_rect(app, &target_id)?;
+            if north_preview.is_null() {
+                return Err("north resize target missing during drag".into());
+            }
+            Ok(())
+        })?;
+        wait_until("north resize committed", || {
+            let rect = window_rect(core, &target_id)?;
+            Ok(rect.y < after_west.y
+                && rect.height > after_west.height
+                && rect.x == after_west.x
+                && rect.width == after_west.width)
+        })?;
+        let after_north = window_rect(core, &target_id)?;
+        record(
+            log,
+            "ui.resize_edges",
+            json!({
+                "window_id": target_id,
+                "before": before,
+                "west": {
+                    "from": {"x": west_x, "y": west_y}, "to": {"x": west_to.0, "y": west_to.1},
+                    "bounds": west_bounds, "preview": west_preview, "after": after_west,
+                },
+                "north": {
+                    "from": {"x": north_x, "y": north_y}, "to": {"x": north_to.0, "y": north_to.1},
+                    "bounds": north_bounds, "preview": north_preview, "after": after_north,
+                },
+                "opposite_ends_fixed": true,
+            }),
+        )?;
+    }
     Ok(())
 }
