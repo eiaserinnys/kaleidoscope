@@ -289,6 +289,48 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
             },
         )?;
     }
+    // 테마를 바꾸면 메인 웹뷰의 선호 색 구성이 따라오는지 보고 다크와 라이트를 찍는다.
+    #[cfg(windows)]
+    {
+        for (theme, dark, name) in [
+            (
+                kaleidoscope_core::kaleidoscope_contract::ThemePreference::Dark,
+                true,
+                "00-theme-dark",
+            ),
+            (
+                kaleidoscope_core::kaleidoscope_contract::ThemePreference::Light,
+                false,
+                "00-theme-light",
+            ),
+        ] {
+            call(core, CoreRequest::ThemeSet { theme })?;
+            ui::driver::wait_dom(
+                app,
+                &format!(
+                    "return window.matchMedia('(prefers-color-scheme: dark)').matches === {dark}"
+                ),
+                &format!("theme {name} prefers-color-scheme"),
+            )?;
+            let observed = ui::driver::evaluate(
+                app,
+                "return {dark: window.matchMedia('(prefers-color-scheme: dark)').matches, colorScheme: getComputedStyle(document.documentElement).colorScheme, background: getComputedStyle(document.body).backgroundColor}",
+            )?;
+            record(
+                log,
+                "theme.applied",
+                json!({"theme": theme, "observed": observed}),
+            )?;
+            screen(out, log, name)?;
+        }
+        call(
+            core,
+            CoreRequest::ThemeSet {
+                theme: kaleidoscope_core::kaleidoscope_contract::ThemePreference::System,
+            },
+        )?;
+        record(log, "theme.restored", json!({}))?;
+    }
     let snapshot = match call(core, CoreRequest::StateGet {})? {
         CoreReply::StateGet { snapshot, .. } => snapshot,
         reply => return Err(format!("unexpected state response: {reply:?}")),
