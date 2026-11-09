@@ -92,6 +92,19 @@ it("가상 트리는 보이는 행의 전체 위치와 전체 펼친 행 수를 
   expect(describeVisible(document.getElementById("root")!).text).toContain("[트리, 전체 1200개 중 99~100번째]");
 });
 
+it("트리 항목의 확인 상태를 글 앞에 표시한다", () => {
+  document.body.innerHTML = '<div id="root"><div role="tree"><button role="treeitem" aria-checked="true">확인한 일</button><button role="treeitem" aria-checked="false">남은 일</button><button role="treeitem">확인 상자 없는 일</button></div></div>';
+  const rect = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height, toJSON() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return this.id === "root" || this.getAttribute("role") === "tree" ? rect(0, 0, 100, 100) : rect(0, 40, 100, 20);
+  });
+  vi.spyOn(document, "createRange").mockImplementation(() => ({ setStart() {}, setEnd() {}, getClientRects: () => [rect(0, 40, 60, 20)] }) as unknown as Range);
+  const text = describeVisible(document.getElementById("root")!).text;
+  expect(text).toContain("[x] 확인한 일");
+  expect(text).toContain("[ ] 남은 일");
+  expect(text).toContain("상자 없는 일");
+});
+
 it("가상 표는 보이는 행 수가 아니라 aria-rowcount로 전체 줄 수를 표시한다", () => {
   document.body.innerHTML = '<div id="root"><div role="table" aria-rowcount="1200"><div role="row" aria-rowindex="99"><span role="cell">앞 행</span></div><div role="row" aria-rowindex="100"><span role="cell">선택한 행</span></div></div></div>';
   const rect = (left: number, top: number, width: number, height: number) => ({ left, top, right: left + width, bottom: top + height, x: left, y: top, width, height, toJSON() {} });

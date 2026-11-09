@@ -38,6 +38,7 @@ mod registry_events;
 mod share;
 mod shell_preferences;
 mod state_commands;
+mod state_commit;
 mod state_events;
 mod startup_readiness;
 // 원천과 설치 동작은 다음 PR에서 연결한다.
@@ -1152,38 +1153,12 @@ impl Core {
         debounced: bool,
         change: impl FnOnce(&mut CoreState) -> Result<CoreReply, CoreError>,
     ) -> Result<(CoreReply, ShellSnapshot), CoreError> {
-        let mut state = self.inner.state.lock().unwrap();
-        let before = state.clone();
-        let reply = change(&mut state)?;
-        sync_state::mark_local_changes(&self.inner, &before.shared, &mut state);
-        let shared_changed = before.shared != state.shared;
-        let device_changed = before.device != state.device;
-        let sync_changed = before.sync != state.sync;
-
-        if shared_changed || device_changed || sync_changed {
-            if debounced {
-                self.inner.flusher.schedule(
-                    shared_changed,
-                    device_changed,
-                    sync_changed,
-                    &self.inner.profiler,
-                );
-            } else {
-                if let Err(error) = self.inner.save_state_locked(
-                    &state,
-                    shared_changed,
-                    device_changed,
-                    sync_changed,
-                ) {
-                    *state = before;
-                    return Err(error);
-                }
-            }
-        }
-
-        let event = self.inner.state_event_locked(&state);
-        drop(state);
-        web::detach_removed(&self.inner);
+        let (reply, event) = state_commit::commit(
+            &self.inner,
+            state_commit::ChangeOrigin::Local { debounced },
+            change,
+        )?;
+        let event = event.expect("로컬 변경은 항상 상태 이벤트를 만든다");
         self.inner.emit_state(&event);
         Ok((reply, event.into_snapshot()))
     }

@@ -36,6 +36,7 @@ function sameNode(left: TreeRowModel["node"], right: TreeRowModel["node"]): bool
     && left.expandable === right.expandable
     && left.selectable === right.selectable
     && left.ariaSelectable === right.ariaSelectable
+    && left.checked === right.checked
     && left.currentOnSelection === right.currentOnSelection
     && left.rowClassName === right.rowClassName
     && sameValue(left.commentKey, right.commentKey)
@@ -84,6 +85,7 @@ export interface TreeViewProps {
   endAction?: { label: string; leading?: ReactNode; onActivate: () => void };
   onExpandedChange: (id: string, expanded: boolean) => void;
   onActivate: (row: TreeRowModel, activation: TreeActivation) => void;
+  onCheck?: (row: TreeRowModel) => void;
   onContextMenu?: (row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController, event?: MouseEvent<HTMLElement>) => void;
   onCommandKeyDown?: (row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>, focus: TreeFocusController) => boolean;
   onDoubleClick?: (row: TreeRowModel, target: HTMLElement) => void;
@@ -106,7 +108,7 @@ export interface TreeViewProps {
 
 export const END_ACTION_ID = "tree:end-action";
 
-export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController, selection, onSelectionChange, drag }: TreeViewProps) {
+export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onCheck, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController, selection, onSelectionChange, drag }: TreeViewProps) {
   const previousRows = useRef(new Map<string, TreeRowModel>());
   const flat = useMemo(() => {
     const nextRows = new Map<string, TreeRowModel>();
@@ -156,8 +158,8 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     virtual.scrollToIndex(flat.indexOf(next), { align: "auto" });
   }, [flat, treeRows, virtual]);
 
-  const handlers = useRef({ onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, selectableRows, expanded, moveFocus, endAction, selection, onSelectionChange });
-  handlers.current = { onActivate, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, selectableRows, expanded, moveFocus, endAction, selection, onSelectionChange };
+  const handlers = useRef({ onActivate, onCheck, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, selectableRows, expanded, moveFocus, endAction, selection, onSelectionChange });
+  handlers.current = { onActivate, onCheck, onContextMenu, onCommandKeyDown, onDoubleClick, onExpandedChange, treeRows, selectableRows, expanded, moveFocus, endAction, selection, onSelectionChange };
   useEffect(() => {
     if (!selection || !onSelectionChange) return;
     const visible = new Set(selectableRows.map((row) => row.id));
@@ -270,6 +272,8 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
         const parentIndex = treeRows.findIndex((item) => item.id === row.parentId);
         if (parentIndex >= 0) move(parentIndex);
       }
+    } else if (event.key === " " && row.node.checked !== undefined) {
+      handlers.current.onCheck?.(row);
     } else if (event.key === "Enter") {
       if (row.id === END_ACTION_ID) handlers.current.endAction?.onActivate();
       else handlers.current.onActivate(row, { source: "enter", target: event.currentTarget });
@@ -447,6 +451,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
         const row = flat[item.index];
         const identity = commentKey?.(row) ?? row.node.commentKey;
         return <TreeRow
+          checkEnabled={onCheck !== undefined}
           commentKey={identity === undefined ? undefined : encodeCommentKey(identity)}
           focused={effectiveFocus === row.id}
           index={item.index}
@@ -454,6 +459,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
           key={row.id}
           measure={virtual.measureElement}
           onActivate={activate}
+          onCheck={onCheck}
           onContextMenu={onContextMenu ? contextMenu : undefined}
           onDoubleClick={onDoubleClick ? doubleClick : undefined}
           onFocus={onFocus}

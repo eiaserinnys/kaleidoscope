@@ -394,6 +394,17 @@ sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Bin
  */
 extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, 
 /**
+ * (55판) 항목의 확인 상자를 누르거나 초점을 둔 행에서 Space를 누를 때 실행한다.
+ * `$event`는 새 확인 값(참/거짓), `$item`은 그 항목이다. 동작 문맥은 `on_select`와 같다.
+ * 없으면 확인 상자는 보이기만 한다. 폴더 트리 모드와 함께 쓰지 않는다.
+ */
+on_check?: Actions, 
+/**
+ * (55판) 참이면 자식이 있는 항목을 처음부터 펼친다. 거짓이면 지금처럼 접힌 채로 시작한다.
+ * 폴더 트리 모드와 함께 쓰지 않는다.
+ */
+default_expanded?: boolean, 
+/**
  * (20판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
  */
 item_menu?: Array<ItemMenuEntry>, } | { "type": "folder", root: FolderRoot, 
@@ -1725,7 +1736,11 @@ export type TreeItem = { key: string,
 /**
  * 없으면 `path`의 마지막 이름이다.
  */
-title?: string, path?: string, meta?: string, badges?: Array<Badge>, children?: Array<TreeItem>, };
+title?: string, path?: string, meta?: string, badges?: Array<Badge>, children?: Array<TreeItem>, 
+/**
+ * 있으면 그 줄에 확인 상자를 그린다. 참이면 확인된 상태다. 없으면 확인 상자를 그리지 않는다.
+ */
+checked?: boolean, };
 
 /**
  * Long Animation Frame 관측값.

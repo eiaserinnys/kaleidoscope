@@ -351,6 +351,30 @@ describe("markdown editor file session", () => {
     expect(session.getSnapshot().text).toBe("# Next");
   });
 
+  it("cancels the pending path when the current document is selected again mid-save", async () => {
+    let finish!: (revision: string) => void;
+    const target = {
+      allowsMissingRevision: false,
+      conflictMessage: "충돌",
+      read: vi.fn(async (path: string) => ({ text: path === "a.md" ? "A 본문" : "B 본문", revision: "r1" })),
+      write: vi.fn().mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; })).mockResolvedValue("r2"),
+    };
+    const session = new FileEditorSession(target);
+    await session.open("a.md");
+    session.setText("A 수정");
+    const saving = session.saveNow();
+    const openingB = session.open("b.md");
+    await session.open("a.md");
+    finish("r2");
+    expect(await saving).toBe(true);
+    await openingB;
+    expect(session.getSnapshot()).toMatchObject({ path: "a.md", text: "A 수정" });
+    session.setText("A 두 번째 수정");
+    expect(await session.saveNow()).toBe(true);
+    expect(target.write).toHaveBeenLastCalledWith("a.md", "A 두 번째 수정", "r2");
+    session.dispose();
+  });
+
   it("offers reload after a revision conflict", async () => {
     const { transport, session } = createSession({ "README.md": "# Original" });
     await session.open("README.md");

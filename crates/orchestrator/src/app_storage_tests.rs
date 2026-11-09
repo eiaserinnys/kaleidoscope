@@ -57,7 +57,7 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::DESKTOP_WALLPAPERS_SCHEMA_VERSION
+        storage::STORAGE_SCOPE_SCHEMA_VERSION
     );
     let fresh_violations = db
         .prepare("PRAGMA foreign_key_check")
@@ -100,7 +100,7 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        storage::DESKTOP_WALLPAPERS_SCHEMA_VERSION
+        storage::STORAGE_SCOPE_SCHEMA_VERSION
     );
     let stored: (String, String) = db
         .query_row(
@@ -146,6 +146,340 @@ fn storage_migration_from_version_nine_preserves_buckets_and_items() {
         .collect::<rusqlite::Result<Vec<_>>>()
         .unwrap();
     assert!(item_foreign_keys.contains(&("app_storage_buckets".to_string(), "CASCADE".to_string())));
+}
+
+#[tokio::test]
+async fn storage_scope_migration_clears_wrong_owner_of_global_collection_documents() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![
+                    Workspace {
+                        id: "workspace-a".into(),
+                        name: "A".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                    Workspace {
+                        id: "workspace-b".into(),
+                        name: "B".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let (written, _, _) = state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-a"),
+            json!("전역 문서"),
+            None,
+        )
+        .unwrap();
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "UPDATE app_storage_items SET workspace_id='workspace-a' WHERE key='documents/메모.md'",
+            [],
+        )
+        .unwrap();
+        db.pragma_update(None, "user_version", 19).unwrap();
+        storage::migrate(&db).unwrap();
+        let owner: Option<String> = db
+            .query_row(
+                "SELECT workspace_id FROM app_storage_items WHERE key='documents/메모.md'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(owner, None);
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .unwrap(),
+            storage::STORAGE_SCOPE_SCHEMA_VERSION
+        );
+    }
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let read = state
+        .read_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-b"),
+        )
+        .unwrap();
+    assert_eq!(read.content, json!("전역 문서"));
+    assert_eq!(read.revision, Some(written.revision));
+}
+
+#[tokio::test]
+async fn storage_scope_migration_fills_owner_of_workspace_single_items() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![
+                    Workspace {
+                        id: "workspace-a".into(),
+                        name: "A".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                    Workspace {
+                        id: "workspace-b".into(),
+                        name: "B".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "storage-test",
+            "workspace_value",
+            Some("workspace-a"),
+            json!("값"),
+            None,
+        )
+        .unwrap();
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "UPDATE app_storage_items SET workspace_id=NULL WHERE key='workspaces/workspace-a/value'",
+            [],
+        )
+        .unwrap();
+        db.pragma_update(None, "user_version", 19).unwrap();
+        storage::migrate(&db).unwrap();
+        let owner: Option<String> = db
+            .query_row(
+                "SELECT workspace_id FROM app_storage_items WHERE key='workspaces/workspace-a/value'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(owner.as_deref(), Some("workspace-a"));
+    }
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key='workspaces/workspace-a/value'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn storage_scope_migration_ignores_workspace_ids_in_global_keys() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![
+                    Workspace {
+                        id: "workspace-a".into(),
+                        name: "A".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                    Workspace {
+                        id: "workspace-b".into(),
+                        name: "B".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "storage-test",
+            "fixed_workspace_note",
+            None,
+            json!("# 고정"),
+            None,
+        )
+        .unwrap();
+    state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "workspace-a",
+            None,
+            json!("전역 문서"),
+            None,
+        )
+        .unwrap();
+    {
+        let db = state.lock_db().unwrap();
+        db.execute(
+            "UPDATE app_storage_items SET workspace_id='workspace-a' WHERE key IN ('workspaces/workspace-a/note','documents/workspace-a')",
+            [],
+        )
+        .unwrap();
+        db.pragma_update(None, "user_version", 19).unwrap();
+        storage::migrate(&db).unwrap();
+        let owners: Vec<Option<String>> = db
+            .prepare(
+                "SELECT workspace_id FROM app_storage_items WHERE key IN ('workspaces/workspace-a/note','documents/workspace-a') ORDER BY key",
+            )
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap();
+        assert_eq!(owners, vec![None, None]);
+    }
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key IN ('workspaces/workspace-a/note','documents/workspace-a')",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn storage_scope_migration_is_idempotent() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![Workspace {
+                    id: "workspace-a".into(),
+                    name: "A".into(),
+                    created_at: "now".into(),
+                    updated_at: "now".into(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-a"),
+            json!("전역 문서"),
+            None,
+        )
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "storage-test",
+            "workspace_value",
+            Some("workspace-a"),
+            json!("값"),
+            None,
+        )
+        .unwrap();
+    let snapshot = |db: &Connection| {
+        let mut statement = db
+            .prepare(
+                "SELECT key,content,revision,workspace_id FROM app_storage_items ORDER BY key",
+            )
+            .unwrap();
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap()
+    };
+    let before = {
+        let db = state.lock_db().unwrap();
+        let before = snapshot(&db);
+        storage::migrate(&db).unwrap();
+        super::storage_scope_migration::migrate(&db).unwrap();
+        assert_eq!(snapshot(&db), before);
+        before
+    };
+    assert_eq!(before.len(), 2);
 }
 
 async fn request(

@@ -131,6 +131,95 @@ async fn storage_isolated_by_account_and_workspace_owner() {
 }
 
 #[tokio::test]
+async fn global_collection_documents_survive_other_workspace_deletion() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![
+                    Workspace {
+                        id: "workspace-a".into(),
+                        name: "A".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                    Workspace {
+                        id: "workspace-b".into(),
+                        name: "B".into(),
+                        created_at: "now".into(),
+                        updated_at: "now".into(),
+                    },
+                ],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let (written, _, _) = state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-a"),
+            json!("전역 문서"),
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key='documents/메모.md'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        1
+    );
+
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key='documents/메모.md'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        1
+    );
+    let read = state
+        .read_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-b"),
+        )
+        .unwrap();
+    assert_eq!(read.content, json!("전역 문서"));
+    assert_eq!(read.revision, Some(written.revision));
+}
+
+#[tokio::test]
 async fn legacy_workspace_storage_stays_writable_until_deleted_after_canonicalization() {
     let state = AppState::in_memory("secret");
     let account = state.mcp_account_id().unwrap();
@@ -232,4 +321,250 @@ async fn legacy_workspace_storage_stays_writable_until_deleted_after_canonicaliz
         .0,
         StatusCode::NOT_FOUND
     );
+}
+
+fn workspace(id: &str) -> Workspace {
+    Workspace {
+        id: id.into(),
+        name: id.into(),
+        created_at: "now".into(),
+        updated_at: "now".into(),
+    }
+}
+
+fn definition_with_workspace_collection() -> String {
+    let mut value: Value = serde_json::from_str(&definition()).unwrap();
+    value["requires"]["modules"]["storage"] = json!(3);
+    value["storage"]["entries"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "id":"workspace_docs", "key":"workspaces/{workspace_id}/documents", "kind":"md",
+            "collection":true, "default":"", "label":"작업 문서", "presentation":"hidden"
+        }));
+    serde_json::to_string(&value).unwrap()
+}
+
+fn definition_with_workspace_values() -> String {
+    let mut value: Value = serde_json::from_str(&definition()).unwrap();
+    value["storage"]["entries"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "id":"workspace_note", "key":"workspaces/{workspace_id}/note", "kind":"md",
+            "default":"", "label":"작업 노트", "presentation":"hidden"
+        }));
+    serde_json::to_string(&value).unwrap()
+}
+
+#[tokio::test]
+async fn workspace_collection_documents_are_deleted_with_their_workspace() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_workspace_collection(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![workspace("workspace-a"), workspace("workspace-b")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .write_app_storage_document(
+            &account,
+            "storage-test",
+            "workspace_docs",
+            "메모.md",
+            Some("workspace-a"),
+            json!("작업 문서"),
+            None,
+        )
+        .unwrap();
+    let (count, owner) = state
+        .lock_db()
+        .unwrap()
+        .query_row(
+            "SELECT count(*),max(workspace_id) FROM app_storage_items WHERE key='workspaces/workspace-a/documents/메모.md'",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(owner.as_deref(), Some("workspace-a"));
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key='workspaces/workspace-a/documents/메모.md'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn workspace_single_items_are_deleted_and_global_items_survive() {
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_workspace_values(), "test", false, None)
+        .unwrap();
+    state
+        .apply_layout_changes(
+            None,
+            &registry::LayoutChanges {
+                workspaces: vec![workspace("workspace-a"), workspace("workspace-b")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let title = state
+        .write_app_storage(
+            &account,
+            "storage-test",
+            "title",
+            Some("workspace-a"),
+            json!("전역 제목"),
+            None,
+        )
+        .unwrap();
+    let note = state
+        .write_app_storage(
+            &account,
+            "storage-test",
+            "note",
+            Some("workspace-a"),
+            json!("# 전역 노트"),
+            None,
+        )
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "storage-test",
+            "workspace_value",
+            Some("workspace-a"),
+            json!("작업 값"),
+            None,
+        )
+        .unwrap();
+    state
+        .write_app_storage(
+            &account,
+            "storage-test",
+            "workspace_note",
+            Some("workspace-a"),
+            json!("# 작업 노트"),
+            None,
+        )
+        .unwrap();
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let read = state
+        .read_app_storage(&account, "storage-test", "title", None)
+        .unwrap();
+    assert_eq!(read.content, json!("전역 제목"));
+    assert_eq!(read.revision, Some(title.0.revision));
+    let read = state
+        .read_app_storage(&account, "storage-test", "note", None)
+        .unwrap();
+    assert_eq!(read.content, json!("# 전역 노트"));
+    assert_eq!(read.revision, Some(note.0.revision));
+    assert_eq!(
+        state
+            .lock_db()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM app_storage_items WHERE key IN ('workspaces/workspace-a/value','workspaces/workspace-a/note')",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
+async fn transfer_stores_declaration_ownership_instead_of_bundle_value() {
+    use kaleidoscope_contract::app_storage::StorageKind;
+    use kaleidoscope_contract::transfer::{TransferBundle, TransferValue};
+    let state = AppState::in_memory("secret");
+    let account = state.mcp_account_id().unwrap();
+    add_device(&state, "device-a", &account, "token-a");
+    state
+        .publish_app(&definition_with_collection(), "test", false, None)
+        .unwrap();
+    state
+        .import_data(
+            &account,
+            TransferBundle {
+                layout: registry::LayoutChanges {
+                    workspaces: vec![workspace("workspace-a"), workspace("workspace-b")],
+                    ..Default::default()
+                },
+                values: vec![TransferValue {
+                    app_id: "storage-test".into(),
+                    key: "documents/메모.md".into(),
+                    kind: StorageKind::Md,
+                    content: json!("전역 문서"),
+                    workspace_id: Some("workspace-a".into()),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let owner: Option<String> = state
+        .lock_db()
+        .unwrap()
+        .query_row(
+            "SELECT workspace_id FROM app_storage_items WHERE key='documents/메모.md'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(owner, None);
+    state
+        .apply_layout_changes(
+            Some("device-a"),
+            &registry::LayoutChanges {
+                deleted_workspaces: vec!["workspace-a".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let read = state
+        .read_app_storage_document(
+            &account,
+            "storage-test",
+            "docs",
+            "메모.md",
+            Some("workspace-b"),
+        )
+        .unwrap();
+    assert_eq!(read.content, json!("전역 문서"));
 }

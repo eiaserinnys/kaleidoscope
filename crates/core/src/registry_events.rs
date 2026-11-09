@@ -6,6 +6,7 @@ use kaleidoscope_contract::{CoreError, CoreEvent, LinkStatus};
 
 use crate::app_commands;
 use crate::link;
+use crate::state_commit;
 use crate::Inner;
 
 pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEvent) -> bool {
@@ -546,45 +547,16 @@ pub(crate) fn apply_registry_change<T>(
     inner: &Inner,
     update: impl FnOnce(&mut crate::CoreState) -> T,
 ) -> Result<(T, Option<crate::state_events::StateEvent>), CoreError> {
-    apply_change(inner, update, false)
+    state_commit::commit(inner, state_commit::ChangeOrigin::Registry, |state| {
+        Ok(update(state))
+    })
 }
 
 pub(crate) fn apply_layout_change<T>(
     inner: &Inner,
     update: impl FnOnce(&mut crate::CoreState) -> T,
 ) -> Result<(T, Option<crate::state_events::StateEvent>), CoreError> {
-    apply_change(inner, update, true)
-}
-
-fn apply_change<T>(
-    inner: &Inner,
-    update: impl FnOnce(&mut crate::CoreState) -> T,
-    server_layout: bool,
-) -> Result<(T, Option<crate::state_events::StateEvent>), CoreError> {
-    let mut state = inner.state.lock().unwrap();
-    let before = state.clone();
-    let result = update(&mut state);
-    let shared_changed = before.shared != state.shared;
-    let device_changed = before.device != state.device;
-    let link_changed = before.link != state.link;
-    let sync_changed = before.sync != state.sync;
-
-    if shared_changed || device_changed || sync_changed {
-        if let Err(error) =
-            inner.save_state_locked(&state, shared_changed, device_changed, sync_changed)
-        {
-            *state = before;
-            return Err(error);
-        }
-    }
-
-    if server_layout && shared_changed {
-        crate::web::record_server_navigation(inner, &before, &state);
-    }
-
-    let event = (shared_changed || device_changed || link_changed)
-        .then(|| inner.state_event_locked(&state));
-    drop(state);
-    crate::web::detach_removed(inner);
-    Ok((result, event))
+    state_commit::commit(inner, state_commit::ChangeOrigin::ServerLayout, |state| {
+        Ok(update(state))
+    })
 }

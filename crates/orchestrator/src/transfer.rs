@@ -407,17 +407,33 @@ impl AppState {
                 }
                 Err(e) => return Err(e),
             }
-            if kaleidoscope_contract::builtin::is_builtin(&item.app_id) {
-                let definition = super::builtin_specs::load_definition(&tx, &item.app_id)?;
-                let collection = definition.as_ref().and_then(|definition| {
-                    definition.storage.as_ref().and_then(|storage| {
-                        storage.entries.iter().find(|entry| {
-                            entry.collection
-                                && contract::storage_entry_key_matches(entry, &item.key)
-                        })
+            let builtin = kaleidoscope_contract::builtin::is_builtin(&item.app_id);
+            let definition: Option<AppDefinition> = if builtin {
+                super::builtin_specs::load_definition(&tx, &item.app_id)?
+            } else {
+                let raw: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1 AND a.deleted_at IS NULL",[&item.app_id],|r|r.get(0)).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
+                let raw = raw.ok_or_else(|| {
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_APP_NOT_FOUND(
+                        &item.app_id,
+                    )
+                })?;
+                Some(serde_json::from_str(&raw).map_err(|error| {
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORED_APP_DEFINITION_JSON_INVALID(
+                        &item.app_id,
+                    )
+                    .and_details(vec![error.to_string()])
+                })?)
+            };
+            let entry = definition.as_ref().and_then(|definition| {
+                definition.storage.as_ref().and_then(|storage| {
+                    storage.entries.iter().find(|entry| {
+                        (!builtin || entry.collection)
+                            && contract::storage_entry_key_matches(entry, &item.key)
                     })
-                });
-                if let Some(entry) = collection {
+                })
+            });
+            if builtin {
+                if let Some(entry) = entry {
                     if entry.kind != item.kind {
                         return Err(
                             kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_COLLECTION_KIND_MISMATCH(
@@ -456,32 +472,12 @@ impl AppState {
                     }
                 }
             } else {
-                let raw: Option<String> = tx.query_row("SELECT v.definition FROM apps a JOIN app_versions v ON a.id=v.app_id AND a.current_version=v.version WHERE a.id=?1 AND a.deleted_at IS NULL",[&item.app_id],|r|r.get(0)).optional().map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
-                let raw = raw.ok_or_else(|| {
-                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_APP_NOT_FOUND(
+                let entry = entry.ok_or_else(|| {
+                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORAGE_ENTRY_NOT_FOUND(
                         &item.app_id,
+                        &item.key,
                     )
                 })?;
-                let definition: AppDefinition = serde_json::from_str(&raw).map_err(|error| {
-                    kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORED_APP_DEFINITION_JSON_INVALID(
-                        &item.app_id,
-                    )
-                    .and_details(vec![error.to_string()])
-                })?;
-                let entry = definition
-                    .storage
-                    .as_ref()
-                    .and_then(|s| {
-                        s.entries
-                            .iter()
-                            .find(|e| contract::storage_entry_key_matches(e, &item.key))
-                    })
-                    .ok_or_else(|| {
-                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORAGE_ENTRY_NOT_FOUND(
-                            &item.app_id,
-                            &item.key,
-                        )
-                    })?;
                 if entry.kind != item.kind {
                     return Err(
                         kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_STORAGE_KIND_MISMATCH(
@@ -492,16 +488,27 @@ impl AppState {
                 }
                 contract::validate_storage_content(entry, &item.content)?;
             }
-            let bucket = app_storage::bucket_id(account, &item.app_id);
-            if let Some((kind, content, _)) = app_storage::load_item(&tx, &bucket, &item.key)? {
-                if kind != item.kind || content != item.content {
+            let target = match entry {
+                Some(entry) => import_storage_target(account, &item, entry)?,
+                None => import_raw_target(account, &item),
+            };
+            if let Some(existing) =
+                super::storage_items::load_item(&tx, &target.bucket_id, &item.key)?
+            {
+                if existing.kind != item.kind || existing.content != item.content {
                     result.skipped.push(label);
                 }
                 continue;
             }
-            let revision =
-                contract::storage_revision(item.kind, &item.content).map_err(|reason| {
-                    if item.kind == StorageKind::Md {
+            match super::storage_items::write_item(&tx, &target, &item.content, None) {
+                Ok(_) => {}
+                Err(super::storage_items::WriteItemError::Load(error)) => return Err(error),
+                Err(super::storage_items::WriteItemError::Conflict { .. }) => {
+                    result.skipped.push(label);
+                    continue;
+                }
+                Err(super::storage_items::WriteItemError::Revision(reason)) => {
+                    return Err(if item.kind == StorageKind::Md {
                         kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_MD_NOT_STRING(
                             &item.app_id,
                             &item.key,
@@ -513,10 +520,24 @@ impl AppState {
                             &item.key,
                         )
                         .and_details(vec![reason])
-                    }
-                })?;
-            tx.execute("INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES(?1,?2,?3) ON CONFLICT DO NOTHING",params![bucket,account,item.app_id]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
-            tx.execute("INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at,workspace_id) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![bucket,item.key,serde_json::to_value(item.kind).unwrap().as_str().unwrap(),serde_json::to_string(&item.content).unwrap(),revision,timestamp(),item.workspace_id]).map_err(|error| db_error_with(error, kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED()))?;
+                    })
+                }
+                Err(super::storage_items::WriteItemError::Serialize(message)) => {
+                    return Err(
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_REVISION_FAILED(
+                            &item.app_id,
+                            &item.key,
+                        )
+                        .and_details(vec![message]),
+                    )
+                }
+                Err(super::storage_items::WriteItemError::Database(error)) => {
+                    return Err(db_error_with(
+                        error,
+                        kaleidoscope_contract::errors::SERVER_TRANSFER_IMPORT_DATABASE_FAILED(),
+                    ))
+                }
+            }
             result.imported += 1;
         }
         tx.commit().map_err(|error| {
@@ -570,6 +591,47 @@ impl AppState {
         Ok(result)
     }
 }
+
+/// 이관 값의 선언에서 실제 저장 대상을 정한다. 소유 작업 공간은 선언 키의 `{workspace_id}` 자리에서
+/// 꺼내므로 묶음에 실린 소유 값은 쓰지 않는다.
+fn import_storage_target(
+    account: &str,
+    item: &TransferValue,
+    entry: &kaleidoscope_contract::app_storage::StorageEntryDecl,
+) -> Result<super::storage_target::StorageTarget, CoreError> {
+    let workspace = super::storage_target::declared_workspace(entry, &item.key);
+    let doc = if entry.collection {
+        let prefix = super::app_storage::resolve_key(entry, workspace.as_deref())?;
+        item.key
+            .strip_prefix(&format!("{prefix}/"))
+            .map(str::to_string)
+    } else {
+        None
+    };
+    if entry.collection && doc.is_none() {
+        return Ok(import_raw_target(account, item));
+    }
+    super::storage_target::resolve_storage_target(
+        account,
+        &item.app_id,
+        entry,
+        workspace.as_deref(),
+        doc.as_deref(),
+    )
+}
+
+/// 선언과 맞지 않는 원시 키는 계정 공용으로 저장한다.
+fn import_raw_target(account: &str, item: &TransferValue) -> super::storage_target::StorageTarget {
+    super::storage_target::StorageTarget {
+        account_id: account.to_string(),
+        app_id: item.app_id.clone(),
+        bucket_id: super::app_storage::bucket_id(account, &item.app_id),
+        key: item.key.clone(),
+        scope: super::storage_target::StorageScope::Account,
+        kind: item.kind,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn insert_layout(
     tx: &Transaction<'_>,

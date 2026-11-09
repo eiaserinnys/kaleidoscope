@@ -6,7 +6,7 @@ import { CLIENT_PING_TIMEOUT_SECS, CLIENT_PICK_FILE_MAX_BYTES } from "../contrac
 import type { ShellStore } from "../core/shell-store";
 import { isCoreError, toCoreError } from "../core/core-transport";
 import type { WindowData } from "../data/window-data";
-import { isWindowVisible } from "../data/window-state";
+import { isWindowVisible, patchWindowState } from "../data/window-state";
 import { clientSource, sandboxErrors } from "../blocks/sandbox-frame";
 import { registerSandboxFlush } from "../blocks/sandbox-flush";
 import { BrowserFiles } from "./client-files";
@@ -586,7 +586,7 @@ export class ClientRuntime {
       else void this.hostServices.keepAwake(message.enabled === true).then((result) => this.reply(message.requestId, result)).catch(() => this.reply(message.requestId, false));
     } else if (message.type === "ks-sandbox-state-set" && message.patch && typeof message.patch === "object") {
       const patch = Object.fromEntries(Object.entries(message.patch).filter(([key]) => this.client.state_keys.includes(key))) as Record<string, JsonValue>;
-      if (Object.keys(patch).length) void this.store.call({ op: "window.patch_state", window_id: this.data.windowId, patch }).catch((error) => this.data.setNotice(toCoreError(error)));
+      if (Object.keys(patch).length) void patchWindowState({ store: this.store, window: { id: this.data.windowId } }, patch).catch((error) => this.data.setNotice(toCoreError(error)));
     } else if ((message.type === "ks-sandbox-storage-get" || message.type === "ks-sandbox-storage-set") && this.client.storage_entries.includes(message.entry)) {
       const task = this.writes.catch(() => undefined).then(async () => {
         if (message.type === "ks-sandbox-storage-get" || !(message.entry in this.revisions)) {
@@ -690,7 +690,10 @@ export class ClientRuntime {
 
   private prepareClose = async () => {
     this.beginClosing();
-    const ok = await this.flush();
+    const flushed = await this.flush();
+    let written = true;
+    try { await this.writes; } catch { written = false; }
+    const ok = flushed && written;
     if (!ok && this.closingNotified) {
       this.closingNotified = false;
       this.lastLifecycle = "";

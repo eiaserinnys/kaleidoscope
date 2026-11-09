@@ -80,8 +80,7 @@ impl AppState {
                 .map_err(layout_change_db_error)?,
         };
         let mut changed = LayoutChanges::default();
-        let mut deleted_storage = Vec::new();
-        let mut deleted_values = Vec::new();
+        let mut deleted_items = Vec::new();
         let deleted_workspace_ids: HashSet<_> =
             changes.deleted_workspaces.iter().cloned().collect();
         let deleted_desktop_ids: HashSet<_> = changes.deleted_desktops.iter().cloned().collect();
@@ -319,8 +318,10 @@ impl AppState {
             if !workspace_exists(&tx, id, &account_id)? {
                 continue;
             }
-            deleted_storage.extend(Self::delete_workspace_storage(&tx, &account_id, id)?);
-            deleted_values.extend(Self::delete_workspace_values(&tx, &account_id, id)?);
+            deleted_items.extend(
+                super::storage_items::delete_workspace_items(&tx, &account_id, id)
+                    .map_err(delete_items_error)?,
+            );
             let children = child_ids(&tx, "desktops", "workspace_id", id, &account_id)?;
             for child in &children {
                 delete_shortcut_children(&tx, child, &account_id, &mut shortcut_ids, &mut changed)?;
@@ -416,25 +417,52 @@ impl AppState {
         sort_changes(&mut changed);
         tx.commit().map_err(layout_change_db_error)?;
         drop(db);
-        for (app_id, changed) in deleted_storage {
-            self.send_event_for_account(
-                DeviceEvent::StorageChanged { app_id, changed },
-                &account_id,
-            );
-        }
-        for (app_id, item) in deleted_values {
-            let bucket_id = super::app_storage::bucket_id(&account_id, &app_id);
-            self.send_event_for_account(
-                DeviceEvent::AppValueChanged {
-                    app_id,
-                    bucket_id,
-                    item,
-                },
-                &account_id,
-            );
+        for item in deleted_items {
+            match item.entry_id {
+                Some(entry_id) => self.send_event_for_account(
+                    DeviceEvent::StorageChanged {
+                        app_id: item.app_id,
+                        changed: kaleidoscope_contract::app_storage::StorageChanged {
+                            bucket_id: item.bucket_id,
+                            item: kaleidoscope_contract::app_storage::StorageItemMeta {
+                                entry_id,
+                                key: item.key,
+                                kind: item.kind,
+                                revision: None,
+                                exists: false,
+                            },
+                        },
+                    },
+                    &account_id,
+                ),
+                None => self.send_event_for_account(
+                    DeviceEvent::AppValueChanged {
+                        app_id: item.app_id,
+                        bucket_id: item.bucket_id,
+                        item: kaleidoscope_contract::app_storage::AppValueMeta {
+                            key: item.key,
+                            kind: item.kind,
+                            revision: None,
+                        },
+                    },
+                    &account_id,
+                ),
+            }
         }
         self.refresh_device_workspaces()?;
         Ok((reply, changed))
+    }
+}
+
+fn delete_items_error(error: super::storage_items::DeleteItemsError) -> CoreError {
+    use super::storage_items::DeleteItemsError;
+    match error {
+        DeleteItemsError::Database(error) => {
+            db_error_with(error, errors::STORAGE_WORKSPACE_DELETE_DATABASE_FAILED())
+        }
+        DeleteItemsError::KindUnknown(key, kind) => {
+            errors::STORAGE_VALUES_KIND_UNKNOWN(&key, &kind)
+        }
     }
 }
 

@@ -93,6 +93,7 @@ fn parse_definition(definition_json: &str, cached: bool, supported: &crate::Supp
     }
     if let Some(error) = new_block_error { return Err(error); }
     crate::validate_list::validate_list_extensions(&definition)?;
+    crate::validate_tree::validate_tree_extensions(&definition)?;
     crate::validate_file_input::validate_file_drop(&definition)?;
 
     for permission in &definition.permissions {

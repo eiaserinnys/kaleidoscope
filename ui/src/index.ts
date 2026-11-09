@@ -62,6 +62,7 @@ export { sendToDefaultAgent } from "./shell/send-message";
 export { isWindowTop } from "./data/window-state";
 export { flushEditors, flushWindowEditors } from "./blocks/file-editor-session";
 export { flushSandboxes } from "./blocks/sandbox-flush";
+export { runSavedTransition } from "./lifecycle/window-transition";
 export { toCoreError } from "./core/core-transport";
 export type { CoreTransport, ReplyFor, RequestFor } from "./core/core-transport";
 export type {

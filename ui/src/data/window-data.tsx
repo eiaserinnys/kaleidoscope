@@ -15,6 +15,7 @@ import { hasRepeatLocator, resolveActionScope, type ActionRead } from "./action-
 import { trackWindowAction } from "../share/action-context";
 import { checkAppLink } from "./app-link";
 import { DefaultFolderPreparation } from "./default-folder";
+import { runSavedTransition } from "../lifecycle/window-transition";
 
 const loading: BindingValue = { status: "loading" };
 /** 직접 다시 받기를 눌렀을 때 진행 표시를 최소한 이만큼은 보인다. 빠른 응답의 깜빡임을 막는다. */
@@ -198,11 +199,27 @@ export class WindowData {
   private unsubscribeLink?: () => void;
   private active = false;
   private pending: DataView[] = [];
-  private inputSettlers = new Set<() => Promise<void> | null>();
+  private inputSettlers = new Set<() => Promise<boolean> | null>();
   private inputSequence = 0;
-  holdInput = (settle: () => Promise<void> | null) => {
+  holdInput = (settle: () => Promise<boolean> | null) => {
     this.inputSettlers.add(settle);
     return () => { this.inputSettlers.delete(settle); };
+  };
+  /** 보내지 않은 입력을 먼저 내보내고, 전송이 모두 성공했는지만 돌려준다. */
+  settleInput = async (): Promise<boolean> => {
+    const pending: Promise<boolean>[] = [];
+    let saved = true;
+    for (const settle of this.inputSettlers) {
+      try {
+        const result = settle();
+        if (result) pending.push(result);
+      } catch { saved = false; }
+    }
+    const results = await Promise.all(pending.map((result) => result.then((sent) => sent, () => false)));
+    if (results.some((sent) => !sent)) saved = false;
+    const reached = this.store.reached(this.inputSequence);
+    if (reached) await reached;
+    return saved;
   };
   private initialized = false;
   private attached = false;
@@ -424,16 +441,23 @@ export class WindowData {
   restartClient = async () => {
     if (this.restarting || !this.definition.client) return;
     this.restarting = true;
-    const previous = this.runtime; this.runtime = null;
-    if (previous) await previous.stop();
-    if (!this.active) { this.restarting = false; return; }
-    this.resetClientChats();
-    this.surfaces.clear();
-    this.clientFailed = false; this.setNotice(null);
-    this.publishClient(Object.fromEntries(Object.entries(this.definition.client.outputs).map(([name, output]) => [name, output.default])));
-    const runtime = new ClientRuntime(this.store, this, this.definition, this.definition.client);
-    this.runtime = runtime; this.clientGeneration += 1; this.clientListeners.forEach((listener) => listener());
-    this.startRuntime(runtime); this.restarting = false;
+    try {
+      const saved = await runSavedTransition(this.store, [this.windowId], async () => {
+        const previous = this.runtime; this.runtime = null;
+        if (previous) await previous.stop();
+        if (!this.active) return;
+        this.resetClientChats();
+        this.surfaces.clear();
+        this.clientFailed = false; this.setNotice(null);
+        this.publishClient(Object.fromEntries(Object.entries(this.definition.client!.outputs).map(([name, output]) => [name, output.default])));
+        const runtime = new ClientRuntime(this.store, this, this.definition, this.definition.client!);
+        this.runtime = runtime; this.clientGeneration += 1; this.clientListeners.forEach((listener) => listener());
+        this.startRuntime(runtime);
+      });
+      if (!saved) this.setNotice(shellErrors.SHELL_CLIENT_RESTART_UNSAVED());
+    } finally {
+      this.restarting = false;
+    }
   };
 
   private startRuntime(runtime: ClientRuntime) {
@@ -711,18 +735,7 @@ export class WindowData {
   private runAction = async (pointer: string, event: JsonValue, item?: JsonValue, modifiers?: EventModifiers, scope?: ItemScope, options?: { input?: boolean }) => {
     const label = this.actionLabel(pointer, scope);
     try {
-      if (!options?.input) {
-        const pending: Promise<void>[] = [];
-        for (const settle of this.inputSettlers) {
-          try {
-            const result = settle();
-            if (result) pending.push(result);
-          } catch (error) { pending.push(Promise.reject(error)); }
-        }
-        if (pending.length) await Promise.allSettled(pending);
-        const reached = this.store.reached(this.inputSequence);
-        if (reached) await reached;
-      }
+      if (!options?.input) await this.settleInput();
       // 입력 응답 뒤에도 계산값 이벤트는 늦을 수 있다. 코어가 이미 든 현재 값을 이 동작에서만 한 번 읽는다.
       let read: ActionRead | undefined;
       if (!options?.input && this.needsRead(pointer, scope)) {
@@ -810,10 +823,26 @@ export class WindowData {
 const DataContext = createContext<{ data: WindowData } | null>(null);
 const WindowDataContext = createContext<WindowData | null>(null);
 
+const inputSettlersByWindow = new Map<string, () => Promise<boolean>>();
+
+/** 창이 화면에 붙어 있으면 그 창의 입력을 내보내고 결과를 돌려준다. 붙어 있지 않으면 보낼 것이 없다. */
+export function settleWindowInput(windowId: string): Promise<boolean> {
+  const settle = inputSettlersByWindow.get(windowId);
+  return settle ? settle() : Promise.resolve(true);
+}
+
 export function WindowDataProvider({ store, windowId, definition, children }: { store: ShellStore; windowId: string; definition: AppDefinition; children: ReactNode }) {
   const data = useMemo(() => new WindowData(store, windowId, definition), [store, windowId, definition]);
   const context = useMemo(() => ({ data }), [data]);
-  useEffect(() => data.mount(), [data]);
+  useEffect(() => {
+    const settle = () => data.settleInput();
+    inputSettlersByWindow.set(windowId, settle);
+    const unmount = data.mount();
+    return () => {
+      if (inputSettlersByWindow.get(windowId) === settle) inputSettlersByWindow.delete(windowId);
+      unmount();
+    };
+  }, [data, windowId]);
   return <WindowDataContext.Provider value={data}>
     <DataContext.Provider value={context}><ClientRuntimeSync data={data} />{children}</DataContext.Provider>
   </WindowDataContext.Provider>;

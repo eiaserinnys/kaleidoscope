@@ -1240,6 +1240,10 @@ pub struct TreeItem {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(optional, as = "Option<Vec<TreeItem>>")]
     pub children: Vec<TreeItem>,
+    /// 있으면 그 줄에 확인 상자를 그린다. 참이면 확인된 상태다. 없으면 확인 상자를 그리지 않는다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub checked: Option<bool>,
 }
 
 /// `feed` 항목. 이름(색과 초상)과 본문 줄들. 본문은 줄바꿈을 지키고 글을 고르고 복사할 수 있다.
@@ -2019,11 +2023,15 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
         Block::Tree {
             items: Some(items),
             on_select,
+            on_check,
             ..
         } => {
             bind!("items", items);
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
+            }
+            if let Some(on_check) = on_check {
+                act!("on_check", on_check);
             }
         }
         Block::Tree { items: None, .. } => {}

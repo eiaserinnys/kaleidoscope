@@ -3,26 +3,35 @@ export interface ThrottledSend<T> {
   flush(): void;
 }
 
-export function createSerialSend<T>(send: (value: T) => Promise<unknown> | unknown): ((value: T, options: { coalesce: boolean }) => Promise<void>) & { idle(): Promise<void> | null } {
+export function createSerialSend<T>(send: (value: T) => Promise<unknown> | unknown): ((value: T, options: { coalesce: boolean }) => Promise<void>) & { idle(): Promise<boolean> | null } {
   let active = false;
+  let failed = false;
   const pending: Array<{ value: T; coalesce: boolean; done: Array<() => void> }> = [];
-  const waiters: Array<() => void> = [];
+  const waiters: Array<(sent: boolean) => void> = [];
 
   const drain = () => {
     if (active) return;
-    if (pending.length === 0) { for (const resolve of waiters.splice(0)) resolve(); return; }
+    if (pending.length === 0) {
+      for (const resolve of waiters.splice(0)) resolve(!failed);
+      failed = false;
+      return;
+    }
     const { value, done } = pending.shift()!;
     active = true;
     let result: Promise<unknown> | unknown;
     try {
       result = send(value);
     } catch {
+      failed = true;
       done.forEach((resolve) => resolve());
       active = false;
       drain();
       return;
     }
-    void Promise.resolve(result).catch(() => undefined).then(() => {
+    void Promise.resolve(result).then(
+      (sent) => { if (sent === false) failed = true; },
+      () => { failed = true; },
+    ).then(() => {
       done.forEach((resolve) => resolve());
       active = false;
       drain();
@@ -35,7 +44,7 @@ export function createSerialSend<T>(send: (value: T) => Promise<unknown> | unkno
     else pending.push({ value, coalesce, done: [resolve] });
     drain();
   });
-  enqueue.idle = () => active || pending.length ? new Promise<void>((resolve) => waiters.push(resolve)) : null;
+  enqueue.idle = () => active || pending.length ? new Promise<boolean>((resolve) => waiters.push(resolve)) : null;
   return enqueue;
 }
 

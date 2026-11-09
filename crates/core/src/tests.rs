@@ -3372,6 +3372,39 @@ fn state_changes_emit_one_snapshot_event_and_file_reads_failures_emit_none() {
 }
 
 #[test]
+fn failed_local_state_change_restores_state_and_emits_no_event() {
+    let temp = TempDir::new().unwrap();
+    let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
+    let events = Arc::new(Mutex::new(Vec::<CoreEvent>::new()));
+    let listener_events = events.clone();
+    core.subscribe(Box::new(move |event| {
+        listener_events.lock().unwrap().push(event.clone());
+    }));
+    let (workspace_id, _) = active_ids(&core);
+
+    let error = core
+        .apply_state_change_mode(true, |state| {
+            state.device.active_workspace_id = Some("없는-작업".into());
+            Err::<CoreReply, CoreError>(
+                kaleidoscope_contract::errors::DESK_WORKSPACE_RENAME_NOT_FOUND(),
+            )
+        })
+        .unwrap_err();
+
+    assert_eq!(error.id.as_deref(), Some("DESK_WORKSPACE_RENAME_NOT_FOUND"));
+    let active_workspace_id = core
+        .inner
+        .state
+        .lock()
+        .unwrap()
+        .device
+        .active_workspace_id
+        .clone();
+    assert_eq!(active_workspace_id.as_deref(), Some(workspace_id.as_str()));
+    assert!(events.lock().unwrap().is_empty());
+}
+
+#[test]
 fn unreadable_state_json_is_renamed_and_core_starts_with_empty_state() {
     let temp = TempDir::new().unwrap();
     let data_dir = temp.path().join("data");

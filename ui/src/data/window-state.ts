@@ -61,6 +61,32 @@ type PendingPatch = {
   reject: (reason: unknown) => void;
 };
 const pendingPatches = new WeakMap<ShellStore, Map<string, PendingPatch>>();
+const pendingWrites = new WeakMap<ShellStore, Map<string, Set<Promise<boolean>>>>();
+
+function trackWrite(store: ShellStore, windowId: string, request: Promise<unknown>): void {
+  let windows = pendingWrites.get(store);
+  if (!windows) { windows = new Map(); pendingWrites.set(store, windows); }
+  let writes = windows.get(windowId);
+  if (!writes) { writes = new Set(); windows.set(windowId, writes); }
+  const tracked: Promise<boolean> = request.then(() => true, () => false);
+  writes.add(tracked);
+  void tracked.then((saved) => { if (saved) writes!.delete(tracked); });
+}
+
+/** 창 상태 쓰기 요청이 모두 응답할 때까지 기다리고, 하나라도 실패하면 false를 돌려준다. */
+export async function settleWindowStateWrites(store: ShellStore, windowId: string): Promise<boolean> {
+  await Promise.resolve();
+  const writes = pendingWrites.get(store)?.get(windowId);
+  if (!writes) return true;
+  let saved = true;
+  while (writes.size) {
+    const current = [...writes];
+    const results = await Promise.all(current);
+    current.forEach((write) => writes.delete(write));
+    if (results.some((ok) => !ok)) saved = false;
+  }
+  return saved;
+}
 
 export function patchWindowState(context: WindowStateTarget, patch: Record<string, JsonValue>): Promise<unknown> {
   const windows = pendingPatches.get(context.store) ?? new Map<string, PendingPatch>();
@@ -77,11 +103,13 @@ export function patchWindowState(context: WindowStateTarget, patch: Record<strin
   windows.set(context.window.id, pending);
   queueMicrotask(() => {
     windows.delete(context.window.id);
-    context.store.call({
+    const request = context.store.call({
       op: "window.patch_state",
       window_id: context.window.id,
       patch: pending.patch,
-    }).then(pending.resolve, pending.reject);
+    });
+    trackWrite(context.store, context.window.id, request);
+    request.then(pending.resolve, pending.reject);
   });
   return promise;
 }
