@@ -10,7 +10,13 @@ const lastWindowFocus = new WeakMap<HTMLElement, HTMLElement>();
 // 키보드로 창을 열었거나 탭으로 들어왔을 때만 링을 그리고, 포인터로 열었거나 아직 입력이 없으면 그리지 않는다.
 let keyboardInput = false;
 const modifierKeys = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta", "CapsLock"]);
-document.addEventListener("keydown", (event) => { if (!modifierKeys.has(event.key)) keyboardInput = true; }, true);
+
+/** 키보드로 조작했다는 것을 기록한다. 쉘이 먼저 가로채 문서까지 오지 않는 단축키도 이 함수로 알린다. */
+export function noteKeyboardInput() {
+  keyboardInput = true;
+}
+
+document.addEventListener("keydown", (event) => { if (!modifierKeys.has(event.key)) noteKeyboardInput(); }, true);
 document.addEventListener("pointerdown", () => { keyboardInput = false; }, true);
 
 type FocusOptionsWithVisibility = FocusOptions & { focusVisible?: boolean };
