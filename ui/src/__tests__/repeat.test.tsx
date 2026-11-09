@@ -109,7 +109,7 @@ it("item을 포함한 여러 필드의 리터럴은 그대로 표시한다", asy
   store.dispose();
 });
 
-it("선택적 창 데이터 훅의 동작도 반복 항목을 사용한다", async () => {
+it("선택적 창 데이터 훅의 동작은 블록이 넘긴 항목을 그 항목으로 쓴다", async () => {
   const definition: AppDefinition = { id: "optional-scope", name: "항목 범위", requires: { blocks: 14, modules: {} },
     permissions: [], state: {}, ui: { type: "text", value: "내용" } };
   const seed = makeTestSeed({ definitions: [definition] });
@@ -125,7 +125,7 @@ it("선택적 창 데이터 훅의 동작도 반복 항목을 사용한다", asy
   </WindowDataProvider>);
   await userEvent.click(screen.getByRole("button", { name: "선택" }));
   await waitFor(() => expect(transport.getCalls()).toContainEqual(expect.objectContaining({
-    op: "data.act", pointer: "/ui/on_select", item: { id: "row" },
+    op: "data.act", pointer: "/ui/on_select", item: { id: "child" },
   })));
   store.dispose();
 });

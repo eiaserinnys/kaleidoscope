@@ -357,7 +357,11 @@ export type Block = { "type": "repeat", items: Binding, key: string,
 /**
  * 항목 사이 간격. 생략하면 기존 배치의 간격을 쓴다.
  */
-gap?: Gap, layout?: RepeatLayout, grid?: RepeatGrid, virtual?: boolean, follow_key?: Binding, follow_pause_ms?: number, template: Block, } | { "type": "when", value?: Binding, 
+gap?: Gap, layout?: RepeatLayout, grid?: RepeatGrid, virtual?: boolean, follow_key?: Binding, follow_pause_ms?: number, 
+/**
+ * 템플릿 안 블록이 자기 항목을 넘기는 동작(트리, 목록, 표의 행)에서는 그 항목이 `$item`, repeat 항목이 `$parent_item`이다.
+ */
+template: Block, } | { "type": "when", value?: Binding, 
 /**
  * (19판) 창 본문 너비가 CSS px 기준으로 이 값 이상일 때 자식을 그린다.
  */

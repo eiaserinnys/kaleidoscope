@@ -854,13 +854,27 @@ function ClientRuntimeSync({ data }: { data: WindowData }) {
   return null;
 }
 
+/** 블록이 넘긴 항목을 그 동작의 항목으로 쓰는 범위. 항목을 넘기는 행 동작이 repeat 항목 대신 자기 행을 받는다. */
+function rowActionScope(item: JsonValue, parent: ItemScope): ItemScope {
+  const key = item !== null && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, JsonValue>).key : undefined;
+  return {
+    item,
+    parent_item: parent.item,
+    key: typeof key === "string" || typeof key === "number" ? key : parent.key,
+    index: 0,
+    instance: parent.instance,
+    parentScope: parent,
+  };
+}
+
 export function useOptionalWindowData(): WindowData | null {
   const value = useContext(WindowDataContext);
   const scope = useItemScope();
   return useMemo(() => {
     if (!value || !scope) return value;
     const proxy = Object.create(value) as WindowData;
-    proxy.act = (pointer, event, item, modifiers, localScope, options) => value.act(pointer, event, item, modifiers, localScope ?? scope, options);
+    proxy.act = (pointer, event, item, modifiers, localScope, options) =>
+      value.act(pointer, event, item, modifiers, localScope ?? (item === undefined ? scope : rowActionScope(item, scope)), options);
     return proxy;
   }, [value, scope]);
 }
