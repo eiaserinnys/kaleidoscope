@@ -802,6 +802,8 @@ impl Core {
             | CoreRequest::ConversationCreate { .. }
             | CoreRequest::ConversationSwitch { .. }
             | CoreRequest::ConversationSend { .. }
+            | CoreRequest::ConversationAttach { .. }
+            | CoreRequest::ConversationDetach { .. }
             | CoreRequest::ConversationAttachment { .. }
             | CoreRequest::ConversationAttachmentOpen { .. }) => {
                 conversation::handle(&self.inner, request)
@@ -1044,7 +1046,29 @@ impl Core {
                 window_id,
                 permission,
             } => connections::login(&self.inner, &window_id, &permission),
-            request => self.handle_state_change(request),
+            // 작업 상태 명령도 이름으로 받는다. 여기에 나머지 갈래를 두지 않아서
+            // 새 요청을 어느 처리기에도 보내지 않으면 컴파일이 멈춘다.
+            request @ (CoreRequest::WorkspaceCreate { .. }
+            | CoreRequest::WorkspaceRename { .. }
+            | CoreRequest::WorkspaceDelete { .. }
+            | CoreRequest::WorkspaceActivate { .. }
+            | CoreRequest::DesktopCreate { .. }
+            | CoreRequest::DesktopRename { .. }
+            | CoreRequest::DesktopDelete { .. }
+            | CoreRequest::DesktopActivate { .. }
+            | CoreRequest::DesktopWallpaperReset { .. }
+            | CoreRequest::DesktopShortcutAdd { .. }
+            | CoreRequest::DesktopShortcutMove { .. }
+            | CoreRequest::DesktopShortcutRemove { .. }
+            | CoreRequest::WindowOpen { .. }
+            | CoreRequest::WindowClose { .. }
+            | CoreRequest::WindowSetState { .. }
+            | CoreRequest::WindowPatchState { .. }
+            | CoreRequest::WindowSetRect { .. }
+            | CoreRequest::WindowRaise { .. }
+            | CoreRequest::WindowMinimize { .. }
+            | CoreRequest::WindowMaximize { .. }
+            | CoreRequest::WindowRestore { .. }) => self.handle_state_change(request),
         }
     }
 

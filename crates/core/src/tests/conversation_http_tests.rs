@@ -564,21 +564,23 @@ fn detach_and_attach_move_the_window_to_the_new_thread_stream() {
         "thread-a",
         "0",
     );
-    crate::conversation::handle(
-        &core.inner,
-        CoreRequest::ConversationDetach {
+    // 쉘이 보내는 길 그대로 Core::handle의 분배를 거친다.
+    let detached = core
+        .handle(CoreRequest::ConversationDetach {
             window_id: window.clone(),
-        },
-    )
-    .unwrap();
-    crate::conversation::handle(
-        &core.inner,
-        CoreRequest::ConversationAttach {
+        })
+        .unwrap();
+    assert!(matches!(detached, CoreReply::ConversationDetach {}), "{detached:?}");
+    let attached = core
+        .handle(CoreRequest::ConversationAttach {
             window_id: window.clone(),
             thread_id: "thread-9".into(),
-        },
-    )
-    .unwrap();
+        })
+        .unwrap();
+    assert!(
+        matches!(&attached, CoreReply::ConversationAttach { thread } if thread.id == "thread-9"),
+        "{attached:?}"
+    );
     let streams = crate::conversation_stream::windows_by_key(&core.inner);
     let watching: Vec<_> = streams
         .iter()

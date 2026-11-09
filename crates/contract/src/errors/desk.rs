@@ -219,8 +219,8 @@ error_catalog! { ENTRIES;
         class: InvalidRequest,
         place: "작업 상태 명령 전달",
         cause: "작업 상태 처리기가 명령을 받지 않았다",
-        message: "작업 상태 명령이 쉘 안에서 처리기에 전달되지 않았습니다. 쉘을 업데이트한 뒤 다시 시도하세요.",
-        fix: "쉘을 업데이트하세요"
+        message: "쉘이 이 명령을 처리할 곳을 찾지 못했습니다. 쉘의 결함이니 이 오류 코드를 알려 주세요.",
+        fix: "이 오류 코드를 쉘 결함으로 알려 주세요"
     }
     DESK_LOCAL_LINK_READ_FAILED(path) {
         class: Io,

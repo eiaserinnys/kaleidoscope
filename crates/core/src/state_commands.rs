@@ -742,57 +742,7 @@ pub(crate) fn handle(state: &mut CoreState, request: CoreRequest) -> Result<Core
         | CoreRequest::LinkUnlink {}
         | CoreRequest::LinkUseLocal {}
         | CoreRequest::LinkSyncLocalToRemote {} => Err(errors::DESK_LINK_COMMAND_UNHANDLED()),
-        CoreRequest::StateGet {}
-        | CoreRequest::ConversationApplyStatus { .. }
-        | CoreRequest::ConversationApplyRetry { .. }
-        | CoreRequest::ConversationGet { .. }
-        | CoreRequest::ConversationHistory { .. }
-        | CoreRequest::ConversationCreate { .. }
-        | CoreRequest::ConversationSwitch { .. }
-        | CoreRequest::ConversationSend { .. }
-        | CoreRequest::ConversationAttachment { .. }
-        | CoreRequest::ConversationAttachmentOpen { .. }
-        | CoreRequest::StorageGet { .. }
-        | CoreRequest::StorageList { .. }
-        | CoreRequest::StorageWrite { .. }
-        | CoreRequest::StorageReset { .. }
-        | CoreRequest::StorageMove { .. }
-        | CoreRequest::FilesPickFolder { .. }
-        | CoreRequest::FilesPrepareDefaultFolder { .. }
-        | CoreRequest::FilesAllowDefaultFolder { .. }
-        | CoreRequest::ClientFileOpen { .. }
-        | CoreRequest::FilesAllowPc { .. }
-        | CoreRequest::FilesOpen { .. }
-        | CoreRequest::FilesList { .. }
-        | CoreRequest::FilesRead { .. }
-        | CoreRequest::FilesWrite { .. }
-        | CoreRequest::FilesMkdir { .. }
-        | CoreRequest::FilesRename { .. }
-        | CoreRequest::FilesMove { .. }
-        | CoreRequest::FilesCopy { .. }
-        | CoreRequest::FilesRemove { .. }
-        | CoreRequest::FilesReveal { .. }
-        | CoreRequest::FilesPath { .. }
-        | CoreRequest::WebAttach { .. }
-        | CoreRequest::WebPlace { .. }
-        | CoreRequest::WebNavigate { .. }
-        | CoreRequest::WebHistory { .. }
-        | CoreRequest::WebCapture { .. }
-        | CoreRequest::WebDetach { .. }
-        | CoreRequest::DataAttach { .. }
-        | CoreRequest::DataDormant { .. }
-        | CoreRequest::DataDetach { .. }
-        | CoreRequest::DataRead { .. }
-        | CoreRequest::DataAct { .. }
-        | CoreRequest::DataRefresh { .. }
-        | CoreRequest::DataMedia { .. }
-        | CoreRequest::ConnectionLogin { .. }
-        | CoreRequest::ShareSet { .. }
-        | CoreRequest::ShareView { .. }
-        | CoreRequest::ShareFreeze {}
-        | CoreRequest::ShareCapture { .. }
-        | CoreRequest::ShareUnfreeze {}
-        | CoreRequest::UpdateRestart {} => Err(errors::DESK_STATE_COMMAND_UNHANDLED()),
+        // 다른 요청은 Core::handle_inner가 이름으로 다른 처리기에 보낸다.
         _ => Err(errors::DESK_STATE_COMMAND_UNHANDLED()),
     }
 }
