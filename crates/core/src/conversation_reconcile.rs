@@ -239,8 +239,12 @@ pub(crate) fn reconcile_app(
         let client = &contexts[0].client;
         let mut expected = std::collections::BTreeSet::new();
         for ctx in &contexts {
-            let binding = ctx.read(inner, &ctx.provider.thread_entry)?.content;
-            if !binding.is_null() && !crate::conversation_context::entry_attached(&binding) {
+            let stored = ctx.read(inner, &ctx.provider.thread_entry)?;
+            let binding = &stored.content;
+            if stored.exists
+                && !binding.is_null()
+                && !crate::conversation_context::entry_attached(binding)
+            {
                 let id = binding
                     .get("thread_id")
                     .and_then(Value::as_str)
@@ -358,8 +362,9 @@ fn apply_thread(
     info: &ThreadInfoReply,
     applied: &mut Applied,
 ) -> Result<(), CoreError> {
-    let binding = ctx.read(inner, &ctx.provider.thread_entry)?.content;
-    if binding.is_null() || crate::conversation_context::entry_attached(&binding) {
+    let stored = ctx.read(inner, &ctx.provider.thread_entry)?;
+    let binding = &stored.content;
+    if !stored.exists || binding.is_null() || crate::conversation_context::entry_attached(binding) {
         return Ok(());
     }
     if binding.get("thread_id").and_then(Value::as_str) != Some(&info.thread.id)

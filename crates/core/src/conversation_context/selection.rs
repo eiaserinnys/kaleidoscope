@@ -55,7 +55,9 @@ impl Context {
                 if e.code == ErrorCode::Conflict =>
             {
                 let existing = self.read(inner, &self.provider.thread_entry)?;
-                if existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id) {
+                if existing.exists
+                    && existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id)
+                {
                     Ok(thread)
                 } else {
                     Err(

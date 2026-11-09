@@ -17,7 +17,7 @@ impl Context {
     /// 저장된 대화 연결이 다른 제공자 대화를 가리키는지.
     pub fn attached(&self, inner: &Arc<Inner>) -> Result<bool, CoreError> {
         let stored = self.read(inner, &self.provider.thread_entry)?;
-        Ok(entry_attached(&stored.content))
+        Ok(stored.exists && entry_attached(&stored.content))
     }
 
     /// 이 작업 키에 이미 있는 대화. 연결하지 않고 읽기만 한다.
@@ -56,7 +56,7 @@ impl Context {
         thread_id: &str,
     ) -> Result<ConversationThread, CoreError> {
         let stored = self.read(inner, &self.provider.thread_entry)?;
-        if !stored.content.is_null() {
+        if stored.exists && !stored.content.is_null() {
             return Err(
                 kaleidoscope_contract::errors::CONV_ATTACH_ALREADY_BOUND(&self.workspace.name),
             );
@@ -146,7 +146,9 @@ impl Context {
                 if e.code == ErrorCode::Conflict =>
             {
                 let existing = self.read(inner, &self.provider.thread_entry)?;
-                if existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id) {
+                if existing.exists
+                    && existing.content.get("thread_id").and_then(Value::as_str) == Some(&thread.id)
+                {
                     Ok(())
                 } else {
                     Err(

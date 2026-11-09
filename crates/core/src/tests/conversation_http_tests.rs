@@ -340,6 +340,8 @@ fn attach_reads_existing_thread_or_adopts_it() {
     ]);
     let temp = TempDir::new().unwrap();
     let (core, registry, ctx) = open_pas(&base, &temp, None);
+    assert!(!ctx.attached(&core.inner).unwrap());
+    assert!(ctx.thread(&core.inner, "bucket").unwrap().is_none());
     let thread = ctx.attach(&core.inner, "bucket", "thread-9").unwrap();
     assert_eq!(thread.id, "thread-9");
     let stored = registry

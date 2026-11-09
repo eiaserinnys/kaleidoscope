@@ -298,7 +298,7 @@ impl Context {
         namespace: &str,
     ) -> Result<Option<ConversationThread>, CoreError> {
         let stored = self.read(inner, &self.provider.thread_entry)?;
-        if stored.content.is_null() {
+        if !stored.exists || stored.content.is_null() {
             return Ok(None);
         }
         let value = &stored.content;

@@ -2371,7 +2371,7 @@ impl RegistryClient for FakeRegistryClient {
             content: value
                 .as_ref()
                 .map(|v| v.0.clone())
-                .unwrap_or(Value::Null),
+                .unwrap_or_else(|| json!("one.json")),
             revision: value.as_ref().map(|v| v.1.clone()),
             exists: value.is_some(),
         })
