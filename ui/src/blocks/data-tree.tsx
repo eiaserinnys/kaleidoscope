@@ -157,8 +157,8 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   };
   const activate = (row: TreeRowModel) => {
     const item = row.node.data as TreeItem | undefined;
-    // path 모드의 가상 폴더는 고를 항목이 없으므로 확인 모드에서도 계속 접고 펼친다.
-    if (row.hasChildren && (!block.on_check || !item)) toggle(row.id, !row.expanded);
+    // 확인 상자가 없는 행은 확인 모드에서도 확인 모드가 아닐 때처럼 접고 펼친다. 확인 상자가 있는 행은 고르기만 한다.
+    if (row.hasChildren && (!block.on_check || row.node.checked === undefined)) toggle(row.id, !row.expanded);
     if (item && block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
   };
   const check = useCallback((row: TreeRowModel) => {

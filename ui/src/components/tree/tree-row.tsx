@@ -41,6 +41,9 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
     ><ChevronRight className={`ks-chevron${row.expanded ? " is-expanded" : ""}`} size="inline" /></span>
     : undefined;
   const iconClass = `ks-file-tree-icon${row.hasChildren ? " is-directory" : ""}`;
+  // 확인 상자가 없는 부모 행은 확인 모드가 아닐 때처럼 화살표 한 열만 두고 제목을 바로 잇는다. 확인 상자가 있는 행과
+  // 확인 상자가 없는 잎 행은 화살표 열 다음에 표식 열을 둔다.
+  const twoColumns = checkEnabled && !(check === undefined && row.hasChildren);
   return <div
     className="ks-tree-virtual-row"
     data-index={index}
@@ -88,7 +91,7 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
       tabIndex={focused ? 0 : -1}
       type="button"
     >
-      {checkEnabled ? <>
+      {twoColumns ? <>
         <span aria-hidden="true" className={iconClass}>{chevron}</span>
         <span aria-hidden="true" className={iconClass}>{marker}</span>
       </> : <span aria-hidden="true" className={iconClass}>{chevron ?? marker}</span>}
