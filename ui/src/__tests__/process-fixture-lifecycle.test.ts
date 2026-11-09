@@ -1,6 +1,9 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import fixture from "../../e2e/fixtures/process/client.js?raw";
 import { clientSource } from "../blocks/sandbox-frame";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
+
+afterEach(cleanupFrameScripts);
 
 it("준비 콜백의 계속되는 출력 읽기가 창 닫기를 막지 않는다", async () => {
   vi.useFakeTimers();
@@ -9,8 +12,8 @@ it("준비 콜백의 계속되는 출력 읽기가 창 닫기를 막지 않는�
   const scripts = [...doc.querySelectorAll<HTMLScriptElement>("script")];
   const decode = (script: HTMLScriptElement) => new TextDecoder().decode(Uint8Array.from(atob(script.src.split(",")[1]), (char) => char.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(decode(scripts[0]))();
-  new Function(decode(scripts[1]))();
+  runFrameScript(decode(scripts[0]));
+  runFrameScript(decode(scripts[1]));
   const host = (data: object) => window.dispatchEvent(new MessageEvent("message", { source: window, data }));
   host({ type: "ks-client-lifecycle", lifecycle: { phase: "ready", visible: true, focused: true, viewport: {} } });
   await vi.waitFor(() => expect(post.mock.calls.some(([value]) => value.type === "ks-client-process" && value.method === "attach")).toBe(true));

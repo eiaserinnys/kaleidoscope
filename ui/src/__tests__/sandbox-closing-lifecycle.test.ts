@@ -1,5 +1,8 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { sandboxSource } from "../blocks/sandbox-frame";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
+
+afterEach(cleanupFrameScripts);
 
 it("오래 걸리는 change는 기다리지 않고 closing에서 시작한 저장은 기다린다", async () => {
   vi.useFakeTimers();
@@ -8,7 +11,7 @@ it("오래 걸리는 change는 기다리지 않고 closing에서 시작한 저�
   const script = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(script.src.split(",")[1]), (char) => char.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const api = (window as unknown as { kaleidoscope: {
     onLifecycle: (listener: (event: { phase: string }) => Promise<void> | undefined) => void;
     setStorage: (entry: string, content: string) => Promise<unknown>;

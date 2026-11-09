@@ -1,5 +1,8 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { sandboxSource } from "../blocks/sandbox-frame";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
+
+afterEach(cleanupFrameScripts);
 
 it("저장본을 수락했을 때만 revision을 갱신하고 닫기 전에 저장을 기다린다", async () => {
   vi.useFakeTimers();
@@ -8,7 +11,7 @@ it("저장본을 수락했을 때만 revision을 갱신하고 닫기 전에 저�
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const api = (window as unknown as { kaleidoscope: { onStorageChange: (entry: string, listener: () => boolean, onError?: (error: Error & { id: string; code: string }) => void) => () => void; setStorage: (entry: string, content: string) => Promise<unknown> } }).kaleidoscope;
   const host = (data: object) => window.dispatchEvent(new MessageEvent("message", { source: window, data }));
   const reject = api.onStorageChange("draft", () => false);

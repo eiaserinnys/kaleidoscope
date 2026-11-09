@@ -1,6 +1,9 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { sandboxSource } from "../blocks/sandbox-frame";
+import { cleanupFrameScripts, runFrameScript } from "./frame-script";
 import tauriConfig from "../../../app/src-tauri/tauri.conf.json";
+
+afterEach(cleanupFrameScripts);
 
 it("프레임 편집 명령은 부모와 해당 토큰만 받는다", () => {
   vi.useFakeTimers();
@@ -11,7 +14,7 @@ it("프레임 편집 명령은 부모와 해당 토큰만 받는다", () => {
   const input = document.createElement("input"); input.value = "abc"; document.body.append(input); input.focus();
   vi.spyOn(document, "hasFocus").mockReturnValue(true);
   const exec = vi.fn(); Object.defineProperty(document, "execCommand", { configurable: true, value: exec });
-  new Function(code)();
+  runFrameScript(code);
   input.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-sandbox-context-command", token: "wrong", requestId: 1, action: "insertText", text: "추가" } }));
   expect(exec).not.toHaveBeenCalled();
@@ -27,7 +30,7 @@ it("선언된 지침과 같이 보기 요청은 프레임을 통해 전달된다
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const sdk = (window as any).kaleidoscope;
   void sdk.host.instructions("app_authoring");
   void sdk.context.prepare({ request_id: "말-1", channel: "chat", attachments: { count: 2, bytes: 123 } });
@@ -45,7 +48,7 @@ it("공통 프레임 브리지는 로컬 출력과 동작 및 표면 API를 제�
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const sdk = (window as unknown as { kaleidoscope: { publish: (value: object) => void; handle: (name: string, callback: () => void) => void; surfaces: { on: Function } } }).kaleidoscope;
   expect(typeof sdk.handle).toBe("function");
   expect(typeof sdk.surfaces.on).toBe("function");
@@ -61,7 +64,7 @@ it("HTTP와 기기 보관 요청은 바이트를 전송 목록에 담는다", ()
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const sdk = (window as any).kaleidoscope;
   const bytes = new Uint8Array([1, 2, 3]).buffer;
   void sdk.http.read({ permission: "images", path: "/a", query: { q: "한글" } });
@@ -81,7 +84,7 @@ it("HTTP 요청은 문자열 본문을 UTF-8 바이트로 전송하고 응답을
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const pending = (window as any).kaleidoscope.http.request({ permission: "net", method: "PUT", path: "/item", headers: { "if-match": "abc" }, body: "한글" });
   const request = post.mock.calls.map(([value]) => value).find((value) => value.type === "ks-client-http-request");
   expect(new TextDecoder().decode(request.body)).toBe("한글");
@@ -99,7 +102,7 @@ it("host 기능과 저장 대화상자는 capability와 선언 액션 안에서 
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const sdk = (window as any).kaleidoscope;
   const pending: Promise<unknown>[] = [];
   sdk.handle("save-and-share", () => {
@@ -140,7 +143,7 @@ it("폴더 선택은 client 동작 안에서만 요청하고 선언 권한 grant
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const sdk = (window as any).kaleidoscope;
   const changes: Array<string | null> = [];
   sdk.files.on_grant("docs", (name: string | null) => changes.push(name));
@@ -172,7 +175,7 @@ it("권한 파일 열기는 사용자 동작 바깥에서도 프레임 요청을
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   void (window as any).kaleidoscope.files.open({ permission: "docs", path: "그림.png" });
   expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "ks-client-file-open", permission: "docs", path: "그림.png" }), "*");
   vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks();
@@ -185,7 +188,7 @@ it("선언되지 않은 client 동작 메시지는 handler와 host API를 열지
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const sdk = (window as any).kaleidoscope;
   const handler = vi.fn(() => sdk.host.keep_awake(true));
   sdk.handle("undeclared", handler);
@@ -210,7 +213,7 @@ it("표면 가시 변화를 알리고 이전 세대의 detach는 새 표면을 �
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const sdk = (window as unknown as { kaleidoscope: { surfaces: { on: (id: string, listener: (surface: any) => void) => void } } }).kaleidoscope;
   const seen: any[] = [];
   sdk.surfaces.on("tile", (surface) => seen.push(surface));
@@ -249,7 +252,7 @@ it("스크립트와 인라인 이벤트를 격리 프레임의 실행 가능한 
   document.body.append(button);
   const handlers = scripts[scripts.length - 1];
   const handlerCode = new TextDecoder().decode(Uint8Array.from(atob(handlers.src.split(",")[1]), (c) => c.charCodeAt(0)));
-  new Function(handlerCode)();
+  runFrameScript(handlerCode);
   button.click();
   expect(button.dataset.done).toBe("click");
   button.remove();
@@ -265,7 +268,7 @@ it("자동 공유는 암호와 숨겨진 입력값을 보내지 않는다", asyn
   const rect = { left: 0, top: 0, right: 100, bottom: 100, x: 0, y: 0, width: 100, height: 100, toJSON() {} };
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
   const post = vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
   const share = post.mock.calls.map(([value]) => value).find((value) => value.type === "ks-sandbox-share");
   expect(share.text).toContain("공개");
@@ -280,7 +283,7 @@ it("body의 onload는 창 로드 때 body를 this로 받아 실행된다", () =>
   document.body.setAttribute("data-ks-on-id", doc.body.getAttribute("data-ks-on-id")!);
   const handler = [...doc.querySelectorAll<HTMLScriptElement>("script")].at(-1)!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(handler.src.split(",")[1]), (c) => c.charCodeAt(0)));
-  new Function(code)();
+  runFrameScript(code);
   window.dispatchEvent(new Event("load"));
   expect(document.body.dataset.loaded).toBe("load");
   document.body.removeAttribute("data-ks-on-id");
@@ -294,7 +297,7 @@ it("로컬 download 링크는 허용하고 일반 링크 이동은 막는다", (
   const bridge = doc.querySelector<HTMLScriptElement>("script[data-ks-injected]")!;
   const code = new TextDecoder().decode(Uint8Array.from(atob(bridge.src.split(",")[1]), (c) => c.charCodeAt(0)));
   vi.spyOn(window, "postMessage").mockImplementation(() => {});
-  new Function(code)();
+  runFrameScript(code);
   const prevented = (href: string, download: boolean) => {
     const anchor = document.createElement("a");
     anchor.setAttribute("href", href);
