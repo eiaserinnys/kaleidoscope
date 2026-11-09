@@ -126,6 +126,9 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
     onPointerDownCapture={(event) => {
       if (pointerGuard?.(event)) return;
       if (isTop) return;
+      // 최소화와 닫기는 누르는 순간 창을 올리지 않는다. 올리기 요청이 뒤늦게 도착하면
+      // 펼쳐지거나 닫으려던 창이 다시 나타난다.
+      if (event.target instanceof Element && event.target.closest('[data-window-control="minimize"], [data-window-control="close"]')) return;
       // 사용자가 다른 창을 고르면 가려지는 창의 입력칸이 초점을 쥐고 있지 않게 한다.
       // 초점이 없으면 맨 위가 되는 순간 window-focus가 이 창의 마지막 초점이나 첫 내용으로 옮긴다.
       const active = document.activeElement;
@@ -150,9 +153,9 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
         <div className="ks-window-title-group"><span className="ks-window-title" title={title}>{title}</span>
           {meta ? <span className="ks-window-title-meta" title={meta}>{meta}</span> : null}</div>
         <div className="ks-window-title-actions">{titleActions}
-          <IconButton aria-label="창 최소화" title="창 최소화" onClick={onMinimize}><Minus size="chrome" /></IconButton>
+          <IconButton aria-label="창 최소화" data-window-control="minimize" title="창 최소화" onClick={onMinimize}><Minus size="chrome" /></IconButton>
           <IconButton aria-label={maximized ? "이전 크기로 복원" : "창 최대화"} title={maximized ? "이전 크기로 복원" : "창 최대화"} onClick={maximized ? onRestore : onMaximize}>{maximized ? <Minimize2 size="chrome" /> : <Maximize2 size="chrome" />}</IconButton>
-          <IconButton aria-label="창 닫기" title="창 닫기" onClick={onClose}><X size="chrome" /></IconButton>
+          <IconButton aria-label="창 닫기" data-window-control="close" title="창 닫기" onClick={onClose}><X size="chrome" /></IconButton>
         </div>
       </header>
       <div className="ks-window-content" ref={contentRef} tabIndex={-1}>{children}</div>
