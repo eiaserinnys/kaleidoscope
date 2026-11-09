@@ -328,7 +328,10 @@ pub const CONTRACT_VERSION: u32 = 46;
 /// - 53판: 확장 아이콘 13개.
 /// - 54판: 앱 정의의 싱글 윈도우(single_window).
 /// - 55판: 트리 항목 확인 상자와 기본 펼침.
-pub const BLOCK_SET_VERSION: u32 = TREE_CHECK_BLOCK_SET_VERSION;
+/// - 56판: repeat 안 블록의 행 동작이 그 행 항목을 넘긴다.
+pub const BLOCK_SET_VERSION: u32 = REPEAT_ROW_ITEM_BLOCK_SET_VERSION;
+/// repeat 안 블록의 행 동작이 그 행 항목을 넘기는 것을 처음 지원하는 블록 세트 판.
+pub const REPEAT_ROW_ITEM_BLOCK_SET_VERSION: u32 = 56;
 /// 트리 항목 확인 상자(`on_check`, `checked`)와 기본 펼침(`default_expanded`)을 처음 지원하는 블록 세트 판.
 pub const TREE_CHECK_BLOCK_SET_VERSION: u32 = 55;
 /// 앱 정의의 single_window를 처음 지원하는 블록 세트 판.
@@ -1616,6 +1619,7 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         follow_pause_ms: Option<u32>,
+        /// 템플릿 안 블록이 자기 행을 넘기는 동작(트리, 목록, 표의 행)에서는 `$item`이 그 행이다. repeat 항목은 클라이언트 동작 context의 `parent_item`으로 받는다(56판).
         template: Box<Block>,
     },
     When {
