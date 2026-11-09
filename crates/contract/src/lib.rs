@@ -329,7 +329,10 @@ pub const CONTRACT_VERSION: u32 = 46;
 /// - 54판: 앱 정의의 싱글 윈도우(single_window).
 /// - 55판: 트리 항목 확인 상자와 기본 펼침.
 /// - 56판: repeat 안 블록의 행 동작이 그 행 항목을 넘긴다.
-pub const BLOCK_SET_VERSION: u32 = REPEAT_ROW_ITEM_BLOCK_SET_VERSION;
+/// - 57판: 문서 모음의 없는 문서를 markdown 블록이 빈 문서로 열고 처음 고칠 때 만든다.
+pub const BLOCK_SET_VERSION: u32 = MISSING_DOCUMENT_EMPTY_BLOCK_SET_VERSION;
+/// 문서 모음의 없는 문서를 markdown 블록이 빈 문서로 열고 처음 고칠 때 만드는 것을 처음 지원하는 블록 세트 판.
+pub const MISSING_DOCUMENT_EMPTY_BLOCK_SET_VERSION: u32 = 57;
 /// repeat 안 블록의 행 동작이 그 행 항목을 넘기는 것을 처음 지원하는 블록 세트 판.
 pub const REPEAT_ROW_ITEM_BLOCK_SET_VERSION: u32 = 56;
 /// 트리 항목 확인 상자(`on_check`, `checked`)와 기본 펼침(`default_expanded`)을 처음 지원하는 블록 세트 판.
@@ -1339,6 +1342,7 @@ fn agent_optional_binding_schema(generator: &mut schemars::SchemaGenerator) -> s
 }
 
 /// 저장소 문서를 참조한다. `entry`는 앱의 저장 항목 id이고, 문서 모음에서는 `doc`에 문서 이름을 준다.
+/// 문서 모음의 문서가 아직 없으면 빈 문서로 열리고, 처음 고칠 때 만들어진다(57판).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
