@@ -603,8 +603,12 @@
 
 .ks-agent-chat-toolbar {
   flex: 0 0 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-start;
+}
+
+.ks-agent-chat-toolbar.ks-agent-chat-toolbar-start {
+  border-block-end: none;
 }
 
 .ks-agent-chat-toolbar > .ks-button {
@@ -612,7 +616,14 @@
   max-width: 100%;
 }
 
+.ks-agent-chat-toolbar > .ks-button.ks-agent-chat-change {
+  flex: 0 0 auto;
+  min-width: auto;
+  margin-inline-start: auto;
+}
+
 .ks-agent-chat-change-hint {
+  min-width: 0;
   color: var(--ks-color-muted);
   font-size: var(--ks-type-meta);
   line-height: var(--ks-line-meta);
@@ -627,12 +638,36 @@
   padding: var(--ks-space-2) var(--ks-space-3);
 }
 
+.ks-agent-chat-start-action + .ks-agent-chat-start-action {
+  margin-block-start: var(--ks-space-2);
+}
+
 .ks-agent-chat-attach-row {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--ks-space-2);
+}
+
+.ks-agent-chat-attach-pair {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--ks-space-2);
+}
+
+.ks-agent-chat-attach-pair > .ks-select-button {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.ks-agent-chat-attach-pair > .ks-button:not(.ks-select-button) {
+  flex: 0 0 auto;
+  min-width: auto;
 }
 
 .ks-agent-chat {

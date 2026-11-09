@@ -289,6 +289,7 @@ const fakeTransport = createFakeTransport({
       { id: "session-4", title: "주간 회고 — 10월 넷째 주 정리", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-05T09:00:00Z" },
       { id: "session-5", title: "", updated_at: "2026-11-04T09:00:00Z" },
       { id: "session-6", title: "발행 파이프라인 점검과 남은 작업 목록", profile: { id: "profile-b", label: "키키" }, updated_at: "2026-11-03T09:00:00Z" },
+      { id: "session-7", title: "kaleidoscope · 작업 PAS 연결 설계와 쉘 출시 준비, 10월 마지막 주 정리", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-02T09:00:00Z" },
     ] : undefined,
   } : undefined,
   files: {

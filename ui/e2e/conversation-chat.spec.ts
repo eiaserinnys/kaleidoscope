@@ -53,6 +53,9 @@ test("기존 대화 연결 — 시작 판과 대화 머리 네 상태", async ({
   await expect(chat.getByRole("button", { name: "시작" })).toBeVisible();
   await expect(chat.getByRole("button", { name: "기존 대화" })).toContainText("기존 대화 선택");
   await capture(page, "attach-start");
+  chat = await open(page, "start");
+  await expect(chat.getByRole("button", { name: "시작" })).toBeVisible();
+  await expect(chat.getByRole("button", { name: "기존 대화" })).toHaveCount(0);
   chat = await open(page, "attach-own");
   await expect(chat.getByRole("button", { name: "기존 대화" })).toContainText("서소영 PAS — 카드 운영 기록 (이 작업)");
   await expect(chat.getByRole("button", { name: "시작" })).toHaveCount(0);
@@ -67,6 +70,106 @@ test("기존 대화 연결 — 시작 판과 대화 머리 네 상태", async ({
   await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeVisible();
   await expect(chat.getByRole("button", { name: "프로필" })).toHaveCount(0);
   await capture(page, "attach-attached-header");
+});
+
+test("시작 판은 고른 줄과 시작 줄을 묶고 연결 줄을 띄운다", async ({ page }) => {
+  const chat = await open(page, "attach-start");
+  const row = chat.locator(".ks-agent-chat-toolbar-start");
+  await expect(row).toBeVisible();
+  expect(await row.evaluate((element) => getComputedStyle(element).borderBottomWidth)).toBe("0px");
+  const [pickerBox, startBox, attachBox] = await Promise.all([
+    chat.getByRole("button", { name: "프로필" }).boundingBox(),
+    chat.getByRole("button", { name: "시작" }).boundingBox(),
+    chat.getByRole("button", { name: "기존 대화" }).boundingBox(),
+  ]);
+  const pickerToStart = startBox!.y - (pickerBox!.y + pickerBox!.height);
+  const startToAttach = attachBox!.y - (startBox!.y + startBox!.height);
+  expect(pickerToStart).toBeLessThan(startToAttach);
+  expect(startToAttach).toBeGreaterThanOrEqual(24);
+  await page.screenshot({ path: `${path}/attach-start-gaps.png` });
+});
+
+test("좁은 창에서도 고른 대화와 연결 단추는 한 줄이다", async ({ page }) => {
+  const chat = await open(page, "attach-start");
+  await page.setViewportSize({ width: 400, height: 600 });
+  await chat.getByRole("button", { name: "기존 대화" }).click();
+  await page.getByRole("menuitem", { name: /kaleidoscope · 작업 PAS 연결 설계/ }).click();
+  const picker = chat.getByRole("button", { name: "기존 대화" });
+  const link = chat.getByRole("button", { name: "연결", exact: true });
+  for (const width of [360, 400]) {
+    await page.setViewportSize({ width, height: 600 });
+    const [chatBox, pickerBox, linkBox] = await Promise.all([chat.boundingBox(), picker.boundingBox(), link.boundingBox()]);
+    expect(Math.abs(pickerBox!.y - linkBox!.y)).toBeLessThanOrEqual(1);
+    expect(pickerBox!.x + pickerBox!.width).toBeLessThanOrEqual(linkBox!.x + 1);
+    expect(linkBox!.x + linkBox!.width).toBeLessThanOrEqual(chatBox!.x + chatBox!.width);
+    expect(await picker.locator(".ks-select-choice-label").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await page.screenshot({ path: `${path}/attach-long-narrow-${width}.png` });
+  }
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await page.screenshot({ path: `${path}/attach-long-wide.png` });
+});
+
+test("좁은 창에서도 대화 머리는 49px 한 줄이다", async ({ page }) => {
+  let chat = await open(page, "attach-attached");
+  for (const width of [360, 400, 1100]) {
+    await page.setViewportSize({ width, height: 600 });
+    const [toolbarBox, buttonBox] = await Promise.all([
+      chat.locator(".ks-agent-chat-toolbar").boundingBox(),
+      chat.getByRole("button", { name: "대화 바꾸기" }).boundingBox(),
+    ]);
+    expect(Math.abs(toolbarBox!.height - 49)).toBeLessThanOrEqual(1);
+    expect(Math.abs(buttonBox!.x + buttonBox!.width - (toolbarBox!.x + toolbarBox!.width - 12))).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `${path}/attach-attached-header-${width}.png` });
+  }
+  chat = await open(page, "ready");
+  for (const width of [360, 400, 1100]) {
+    await page.setViewportSize({ width, height: 600 });
+    const [toolbarBox, buttonBox] = await Promise.all([
+      chat.locator(".ks-agent-chat-toolbar").boundingBox(),
+      chat.getByRole("button", { name: "대화 바꾸기" }).boundingBox(),
+    ]);
+    expect(Math.abs(toolbarBox!.height - 49)).toBeLessThanOrEqual(1);
+    expect(Math.abs(buttonBox!.x + buttonBox!.width - (toolbarBox!.x + toolbarBox!.width - 12))).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: `${path}/attach-owned-header-${width}.png` });
+  }
+});
+
+test("연결하는 중에는 시작과 고른 줄을 잠근다", async ({ page }) => {
+  for (const [width, height, name] of [[1100, 700, "attach-loading-wide"], [400, 600, "attach-loading-narrow"]] as const) {
+    const chat = await open(page, "attach-start");
+    await page.setViewportSize({ width, height });
+    await chat.getByRole("button", { name: "기존 대화" }).click();
+    await page.getByRole("menuitem", { name: /서소영 PAS — 카드 운영과 배포 기록/ }).click();
+    await chat.getByRole("button", { name: "연결", exact: true }).click();
+    await expect(chat.getByText("연결하는 중")).toBeVisible();
+    await expect(chat.getByRole("button", { name: "시작" })).toBeDisabled();
+    await expect(chat.getByRole("button", { name: "프로필" })).toBeDisabled();
+    await expect(chat.getByRole("button", { name: "모델" })).toBeDisabled();
+    await page.screenshot({ path: `${path}/${name}.png` });
+  }
+});
+
+test("답변 중에는 두 머리 모두 대화 바꾸기를 잠근다", async ({ page }) => {
+  let chat = await open(page, "ready");
+  await expect(chat.getByText("기존 기록")).toBeVisible();
+  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: true, tool: null } }));
+  await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeDisabled();
+  await capture(page, "attach-owned-busy");
+  chat = await open(page, "attach-attached");
+  await expect(chat.getByText("서소영 PAS — 카드 운영 기록 2026년 11월 · Sol")).toBeVisible();
+  await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: true, tool: null } }));
+  await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeDisabled();
+  await capture(page, "attach-attached-busy");
+});
+
+test("이 작업의 대화를 다시 연결하면 소유한 대화 머리로 돌아온다", async ({ page }) => {
+  const chat = await open(page, "attach-own");
+  await expect(chat.getByRole("button", { name: "기존 대화" })).toContainText("서소영 PAS — 카드 운영 기록 (이 작업)");
+  await chat.getByRole("button", { name: "연결", exact: true }).click();
+  await expect(chat.getByRole("button", { name: "프로필" })).toBeVisible();
+  await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeVisible();
+  await expect(chat.locator(".ks-agent-chat-change-hint")).toHaveCount(0);
+  await capture(page, "attach-own-header");
 });
 
 test("프로필과 다른 노드 모델 변경은 확인하고 답변 중에는 잠근다", async ({ page }) => {

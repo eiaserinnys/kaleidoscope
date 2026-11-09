@@ -42,7 +42,8 @@
   white-space: pre-wrap;
 }
 
-.ks-data-toolbar .ks-data-text.is-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-data-toolbar .ks-data-text.is-title,
+.ks-agent-chat-change-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 한 덩어리로 읽고 옮겨 적는 짧은 값은 값 안에서 끊지 않는다. */
 .ks-pairing-code { white-space: nowrap; }

@@ -38,6 +38,15 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         }
         CoreRequest::ConversationDetach { .. } => {
             ctx.detach(inner)?;
+            let namespace = ctx.namespace(inner)?;
+            crate::conversation_stream::leave(
+                inner,
+                &format!(
+                    "{}\u{0}{}\u{0}{}\u{0}",
+                    ctx.client.info.name, namespace, ctx.workspace.id
+                ),
+                &window,
+            );
             return Ok(CoreReply::ConversationDetach {});
         }
         request => request,
@@ -105,8 +114,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
                 });
             if let Some(thread) = &thread {
                 let key = format!(
-                    "{}\u{0}{}\u{0}{}",
-                    ctx.client.info.name, namespace, ctx.workspace.id
+                    "{}\u{0}{}\u{0}{}\u{0}{}",
+                    ctx.client.info.name, namespace, ctx.workspace.id, thread.id
                 );
                 crate::conversation_stream::watch(
                     inner,
@@ -149,8 +158,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         CoreRequest::ConversationCreate { model, profile, .. } => {
             let thread = ctx.create(inner, &namespace, &model, profile.as_deref())?;
             let key = format!(
-                "{}\u{0}{}\u{0}{}",
-                ctx.client.info.name, namespace, ctx.workspace.id
+                "{}\u{0}{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id, thread.id
             );
             crate::conversation_stream::watch(
                 inner,
@@ -166,8 +175,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
             let (thread, notices) =
                 ctx.switch(inner, &namespace, profile.as_deref(), model.as_deref())?;
             let key = format!(
-                "{}\u{0}{}\u{0}{}",
-                ctx.client.info.name, namespace, ctx.workspace.id
+                "{}\u{0}{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id, thread.id
             );
             crate::conversation_stream::watch(
                 inner,
@@ -182,8 +191,8 @@ pub(crate) fn handle(inner: &Arc<Inner>, request: CoreRequest) -> Result<CoreRep
         CoreRequest::ConversationAttach { thread_id, .. } => {
             let thread = ctx.attach(inner, &namespace, &thread_id)?;
             let key = format!(
-                "{}\u{0}{}\u{0}{}",
-                ctx.client.info.name, namespace, ctx.workspace.id
+                "{}\u{0}{}\u{0}{}\u{0}{}",
+                ctx.client.info.name, namespace, ctx.workspace.id, thread.id
             );
             crate::conversation_stream::watch(
                 inner,

@@ -473,14 +473,7 @@ fn detach_clears_the_entry_without_talking_to_the_provider() {
     let (core, registry, ctx) = open_pas(&base, &temp, None);
     *registry.storage_value.lock().unwrap() = Some((attached_entry("thread-9"), "r0".into()));
     ctx.detach(&core.inner).unwrap();
-    assert!(registry
-        .storage_value
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .0
-        .is_null());
+    assert!(registry.storage_value.lock().unwrap().is_none());
     assert!(server.join().unwrap().is_empty());
 
     let (base, server) = server_with_requests(vec![]);
@@ -489,6 +482,115 @@ fn detach_clears_the_entry_without_talking_to_the_provider() {
     ctx.detach(&core.inner).unwrap();
     assert!(registry.storage_value.lock().unwrap().is_none());
     assert!(server.join().unwrap().is_empty());
+}
+
+#[test]
+fn detach_allows_attaching_another_conversation_afterwards() {
+    let (base, server) = server_with_requests(vec![
+        (404, String::new()),
+        (200, thread_info_reply("thread-9", "elsewhere", "other")),
+        (404, String::new()),
+        (200, thread_info_reply("thread-8", "elsewhere", "other")),
+    ]);
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas(&base, &temp, None);
+    ctx.attach(&core.inner, "bucket", "thread-9").unwrap();
+    ctx.detach(&core.inner).unwrap();
+    assert!(registry.storage_value.lock().unwrap().is_none());
+    let thread = ctx.attach(&core.inner, "bucket", "thread-8").unwrap();
+    assert_eq!(thread.id, "thread-8");
+    let stored = registry.storage_value.lock().unwrap().clone().unwrap().0;
+    assert_eq!(stored["thread_id"], json!("thread-8"));
+    assert_eq!(stored["attached"], json!(true));
+    assert_eq!(server.join().unwrap().len(), 4);
+}
+
+fn settings_entries() -> BTreeMap<String, Value> {
+    [
+        ("profile", json!("profile-b")),
+        ("collection", json!("collection-1")),
+        ("model_order", json!(["model-a"])),
+        ("title_template", json!("작업 PAS · {workspace.name}")),
+        ("initial_instruction", json!("이 작업을 도와주세요.")),
+        ("role", json!("이 작업의 목적과 제약을 먼저 확인합니다.")),
+    ]
+    .into_iter()
+    .map(|(entry, value)| (entry.into(), value))
+    .collect()
+}
+
+#[test]
+fn detach_allows_starting_a_new_conversation_afterwards() {
+    let (base, server) = server_with_requests(vec![
+        (404, String::new()),
+        (200, thread_info_reply("thread-9", "elsewhere", "other")),
+        (200, ensure_thread_reply("thread-10", "bucket", "placeholder")),
+    ]);
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas(&base, &temp, None);
+    ctx.attach(&core.inner, "bucket", "thread-9").unwrap();
+    ctx.detach(&core.inner).unwrap();
+    *registry.storage_entries.lock().unwrap() = settings_entries();
+    let thread = ctx.create(&core.inner, "bucket", "model-a", None).unwrap();
+    assert_eq!(thread.id, "thread-10");
+    let stored = registry.storage_value.lock().unwrap().clone().unwrap().0;
+    assert_eq!(stored["thread_id"], json!("thread-10"));
+    assert!(stored.get("attached").is_none());
+    assert_eq!(server.join().unwrap().len(), 3);
+}
+
+#[test]
+fn detach_and_attach_move_the_window_to_the_new_thread_stream() {
+    let (base, server) = server_with_requests(vec![
+        (404, String::new()),
+        (200, thread_info_reply("thread-9", "elsewhere", "other")),
+    ]);
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas(&base, &temp, None);
+    *registry.storage_value.lock().unwrap() = Some((attached_entry("thread-a"), "r0".into()));
+    let window = core.inner.state.lock().unwrap().shared.windows[0]
+        .id
+        .clone();
+    let prefix = format!("conversation\u{0}bucket\u{0}{}\u{0}", ctx.workspace.id);
+    let mut silent = ctx.client.clone();
+    silent.info.base_url = "http://127.0.0.1:9".into();
+    crate::conversation_stream::watch(
+        &core.inner,
+        format!("{prefix}thread-a"),
+        &window,
+        silent,
+        "thread-a",
+        "0",
+    );
+    crate::conversation::handle(
+        &core.inner,
+        CoreRequest::ConversationDetach {
+            window_id: window.clone(),
+        },
+    )
+    .unwrap();
+    crate::conversation::handle(
+        &core.inner,
+        CoreRequest::ConversationAttach {
+            window_id: window.clone(),
+            thread_id: "thread-9".into(),
+        },
+    )
+    .unwrap();
+    let streams = crate::conversation_stream::windows_by_key(&core.inner);
+    let watching: Vec<_> = streams
+        .iter()
+        .filter(|(key, windows)| key.starts_with(&prefix) && windows.contains(&window))
+        .collect();
+    assert_eq!(watching.len(), 1, "{streams:?}");
+    assert!(watching[0].0.ends_with("\u{0}thread-9"), "{streams:?}");
+    assert!(
+        streams
+            .iter()
+            .all(|(key, windows)| key != &format!("{prefix}thread-a") || !windows.contains(&window)),
+        "{streams:?}"
+    );
+    assert_eq!(server.join().unwrap().len(), 2);
 }
 
 #[test]

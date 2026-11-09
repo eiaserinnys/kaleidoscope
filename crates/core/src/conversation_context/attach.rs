@@ -2,7 +2,7 @@
 use super::{entry_attached, required_string_allow_empty, Context};
 use crate::{app_storage, Inner};
 use kaleidoscope_contract::{
-    app_storage::{ExpectedRevision, StorageWriteRequest},
+    app_storage::{ExpectedRevision, StorageResetRequest, StorageWriteRequest},
     conversation::{
         AdoptableConversation, AdoptableReply, AdoptThreadRequest, ConversationThread,
         EnsureThreadReply, ThreadByKeyReply, ThreadInfoReply,
@@ -163,22 +163,21 @@ impl Context {
     /// 연결을 풀고 이 작업이 가진 대화로 돌아간다. 제공자는 건드리지 않는다.
     pub fn detach(&self, inner: &Arc<Inner>) -> Result<(), CoreError> {
         let stored = self.read(inner, &self.provider.thread_entry)?;
-        if stored.content.is_null() {
+        if !stored.exists || stored.content.is_null() {
             return Ok(());
         }
-        let write = StorageWriteRequest {
-            content: Value::Null,
+        let reset = StorageResetRequest {
             expected_revision: ExpectedRevision(stored.revision.clone()),
         };
         inner
             .registry
-            .storage_write(
+            .storage_reset(
                 &self.storage.link.server_url,
                 &self.storage.link.token,
                 &self.storage.app,
                 &self.provider.thread_entry,
                 &self.storage.workspace,
-                &write,
+                &reset,
             )
             .map_err(|e| app_storage::map_error(inner, &self.storage.link, e))?;
         Ok(())

@@ -469,7 +469,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
           created_at: "updated_at" in candidate ? candidate.updated_at : candidate.created_at,
           archived: false,
         };
-        conversation.attached = true;
+        conversation.attached = candidate.id !== conversation.own?.id;
         watchConversation();
         return { op: "conversation.attach", thread: clone(conversation.thread) };
       }
