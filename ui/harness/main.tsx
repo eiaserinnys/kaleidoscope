@@ -286,7 +286,7 @@ const fakeTransport = createFakeTransport({
       { id: "session-1", title: "서소영 PAS — 카드 운영과 배포 기록", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-08T09:00:00Z" },
       { id: "session-2", title: "엠버 앤 블레이드 밸런스 회의", profile: { id: "profile-b", label: "키키" }, updated_at: "2026-11-07T09:00:00Z" },
       { id: "session-3", title: "kaleidoscope 셸 설계 검토", updated_at: "2026-11-06T09:00:00Z" },
-      { id: "session-4", title: "소울스트림 세션 회고 — 10월 넷째 주 정리", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-05T09:00:00Z" },
+      { id: "session-4", title: "주간 회고 — 10월 넷째 주 정리", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-05T09:00:00Z" },
       { id: "session-5", title: "", updated_at: "2026-11-04T09:00:00Z" },
       { id: "session-6", title: "발행 파이프라인 점검과 남은 작업 목록", profile: { id: "profile-b", label: "키키" }, updated_at: "2026-11-03T09:00:00Z" },
     ] : undefined,
