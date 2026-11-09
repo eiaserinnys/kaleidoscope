@@ -86,7 +86,7 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-test("진행 막대 이름표와 구역 메타는 선택되고, 구역 제목과 접는 머리 메타는 선택되지 않는다", async ({ page }) => {
+test("진행 막대 이름표, 구역 제목, 접는 머리 메타는 선택되지 않고 구역 메타는 선택된다", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/?preview=progress-track-test");
   const app = page.getByTestId("app-window-progress-track-test");
@@ -105,9 +105,15 @@ test("진행 막대 이름표와 구역 메타는 선택되고, 구역 제목과
   await toggleMeta.dblclick();
   expect(await selectionText(page)).toBe("");
 
+  const progressLabel = app.locator(".ks-data-progress-label").first();
+
   await clearSelection(page);
-  await dragText(page, app.locator(".ks-data-progress-label").first());
-  expect(await selectionText(page)).toContain("7일");
+  await dragText(page, progressLabel);
+  expect(await selectionText(page)).toBe("");
+
+  await clearSelection(page);
+  await progressLabel.dblclick();
+  expect(await selectionText(page)).toBe("");
 
   await clearSelection(page);
   await dragText(page, app.locator(".ks-data-section-meta").first());
