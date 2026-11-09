@@ -154,6 +154,96 @@ it("default_expanded는 처음부터 펼치고 사용자가 접은 행은 접힌
   expect(parent.getAttribute("aria-expanded")).toBe("false");
 });
 
+const parentItems = [
+  { key: "p", title: "상위", checked: false, children: [
+    { key: "c1", title: "아이 하나", checked: false },
+    { key: "c2", title: "아이 둘", checked: true },
+  ] },
+];
+const parentBlock = {
+  type: "tree",
+  default_expanded: true,
+  items: { state: "items" },
+  selected: { state: "picked" },
+  on_select: { set_state: "picked" },
+  on_check: [{ set_state: "last" }],
+} as unknown as Block;
+
+it("확인 모드의 부모 행은 화살표 다음 열에 확인 상자를 두고 잎 행과 같은 열마다 그린다", async () => {
+  setup(parentBlock, { items: parentItems, picked: null, last: null });
+  const parent = await screen.findByRole("treeitem", { name: "상위" });
+  const [expand, mark] = Array.from(parent.querySelectorAll(":scope > .ks-file-tree-icon"));
+  expect(expand.querySelector(".ks-chevron")).toBeTruthy();
+  expect(expand.querySelector("[data-tree-check]")).toBeNull();
+  expect(mark.querySelector("[data-tree-check]")).toBeTruthy();
+  expect(expand.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(parent.getAttribute("aria-checked")).toBe("false");
+
+  const leaf = screen.getByRole("treeitem", { name: "아이 하나" });
+  const [leafExpand, leafMark] = Array.from(leaf.querySelectorAll(":scope > .ks-file-tree-icon"));
+  expect(leafExpand.querySelector(".ks-chevron")).toBeNull();
+  expect(leafMark.querySelector("[data-tree-check]")).toBeTruthy();
+  expect(leaf.querySelector(":scope > .ks-file-tree-name")?.textContent).toBe("아이 하나");
+});
+
+it("확인 모드에서 부모 행 본문을 누르면 고르기만 하고 접히지 않는다", async () => {
+  const { calls } = setup(parentBlock, { items: parentItems, picked: null, last: null });
+  const parent = await screen.findByRole("treeitem", { name: "상위" });
+  fireEvent.click(parent);
+  expect(parent.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("treeitem", { name: "아이 하나" })).toBeTruthy();
+  await waitFor(() => expect(actCalls(calls, "/ui/on_select")).toEqual([expect.objectContaining({ event: "p", item: parentItems[0] })]));
+  expect(actCalls(calls, "/ui/on_check")).toHaveLength(0);
+});
+
+it("확인 모드에서 펼침 화살표를 누르면 펼침만 바뀐다", async () => {
+  const { calls } = setup(parentBlock, { items: parentItems, picked: null, last: null });
+  const parent = await screen.findByRole("treeitem", { name: "상위" });
+  fireEvent.click(parent.querySelector(".ks-chevron")!);
+  expect(parent.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("treeitem", { name: "아이 하나" })).toBeNull();
+  await act(async () => { await Promise.resolve(); });
+  expect(calls.mock.calls.some(([request]) => (request as CoreRequest).op === "data.act")).toBe(false);
+
+  fireEvent.click(parent.querySelector(".ks-chevron")!);
+  expect(parent.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("treeitem", { name: "아이 하나" })).toBeTruthy();
+});
+
+it("확인 모드에서 부모 확인 상자를 누르면 on_check만 실행한다", async () => {
+  const { calls } = setup(parentBlock, { items: parentItems, picked: null, last: null });
+  const parent = await screen.findByRole("treeitem", { name: "상위" });
+  fireEvent.click(parent.querySelector("[data-tree-check]")!);
+  await waitFor(() => expect(actCalls(calls, "/ui/on_check")).toEqual([expect.objectContaining({ event: true, item: parentItems[0] })]));
+  expect(actCalls(calls, "/ui/on_select")).toHaveLength(0);
+  expect(parent.getAttribute("aria-expanded")).toBe("true");
+});
+
+it("확인 모드 부모 행에서 화살표는 펼침, Space는 확인, Enter는 고르기만 한다", async () => {
+  const { calls } = setup(parentBlock, { items: parentItems, picked: null, last: null });
+  const parent = await screen.findByRole("treeitem", { name: "상위" });
+  parent.focus();
+  fireEvent.keyDown(parent, { key: "ArrowLeft" });
+  expect(parent.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.keyDown(parent, { key: "ArrowRight" });
+  expect(parent.getAttribute("aria-expanded")).toBe("true");
+
+  fireEvent.keyDown(parent, { key: " " });
+  await waitFor(() => expect(actCalls(calls, "/ui/on_check")).toEqual([expect.objectContaining({ event: true, item: parentItems[0] })]));
+  fireEvent.keyDown(parent, { key: "Enter" });
+  await waitFor(() => expect(actCalls(calls, "/ui/on_select")).toEqual([expect.objectContaining({ event: "p", item: parentItems[0] })]));
+  expect(parent.getAttribute("aria-expanded")).toBe("true");
+});
+
+it("확인 모드가 아닌 데이터 트리는 부모 행에 화살표 한 열만 두고 본문 클릭이 펼침을 바꾼다", async () => {
+  setup({ type: "tree", default_expanded: true, items: { state: "items" } } as unknown as Block, { items: parentItems });
+  const parent = await screen.findByRole("treeitem", { name: "상위" });
+  expect(parent.querySelectorAll(":scope > .ks-file-tree-icon")).toHaveLength(1);
+  fireEvent.click(parent);
+  expect(parent.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("treeitem", { name: "아이 하나" })).toBeNull();
+});
+
 it("확인 상자가 없는 트리는 상자와 aria-checked 없이 그대로 동작한다", async () => {
   const { calls } = setup({ type: "tree", items: [{ key: "a", title: "하나" }] } as unknown as Block);
   const row = await screen.findByRole("treeitem", { name: "하나" });

@@ -156,7 +156,7 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
     });
   };
   const activate = (row: TreeRowModel) => {
-    if (row.hasChildren) toggle(row.id, !row.expanded);
+    if (row.hasChildren && !block.on_check) toggle(row.id, !row.expanded);
     const item = row.node.data as TreeItem | undefined;
     if (item && block.on_select) void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
   };

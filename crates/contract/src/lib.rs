@@ -331,7 +331,10 @@ pub const CONTRACT_VERSION: u32 = 46;
 /// - 56판: repeat 안 블록의 행 동작이 그 행 항목을 넘긴다.
 /// - 57판: 문서 모음의 없는 문서를 markdown 블록이 빈 문서로 열고 처음 고칠 때 만든다.
 /// - 58판: 표 내용 칸의 muted(덜 띄는 칸).
-pub const BLOCK_SET_VERSION: u32 = TABLE_CELL_MUTED_BLOCK_SET_VERSION;
+/// - 59판: 트리 확인 모드의 부모 행 확인 상자와 행 클릭 시 펼침 유지.
+pub const BLOCK_SET_VERSION: u32 = TREE_CHECK_PARENT_ROW_BLOCK_SET_VERSION;
+/// 트리 확인 모드에서 부모 행도 확인 상자를 그리고 행 클릭으로 접히지 않는 것을 처음 지원하는 블록 세트 판.
+pub const TREE_CHECK_PARENT_ROW_BLOCK_SET_VERSION: u32 = 59;
 /// 표 내용 칸의 muted(덜 띄는 칸)를 처음 지원하는 블록 세트 판.
 pub const TABLE_CELL_MUTED_BLOCK_SET_VERSION: u32 = 58;
 /// 문서 모음의 없는 문서를 markdown 블록이 빈 문서로 열고 처음 고칠 때 만드는 것을 처음 지원하는 블록 세트 판.
