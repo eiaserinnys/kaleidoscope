@@ -13,6 +13,9 @@ import {
   IconButton,
   LayoutGrid,
   Monitor,
+  OfflineCloud,
+  OfflineMonitor,
+  PairingCloud,
   Menu,
   Notice,
   Plus,
@@ -57,10 +60,13 @@ function serverModeOf(link: ShellSnapshot["link"]): ServerModeFlag {
   return link.state === "unlinked" ? "none" : "remote";
 }
 
+// 상태는 점 색 하나가 아니라 그림과 점 유무로도 갈린다. 끊긴 상태는 점선 그림, 거부는 점선 없는
+// CloudOff와 빨간 점, 연결 해제는 CloudOff와 점 없음이다.
 function serverIconOf(link: ShellSnapshot["link"]) {
-  const mode = serverModeOf(link);
-  if (mode === "embedded") return <Monitor />;
-  return mode === "remote" ? <Cloud /> : <CloudOff />;
+  if (link.state === "revoked" || link.state === "unlinked") return <CloudOff />;
+  if (link.state === "pairing") return <PairingCloud />;
+  if (link.state === "offline") return link.mode === "embedded" ? <OfflineMonitor /> : <OfflineCloud />;
+  return link.mode === "embedded" ? <Monitor /> : <Cloud />;
 }
 
 export function Shell({ store }: { store: ShellStore }) {
@@ -220,7 +226,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const serverStatusMark = snapshot ? (
     <span aria-hidden="true" className="shell-server-icon">
       {serverIconOf(snapshot.link)}
-      <span className={`shell-server-dot is-${snapshot.link.state}`} />
+      {snapshot.link.state === "unlinked" ? null : <span className={`shell-server-dot is-${snapshot.link.state}`} />}
     </span>
   ) : null;
   const serverButton = snapshot ? (

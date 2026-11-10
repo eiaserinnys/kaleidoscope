@@ -178,3 +178,4 @@ export const PairingCloud = (props: IconProps) => renderIcon(
   </>,
 );
 export const OfflineCloud = (props: IconProps) => renderIcon(CloudIcon, props, undefined, "3 2");
+export const OfflineMonitor = (props: IconProps) => renderIcon(MonitorIcon, props, undefined, "3 2");

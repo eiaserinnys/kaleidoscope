@@ -34,6 +34,7 @@ export {
   Minimize2,
   Monitor,
   OfflineCloud,
+  OfflineMonitor,
   PairingCloud,
   PanelLeftClose,
   PanelLeftOpen,

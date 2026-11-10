@@ -2,15 +2,16 @@
 """머리 막대 오른쪽의 서버 단추를 연결 상태마다 넓은 창과 최소 창에서 캡처한다.
 
 장면: 내 PC 서버 연결(embedded), 원격 서버 연결(connected), 내 PC 서버 연결 중
-(embedded-offline), 원격 오프라인(offline), 페어링 코드(pairing), 연결 해제(unlinked).
+(embedded-offline), 원격 오프라인(offline), 페어링 코드(pairing), 원격 연결
+거부(revoked), 연결 해제(unlinked). 테마는 라이트와 다크를 모두 찍는다.
 
   python3 scripts/visual-check/check_shell_header.py [--output 산출폴더] [--port 5297] [--label after]
 
-app의 vite 개발 서버를 /harness.html?link=...에 띄워 그린다. 창 폭마다 상태를 모두 찍고,
-단추의 이름·모드·그림·점 색·좌표와 톱니 단추의 좌표를 result.json에 남긴다.
-머리 막대가 화면보다 넓은 창에서는 오른쪽 단추가 화면 밖에 있으므로, 단추 자체의 생김새는
-`.ks-shell-actions` 요소 캡처로 따로 남긴다. 이 스크립트는 판정하지 않는다.
-고치기 전과 뒤의 result.json과 캡처를 같은 장면끼리 비교하는 것이 목적이다.
+app의 vite 개발 서버를 /harness.html?link=...에 띄워 그린다. 테마와 창 폭마다 상태를 모두
+찍고, 단추의 이름·모드·그림(점선 여부, 구름 점 개수)·점 색·좌표와 톱니 단추의 좌표를
+result.json에 남긴다. 머리 막대가 화면보다 넓은 창에서는 오른쪽 단추가 화면 밖에 있으므로,
+단추 자체의 생김새는 `.ks-shell-actions` 요소 캡처로 따로 남긴다. 이 스크립트는 판정하지
+않는다. 고치기 전과 뒤의 result.json과 캡처를 같은 장면끼리 비교하는 것이 목적이다.
 """
 import argparse
 import json
@@ -25,13 +26,15 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
-SIZES = ((1180, 720), (360, 240))
+SIZES = ((1180, 720), (960, 600))
+THEMES = ("light", "dark")
 STATES = (
     ("embedded", "link=embedded"),
     ("connected", "link=connected"),
     ("embedded-offline", "link=embedded-offline"),
     ("offline", "link=offline"),
     ("pairing", "link=pairing"),
+    ("revoked", "link=revoked"),
     ("unlinked", ""),
 )
 
@@ -59,6 +62,8 @@ MEASURE = """() => {
     } : null,
     gear: gear ? { rect: rect(gear) } : null,
     icon_class: svg ? svg.getAttribute('class') : null,
+    icon_dash: svg ? svg.getAttribute('stroke-dasharray') : null,
+    icon_circles: svg ? svg.querySelectorAll('circle').length : null,
     icon_rect: rect(svg),
     dot: dot ? { class: dot.className, color: getComputedStyle(dot).backgroundColor, rect: rect(dot), shadow: getComputedStyle(dot).boxShadow } : null,
     bar: { rect: rect(bar), scrollWidth: bar.scrollWidth, clientWidth: bar.clientWidth, scrollHeight: bar.scrollHeight, clientHeight: bar.clientHeight },
@@ -139,8 +144,10 @@ def capture(page, output, key, clip=None):
     return str(path)
 
 
-def header_scene(page, port, width, height, query, key, output):
+def header_scene(page, port, width, height, theme, query, key, output):
     page.set_viewport_size({"width": width, "height": height})
+    # 리포의 테마 정본은 prefers-color-scheme 미디어 질의다(foundation.css, shell.css).
+    page.emulate_media(color_scheme=theme)
     url = f"http://127.0.0.1:{port}/harness.html" + (f"?{query}" if query else "")
     page.goto(url, wait_until="load")
     page.locator(".ks-shell-bar").wait_for(timeout=20000)
@@ -198,13 +205,14 @@ def main():
                     else None,
                 )
                 page.on("pageerror", lambda error: result["console"].append(f"pageerror: {error}"))
-                for width, height in SIZES:
-                    for state, query in STATES:
-                        key = f"shell-header-{state}-{width}x{height}"
-                        result[key] = header_scene(page, args.port, width, height, query, key, output)
-                        server = result[key]["server"] or {}
-                        dot = result[key]["dot"] or {}
-                        print(key, server.get("mode"), result[key]["icon_class"], dot.get("color"), flush=True)
+                for theme in THEMES:
+                    for width, height in SIZES:
+                        for state, query in STATES:
+                            key = f"shell-header-{state}-{theme}-{width}x{height}"
+                            result[key] = header_scene(page, args.port, width, height, theme, query, key, output)
+                            server = result[key]["server"] or {}
+                            dot = result[key]["dot"] or {}
+                            print(key, server.get("mode"), result[key]["icon_class"], result[key]["icon_dash"], dot.get("color"), flush=True)
                 page.close()
             finally:
                 browser.close()

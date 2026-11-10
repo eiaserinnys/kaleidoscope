@@ -811,6 +811,7 @@ describe("shell server link control", () => {
     expect(button.getAttribute("title")).toBe("내 PC 서버");
     expect(button.getAttribute("data-server-mode")).toBe("embedded");
     expect(button.querySelector(".lucide-monitor")).toBeTruthy();
+    expect(button.querySelector("svg")?.getAttribute("stroke-dasharray")).toBeNull();
     expect(button.querySelector(".shell-server-dot")?.classList.contains("is-connected")).toBe(true);
     expect(button.querySelector(".ks-truncate")).toBeNull();
     expect(button.textContent).toBe("");
@@ -818,10 +819,11 @@ describe("shell server link control", () => {
     const offline = await screen.findByRole("button", { name: "내 PC 서버 연결 중" });
     expect(offline.getAttribute("data-server-mode")).toBe("embedded");
     expect(offline.querySelector(".lucide-monitor")).toBeTruthy();
+    expect(offline.querySelector("svg")?.getAttribute("stroke-dasharray")).toBe("3 2");
     expect(offline.querySelector(".shell-server-dot")?.classList.contains("is-offline")).toBe(true);
     store.dispose();
   });
-  it("머리 막대 서버 단추는 원격 모드와 연결 해제를 다른 그림으로 보인다", async () => {
+  it("머리 막대 서버 단추는 원격 연결·오프라인·연결 해제를 다른 그림과 점으로 보인다", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
@@ -829,13 +831,19 @@ describe("shell server link control", () => {
     const remote = screen.getByRole("button", { name: "원격 서버 (remote.example)" });
     expect(remote.getAttribute("data-server-mode")).toBe("remote");
     expect(remote.querySelector(".lucide-cloud")).toBeTruthy();
+    expect(remote.querySelector("svg")?.getAttribute("stroke-dasharray")).toBeNull();
     expect(remote.querySelector(".lucide-monitor")).toBeNull();
     expect(remote.querySelector(".shell-server-dot")?.classList.contains("is-connected")).toBe(true);
+    act(() => transport.setLink({ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "집", reason: { id: "CONN_EVENTS_SEND_FAILED", code: "server", message: "연결 끊김", details: ["host=remote.example"] } }));
+    const remoteOffline = await screen.findByRole("button", { name: "원격 오프라인" });
+    expect(remoteOffline.querySelector(".lucide-cloud")).toBeTruthy();
+    expect(remoteOffline.querySelector("svg")?.getAttribute("stroke-dasharray")).toBe("3 2");
+    expect(remoteOffline.querySelector(".shell-server-dot")?.classList.contains("is-offline")).toBe(true);
     act(() => transport.setLink({ state: "unlinked" }));
     const unlinked = await screen.findByRole("button", { name: "연결 해제됨" });
     expect(unlinked.getAttribute("data-server-mode")).toBe("none");
     expect(unlinked.querySelector(".lucide-cloud-off")).toBeTruthy();
-    expect(unlinked.querySelector(".shell-server-dot")?.classList.contains("is-unlinked")).toBe(true);
+    expect(unlinked.querySelector(".shell-server-dot")).toBeNull();
     expect(unlinked.querySelector(".ks-truncate")).toBeNull();
     store.dispose();
   });
@@ -848,6 +856,7 @@ describe("shell server link control", () => {
     expect(button.classList.contains("shell-link-button")).toBe(true);
     expect(button.getAttribute("data-server-mode")).toBe("remote");
     expect(button.querySelector(".lucide-cloud")).toBeTruthy();
+    expect(button.querySelectorAll("svg circle").length).toBe(3);
     expect(button.querySelector(".shell-server-dot")?.classList.contains("is-pairing")).toBe(true);
     expect(button.querySelector(".ks-truncate")?.textContent).toBe("페어링 코드 123456");
     store.dispose();
@@ -874,7 +883,9 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     const button = screen.getByRole("button", { name: "원격 연결 거부됨" });
     expect(button.getAttribute("data-server-mode")).toBe("remote");
-    expect(button.querySelector(".lucide-cloud")).toBeTruthy();
+    expect(button.querySelector(".lucide-cloud-off")).toBeTruthy();
+    expect(button.querySelector(".lucide-cloud")).toBeNull();
+    expect(button.querySelector(".shell-server-dot")?.classList.contains("is-revoked")).toBe(true);
     fireEvent.click(button);
     expect(screen.queryByRole("button", { name: "가져오기" })).toBeNull();
     const input = screen.getByRole("textbox", { name: "원격 서버 주소" }) as HTMLInputElement;
@@ -970,6 +981,7 @@ describe("shell server link control", () => {
     const button = screen.getByRole("button", { name: "원격 오프라인" });
     expect(button.getAttribute("data-server-mode")).toBe("remote");
     expect(button.querySelector(".lucide-cloud")).toBeTruthy();
+    expect(button.querySelector("svg")?.getAttribute("stroke-dasharray")).toBe("3 2");
     fireEvent.click(button);
     expect(screen.getByText("연결 끊김")).toBeTruthy();
     expect(screen.getByText("CONN_EVENTS_SEND_FAILED")).toBeTruthy();
