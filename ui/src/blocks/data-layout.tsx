@@ -312,13 +312,16 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
   const [ended, setEnded] = useState(false);
   const [pending, setPending] = useState<{ text: string; base: unknown } | null>(null);
   const editingFlag = editingValue.status === "ready" && editingValue.value === true;
+  const titleValue = title.status === "ready" ? title.value : null;
   // 앱이 editing을 다시 켤 때(꺼졌다 켜지는 전이) 지역 종료 표시를 거둔다.
   const previousEditing = useRef(false);
   useEffect(() => {
-    if (editingFlag && !previousEditing.current) setEnded(false);
+    const wasEditing = previousEditing.current;
     previousEditing.current = editingFlag;
-  }, [editingFlag]);
-  const titleValue = title.status === "ready" ? title.value : null;
+    if (editingFlag && !wasEditing) { setEnded(false); return; }
+    // 앱이 editing을 끄면서 이름도 그대로 두면 받아들이지 않은 것이다. 친 이름을 거두고 원래 이름으로 돌린다.
+    if (!editingFlag && wasEditing && pending !== null && JSON.stringify(titleValue) === JSON.stringify(pending.base)) setPending(null);
+  }, [editingFlag, pending, titleValue]);
   // 확정한 이름은 앱 값이 처음 값에서 바뀌면 거둔다. 그 전까지는 친 이름을 제목으로 보인다.
   useEffect(() => {
     if (pending === null) return;
@@ -376,7 +379,7 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
           <span className="ks-data-section-heading">{titleText}{metaText}</span>
         </button>
         : block.actions?.length ? <div className="ks-data-section-heading">{titleText}{metaText}</div> : <>{titleText}{metaText}</>}
-      {actions?.length ? <div className="ks-data-section-actions">{actions}</div> : null}
+      {actions?.length ? <div className="ks-data-section-actions" onClick={collapsed ? () => setCollapsed(false) : undefined}>{actions}</div> : null}
     </div>
     <BindingFailureNotice value={title} />
     <DormantPointer dormant={collapsed} pointer={`${pointer}/child`} />

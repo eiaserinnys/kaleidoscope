@@ -218,25 +218,35 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   }, [block.on_check, data, editable, ended, pointer, titles]);
   const nodes = useMemo(() => tree(value, block.by === "path", [], pending, inline), [value, block.by, pending, inline]);
   // 앱이 항목의 editing을 끄면 지역 종료 표시를 거둔다. 같은 키가 다시 editing이 참이 되면 새 글칸을 연다.
+  const editingFlags = useRef(new Map<string, boolean>());
   useEffect(() => {
     const live = new Set<string>();
-    const visit = (list: DataNode[]) => list.forEach((node) => { if (node.item?.editing === true) live.add(node.item.key); visit(node.children); });
+    const current = new Map<string, boolean>();
+    const visit = (list: DataNode[]) => list.forEach((node) => {
+      const item = node.item;
+      if (item) { if (item.editing === true) live.add(item.key); current.set(item.key, item.editing === true); }
+      visit(node.children);
+    });
     visit(nodes);
+    const previous = editingFlags.current;
+    editingFlags.current = current;
     setEnded((old) => {
       if (!old.size) return old;
       const next = new Set([...old].filter((key) => live.has(key)));
       return next.size === old.size ? old : next;
     });
-    // 확정한 제목은 앱 값이 그 처음 값에서 바뀌면 거둔다. 바뀌지 않았으면 확정한 글을 그대로 보인다.
+    // 확정한 제목은 앱 값이 그 처음 값에서 바뀌면 거둔다. 앱이 editing을 끄면서 값도 그대로 두면 받아들이지 않은 것이므로 거둔다.
     setTitles((old) => {
       if (!old.size) return old;
-      const current = new Map<string, string>();
-      const collect = (list: DataNode[]) => list.forEach((node) => { if (node.item) current.set(node.item.key, node.item.title ?? ""); collect(node.children); });
+      const titles = new Map<string, string>();
+      const collect = (list: DataNode[]) => list.forEach((node) => { if (node.item) titles.set(node.item.key, node.item.title ?? ""); collect(node.children); });
       collect(nodes);
       let changed = false;
       const next = new Map(old);
       for (const [key, entry] of old) {
-        if (current.get(key) !== entry.base) { next.delete(key); changed = true; }
+        const title = titles.get(key);
+        const rejected = previous.get(key) === true && current.get(key) === false && title === entry.base;
+        if (title !== entry.base || rejected) { next.delete(key); changed = true; }
       }
       return changed ? next : old;
     });
@@ -262,6 +272,37 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
       return next;
     });
   }, [block.default_expanded, nodes, selected]);
+
+  // 편집할 항목이 새로 나타나면 그 조상을 펼친다. 편집 도중에 사용자가 부모를 다시 접는 것은 막지 않는다.
+  const editingKeys = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const current = new Set<string>();
+    const visit = (list: DataNode[]) => list.forEach((node) => {
+      if (node.item && isEditing(node.item, inline)) current.add(node.item.key);
+      visit(node.children);
+    });
+    visit(nodes);
+    const appeared = [...current].filter((key) => !editingKeys.current.has(key));
+    editingKeys.current = current;
+    if (!appeared.length) return;
+    const path = new Set(appeared.flatMap((key) => ancestors(nodes, key) ?? []));
+    if (!path.size) return;
+    if (block.default_expanded) {
+      setCollapsed((old) => {
+        if (![...path].some((id) => old.has(id))) return old;
+        const next = new Set(old);
+        path.forEach((id) => next.delete(id));
+        return next;
+      });
+      return;
+    }
+    setExpanded((old) => {
+      if ([...path].every((id) => old.has(id))) return old;
+      const next = new Set(old);
+      path.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [block.default_expanded, inline, nodes]);
 
   const visibleExpanded = useMemo(() => {
     if (!block.default_expanded) return expanded;
@@ -313,11 +354,13 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
     });
   }, [block.on_check, data, pointer]);
 
-  if (!nodes.length) return <NoItems rootProps={blockRoot} />;
+  // on_move가 있는 트리는 항목이 없어도 빈 상태 자체를 놓을 자리로 받는다. 놓으면 트리 끝(end)과 같다.
+  if (!nodes.length && !drag.enabled) return <NoItems rootProps={blockRoot} />;
   return <><TreeView
     rootProps={blockRoot}
     className="ks-data-view ks-data-tree"
     drag={drag}
+    emptyContent={nodes.length ? undefined : <NoItems />}
     expanded={visibleExpanded}
     label="트리"
     nodes={nodes}

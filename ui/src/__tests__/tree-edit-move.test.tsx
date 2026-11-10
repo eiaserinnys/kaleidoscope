@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block, CoreReply, CoreRequest } from "../contract/contract";
 import { ContextMenuHost } from "../components/context-menu";
@@ -355,4 +356,209 @@ it("바로 입력 Escape는 연 자리인 구역 머리 + 단추로 초점을 �
   expect(document.activeElement).toBe(input);
   fireEvent.keyDown(input, { key: "Escape" });
   await waitFor(() => expect(document.activeElement).toBe(button));
+});
+
+function setupWithMenu(ui: Block, state: AppDefinition["state"]) {
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 60, modules: {} }, permissions: [], state, ui };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { ...state };
+  const transport = createFakeTransport(seed);
+  const calls = vi.spyOn(transport, "call");
+  render(<><ContextMenuHost /><AppWindowContent store={createShellStore(transport)} windowId="viewer-window" /></>);
+  return { calls };
+}
+
+it("접힌 부모 안에 바로 입력 항목이 새로 생기면 그 조상을 펼친다", async () => {
+  const addChild = '$map($state.items, function($i){ $i.key = "p" ? $merge([$i, {"children": $append($i.children, [{"key": "n", "title": "", "editing": true}])}]) : $i })';
+  const reveal = (defaultExpanded: boolean) => ({
+    type: "stack", direction: "column", children: [
+      {
+        type: "tree", items: { state: "items" }, default_expanded: defaultExpanded,
+        on_edit: [{ set_state: "last", value: { expr: "$event" } }], on_edit_cancel: [{ set_state: "cancelled" }],
+      },
+      { type: "button", label: "하위 추가", on_click: [{ set_state: "items", value: { expr: addChild } }] },
+    ],
+  } as unknown as Block);
+  const state = () => ({ items: [{ key: "p", title: "부모", children: [{ key: "c", title: "아이" }] }], last: null, cancelled: null });
+
+  setup(reveal(false), state());
+  expect(await screen.findByRole("treeitem", { name: "부모" })).toBeTruthy();
+  expect(screen.queryByRole("treeitem", { name: "아이" }), "부모가 접혀 있다").toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "하위 추가" }));
+  expect(await screen.findByRole("textbox", { name: "항목 이름" })).toBeTruthy();
+  expect(screen.getByRole("treeitem", { name: "아이" })).toBeTruthy();
+  expect(screen.getByRole("treeitem", { name: "부모" }).getAttribute("aria-expanded")).toBe("true");
+
+  cleanup();
+  setup(reveal(true), state());
+  const parent = await screen.findByRole("treeitem", { name: "부모" });
+  expect(parent.getAttribute("aria-expanded")).toBe("true");
+  fireEvent.click(parent.querySelector(".ks-tree-chevron-trigger")!);
+  expect(screen.queryByRole("treeitem", { name: "아이" }), "사용자가 부모를 접었다").toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "하위 추가" }));
+  expect(await screen.findByRole("textbox", { name: "항목 이름" })).toBeTruthy();
+  expect(screen.getByRole("treeitem", { name: "아이" })).toBeTruthy();
+});
+
+it("접힌 구역의 머리 동작 단추를 누르면 구역을 먼저 펼치고 새 글칸이 초점을 받는다", async () => {
+  const ui = {
+    type: "section", collapsible: true, title: { state: "sectionTitle" }, editing: { state: "sectionEditing" },
+    actions: [{
+      type: "button", label: "추가",
+      on_click: [{ set_state: "rows", value: [{ key: "new", title: "", editing: true }] }],
+    }],
+    child: {
+      type: "tree", items: { state: "rows" },
+      on_edit: [{ set_state: "last", value: { expr: "$event" } }],
+      on_edit_cancel: [{ set_state: "rows", value: [] }],
+    },
+  } as unknown as Block;
+  const state = { sectionTitle: "구역", sectionEditing: false, rows: [], last: null };
+
+  setup(ui, state);
+  const toggle = await screen.findByRole("button", { name: "구역" });
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByText("없음"), "접힌 구역 안은 그리지 않는다").toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "추가" }));
+  const input = await screen.findByRole("textbox", { name: "항목 이름" });
+  expect(screen.getByRole("button", { name: "구역" }).getAttribute("aria-expanded")).toBe("true");
+  await waitFor(() => expect(document.activeElement).toBe(input));
+
+  cleanup();
+  setup(ui, state);
+  fireEvent.click(await screen.findByRole("button", { name: "구역" }));
+  const button = screen.getByRole("button", { name: "추가" });
+  button.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(await screen.findByRole("textbox", { name: "항목 이름" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "구역" }).getAttribute("aria-expanded")).toBe("true");
+});
+
+it("앱이 받아들이지 않은 구역 이름은 머리에 남지 않고 원래 이름으로 돌아간다", async () => {
+  const ui = {
+    type: "section", collapsible: true, title: { state: "sectionTitle" }, editing: { state: "sectionEditing" },
+    menu: [{ label: "이름 바꾸기", on_select: [{ set_state: "sectionEditing", value: true }] }],
+    on_edit: [{ set_state: "sectionEditing", value: false }],
+    on_edit_cancel: [{ set_state: "sectionEditing", value: false }],
+    child: { type: "text", value: "안쪽" },
+  } as unknown as Block;
+  const state = { sectionTitle: "첫째 구역", sectionEditing: false };
+  setupWithMenu(ui, state);
+  fireEvent.contextMenu(await screen.findByRole("button", { name: "첫째 구역" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "이름 바꾸기" }));
+  const input = await screen.findByRole("textbox", { name: "구역 이름" });
+  fireEvent.change(input, { target: { value: "다른 이름" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(screen.getByText("다른 이름"), "확정 직후에는 친 이름을 보인다").toBeTruthy();
+  await waitFor(() => expect(screen.getByText("첫째 구역"), "거절되면 원래 이름으로 돌아간다").toBeTruthy());
+  expect(screen.queryByText("다른 이름")).toBeNull();
+  expect(screen.queryByRole("textbox", { name: "구역 이름" })).toBeNull();
+});
+
+it("앱이 받아들이지 않은 항목 제목은 친 제목을 거두고 원래 제목을 보인다", async () => {
+  const ui = {
+    type: "tree", items: { state: "items" },
+    item_menu: [{ label: "이름 바꾸기", on_select: [{ set_state: "items", value: { expr: '$map($state.items, function($i){ $merge([$i, {"editing": $i.key = "a"}]) })' } }] }],
+    on_edit: [{ set_state: "items", value: { expr: '$map($state.items, function($i){ $i.key = "a" ? $merge([$i, {"editing": false}]) : $i })' } }],
+    on_edit_cancel: [{ set_state: "items", value: { expr: '$map($state.items, function($i){ $merge([$i, {"editing": false}]) })' } }],
+  } as unknown as Block;
+  const state = { items: [{ key: "a", title: "처음" }] };
+  setupWithMenu(ui, state);
+  fireEvent.contextMenu(await screen.findByRole("treeitem", { name: "처음" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "이름 바꾸기" }));
+  const input = await screen.findByRole("textbox", { name: "항목 이름" });
+  fireEvent.change(input, { target: { value: "새 이름" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(screen.getByRole("treeitem", { name: "새 이름" }), "확정 직후에는 친 제목을 보인다").toBeTruthy();
+  await waitFor(() => expect(screen.getByRole("treeitem", { name: "처음" }), "거절되면 원래 제목으로 돌아간다").toBeTruthy());
+  expect(screen.queryByRole("treeitem", { name: "새 이름" })).toBeNull();
+});
+
+it("바로 더하기로 확정한 새 항목은 앱이 같은 키로 실제 항목을 넣어도 친 이름이 깜박이지 않는다", async () => {
+  const ui = {
+    type: "tree", items: { state: "items" },
+    on_edit: [{ set_state: "items", value: { expr: '[{"key": "new", "title": $event, "editing": false}]' } }],
+    on_edit_cancel: [{ set_state: "items", value: [] }],
+  } as unknown as Block;
+  setup(ui, { items: [{ key: "new", title: "", editing: true }] });
+  const input = await screen.findByRole("textbox", { name: "항목 이름" });
+  fireEvent.change(input, { target: { value: "새 항목" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(screen.getByRole("treeitem", { name: "새 항목" }), "확정 직후 친 이름을 보인다").toBeTruthy();
+  await waitFor(() => expect(screen.queryByRole("textbox", { name: "항목 이름" })).toBeNull());
+  expect(screen.getByRole("treeitem", { name: "새 항목" }), "앱 갱신 뒤에도 같은 이름을 보인다").toBeTruthy();
+});
+
+it("끌던 원본 트리가 사라지면 다른 트리의 놓을 자리 표시도 지운다", async () => {
+  const sections = [
+    { id: "s1", title: "첫째 구역", rows: [{ key: "a", title: "첫째 항목" }] },
+    { id: "s2", title: "둘째 구역", rows: [{ key: "b", title: "둘째 항목" }] },
+  ];
+  const definition: AppDefinition = {
+    ...mdViewerDefinition, requires: { blocks: 60, modules: {} }, permissions: [], state: { sections: [], moved: null },
+    ui: { type: "stack", direction: "column", children: [
+      { type: "repeat", items: { state: "sections" }, key: "id", layout: "column", template: {
+        type: "section", title: { item: "title" },
+        child: { type: "tree", items: { item: "rows" }, on_move: [{ set_state: "moved", value: { expr: "$event" } }] },
+      } },
+      { type: "button", label: "첫 구역 지우기", on_click: [{ set_state: "sections", value: { expr: '$filter($state.sections, function($s){ $s.id != "s1" })' } }] },
+    ] } as unknown as Block,
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { sections };
+  const transport = createFakeTransport(seed);
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+
+  const source = await screen.findByRole("treeitem", { name: "첫째 항목" });
+  const target = screen.getByRole("treeitem", { name: "둘째 항목" });
+  rowRect(target);
+  const value = transfer();
+  drag("dragstart", source, value);
+  drag("dragover", target, value, 20);
+  expect(target.getAttribute("data-drop-state")).toBe("valid");
+  fireEvent.click(screen.getByRole("button", { name: "첫 구역 지우기" }));
+  await waitFor(() => expect(screen.queryByRole("treeitem", { name: "첫째 항목" })).toBeNull());
+  await waitFor(() => expect(screen.getByRole("treeitem", { name: "둘째 항목" }).getAttribute("data-drop-state")).toBeNull());
+});
+
+it("on_move가 있는 트리는 항목이 없어도 빈 상태를 놓을 자리로 받고 end로 on_move를 부른다", async () => {
+  const twoTrees = {
+    type: "stack", direction: "column", children: [
+      { type: "tree", items: { state: "left" }, on_move: [{ set_state: "moved", value: { expr: "$event" } }] },
+      { type: "tree", items: { state: "right" }, on_move: [{ set_state: "moved", value: { expr: "$event" } }] },
+    ],
+  } as unknown as Block;
+  const state = () => ({ left: [{ key: "a", title: "가" }], right: [], moved: null });
+
+  const { calls } = setup(twoTrees, state());
+  const source = await screen.findByRole("treeitem", { name: "가" });
+  const trees = screen.getAllByRole("tree");
+  expect(trees, "빈 트리도 항목이 없을 때 그대로 트리로 선다").toHaveLength(2);
+  const empty = trees[1];
+  const value = transfer();
+  drag("dragstart", source, value);
+  drag("dragover", empty, value);
+  expect(empty.getAttribute("data-drop-state")).toBe("valid");
+  expect(document.querySelectorAll("[data-drop-state]"), "놓을 자리 표시는 한 곳뿐").toHaveLength(1);
+  drag("drop", empty, value);
+  await waitFor(() => expect(actCalls(calls, "/ui/children/1/on_move")).toEqual([
+    expect.objectContaining({ event: { key: "a", target: null, position: "end" }, item: null }),
+  ]));
+
+  cleanup();
+  setup(twoTrees, state());
+  const sourceAgain = await screen.findByRole("treeitem", { name: "가" });
+  const emptyAgain = screen.getAllByRole("tree")[1];
+  const leaving = transfer();
+  drag("dragstart", sourceAgain, leaving);
+  drag("dragover", emptyAgain, leaving);
+  expect(emptyAgain.getAttribute("data-drop-state")).toBe("valid");
+  fireEvent.dragLeave(emptyAgain, { relatedTarget: document.body });
+  expect(emptyAgain.getAttribute("data-drop-state"), "트리 밖으로 나가면 지운다").toBeNull();
+
+  cleanup();
+  setup({ type: "tree", items: { state: "right" } } as unknown as Block, { right: [] });
+  expect(await screen.findByText("없음")).toBeTruthy();
+  expect(screen.queryByRole("tree"), "on_move가 없는 빈 트리는 지금 그대로다").toBeNull();
 });
