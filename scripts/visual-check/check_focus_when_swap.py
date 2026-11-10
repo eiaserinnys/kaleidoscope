@@ -199,6 +199,79 @@ def check_scroll(before, after):
     return ok, notes
 
 
+def run_split(sb, page, app, window_id, output, width, height, captures):
+    """생김과 사라짐이 두 번의 변경 알림으로 나뉘어 와도 초점을 지키는지 확인한다.
+
+    첫 알림에는 같은 자리에 단추가 생기고 글칸은 아직 살아 있으며, 다음 알림에서 글칸만 사라진다.
+    교체 판정이 「이번 알림에 생긴 노드」만 보면 첫 알림의 단추를 못 찾아 첫 목록 행으로 간다.
+    """
+    size = f"{width}x{height}"
+    sb.set_state(window_id, {"idle": True, "editing": False, "name": ""})
+    start = app.get_by_role("button", name="편집 시작")
+    start.wait_for(state="visible", timeout=15_000)
+    page.wait_for_timeout(200)
+    start.click()
+    field = app.get_by_role("textbox", name="이름")
+    field.wait_for(state="visible", timeout=15_000)
+    wait_until(lambda: (page.evaluate("window.__ksSwap.active()") or {}).get("label") == "이름",
+               10, "글칸이 초점을 받지 않았습니다")
+    page.evaluate("window.__ksSwap.scrollToEnd()")
+    page.wait_for_timeout(200)
+    before = page.evaluate("window.__ksSwap.scroll()")
+    active_before = page.evaluate("window.__ksSwap.active()")
+    stacked = page.evaluate("window.__ksSwap.stacked()")
+    capture(page, output, f"split-before-{size}.png", captures)
+
+    page.evaluate("window.__ksSwap.reset()")
+    # 첫 알림: 단추가 생기고 글칸은 아직 살아 있다.
+    first = sb.core({"op": "window.patch_state", "window_id": window_id, "patch": {"idle": True}})
+    if "error" in first:
+        raise AssertionError(first["error"])
+    app.get_by_role("button", name="편집 시작").wait_for(state="visible", timeout=15_000)
+    page.wait_for_timeout(300)
+    still_focused = page.evaluate("window.__ksSwap.active()")
+    # 다음 알림: 글칸만 사라진다.
+    second = sb.core({"op": "window.patch_state", "window_id": window_id, "patch": {"editing": False}})
+    if "error" in second:
+        raise AssertionError(second["error"])
+    wait_until(lambda: (page.evaluate("window.__ksSwap.active()") or {}).get("label") == "편집 시작",
+               10, "나뉜 알림에서 초점이 새 단추로 가지 않았습니다")
+    page.wait_for_timeout(400)
+    active_after = page.evaluate("window.__ksSwap.active()")
+    after = page.evaluate("window.__ksSwap.scroll()")
+    batches = page.evaluate("window.__ksSwap.batches")
+    capture(page, output, f"split-after-{size}.png", captures)
+
+    added_batch = next((index for index, batch in enumerate(batches)
+                        if any("ks-data-button" in node for record in batch for node in record["added"])), None)
+    removed_batch = next((index for index, batch in enumerate(batches)
+                          if any("ks-input-field" in node for record in batch for node in record["removed"])), None)
+    focus_ok = bool(active_after) and active_after["tag"] == "button" and active_after["label"] == "편집 시작"
+    split_ok = (len(batches) >= 2 and added_batch is not None and removed_batch is not None
+                and added_batch < removed_batch)
+    scroll_ok, scroll_notes = check_scroll(before, after)
+    expected_stacked = width < COLUMN_BELOW
+    stacked_ok = stacked == expected_stacked
+    return {
+        "size": size,
+        "action": "split",
+        "key": "두 알림",
+        "stacked": stacked,
+        "stacked_ok": stacked_ok,
+        "focus_before": active_before,
+        "focus_after": active_after,
+        "focus_ok": focus_ok,
+        "split_still_focused": still_focused,
+        "batches": batches,
+        "added_batch": added_batch,
+        "removed_batch": removed_batch,
+        "split_ok": split_ok,
+        "scroll": scroll_notes,
+        "scroll_ok": scroll_ok,
+        "ok": focus_ok and split_ok and scroll_ok and stacked_ok,
+    }
+
+
 def run_action(sb, page, app, window_id, output, width, height, action, captures):
     size = f"{width}x{height}"
     sb.set_state(window_id, {"idle": True, "editing": False, "name": ""})
@@ -306,6 +379,7 @@ def main():
                     page.wait_for_timeout(500)
                     for action in ("enter", "escape"):
                         result["checks"].append(run_action(sb, page, app, window_id, output, width, height, action, result["captures"]))
+                    result["checks"].append(run_split(sb, page, app, window_id, output, width, height, result["captures"]))
         except Exception:  # noqa: BLE001 - 판정 실패도 결과와 캡처를 남긴다
             result["error"] = traceback.format_exc()[-3000:]
         finally:
@@ -323,7 +397,8 @@ def main():
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"ok": result["ok"], "checks": [
         {"size": check["size"], "action": check["action"], "focus_ok": check["focus_ok"],
-         "batch_ok": check["batch_ok"], "scroll_ok": check["scroll_ok"], "stacked_ok": check["stacked_ok"]}
+         "batch_ok": check.get("batch_ok"), "split_ok": check.get("split_ok"),
+         "scroll_ok": check["scroll_ok"], "stacked_ok": check["stacked_ok"]}
         for check in result["checks"]], "error": result.get("error")}, ensure_ascii=False, indent=2), flush=True)
     print(f"result {output / 'result.json'}", flush=True)
     return 0 if result["ok"] else 1

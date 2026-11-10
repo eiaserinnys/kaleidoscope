@@ -614,6 +614,41 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(next));
   });
 
+  it("초점을 쥔 글칸이 사라지기 전 알림에서 생긴 같은 자리 조작으로 초점을 옮긴다", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const rows = Array.from({ length: 30 }, (_, index) => ({ key: `r${index}`, title: `행 ${String(index + 1).padStart(2, "0")}` }));
+    const definition: AppDefinition = {
+      id: "focus-swap-split", name: "두 알림 교체", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { rows, idle: false, editing: true, name: "" },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "list", items: { state: "rows" } },
+        { type: "when", value: { state: "idle" }, child: { type: "button", label: "편집 시작", on_click: [{ set_state: "idle", value: false }, { set_state: "editing", value: true }] } },
+        { type: "when", value: { state: "editing" }, child: {
+          type: "input", label: "이름", value: { state: "name" }, on_change: { set_state: "name" }, focus: { state: "editing" },
+          on_submit: [{ set_state: "editing", value: false }, { set_state: "idle", value: true }],
+          on_cancel: [{ set_state: "editing", value: false }, { set_state: "idle", value: true }],
+        } },
+      ] },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const input = await screen.findByRole("textbox", { name: "이름" });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+
+    // 실제 앱은 저장이 끝나고 글칸을 닫는 두 번의 내보내기를 따로 하므로, 새 조작이 생기는 알림과
+    // 초점을 쥔 글칸이 사라지는 알림이 나뉘어 온다. 첫 알림에서는 글칸이 아직 살아 있다.
+    await act(async () => { await store.call({ op: "window.patch_state", window_id: "viewer-window", patch: { idle: true } }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    const added = screen.getByRole("button", { name: "편집 시작" });
+    expect(input.isConnected).toBe(true);
+
+    await act(async () => { await store.call({ op: "window.patch_state", window_id: "viewer-window", patch: { editing: false } }); });
+    await waitFor(() => expect(document.activeElement).toBe(added));
+    expect(focus.mock.calls.at(-1)?.[0]).toMatchObject({ preventScroll: true });
+    store.dispose();
+  });
+
   it("승인 목록이 비면 말풍선 대신 대화 입력칸으로 초점을 옮긴다", async () => {
     await focusFixture('<div><button>내 말풍선</button><div role="list"><button role="listitem">허용</button></div></div><textarea class="ks-agent-chat-input" aria-label="메시지"></textarea>');
     const allow = screen.getByRole("listitem");
