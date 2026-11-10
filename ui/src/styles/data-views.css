@@ -100,16 +100,6 @@
 .ks-data-tab-panel > .ks-list.is-grid::before, .ks-data-section-child > .ks-list.is-grid::before,
 .ks-data-stack.is-column:not(.gap-none) > .ks-data-stack-item:not(:first-child) > .ks-list.is-grid::before { display: none; }
 .ks-data-stack-item:has(> .ks-data-toolbar) + .ks-data-stack-item > .ks-list.is-grid::before { display: block; }
-/* 스스로 스크롤하는 목록과 반복은 아래나 위에 더 볼 내용이 있으면 가장자리에 선을 둔다.
-   표 머리와 같은 스크롤 상태 컨테이너 질의를 쓴다. 격자 목록의 ::before는 위 여백이 쓰므로
-   위쪽 선은 두지 않는다. 스크롤 상태 질의를 모르는 엔진은 선을 그리지 않는다. */
-.ks-data-view:is(.ks-list, .ks-repeat) { container-type: scroll-state; }
-@container scroll-state(scrollable: bottom) {
-  .ks-data-view:is(.ks-list, .ks-repeat)::after { content: ""; display: block; position: sticky; inset-block-end: 0; z-index: 3; height: var(--ks-line-width); margin-block-start: calc(-1 * var(--ks-line-width)); background: var(--ks-color-border); }
-}
-@container scroll-state(scrollable: top) {
-  .ks-data-view:is(.ks-list:not(.is-grid), .ks-repeat)::before { content: ""; display: block; position: sticky; inset-block-start: 0; z-index: 3; height: var(--ks-line-width); margin-block-end: calc(-1 * var(--ks-line-width)); background: var(--ks-color-border); }
-}
 .ks-list.is-loading, .ks-data-loading-rows { overflow: hidden; pointer-events: none; cursor: default; }
 .ks-list.is-loading .ks-row > .ks-data-skeleton, .ks-list.is-loading .ks-list-content > .ks-data-skeleton, .ks-data-loading-rows .ks-data-skeleton { padding: 0; }
 .ks-data-loading-rows .ks-table-header .ks-data-skeleton i { height: calc(var(--ks-type-meta) * var(--ks-line-body)); }

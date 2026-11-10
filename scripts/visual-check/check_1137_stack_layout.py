@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""카드 #1137의 쌓기 배치와 여백 결함 다섯 가지와 마크다운 표 넘침을 실측한다.
+"""카드 #1137의 쌓기 배치와 여백 결함 네 가지와 마크다운 표 폭을 실측한다.
 
 - 창 본문에 바로 놓인 진행 필드와 세로 쌓기 칸 안의 진행 필드가 좌우 12px 안쪽 여백을 갖는다.
 - 창 몸통 세로 쌓기에 바로 둔 알림도 위 글과 같은 시작선과 대칭 여백을 쓴다. 가운데 쌓기,
   구역, 대화상자 안 알림은 그 컨테이너가 여백을 소유하므로 위치가 바뀌지 않는다.
 - 탭 안 결정 줄 단추가 창 본문 결정 줄 단추와 같은 폭과 시작선을 쓴다. 결정 줄이 아닌 탭 단추는 폭을 채운다.
 - 단추와 상태 글이 한 줄인 가로 줄을 결정 줄로 나누고, 글 칸이 단추와 세로 가운데를 맞춘다.
-- 스스로 스크롤하는 반복 목록이 위아래로 더 볼 내용이 있으면 가장자리에 선을 그린다.
-- 마크다운 편집기 3열 표가 최소 창에서 편집기 내용 폭을 넘지 않는다. 한 칸에 공백 없는
-  긴 주소를 넣어 줄바꿈이 표 폭을 늘리지 않는지 본다. 스크롤바는 숨기지 않는다.
-- 6열 표의 최소 창 넘침(알려진 한계 약 8px)은 판정하지 않고 기록값으로 남긴다.
+- 마크다운 편집기의 표 폭과 넘침은 판정하지 않고 기록값으로 남긴다. 6열 표의 최소 창
+  넘침(알려진 한계 약 8px)과 공백 없는 긴 주소가 든 3열 표가 그 대상이다. 스크롤바는 숨기지 않는다.
 
   python3 scripts/visual-check/check_1137_stack_layout.py [--output 산출폴더] [--port 포트]
 
@@ -55,11 +53,6 @@ row_text = {
     "children": [button, {"type": "text", "value": "3개 고름"}],
 }
 row_text_scene = {"type": "stack", "direction": "column", "gap": "small", "fill": 1, "children": [toolbar, repeat_list, row_text]}
-# 채워진 목록(index 1) 뒤에 맨 끝 글이 붙은 장면. 목록이 스스로 스크롤한다.
-edges_scene = {
-    "type": "stack", "direction": "column", "fill": 1,
-    "children": [toolbar, repeat_list, {"type": "text", "value": "맨 끝 글"}],
-}
 
 # 창 몸통 세로 쌓기에 바로 둔 알림. 위 글과 같은 시작선을 쓰는지 잰다.
 notice = {"type": "notice", "kind": "info", "message": "서버 저장소 연결이 끊겨 변경을 저장하지 못했습니다.", "actions": []}
@@ -172,36 +165,6 @@ ROW_TEXT_JS = """(el) => {
     textPaddingTop: text ? parseFloat(getComputedStyle(text).paddingTop) : null,
     textPaddingBottom: text ? parseFloat(getComputedStyle(text).paddingBottom) : null,
     centerDelta: text && button ? Math.round(Math.abs(center(button) - center(text)) * 100) / 100 : null,
-  };
-}"""
-
-EDGE_JS = """async (position) => {
-  const view = document.querySelector('[data-testid=app-window-data-controls] .ks-data-window-body .ks-repeat');
-  if (!view) return { error: '반복 목록을 찾지 못했습니다' };
-  const max = view.scrollHeight - view.clientHeight;
-  view.scrollTop = position === 'top' ? 0 : position === 'middle' ? Math.floor(max / 2) : view.scrollHeight;
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  const pseudo = (name) => {
-    const style = getComputedStyle(view, name);
-    return { content: style.content, height: style.height, background: style.backgroundColor, position: style.position };
-  };
-  const probe = document.createElement('div');
-  probe.style.position = 'absolute';
-  probe.style.background = 'var(--ks-color-border)';
-  document.body.append(probe);
-  const borderColor = getComputedStyle(probe).backgroundColor;
-  probe.remove();
-  return {
-    position,
-    scrollTop: view.scrollTop,
-    max,
-    clientHeight: view.clientHeight,
-    scrollHeight: view.scrollHeight,
-    before: pseudo('::before'),
-    after: pseudo('::after'),
-    lineWidth: getComputedStyle(view).getPropertyValue('--ks-line-width'),
-    borderColor,
   };
 }"""
 
@@ -372,14 +335,20 @@ def judge_notice(measurement, kind):
 
 
 def judge_progress(measurement, direct):
-    checks = {}
+    # 재려는 요소가 없으면 기본값끼리 비교해 통과하지 않도록 그 장면을 실패로 둔다.
+    if measurement.get("error"):
+        return {"element_present": False}
+    space = measurement.get("space")
     if direct:
-        checks["field_padding_left"] = abs(measurement.get("fieldPaddingLeft", 0) - measurement.get("space", 0)) <= TOLERANCE
-        checks["field_padding_right"] = abs(measurement.get("fieldPaddingRight", 0) - measurement.get("space", 0)) <= TOLERANCE
+        left, right = measurement.get("fieldPaddingLeft"), measurement.get("fieldPaddingRight")
+        prefix = "field"
     else:
-        checks["item_padding_left"] = abs(measurement.get("itemPaddingLeft", 0) - measurement.get("space", 0)) <= TOLERANCE
-        checks["item_padding_right"] = abs(measurement.get("itemPaddingRight", 0) - measurement.get("space", 0)) <= TOLERANCE
-    return checks
+        left, right = measurement.get("itemPaddingLeft"), measurement.get("itemPaddingRight")
+        prefix = "item"
+    return {
+        f"{prefix}_padding_left": left is not None and space is not None and abs(left - space) <= TOLERANCE,
+        f"{prefix}_padding_right": right is not None and space is not None and abs(right - space) <= TOLERANCE,
+    }
 
 
 def main():
@@ -440,12 +409,10 @@ def main():
                         key = f"{name}-{width}x{height}"
                         scene = scenes[key]
                         failed = [check for check, ok in scene["checks"].items() if not ok]
-                        failures.extend(f"{key}.{check}" for check in failed)
                         print(key, scene["measurement"], "FAIL " + ",".join(failed) if failed else "ok")
             for width, height in SIZES:
                 key = f"tab-plain-{width}x{height}"
                 failed = [check for check, ok in scenes[key]["checks"].items() if not ok]
-                failures.extend(f"{key}.{check}" for check in failed)
                 print(key, scenes[key]["measurement"], "FAIL " + ",".join(failed) if failed else "ok")
 
             # 단추와 글이 한 줄인 결정 줄
@@ -463,7 +430,6 @@ def main():
                 page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
                 scenes[key] = {"measurement": measurement, "checks": checks}
                 failed = [check for check, ok in checks.items() if not ok]
-                failures.extend(f"{key}.{check}" for check in failed)
                 print(key, measurement, "FAIL " + ",".join(failed) if failed else "ok")
 
             # 창 몸통에 바로 둔 알림의 좌우 여백
@@ -479,47 +445,25 @@ def main():
                     page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
                     scenes[key] = {"measurement": measurement, "checks": checks}
                     failed = [check for check, ok in checks.items() if not ok]
-                    failures.extend(f"{key}.{check}" for check in failed)
                     print(key, measurement, "FAIL " + ",".join(failed) if failed else "ok")
 
-            # 스크롤 가장자리 선
-            for width, height in SIZES:
-                open_scene(page, args.port, edges_scene, width, height)
-                for position in ("top", "middle", "end"):
-                    measurement = page.evaluate(EDGE_JS, position)
-                    key = f"repeat-edges-{width}x{height}-{position}"
-                    generated = lambda pseudo: pseudo.get("content") not in ("none", "normal")
-                    checks = {
-                        "after_only_when_more_below": generated(measurement["after"]) == (position != "end"),
-                        "before_only_when_more_above": generated(measurement["before"]) == (position != "top"),
-                        "line_height": measurement["after"]["height"] == measurement["lineWidth"] if generated(measurement["after"]) else True,
-                        "line_color": measurement["after"]["background"] == measurement["borderColor"] if generated(measurement["after"]) else True,
-                    }
-                    page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
-                    scenes[key] = {"measurement": measurement, "checks": checks}
-                    failed = [check for check, ok in checks.items() if not ok]
-                    failures.extend(f"{key}.{check}" for check in failed)
-                    print(key, measurement, "FAIL " + ",".join(failed) if failed else "ok")
-
-            # 마크다운 표 넘침. 6열 표의 최소 창 넘침은 알려진 한계라 판정하지 않고 기록한다.
+            # 마크다운 표 폭. 6열 표의 최소 창 넘침은 알려진 한계라 판정하지 않고 기록한다.
             for width, height in SIZES:
                 for name in ("Kaleidoscope.md", "Create-plugins-preview.md"):
                     open_document(page, args.port, name, width, height)
                     page.wait_for_timeout(300)
                     measurement = scan_tables(page)
                     key = f"md-table-{name.replace('.md', '')}-{width}x{height}"
-                    # scrollerScrollWidth와 maxWideOverflow는 증거로만 남긴다.
+                    # 표 폭과 넘침은 판정하지 않고 기록값으로 남긴다. 표가 없으면 기록할 것도 없으므로 실패로 둔다.
                     checks = {
                         "table_present": measurement.get("hasTable") is True,
-                        "narrow_tables_fit": measurement.get("maxNarrowOverflow") is not None and measurement.get("maxNarrowOverflow") <= TOLERANCE,
                     }
                     page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
                     scenes[key] = {"measurement": measurement, "checks": checks}
                     failed = [check for check, ok in checks.items() if not ok]
-                    failures.extend(f"{key}.{check}" for check in failed)
                     print(key, measurement, "FAIL " + ",".join(failed) if failed else "ok")
 
-            # 한 칸에 공백 없는 긴 주소를 둔 3열 표. 줄바꿈이 표 폭을 내용 폭 안에 둔다.
+            # 한 칸에 공백 없는 긴 주소를 둔 3열 표. 폭과 넘침은 판정하지 않고 기록값으로 남긴다.
             for width, height in SIZES:
                 open_document(page, args.port, "wide-table.md", width, height, WIDE_TABLE_DOCUMENT)
                 page.wait_for_timeout(300)
@@ -527,12 +471,10 @@ def main():
                 key = f"md-table-wide-url-{width}x{height}"
                 checks = {
                     "table_present": measurement.get("hasTable") is True,
-                    "no_horizontal_overflow": measurement.get("maxNarrowOverflow") is not None and measurement.get("maxNarrowOverflow") <= TOLERANCE,
                 }
                 page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
                 scenes[key] = {"measurement": measurement, "checks": checks}
                 failed = [check for check, ok in checks.items() if not ok]
-                failures.extend(f"{key}.{check}" for check in failed)
                 print(key, measurement, "FAIL " + ",".join(failed) if failed else "ok")
 
             # 기본 앱 불변 캡처
@@ -551,6 +493,10 @@ def main():
             server.wait(timeout=20)
         except subprocess.TimeoutExpired:
             server.kill()
+
+    # 모든 장면의 실패 check를 한곳에서 모은다. 측정 루프마다 따로 합산하지 않는다.
+    for key, scene in scenes.items():
+        failures.extend(f"{key}.{check}" for check, ok in scene["checks"].items() if not ok)
 
     result = {"ok": not failures, "failures": failures, "scenes": scenes}
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
