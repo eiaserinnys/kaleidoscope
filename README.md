@@ -96,11 +96,13 @@ App workers run Python 3 (`python3` on Linux and macOS, `python` on Windows), wh
 
 ### Run a private app store
 
-Download `kaleidoscope-store-server-x86_64-pc-windows-msvc.exe` from Releases, or build it with `cargo build --release -p kaleidoscope-store-server`. Both command-line flags are required:
+Download `kaleidoscope-store-server-x86_64-pc-windows-msvc.exe` from Releases, or build it with `cargo build --release -p kaleidoscope-store-server`. `--bind` and `--data-dir` are required; `--invite-code-file` and `--publish-pull-request` are optional:
 
 ```text
-kaleidoscope-store-server --bind 0.0.0.0:4230 --data-dir ./store-data
+kaleidoscope-store-server --bind 0.0.0.0:4230 --data-dir ./store-data [--invite-code-file ./invite.txt] [--publish-pull-request https://github.com/<owner>/<repo>]
 ```
+
+With `--invite-code-file`, reads and `POST /publish` require the invite code in the `x-kaleidoscope-invite` header. `--publish-pull-request` makes the index declare `{"method":"pull_request","url":"..."}` so agents open a pull request in that repository instead of publishing directly; without it the index declares `{"method":"direct","path":"publish"}`. `POST /publish` is unchanged either way.
 
 The server serves the version 1 store index and accepts app folders through `POST /publish` as multipart files. Publishing the same contents keeps the existing release; changed contents create a new release. It has no login or approval: bind it only where your private network controls access.
 

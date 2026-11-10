@@ -1,3 +1,4 @@
+use kaleidoscope_store_server::PublishDeclaration;
 use reqwest::{
     multipart::{Form, Part},
     Client, StatusCode,
@@ -42,11 +43,19 @@ async fn start_with_invite(
     dir: &Path,
     invite: Option<&str>,
 ) -> (String, tokio::task::JoinHandle<()>) {
+    start_with_publish(dir, invite, PublishDeclaration::Direct).await
+}
+async fn start_with_publish(
+    dir: &Path,
+    invite: Option<&str>,
+    publish: PublishDeclaration,
+) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = format!("http://{}", listener.local_addr().unwrap());
-    let router = kaleidoscope_store_server::router_with_invite(
+    let router = kaleidoscope_store_server::router_with_publish(
         dir.to_owned(),
         invite.map(str::to_owned),
+        publish,
     );
     let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     (address, task)
@@ -71,6 +80,19 @@ async fn publish_with_header(
 async fn get(client: &Client, base: &str, path: &str) -> Value {
     client
         .get(format!("{base}/{path}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+async fn get_with_invite(client: &Client, base: &str, path: &str, invite: &str) -> Value {
+    client
+        .get(format!("{base}/{path}"))
+        .header("x-kaleidoscope-invite", invite)
         .send()
         .await
         .unwrap()
@@ -484,4 +506,108 @@ async fn screenshot_is_in_manifest_and_served_as_png() {
     let response = client.get(format!("{base}/{path}")).send().await.unwrap();
     assert_eq!(response.headers()["content-type"], "image/png");
     assert_eq!(response.bytes().await.unwrap(), png);
+}
+
+#[test]
+fn pull_request_declaration_requires_plain_https_url() {
+    assert_eq!(
+        PublishDeclaration::pull_request("https://github.com/example/apps")
+            .unwrap()
+            .value(),
+        json!({"method":"pull_request","url":"https://github.com/example/apps"})
+    );
+    for url in [
+        "",
+        "github.com/example/apps",
+        "http://github.com/example/apps",
+        "https://example.com/apps?ref=main",
+        "https://example.com/apps#top",
+        "https://user@example.com/apps",
+        "https://user:secret@example.com/apps",
+    ] {
+        let error = PublishDeclaration::pull_request(url).unwrap_err();
+        assert_eq!(
+            error.id.as_deref(),
+            Some("STORESERVER_START_PUBLISH_URL_INVALID"),
+            "{url}"
+        );
+    }
+    assert_eq!(
+        PublishDeclaration::Direct.value(),
+        json!({"method":"direct","path":"publish"})
+    );
+}
+
+#[tokio::test]
+async fn pull_request_declaration_is_written_and_kept_after_publish() {
+    let dir = TempDir::new().unwrap();
+    let invite = "8e307891-fd5a-4d75-be0f-a80ab5df0602";
+    let declaration = PublishDeclaration::pull_request("https://github.com/example/apps").unwrap();
+    let expected = declaration.value();
+    let (base, _task) = start_with_publish(dir.path(), Some(invite), declaration).await;
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap();
+    assert_eq!(
+        get_with_invite(&client, &base, "index.json", invite).await["publish"],
+        expected
+    );
+    let (status, result) = publish_with_header(
+        &client,
+        &base,
+        form(app("보기"), store("요약"), None),
+        Some(invite),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(result["release"], 1);
+    let index = get_with_invite(&client, &base, "index.json", invite).await;
+    assert_eq!(index["publish"], expected);
+    assert_eq!(index["items"][0]["release"], 1);
+}
+
+#[test]
+fn binary_refuses_invalid_publish_url() {
+    let dir = TempDir::new().unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_kaleidoscope-store-server"))
+        .args([
+            "--bind",
+            "127.0.0.1:0",
+            "--data-dir",
+            dir.path().to_str().unwrap(),
+            "--publish-pull-request",
+            "http://example.com/apps",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("STORESERVER_START_PUBLISH_URL_INVALID"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[tokio::test]
+async fn restart_with_pull_request_keeps_items_and_other_fields() {
+    let dir = TempDir::new().unwrap();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap();
+    let (base, task) = start(dir.path()).await;
+    let (status, _) = publish(&client, &base, form(app("보기"), store("요약"), None)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let before = get(&client, &base, "index.json").await;
+    assert_eq!(
+        before["publish"],
+        json!({"method":"direct","path":"publish"})
+    );
+    task.abort();
+    let declaration = PublishDeclaration::pull_request("https://github.com/example/apps").unwrap();
+    let mut expected = before.clone();
+    expected["publish"] = declaration.value();
+    let (base, _task) = start_with_publish(dir.path(), None, declaration).await;
+    assert_eq!(get(&client, &base, "index.json").await, expected);
 }

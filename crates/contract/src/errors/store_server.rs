@@ -1,6 +1,7 @@
 error_catalog! { ENTRIES;
     STORESERVER_START_BIND_FAILED(address) { class: Server, place: "스토어 서버 시작", cause: "주소에 바인드하지 못했다", message: "스토어 서버 주소 {address}를 열지 못했습니다. 주소와 포트가 사용 가능한지 확인하세요.", fix: "주소와 포트를 확인하세요" }
     STORESERVER_START_INVITE_FILE_FAILED() { class: Io, place: "스토어 서버 초대코드 파일 읽기", cause: "초대코드 파일을 읽지 못했거나 값이 비었다", message: "스토어 서버 초대코드 파일을 읽지 못했습니다. 파일 경로와 내용을 확인하세요.", fix: "초대코드 파일 경로와 내용을 확인하세요" }
+    STORESERVER_START_PUBLISH_URL_INVALID() { class: InvalidRequest, place: "스토어 서버 올리기 주소 검사", cause: "--publish-pull-request 값이 사용자 정보, 쿼리, 조각이 없는 https 주소가 아니다", message: "스토어 서버의 올리기 주소가 올바르지 않습니다. 사용자 정보, 쿼리, 조각이 없는 https:// 주소를 --publish-pull-request에 지정하세요.", fix: "--publish-pull-request에 https:// 주소를 지정하세요" }
     STORESERVER_AUTH_INVITE_INVALID() { class: Unauthorized, place: "스토어 서버 초대코드 검사", cause: "초대코드 헤더가 없거나 서버 값과 다르다", message: "스토어 서버의 초대코드가 없거나 일치하지 않습니다. 초대코드를 확인해 다시 요청하세요.", fix: "초대코드를 확인하세요" }
     STORESERVER_START_DATA_DIRECTORY_FAILED() { class: Io, place: "스토어 자료 폴더 준비", cause: "자료 폴더를 열거나 만들지 못했다", message: "스토어 자료 폴더를 준비하지 못했습니다. 경로와 쓰기 권한을 확인하세요.", fix: "자료 폴더 경로와 권한을 확인하세요" }
     STORESERVER_PUBLISH_BODY_TOO_LARGE() { class: InvalidRequest, place: "게시 요청 크기 검사", cause: "본문이 22 MiB를 넘었다", message: "게시 요청이 22 MiB를 넘습니다. 앱과 파일 크기를 줄여 다시 올리세요.", fix: "게시 요청을 22 MiB 이하로 줄이세요" }

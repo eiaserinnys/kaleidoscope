@@ -10,21 +10,60 @@ use axum::{
     Json, Router,
 };
 use kaleidoscope_contract::{errors::store_server as e, CoreError};
+use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     path::{Path as FsPath, PathBuf},
     sync::Arc,
 };
 use tokio::sync::Mutex;
+use url::Url;
 
 /// 사설 스토어 초대코드를 담는 요청 헤더 이름.
 pub const INVITE_HEADER: &str = "x-kaleidoscope-invite";
+
+/// 색인의 `publish` 선언. 에이전트가 이 스토어에 앱을 어떻게 올리는지 알게 한다.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PublishDeclaration {
+    /// 이 서버의 `POST /publish`로 바로 올린다.
+    Direct,
+    /// 리포에 pull request를 올리면 배포가 색인을 갱신한다.
+    PullRequest { url: String },
+}
+
+impl PublishDeclaration {
+    /// `--publish-pull-request` 값으로 리포 PR 올리기 선언을 만든다.
+    /// 사용자 정보, 쿼리, 조각이 없는 https:// 주소만 받는다.
+    pub fn pull_request(url: &str) -> Result<Self, CoreError> {
+        let parsed = Url::parse(url).map_err(|_| e::STORESERVER_START_PUBLISH_URL_INVALID())?;
+        if parsed.scheme() != "https"
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.query().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err(e::STORESERVER_START_PUBLISH_URL_INVALID());
+        }
+        Ok(Self::PullRequest {
+            url: url.to_owned(),
+        })
+    }
+
+    /// 색인에 적는 값.
+    pub fn value(&self) -> Value {
+        match self {
+            Self::Direct => json!({"method": "direct", "path": "publish"}),
+            Self::PullRequest { url } => json!({"method": "pull_request", "url": url}),
+        }
+    }
+}
 
 #[derive(Clone)]
 struct AppState {
     dir: PathBuf,
     publish_lock: Arc<Mutex<()>>,
     invite: Option<String>,
+    publish: PublishDeclaration,
 }
 struct Failure(StatusCode, CoreError);
 impl IntoResponse for Failure {
@@ -34,15 +73,23 @@ impl IntoResponse for Failure {
 }
 type ResultResponse<T> = Result<T, Failure>;
 
-pub fn initialize(dir: &FsPath) -> Result<(), CoreError> {
-    storage::initialize(dir)
+pub fn initialize(dir: &FsPath, declaration: &PublishDeclaration) -> Result<(), CoreError> {
+    storage::initialize(dir, declaration)
 }
 pub fn router(dir: PathBuf) -> Router {
     router_with_invite(dir, None)
 }
 /// `invite`가 있으면 읽기와 직접 게시 요청에 초대코드 헤더를 요구한다.
 pub fn router_with_invite(dir: PathBuf, invite: Option<String>) -> Router {
-    initialize(&dir).expect("스토어 자료 폴더 준비");
+    router_with_publish(dir, invite, PublishDeclaration::Direct)
+}
+/// `declaration`은 색인에 적는 올리기 선언이다. `POST /publish`는 선언과 무관하게 초대코드로 계속 받는다.
+pub fn router_with_publish(
+    dir: PathBuf,
+    invite: Option<String>,
+    declaration: PublishDeclaration,
+) -> Router {
+    initialize(&dir, &declaration).expect("스토어 자료 폴더 준비");
     let invite = invite
         .map(|value| value.trim().to_ascii_lowercase())
         .filter(|value| !value.is_empty());
@@ -50,6 +97,7 @@ pub fn router_with_invite(dir: PathBuf, invite: Option<String>) -> Router {
         dir,
         publish_lock: Arc::new(Mutex::new(())),
         invite,
+        publish: declaration,
     };
     Router::new()
         .route("/index.json", get(index))
@@ -163,7 +211,7 @@ async fn publish(
         Failure(status, err)
     })?;
     let _guard = state.publish_lock.lock().await;
-    let (unchanged, response) = storage::publish(&state.dir, input)
+    let (unchanged, response) = storage::publish(&state.dir, input, &state.publish)
         .map_err(|err| Failure(StatusCode::INTERNAL_SERVER_ERROR, err))?;
     Ok((
         if unchanged {

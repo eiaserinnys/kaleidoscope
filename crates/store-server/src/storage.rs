@@ -1,4 +1,4 @@
-use crate::validation::Validated;
+use crate::{validation::Validated, PublishDeclaration};
 use chrono::Utc;
 use kaleidoscope_contract::{errors::store_server as e, CoreError, PermissionDecl};
 use serde_json::{json, Value};
@@ -27,14 +27,28 @@ fn atomic_json(path: &Path, value: &Value) -> std::io::Result<()> {
     tmp.persist(path).map_err(|e| e.error)?;
     Ok(())
 }
-pub fn initialize(dir: &Path) -> Result<(), CoreError> {
+pub fn initialize(dir: &Path, declaration: &PublishDeclaration) -> Result<(), CoreError> {
     fs::create_dir_all(dir.join("apps"))
         .and_then(|_| fs::create_dir_all(dir.join(".staging")))
         .map_err(|_| e::STORESERVER_START_DATA_DIRECTORY_FAILED())?;
-    let index = dir.join("index.json");
-    if !index.exists() {
-        atomic_json(&index,&json!({"format":1,"generated_at":now(),"publish":{"method":"direct","path":"publish"},"items":[]}))
-            .map_err(|_|e::STORESERVER_START_DATA_DIRECTORY_FAILED())?;
+    let index_path = dir.join("index.json");
+    let publish = declaration.value();
+    if !index_path.exists() {
+        atomic_json(
+            &index_path,
+            &json!({"format":1,"generated_at":now(),"publish":publish,"items":[]}),
+        )
+        .map_err(|_| e::STORESERVER_START_DATA_DIRECTORY_FAILED())?;
+        return Ok(());
+    }
+    let mut index = read_json(&index_path)?;
+    let object = index
+        .as_object_mut()
+        .ok_or_else(e::STORESERVER_PUBLISH_CATALOG_COMMIT_FAILED)?;
+    if object.get("publish") != Some(&publish) {
+        object.insert("publish".to_string(), publish);
+        atomic_json(&index_path, &index)
+            .map_err(|_| e::STORESERVER_START_DATA_DIRECTORY_FAILED())?;
     }
     Ok(())
 }
@@ -99,7 +113,11 @@ fn current_unchanged(dir: &Path, current: u64, input: &Validated) -> Result<bool
     }
     Ok(true)
 }
-pub fn publish(dir: &Path, input: Validated) -> Result<(bool, Value), CoreError> {
+pub fn publish(
+    dir: &Path,
+    input: Validated,
+    declaration: &PublishDeclaration,
+) -> Result<(bool, Value), CoreError> {
     let id = &input.app.id;
     let app_dir = dir.join("apps").join(id);
     fs::create_dir_all(&app_dir).map_err(|_| e::STORESERVER_PUBLISH_STAGE_WRITE_FAILED())?;
@@ -233,7 +251,7 @@ pub fn publish(dir: &Path, input: Validated) -> Result<(bool, Value), CoreError>
         items.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
     }
     index["generated_at"] = json!(now());
-    index["publish"] = json!({"method":"direct","path":"publish"});
+    index["publish"] = declaration.value();
     atomic_json(&index_path, &index).map_err(|_| e::STORESERVER_PUBLISH_CATALOG_COMMIT_FAILED())?;
     Ok((
         false,
