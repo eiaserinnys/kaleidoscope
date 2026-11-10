@@ -284,4 +284,8 @@ pub const RETIRED: &[(&str, &str)] = &[
         "STORAGE_APP_VALUES_WORKSPACE_DELETE_DATABASE_FAILED",
         "작업 삭제의 저장 항목 정리를 소유 열 기준 한 번으로 합쳐 STORAGE_WORKSPACE_DELETE_DATABASE_FAILED로 통합했다",
     ),
+    (
+        "SHELL_APP_IMPORT_REPLY_INVALID",
+        "앱 정의 가져오기가 앱스토어의 shell.import_app으로 옮겨 가며 머리 막대 가져오기 응답 검사를 없앴다",
+    ),
 ];
