@@ -284,6 +284,37 @@ describe("공용 우클릭 메뉴", () => {
     expect(send).toHaveBeenCalledWith({ requestId: 17, action: "selectAll" });
   });
 
+  it("채팅 입력칸의 붙여넣기는 이미지 클립보드를 먼저 읽어 첨부로 넘긴다", async () => {
+    const image = new Blob(["png"], { type: "image/png" });
+    const read = vi.fn().mockResolvedValue([{ types: ["image/png"], getType: vi.fn().mockResolvedValue(image) }]);
+    const readText = vi.fn().mockResolvedValue("글");
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { read, readText } });
+    render(<><ContextMenuHost /><textarea className="ks-agent-chat-input" aria-label="메시지" /></>);
+    const input = screen.getByLabelText("메시지") as HTMLTextAreaElement;
+    const received: File[][] = [];
+    input.addEventListener("ks-chat-paste-files", (event) => received.push((event as CustomEvent<{ files: File[] }>).detail.files));
+    input.focus();
+    fireEvent.contextMenu(input);
+    fireEvent.click(screen.getByRole("menuitem", { name: "붙여넣기" }));
+    await waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0][0].name).toBe("clipboard.png");
+    expect(received[0][0].type).toBe("image/png");
+    expect(readText).not.toHaveBeenCalled();
+  });
+
+  it("이미지 클립보드를 읽지 못하면 채팅 입력칸의 글 붙여넣기로 돌아간다", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("권한 거부"));
+    const readText = vi.fn().mockResolvedValue("글");
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { read, readText } });
+    const exec = vi.fn(); Object.defineProperty(document, "execCommand", { configurable: true, value: exec });
+    render(<><ContextMenuHost /><textarea className="ks-agent-chat-input" aria-label="메시지" /></>);
+    const input = screen.getByLabelText("메시지") as HTMLTextAreaElement;
+    input.focus();
+    fireEvent.contextMenu(input);
+    fireEvent.click(screen.getByRole("menuitem", { name: "붙여넣기" }));
+    await waitFor(() => expect(exec).toHaveBeenCalledWith("insertText", false, "글"));
+  });
+
   it("붙여넣기 읽기 실패에는 Ctrl+V를 안내한다", async () => {
     const onError = vi.fn();
     vi.stubGlobal("navigator", { ...navigator, clipboard: { readText: vi.fn().mockRejectedValue(new Error("권한 거부")) } });

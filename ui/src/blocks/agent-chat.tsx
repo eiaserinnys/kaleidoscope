@@ -13,7 +13,7 @@ import { useBinding, useChatDraft } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
 import { prepareShareForSend } from "../share/share-view";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
-import { ChatComposer } from "./chat-composer";
+import { ChatComposer, chatAreaPaste } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
 import { useFrameCoalesced } from "./frame-coalesced";
 import { Select } from "../components/select-toggle";
@@ -604,7 +604,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   );
 
   return (
-    <section {...blockRoot} className="ks-agent-chat" ref={shareRef}>
+    <section {...blockRoot} className="ks-agent-chat" ref={shareRef} onPaste={(event) => chatAreaPaste(event, inputRef.current, inputDisabled)}>
       {conversationToolbar()}
       {attached ? null : selectorRow()}
       {notices.length ? <Notice>{notices.join("\n")}</Notice> : null}

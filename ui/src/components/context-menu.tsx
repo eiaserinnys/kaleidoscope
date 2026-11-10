@@ -8,6 +8,7 @@ import { Menu, type MenuEntry } from "./menu";
 import { Button, Notice } from "./primitives";
 import { ownerOf } from "../share/overlay-owner";
 import { windowActionActive } from "../share/action-context";
+import { requestChatAttachment } from "../blocks/chat-paste";
 
 type MenuEvent = MouseEvent | ReactMouseEvent<HTMLElement>;
 type MenuState = { anchor: HTMLElement; point?: { x: number; y: number }; keyboardRect?: { left: number; top: number; bottom: number }; entries: MenuEntry[] };
@@ -56,6 +57,20 @@ async function readMenuClipboard(): Promise<string | null> {
   catch (reason) { reportError(shellErrors.SHELL_MENU_CLIPBOARD_READ_FAILED({ reason: reasonText(reason) })); return null; }
 }
 
+const CLIPBOARD_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+async function readClipboardImages(): Promise<File[]> {
+  try {
+    const files: File[] = [];
+    for (const item of await navigator.clipboard.read()) {
+      const type = CLIPBOARD_IMAGE_TYPES.find((candidate) => item.types.includes(candidate));
+      if (!type) continue;
+      files.push(new File([await item.getType(type)], `clipboard.${type === "image/jpeg" ? "jpg" : type.slice(6)}`, { type }));
+    }
+    return files;
+  } catch { return []; }
+}
+
 function textEntries(target: HTMLElement): MenuEntry[] {
   const input = target.closest("input, textarea");
   const field = input instanceof HTMLTextAreaElement || (input instanceof HTMLInputElement && ["text", "search", "url", "email", "tel", "password", "number"].includes(input.type)) ? input : null;
@@ -97,7 +112,21 @@ function textEntries(target: HTMLElement): MenuEntry[] {
   return [
     { id: "text-cut", label: "잘라내기", shortcut: "Ctrl+X", disabled: !selectedText || password, onSelect: () => { restoreField(); void writeMenuClipboard(selectedText, "잘라내기").then((ok) => { if (ok && hasFocus()) remove(); }); } },
     copy,
-    { id: "text-paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => { restoreField(); void readMenuClipboard().then((text) => { if (text !== null && hasFocus()) insert(text); }); } },
+    { id: "text-paste", label: "붙여넣기", shortcut: "Ctrl+V", onSelect: () => {
+      restoreField();
+      const chatField = field instanceof HTMLTextAreaElement && field.classList.contains("ks-agent-chat-input") ? field : null;
+      if (!chatField || typeof navigator.clipboard?.read !== "function") {
+        void readMenuClipboard().then((text) => { if (text !== null && hasFocus()) insert(text); });
+        return;
+      }
+      void readClipboardImages().then((files) => {
+        if (files.length) {
+          if (hasFocus()) { requestChatAttachment(chatField, files); chatField.focus(); }
+          return;
+        }
+        void readMenuClipboard().then((text) => { if (text !== null && hasFocus()) insert(text); });
+      });
+    } },
     { id: "text-separator", type: "separator" }, all,
   ];
 }

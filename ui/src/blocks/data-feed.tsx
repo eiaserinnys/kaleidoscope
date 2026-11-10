@@ -30,6 +30,9 @@ function asFeedEntry(value: unknown): FeedEntry | null {
   if (name === undefined) delete entry.name; else entry.name = name;
   if (meta === undefined) delete entry.meta; else entry.meta = meta;
   if (depth === undefined) delete entry.depth; else entry.depth = depth;
+  if (typeof value.collapsed === "boolean") entry.collapsed = value.collapsed; else delete entry.collapsed;
+  if (typeof value.checked === "boolean") entry.checked = value.checked; else delete entry.checked;
+  if (typeof value.table === "boolean") entry.table = value.table; else delete entry.table;
   if ("badges" in value) entry.badges = asBadges(value.badges); else delete entry.badges;
   if ("children" in value) entry.children = asArray(value.children).flatMap((child) => { const parsed = asFeedEntry(child); return parsed ? [parsed] : []; });
   else delete entry.children;
@@ -58,6 +61,20 @@ function flattenFeedEntries(entries: FeedEntry[]): FlattenedFeedItem[] {
     flattened[ancestor].replyCount = flattened.length - ancestor - 1;
   }
   return flattened;
+}
+function declaredCollapsed(value: unknown, grouped: boolean): Map<string, boolean> {
+  const declared = new Map<string, boolean>();
+  const walk = (entry: FeedEntry) => {
+    if (typeof entry.collapsed === "boolean") declared.set(entry.key, entry.collapsed);
+    (entry.children ?? []).forEach(walk);
+  };
+  groups(value, grouped, valid).forEach((group) => {
+    group.items.forEach((item) => {
+      const entry = asFeedEntry(item);
+      if (entry) walk(entry);
+    });
+  });
+  return declared;
 }
 type Row = { kind: "heading"; title: string; meta?: string; groupKey: string; collapsed: boolean } | { kind: "entry"; item: FlattenedFeedItem; index: number };
 type FeedHandlers = {
@@ -88,12 +105,16 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
         { id: "link-copy", label: "링크 주소 복사", onSelect: () => { void writeMenuClipboard(entry.link!, "링크 주소 복사"); } },
       ])}>{entry.meta}</a>
     : <span className="ks-view-meta">{entry.meta}</span>);
-  const canCollapse = collapsible || item.replyCount > 0;
+  const table = entry.table === true;
+  const hasCheck = typeof entry.checked === "boolean";
+  const checked = entry.checked === true;
+  const canCollapse = item.replyCount > 0 || (collapsible && (Boolean(entry.body) || (entry.media?.length ?? 0) > 0 || entry.collapsed !== undefined));
+  const collapseBadge = collapsed ? item.replyCount > 0 ? `답글 ${item.replyCount}개 접힘` : table ? null : "접힘" : item.replyCount > 0 ? `답글 ${item.replyCount}` : null;
   const collapseLabel = collapsed ? item.replyCount ? `답글 ${item.replyCount}개 펴기` : "본문 펴기" : item.replyCount ? `답글 ${item.replyCount}개 접기` : "접기";
-  return <><article data-ks-comment-key={encodeCommentKey(entry.key)} aria-setsize={count} aria-posinset={index + 1} className={`ks-feed-entry${item.depth > 0 ? " ks-feed-entry-nested" : ""}${collapsed ? " is-collapsed" : ""}${active ? " is-selected" : ""}${selectable ? " is-selectable" : ""}`} aria-current={active ? "true" : undefined} data-depth={item.depth} style={{ "--ks-feed-depth": Math.min(item.depth, 6) } as React.CSSProperties} data-focus-index={index} tabIndex={focused ? 0 : -1} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => { if (event.target === event.currentTarget) handlers.current.keyDown(event, index, entry); }} onClick={() => handlers.current.choose(entry)} onContextMenu={(event) => handlers.current.menu(event, entry)}>
+  return <><article data-ks-comment-key={encodeCommentKey(entry.key)} aria-setsize={count} aria-posinset={index + 1} className={`ks-feed-entry${item.depth > 0 ? " ks-feed-entry-nested" : ""}${table ? " is-table-row" : ""}${collapsed ? " is-collapsed" : ""}${active ? " is-selected" : ""}${selectable ? " is-selectable" : ""}`} aria-current={active ? "true" : undefined} data-depth={item.depth} style={{ "--ks-feed-depth": Math.min(item.depth, 6) } as React.CSSProperties} data-focus-index={index} tabIndex={focused ? 0 : -1} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => { if (event.target === event.currentTarget) handlers.current.keyDown(event, index, entry); }} onClick={() => { if (!hasCheck) handlers.current.choose(entry); }} onContextMenu={(event) => handlers.current.menu(event, entry)}>
     {isMedia(entry.image) && <MediaThumbnail media={entry.image} className="ks-feed-avatar" />}
-    <div className="ks-feed-content"><div className={`ks-feed-header${copy || canCollapse ? " is-copy" : ""}`}>
-      <div className="ks-feed-ident"><div className="ks-feed-name-line">{typeof entry.name === "string" && <strong style={validColor(entry.color) ? { color: entry.color } : undefined}>{entry.name}</strong>}<Badges values={entry.badges} />{(collapsed || item.replyCount > 0) && <Badges values={[collapsed ? item.replyCount > 0 ? `답글 ${item.replyCount}개 접힘` : "접힘" : `답글 ${item.replyCount}`]} />}</div>
+    <div className="ks-feed-content"><div className={`ks-feed-header${copy || canCollapse ? " is-copy" : ""}`} onClick={hasCheck && canCollapse ? () => handlers.current.toggle(entry.key) : undefined}>
+      <div className="ks-feed-ident"><div className="ks-feed-name-line">{hasCheck && <button type="button" role="checkbox" aria-checked={checked} aria-label={checked ? "완료 취소" : "완료"} title={checked ? "완료 취소" : "완료"} className={`ks-tree-check${checked ? " is-checked" : ""}`} onClick={(event) => { event.stopPropagation(); handlers.current.choose(entry); }}>{checked ? "✓" : ""}</button>}{typeof entry.name === "string" && <strong style={validColor(entry.color) ? { color: entry.color } : undefined}>{entry.name}</strong>}<Badges values={entry.badges} />{collapseBadge && <Badges values={[collapseBadge]} />}</div>
         {meta && (copy ? <span className="ks-feed-meta-copy">{meta}{!collapsed && handlers.current.copy(JSON.stringify([entry.key, "meta"]), entry.meta!)}</span> : meta)}</div>
       <div className="ks-feed-head-actions">{canCollapse && <IconButton className="ks-feed-collapse-btn" aria-label={collapseLabel} title={collapseLabel} onClick={(event) => { event.stopPropagation(); handlers.current.toggle(entry.key); }}><DataIcon name={collapsed ? "chevron-right" : "chevron-down"} /></IconButton>}</div>
     </div>
@@ -113,7 +134,27 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
-  const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => new Set());
+  const declared = useMemo(() => declaredCollapsed(value, Boolean(block.grouped)), [value, block.grouped]);
+  const appliedDeclared = useRef(declared);
+  const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => new Set(Array.from(declared).filter(([, collapsed]) => collapsed).map(([key]) => key)));
+  useEffect(() => {
+    const changes: Array<[string, boolean]> = [];
+    for (const [key, collapsed] of declared) {
+      if (appliedDeclared.current.get(key) === collapsed) continue;
+      appliedDeclared.current.set(key, collapsed);
+      changes.push([key, collapsed]);
+    }
+    if (!changes.length) return;
+    setCollapsedKeys((current) => {
+      let next = current;
+      for (const [key, collapsed] of changes) {
+        if (next.has(key) === collapsed) continue;
+        if (next === current) next = new Set(current);
+        if (collapsed) next.add(key); else next.delete(key);
+      }
+      return next;
+    });
+  }, [declared]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const rows = useMemo(() => {
     const sourceGroups = groups(value, Boolean(block.grouped), valid);
@@ -199,7 +240,7 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   });
   handlers.current = {
     focus: roving.setFocus,
-    keyDown: (event, index, entry) => roving.keyDown(event, index, () => choose(entry)),
+    keyDown: (event, index, entry) => roving.keyDown(event, index, () => { if (typeof entry.checked !== "boolean") choose(entry); }),
     choose,
     menu: (event, entry) => { if (!event.defaultPrevented) menu.open(event, event.currentTarget, entry as unknown as JsonValue, entry.key, "본문 복사", typeof entry.body === "string" ? entry.body : entry.body.join("\n\n")); },
     toggle: toggleEntry,

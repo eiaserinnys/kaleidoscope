@@ -1,12 +1,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { createRef } from "react";
+import { createRef, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatComposer } from "../blocks/chat-composer";
 import { ChatHistory } from "../blocks/chat-history";
 import { HistoryAttachmentView } from "../blocks/agent-attachments";
 import { AgentChatBlock, modelAvailabilityDescription } from "../blocks/agent-chat";
 import { Select } from "../components/select-toggle";
-import { WindowDataProvider } from "../data/window-data";
+import { WindowDataProvider, useWindowData } from "../data/window-data";
+import { ClientChatBlock, type ClientChatBlockData } from "../blocks/client-chat";
+import { ClientRuntime } from "../runtime/client-runtime";
+import { createShellStore } from "../core/shell-store";
 import type { AppDefinition, Binding, BindingValue, CoreError, CoreEvent, CoreReply, CoreRequest, ConversationItem, ConversationThread, ShellSnapshot } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 import { createFakeTransport } from "../core/fake-transport";
@@ -38,6 +41,46 @@ const models = [
   { id: "m2", label: "모델 2", available: true, group: { id: "node-b", label: "노드 B" } },
 ];
 const profiles = [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }];
+
+it("클라이언트 채팅의 미디어 첨부 응답을 호스트에서 읽어 이미지로 표시한다", async () => {
+  vi.spyOn(ClientRuntime.prototype, "start").mockResolvedValue(undefined);
+  const block: ClientChatBlockData = { type: "chat", client: { channel: "thread", on_send: "send", on_cancel: "cancel", on_attachment: "attachment" } };
+  const app: AppDefinition = { ...definition, ui: block, client: {
+    runtime: "javascript", entry: { id: "test-chat", version: 1 }, inputs: {}, outputs: {},
+    channels: ["thread"], actions: ["send", "cancel", "attachment"], commands: {}, state_keys: [], storage_entries: [],
+  } };
+  const snapshot = makeTestSnapshot({ definitions: [app] });
+  const transport = createFakeTransport({ snapshot, folder: null, files: {} });
+  const originalCall = transport.call.bind(transport);
+  const media = { permission: "cards", path: "/api/attachments/a1/content" };
+  const call = vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "data.media"
+    ? { op: "data.media", media: { mime: "image/png", data_base64: "aW1hZ2U=", width: 1, height: 1 } }
+    : originalCall(request));
+  const store = createShellStore(transport);
+  const window = snapshot.shared.windows[0];
+  function Chat() {
+    const data = useWindowData();
+    useEffect(() => {
+      const action = vi.spyOn(data, "requestClientAction").mockImplementation(async (_name, event) => {
+        data.publishClientChat("thread", { kind: "attachment", request_id: (event as { request_id: string }).request_id, media });
+      });
+      data.publishClientChat("thread", { kind: "snapshot", items: [{ ...item("media-item", "기록"), kind: "user", attachments: [{ id: "a1", name: "서버.png", mime: "image/png" }] }],
+        stream_id: null, text: "", busy: false, tool: null, queued: [] });
+      return () => action.mockRestore();
+    }, [data]);
+    return <ClientChatBlock block={block} context={{ store, window, definition: app }} pointer="/ui" />;
+  }
+  const view = render(<WindowDataProvider store={store} windowId={window.id} definition={app}><Chat /></WindowDataProvider>);
+  try {
+    await waitFor(() => expect(call).toHaveBeenCalledWith({ op: "data.media", window_id: window.id, media }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "서버.png" }).querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,aW1hZ2U="));
+  } finally {
+    view.unmount();
+    store.dispose();
+    vi.restoreAllMocks();
+  }
+});
+
 function setup(handler: (request: CoreRequest) => Promise<CoreReply>, appDefinition: AppDefinition = definition, initialLoading: Binding = false) {
   const snapshot = makeTestSnapshot({ definitions: [appDefinition] });
   snapshot.link = { state: "connected", mode: "remote", server_url: "https://example.test", device_name: "시험" };
@@ -611,6 +654,20 @@ describe("공용 대화 부품", () => {
     fireEvent.keyDown(input, { key: "Enter", keyCode: 229, isComposing: true });
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith();
+  });
+
+  it("채팅 영역에 붙여넣은 이미지를 입력칸 밖에서도 첨부로 받는다", async () => {
+    if (!URL.createObjectURL) URL.createObjectURL = () => "";
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = () => {};
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:시험");
+    setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    const section = document.querySelector<HTMLElement>(".ks-agent-chat")!;
+    const image = new File(["png"], "image.png", { type: "image/png" });
+    const clipboardData = { items: [{ kind: "file", getAsFile: () => image }], files: [image], types: ["Files"], getData: () => "" } as unknown as DataTransfer;
+    fireEvent.paste(section, { clipboardData });
+    expect(await screen.findByText("붙여넣은 이미지.png")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "메시지" }));
   });
 
   it("기록 그림은 불러오는 중과 표시된 뒤 같은 틀을 쓴다", async () => {

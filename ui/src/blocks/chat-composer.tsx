@@ -1,11 +1,51 @@
-import { useRef, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useRef, type ClipboardEvent, type KeyboardEvent, type RefObject } from "react";
 import { AGENT_ATTACHMENTS_MAX, AGENT_ATTACHMENT_MAX_BYTES, AGENT_ATTACHMENTS_TOTAL_MAX_BYTES } from "../contract/limits";
 import type { CoreError } from "../contract/contract";
 import { Square as SquareIcon } from "lucide-react";
 import { ArrowUp, ICON_SIZE, Paperclip, ScreenShare } from "../components/icons";
 import { IconButton, Notice } from "../components/primitives";
 import { AttachmentChip, DraftChip, makeDraftAttachment, type DraftAttachment, type Preview } from "./agent-attachments";
+import { CHAT_PASTE_FILES_EVENT, requestChatAttachment } from "./chat-paste";
 import * as shellErrors from "../contract/shell-errors";
+
+const CLIPBOARD_IMAGE_EXTENSIONS: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+
+/** 붙여넣기 데이터에서 파일을 모은다. 이름 없는 클립보드 그림도 파일 그대로 남기고, 같은 파일은 한 번만 넣는다. */
+export function extractClipboardFiles(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  const files: File[] = [];
+  const seen = new Set<string>();
+  const push = (file: File | null) => {
+    if (!file) return;
+    const key = `${file.type}|${file.size}|${file.name === "image.png" ? "" : file.name}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    files.push(file);
+  };
+  Array.from(data.items ?? []).forEach((item) => { if (item.kind === "file") push(item.getAsFile()); });
+  Array.from(data.files ?? []).forEach(push);
+  return files;
+}
+
+/** 첨부로 받을 파일만 고른다. 그림이 하나라도 있으면 글과 함께 와도 첨부이고, 다른 파일은 글 없이 왔을 때만 첨부다. */
+export function clipboardAttachmentFiles(data: DataTransfer | null): File[] {
+  const files = extractClipboardFiles(data);
+  if (!files.length) return [];
+  if (files.some((file) => file.type.startsWith("image/"))) return files;
+  return data && data.getData("text/plain").trim() === "" ? files : [];
+}
+
+/** 입력칸 밖에서 붙여넣어도 채팅 영역이 그림을 첨부로 받는다. 입력칸 자신은 ChatComposer가 처리한다. */
+export function chatAreaPaste(event: ClipboardEvent<HTMLElement>, input: HTMLTextAreaElement | null, disabled: boolean): void {
+  if (disabled || event.defaultPrevented) return;
+  const target = event.target;
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) return;
+  const files = clipboardAttachmentFiles(event.clipboardData);
+  if (!files.length) return;
+  event.preventDefault();
+  requestChatAttachment(input, files);
+  input?.focus();
+}
 
 export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachmentsChange, onSend, disabled, busy, onCancel, sharedWindows, onRemoveShared, onPreview, error, onError }: {
   draft: string;
@@ -39,15 +79,28 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
     onAttachmentsChange(accepted);
   };
 
+  const addFiles = (files: File[]) => {
+    addAttachments(files.map((file) => makeDraftAttachment(file, CLIPBOARD_IMAGE_EXTENSIONS[file.type] ? `붙여넣은 이미지.${CLIPBOARD_IMAGE_EXTENSIONS[file.type]}` : file.name || "붙여넣은 파일")));
+  };
+  const addFilesRef = useRef(addFiles);
+  addFilesRef.current = addFiles;
+  useEffect(() => {
+    const element = inputRef.current;
+    if (!element) return;
+    const listener = (event: Event) => {
+      const files = (event as CustomEvent<{ files?: File[] }>).detail?.files;
+      if (files?.length) addFilesRef.current(files);
+    };
+    element.addEventListener(CHAT_PASTE_FILES_EVENT, listener);
+    return () => element.removeEventListener(CHAT_PASTE_FILES_EVENT, listener);
+  }, [inputRef]);
+
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     if (disabled) return;
-    const data = event.clipboardData;
-    const files = Array.from(data.files);
-    const pasted = files.length ? files : Array.from(data.items).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter((file): file is File => file !== null);
-    if (!pasted.length) return;
-    if (!Array.from(data.types).includes("text/plain")) event.preventDefault();
-    const extensions: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
-    addAttachments(pasted.map((file) => makeDraftAttachment(file, extensions[file.type] ? `붙여넣은 이미지.${extensions[file.type]}` : file.name || "붙여넣은 파일")));
+    const files = clipboardAttachmentFiles(event.clipboardData);
+    if (!files.length) return;
+    event.preventDefault();
+    addFiles(files);
   };
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

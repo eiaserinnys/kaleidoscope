@@ -709,6 +709,67 @@ it("renders nested feed replies with depth, badges, and collapsible descendants"
   expect(await screen.findByText("깊은 답글")).not.toBeNull();
 });
 
+it("renders feed table rows with a header check box that selects without the row body selecting", async () => {
+  const { calls } = setup({
+    type: "feed", collapsible: true,
+    entries: [{ key: "todo", name: "할 일", body: "할 일 본문", table: true, checked: false }],
+    on_select: { set_state: "choice" },
+  } as unknown as Block, { choice: null });
+  const body = await screen.findByText("할 일 본문");
+  const article = body.closest("article")!;
+  expect(article.classList.contains("is-table-row")).toBe(true);
+  const check = within(article).getByRole("checkbox", { name: "완료" });
+  expect(check.getAttribute("aria-checked")).toBe("false");
+  fireEvent.click(check);
+  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: "todo" })));
+  const acts = () => calls.mock.calls.filter(([request]) => request.op === "data.act");
+  expect(acts()).toHaveLength(1);
+  fireEvent.click(body);
+  expect(acts()).toHaveLength(1);
+});
+
+it("toggles collapse from a checked feed entry header without selecting it", async () => {
+  const { calls } = setup({
+    type: "feed", collapsible: true,
+    entries: [{ key: "todo", name: "할 일", body: "할 일 본문", table: true, checked: true }],
+    on_select: { set_state: "choice" },
+  } as unknown as Block, { choice: null });
+  const article = (await screen.findByText("할 일 본문")).closest("article")!;
+  expect(within(article).getByRole("checkbox", { name: "완료 취소" }).getAttribute("aria-checked")).toBe("true");
+  fireEvent.click(within(article).getByText("할 일"));
+  expect(article.classList.contains("is-collapsed")).toBe(true);
+  expect(screen.queryByText("할 일 본문")).toBeNull();
+  expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
+});
+
+it("starts feed entries collapsed from data and applies changed data without undoing manual toggles", async () => {
+  const entries = [{ key: "a", name: "이름", body: "숨은 본문", collapsed: true }];
+  const { transport } = setup({ type: "feed", collapsible: true, entries: { expr: "$state.entries" } } as unknown as Block, { entries });
+  expect(await screen.findByText("이름")).toBeTruthy();
+  expect(screen.queryByText("숨은 본문")).toBeNull();
+  const article = () => screen.getByText("이름").closest("article")!;
+  expect(article().classList.contains("is-collapsed")).toBe(true);
+  fireEvent.click(within(article()).getByRole("button", { name: "본문 펴기" }));
+  expect(await screen.findByText("숨은 본문")).not.toBeNull();
+  const update = (value: JsonValue[]) => act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/entries": { status: "ready", value } } } }));
+  update([{ key: "a", name: "이름", body: "숨은 본문", collapsed: true }]);
+  expect(article().classList.contains("is-collapsed")).toBe(false);
+  update([{ key: "a", name: "이름", body: "숨은 본문", collapsed: false }]);
+  expect(article().classList.contains("is-collapsed")).toBe(false);
+  update([{ key: "a", name: "이름", body: "숨은 본문", collapsed: true }]);
+  await waitFor(() => expect(article().classList.contains("is-collapsed")).toBe(true));
+});
+
+it("does not show the collapsed badge on collapsed table rows without replies", async () => {
+  setup({ type: "feed", collapsible: true, entries: [{ key: "a", name: "이름", body: "표 본문", table: true, collapsed: true }] } as unknown as Block);
+  const article = (await screen.findByText("이름")).closest("article")!;
+  expect(within(article).queryByText("접힘")).toBeNull();
+  expect(within(article).getByRole("button", { name: "본문 펴기" })).toBeTruthy();
+  cleanup();
+  setup({ type: "feed", collapsible: true, entries: [{ key: "b", name: "이름", body: "흐름 본문", collapsed: true }] } as unknown as Block);
+  expect(await screen.findByText("접힘")).toBeTruthy();
+});
+
 it("counts descendants across flat feed entries that carry depth", async () => {
   setup({
     type: "feed", entries: [

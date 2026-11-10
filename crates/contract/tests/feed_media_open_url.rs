@@ -51,6 +51,21 @@ fn feed_media_and_link_round_trip() {
 }
 
 #[test]
+fn feed_entry_carries_table_collapsed_and_checked_flags() {
+    let value = json!({"key":"todo","body":"본문","table":true,"collapsed":true,"checked":false});
+    let parsed: FeedEntry = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(parsed.table, Some(true));
+    assert_eq!(parsed.collapsed, Some(true));
+    assert_eq!(parsed.checked, Some(false));
+    let serialized = serde_json::to_value(parsed).unwrap();
+    assert_eq!(serialized["table"], json!(true));
+    assert_eq!(serialized["collapsed"], json!(true));
+    assert_eq!(serialized["checked"], json!(false));
+    let old = app(json!({"type":"feed", "entries":[value]}), 27);
+    assert!(parse_app_definition(&old.to_string()).is_ok(), "피드 데이터 필드는 판을 제한하지 않는다");
+}
+
+#[test]
 fn list_remove_and_open_url_require_new_version_and_menu_item_binding() {
     let list = json!({"type":"list","items":[],"on_remove":{"set_state":"selected"}});
     let mut old = app(list.clone(), 35); old["state"]["selected"] = Value::Null;
