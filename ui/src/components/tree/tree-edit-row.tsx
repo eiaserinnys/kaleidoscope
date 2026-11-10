@@ -4,10 +4,12 @@ import { ErrorId } from "../primitives";
 import { TextInput, type TextInputCancelReason } from "../text-input";
 
 /** 폴더 트리와 데이터 트리가 함께 쓰는 바로 입력 글칸. 배치와 여백은 폴더 트리의 바로 입력 행을 그대로 따른다. */
-export function TreeEditInput({ inputKey, ariaLabel, value, cancelOnBlur = false, cancelOnEscape = false, commitOnBlur = true, selectBeforeExtension = false, onCommit, onCancel }: {
+export function TreeEditInput({ inputKey, ariaLabel, value, focusReturn, cancelOnBlur = false, cancelOnEscape = false, commitOnBlur = true, selectBeforeExtension = false, onCommit, onCancel }: {
   inputKey?: string;
   ariaLabel: string;
   value: string;
+  /** 글칸이 사라졌을 때 초점을 되돌릴 조작을 가리키는 표시. window-focus의 같은 자리 규칙이 읽는다. */
+  focusReturn?: string;
   cancelOnBlur?: boolean;
   cancelOnEscape?: boolean;
   commitOnBlur?: boolean;
@@ -18,6 +20,7 @@ export function TreeEditInput({ inputKey, ariaLabel, value, cancelOnBlur = false
   return <TextInput
     key={inputKey}
     aria-label={ariaLabel}
+    data-focus-return={focusReturn}
     cancelOnBlur={cancelOnBlur}
     cancelOnEscape={cancelOnEscape}
     commitOnBlur={commitOnBlur}

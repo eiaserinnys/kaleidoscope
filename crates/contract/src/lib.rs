@@ -339,7 +339,10 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 58판: 표 내용 칸의 muted(덜 띄는 칸).
 /// - 59판: 트리 확인 모드의 부모 행 확인 상자와 확인 상자가 있는 행의 본문 클릭 시 펼침 유지.
 /// - 60판: 데이터 트리의 바로 입력과 끌어 옮기기, 구역 머리의 메뉴와 바로 이름 바꾸기.
-pub const BLOCK_SET_VERSION: u32 = TREE_EDIT_MOVE_BLOCK_SET_VERSION;
+/// - 61판: 데이터 트리의 빈 자리 글(`empty_text`).
+pub const BLOCK_SET_VERSION: u32 = TREE_EMPTY_TEXT_BLOCK_SET_VERSION;
+/// 데이터 트리가 항목 없이 그릴 한 줄의 글(`empty_text`)을 처음 지원하는 블록 세트 판.
+pub const TREE_EMPTY_TEXT_BLOCK_SET_VERSION: u32 = 61;
 /// 데이터 트리의 바로 입력(`editing`, `on_edit`, `on_edit_cancel`)과 끌어 옮기기(`on_move`), 구역 머리의 메뉴와
 /// 바로 이름 바꾸기를 처음 지원하는 블록 세트 판.
 pub const TREE_EDIT_MOVE_BLOCK_SET_VERSION: u32 = 60;
@@ -1961,6 +1964,11 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_move: Option<Actions>,
+        /// (61판) 항목이 없을 때 그릴 한 줄의 글. 없으면 지금처럼 빈 상태 상자를 그린다.
+        /// 빈 문자열이면 글 없는 한 줄을 그리고, 값을 계산해 문자열이 아니면 빈 문자열로 본다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        empty_text: Option<Binding>,
     },
     /// (13판) 파일 폴더 또는 선언된 저장소 문서 모음을 읽고 항목을 고른다.
     /// PC 전체 권한은 탐색기만 받는다. `read_only`는 쓰기 UI를 보이지 않게 한다.
@@ -2841,6 +2849,8 @@ enum RawBlock {
         on_edit_cancel: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_move: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        empty_text: Option<Binding>,
     },
     Folder {
         root: FolderRoot,
@@ -3599,6 +3609,7 @@ impl From<RawBlock> for Block {
                 on_edit,
                 on_edit_cancel,
                 on_move,
+                empty_text,
             } => Block::Tree {
                 items,
                 root,
@@ -3612,6 +3623,7 @@ impl From<RawBlock> for Block {
                 on_edit,
                 on_edit_cancel,
                 on_move,
+                empty_text,
             },
             RawBlock::Folder {
                 root,
@@ -4053,6 +4065,7 @@ impl From<RawBlock> for Block {
                 on_edit: None,
                 on_edit_cancel: None,
                 on_move: None,
+                empty_text: None,
             },
             RawBlock::MarkdownEditor { file, document } => Block::Markdown {
                 file,

@@ -44,7 +44,7 @@ import { inputSpinApp } from "../e2e/fixtures/input-spin";
 import { inputOptionsApp } from "../e2e/fixtures/input-options-app";
 import { inputDateTimeApp } from "../e2e/fixtures/input-date-time-app";
 import { canvasLoadingApp, canvasLoadingMedia, frameVisibilityApp } from "../e2e/fixtures/frame-visibility-1136";
-import { treeEditMoveApp } from "../e2e/fixtures/tree-edit-move-1112";
+import { treeEditMoveApp, treeNameKeyApp } from "../e2e/fixtures/tree-edit-move-1112";
 import windowBodyGutter from "../e2e/fixtures/window-body-gutter.json";
 import windowBodyGutterLists from "../e2e/fixtures/window-body-gutter-lists.json";
 import windowBodyGutterRow from "../e2e/fixtures/window-body-gutter-row.json";
@@ -101,7 +101,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, repeatEmptyCenterApp, inputSpinApp, inputOptionsApp, inputDateTimeApp, frameVisibilityApp, canvasLoadingApp, treeEditMoveApp];
+const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, repeatEmptyCenterApp, inputSpinApp, inputOptionsApp, inputDateTimeApp, frameVisibilityApp, canvasLoadingApp, treeEditMoveApp, treeNameKeyApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},

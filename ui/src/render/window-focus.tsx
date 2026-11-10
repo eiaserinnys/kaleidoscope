@@ -30,7 +30,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let focusedDialogElement: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
-    let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number; swapIndex: number }> = [];
+    let focusPath: Array<{ ancestor: HTMLElement; childIndex: number; controlIndex: number; swapIndex: number }> = [];
     let bookmark = focusBookmark(null, body);
     // StrictMode가 효과를 다시 붙일 때처럼 이 인스턴스가 붙기 전에 초점을 받은 내용 칸을 이어받는다.
     const seeded = document.activeElement;
@@ -67,6 +67,19 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     };
     const swapTarget = (): HTMLElement | undefined => {
       if (!focused || focused.isConnected || !isControl(focused)) return undefined;
+      // 사라진 조작에 되돌아갈 조작 표시가 있으면, 같은 자리에 새로 생긴 덩어리 안에서 그 조작을 먼저 고른다.
+      // 반복 key가 바뀌면 구역 항목째 다시 만들어져 초점을 쥔 조작이 사라지므로, 모음 복구보다 앞서 판정한다.
+      const returnSelector = focused.getAttribute("data-focus-return");
+      if (returnSelector) {
+        for (const { ancestor, childIndex } of focusPath) {
+          if (!body.contains(ancestor) || childIndex < 0) continue;
+          const child = ancestor.children[childIndex];
+          if (!(child instanceof HTMLElement) || !addedAfterFocus(child)) continue;
+          const target = focusableControls(child).find((element) => element.matches(returnSelector) && !element.matches(".ks-button-emphasis"));
+          if (target) return target;
+          break;
+        }
+      }
       // 사라진 조작이 속한 모음 항목까지 사라졌으면 기존 모음 복구가 맡는다.
       if (focusedItem && !focusedItem.isConnected) return undefined;
       for (const { ancestor, swapIndex } of focusPath) {
@@ -116,9 +129,11 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
         }
       }
       focusPath = [];
+      let child: Element = target;
       for (let ancestor = target.parentElement; ancestor && body.contains(ancestor); ancestor = ancestor.parentElement) {
         const controls = focusableControls(ancestor);
-        focusPath.push({ ancestor, controlIndex: tabbableControls(controls).indexOf(target), swapIndex: controls.indexOf(target) });
+        focusPath.push({ ancestor, childIndex: Array.prototype.indexOf.call(ancestor.children, child), controlIndex: tabbableControls(controls).indexOf(target), swapIndex: controls.indexOf(target) });
+        child = ancestor;
       }
     };
     const collectionTarget = (changes: MutationRecord[]): HTMLElement | undefined => {

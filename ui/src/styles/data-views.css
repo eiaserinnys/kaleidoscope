@@ -326,6 +326,9 @@
 .ks-list-card:active:not([aria-disabled="true"], [data-ks-share-readonly="true"]),
 .ks-icon-tile:active:not([aria-disabled="true"], [data-ks-share-readonly="true"]) { background-image: linear-gradient(var(--ks-color-pressed), var(--ks-color-pressed)); }
 .ks-list-card.is-current:active:not([aria-disabled="true"], [data-ks-share-readonly="true"]) { background-image: linear-gradient(color-mix(in srgb, var(--ks-color-accent-contrast) 16%, transparent), color-mix(in srgb, var(--ks-color-accent-contrast) 16%, transparent)); }
+/* empty_text가 있는 빈 트리의 한 줄은 트리 행과 같은 높이와 여백을 쓰되 누를 수 있는 행이 아니다. */
+.ks-data-tree .ks-tree-empty { cursor: default; }
+.ks-data-tree .ks-tree-empty:hover, .ks-data-tree .ks-tree-empty:active { background-image: none; }
 .ks-list-item.is-grid > .ks-list-remove {
   top: var(--ks-space-1);
   right: var(--ks-space-1);

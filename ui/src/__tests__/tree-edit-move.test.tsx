@@ -562,3 +562,100 @@ it("on_move가 있는 트리는 항목이 없어도 빈 상태를 놓을 자리�
   expect(await screen.findByText("없음")).toBeTruthy();
   expect(screen.queryByRole("tree"), "on_move가 없는 빈 트리는 지금 그대로다").toBeNull();
 });
+
+it("empty_text가 있으면 빈 트리는 아이콘 없는 한 줄을 메타 글자로 그린다", async () => {
+  setup({ type: "tree", items: [], empty_text: "아직 항목이 없습니다" } as unknown as Block, {});
+  const line = await waitFor(() => {
+    const found = document.querySelector<HTMLElement>(".ks-data-tree .ks-tree-empty");
+    expect(found).toBeTruthy();
+    return found!;
+  });
+  expect(line.classList.contains("ks-row"), "트리 행의 높이와 여백을 그대로 쓴다").toBe(true);
+  expect(line.querySelectorAll("svg"), "아이콘을 그리지 않는다").toHaveLength(0);
+  expect(line.querySelector("[data-tree-check]")).toBeNull();
+  expect(line.querySelectorAll(".ks-file-tree-icon")).toHaveLength(1);
+  const text = line.querySelector(".ks-view-meta");
+  expect(text?.textContent).toBe("아직 항목이 없습니다");
+  expect(screen.queryByText("없음")).toBeNull();
+});
+
+it("empty_text가 빈 문자열이거나 계산값이 문자열이 아니면 글 없는 한 줄이다", async () => {
+  setup({ type: "tree", items: [], empty_text: "" } as unknown as Block, {});
+  const line = await waitFor(() => {
+    const found = document.querySelector<HTMLElement>(".ks-data-tree .ks-tree-empty");
+    expect(found).toBeTruthy();
+    return found!;
+  });
+  expect(line.textContent).toBe("");
+  expect(screen.queryByText("없음")).toBeNull();
+
+  cleanup();
+  setup({ type: "tree", items: [], empty_text: { state: "note" } } as unknown as Block, { note: null });
+  const computed = await waitFor(() => {
+    const found = document.querySelector<HTMLElement>(".ks-data-tree .ks-tree-empty");
+    expect(found).toBeTruthy();
+    return found!;
+  });
+  expect(computed.textContent).toBe("");
+});
+
+it("확인 상자를 그리는 트리는 empty_text 한 줄에도 빈 열을 둘 그린다", async () => {
+  setup({
+    type: "tree", items: [], empty_text: "비었습니다",
+    on_check: [{ set_state: "checked" }],
+  } as unknown as Block, { checked: null });
+  const line = await waitFor(() => {
+    const found = document.querySelector<HTMLElement>(".ks-data-tree .ks-tree-empty");
+    expect(found).toBeTruthy();
+    return found!;
+  });
+  expect(line.querySelectorAll(".ks-file-tree-icon")).toHaveLength(2);
+  expect(line.querySelectorAll("svg")).toHaveLength(0);
+  expect(line.querySelector(".ks-view-meta")?.textContent).toBe("비었습니다");
+});
+
+it("on_move가 있는 빈 트리는 empty_text 한 줄 위에서 놓을 자리를 표시하고 end로 보낸다", async () => {
+  const twoTrees = {
+    type: "stack", direction: "column", children: [
+      { type: "tree", items: { state: "left" }, on_move: [{ set_state: "moved", value: { expr: "$event" } }] },
+      { type: "tree", items: { state: "right" }, empty_text: "여기에 놓으세요", on_move: [{ set_state: "moved", value: { expr: "$event" } }] },
+    ],
+  } as unknown as Block;
+  const { calls } = setup(twoTrees, { left: [{ key: "a", title: "가" }], right: [], moved: null });
+  const source = await screen.findByRole("treeitem", { name: "가" });
+  const line = document.querySelector<HTMLElement>(".ks-data-tree .ks-tree-empty")!;
+  const tree = line.closest(".ks-data-tree")!;
+  const value = transfer();
+  drag("dragstart", source, value);
+  drag("dragover", line, value);
+  expect(line.getAttribute("data-drop-state")).toBe("valid");
+  expect(tree.getAttribute("data-drop-state"), "놓을 자리 표시는 그 한 줄에만 선다").toBeNull();
+  expect(document.querySelectorAll("[data-drop-state]"), "놓을 자리 표시는 한 곳뿐").toHaveLength(1);
+  drag("drop", line, value);
+  await waitFor(() => expect(actCalls(calls, "/ui/children/1/on_move")).toEqual([
+    expect.objectContaining({ event: { key: "a", target: null, position: "end" }, item: null }),
+  ]));
+  expect(document.querySelectorAll("[data-drop-state]"), "끌기가 끝나면 표시가 남지 않는다").toHaveLength(0);
+});
+
+it("이름 바꾸는 부모 행의 화살표는 그 행의 펼침 상태를 따른다", async () => {
+  const parentEditing = (defaultExpanded: boolean) => ({
+    type: "tree",
+    items: [{ key: "p", title: "부모", editing: true, children: [{ key: "c", title: "아이" }] }],
+    default_expanded: defaultExpanded,
+    on_edit: [{ set_state: "last", value: { expr: "$event" } }],
+  } as unknown as Block);
+  setup(parentEditing(true), { last: null });
+  const input = await screen.findByRole("textbox", { name: "항목 이름" });
+  const openRow = input.closest(".ks-file-tree-create-row")!;
+  expect(openRow.querySelector(".ks-chevron")?.classList.contains("is-expanded"), "펼친 부모").toBe(true);
+  expect(screen.getByRole("treeitem", { name: "아이" })).toBeTruthy();
+
+  cleanup();
+  setup(parentEditing(false), { last: null });
+  const collapsedInput = await screen.findByRole("textbox", { name: "항목 이름" });
+  const collapsedRow = collapsedInput.closest(".ks-file-tree-create-row")!;
+  expect(collapsedRow.querySelector(".ks-chevron")).toBeTruthy();
+  expect(collapsedRow.querySelector(".ks-chevron")?.classList.contains("is-expanded"), "접힌 부모").toBe(false);
+  expect(screen.queryByRole("treeitem", { name: "아이" })).toBeNull();
+});

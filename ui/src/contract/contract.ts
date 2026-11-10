@@ -424,7 +424,12 @@ on_edit_cancel?: Actions,
 /**
  * (60판) 항목을 끌어 놓을 때 실행한다. `$event`는 `{key, target, position}`, `$item`은 놓은 자리 항목(없으면 null)이다.
  */
-on_move?: Actions, } | { "type": "folder", root: FolderRoot, 
+on_move?: Actions, 
+/**
+ * (61판) 항목이 없을 때 그릴 한 줄의 글. 없으면 지금처럼 빈 상태 상자를 그린다.
+ * 빈 문자열이면 글 없는 한 줄을 그리고, 값을 계산해 문자열이 아니면 빈 문자열로 본다.
+ */
+empty_text?: Binding, } | { "type": "folder", root: FolderRoot, 
 /**
  * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
  */

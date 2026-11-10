@@ -128,6 +128,34 @@ async function pageDropTree(page: Page, index: number) {
   }, index);
 }
 
+// empty_text가 있는 빈 트리의 한 줄. 그 줄이 놓을 자리 표시를 직접 받는다.
+async function pageDragOverEmptyLine(page: Page, index: number) {
+  await page.evaluate((index) => {
+    const holder = window as unknown as { __ksDrag?: DragState };
+    const dataTransfer = holder.__ksDrag!.dataTransfer;
+    const line = document.querySelectorAll<HTMLElement>(".ks-data-tree")[index]!.querySelector<HTMLElement>(".ks-tree-empty")!;
+    const rect = line.getBoundingClientRect();
+    line.dispatchEvent(new DragEvent("dragover", {
+      bubbles: true, cancelable: true, dataTransfer,
+      clientX: rect.left + Math.min(20, rect.width / 2), clientY: rect.top + rect.height / 2,
+    }));
+  }, index);
+}
+
+async function pageDropEmptyLine(page: Page, index: number) {
+  await page.evaluate((index) => {
+    const holder = window as unknown as { __ksDrag?: DragState };
+    const dataTransfer = holder.__ksDrag!.dataTransfer;
+    const line = document.querySelectorAll<HTMLElement>(".ks-data-tree")[index]!.querySelector<HTMLElement>(".ks-tree-empty")!;
+    const rect = line.getBoundingClientRect();
+    line.dispatchEvent(new DragEvent("drop", {
+      bubbles: true, cancelable: true, dataTransfer,
+      clientX: rect.left + Math.min(20, rect.width / 2), clientY: rect.top + rect.height / 2,
+    }));
+    delete holder.__ksDrag;
+  }, index);
+}
+
 async function openSectionMenu(page: Page, app: Locator) {
   await app.locator(".ks-data-section-title").first().click({ button: "right" });
   await expect(page.getByRole("menu")).toBeVisible();
@@ -570,7 +598,7 @@ test("앱이 받아들이지 않은 구역 이름은 머리에 남지 않는다"
 test("빈 구역 트리로 끌어 놓으면 놓을 자리 하나를 보이고 끝으로 옮긴다", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "light");
   const trees = app.locator(".ks-data-tree");
-  await expect(trees).toHaveCount(4);
+  await expect(trees).toHaveCount(7);
   const emptyTree = trees.nth(2);
   await expect(emptyTree.getByText("없음")).toBeVisible();
   await emptyTree.scrollIntoViewIfNeeded();
@@ -587,4 +615,146 @@ test("빈 구역 트리로 끌어 놓으면 놓을 자리 하나를 보이고 �
   await expect(emptyTree).not.toHaveAttribute("data-drop-state");
   await lastMove.scrollIntoViewIfNeeded();
   await capture(app, testInfo, "빈-구역-놓은뒤.png");
+});
+
+// empty_text가 있는 빈 트리의 한 줄을 같은 트리 모양(확인 열 없음)의 뿌리 행과 견준다.
+async function emptyLineMetrics(referenceRow: Locator, line: Locator, hasText: boolean) {
+  const [rowBox, lineBox, titleBox] = await Promise.all([box(referenceRow), box(line), box(referenceRow.locator(".ks-tree-name"))]);
+  if (!hasText) return { rowBox, lineBox, titleBox, lineTextBox: null, meta: null };
+  const lineTextBox = await box(line.locator(".ks-view-meta"));
+  const meta = await line.locator(".ks-view-meta").evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--ks-color-muted)";
+    probe.style.fontSize = "var(--ks-type-meta)";
+    document.body.append(probe);
+    const style = getComputedStyle(element);
+    const expected = getComputedStyle(probe);
+    const result = { fontSize: style.fontSize, color: style.color, tokenFontSize: expected.fontSize, tokenColor: expected.color };
+    probe.remove();
+    return result;
+  });
+  return { rowBox, lineBox, titleBox, lineTextBox, meta };
+}
+
+test("empty_text 빈 트리: 한 줄 높이, 아이콘 없음, 제목 시작선과 메타 글자 (넓은 밝음)", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+  const trees = app.locator(".ks-data-tree");
+  await expect(trees).toHaveCount(7);
+  const reference = trees.nth(4);
+  const blank = trees.nth(5);
+  const texted = trees.nth(6);
+  const blankLine = blank.locator(".ks-tree-empty");
+  const textLine = texted.locator(".ks-tree-empty");
+  await blankLine.scrollIntoViewIfNeeded();
+  await expect(blankLine).toBeVisible();
+  await expect(textLine).toBeVisible();
+  await expect(textLine).toHaveText("아직 항목이 없습니다");
+
+  const referenceRow = reference.locator(ROW("r1"));
+  const blankMetrics = await emptyLineMetrics(referenceRow, blankLine, false);
+  const textMetrics = await emptyLineMetrics(referenceRow, textLine, true);
+  console.log(`빈 자리 한 줄: ${JSON.stringify({
+    row: round(blankMetrics.rowBox.height), blank: round(blankMetrics.lineBox.height), text: round(textMetrics.lineBox.height),
+    rowTitleLeft: round(blankMetrics.titleBox.left), lineTextLeft: round(textMetrics.lineTextBox!.left), meta: textMetrics.meta,
+  })}`);
+  expect(Math.abs(blankMetrics.lineBox.height - blankMetrics.rowBox.height), "글 없는 한 줄 높이는 트리 행과 같다").toBeLessThanOrEqual(1);
+  expect(Math.abs(textMetrics.lineBox.height - textMetrics.rowBox.height), "글 있는 한 줄 높이는 트리 행과 같다").toBeLessThanOrEqual(1);
+  expect(Math.abs(textMetrics.lineTextBox!.left - textMetrics.titleBox.left), "글 시작선은 뿌리 행 제목 시작선과 같다").toBeLessThanOrEqual(1);
+  expect(textMetrics.meta!.fontSize, "메타 글자 토큰").toBe(textMetrics.meta!.tokenFontSize);
+  expect(textMetrics.meta!.color, "메타 색 토큰").toBe(textMetrics.meta!.tokenColor);
+  expect(await blankLine.locator("svg").count(), "글 없는 한 줄에 아이콘이 없다").toBe(0);
+  expect(await textLine.locator("svg").count(), "글 있는 한 줄에 아이콘이 없다").toBe(0);
+  expect(await blankLine.locator(".ks-file-tree-icon").count(), "확인 열 없이 표식 한 열").toBe(1);
+  await capture(app, testInfo, "빈-자리-글-넓은-밝음.png");
+});
+
+test("empty_text 빈 트리 (넓은 어두움, 좁은 360 밝음과 어두움)", async ({ page }, testInfo) => {
+  const wide = await open(page, APP, 1182, 800, "dark");
+  const wideLine = wide.locator(".ks-data-tree").nth(6).locator(".ks-tree-empty");
+  await wideLine.scrollIntoViewIfNeeded();
+  await expect(wideLine).toHaveText("아직 항목이 없습니다");
+  await capture(wide, testInfo, "빈-자리-글-넓은-어두움.png");
+
+  const narrow = await open(page, APP, 360, 800, "light");
+  const narrowTrees = narrow.locator(".ks-data-tree");
+  await expect(narrowTrees).toHaveCount(7);
+  const narrowBlank = narrowTrees.nth(5).locator(".ks-tree-empty");
+  const narrowText = narrowTrees.nth(6).locator(".ks-tree-empty");
+  await narrowText.scrollIntoViewIfNeeded();
+  await expect(narrowBlank).toBeVisible();
+  const overflow = await narrow.locator(".ks-data-section").nth(6).evaluate((element) => element.scrollWidth - element.clientWidth);
+  console.log(`좁은 360 빈 자리: ${JSON.stringify({ overflow, blank: round((await narrowBlank.boundingBox())!.height), text: round((await narrowText.boundingBox())!.height) })}`);
+  expect(overflow, "좁은 창에서 가로로 넘치지 않는다").toBeLessThanOrEqual(1);
+  await capture(narrow, testInfo, "빈-자리-글-좁은-360-밝음.png");
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await capture(narrow, testInfo, "빈-자리-글-좁은-360-어두움.png");
+});
+
+test("empty_text 한 줄 위로 끌면 그 줄에 놓을 자리 표시가 서고 놓으면 끝으로 간다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+  const blankTree = app.locator(".ks-data-tree").nth(5);
+  const line = blankTree.locator(".ks-tree-empty");
+  await line.scrollIntoViewIfNeeded();
+
+  await pageDragStart(page, "a");
+  await pageDragOverEmptyLine(page, 5);
+  await expect(line).toHaveAttribute("data-drop-state", "valid");
+  await expect(blankTree, "트리 뿌리는 표시를 받지 않는다").not.toHaveAttribute("data-drop-state");
+  await expect(app.locator("[data-drop-state]"), "놓을 자리 표시는 한 곳뿐").toHaveCount(1);
+  await capture(app, testInfo, "빈-자리-한줄-끌기-중.png");
+
+  await pageDropEmptyLine(page, 5);
+  await expect(app.getByText("마지막 이동: a → 끝 (end)", { exact: true })).toBeVisible();
+  await expect(app.locator("[data-drop-state]"), "끌기가 끝나면 표시가 없다").toHaveCount(0);
+  await capture(app, testInfo, "빈-자리-한줄-놓은뒤.png");
+});
+
+test("펼친 부모 행 이름 바꾸기: 화살표가 펼침을 따르고 자식이 그대로 보인다", async ({ browser }, testInfo) => {
+  const context = await browser.newContext({ deviceScaleFactor: 3, viewport: { width: 1182, height: 800 } });
+  const page = await context.newPage();
+  const app = await open(page, APP, 1182, 800, "light");
+  const parent = app.locator(ROW("b"));
+  await expect(parent).toHaveAttribute("aria-expanded", "true");
+  await parent.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "이름 바꾸기" }).click();
+  const editRow = app.locator(".ks-file-tree-create-row");
+  await expect(editRow.locator(".ks-chevron")).toHaveClass(/is-expanded/);
+  await expect(app.locator(ROW("b1")), "자식은 그대로 보인다").toBeVisible();
+  console.log(`펼친 부모 편집 화살표: ${JSON.stringify({ className: await editRow.locator(".ks-chevron").getAttribute("class"), childVisible: true })}`);
+  await editRow.screenshot({ path: testInfo.outputPath("펼친-부모-이름-화살표-3배.png") });
+  await app.getByRole("textbox", { name: "항목 이름" }).press("Escape");
+  await expect(editRow).toHaveCount(0);
+
+  await parent.locator(".ks-tree-chevron-trigger").click();
+  await expect(parent).toHaveAttribute("aria-expanded", "false");
+  await parent.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "이름 바꾸기" }).click();
+  const collapsedRow = app.locator(".ks-file-tree-create-row");
+  await expect(collapsedRow.locator(".ks-chevron")).not.toHaveClass(/is-expanded/);
+  console.log(`접힌 부모 편집 화살표: ${JSON.stringify({ className: await collapsedRow.locator(".ks-chevron").getAttribute("class"), childVisible: false })}`);
+  await collapsedRow.screenshot({ path: testInfo.outputPath("접힌-부모-이름-화살표-3배.png") });
+  await context.close();
+});
+
+test("구역 이름 확정으로 구역이 다시 만들어져도 같은 자리 구역 접기 단추가 초점을 받는다", async ({ page }, testInfo) => {
+  const app = await open(page, "tree-name-key-1112", 1182, 800, "light");
+  const second = app.locator(".ks-data-section").nth(1);
+  await expect(second.locator(".ks-data-section-title")).toHaveText("다음 주");
+  await second.locator(".ks-data-section-title").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "구역 이름 바꾸기" }).click();
+  const input = second.getByRole("textbox", { name: "구역 이름" });
+  await expect(input).toBeFocused();
+  await input.fill("새 이름");
+  await input.press("Enter");
+  const renamed = app.locator('.ks-repeat-item[data-repeat-key="새 이름"] .ks-data-section-toggle');
+  await expect(renamed).toBeFocused();
+  const active = await page.evaluate(() => {
+    const element = document.activeElement as HTMLElement | null;
+    return { className: element?.className ?? "", text: element?.textContent?.trim() ?? "" };
+  });
+  console.log(`구역 이름 확정 뒤 초점: ${JSON.stringify(active)}`);
+  expect(active.className).toContain("ks-data-section-toggle");
+  expect(active.text).toContain("새 이름");
+  await capture(app, testInfo, "이름-key-구역-확정-초점.png");
 });

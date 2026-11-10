@@ -82,6 +82,8 @@ export interface TreeViewProps {
   label: string;
   className: string;
   emptyContent?: ReactNode;
+  /** 빈 내용 자체가 놓을 자리면 참. 트리 뿌리에 그리던 표시를 빈 내용 한 줄이 대신 받는다. */
+  emptyContentDropTarget?: boolean;
   endAction?: { label: string; leading?: ReactNode; onActivate: () => void };
   onExpandedChange: (id: string, expanded: boolean) => void;
   onActivate: (row: TreeRowModel, activation: TreeActivation) => void;
@@ -109,7 +111,7 @@ export interface TreeViewProps {
 
 export const END_ACTION_ID = "tree:end-action";
 
-export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, label, className, emptyContent, endAction, onExpandedChange, onActivate, onCheck, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController, selection, onSelectionChange, drag }: TreeViewProps) {
+export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, label, className, emptyContent, emptyContentDropTarget, endAction, onExpandedChange, onActivate, onCheck, onContextMenu, onCommandKeyDown, onDoubleClick, menuTargetId, onFocusController, selection, onSelectionChange, drag }: TreeViewProps) {
   const previousRows = useRef(new Map<string, TreeRowModel>());
   const flat = useMemo(() => {
     const nextRows = new Map<string, TreeRowModel>();
@@ -411,7 +413,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     ref={scrollRef}
     role="tree"
     aria-multiselectable={selection ? true : undefined}
-    data-drop-state={drag?.targetId === "" ? drag.valid ? "valid" : "invalid" : undefined}
+    data-drop-state={drag?.targetId === "" && !emptyContentDropTarget ? drag.valid ? "valid" : "invalid" : undefined}
     onDragStart={drag?.enabled ? (event) => { const row = dragRow(event.target); if (row) drag.onStart(row, event); } : undefined}
     onDragOver={drag?.enabled ? (event) => { const row = dragRow(event.target); if (row !== undefined) drag.onOver(row, event); } : undefined}
     onDrop={drag?.enabled ? (event) => { const row = dragRow(event.target); if (row !== undefined) drag.onDrop(row, event); } : undefined}
