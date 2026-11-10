@@ -97,6 +97,42 @@ describe("shell core events", () => {
     store.dispose();
   });
 
+  it("Ctrl+PageDown과 Ctrl+PageUp은 작업을 배열 순서로 양 끝에서 순환한다", async () => {
+    const snapshot = makeTestSnapshot();
+    snapshot.shared.workspaces.push(
+      { id: "workspace-2", name: "작업 2", created_at: "2026-10-29T00:00:00Z", updated_at: "2026-10-29T00:00:00Z" },
+      { id: "workspace-3", name: "작업 3", created_at: "2026-10-29T00:00:00Z", updated_at: "2026-10-29T00:00:00Z" },
+    );
+    snapshot.shared.desktops.push(
+      { id: "desktop-2", workspace_id: "workspace-2", name: "작업 화면", position: 0, created_at: "2026-10-29T00:00:00Z", updated_at: "2026-10-29T00:00:00Z" },
+      { id: "desktop-3", workspace_id: "workspace-3", name: "작업 화면", position: 0, created_at: "2026-10-29T00:00:00Z", updated_at: "2026-10-29T00:00:00Z" },
+    );
+    const store = createShellStore(createFakeTransport({ ...makeTestSeed(), snapshot }));
+    render(<Shell store={store} />);
+    await store.ready;
+    for (const id of ["workspace-2", "workspace-3", "workspace-1"]) {
+      fireEvent.keyDown(window, { code: "PageDown", key: "PageDown", ctrlKey: true });
+      await waitFor(() => expect(store.getSnapshot()?.device.active_workspace_id).toBe(id));
+    }
+    fireEvent.keyDown(window, { code: "PageUp", key: "PageUp", ctrlKey: true });
+    await waitFor(() => expect(store.getSnapshot()?.device.active_workspace_id).toBe("workspace-3"));
+    store.dispose();
+  });
+
+  it("수식키가 더 눌리거나 작업이 하나뿐이면 작업을 바꾸지 않는다", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    fireEvent.keyDown(window, { code: "PageDown", key: "PageDown", ctrlKey: true });
+    fireEvent.keyDown(window, { code: "PageDown", key: "PageDown", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(window, { code: "PageDown", key: "PageDown", ctrlKey: true, altKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "workspace.activate" }));
+    store.dispose();
+  });
+
   it("다시 열기는 최소화된 창만 원래 크기와 최대화 상태로 연다", async () => {
     const snapshot = makeTestSnapshot();
     snapshot.shared.windows[0].minimized = true;

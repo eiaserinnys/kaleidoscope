@@ -553,7 +553,7 @@ jobs:
             Get-Content -Raw (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'shortcut-results.json') | Write-Host
             if ($app.ExitCode -ne 0) { throw "네이티브 단축키 실측 실패: $($app.ExitCode)" }
             foreach ($surface in @('main','html','sandbox','client','web')) {
-              foreach ($code in @('ArrowRight','PageDown','Tab')) {
+              foreach ($code in @('ArrowRight','PageDown','Tab','CtrlPageDown')) {
                 $rows = @($events | Where-Object { $_.step -eq 'shortcut.measure' -and $_.data.surface -eq $surface -and $_.data.code -eq $code })
                 if ($rows.Count -ne 1) { throw "단축키 실측 행 누락/중복: $surface $code" }
                 Write-Host ($rows[0].data | ConvertTo-Json -Compress)

@@ -563,6 +563,13 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         snapshot = { ...snapshot, theme: request.theme };
         emitState();
         return { op: "theme.set" };
+      case "workspace.activate": {
+        const workspace = snapshot.shared.workspaces.find((item) => item.id === request.workspace_id);
+        if (!workspace) return fail("not_found", "작업을 찾을 수 없습니다");
+        snapshot = { ...snapshot, device: { ...snapshot.device, active_workspace_id: workspace.id } };
+        emitState();
+        return { op: "workspace.activate" };
+      }
       case "desktop.activate": {
         const desktop = snapshot.shared.desktops.find((item) => item.id === request.desktop_id);
         if (!desktop) return fail("not_found", "데스크톱을 찾을 수 없습니다");

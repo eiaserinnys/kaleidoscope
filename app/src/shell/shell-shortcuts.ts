@@ -3,9 +3,14 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { ShellWindowActions } from "./shell-window-actions";
 
-type Shortcut = "previousDesktop" | "nextDesktop" | "previousWindow" | "nextWindow" | "toggleMaximize" | "minimize" | "restoreAll" | "minimizeAll";
+type Shortcut = "previousDesktop" | "nextDesktop" | "previousWindow" | "nextWindow" | "previousWorkspace" | "nextWorkspace" | "toggleMaximize" | "minimize" | "restoreAll" | "minimizeAll";
 
 export function shellShortcut(event: Pick<KeyboardEvent, "code" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): Shortcut | undefined {
+  if (event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+    if (event.code === "PageUp") return "previousWorkspace";
+    if (event.code === "PageDown") return "nextWorkspace";
+    return;
+  }
   if (!event.ctrlKey || !event.altKey || event.metaKey) return;
   if (event.code === "Tab") return event.shiftKey ? "previousWindow" : "nextWindow";
   if (event.code === "ArrowUp") return event.shiftKey ? "restoreAll" : "toggleMaximize";
@@ -24,6 +29,8 @@ export function installShellShortcuts(actions: ShellWindowActions): () => void {
     switch (shortcut) {
       case "previousDesktop": void actions.desktop(-1); break;
       case "nextDesktop": void actions.desktop(1); break;
+      case "previousWorkspace": void actions.workspace(-1); break;
+      case "nextWorkspace": void actions.workspace(1); break;
       case "previousWindow": void actions.cycleWindow(-1); break;
       case "nextWindow": void actions.cycleWindow(1); break;
       case "toggleMaximize": void actions.toggleMaximizeCurrent(); break;
@@ -42,9 +49,9 @@ export function installShellShortcuts(actions: ShellWindowActions): () => void {
   let cancelled = false;
   let unlisten: (() => void) | undefined;
   if (isTauri()) {
-    void getCurrentWebview().listen<{ code: string; shift: boolean }>("shell-shortcut", ({ payload }) => {
+    void getCurrentWebview().listen<{ code: string; shift: boolean; alt: boolean }>("shell-shortcut", ({ payload }) => {
       if (cancelled) return;
-      const shortcut = shellShortcut({ code: payload.code, shiftKey: payload.shift, ctrlKey: true, altKey: true, metaKey: false });
+      const shortcut = shellShortcut({ code: payload.code, shiftKey: payload.shift, ctrlKey: true, altKey: payload.alt, metaKey: false });
       if (shortcut) execute(shortcut);
     }).then((stop) => { if (cancelled) stop(); else unlisten = stop; });
   }
