@@ -1,4 +1,4 @@
-import type { ConversationAttachment, ConversationEvent, ConversationItem, CoreError } from "../contract/contract";
+import type { ConversationAttachment, ConversationEvent, ConversationItem, CoreError, MediaRef } from "../contract/contract";
 
 export type ClientChatQueuedMessage = {
   id: string;
@@ -18,9 +18,10 @@ export type ClientChatEnvelope =
     }
   | { kind: "event"; event: ConversationEvent }
   | { kind: "attachment"; request_id: string; mime: string; bytes: ArrayBuffer }
+  | { kind: "attachment"; request_id: string; media: MediaRef }
   | { kind: "error"; error: CoreError };
 
-export type ClientChatAttachment = { mime: string; bytes: ArrayBuffer };
+export type ClientChatAttachment = { mime: string; bytes: ArrayBuffer } | { media: MediaRef };
 
 export type ClientChatState = {
   generation: number;
@@ -64,7 +65,7 @@ export function applyClientChatEnvelope(state: ClientChatState, envelope: Client
   }
   if (envelope.kind === "attachment") {
     const attachments = new Map(state.attachments);
-    attachments.set(envelope.request_id, { mime: envelope.mime, bytes: envelope.bytes });
+    attachments.set(envelope.request_id, "media" in envelope ? { media: envelope.media } : { mime: envelope.mime, bytes: envelope.bytes });
     return { ...state, loading: false, attachments };
   }
   if (envelope.kind === "error") return { ...state, loading: false, error: envelope.error };
