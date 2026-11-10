@@ -61,13 +61,6 @@ error_catalog! { ENTRIES;
     SHELL_TABLE_CELL_CONTENT_INVALID(field) { class: InvalidRequest, place: "표 칸 내용", cause: "칸 내용의 형태가 올바르지 않다", message: "표의 {field} 칸 내용을 읽지 못했습니다. 앱의 칸 출력을 고치세요.", fix: "앱의 칸 출력을 고치세요" }
     SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 지침 요청", cause: "앱이 지침 기능을 선언하지 않았다", message: "앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 instructions를 선언하세요" }
     SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED() { class: PermissionDenied, place: "클라이언트 같이 보기 요청", cause: "앱이 같이 보기 기능을 선언하지 않았다", message: "앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.", fix: "client.capabilities에 context_capture를 선언하세요" }
-    SHELL_APP_IMPORT_REPLY_INVALID() {
-        class: Io,
-        place: "앱 정의 가져오기 응답",
-        cause: "가져오기 응답의 종류가 예상과 다르다",
-        message: "앱 정의를 가져온 결과를 확인하지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.",
-        fix: "쉘을 다시 시작한 뒤 다시 시도하세요"
-    }
     SHELL_WINDOW_CLOSE_UNSAVED() {
         class: Io,
         place: "창 닫기 전 저장",

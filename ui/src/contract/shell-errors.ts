@@ -63,7 +63,6 @@ export const SHELL_TABLE_ROW_KEY_MISSING = (args: { count: string }): CoreError 
 export const SHELL_TABLE_CELL_CONTENT_INVALID = (args: { field: string }): CoreError => ({ id: "SHELL_TABLE_CELL_CONTENT_INVALID", code: "invalid_request", message: `표의 ${args.field} 칸 내용을 읽지 못했습니다. 앱의 칸 출력을 고치세요.`, details: [] });
 export const SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED = (): CoreError => ({ id: "SHELL_CLIENT_INSTRUCTIONS_CAPABILITY_UNDECLARED", code: "permission_denied", message: `앱이 지침 읽기 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.`, details: [] });
 export const SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED = (): CoreError => ({ id: "SHELL_CLIENT_CONTEXT_CAPABILITY_UNDECLARED", code: "permission_denied", message: `앱이 같이 보기 준비 기능을 선언하지 않았습니다. 앱 정의의 client.capabilities를 고치세요.`, details: [] });
-export const SHELL_APP_IMPORT_REPLY_INVALID = (): CoreError => ({ id: "SHELL_APP_IMPORT_REPLY_INVALID", code: "io", message: `앱 정의를 가져온 결과를 확인하지 못했습니다. 쉘을 다시 시작한 뒤 다시 시도하세요.`, details: [] });
 export const SHELL_WINDOW_CLOSE_UNSAVED = (): CoreError => ({ id: "SHELL_WINDOW_CLOSE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 창을 닫지 않았습니다. 내용을 저장한 뒤 다시 닫으세요.`, details: [] });
 export const SHELL_DESKTOP_DELETE_UNSAVED = (): CoreError => ({ id: "SHELL_DESKTOP_DELETE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 데스크톱을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.`, details: [] });
 export const SHELL_WORKSPACE_DELETE_UNSAVED = (): CoreError => ({ id: "SHELL_WORKSPACE_DELETE_UNSAVED", code: "io", message: `저장하지 못한 내용이 있어 작업을 지우지 않았습니다. 내용을 저장한 뒤 다시 지우세요.`, details: [] });

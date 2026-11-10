@@ -53,10 +53,12 @@ fn shell_actions_require_the_shell_module() {
 }
 
 #[test]
-fn current_shell_supports_shell_one_and_rejects_newer_versions() {
+fn current_shell_supports_shell_two_and_rejects_newer_versions() {
     parse_app_definition(&definition().to_string()).unwrap();
     let mut newer = definition();
     newer["requires"]["modules"]["shell"] = json!(2);
+    parse_app_definition(&newer.to_string()).unwrap();
+    newer["requires"]["modules"]["shell"] = json!(3);
     assert_eq!(
         parse_app_definition(&newer.to_string())
             .unwrap_err()
