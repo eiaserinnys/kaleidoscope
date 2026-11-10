@@ -529,6 +529,30 @@ fn replace_of_a_custom_app_consents_without_an_origin() {
 }
 
 #[test]
+fn replace_install_does_not_send_after_the_origin_changes_with_the_same_version_during_consent() {
+    let (_temp, core, registry, window) = store_caller();
+    import_store_example(&core, 1);
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, replacing, .. } = event {
+        tx.send((request_id.clone(), digest.clone(), *replacing)).unwrap();
+    }));
+    let task = install_example_with(core.clone(), window.clone(), true);
+    let (request, digest, replacing) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(!replacing, "같은 출처의 보통 갱신으로 동의를 받는다");
+    // 동의를 기다리는 사이 다른 요청이 같은 정의를 다른 스토어에서 설치해 판 번호는 그대로이고 출처만 바뀐다.
+    {
+        let mut state = core.inner.state.lock().unwrap();
+        let app = state.shared.apps.iter_mut().find(|app| app.id == "example").unwrap();
+        app.origin = Some(kaleidoscope_contract::store::StoreOrigin {
+            store_url: "https://other.example.com/appstore".into(), store_app_id: "example".into(), release: 7, digest: "other-digest".into(),
+        });
+    }
+    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    assert_eq!(task.join().unwrap().unwrap_err().id.as_deref(), Some("STORECLIENT_INSTALL_CONTEXT_CHANGED"));
+    assert!(registry.store_requests.lock().unwrap().is_empty(), "보통 갱신에 동의한 요청으로 다른 출처를 대체하지 않는다");
+}
+
+#[test]
 fn replace_install_maps_a_link_change_during_consent_to_context_changed() {
     let (_temp, core, registry, window) = store_caller();
     import_store_example(&core, 1);

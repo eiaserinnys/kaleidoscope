@@ -64,6 +64,8 @@ pub(crate) struct PreparedInstall {
     bundle: super::bundle::PreparedBundle,
     /// 설치 뒤 상태를 비교할 기준 판. 확정 단계에서 다시 대조한다.
     expected_current_version: Option<u32>,
+    /// 동의를 받을 때의 설치 기준 판. 출처(`from_origin`)와 함께 확정 단계에서 다시 대조한다.
+    expected_installed_version: Option<u32>,
     replace: bool,
     from_origin: Option<StoreOrigin>,
     replacing: bool,
@@ -110,6 +112,7 @@ pub(crate) fn prepare_install(inner: &Arc<Inner>, window: &str, permission: &str
         release,
         bundle,
         expected_current_version: current.as_ref().map(|app| app.current_version),
+        expected_installed_version: current.as_ref().and_then(|app| app.installed_version),
         replace,
         from_origin,
         replacing,
@@ -118,16 +121,18 @@ pub(crate) fn prepare_install(inner: &Arc<Inner>, window: &str, permission: &str
     })
 }
 
-/// 동의받은 준비 그대로 보낸다. 기다리는 동안 연결 세대나 대상 판이 바뀌었으면 보내지 않는다.
+/// 동의받은 준비 그대로 보낸다. 기다리는 동안 연결 세대, 대상 판, 출처, 설치 기준 판이 바뀌었으면 보내지 않는다.
 pub(crate) fn commit_prepared_install(inner: &Arc<Inner>, prepared: PreparedInstall) -> Result<bool, CoreError> {
-    let PreparedInstall { window, permission, caller, caller_version, link, generation, server, id, release, bundle, expected_current_version, replace, .. } = prepared;
+    let PreparedInstall { window, permission, caller, caller_version, link, generation, server, id, release, bundle, expected_current_version, expected_installed_version, replace, from_origin, .. } = prepared;
     if !crate::link::is_current(inner, generation) { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
     let (current_caller, current_version, _, current_generation) = context(inner, &window, &permission, true).map_err(|error| {
         if !crate::link::is_current(inner, generation) { errors::STORECLIENT_INSTALL_CONTEXT_CHANGED() } else { error }
     })?;
     if current_caller != caller || current_version != caller_version || current_generation != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
-    let installed_version = inner.state.lock().unwrap().shared.apps.iter().find(|app| app.id == id).map(|app| app.current_version);
-    if installed_version != expected_current_version { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
+    // 같은 정의를 다른 스토어에서 설치하면 판 번호는 그대로이고 출처만 바뀐다. 사용자가 본 출처와 다르면 보내지 않는다.
+    let unchanged = inner.state.lock().unwrap().shared.apps.iter().find(|app| app.id == id).map(|app| (app.current_version, app.origin.as_ref(), app.installed_version))
+        == expected_current_version.map(|version| (version, from_origin.as_ref(), expected_installed_version));
+    if !unchanged { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
     let request = DeviceInstallRequest {
         definition_json: bundle.definition_json,
         asset_uploads: bundle.assets,
