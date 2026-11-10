@@ -109,9 +109,10 @@ pub(super) fn check_guard(
         // 다른 스토어 출처는 명시 전환일 때만 옛 출처와 비교하지 않고 대체한다.
         return if guard.replace { Ok(false) } else { Err(errors::REGISTRYINSTALL_ORIGIN_CONFLICT(id)) };
     }
-    if installation.installed_version != Some(version) {
-        // 설치 뒤 고친 앱은 명시 전환일 때만 같은 스토어 판으로 되돌린다.
-        return if guard.replace { Ok(false) } else { Err(errors::REGISTRYINSTALL_LOCAL_MODIFIED(id)) };
+    // 설치 뒤 고친 앱은 명시 전환일 때만 스토어 판으로 되돌린다. 같은 출처라 판과 해시 검사는 그대로 거친다.
+    let modified = installation.installed_version != Some(version);
+    if modified && !guard.replace {
+        return Err(errors::REGISTRYINSTALL_LOCAL_MODIFIED(id));
     }
     if new.release < old.release {
         return Err(errors::REGISTRYINSTALL_RELEASE_DOWNGRADE(id));
@@ -120,7 +121,8 @@ pub(super) fn check_guard(
         if new.digest != old.digest {
             return Err(errors::REGISTRYINSTALL_RELEASE_DIGEST_CONFLICT(id));
         }
-        return Ok(true);
+        // 고친 앱을 같은 판으로 되돌리는 것은 이미 설치된 상태가 아니다.
+        return Ok(!modified);
     }
     Ok(false)
 }

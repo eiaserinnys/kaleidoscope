@@ -807,6 +807,54 @@ async fn replace_does_not_bypass_builtin_expected_version_or_downgrade_checks() 
 }
 
 #[tokio::test]
+async fn replace_on_a_modified_app_keeps_downgrade_and_digest_checks() {
+    let (_dir, state) = setup();
+    let modify = |id: &str| {
+        let changed = json!({"id":id,"name":"수정","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"안녕"}}).to_string();
+        state.publish_app(&changed, "agent", false, None).unwrap();
+    };
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle("modified-down", 2, "둘", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    modify("modified-down");
+    let mut down = bundle("modified-down", 1, "하나", Some(2));
+    down["replace"] = json!(true);
+    let (_, error) = call(&state, "POST", "/api/device/app-installs", down).await;
+    assert_eq!(error["id"], "REGISTRYINSTALL_RELEASE_DOWNGRADE");
+
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle("modified-digest", 1, "에이", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    modify("modified-digest");
+    let mut digest = bundle("modified-digest", 1, "비", Some(2));
+    digest["replace"] = json!(true);
+    let (_, error) = call(&state, "POST", "/api/device/app-installs", digest).await;
+    assert_eq!(error["id"], "REGISTRYINSTALL_RELEASE_DIGEST_CONFLICT");
+
+    let mut newer = bundle("modified-digest", 2, "비", Some(2));
+    newer["replace"] = json!(true);
+    let (status, reply) = call(&state, "POST", "/api/device/app-installs", newer).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["app"]["version"]["definition"]["name"], "비");
+}
+
+#[tokio::test]
 async fn custom_app_can_be_removed_by_device_with_allow_custom() {
     let (_dir, state) = setup();
     let custom = bundle("custom-delete", 1, "개인", None);
