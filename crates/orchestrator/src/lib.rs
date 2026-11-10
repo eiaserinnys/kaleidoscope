@@ -23,6 +23,7 @@ use kaleidoscope_contract::{
         self, DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
         PairStartRequest, RegistryApp,
     },
+    store::StoreOrigin,
     validate::parse_app_definition,
     App, AppDefinition, AppVersion, CoreError, ErrorCode, Requires, Supported,
     LEGACY_BLOCK_SET_VERSION,
@@ -132,6 +133,7 @@ struct Inner {
     connections: Mutex<HashMap<String, usize>>,
     shares: Mutex<share::ShareStore>,
     window_control: Mutex<window_control::ControlState>,
+    store_update: Mutex<store_update::StoreUpdateState>,
     window_control_versions: Mutex<HashMap<String, Vec<u32>>>,
     device_support: Mutex<HashMap<String, Option<Supported>>>,
     layout_sync_devices: Mutex<HashSet<String>>,
@@ -170,6 +172,10 @@ struct AppSummary {
     updated_at: String,
     builtin: bool,
     definition_available: bool,
+    /// 스토어 설치 기록이 있을 때만 있다. 에이전트가 스토어 앱과 커스텀 앱을 가리는 데 쓴다.
+    origin: Option<StoreOrigin>,
+    /// 출처가 있고 지금 판이 설치 기준 판과 다르면 true다. upload_app으로 고친 수정본이다.
+    modified: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -225,6 +231,7 @@ impl AppState {
             connections: Mutex::new(HashMap::new()),
             shares: Mutex::new(share::ShareStore::default()),
             window_control: Mutex::new(window_control::ControlState::default()),
+            store_update: Mutex::new(store_update::StoreUpdateState::default()),
             window_control_versions: Mutex::new(HashMap::new()),
             device_support: Mutex::new(HashMap::new()),
             layout_sync_devices: Mutex::new(HashSet::new()),
@@ -543,6 +550,9 @@ impl AppState {
                 .map(|row| AppSummary {
                     builtin: false,
                     definition_available: true,
+                    modified: row.app.origin.is_some()
+                        && row.app.installed_version != Some(row.app.current_version),
+                    origin: row.app.origin,
                     id: row.app.id,
                     name: row.app.name,
                     description: row.version.definition.description,
@@ -561,6 +571,8 @@ impl AppState {
                         updated_at: identity.updated_at.into(),
                         builtin: true,
                         definition_available: false,
+                        origin: None,
+                        modified: false,
                     }),
             );
             summaries.sort_by(|a, b| a.id.cmp(&b.id));
@@ -691,6 +703,7 @@ impl AppState {
         if changed > 0 {
             self.delete_device_shared_views(id);
             self.window_control_device_disconnected(id);
+            self.store_update_device_disconnected(id);
         }
         Ok(changed > 0)
     }
@@ -733,10 +746,13 @@ mod registry_install;
 mod registry_install_tests;
 mod share;
 mod storage;
+mod store_update;
 mod storage_items;
 mod storage_scope_migration;
 mod storage_target;
 mod window_control;
+#[cfg(test)]
+mod store_update_tests;
 #[cfg(test)]
 mod window_control_tests;
 pub mod worker;

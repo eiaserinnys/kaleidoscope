@@ -44,6 +44,7 @@ mod startup_readiness;
 // 원천과 설치 동작은 다음 PR에서 연결한다.
 #[allow(dead_code)]
 mod store;
+mod store_update;
 mod storage;
 mod sync_state;
 mod update_changes;
@@ -706,7 +707,7 @@ impl Core {
             | CoreRequest::WindowControlCapture { .. }
             | CoreRequest::WebControl { .. }) => window_control::handle(&self.inner, request),
             CoreRequest::StoreRespondServerPermission { window_id, request_id, server, allow } => store_server_consent::respond(&self.inner, &window_id, &request_id, &server, allow),
-            CoreRequest::AppRespondInstallPermission { window_id, request_id, digest, allow } => installation_consent::respond(&self.inner, &window_id, &request_id, &digest, allow),
+            CoreRequest::AppRespondInstallPermission { owner, request_id, digest, allow } => installation_consent::respond(&self.inner, &owner, &request_id, &digest, allow),
             CoreRequest::ProfilerReport { inputs, frames } => {
                 self.inner.profiler.report(inputs, frames);
                 Ok(CoreReply::ProfilerReport {})

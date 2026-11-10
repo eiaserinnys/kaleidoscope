@@ -153,9 +153,13 @@ pub(crate) fn use_local(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         let _state = inner.state.lock().unwrap();
         let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
         crate::store_server_consent::shutdown(inner);
+        crate::installation_consent::shutdown_shell(inner);
         generation
     };
-    activate(inner, file.clone(), generation)?;
+    let activated = activate(inner, file.clone(), generation);
+    // 전환이 상태 이벤트를 내보내지 못하고 끝나도 닫힌 쉘 동의는 화면에 알린다.
+    crate::installation_consent::flush_closed(inner);
+    activated?;
     link::start_stream(inner.clone(), generation, file);
     Ok(CoreReply::LinkUseLocal {})
 }

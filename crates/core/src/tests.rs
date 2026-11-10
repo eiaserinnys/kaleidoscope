@@ -48,6 +48,7 @@ mod startup_readiness_tests;
 mod shell_actions_tests;
 mod store_allow_tests;
 mod store_runtime_tests;
+mod store_update_tests;
 mod wallpaper_tests;
 mod window_control_tests;
 
@@ -2197,6 +2198,8 @@ struct FakeRegistryClient {
     store_requests: Mutex<Vec<kaleidoscope_contract::store::DeviceInstallRequest>>,
     store_server: Mutex<Option<kaleidoscope_orchestrator::AppState>>,
     store_install_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
+    store_install_unchanged: std::sync::atomic::AtomicBool,
+    store_update_responses: Mutex<Vec<kaleidoscope_contract::StoreUpdateResponse>>,
     store_remove_pause: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
     asset_bytes: Mutex<Option<Vec<u8>>>,
     asset_uploads: Mutex<Vec<kaleidoscope_contract::assets::AssetUpload>>,
@@ -2257,7 +2260,8 @@ impl RegistryClient for FakeRegistryClient {
             ready.send(()).unwrap();
             resume.recv_timeout(Duration::from_secs(10)).unwrap();
         }
-        Ok(kaleidoscope_contract::store::DeviceInstallReply { app, unchanged: false })
+        let unchanged = self.store_install_unchanged.swap(false, Ordering::SeqCst);
+        Ok(kaleidoscope_contract::store::DeviceInstallReply { app, unchanged })
     }
     fn remove_store_app(&self, _: &str, _: &str, id: &str, request: &kaleidoscope_contract::store::DeviceRemoveRequest) -> Result<(), RegistryError> {
         if let Some(server) = self.store_server.lock().unwrap().clone() {
@@ -2325,6 +2329,18 @@ impl RegistryClient for FakeRegistryClient {
         response: &kaleidoscope_contract::WindowControlResponse,
     ) -> Result<(), RegistryError> {
         self.control_responses
+            .lock()
+            .unwrap()
+            .push(response.clone());
+        Ok(())
+    }
+    fn post_store_update_response(
+        &self,
+        _: &str,
+        _: &str,
+        response: &kaleidoscope_contract::StoreUpdateResponse,
+    ) -> Result<(), RegistryError> {
+        self.store_update_responses
             .lock()
             .unwrap()
             .push(response.clone());

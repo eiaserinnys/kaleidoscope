@@ -110,6 +110,14 @@ pub(crate) trait RegistryClient: Send + Sync + 'static {
         token: &str,
         response: &kaleidoscope_contract::WindowControlResponse,
     ) -> Result<(), RegistryError>;
+    fn post_store_update_response(
+        &self,
+        _server_url: &str,
+        _token: &str,
+        _response: &kaleidoscope_contract::StoreUpdateResponse,
+    ) -> Result<(), RegistryError> {
+        Err(RegistryError::failure(FailureStage::Send, "앱 갱신 응답을 보낼 수 없습니다"))
+    }
     fn invoke_worker(
         &self,
         _url: &str,
@@ -514,6 +522,27 @@ impl RegistryClient for HttpRegistryClient {
             .post(format!(
                 "{server_url}{}/{}",
                 kaleidoscope_contract::registry::DEVICE_WINDOW_CONTROL_PATH,
+                response.request_id
+            ))
+            .bearer_auth(token)
+            .json(response)
+            .send_registry()?;
+        let host = response_host(&response);
+        let status = response.status();
+        let body = response.bytes().unwrap_or_default();
+        check_status(status, &body, &host)
+    }
+    fn post_store_update_response(
+        &self,
+        server_url: &str,
+        token: &str,
+        response: &kaleidoscope_contract::StoreUpdateResponse,
+    ) -> Result<(), RegistryError> {
+        let response = self
+            .requests()?
+            .post(format!(
+                "{server_url}{}/{}",
+                kaleidoscope_contract::DEVICE_STORE_UPDATES_PATH,
                 response.request_id
             ))
             .bearer_auth(token)

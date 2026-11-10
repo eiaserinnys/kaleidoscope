@@ -1,5 +1,5 @@
 use super::*;
-use kaleidoscope_contract::{ActWindowArgs, ReadWindowArgs};
+use kaleidoscope_contract::{ActWindowArgs, ReadWindowArgs, UpdateAppFromStoreArgs};
 
 pub(super) fn call_budget_warnings(definition: &AppDefinition) -> Vec<String> {
     kaleidoscope_contract::data::call_budget(definition)
@@ -187,7 +187,7 @@ impl McpServer {
 
     #[tool(
         name = "upload_app",
-        description = "앱 정의를 검사해 레지스트리에 새 버전으로 올립니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다. 에이전트가 앱을 만들거나 고친 뒤 list_apps와 get_app으로 확인하고 사용합니다."
+        description = "앱 정의를 검사해 레지스트리에 새 버전으로 올립니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다. 에이전트가 앱을 만들거나 고친 뒤 list_apps와 get_app으로 확인하고 사용합니다. 스토어에서 설치한 앱을 upload_app으로 올리면 스토어 배포를 받지 않는 고친 사본이 되므로, 스토어 원본을 고쳐 update_app_from_store로 적용합니다."
     )]
     async fn tool_upload_app(
         &self,
@@ -373,14 +373,16 @@ impl McpServer {
                 .collect();
             return Ok(json_result(
                 json!({"app_id":identity.id,"version":identity.version,"builtin":true,
-                "definition_available":false,"definition":null,"metadata":{"name":identity.name,
+                "definition_available":false,"definition":null,"origin":null,"modified":false,"metadata":{"name":identity.name,
                 "requires":{"blocks":identity.blocks,"modules":modules},"updated_at":identity.updated_at}}),
             ));
         }
         Ok(match self.state.app(&args.app_id, args.version) {
-            Ok(Some(row)) => json_result(
-                json!({"app_id":row.app.id,"version":row.version.version,"definition":row.version.definition}),
-            ),
+            Ok(Some(row)) => {
+                let modified =
+                    row.app.origin.is_some() && row.app.installed_version != Some(row.app.current_version);
+                json_result(json!({"app_id":row.app.id,"version":row.version.version,"definition":row.version.definition,"origin":row.app.origin,"modified":modified}))
+            }
             Ok(None) => json_error(kaleidoscope_contract::errors::MCP_GET_APP_NOT_FOUND(
                 &args.app_id,
             )),
@@ -695,6 +697,26 @@ impl McpServer {
                 .act_window(request_principal(&context), args)
                 .await,
         ))
+    }
+
+    #[tool(
+        description = "앱을 스토어의 최신 판으로 기기에서 갱신하거나 새로 설치합니다. 앱을 스토어에 올린 뒤 이 도구로 기기에 반영합니다. store_url을 생략하면 기기에 설치된 앱의 현재 출처를 씁니다. 설치되지 않은 앱은 store_url이 필요하고 늘 사용자 동의를 받습니다. replace=true는 출처나 수정본을 스토어 판으로 명시 전환하며, 권한 검토 범위가 같으면 동의 없이 적용합니다. 결과가 consent_required이면 사용자에게 쉘의 확인 창을 눌러 달라고 알리십시오. 스토어 게시 성공과 기기 적용 성공은 따로 확인합니다."
+    )]
+    async fn tool_update_app_from_store(
+        &self,
+        Parameters(args): Parameters<UpdateAppFromStoreArgs>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Ok(
+            match self
+                .state
+                .update_app_from_store(request_principal(&context), args)
+                .await
+            {
+                Ok(value) => json_result(serde_json::to_value(value).expect("갱신 결과 직렬화")),
+                Err(error) => json_error(error),
+            },
+        )
     }
 
     #[tool(description = "현재 작업과 창 개수를 나열합니다.")]

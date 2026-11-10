@@ -128,6 +128,10 @@ pub fn router(state: AppState) -> Router {
             post(super::window_control::device_reply).layer(DefaultBodyLimit::disable()),
         )
         .route(
+            "/store-updates/{request_id}",
+            post(super::store_update::device_reply).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
             "/layout",
             axum::routing::put(super::layouts::put_layout).layer(body_limit(2 * 1024 * 1024)),
         )

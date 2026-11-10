@@ -106,6 +106,23 @@ fn install_example_with(core: Arc<Core>, window: String, replace: bool) -> threa
     thread::spawn(move || crate::store::install::install(&core.inner, &window, "catalog", json!("https://EXAMPLE.com:443/appstore/"), json!("example"), json!(3), replace))
 }
 
+/// 창 설치 동의의 소유자. 동의를 시작한 창의 앱과 판을 상태에서 읽는다.
+pub(super) fn window_owner(core: &Arc<Core>, window: &str) -> kaleidoscope_contract::InstallConsentOwner {
+    let state = core.inner.state.lock().unwrap();
+    let win = state.shared.windows.iter().find(|candidate| candidate.id == window).unwrap();
+    let owner = owner_of(window, &win.app_id);
+    drop(state);
+    owner
+}
+
+pub(super) fn owner_of(window: &str, app: &str) -> kaleidoscope_contract::InstallConsentOwner {
+    kaleidoscope_contract::InstallConsentOwner::Window {
+        window_id: window.into(),
+        app_id: app.into(),
+        app_version: 1,
+    }
+}
+
 /// 픽스처 스토어의 3판과 같은 정의를 `example` 앱으로 설치해 둔다. `installed_version`이 현재 판과 다르면 수정본이다.
 fn import_store_example(core: &Core, installed_version: u32) {
     let prepared = crate::store::client(&core.inner, "https://example.com/appstore").unwrap()
@@ -135,14 +152,14 @@ fn store_install_transmits_connections_from_the_approved_manifest() {
     core.subscribe(Box::new(move |event| if let CoreEvent::AppInstallPermission { request_id, digest, .. } = event { tx.send((request_id.clone(), digest.clone())).unwrap(); }));
     let task = install_example(core.clone(), window.clone());
     let (request_id, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id:window, request_id, digest: digest.clone(), allow:true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id, digest: digest.clone(), allow:true }).unwrap();
     assert!(task.join().unwrap().unwrap());
     let requests = registry.store_requests.lock().unwrap();
     assert_eq!(requests[0].connections.as_ref(), Some(&expected));
     assert_eq!(format!("{:x}", Sha256::digest(base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &requests[0].manifest_base64).unwrap())), digest);
 }
 
-fn switch_cache(core: &Core) {
+pub(super) fn switch_cache(core: &Core) {
     let definition = json!({"id":"example","name":"새 서버 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"새 서버"}}).to_string();
     let mut state = core.inner.state.lock().unwrap();
     core.inner.generation.fetch_add(1, Ordering::SeqCst);
@@ -159,7 +176,7 @@ fn store_install_response_from_previous_server_does_not_change_current_cache() {
     *registry.store_install_pause.lock().unwrap() = Some((ready_tx, resume_rx));
     let task = install_example(core.clone(), window.clone());
     let (request_id, digest) = consent_rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id:window, request_id, digest, allow:true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id, digest, allow:true }).unwrap();
     ready_rx.recv_timeout(Duration::from_secs(10)).unwrap();
     switch_cache(&core);
     resume_tx.send(()).unwrap();
@@ -176,7 +193,7 @@ fn store_install_does_not_send_after_server_changes_during_consent() {
     let task = install_example(core.clone(), window.clone());
     let (request_id, digest) = consent_rx.recv_timeout(Duration::from_secs(10)).unwrap();
     switch_cache(&core);
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id:window, request_id, digest, allow:true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id, digest, allow:true }).unwrap();
     assert_eq!(task.join().unwrap().unwrap_err().id.as_deref(), Some("STORECLIENT_INSTALL_CONTEXT_CHANGED"));
     assert!(registry.store_requests.lock().unwrap().is_empty());
 }
@@ -259,9 +276,9 @@ fn closing_the_window_cancels_pending_consent() {
     let app: kaleidoscope_contract::AppDefinition = serde_json::from_str(&definition).unwrap();
     let task = thread::spawn(move || crate::installation_consent::wait(&waiter.inner, &wait_window, "consent-fixture", 1, 1, "https://example.com/appstore", "digest", &app, None, false, false));
     let id = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    let error = core.handle(CoreRequest::AppRespondInstallPermission { window_id: "other".into(), request_id: id.clone(), digest:"digest".into(), allow:true }).unwrap_err();
+    let error = core.handle(CoreRequest::AppRespondInstallPermission { owner: owner_of("other", "consent-fixture"), request_id: id.clone(), digest:"digest".into(), allow:true }).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("STORECLIENT_INSTALL_WINDOW_MISMATCH"));
-    let error = core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: id, digest:"other".into(), allow:true }).unwrap_err();
+    let error = core.handle(CoreRequest::AppRespondInstallPermission { owner: owner_of(&window, "consent-fixture"), request_id: id, digest:"other".into(), allow:true }).unwrap_err();
     assert_eq!(error.id.as_deref(), Some("STORECLIENT_INSTALL_DIGEST_MISMATCH"));
     core.handle(CoreRequest::WindowClose { window_id: window }).unwrap();
     assert!(!task.join().unwrap().unwrap());
@@ -348,7 +365,7 @@ fn store_source_and_consent_install_update_modified_and_remove() {
     let act = |core: Arc<Core>, window: String| thread::spawn(move || core.handle(CoreRequest::DataAct { window_id: window, pointer: "/ui/children/2/on_click".into(), event: Value::Null, item: Value::Null, modifiers: None }));
     let first = act(core.clone(), window.clone());
     let (request, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: false }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: false }).unwrap();
     first.join().unwrap().unwrap();
     assert!(registry.store_requests.lock().unwrap().is_empty());
     let db = rusqlite::Connection::open(&database).unwrap();
@@ -373,7 +390,7 @@ fn store_source_and_consent_install_update_modified_and_remove() {
         replace: false,
     };
     let _: kaleidoscope_contract::store::DeviceInstallReply = server_request(&server, "POST", "/api/device/app-installs", &concurrent).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: true }).unwrap();
     let error = raced.join().unwrap().unwrap_err();
     assert_eq!(error.id.as_deref(), Some("REGISTRYINSTALL_EXPECTED_VERSION_CONFLICT"));
     let _: Value = server_request(&server, "DELETE", "/api/device/apps/example", &kaleidoscope_contract::store::DeviceRemoveRequest { expected_current_version: std::num::NonZeroU32::new(1).unwrap(), allow_custom: false }).unwrap();
@@ -381,7 +398,7 @@ fn store_source_and_consent_install_update_modified_and_remove() {
 
     let second = act(core.clone(), window.clone());
     let (request, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: true }).unwrap();
     second.join().unwrap().unwrap();
     let installed = core.inner.state.lock().unwrap().shared.apps.iter().find(|app| app.id == "example").cloned().unwrap();
     assert_eq!(installed.origin.unwrap().release, 3);
@@ -395,7 +412,7 @@ fn store_source_and_consent_install_update_modified_and_remove() {
     core.handle(CoreRequest::WindowSetState { window_id: window.clone(), state: BTreeMap::from([("release".into(), json!(5)), ("success".into(), json!(false))]) }).unwrap();
     let third = act(core.clone(), window.clone());
     let (request, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: true }).unwrap();
     third.join().unwrap().unwrap();
 
     let mut modified_definition = registry.store_apps.lock().unwrap()["example"].version.definition.clone();
@@ -420,7 +437,7 @@ fn store_source_and_consent_install_update_modified_and_remove() {
         window_id: window, pointer: "/ui/children/4/on_click".into(), event: Value::Null, item: Value::Null, modifiers: None
     }) });
     let (request, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: true }).unwrap();
     replaced.join().unwrap().unwrap();
     assert!(registry.store_requests.lock().unwrap().last().unwrap().replace);
     let state = core.inner.state.lock().unwrap();
@@ -440,7 +457,7 @@ fn store_consent_reports_the_installed_release_only_when_updating() {
     let fresh = install_example(core.clone(), window.clone());
     let (request, digest, installed_release) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     assert_eq!(installed_release, None, "새 설치는 업데이트로 묻지 않는다");
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: false }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: false }).unwrap();
     assert!(!fresh.join().unwrap().unwrap());
 
     let prepared = crate::store::client(&core.inner, "https://example.com/appstore").unwrap()
@@ -458,7 +475,7 @@ fn store_consent_reports_the_installed_release_only_when_updating() {
     let update = install_example(core.clone(), window.clone());
     let (request, digest, installed_release) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     assert_eq!(installed_release, Some(2), "깔린 판의 스토어 판을 알린다");
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: false }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: false }).unwrap();
     assert!(!update.join().unwrap().unwrap());
 }
 
@@ -476,13 +493,13 @@ fn replace_consents_even_with_the_same_scope_and_sends_replace_with_the_prepared
     assert_eq!(from_origin.map(|origin| origin.release), Some(2), "현재 스토어 출처를 알린다");
     assert!(!replacing, "같은 출처의 보통 갱신은 대체가 아니다");
     assert!(!modified);
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: false }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: false }).unwrap();
     assert!(!first.join().unwrap().unwrap());
     assert!(registry.store_requests.lock().unwrap().is_empty(), "취소하면 서버에 보내지 않는다");
 
     let second = install_example_with(core.clone(), window.clone(), true);
     let (request, digest, _, _, _) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest: digest.clone(), allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest: digest.clone(), allow: true }).unwrap();
     assert!(second.join().unwrap().unwrap());
     let requests = registry.store_requests.lock().unwrap();
     assert_eq!(requests.len(), 1);
@@ -504,7 +521,7 @@ fn replace_bypasses_the_local_modified_precheck_and_warns() {
     assert!(from_origin);
     assert!(replacing, "고친 앱을 되돌리는 것은 대체다");
     assert!(modified, "고친 내용을 대체한다고 알린다");
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: false }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: false }).unwrap();
     assert!(!task.join().unwrap().unwrap());
     assert!(registry.store_requests.lock().unwrap().is_empty());
 }
@@ -523,7 +540,7 @@ fn replace_of_a_custom_app_consents_without_an_origin() {
     assert!(!from_origin, "커스텀 앱에는 스토어 출처가 없다");
     assert!(replacing);
     assert!(!modified);
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: true }).unwrap();
     assert!(task.join().unwrap().unwrap());
     assert!(registry.store_requests.lock().unwrap()[0].replace);
 }
@@ -547,7 +564,7 @@ fn replace_install_does_not_send_after_the_origin_changes_with_the_same_version_
             store_url: "https://other.example.com/appstore".into(), store_app_id: "example".into(), release: 7, digest: "other-digest".into(),
         });
     }
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: true }).unwrap();
     assert_eq!(task.join().unwrap().unwrap_err().id.as_deref(), Some("STORECLIENT_INSTALL_CONTEXT_CHANGED"));
     assert!(registry.store_requests.lock().unwrap().is_empty(), "보통 갱신에 동의한 요청으로 다른 출처를 대체하지 않는다");
 }
@@ -563,7 +580,7 @@ fn replace_install_maps_a_link_change_during_consent_to_context_changed() {
     let task = install_example_with(core.clone(), window.clone(), true);
     let (request, digest) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
     core.handle(CoreRequest::LinkUnlink {}).unwrap();
-    core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
+    core.handle(CoreRequest::AppRespondInstallPermission { owner: window_owner(&core, &window), request_id: request, digest, allow: true }).unwrap();
     assert_eq!(task.join().unwrap().unwrap_err().id.as_deref(), Some("STORECLIENT_INSTALL_CONTEXT_CHANGED"));
     assert!(registry.store_requests.lock().unwrap().is_empty(), "바뀐 링크로 서버에 보내지 않는다");
 }

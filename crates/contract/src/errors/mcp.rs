@@ -116,4 +116,60 @@ error_catalog! { ENTRIES;
         message: "연결 {name}: 등록된 연결을 찾지 못했습니다. list_connections에서 이름을 확인하세요.",
         fix: "list_connections에 표시된 연결 이름을 지정하세요"
     }
+    MCP_STORE_UPDATE_DEVICE_REQUIRED() {
+        class: NotFound,
+        place: "update_app_from_store 대상 기기 선택",
+        cause: "요청받을 연결 기기가 없다",
+        message: "앱을 갱신할 기기를 찾지 못했습니다. 연결된 기기를 지정해 주세요.",
+        fix: "list_devices에서 연결된 기기 ID를 확인해 device_id로 지정하세요"
+    }
+    MCP_STORE_UPDATE_DEVICE_OFFLINE(name) {
+        class: Unavailable,
+        place: "update_app_from_store 기기 연결 확인",
+        cause: "기기 스트림이 종료됐다",
+        message: "'{name}' 기기가 연결되어 있지 않습니다. 쉘을 켜고 다시 요청해 주세요.",
+        fix: "쉘을 켜고 다시 요청하세요"
+    }
+    MCP_STORE_UPDATE_DEVICE_FORBIDDEN() {
+        class: PermissionDenied,
+        place: "update_app_from_store 기기 접근 확인",
+        cause: "MCP 연결의 계정이나 작업이 그 기기를 쓸 수 없다",
+        message: "이 MCP 연결에서는 지정한 기기에 앱 갱신을 요청할 수 없습니다. 연결된 계정과 작업의 기기를 지정해 주세요.",
+        fix: "연결된 계정과 작업의 기기를 지정하세요"
+    }
+    MCP_STORE_UPDATE_DEVICE_VERSION_UNSUPPORTED(name) {
+        class: Unavailable,
+        place: "update_app_from_store 기기 판 확인",
+        cause: "기기의 쉘이 스토어 갱신 요청을 지원하지 않는다",
+        message: "'{name}' 기기의 쉘이 스토어 갱신 요청을 지원하지 않습니다. 쉘을 올린 뒤 다시 요청해 주세요.",
+        fix: "쉘을 올린 뒤 다시 요청하세요"
+    }
+    MCP_STORE_UPDATE_TIMEOUT(name) {
+        class: Unavailable,
+        place: "update_app_from_store 기기 응답 대기",
+        cause: "응답 대기 시간이 지났다",
+        message: "'{name}' 기기의 앱 갱신 결과를 받지 못했습니다. 쉘의 설치 상태를 확인해 주세요.",
+        fix: "쉘의 설치 상태를 확인하세요"
+    }
+    MCP_STORE_UPDATE_REPLY_INVALID() {
+        class: InvalidRequest,
+        place: "update_app_from_store 응답 본문 검사",
+        cause: "응답을 계약 형식으로 읽지 못했다",
+        message: "기기의 앱 갱신 응답 형식이 맞지 않습니다. 기기와 서버를 같은 지원 판으로 올려 주세요.",
+        fix: "기기와 서버를 같은 지원 판으로 올리세요"
+    }
+    MCP_STORE_UPDATE_REPLY_DEVICE_MISMATCH() {
+        class: PermissionDenied,
+        place: "update_app_from_store 응답 기기 확인",
+        cause: "응답 기기가 요청 대상과 다르다",
+        message: "이 앱 갱신 요청을 받은 기기의 응답이 아닙니다. 요청 대상 기기에서 응답해 주세요.",
+        fix: "요청 대상 기기에서 응답하세요"
+    }
+    MCP_STORE_UPDATE_REQUEST_UNKNOWN() {
+        class: NotFound,
+        place: "update_app_from_store 응답 대기 조회",
+        cause: "요청을 찾지 못했거나 대기가 끝났다",
+        message: "이 앱 갱신 요청의 대기가 끝났습니다. 새 요청 결과만 보내세요.",
+        fix: "새 요청 결과만 보내세요"
+    }
 }

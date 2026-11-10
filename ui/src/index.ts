@@ -58,7 +58,7 @@ export {
   type FakeTransportSeed,
   type FakeWebViewSnapshot,
 } from "./core/fake-transport";
-export { createShellStore, useShellSelector, type ShellStore } from "./core/shell-store";
+export { createShellStore, useShellSelector, type InstallConsent, type ShellInstallConsent, type ShellStore } from "./core/shell-store";
 export { messageReceiver, messageApps, defaultMessageApp, useDefaultMessageApp, type MessageReceiver, type MessageApp } from "./shell/message-target";
 export { sendToDefaultAgent } from "./shell/send-message";
 export { isWindowTop } from "./data/window-state";

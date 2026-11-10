@@ -246,8 +246,10 @@ mod validate_button;
 mod validate_list;
 mod validate_file_input;
 mod validate_tree;
+pub mod store_update;
 pub mod window_control;
 pub mod worker;
+pub use store_update::*;
 pub use window_control::*;
 
 use data::{Actions, Binding, SourceDecl};
@@ -5487,7 +5489,7 @@ pub enum CoreRequest {
     #[serde(rename = "store.respond_server_permission")]
     StoreRespondServerPermission { window_id: String, request_id: String, server: String, allow: bool },
     #[serde(rename = "app.respond_install_permission")]
-    AppRespondInstallPermission { window_id: String, request_id: String, digest: String, allow: bool },
+    AppRespondInstallPermission { owner: InstallConsentOwner, request_id: String, digest: String, allow: bool },
 
     /// 프로세스 명령. 허용 응답은 쉘에서만 보낸다.
     #[serde(rename = "process.start")]
@@ -6398,6 +6400,25 @@ pub enum FileKind {
     Dir,
 }
 
+/// 설치 동의를 요청한 소유자. 앱 창에서 시작한 설치와 MCP가 시작한 쉘 전체 설치를 가른다.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum InstallConsentOwner {
+    /// 앱 화면에서 시작한 설치. 같은 창에서만 응답할 수 있다.
+    Window {
+        window_id: String,
+        app_id: String,
+        app_version: u32,
+    },
+    /// MCP 요청으로 시작한 쉘 전체 설치. 링크 세대와 서버 요청 id가 맞을 때만 응답할 수 있다.
+    Shell {
+        #[ts(type = "number")]
+        generation: u64,
+        request_id: String,
+    },
+}
+
 /// 코어가 화면에 보내는 이벤트. `event`로 가른다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "event")]
@@ -6479,9 +6500,10 @@ pub enum CoreEvent {
     StoreServerPermission { window_id: String, request_id: String, app_name: String, server: String },
     /// 앱을 설치하기 전에 사용자에게 확인을 구한다. `installed_release`는 같은 스토어 앱이 이미 깔려 있을 때
     /// 그 스토어 판이며, 새로 설치하는 앱이면 없다. 스토어가 판을 올리는지 화면이 이 값으로 가른다.
+    /// `owner`는 요청을 시작한 창(`window`)이나 MCP의 쉘 전체 요청(`shell`)을 가른다. 응답은 같은 owner로 보낸다.
     #[serde(rename = "app.install_permission")]
     AppInstallPermission {
-        window_id: String,
+        owner: InstallConsentOwner,
         request_id: String,
         app_name: String,
         release: u32,
@@ -6504,6 +6526,10 @@ pub enum CoreEvent {
         digest: String,
         definition: AppDefinition,
     },
+    /// 쉘 전체 동의(`owner.kind == "shell"`)가 사용자 응답 없이 닫혔다(링크 교체, 토큰 거부, 링크 세대 변경).
+    /// 쉘은 같은 request_id의 확인 창을 거둔다. 창 동의는 창 스냅샷으로 가리므로 이 이벤트를 보내지 않는다.
+    #[serde(rename = "app.install_permission_closed")]
+    AppInstallPermissionClosed { request_id: String },
     /// 쉘이 사용자에게 실행 허용을 묻는다.
     #[serde(rename = "process.permission")]
     ProcessPermission {

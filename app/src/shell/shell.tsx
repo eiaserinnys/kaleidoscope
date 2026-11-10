@@ -41,6 +41,7 @@ import { serverLabel } from "./server-label";
 import { ShellSettings } from "./shell-settings";
 import { MessageAppPrompt } from "./message-app-prompt";
 import { UpdateDialog } from "./update-dialog";
+import { ShellInstallationConsent } from "./installation-consent";
 import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { WallpaperLayer } from "./wallpaper-layer";
@@ -262,6 +263,27 @@ export function Shell({ store }: { store: ShellStore }) {
     void runCommand({ op: "window.open", desktop_id: desktop.id, app_id: appId, rect: newWindowRect(desktop.id, latest, windowSizeForApp(latest, appId)) });
   }, [newWindowRect, runCommand, store]);
 
+  // 쉘 전체 설치 동의는 작업 없이 연결만 된 화면에서도 뜨므로 알림도 두 갈래 모두에 둔다.
+  const noticeLayer = notice ? (
+    <div className="ks-shell-notice-layer">
+      <Notice
+        actions={[
+          <Button key="close" onClick={() => setNotice(null)}>닫기</Button>,
+        ]}
+        errorId={notice.id}
+        data-ks-overlay
+        role="alert"
+      >
+        {notice.message}
+        {notice.details.length > 0 ? (
+          <span className="ks-notice-details">
+            {notice.details.map((detail) => <span key={detail}>{detail}</span>)}
+          </span>
+        ) : null}
+      </Notice>
+    </div>
+  ) : null;
+
   if (!snapshot) {
     return <main className="app-root"><EmptyState icon={<LayoutGrid size="empty" />} text="코어에 연결할 수 없습니다" /></main>;
   }
@@ -276,6 +298,8 @@ export function Shell({ store }: { store: ShellStore }) {
           action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined} />} />
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
+      {host ? <ShellInstallationConsent store={store} host={host} onError={setNotice} /> : null}
+      {noticeLayer}
     </main>;
   }
 
@@ -483,29 +507,12 @@ export function Shell({ store }: { store: ShellStore }) {
 
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
+      {host ? <ShellInstallationConsent store={store} host={host} onError={setNotice} /> : null}
       {launcher ? <AppLauncher store={store} anchor={launcher.anchor} activeDesktopId={activeDesktop.id} onCall={runCommand} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />
       ) : null}
-      {notice ? (
-        <div className="ks-shell-notice-layer">
-          <Notice
-            actions={[
-              <Button key="close" onClick={() => setNotice(null)}>닫기</Button>,
-            ]}
-            errorId={notice.id}
-          data-ks-overlay
-            role="alert"
-          >
-            {notice.message}
-            {notice.details.length > 0 ? (
-              <span className="ks-notice-details">
-                {notice.details.map((detail) => <span key={detail}>{detail}</span>)}
-              </span>
-            ) : null}
-          </Notice>
-        </div>
-      ) : null}
+      {noticeLayer}
     </main>
   );
 }

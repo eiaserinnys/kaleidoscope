@@ -107,17 +107,50 @@ it("덮인 곳을 눌러도 취소하지 않고 창 머리 조작은 열어 둔�
   expect(call).not.toHaveBeenCalled();
 });
 
-it("스크롤 본문은 키보드로 진입하고 명령과 환경이 설명에 연결된다", () => {
+// 스크롤 칸은 내용이 넘칠 때만 Tab 초점을 받는다. jsdom은 높이가 0이라 넘치는 상태를 흉내 낸다.
+function mockScrollOverflow() {
+  const elementClientHeight = Object.getOwnPropertyDescriptor(Element.prototype, "clientHeight");
+  const elementScrollHeight = Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight");
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.classList.contains("ks-dialog-scroll") ? 300 : elementClientHeight?.get?.call(this) ?? 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.classList.contains("ks-dialog-scroll") ? 600 : elementScrollHeight?.get?.call(this) ?? 0;
+    },
+  });
+  return () => {
+    if (elementClientHeight) Object.defineProperty(HTMLElement.prototype, "clientHeight", elementClientHeight);
+    if (elementScrollHeight) Object.defineProperty(HTMLElement.prototype, "scrollHeight", elementScrollHeight);
+  };
+}
+
+it("넘치는 스크롤 본문은 키보드로 진입하고 명령과 환경이 설명에 연결된다", () => {
+  const restore = mockScrollOverflow();
+  try {
+    const { emit } = setup(); emit();
+    const dialog = screen.getByRole("dialog");
+    const body = document.getElementById(dialog.getAttribute("aria-describedby")!);
+    expect(body?.textContent).toContain("test-command --option");
+    expect(body?.textContent).toContain("FIRST=one");
+    const scroll = dialog.querySelector<HTMLElement>(".ks-dialog-scroll")!;
+    expect(scroll.tabIndex).toBe(0);
+    scroll.focus();
+    for (const key of ["ArrowDown", "PageDown", "End"]) fireEvent.keyDown(scroll, { key });
+    expect(document.activeElement).toBe(scroll);
+  } finally {
+    restore();
+  }
+});
+
+it("넘치지 않는 스크롤 본문은 Tab 초점을 받지 않는다", () => {
   const { emit } = setup(); emit();
-  const dialog = screen.getByRole("dialog");
-  const body = document.getElementById(dialog.getAttribute("aria-describedby")!);
-  expect(body?.textContent).toContain("test-command --option");
-  expect(body?.textContent).toContain("FIRST=one");
-  const scroll = dialog.querySelector<HTMLElement>(".ks-dialog-scroll")!;
-  expect(scroll.tabIndex).toBe(0);
-  scroll.focus();
-  for (const key of ["ArrowDown", "PageDown", "End"]) fireEvent.keyDown(scroll, { key });
-  expect(document.activeElement).toBe(scroll);
+  const scroll = screen.getByRole("dialog").querySelector<HTMLElement>(".ks-dialog-scroll")!;
+  expect(scroll.hasAttribute("tabindex")).toBe(false);
 });
 
 it("취소 뒤 요청 전 포커스로 돌아간다", () => {

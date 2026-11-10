@@ -43,9 +43,13 @@ pub(crate) fn start(
             let _state = inner.state.lock().unwrap();
             let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
             crate::store_server_consent::shutdown(inner);
+            crate::installation_consent::shutdown_shell(inner);
             generation
         };
-        crate::server_switch::activate(inner, file.clone(), generation)?;
+        let activated = crate::server_switch::activate(inner, file.clone(), generation);
+        // 전환이 상태 이벤트를 내보내지 못하고 끝나도 닫힌 쉘 동의는 화면에 알린다.
+        crate::installation_consent::flush_closed(inner);
+        activated?;
         start_stream(inner.clone(), generation, file);
         return Ok(CoreReply::LinkStart {
             user_code: String::new(),
@@ -99,6 +103,7 @@ pub(crate) fn start(
         let _state = inner.state.lock().unwrap();
         let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
         crate::store_server_consent::shutdown(inner);
+        crate::installation_consent::shutdown_shell(inner);
         generation
     };
     let pairing = LinkStatus::Pairing {
@@ -119,6 +124,8 @@ pub(crate) fn start(
         inner.layout_signal.notify();
         emit_state(inner);
     }
+    // 링크 상태가 그대로라 상태 이벤트를 내보내지 않았어도 닫힌 쉘 동의는 알린다.
+    crate::installation_consent::flush_closed(inner);
     if current {
         let inner = Arc::clone(inner);
         let poll_reply = reply.clone();
@@ -146,6 +153,7 @@ pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         } else {
             inner.generation.fetch_add(1, Ordering::SeqCst);
             crate::store_server_consent::shutdown(inner);
+            crate::installation_consent::shutdown_shell(inner);
             inner.link_connecting.store(false, Ordering::SeqCst);
             set_link_locked(&mut state, LinkStatus::Unlinked {})
         }
@@ -167,18 +175,22 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
     crate::process_host::server_changed(inner);
     crate::realtime_host::shutdown_sessions(inner);
     crate::client_services::server_changed(inner);
-    let changed = {
+    let result = (|| {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
         crate::store_server_consent::shutdown(inner);
+        crate::installation_consent::shutdown_shell(inner);
         storage::remove_link(&inner.data_dir)?;
         inner.flusher.clear_sync();
         crate::sync_state::remove(&inner.data_dir)?;
         *inner.link_file.lock().unwrap() = None;
         state.sync = Default::default();
         inner.link_connecting.store(false, Ordering::SeqCst);
-        set_link_locked(&mut state, LinkStatus::Unlinked {})
-    };
+        Ok(set_link_locked(&mut state, LinkStatus::Unlinked {}))
+    })();
+    // 연결 파일 정리가 실패해 일찍 돌아가도 이미 지운 쉘 동의는 화면에 알린다.
+    crate::installation_consent::flush_closed(inner);
+    let changed = result?;
     crate::process_host::rebind_unlinked(inner, &previous_scope);
     if changed {
         inner.layout_signal.notify();
@@ -508,6 +520,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
         }
         inner.generation.fetch_add(1, Ordering::SeqCst);
         crate::store_server_consent::shutdown(inner);
+        crate::installation_consent::shutdown_shell(inner);
         inner.link_connecting.store(false, Ordering::SeqCst);
         inner.layout_signal.notify();
         if file.mode == kaleidoscope_contract::ServerMode::Remote {
@@ -540,6 +553,8 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
         crate::realtime_host::shutdown_sessions(inner);
         emit_state(inner);
     }
+    // 이미 철회 상태라 상태 이벤트를 내보내지 않았어도 닫힌 쉘 동의는 알린다.
+    crate::installation_consent::flush_closed(inner);
 }
 
 fn wait_before_retry(inner: &Inner, generation: u64, seconds: u64) -> bool {

@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { useId, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "./primitives";
 import { LoaderCircle } from "./icons";
@@ -15,6 +15,22 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   const overlay = useRef<HTMLDivElement>(null);
   const opener = useRef<FocusBookmark | null>(null);
   const rememberedFocus = useRef<HTMLElement | null>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  const [scrollable, setScrollable] = useState(false);
+  const hasContent = body != null;
+  // 보이는 높이가 있고 내용이 넘칠 때만 스크롤 칸이 Tab 초점을 받는다. 높이 0인 칸에서 Tab이 멈추면 고리가 보이지 않는다.
+  useLayoutEffect(() => {
+    const element = scroll.current;
+    if (!element) return;
+    const measure = () => setScrollable(element.clientHeight > 0 && element.scrollHeight > element.clientHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    const content = element.firstElementChild;
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [hasContent]);
   const onCancelRef = useRef(onCancel);
   onCancelRef.current = onCancel;
   const busyRef = useRef(busy);
@@ -38,7 +54,8 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     if (native.isTrusted === false && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
     if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); if (!busyRef.current) onCancelRef.current(); return; }
     if (event.key !== "Tab" || !root.current) return;
-    const focusable = [...root.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+    // 브라우저 Tab 순서와 같게 스크롤 칸과 details 요약도 초점 대상으로 센다.
+    const focusable = [...root.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])')];
     if (!focusable.length) { event.preventDefault(); return; }
     const first = focusable[0]; const last = focusable[focusable.length - 1];
     if (event.shiftKey && (document.activeElement === first || (windowModal && document.activeElement === root.current))) { event.preventDefault(); last.focus(windowModal ? { preventScroll: true } : undefined); }
@@ -115,7 +132,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
       if (element?.isConnected && window.getSelection()?.isCollapsed) element.focus({ preventScroll: true });
     }}>
     <div {...rootProps} className="ks-dialog" role="dialog" aria-modal={windowModal ? active : true} aria-labelledby={titleId} aria-describedby={windowModal && body != null ? bodyId : undefined} tabIndex={windowModal ? -1 : undefined} onKeyDown={windowModal ? onKey : undefined} ref={root}>
-      {heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={windowModal ? 0 : undefined}>{content}</div> : null}
+      {heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={scrollable ? 0 : undefined} ref={scroll}>{content}</div> : null}
       {noticeSlotRef ? <div className="ks-dialog-notice-slot" ref={noticeSlotRef} /> : null}
       <div className="ks-dialog-actions">{showCancel ? <Button aria-disabled={busy || undefined} onClick={() => { if (!busyRef.current) onCancel(); }}>{cancelLabel}</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button aria-disabled={busy || undefined} aria-label={ok} aria-busy={busy || undefined} className={busy ? "is-progress" : undefined} onClick={(event) => { if (!busyRef.current) onConfirm(event); }} variant={danger ? "default" : "emphasis"}><span>{ok}</span>{busy ? <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span> : null}</Button></span></div>
     </div>
