@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
 const fixture = new URL("../harness/fixtures/text-wrap.md", import.meta.url);
@@ -223,25 +223,71 @@ const TABLE_DOCUMENT = `# 긴 주소가 든 표
 | 공지 | ${LONG_URL} | 열림 |
 | 문서 | https://example.org/short | 닫힘 |
 `;
+const PROSE_DOCUMENT = `# 긴 문장 칸만 있는 표
 
-async function openTableDocument(page: Page, width: number) {
-  await page.setViewportSize({ width, height: 732 });
+| 항목 | 설명 | 상태 |
+|---|---|---|
+| 공지 | 링크도 코드도 없이 아주 길게 이어지는 설명 문장으로, 창이 넓어도 한 줄에 다 들어가지 않을 만큼 길게 써서 다른 칸의 폭을 얼마나 가져가는지 봅니다 | 열림 |
+| 문서 | 짧은 설명 | 닫힘 |
+`;
+const EN_WORDS_TABLE = `| Configuration | Responsibilities | Implementation | Documentation |
+|---|---|---|---|
+| Initialization | Synchronization | Internationalization | Troubleshooting |
+`;
+const PLAIN_SHA_TABLE = `| PR | 커밋 | 상태 |
+|---|---|---|
+| 544 | 32cd90b8e06a3591092003c29cf3a0280464f39a | 머지 |
+`;
+
+async function openTableDocument(page: Page, width: number, height = 720, text = TABLE_DOCUMENT, name = "wide-table.md") {
+  await page.setViewportSize({ width, height });
   await page.goto("/?preview=md-editor");
   await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
   await page.waitForFunction(() => (window as any).__ksHarness !== undefined);
-  await page.evaluate(async (text) => {
+  await page.evaluate(async ({ text, name }) => {
     const harness = (window as any).__ksHarness;
     await harness.call({ op: "files.pick_folder", window_id: "editor-window", permission: "docs" });
-    await harness.call({ op: "files.write", window_id: "editor-window", permission: "docs", path: "wide-table.md", text });
+    await harness.call({ op: "files.write", window_id: "editor-window", permission: "docs", path: name, text });
     const { snapshot } = await harness.call({ op: "state.get" });
     const win = snapshot.shared.windows.find((window: any) => window.app_id === "md-editor");
-    win.state = { ...win.state, source: 1, current_file: "wide-table.md" };
+    win.state = { ...win.state, source: 1, current_file: name };
     harness.emit({ event: "state.changed", snapshot });
-  }, TABLE_DOCUMENT);
+  }, { text, name });
   const app = page.getByTestId("app-window-md-editor");
   await expect(app.locator(".cm-content")).toBeVisible();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   return app;
+}
+
+async function openStorageDocument(page: Page, width: number, height: number, text: string) {
+  await page.setViewportSize({ width, height });
+  await page.goto("/?preview=storage-document");
+  await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
+  await page.waitForFunction(() => (window as any).__ksHarness !== undefined);
+  await page.evaluate(async (content) => {
+    const harness = (window as any).__ksHarness;
+    const read = await harness.call({ op: "storage.get", window_id: "storage-window", entry: "memo" });
+    await harness.call({ op: "storage.write", window_id: "storage-window", entry: "memo", content, expected_revision: read.result.revision });
+  }, text);
+  const app = page.getByTestId("app-window-storage-document");
+  await expect(app.locator(".ks-markdown-text")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  return app;
+}
+
+// 칸 안 글의 줄 상자 수. 서로 다른 줄의 위 끝이 몇 개인지 센다.
+async function shortCellLines(table: Locator) {
+  const cells = await table.locator("th, td").evaluateAll((elements) =>
+    elements.map((cell) => {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      return {
+        text: cell.textContent ?? "",
+        lines: new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size,
+      };
+    }),
+  );
+  return cells.filter((cell) => cell.text.length <= 10 && !cell.text.startsWith("http"));
 }
 
 test("마크다운 편집기의 표 칸은 낱말 단위로 줄바꿈하고 긴 주소만 끊는다", async ({ page }) => {
@@ -292,4 +338,46 @@ test("마크다운 편집기의 표와 긴 코드 줄이 창 폭에 맞는다", 
   );
   expect(columnWidths.length).toBeGreaterThan(1);
   expect(Math.max(...columnWidths) - Math.min(...columnWidths)).toBeGreaterThan(1);
+});
+
+test("1180 폭 편집기의 긴 주소 표와 긴 문장 칸 표에서 짧은 칸은 한 줄이고 맨 주소는 링크로 그린다", async ({ page }) => {
+  for (const [name, text] of [["wide-url.md", TABLE_DOCUMENT], ["prose-only.md", PROSE_DOCUMENT]] as const) {
+    const app = await openTableDocument(page, 1180, 720, text, name);
+    const table = app.locator(".ks-live-table").first();
+    await expect(table).toBeVisible();
+    const short = await shortCellLines(table);
+    expect(short.length, name).toBeGreaterThanOrEqual(6);
+    for (const cell of short) expect(cell.lines, `${name} ${cell.text}`).toBe(1);
+    const dimensions = await app.locator(".cm-scroller").evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+    expect(dimensions.scrollWidth, name).toBeLessThanOrEqual(dimensions.clientWidth);
+    if (name === "wide-url.md") await expect(table.locator("td .ks-live-link")).toHaveCount(2);
+  }
+});
+
+test("1180 폭 저장소 문서 보기의 긴 주소 표와 긴 문장 칸 표에서 짧은 칸은 한 줄이다", async ({ page }) => {
+  for (const [name, text] of [["wide-url.md", TABLE_DOCUMENT], ["prose-only.md", PROSE_DOCUMENT]] as const) {
+    const app = await openStorageDocument(page, 1180, 720, text);
+    const view = app.locator(".ks-markdown-text");
+    const table = view.locator("table").first();
+    await expect(table).toBeVisible();
+    const short = await shortCellLines(table);
+    expect(short.length, name).toBeGreaterThanOrEqual(6);
+    for (const cell of short) expect(cell.lines, `${name} ${cell.text}`).toBe(1);
+    const dimensions = await view.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+    expect(dimensions.scrollWidth, name).toBeLessThanOrEqual(dimensions.clientWidth);
+  }
+});
+
+test("360 폭의 긴 영어 낱말 표와 맨 SHA 표는 is-tight로 물러서 넘치지 않는다", async ({ page }) => {
+  for (const [name, text] of [["en-words.md", EN_WORDS_TABLE], ["plain-sha.md", PLAIN_SHA_TABLE]] as const) {
+    const app = await openTableDocument(page, 360, 240, text, name);
+    await expect(app.locator(".ks-table-fit").first()).toHaveClass(/is-tight/, { timeout: 5000 });
+    const dimensions = await app.locator(".cm-scroller").evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+    expect(dimensions.scrollWidth, name).toBeLessThanOrEqual(dimensions.clientWidth);
+
+    const viewApp = await openStorageDocument(page, 360, 240, text);
+    await expect(viewApp.locator(".ks-markdown-text .ks-table-fit").first()).toHaveClass(/is-tight/, { timeout: 5000 });
+    const viewDimensions = await viewApp.locator(".ks-markdown-text").evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+    expect(viewDimensions.scrollWidth, name).toBeLessThanOrEqual(viewDimensions.clientWidth);
+  }
 });

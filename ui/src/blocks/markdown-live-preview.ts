@@ -2,6 +2,7 @@ import { syntaxTree } from "@codemirror/language";
 import { StateEffect, StateField, type EditorSelection, type EditorState, type Extension, type Range } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, keymap, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { MarkdownReferenceIndex } from "./markdown-reference-index";
+import { watchTableFit } from "./table-fit";
 type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>["resolve"]>;
 
 const focusEffect = StateEffect.define<boolean>();
@@ -10,6 +11,7 @@ const pointerEffect = StateEffect.define<{ focused: boolean; selection: EditorSe
 type TableCell = { table: number; from: number; to: number };
 const tableCells = new WeakMap<Element, TableCell>();
 const tableTextPositions = new WeakMap<Node, number>();
+const tableFitStops = new WeakMap<HTMLElement, () => void>();
 
 class TextWidget extends WidgetType {
   constructor(readonly text: string, readonly className: string) { super(); }
@@ -62,7 +64,7 @@ function appendInline(parent: HTMLElement, node: SyntaxNode, state: EditorState,
       const el = document.createElement(tag);
       if (child.name === "Link") el.className = "ks-live-link";
       if (child.name === "Image") el.className = "ks-live-image";
-      if (child.name === "URL") el.className = "ks-live-url";
+      if (child.name === "URL") el.className = "ks-live-link";
       const label = child.name === "Link" || child.name === "Image" ? labelBounds(child) : null;
       if (label) appendInline(el, child, state, references, label[0], label[1]);
       else {
@@ -83,6 +85,7 @@ class TableWidget extends WidgetType {
   constructor(readonly node: SyntaxNode, readonly state: EditorState) { super(); }
   toDOM(view: EditorView) {
     const wrap = document.createElement("div");
+    wrap.className = "ks-table-fit";
     const table = document.createElement("table");
     table.className = "ks-live-table";
     const parts = children(this.node);
@@ -125,12 +128,21 @@ class TableWidget extends WidgetType {
       table.append(tr);
     }
     wrap.append(table);
+    const probe = document.createElement("div");
+    probe.className = "ks-table-fit-probe";
+    probe.setAttribute("aria-hidden", "true");
+    wrap.append(probe);
+    tableFitStops.set(wrap, watchTableFit(wrap, probe, table));
     wrap.addEventListener("mousedown", (event) => {
       if (event.button !== 0 || (event.target !== wrap && event.target !== table)) return;
       event.preventDefault();
       view.plugin(pointerPreview)?.selectTableOnRelease(this.node.from);
     });
     return wrap;
+  }
+  destroy(dom: HTMLElement) {
+    tableFitStops.get(dom)?.();
+    tableFitStops.delete(dom);
   }
   ignoreEvent() { return false; }
 }

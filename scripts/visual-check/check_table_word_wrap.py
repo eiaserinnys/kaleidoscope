@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """카드 #1137 마크다운 표 칸의 낱말 단위 줄바꿈을 실측한다.
 
-한 칸에 공백 없는 긴 맨 주소가 든 3열 표를 마크다운 편집기(?preview=md-editor)와
-마크다운 보기 블록(?preview=storage-document의 문서)에 띄우고 네 가지를 잰다.
+표를 여러 장면으로 띄운다. 긴 주소가 든 표, 링크도 코드도 없는 긴 문장 칸 표,
+링크가 든 설명 칸 표, 코드 표, 긴 영어 낱말 4열 표, 맨 40자 SHA 표, 그리고 기본 문서
+Kaleidoscope.md와 Create-plugins-preview.md의 표다. 앞의 여섯은 마크다운 편집기
+(?preview=md-editor)와 저장소 문서의 보기(?preview=storage-document) 두 화면에서,
+기본 문서 둘은 편집기에서 잰다. 크기는 1180×720, 960×640, 800×600, 360×240이다.
 
-- 1180×720에서 주소 칸이 아닌 짧은 낱말 칸(「항목」「상태」「공지」「열림」「문서」「닫힘」)의
-  글이 한 줄이다(칸 안 글의 줄 상자 수 1). 편집기와 마크다운 보기 둘 다.
-- 1180×720과 360×240 모두에서 .cm-scroller와 .ks-markdown-text에 가로 넘침이 없다
-  (scrollWidth <= clientWidth).
-- 편집기의 맨 주소는 .ks-live-url span으로, 마크다운 보기의 맨 주소는 <a>로 그려진다
-  (설계의 :has 선택자가 주소 칸을 집는 근거).
-- 불변 장면: 내 폴더의 Kaleidoscope.md와 Create-plugins-preview.md 표를 같은 두 크기에서
-  캡처해 표 폭과 scroller를 기준 폴더(result.json)와 대조한다. --baseline을 주지 않으면
-  기록만 한다.
+장면마다 표 높이와 칸별 폭·줄 수, is-tight 여부, 가로 넘침을 result.json에 남긴다.
+1180×720에서 긴 주소 표와 긴 문장 칸 표의 짧은 칸은 한 줄이어야 하고, 360×240에서
+긴 영어 낱말 표와 맨 SHA 표는 is-tight로 물러서 넘치지 않아야 한다. 편집기의 맨 주소는
+.ks-live-link span으로 그려져야 한다.
+
+--baseline에 수정 전 result.json이 있는 폴더를 주면 장면마다 표 높이가 1px 넘게 늘거나
+어느 칸의 줄 수가 늘거나 넘침이 생긴 것을 실패로 적고, 칸 폭 차이는 모두 출력한다.
 
 요소를 찾지 못하면 그 장면은 실패다. 찾지 못한 채 통과하는 판정을 두지 않는다.
 
@@ -35,93 +36,131 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 STYLE = "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }"
-SIZES = ((1180, 720), (360, 240))
+SIZES = ((1180, 720), (960, 640), (800, 600), (360, 240))
 TOLERANCE = 1.0
 
-WIDE_URL = "https://example.org/very/long/path/segments/that/keeps/going/and/going/abcdefghijklmnopqrstuvwxyz"
+URL = "https://example.org/very/long/path/segments/that/keeps/going/and/going/abcdefghijklmnopqrstuvwxyz"
+SHA = "32cd90b8e06a3591092003c29cf3a0280464f39a"
 WIDE_TABLE_DOCUMENT = f"""# 긴 주소가 든 표
 
 | 항목 | 주소 | 상태 |
 |---|---|---|
-| 공지 | {WIDE_URL} | 열림 |
+| 공지 | {URL} | 열림 |
 | 문서 | https://example.org/short | 닫힘 |
 """
+PROSE_DOCUMENT = """# 긴 문장 칸만 있는 표
 
-MD_MEASURE_JS = """() => {
+| 항목 | 설명 | 상태 |
+|---|---|---|
+| 공지 | 이 칸은 링크도 코드도 없이 아주 길게 이어지는 설명 문장으로, 창이 넓어도 한 줄에 다 들어가지 않을 만큼 길게 써서 다른 칸의 폭을 얼마나 가져가는지 봅니다 | 열림 |
+| 문서 | 짧은 설명 | 닫힘 |
+"""
+LINK_PROSE_DOCUMENT = """# 링크가 든 설명 칸
+
+| 이름 | 설명 | 비고 |
+|---|---|---|
+| 첫째 | 이 칸은 [안내 문서](https://example.org/guide)를 따라 설정을 바꾸고 창을 다시 열어 바뀐 값을 확인하는 긴 설명입니다 | 이 칸은 링크 없이 비슷한 길이로 이어지는 설명 문장이며 창 폭에 맞춰 줄바꿈됩니다 |
+| 둘째 | 짧은 설명 | 없음 |
+"""
+CODE_DOCUMENT = """# 코드가 든 표
+
+Agent B supports two ways to add custom skills, agents, and hooks:
+
+| Approach | Skill names | Best for |
+| :--- | :--- | :--- |
+| **Standalone** (`.agent/` directory) | `/hello` | Personal workflows, project-specific customizations, quick experiments |
+| **Plugins** (directories with a `.agent-plugin/plugin.json`) | `/plugin-name:hello` | Sharing with teammates, distributing to community, versioned releases, reusable across projects |
+"""
+EN_WORDS_DOCUMENT = """| Configuration | Responsibilities | Implementation | Documentation |
+|---|---|---|---|
+| Initialization | Synchronization | Internationalization | Troubleshooting |
+"""
+PLAIN_SHA_DOCUMENT = f"""| PR | 커밋 | 상태 |
+|---|---|---|
+| 544 | {SHA} | 머지 |
+"""
+DOCUMENTS = {
+    "wide-url": (WIDE_TABLE_DOCUMENT, "긴 주소가 든 표"),
+    "prose-only": (PROSE_DOCUMENT, "긴 문장 칸만 있는 표"),
+    "link-prose": (LINK_PROSE_DOCUMENT, "링크가 든 설명 칸"),
+    "code": (CODE_DOCUMENT, "코드가 든 표"),
+    "en-words": (EN_WORDS_DOCUMENT, "Configuration"),
+    "plain-sha": (PLAIN_SHA_DOCUMENT, "커밋"),
+}
+INVARIANT_DOCUMENTS = {
+    "Kaleidoscope": ("Kaleidoscope.md", "kaleidoscope 작업 메모"),
+    "Create-plugins-preview": ("Create-plugins-preview.md", "Create plugins"),
+}
+
+EDITOR_TABLES_JS = """() => {
   const app = document.querySelector('[data-testid=app-window-md-editor]');
   if (!app) return { error: '마크다운 편집기 창을 찾지 못했습니다' };
   const scroller = app.querySelector('.cm-scroller');
-  const table = app.querySelector('.ks-live-table');
   if (!scroller) return { error: '편집기 스크롤 영역을 찾지 못했습니다' };
-  if (!table) return { error: '편집기의 표를 찾지 못했습니다', scroller: { scrollWidth: scroller.scrollWidth, clientWidth: scroller.clientWidth } };
-  const round = (value) => Math.round(value * 100) / 100;
-  // 칸 안 글의 줄 상자 수. 서로 다른 줄의 위 끝이 몇 개인지 센다.
+  const round = (value) => Math.round(value * 10) / 10;
   const lineCount = (cell) => {
     const range = document.createRange();
     range.selectNodeContents(cell);
-    const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
-    return tops.size;
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
   };
-  const cells = [...table.querySelectorAll('th, td')].map((cell) => ({
-    text: cell.textContent,
-    lines: lineCount(cell),
-    width: round(cell.getBoundingClientRect().width),
-    urlSpan: Boolean(cell.querySelector('.ks-live-url')),
-  }));
-  const tableRect = table.getBoundingClientRect();
   const scrollerRect = scroller.getBoundingClientRect();
+  const origin = scrollerRect.top - scroller.scrollTop;
   return {
-    scroller: { scrollWidth: scroller.scrollWidth, clientWidth: scroller.clientWidth },
-    table: { width: round(tableRect.width), overflowRight: round(tableRect.right - (scrollerRect.left + scroller.clientWidth)) },
-    cells,
+    container: { scrollWidth: scroller.scrollWidth, clientWidth: scroller.clientWidth },
+    tables: [...app.querySelectorAll('.ks-live-table')].map((table) => {
+      const rect = table.getBoundingClientRect();
+      return {
+        offset: Math.round(rect.top - origin),
+        width: round(rect.width),
+        height: round(rect.height),
+        overflowRight: round(rect.right - (scrollerRect.left + scroller.clientWidth)),
+        isTight: table.parentElement?.classList.contains('is-tight') ?? false,
+        wrapped: table.parentElement?.classList.contains('ks-table-fit') ?? false,
+        cells: [...table.querySelectorAll('th, td')].map((cell) => ({
+          text: (cell.textContent || '').slice(0, 40),
+          lines: lineCount(cell),
+          width: round(cell.getBoundingClientRect().width),
+          links: cell.querySelectorAll('.ks-live-link').length,
+          anchors: cell.querySelectorAll('a').length,
+          codes: cell.querySelectorAll('code').length,
+        })),
+      };
+    }),
   };
 }"""
 
-MD_TABLES_JS = """() => {
-  const app = document.querySelector('[data-testid=app-window-md-editor]');
-  if (!app) return { error: '마크다운 편집기 창을 찾지 못했습니다' };
-  const scroller = app.querySelector('.cm-scroller');
-  if (!scroller) return { error: '편집기 스크롤 영역을 찾지 못했습니다' };
-  const round = (value) => Math.round(value * 100) / 100;
-  const tables = [...app.querySelectorAll('.ks-live-table')].map((table) => {
-    const rows = [...table.querySelectorAll('tr')];
-    return {
-      width: round(table.getBoundingClientRect().width),
-      columns: rows.length ? [...rows[0].children].map((cell) => round(cell.getBoundingClientRect().width)) : [],
-      rows: rows.length,
-    };
-  });
-  return { tables, scroller: { scrollWidth: scroller.scrollWidth, clientWidth: scroller.clientWidth } };
-}"""
-
-VIEW_MEASURE_JS = """() => {
+VIEW_TABLES_JS = """() => {
   const app = document.querySelector('[data-testid=app-window-storage-document]');
   if (!app) return { error: '저장소 문서 창을 찾지 못했습니다' };
   const root = app.querySelector('.ks-markdown-text');
   if (!root) return { error: '마크다운 보기 글 상자를 찾지 못했습니다' };
-  const table = root.querySelector('table');
-  if (!table) return { error: '마크다운 보기 표를 찾지 못했습니다', text: root.textContent.slice(0, 200) };
-  const round = (value) => Math.round(value * 100) / 100;
+  const round = (value) => Math.round(value * 10) / 10;
   const lineCount = (cell) => {
     const range = document.createRange();
     range.selectNodeContents(cell);
-    const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
-    return tops.size;
+    return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
   };
-  const cells = [...table.querySelectorAll('th, td')].map((cell) => ({
-    text: cell.textContent,
-    lines: lineCount(cell),
-    width: round(cell.getBoundingClientRect().width),
-    anchors: cell.querySelectorAll('a').length,
-    codes: cell.querySelectorAll('code').length,
-  }));
-  const tableRect = table.getBoundingClientRect();
   const rootRect = root.getBoundingClientRect();
   return {
-    table: { width: round(tableRect.width), overflowRight: round(tableRect.right - rootRect.right) },
-    root: { scrollWidth: root.scrollWidth, clientWidth: root.clientWidth },
-    urlAnchors: cells.filter((cell) => cell.anchors > 0).length,
-    cells,
+    container: { scrollWidth: root.scrollWidth, clientWidth: root.clientWidth },
+    tables: [...root.querySelectorAll('table')].map((table) => {
+      const rect = table.getBoundingClientRect();
+      return {
+        width: round(rect.width),
+        height: round(rect.height),
+        overflowRight: round(rect.right - (rootRect.left + root.clientWidth)),
+        isTight: table.parentElement?.classList.contains('is-tight') ?? false,
+        wrapped: table.parentElement?.classList.contains('ks-table-fit') ?? false,
+        cells: [...table.querySelectorAll('th, td')].map((cell) => ({
+          text: (cell.textContent || '').slice(0, 40),
+          lines: lineCount(cell),
+          width: round(cell.getBoundingClientRect().width),
+          links: cell.querySelectorAll('.ks-live-link').length,
+          anchors: cell.querySelectorAll('a').length,
+          codes: cell.querySelectorAll('code').length,
+        })),
+      };
+    }),
   };
 }"""
 
@@ -137,7 +176,7 @@ def wait_server(port):
     raise SystemExit("하네스 서버가 뜨지 않았습니다")
 
 
-def open_document(page, port, name, width, height, text=None):
+def open_document(page, port, name, width, height, text=None, marker=None):
     page.set_viewport_size({"width": width, "height": height})
     page.goto(f"http://127.0.0.1:{port}/?preview=md-editor")
     page.wait_for_function(
@@ -157,6 +196,12 @@ def open_document(page, port, name, width, height, text=None):
         {"file": name, "text": text},
     )
     page.wait_for_function("() => document.querySelector('[data-testid=app-window-md-editor] .cm-content')", timeout=120000)
+    if marker is not None:
+        page.wait_for_function(
+            "(marker) => (document.querySelector('[data-testid=app-window-md-editor] .cm-content')?.textContent || '').includes(marker)",
+            arg=marker,
+            timeout=120000,
+        )
     page.add_style_tag(content=STYLE)
     page.evaluate("() => document.fonts.ready.then(() => undefined)")
     page.wait_for_timeout(400)
@@ -182,16 +227,19 @@ def open_view_document(page, port, text, width, height):
     page.wait_for_timeout(400)
 
 
-def scan_tables(page):
-    """편집기를 끝까지 내리며 만난 표를 모아 칸 폭을 기록한다."""
+def scan_editor_tables(page):
+    """편집기를 끝까지 내리며 만난 표를 문서 위치 순서로 모은다."""
     page.evaluate("() => { const scroller = document.querySelector('[data-testid=app-window-md-editor] .cm-scroller'); if (scroller) scroller.scrollTop = 0; }")
     page.wait_for_timeout(200)
-    seen = []
-    for _ in range(120):
-        measurement = page.evaluate(MD_TABLES_JS)
+    collected = {}
+    container = None
+    for _ in range(200):
+        measurement = page.evaluate(EDITOR_TABLES_JS)
         if measurement.get("error"):
             return measurement
-        seen.append(measurement)
+        container = measurement["container"]
+        for table in measurement["tables"]:
+            collected.setdefault(table["offset"], table)
         at_end = page.evaluate(
             "() => { const scroller = document.querySelector('[data-testid=app-window-md-editor] .cm-scroller');"
             " if (!scroller) return true; const before = scroller.scrollTop; scroller.scrollTop = before + 160;"
@@ -200,86 +248,71 @@ def scan_tables(page):
         if at_end:
             break
         page.wait_for_timeout(120)
-    final = page.evaluate(MD_TABLES_JS)
-    if not final.get("error"):
-        seen.append(final)
-    tables = []
-    for item in seen:
-        for table in item.get("tables", []):
-            if table not in tables:
-                tables.append(table)
-    return {"tables": tables, "scroller": final.get("scroller")}
+    return {"container": container, "tables": [collected[offset] for offset in sorted(collected)]}
 
 
-def judge_document(measurement, width):
-    if measurement.get("error"):
-        return {"element_present": False}
-    cells = measurement.get("cells", [])
-    short_cells = [cell for cell in cells if cell["text"] and not cell["text"].startswith("http")]
-    url_cells = [cell for cell in cells if cell["urlSpan"]]
-    checks = {
-        "element_present": True,
-        "url_span_present": len(url_cells) == 2,
-        "short_cells_present": len(short_cells) >= 6,
-        "scroller_no_overflow": measurement["scroller"]["scrollWidth"] <= measurement["scroller"]["clientWidth"],
-    }
-    if width == 1180:
+def is_short(cell):
+    text = (cell.get("text") or "").strip()
+    return bool(text) and len(text) <= 10 and not text.startswith("http")
+
+
+def judge_scene(scene, name, kind, width):
+    checks = {"element_present": bool(scene.get("tables"))}
+    if not checks["element_present"]:
+        return checks
+    checks["container_no_overflow"] = scene["container"]["scrollWidth"] <= scene["container"]["clientWidth"]
+    checks["table_no_overflow"] = all(table["overflowRight"] <= TOLERANCE for table in scene["tables"])
+    cells = [cell for table in scene["tables"] for cell in table["cells"]]
+    if width == 1180 and name in ("wide-url", "prose-only"):
+        short_cells = [cell for cell in cells if is_short(cell)]
+        checks["short_cells_present"] = len(short_cells) >= 6
         checks["short_cells_one_line"] = bool(short_cells) and all(cell["lines"] == 1 for cell in short_cells)
+    if name == "wide-url":
+        if kind == "editor":
+            checks["bare_urls_are_links"] = sum(cell["links"] > 0 for cell in cells) == 2
+        else:
+            checks["bare_urls_are_links"] = any(cell["anchors"] > 0 for cell in cells)
+    if width == 360 and name in ("en-words", "plain-sha"):
+        checks["tight_fallback"] = all(table["isTight"] for table in scene["tables"])
     return checks
 
 
-def judge_view(measurement, width):
-    if measurement.get("error"):
-        return {"element_present": False}
-    cells = measurement.get("cells", [])
-    short_cells = [cell for cell in cells if cell["text"] and not cell["text"].startswith("http")]
-    checks = {
-        "element_present": True,
-        "url_anchors_present": measurement.get("urlAnchors", 0) >= 1,
-        "short_cells_present": len(short_cells) >= 6,
-        "root_no_overflow": measurement["root"]["scrollWidth"] <= measurement["root"]["clientWidth"],
-    }
-    if width == 1180:
-        checks["short_cells_one_line"] = bool(short_cells) and all(cell["lines"] == 1 for cell in short_cells)
-    return checks
-
-
-def compare_invariant(measurement, baseline):
-    """불변 장면의 표 폭·행/칸 수·scroller가 기준 폴더와 같은지 본다.
-
-    칸 폭은 재지 않는다. 주소나 코드가 든 칸의 내용 폭을 20em으로 제한하는 것이 이번 설계라,
-    그런 칸이 있는 표는 칸 사이 폭 배분이 바뀌는 것이 정상이다.
-    """
-    if measurement.get("error"):
-        return {"matches_baseline": False}, "요소를 찾지 못함"
-    base = baseline.get("measurement", {})
-    if base.get("error"):
-        return {"matches_baseline": False}, "기준 폴더에 측정값이 없음"
-    problems = []
+def compare_scene(scene, base):
+    """기준 폴더의 같은 장면과 표 높이, 칸 줄 수, 넘침을 대조한다. 칸 폭 차이는 모아 돌려준다."""
+    width_changes = []
+    if base is None:
+        return ["기준 폴더에 장면 없음"], width_changes
+    # result.json의 장면은 {kind, document, size, measurement, checks}이므로 실측치는 measurement 아래에 있다.
+    base = base.get("measurement") or {}
     before_tables = base.get("tables", [])
-    tables = measurement.get("tables", [])
+    tables = scene.get("tables", [])
+    problems = []
     if len(tables) != len(before_tables):
         problems.append(f"표 수 {len(tables)} != {len(before_tables)}")
     for index, (table, before) in enumerate(zip(tables, before_tables)):
-        if table.get("rows") != before.get("rows"):
-            problems.append(f"표 {index} 행 수 {table.get('rows')} != {before.get('rows')}")
-        if len(table.get("columns", [])) != len(before.get("columns", [])):
-            problems.append(f"표 {index} 칸 수 {len(table.get('columns', []))} != {len(before.get('columns', []))}")
-        if abs(table.get("width", 0) - before.get("width", 0)) > TOLERANCE:
-            problems.append(f"표 {index} 폭 {table.get('width')} != {before.get('width')}")
-    before_scroller = base.get("scroller") or {}
-    scroller = measurement.get("scroller") or {}
-    for key in ("scrollWidth", "clientWidth"):
-        if abs(scroller.get(key, 0) - before_scroller.get(key, 0)) > TOLERANCE:
-            problems.append(f"scroller {key} {scroller.get(key)} != {before_scroller.get(key)}")
-    return {"matches_baseline": not problems}, "; ".join(problems)
+        if table["height"] > before["height"] + TOLERANCE:
+            problems.append(f"표 {index} 높이 {before['height']} -> {table['height']}")
+        if len(table["cells"]) != len(before["cells"]):
+            problems.append(f"표 {index} 칸 수 {len(table['cells'])} != {len(before['cells'])}")
+        for cell_index, (cell, before_cell) in enumerate(zip(table["cells"], before["cells"])):
+            if cell["lines"] > before_cell["lines"]:
+                problems.append(f"표 {index} 칸 {cell_index} 「{cell['text'][:16]}」 줄 수 {before_cell['lines']} -> {cell['lines']}")
+            delta = round(cell["width"] - before_cell["width"], 1)
+            if abs(delta) >= 0.1:
+                width_changes.append(f"표 {index} 칸 {cell_index} 「{cell['text'][:12]}」 폭 {before_cell['width']} -> {cell['width']} ({delta:+})")
+    before_container = base.get("container") or {}
+    after_overflows = scene["container"]["scrollWidth"] > scene["container"]["clientWidth"]
+    before_overflows = before_container.get("scrollWidth", 0) > before_container.get("clientWidth", 0)
+    if after_overflows and not before_overflows:
+        problems.append(f"넘침 {scene['container']} (기준 {before_container})")
+    return problems, width_changes
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="target/visual-check/table-word-wrap-1137")
     parser.add_argument("--port", type=int, default=5395)
-    parser.add_argument("--baseline", help="수정 전 result.json이 있는 폴더. 주면 불변 장면을 대조한다")
+    parser.add_argument("--baseline", help="수정 전 result.json이 있는 폴더. 주면 장면마다 표 높이와 칸 줄 수를 대조한다")
     args = parser.parse_args()
 
     baseline = None
@@ -306,57 +339,84 @@ def main():
         wait_server(args.port)
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(ignore_default_args=["--hide-scrollbars"])
-            page = browser.new_page()
+
+            def measure_and_capture(key, name, kind, width, height, file, text=None, marker=None, wait_table=True):
+                # 장면마다 새 페이지를 연다. 한 페이지로 수십 장면을 넘기면 렌더러가 죽어 다음 장면이 뜨지 않는다.
+                page = browser.new_page()
+                try:
+                    if kind == "editor":
+                        open_document(page, args.port, file, width, height, text, marker)
+                        # 긴 문서의 표는 처음 화면 밖에 있어 붙지 않는다. scan_editor_tables가 내리며 찾는 장면은 기다리지 않는다.
+                        if wait_table:
+                            page.locator("[data-testid=app-window-md-editor] .ks-live-table").first.wait_for(state="attached", timeout=30000)
+                        measurement = scan_editor_tables(page)
+                    else:
+                        open_view_document(page, args.port, text, width, height)
+                        page.locator("[data-testid=app-window-storage-document] .ks-markdown-text table").first.wait_for(state="visible", timeout=30000)
+                        measurement = page.evaluate(VIEW_TABLES_JS)
+                    page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
+                    return measurement
+                finally:
+                    page.close()
+
             for width, height in SIZES:
-                # 긴 주소가 든 표. 짧은 낱말 칸의 줄 수와 편집기 가로 넘침을 판정한다.
-                open_document(page, args.port, "wide-table.md", width, height, WIDE_TABLE_DOCUMENT)
-                page.locator(".ks-live-table").first.wait_for(state="visible", timeout=30000)
-                key = f"wide-url-{width}x{height}"
-                measurement = page.evaluate(MD_MEASURE_JS)
-                checks = judge_document(measurement, width)
-                page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
-                scenes[key] = {"measurement": measurement, "checks": checks}
-                failed = [check for check, ok in checks.items() if not ok]
-                failures.extend(f"{key}.{check}" for check in failed)
-                print(key, "FAIL " + ",".join(failed) if failed else "ok")
-
-                # 마크다운 보기의 같은 표. 줄 수와 넘침을 기록한다.
-                open_view_document(page, args.port, WIDE_TABLE_DOCUMENT, width, height)
-                page.locator(".ks-markdown-text table").first.wait_for(state="visible", timeout=30000)
-                view_key = f"wide-url-view-{width}x{height}"
-                view = page.evaluate(VIEW_MEASURE_JS)
-                view_checks = judge_view(view, width)
-                page.screenshot(path=str(output / f"{view_key}.png"), animations="disabled")
-                scenes[view_key] = {"measurement": view, "checks": view_checks}
-                failed = [check for check, ok in view_checks.items() if not ok]
-                failures.extend(f"{view_key}.{check}" for check in failed)
-                print(view_key, "FAIL " + ",".join(failed) if failed else "ok",
-                      {cell["text"][:20]: (cell["lines"], cell.get("anchors")) for cell in view.get("cells", [])})
-
-            # 불변: 기본 문서의 표. 기준 폴더가 있으면 표 폭과 scroller가 같은지 대조한다.
-            for name in ("Kaleidoscope.md", "Create-plugins-preview.md"):
-                for width, height in SIZES:
-                    open_document(page, args.port, name, width, height)
-                    key = f"md-table-{name.replace('.md', '')}-{width}x{height}"
-                    measurement = scan_tables(page)
-                    checks = {"table_present": not measurement.get("error") and bool(measurement.get("tables"))}
+                for name, (text, marker) in DOCUMENTS.items():
+                    for kind in ("editor", "view"):
+                        key = f"{name}-{kind}-{width}x{height}"
+                        measurement = measure_and_capture(key, name, kind, width, height, f"{name}.md", text, marker)
+                        checks = judge_scene(measurement, name, kind, width)
+                        detail = ""
+                        if baseline is not None:
+                            if measurement.get("error"):
+                                checks["matches_baseline"] = False
+                                detail = "요소를 찾지 못함"
+                            else:
+                                problems, width_changes = compare_scene(measurement, baseline.get(key))
+                                checks["matches_baseline"] = not problems
+                                detail = "; ".join(problems)
+                                for change in width_changes:
+                                    print("  폭 변화", key, change)
+                        scenes[key] = {
+                            "kind": kind,
+                            "document": name,
+                            "size": f"{width}x{height}",
+                            "measurement": measurement,
+                            "checks": checks,
+                        }
+                        failed = [check for check, ok in checks.items() if not ok]
+                        failures.extend(f"{key}.{check}" for check in failed)
+                        if failed:
+                            print(key, "FAIL " + ",".join(failed), detail)
+                        else:
+                            print(key, "ok", detail)
+                for name, (file, marker) in INVARIANT_DOCUMENTS.items():
+                    key = f"{name}-editor-{width}x{height}"
+                    measurement = measure_and_capture(key, name, "editor", width, height, file, marker=marker, wait_table=False)
+                    checks = {"table_present": bool(measurement.get("tables"))}
                     detail = ""
                     if baseline is not None:
-                        base_scene = baseline.get(key)
-                        if base_scene is None:
+                        if measurement.get("error") or not measurement.get("tables"):
                             checks["matches_baseline"] = False
-                            detail = "기준 폴더에 장면 없음"
+                            detail = "요소를 찾지 못함"
                         else:
-                            extra, detail = compare_invariant(measurement, base_scene)
-                            checks.update(extra)
-                    page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
-                    scenes[key] = {"measurement": measurement, "checks": checks}
+                            problems, width_changes = compare_scene(measurement, baseline.get(key))
+                            checks["matches_baseline"] = not problems
+                            detail = "; ".join(problems)
+                            for change in width_changes:
+                                print("  폭 변화", key, change)
+                    scenes[key] = {
+                        "kind": "editor",
+                        "document": name,
+                        "size": f"{width}x{height}",
+                        "measurement": measurement,
+                        "checks": checks,
+                    }
                     failed = [check for check, ok in checks.items() if not ok]
                     failures.extend(f"{key}.{check}" for check in failed)
                     if failed:
                         print(key, "FAIL " + ",".join(failed), detail)
                     else:
-                        print(key, "ok", measurement["tables"], detail)
+                        print(key, "ok", detail)
             browser.close()
     finally:
         server.stdin.close()

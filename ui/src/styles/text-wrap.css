@@ -54,8 +54,7 @@
   overflow-wrap: normal;
 }
 
-/* 표 칸은 아무 곳에서나 끊어 창 폭에 맞춘다. 공백 없는 긴 주소와 코드가 남는 폭을 다 가져가 짧은 낱말을 한 글자씩 끊지 않도록, 그런 것이 든 칸은 내용 폭을 20em까지만 내세운다. */
-.ks-live-table :is(th, td):has(.ks-live-url, .ks-live-link, code),
-.ks-markdown-text :is(th, td):has(a, code) {
-  max-width: 20em;
-}
+/* 표 칸은 낱말 단위로 줄바꿈한다. 칸의 최소 폭이 가장 긴 낱말이 되어, 긴 글이나 주소가 든 칸이 남는 폭을 가져가도 짧은 낱말을 한 글자씩 끊지 않는다. 공백 없는 주소와 링크와 코드는 아무 곳에서나 끊는다. 낱말 단위로는 감싼 폭을 넘는 표는 table-fit.ts가 is-tight를 붙여 모든 칸을 아무 곳에서나 끊는다. */
+.ks-table-fit :is(th, td) { overflow-wrap: break-word; }
+.ks-table-fit :is(th, td) :is(a, code, .ks-live-link),
+.ks-table-fit.is-tight :is(th, td) { overflow-wrap: anywhere; }
