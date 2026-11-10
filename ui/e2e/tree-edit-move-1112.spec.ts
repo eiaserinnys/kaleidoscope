@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 // 블록 세트 60의 눈 확인용 시나리오. 확인 상자, 데이터 트리 바로 입력과 끌어 옮기기, 구역 머리 메뉴와
-// 이름 바꾸기를 실제 브라우저에서 캡처하고, 확인 상자 크기·행 높이·머리 높이·정렬 좌표를 잰다.
+// 이름 바꾸기를 실제 브라우저에서 캡처하고, 확인 상자 크기, 행 높이, 머리 높이, 정렬 좌표를 잰다.
 // 구역이 둘이므로 트리 사이 끌기, 트리 밖 끌기, 긴 목록 끝 바로 입력의 초점과 스크롤도 함께 본다.
 const APP = "tree-edit-move-1112";
 const ROW = (key: string) => `[data-tree-id="item:${key}"]`;
@@ -104,7 +104,7 @@ async function openSectionMenu(page: Page, app: Locator) {
   await expect(page.getByRole("menu")).toBeVisible();
 }
 
-test("넓은 창 확인 상자: 크기·둥글기·세로 가운데·열 정렬 (밝음)", async ({ page }, testInfo) => {
+test("넓은 창 확인 상자: 크기, 둥글기, 세로 가운데, 열 정렬 (밝음)", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "light");
   const tree = app.locator(".ks-data-tree").first();
   await expect(tree).toBeVisible();
@@ -278,7 +278,7 @@ test("트리 행 이름 바꾸기: 전체 고름, 행 높이, 취소와 확정",
   await expect(app.getByText("마지막 이름: a: 설계 정리 v2", { exact: true })).toBeVisible();
 });
 
-test("끌어 옮기기: before·inside·after·end 표시와 놓은 뒤", async ({ page }, testInfo) => {
+test("끌어 옮기기: before, inside, after, end 표시와 놓은 뒤", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "light");
   const tree = app.locator(".ks-data-tree").first();
   await expect(tree).toBeVisible();
@@ -440,7 +440,7 @@ test("좁은 창: 확인 상자와 구역 이름 글칸", async ({ page }, testI
   await capture(app, testInfo, "좁은-구역-이름-밝음.png");
 });
 
-test("폴더 트리의 새 항목·하위 항목·이름 바꾸기 글칸 행", async ({ page }, testInfo) => {
+test("폴더 트리의 새 항목, 하위 항목, 이름 바꾸기 글칸 행", async ({ page }, testInfo) => {
   const app = await open(page, "md-editor", 1182, 800, "light");
   await app.getByRole("tab", { name: "내 폴더" }).click();
   await app.getByRole("button", { name: "문서 폴더 고르기" }).click();
