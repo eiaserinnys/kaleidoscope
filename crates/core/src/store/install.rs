@@ -12,7 +12,7 @@ fn scope(definition: &AppDefinition) -> Value {
     serde_json::json!({"permissions":permissions, "storage":definition.storage, "client":definition.client, "worker":definition.worker, "agent":definition.agent})
 }
 
-fn context(inner: &Inner, window: &str, permission: &str, install: bool) -> Result<(String, u32, crate::storage::LinkFile, u64), CoreError> {
+fn base_context(inner: &Inner, window: &str, permission: &str, install: bool) -> Result<(String, u32, LinkStatus, Option<crate::storage::LinkFile>, u64), CoreError> {
     let state = inner.state.lock().unwrap();
     let win = state.shared.windows.iter().find(|w| w.id == window).ok_or_else(||
         if install { errors::STORECLIENT_INSTALL_WINDOW_MISSING() } else { errors::STORECLIENT_REMOVE_WINDOW_MISSING() })?;
@@ -21,12 +21,18 @@ fn context(inner: &Inner, window: &str, permission: &str, install: bool) -> Resu
     if !definition.permissions.iter().any(|decl| matches!(decl, PermissionDecl::Store { id, .. } if id == permission)) {
         return Err(if install { errors::STORECLIENT_INSTALL_PERMISSION_UNDECLARED(permission) } else { errors::STORECLIENT_REMOVE_PERMISSION_UNDECLARED(permission) });
     }
-    if !matches!(state.link, LinkStatus::Connected { .. }) {
-        return Err(if install { errors::STORECLIENT_INSTALL_SERVER_DISCONNECTED() } else { errors::STORECLIENT_REMOVE_SERVER_DISCONNECTED() });
+    let link = inner.link_file.lock().unwrap().clone().filter(|link| !link.revoked);
+    Ok((win.app_id.clone(), win.app_version, state.link.clone(), link, inner.generation.load(Ordering::SeqCst)))
+}
+
+fn context(inner: &Inner, window: &str, permission: &str, install: bool) -> Result<(String, u32, crate::storage::LinkFile, u64), CoreError> {
+    let (app, version, status, link, generation) = base_context(inner, window, permission, install)?;
+    let disconnected = || if install { errors::STORECLIENT_INSTALL_SERVER_DISCONNECTED() } else { errors::STORECLIENT_REMOVE_SERVER_DISCONNECTED() };
+    if !matches!(status, LinkStatus::Connected { .. }) {
+        return Err(disconnected());
     }
-    let link = inner.link_file.lock().unwrap().clone().filter(|link| !link.revoked).ok_or_else(||
-        if install { errors::STORECLIENT_INSTALL_SERVER_DISCONNECTED() } else { errors::STORECLIENT_REMOVE_SERVER_DISCONNECTED() })?;
-    Ok((win.app_id.clone(), win.app_version, link, inner.generation.load(Ordering::SeqCst)))
+    let link = link.ok_or_else(disconnected)?;
+    Ok((app, version, link, generation))
 }
 
 pub(crate) fn registry_error(error: RegistryError, install: bool, app_id: &str) -> CoreError {
@@ -212,26 +218,65 @@ pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server
     Ok(true)
 }
 
-pub(crate) fn remove(inner: &Arc<Inner>, window: &str, permission: &str, id: Value) -> Result<(), CoreError> {
-    let (_, _, link, generation) = context(inner, window, permission, false)?;
+pub(crate) fn remove(inner: &Arc<Inner>, window: &str, permission: &str, id: Value, allow_custom: bool) -> Result<(), CoreError> {
     let id = id.as_str().ok_or_else(errors::STORECLIENT_REMOVE_ID_INVALID)?;
-    let version = {
-        let state = inner.state.lock().unwrap();
-        if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
-        state.shared.apps.iter().find(|app| app.id == id)
-            .and_then(|app| NonZeroU32::new(app.current_version)).ok_or_else(|| errors::STORECLIENT_REMOVE_APP_MISSING(id))?
-    };
-    let result = inner.registry.remove_store_app(&link.server_url, &link.token, id, &DeviceRemoveRequest { expected_current_version: version, allow_custom: false });
-    let (applied, event) = registry_events::apply_registry_change(inner, |state| {
-        if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
-        result.map_err(|error| registry_error(error, false, id))?;
-        app_commands::remove_registry_app(state, id);
-        Ok(())
-    })?;
-    applied?;
-    crate::data_runtime::apps_changed(inner);
-    if let Some(event) = event { inner.emit_state(&event); }
-    Ok(())
+    if kaleidoscope_contract::builtin::is_builtin(id) {
+        return Err(errors::STORECLIENT_REMOVE_BUILTIN(id));
+    }
+    let (_, _, status, link, generation) = base_context(inner, window, permission, false)?;
+    match status {
+        LinkStatus::Unlinked {} => {
+            if !allow_custom { return Err(errors::STORECLIENT_REMOVE_SERVER_DISCONNECTED()); }
+            // 연결이 없는 기기에서는 출처 없는 앱만 로컬에서 지운다. 창 삭제와 권한 정리는
+            // 기존 창 닫기와 레지스트리 앱 제거 경로를 그대로 쓴다.
+            let (applied, event) = registry_events::apply_registry_change(inner, |state| {
+                if !matches!(state.link, LinkStatus::Unlinked {}) {
+                    return Err(errors::STORECLIENT_REMOVE_CUSTOM_OFFLINE());
+                }
+                let Some(app) = state.shared.apps.iter().find(|app| app.id == id) else {
+                    return Err(errors::STORECLIENT_REMOVE_APP_MISSING(id));
+                };
+                if app.origin.is_some() {
+                    return Err(errors::STORECLIENT_REMOVE_SERVER_DISCONNECTED());
+                }
+                let windows: Vec<String> = state.shared.windows.iter()
+                    .filter(|window| window.app_id == id)
+                    .map(|window| window.id.clone())
+                    .collect();
+                for window_id in windows {
+                    crate::state_commands::handle(state, kaleidoscope_contract::CoreRequest::WindowClose { window_id })?;
+                }
+                app_commands::remove_registry_app(state, id);
+                Ok(())
+            })?;
+            applied?;
+            crate::data_runtime::apps_changed(inner);
+            if let Some(event) = event { inner.emit_state(&event); }
+            Ok(())
+        }
+        LinkStatus::Connected { .. } => {
+            let link = link.ok_or_else(errors::STORECLIENT_REMOVE_SERVER_DISCONNECTED)?;
+            let version = {
+                let state = inner.state.lock().unwrap();
+                if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
+                state.shared.apps.iter().find(|app| app.id == id)
+                    .and_then(|app| NonZeroU32::new(app.current_version)).ok_or_else(|| errors::STORECLIENT_REMOVE_APP_MISSING(id))?
+            };
+            let result = inner.registry.remove_store_app(&link.server_url, &link.token, id, &DeviceRemoveRequest { expected_current_version: version, allow_custom });
+            let (applied, event) = registry_events::apply_registry_change(inner, |state| {
+                if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
+                result.map_err(|error| registry_error(error, false, id))?;
+                app_commands::remove_registry_app(state, id);
+                Ok(())
+            })?;
+            applied?;
+            crate::data_runtime::apps_changed(inner);
+            if let Some(event) = event { inner.emit_state(&event); }
+            Ok(())
+        }
+        _ if allow_custom => Err(errors::STORECLIENT_REMOVE_CUSTOM_OFFLINE()),
+        _ => Err(errors::STORECLIENT_REMOVE_SERVER_DISCONNECTED()),
+    }
 }
 
 #[cfg(test)]

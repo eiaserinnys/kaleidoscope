@@ -42,7 +42,7 @@ async fn preview_evaluates_sample_apps_and_defaults_to_empty() {
     let empty_count: f64 = serde_json::from_str(empty["values"][0]["value"].as_str().unwrap()).unwrap();
     assert_eq!(empty_count, 0.0);
     let mut input = args(definition);
-    input.apps = Some(vec![serde_json::from_value(json!({"id":"example","name":"보기","version":1,"origin":null,"installed_version":null,"modified":false,"icon":null})).unwrap()]);
+    input.apps = Some(vec![serde_json::from_value(json!({"id":"example","builtin":false,"name":"보기","version":1,"origin":null,"installed_version":null,"modified":false,"icon":null})).unwrap()]);
     let result = result_value(server.preview_app_result(input).await.unwrap());
     assert_eq!(result["values"][0]["status"], "ready");
     let count: f64 = serde_json::from_str(result["values"][0]["value"].as_str().unwrap()).unwrap();
@@ -76,7 +76,7 @@ async fn preview_badge_uses_latest_and_warns_for_non_integer() {
         "permissions":[{"module":"store","id":"catalog","label":"스토어"}],
         "badge":{"expr":"$count($apps[latest.release > origin.release])"},"ui":{"type":"text","value":"시험"}});
     let mut input = args(definition.clone());
-    input.apps = Some(vec![serde_json::from_value(json!({"id":"example","name":"보기","version":1,"origin":{"store_url":"https://example.com","store_app_id":"example","release":1,"digest":"digest"},"latest":{"release":2,"compatible":true},"installed_version":1,"modified":false,"icon":null})).unwrap()]);
+    input.apps = Some(vec![serde_json::from_value(json!({"id":"example","builtin":false,"name":"보기","version":1,"origin":{"store_url":"https://example.com","store_app_id":"example","release":1,"digest":"digest"},"latest":{"release":2,"compatible":true},"installed_version":1,"modified":false,"icon":null})).unwrap()]);
     let result = result_value(server.preview_app_result(input).await.unwrap());
     assert_eq!(result["badge"], 1);
     definition["badge"] = json!({"expr":"1.5"});

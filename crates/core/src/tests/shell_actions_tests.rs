@@ -163,19 +163,19 @@ fn store_detail_opens_and_adds_the_selected_builtin_app() {
     });
     core.handle(CoreRequest::DataAct {
         window_id: store.clone(),
-        pointer: "/ui/children/1/children/1/on_select".into(),
+        pointer: "/ui/children/1/children/2/child/on_select".into(),
         event: Value::Null,
         item,
         modifiers: None,
     })
     .unwrap();
     assert!(matches!(
-        crate::data_runtime::binding_value(&core.inner, &store, "/ui/children/2/children/3/value"),
+        crate::data_runtime::binding_value(&core.inner, &store, "/ui/children/2/children/5/value"),
         Some(kaleidoscope_contract::data::BindingValue::Ready { value, .. }) if value == json!(true)
     ), "설치된 앱을 고르면 열기와 바탕화면에 추가 줄이 보인다");
 
-    let open = "/ui/children/2/children/3/child/end/1/on_click";
-    let add = "/ui/children/2/children/3/child/end/0/on_click";
+    let open = "/ui/children/2/children/5/child/end/1/on_click";
+    let add = "/ui/children/2/children/5/child/end/0/on_click";
     press(&core, &store, open).unwrap();
     assert_eq!(calculator_windows(&core, &desktop), 1);
     press(&core, &store, open).unwrap();
@@ -210,11 +210,11 @@ fn store_detail_opens_and_adds_the_selected_builtin_app() {
         "단추를 다시 눌러도 아이콘은 하나다"
     );
     assert!(matches!(
-        crate::data_runtime::binding_value(&core.inner, &store, "/ui/children/2/children/3/child/end/0/label"),
+        crate::data_runtime::binding_value(&core.inner, &store, "/ui/children/2/children/5/child/end/0/label"),
         Some(kaleidoscope_contract::data::BindingValue::Ready { value, .. }) if value == json!("바탕화면에 있음")
     ));
     assert!(matches!(
-        crate::data_runtime::binding_value(&core.inner, &store, "/ui/children/2/children/3/child/end/0/disabled"),
+        crate::data_runtime::binding_value(&core.inner, &store, "/ui/children/2/children/5/child/end/0/disabled"),
         Some(kaleidoscope_contract::data::BindingValue::Ready { value, .. }) if value == json!(true)
     ));
 }

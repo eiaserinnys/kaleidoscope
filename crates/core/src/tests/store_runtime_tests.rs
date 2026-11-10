@@ -207,7 +207,7 @@ fn store_remove_response_from_previous_server_does_not_change_current_cache() {
     let (resume_tx, resume_rx) = mpsc::channel();
     *registry.store_remove_pause.lock().unwrap() = Some((ready_tx, resume_rx));
     let target = core.clone();
-    let task = thread::spawn(move || crate::store::install::remove(&target.inner, &window, "catalog", json!("example")));
+    let task = thread::spawn(move || crate::store::install::remove(&target.inner, &window, "catalog", json!("example"), false));
     ready_rx.recv_timeout(Duration::from_secs(10)).unwrap();
     switch_cache(&core);
     resume_tx.send(()).unwrap();
@@ -714,4 +714,109 @@ fn server_consent_cancel_stops_following_action() {
     core.handle(CoreRequest::StoreRespondServerPermission { window_id:window.clone(), request_id, server, allow:false }).unwrap();
     task.join().unwrap().unwrap();
     assert_eq!(core.inner.state.lock().unwrap().shared.windows.iter().find(|w| w.id == window).unwrap().state["success"], json!(false));
+}
+
+fn remove_caller(actions: Value) -> String {
+    json!({
+        "id":"remove-caller", "name":"지우기 시험",
+        "requires":{"blocks":4,"modules":{"store":4,"shell":2}},
+        "permissions":[{"module":"store","id":"catalog","label":"스토어"}],
+        "ui":{"type":"button","label":"지우기","on_click":actions}
+    })
+    .to_string()
+}
+
+fn custom_app() -> String {
+    json!({"id":"custom","name":"커스텀 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"커스텀 앱"}}).to_string()
+}
+
+fn remove_press(core: &Core, window: &str) -> Result<CoreReply, CoreError> {
+    core.handle(CoreRequest::DataAct {
+        window_id: window.into(),
+        pointer: "/ui/on_click".into(),
+        event: Value::Null,
+        item: Value::Null,
+        modifiers: None,
+    })
+}
+
+#[test]
+fn allow_custom_removes_an_unlinked_local_app_and_closes_its_windows() {
+    let temp = TempDir::new().unwrap();
+    let actions = json!([{"store.remove":{"permission":"catalog","id":"custom","allow_custom":true}}]);
+    let core = Arc::new(open_core(temp.path(), vec![remove_caller(actions), custom_app()], &Arc::new(FakeHost::default())));
+    let (_, desktop) = active_ids(&core);
+    let store = open_window(&core, &desktop, "remove-caller");
+    let _custom_window = open_window(&core, &desktop, "custom");
+    core.handle(CoreRequest::DataAttach { window_id: store.clone(), dormant: vec![] }).unwrap();
+    remove_press(&core, &store).unwrap();
+    let (removed, windows) = {
+        let state = core.inner.state.lock().unwrap();
+        (
+            state.shared.apps.iter().any(|app| app.id == "custom"),
+            state.shared.windows.iter().filter(|window| window.app_id == "custom").count(),
+        )
+    };
+    assert!(!removed, "출처 없는 앱을 로컬에서 지운다");
+    assert_eq!(windows, 0, "그 앱의 창을 함께 닫는다");
+}
+
+#[test]
+fn remove_without_allow_custom_is_rejected_on_an_unlinked_device() {
+    let temp = TempDir::new().unwrap();
+    let core = Arc::new(open_core(temp.path(), vec![remove_caller(json!([{"shell.import_app":{}}])), custom_app()], &Arc::new(FakeHost::default())));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "remove-caller");
+    let error = crate::store::install::remove(&core.inner, &window, "catalog", json!("custom"), false).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("STORECLIENT_REMOVE_SERVER_DISCONNECTED"));
+    let kept = core.inner.state.lock().unwrap().shared.apps.iter().any(|app| app.id == "custom");
+    assert!(kept);
+}
+
+#[test]
+fn allow_custom_is_rejected_while_offline() {
+    let temp = TempDir::new().unwrap();
+    let core = Arc::new(open_core(temp.path(), vec![remove_caller(json!([{"shell.import_app":{}}])), custom_app()], &Arc::new(FakeHost::default())));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "remove-caller");
+    let link = connected_link_file();
+    *core.inner.link_file.lock().unwrap() = Some(link.clone());
+    core.inner.state.lock().unwrap().link = LinkStatus::Offline {
+        mode: link.mode,
+        server_url: link.server_url,
+        device_name: link.device_name,
+        reason: Some(kaleidoscope_contract::errors::CONN_EVENTS_STATUS_FAILED()),
+    };
+    let error = crate::store::install::remove(&core.inner, &window, "catalog", json!("custom"), true).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("STORECLIENT_REMOVE_CUSTOM_OFFLINE"));
+    let kept = core.inner.state.lock().unwrap().shared.apps.iter().any(|app| app.id == "custom");
+    assert!(kept);
+}
+
+#[test]
+fn remove_rejects_builtin_apps_even_with_allow_custom() {
+    let temp = TempDir::new().unwrap();
+    let core = Arc::new(open_core(temp.path(), vec![remove_caller(json!([{"shell.import_app":{}}]))], &Arc::new(FakeHost::default())));
+    let (_, desktop) = active_ids(&core);
+    let window = open_window(&core, &desktop, "remove-caller");
+    let error = crate::store::install::remove(&core.inner, &window, "catalog", json!("store"), true).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("STORECLIENT_REMOVE_BUILTIN"));
+    assert_eq!(error.code, ErrorCode::InvalidRequest);
+    let kept = core.inner.state.lock().unwrap().shared.apps.iter().any(|app| app.id == "store");
+    assert!(kept);
+}
+
+#[test]
+fn installed_app_values_mark_builtin_and_custom_apps() {
+    let temp = TempDir::new().unwrap();
+    let core = Arc::new(open_core(temp.path(), vec![remove_caller(json!([{"shell.import_app":{}}]))], &Arc::new(FakeHost::default())));
+    crate::app_commands::import(&mut core.inner.state.lock().unwrap(), custom_app()).unwrap();
+    let apps = {
+        let state = core.inner.state.lock().unwrap();
+        let definition = crate::app_commands::definition_for(&state.shared, "remove-caller", 1).unwrap();
+        crate::data_runtime::apps_for(&state, &definition).unwrap()
+    };
+    let builtin = |id: &str| apps.iter().find(|app| app.id == id).unwrap().builtin;
+    assert!(builtin("store"), "쉘 기본 앱은 builtin이다");
+    assert!(!builtin("custom"), "직접 가져온 앱은 builtin이 아니다");
 }

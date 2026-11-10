@@ -52,6 +52,10 @@ fn native_theme(theme: ThemePreference) -> Option<tauri::Theme> {
 }
 
 impl Host for DialogHost {
+    fn supports_pick_files(&self) -> bool {
+        true
+    }
+
     fn apply_theme(&self, theme: ThemePreference) {
         if let Some(window) = self.app.get_window("main") {
             if let Err(error) = window.set_theme(native_theme(theme)) {

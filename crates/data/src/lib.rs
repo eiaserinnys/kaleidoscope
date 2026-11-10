@@ -108,9 +108,10 @@ pub struct Env<'a> {
 pub enum Step {
     StoreAllowServer { permission: String, server: Value },
     StoreInstall { permission: String, server: Value, id: Value, release: Value, replace: bool },
-    StoreRemove { permission: String, id: Value },
+    StoreRemove { permission: String, id: Value, allow_custom: bool },
     ShellOpen { app_id: String },
     ShellAddShortcut { app_id: String },
+    ShellImportApp,
     Worker {
         action: String,
         args: Option<Value>,
@@ -614,8 +615,10 @@ impl CompiledApp {
                         Ok(Step::StoreRemove {
                             permission: spec.permission.clone(),
                             id: self.binding(&spec.id, &format!("{base}/store.remove/id"), env.state, &vars)?,
+                            allow_custom: spec.allow_custom,
                         })
                     }
+                    Action::ShellImport(_) => Ok(Step::ShellImportApp),
                     Action::ShellOpen(action) => Ok(Step::ShellOpen {
                         app_id: self.shell_app_id(
                             &action.shell_open.app_id,

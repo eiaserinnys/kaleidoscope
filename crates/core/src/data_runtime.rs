@@ -1210,6 +1210,7 @@ pub(crate) fn apps_for(state: &crate::CoreState, definition: &AppDefinition) -> 
     }
     Some(state.shared.apps.iter().map(|app| kaleidoscope_contract::store::InstalledAppValue {
         id: app.id.clone(),
+        builtin: kaleidoscope_contract::builtin::is_builtin(&app.id),
         name: app.name.clone(),
         version: app.current_version,
         origin: app.origin.clone(),

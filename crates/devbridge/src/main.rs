@@ -37,6 +37,10 @@ impl Host for DevHost {
         env::var_os("KALEIDOSCOPE_DEV_PICK").map(PathBuf::from)
     }
 
+    fn supports_pick_files(&self) -> bool {
+        true
+    }
+
     fn pick_files(&self, _: &[kaleidoscope_contract::data::FileAccept], multiple: bool) -> Option<Vec<PathBuf>> {
         let raw = env::var("KALEIDOSCOPE_DEV_PICK_FILES").ok()?;
         let mut paths: Vec<PathBuf> = serde_json::from_str(&raw).ok()?;

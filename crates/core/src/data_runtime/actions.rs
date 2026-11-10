@@ -185,8 +185,8 @@ pub(crate) fn act(
             Step::StoreInstall { permission, server, id, release, replace } => {
                 if !crate::store::install::install(inner, window_id, &permission, server, id, release, replace)? { break; }
             }
-            Step::StoreRemove { permission, id } => {
-                crate::store::install::remove(inner, window_id, &permission, id)?;
+            Step::StoreRemove { permission, id, allow_custom } => {
+                crate::store::install::remove(inner, window_id, &permission, id, allow_custom)?;
             }
             Step::ShellOpen { app_id } => {
                 let desktop_id = shell_desktop_id(inner, window_id)?;
@@ -205,6 +205,9 @@ pub(crate) fn act(
                         CoreRequest::DesktopShortcutAdd { desktop_id, app_id },
                     )
                 })?;
+            }
+            Step::ShellImportApp => {
+                if !crate::shell_import::import(inner)? { break; }
             }
             Step::Worker { action, args } => {
                 let worker_action = action.clone();

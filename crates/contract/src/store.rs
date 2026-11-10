@@ -40,6 +40,8 @@ pub struct StoreLatest {
 #[ts(export, export_to = "contract.ts")]
 pub struct InstalledAppValue {
     pub id: String,
+    /// 쉘에 포함된 기본 앱인가. 기본 앱은 지울 수 없고 스토어 판으로 바꾸지 않는다.
+    pub builtin: bool,
     pub name: String,
     pub version: u32,
     pub origin: Option<StoreOrigin>,
