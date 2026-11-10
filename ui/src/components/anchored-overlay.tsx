@@ -46,6 +46,10 @@ export function useAnchoredOverlay(anchor: HTMLElement | null, surface: RefObjec
     const observer = observe && typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
     if (observe) {
       observer?.observe(anchor); observer?.observe(element);
+      // 창 안쪽을 끄는 것처럼 웹 뷰포트가 그대로인 크기 변화도 있다. 기준 요소의 크기가 그대로여도
+      // 창이 바뀌면 자리를 다시 재야 메뉴가 옛 좌표에 남지 않는다.
+      const windowRoot = anchor.closest<HTMLElement>(".ks-window");
+      if (windowRoot && windowRoot !== anchor) observer?.observe(windowRoot);
       if (verticalAnchor && verticalAnchor !== anchor) observer?.observe(verticalAnchor);
       window.addEventListener("resize", schedule);
       window.addEventListener("scroll", schedule, true);

@@ -36,6 +36,7 @@ mod profiler;
 mod registry_client;
 mod registry_events;
 mod share;
+mod shell_import;
 mod shell_preferences;
 mod state_commands;
 mod state_commit;
@@ -88,6 +89,11 @@ pub fn crop_share_capture_png(bytes: &[u8], bounds: Rect, scale_factor: f64) -> 
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
+    /// 파일 고르기 창을 띄울 수 있는 호스트인가. pick_files가 None을 돌려줄 때 취소와
+    /// 미지원을 가르는 데 쓴다.
+    fn supports_pick_files(&self) -> bool {
+        false
+    }
     fn pick_files(
         &self,
         _accept: &[kaleidoscope_contract::data::FileAccept],

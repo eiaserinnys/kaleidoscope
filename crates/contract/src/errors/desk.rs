@@ -453,4 +453,32 @@ error_catalog! { ENTRIES;
         message: "앱이 이 쉘에서 지원하지 않는 기능을 요구합니다. 쉘을 업데이트한 뒤 다시 가져오세요.",
         fix: "쉘을 업데이트하세요"
     }
+    DESK_APP_IMPORT_PICKER_UNAVAILABLE() {
+        class: UnsupportedApp,
+        place: "앱 정의 파일 고르기",
+        cause: "이 호스트에 파일 고르기 창이 없다",
+        message: "이 기기에서는 앱 정의 파일을 고를 수 없습니다. 파일 선택을 지원하는 데스크톱 쉘에서 가져오세요.",
+        fix: "파일 선택을 지원하는 데스크톱 쉘에서 가져오세요"
+    }
+    DESK_APP_IMPORT_FILE_READ_FAILED(name) {
+        class: Io,
+        place: "앱 정의 파일 읽기",
+        cause: "고른 파일을 읽지 못했다",
+        message: "앱 정의 파일 '{name}'을 읽지 못했습니다. 파일 접근 권한을 확인하고 다시 골라 주세요.",
+        fix: "파일 접근 권한을 확인하고 다시 고르세요"
+    }
+    DESK_APP_IMPORT_FILE_TOO_LARGE(name, limit) {
+        class: InvalidRequest,
+        place: "앱 정의 파일 크기 검사",
+        cause: "고른 파일이 앱 정의 한도를 넘었다",
+        message: "앱 정의 파일 '{name}'이 {limit}보다 큽니다. 앱 정의만 담은 JSON 파일을 골라 주세요.",
+        fix: "앱 정의만 담은 JSON 파일을 고르세요"
+    }
+    DESK_APP_IMPORT_FILE_ENCODING_INVALID(name) {
+        class: InvalidAppDefinition,
+        place: "앱 정의 파일 인코딩 검사",
+        cause: "고른 파일이 UTF-8 텍스트가 아니다",
+        message: "앱 정의 파일 '{name}'이 UTF-8 텍스트가 아닙니다. UTF-8 JSON 파일로 저장한 뒤 다시 골라 주세요.",
+        fix: "UTF-8 JSON 파일로 저장한 뒤 다시 고르세요"
+    }
 }

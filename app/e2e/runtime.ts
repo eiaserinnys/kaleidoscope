@@ -25,6 +25,8 @@ export function pathsFor(runtimeDir: string) {
     artifactsDir: path.join(root, "artifacts"),
     reportFile: path.join(root, "report.json"),
     outputDir: path.join(root, "playwright-output"),
+    // devbridge가 파일 고르기에서 읽는 경로 목록. 시험이 단계마다 다시 쓴다.
+    pickFilesFile: path.join(root, "pick-files.json"),
   };
 }
 

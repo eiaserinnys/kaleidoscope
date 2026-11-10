@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   ContextMenuHost,
@@ -9,7 +9,6 @@ import {
   Cloud,
   CloudOff,
   EmptyState,
-  Import,
   IconButton,
   LayoutGrid,
   Monitor,
@@ -46,7 +45,6 @@ import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { WallpaperLayer } from "./wallpaper-layer";
 import { SystemWindow, type SystemWindowState } from "./system-window";
-import { importAppDefinition } from "./import-definition";
 import { makeNewWindowRect, windowSizeForApp } from "./window-geometry";
 import { createShellWindowActions, selectDesktop, selectWorkspace } from "./shell-window-actions";
 import { installShellShortcuts } from "./shell-shortcuts";
@@ -73,7 +71,6 @@ function serverIconOf(link: ShellSnapshot["link"]) {
 export function Shell({ store }: { store: ShellStore }) {
   useWindowControlHost(store);
   const snapshot = useShellSelector(store, (value) => value, sameShellChrome);
-  const fileInput = useRef<HTMLInputElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [launcher, setLauncher] = useState<{ anchor: HTMLElement } | null>(null);
   const closeLauncher = useCallback(() => setLauncher(null), []);
@@ -377,24 +374,6 @@ export function Shell({ store }: { store: ShellStore }) {
     void runCommand({ op: "desktop.create", workspace_id: activeWorkspace.id, name });
   };
 
-  const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-    try {
-      const definition = await file.text();
-      const latest = store.getSnapshot();
-      const workspace = latest ? selectWorkspace(latest) : undefined;
-      const desktop = latest && workspace ? selectDesktop(latest, workspace) : undefined;
-      if (!desktop) return;
-      await importAppDefinition(store, desktop.id, definition, (size) => newWindowRect(desktop.id, latest!, size));
-    } catch (reason) {
-      setNotice(toCoreError(reason));
-    }
-  };
-
-
   return (
     <main className="app-root" ref={setHost}>
       <WallpaperLayer activeDesktopId={activeDesktop.id} onError={setNotice} store={store} />
@@ -463,9 +442,6 @@ export function Shell({ store }: { store: ShellStore }) {
         </nav>
 
         <div className="ks-shell-actions">
-          <IconButton aria-label="앱 정의 가져오기" onClick={() => { fileInput.current?.click(); }} title="앱 정의 가져오기">
-            <Import />
-          </IconButton>
           {snapshot.update.state === "ready" ? (
             <IconButton
               aria-label={`새 판 ${snapshot.update.version} 받음`}
@@ -478,14 +454,6 @@ export function Shell({ store }: { store: ShellStore }) {
           ) : null}
           {serverButton}
           {settingsButton}
-          <input
-            accept=".json,application/json"
-            aria-label="앱 정의 파일"
-            className="ks-file-input"
-            onChange={handleImport}
-            ref={fileInput}
-            type="file"
-          />
         </div>
       </header>
 

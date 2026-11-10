@@ -291,7 +291,12 @@ it("화면 밖에 유지된 초점 칸으로 배경 누름 뒤 돌아간다", as
 });
 it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 쓴다", async () => {
   const app = JSON.parse(storeDefinitionText);
-  const items = await jsonata(app.ui.children[1].children[1].items.expr).evaluate({}, {
+  // 분류 도구 막대가 늘어도 찾을 수 있게 자리 번호 대신 목록 식의 표지로 고른다.
+  const storeList = app.ui.children[1].children
+    .map((child: { child?: { items?: { expr?: string } } }) => child.child)
+    .find((child: { items?: { expr?: string } } | undefined) => child?.items?.expr?.includes('"other-stores"')) as { items: { expr: string } } | undefined;
+  if (storeList === undefined) throw new Error("앱스토어 정의에서 스토어 목록을 찾지 못했습니다");
+  const items = await jsonata(storeList.items.expr).evaluate({}, {
     state: { category: "__installed", query: "" }, data: { catalog: { stores: [] } },
     apps: [{ id: "notes", name: "남은 앱", icon: { asset: "other-app-icon", version: 1 }, origin: { store_url: "http://removed" } }],
   });

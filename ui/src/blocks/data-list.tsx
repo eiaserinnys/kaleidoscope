@@ -111,7 +111,9 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const scroll = useRef<HTMLDivElement>(null);
   const iconColumns = useIconGridColumns(scroll, icons && (items.length > 0 || !!more));
   const activeColumns = icons ? iconColumns : grid ? columns : 1;
-  useEffect(() => {
+  // 격자의 칸 수는 첫 그림 전에 잰다. 칸 수가 그려진 뒤에 바뀌면 줄 묶음이 달라져 줄이 다시 만들어지고,
+  // 그 줄을 잡고 있던 초점이 사라진다.
+  useLayoutEffect(() => {
     if (!grid || !scroll.current) return;
     const element = scroll.current;
     const probe = block.item_width ? element.ownerDocument.createElement("span") : null;
@@ -149,6 +151,14 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     return result;
   }, [grouped, items.length, block.grouped, activeColumns]);
   const rowKeys = useMemo(() => rows.map((row) => row.kind === "items" ? row.items.map((item) => item.key) : []), [rows]);
+  // 가상 목록이 줄 높이를 기억할 때 쓰는 줄 정체성. 항목 줄은 자리와 담긴 항목으로, 머리 줄과
+  // 상태 줄은 종류와 글까지 넣어 구분한다. 머리 줄과 상태 줄의 키가 비어 있으면 장면이
+  // 바뀌며 같은 자리에 다른 종류의 줄이 올 때 예전 높이를 물려받아 다음 줄과 겹친다.
+  const rowIds = useMemo(() => rows.map((row, index) => row.kind === "items"
+    ? `${index}\u0000${row.items.map((item) => item.key).join("\u0001")}`
+    : row.kind === "heading"
+      ? `${index}\u0000heading\u0000${row.title}\u0000${row.meta ?? ""}`
+      : `${index}\u0000status\u0000${row.group.key ?? row.group.title}\u0000${row.group.status?.state ?? ""}\u0000${row.group.status?.message ?? ""}\u0000${row.group.status?.code ?? ""}`), [rows]);
   useScrollbarFlapHold(scroll, grid, rows.length);
   const [headingHeight, setHeadingHeight] = useState(0);
   useLayoutEffect(() => {
@@ -161,7 +171,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     observer.observe(heading);
     return () => observer.disconnect();
   });
-  const { virtual, resizeAnchor } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 });
+  const { virtual, resizeAnchor } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 }, rowIds);
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const currentValue = useBinding(`${pointer}/current`, block.current ?? null);
@@ -305,7 +315,14 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     {currentHeading?.kind === "heading" && first > 0 ? <div className="ks-view-sticky"><GroupHeading title={currentHeading.title} meta={currentHeading.meta} /></div> : null}
     {!items.length && !hasStatus ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((row) => {
       const entry = rows[row.index];
-      return <div className={entry.kind === "status" ? "ks-load-more ks-list-group-row" : entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} data-row-key={entry.kind === "status" ? entry.group.key ?? entry.group.title : undefined} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)` }}>
+      // 아이콘 줄은 묶은 열 수를 그대로 그린다. 스크롤 막대가 생겨 칸 폭이 잠깐 줄면
+      // auto-fill이 한 칸 모자란 폭으로 접어 두 줄이 되고, 그 두 줄 높이가 줄 묶음의
+      // 기억으로 남아 막대가 사라진 뒤에도 접힌 채로 남는다. 열 수를 묶음이 정하면
+      // 폭이 줄어도 줄은 한 줄이고, 높이도 한 줄 높이로만 기억된다.
+      const rowStyle = entry.kind === "items" && icons
+        ? { gridTemplateColumns: `repeat(${activeColumns}, minmax(0, 1fr))` } as React.CSSProperties
+        : undefined;
+      return <div className={entry.kind === "status" ? "ks-load-more ks-list-group-row" : entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} data-row-key={entry.kind === "status" ? entry.group.key ?? entry.group.title : undefined} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)`, ...rowStyle }}>
         {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.kind === "status" ? (() => {
           const { group } = entry; const status = group.status!;
           const index = block.group_actions?.findIndex((action) => action.key === group.action) ?? -1;

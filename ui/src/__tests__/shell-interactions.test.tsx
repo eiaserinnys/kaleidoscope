@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Shell } from "../../../app/src/shell/shell";
 import { WindowFrame } from "../../../app/src/shell/window-frame";
 import { makeNewWindowRect } from "../../../app/src/shell/window-geometry";
-import { importAppDefinition } from "../../../app/src/shell/import-definition";
 import type { AppWindow, CoreRequest, ShellSnapshot } from "../contract/contract";
-import type { ShellStore } from "../core/shell-store";
-import { makeTestSnapshot, mdViewerDefinition } from "./fixtures";
+import { createFakeTransport } from "../core/fake-transport";
+import { createShellStore, type ShellStore } from "../core/shell-store";
+import { makeTestSeed, makeTestSnapshot } from "./fixtures";
 
 afterEach(() => {
   cleanup();
@@ -287,7 +288,7 @@ describe("window dragging", () => {
   });
 });
 
-describe("app definition import", () => {
+describe("창 배치와 쉘 머리 막대", () => {
   beforeEach(() => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");
@@ -298,30 +299,14 @@ describe("app definition import", () => {
     document.documentElement.style.removeProperty("--ks-window-min-height");
   });
 
-  it("opens an imported app only when the active desktop has no window for it", async () => {
-    const snapshot = makeTestSnapshot();
-    snapshot.shared.windows = snapshot.shared.windows.filter((window) => window.app_id !== "md-viewer");
-    const calls: CoreRequest[] = [];
-    const store = makeStore(snapshot, calls);
+  it("쉘 머리 막대에는 앱 정의 가져오기 단추와 숨은 파일 입력이 없다", async () => {
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    const view = render(<Shell store={store} />);
+    await store.ready;
 
-    const rect = { x: 48, y: 48, width: 880, height: 480 };
-    const makeRect = vi.fn(() => rect);
-    await importAppDefinition(store, "desktop-1", JSON.stringify(mdViewerDefinition), makeRect);
-
-    expect(calls).toEqual([
-      { op: "app.import", definition_json: JSON.stringify(mdViewerDefinition) },
-      { op: "window.open", desktop_id: "desktop-1", app_id: "md-viewer", rect },
-    ]);
-    expect(makeRect).toHaveBeenCalledWith({ width: 480, height: 360 });
-  });
-
-  it("keeps an already open app window instead of opening a duplicate", async () => {
-    const snapshot = makeTestSnapshot();
-    const calls: CoreRequest[] = [];
-
-    await importAppDefinition(makeStore(snapshot, calls), "desktop-1", JSON.stringify(mdViewerDefinition), () => ({ x: 48, y: 48, width: 880, height: 480 }));
-
-    expect(calls).toEqual([{ op: "app.import", definition_json: JSON.stringify(mdViewerDefinition) }]);
+    expect(screen.queryByRole("button", { name: "앱 정의 가져오기" })).toBeNull();
+    expect(view.container.querySelector('input[type="file"]')).toBeNull();
+    store.dispose();
   });
 
   it("cascades new windows by position before fitting their size", () => {
@@ -398,7 +383,6 @@ function makeStore(snapshot: ShellSnapshot, calls: CoreRequest[]): ShellStore {
   return {
     call: vi.fn(async (request: CoreRequest) => {
       calls.push(request);
-      if (request.op === "app.import") return { op: "app.import", app: { id: "md-viewer" }, version: { definition: { ...mdViewerDefinition, window_size: { width: 480, height: 360 } } } };
       return { op: "window.open", window: {} };
     }),
     getSnapshot: () => snapshot,

@@ -59,7 +59,10 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
       gracefulShutdown: { signal: "SIGINT", timeout: 5_000 },
-      env: { KALEIDOSCOPE_DEV_PICK: paths.docsDir },
+      env: {
+        KALEIDOSCOPE_DEV_PICK: paths.docsDir,
+        KALEIDOSCOPE_DEV_PICK_FILES_FILE: paths.pickFilesFile,
+      },
     },
   ],
 });

@@ -72,7 +72,7 @@ export function useScrollbarFlapHold(scroll: RefObject<HTMLDivElement | null>, e
   }, [scroll, enabled, marker]);
 }
 type RowKeys = readonly (readonly (string | number)[])[];
-export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false, getItemKey?: (index: number) => string | number, viewport?: { element: HTMLDivElement; margin: number } | null, rowKeys?: RowKeys, scrollPadding?: { start: number; end: number }) {
+export function useVirtualRows(count: number, estimate: number, supplied?: RefObject<HTMLDivElement | null>, horizontal = false, getItemKey?: (index: number) => string | number, viewport?: { element: HTMLDivElement; margin: number } | null, rowKeys?: RowKeys, scrollPadding?: { start: number; end: number }, rowIds?: readonly string[]) {
   const local = useRef<HTMLDivElement>(null);
   const scroll = supplied ?? local;
   const position = useRef(0);
@@ -93,8 +93,20 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
     return !old.virtual.getVirtualItems().some((row) => row.end > offset && row.start < offset + (size ?? 0)
       && old.keys[row.index]?.some((key) => next.has(key)));
   }, [rowKeys]);
+  // 행 높이를 자리 번호가 아니라 줄의 내용으로 기억한다. 창 폭이 바뀌면 같은 항목이
+  // 다른 줄 묶음으로 나뉘어 자리 번호의 뜻이 달라지는데, 자리 번호로 기억하면 예전 폭에서
+  // 잰 높이가 남아 전체 높이와 스크롤 자리가 어긋난다. 머리 줄과 상태 줄은 담긴 항목이
+  // 없어 빈 키가 되므로 부르는 쪽이 줄 종류와 글을 담은 rowIds를 주어 같은 자리에서
+  // 종류가 바뀐 줄이 예전 높이를 물려받지 않게 한다.
+  const rowIdentity = useMemo(() => {
+    if (getItemKey) return undefined;
+    if (rowIds) return (index: number) => rowIds[index] ?? String(index);
+    if (rowKeys) return (index: number) => `${index}\u0000${rowKeys[index]?.join("\u0001") ?? ""}`;
+    return undefined;
+  }, [getItemKey, rowIds, rowKeys]);
   const virtual = useVirtualizer({
-    count, getScrollElement: () => viewport?.element ?? scroll.current, estimateSize: () => estimate, overscan: 4, horizontal, getItemKey,
+    count, getScrollElement: () => viewport?.element ?? scroll.current, estimateSize: () => estimate, overscan: 4, horizontal,
+    getItemKey: getItemKey ?? rowIdentity,
     scrollMargin: viewport?.margin ?? 0,
     scrollPaddingStart: scrollPadding?.start ?? 0,
     scrollPaddingEnd: scrollPadding?.end ?? 0,

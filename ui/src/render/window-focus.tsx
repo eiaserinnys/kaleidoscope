@@ -101,18 +101,14 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       if (event.isTrusted) { stopWaiting(); clearRescuedFocus(); }
     };
     const onKeyUp = () => { tabMove = false; };
-    const onFocus = (event: FocusEvent) => {
-      const target = event.target;
-      if (waiting.current && !moving && target !== waiting.current.pane) stopWaiting();
-      if (commenting()) { stopWaiting(); return; }
-      if (!(target instanceof HTMLElement) || !scope.contains(target)) return;
+    // 창 안의 초점을 이어받아 둔다. 초점이 사라졌을 때 이 기록으로 복구 대상을 찾는다.
+    const capture = (target: HTMLElement) => {
       addedSinceFocus = new WeakSet();
       const fromTab = tabMove; tabMove = false;
       cancelAnimationFrame(focusFrame);
       if (fromTab && content.contains(target)) focusFrame = requestAnimationFrame(() => {
         if (document.activeElement === target) revealStackControl(target);
       });
-      if (target === content || target.classList.contains("ks-window-content")) return;
       focused = target;
       focusedDialog = Boolean(target.closest(".ks-dialog-overlay"));
       focusedDialogElement = focusedDialog ? target.closest<HTMLElement>(".ks-dialog") : null;
@@ -135,6 +131,14 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
         focusPath.push({ ancestor, childIndex: Array.prototype.indexOf.call(ancestor.children, child), controlIndex: tabbableControls(controls).indexOf(target), swapIndex: controls.indexOf(target) });
         child = ancestor;
       }
+    };
+    const onFocus = (event: FocusEvent) => {
+      const target = event.target;
+      if (waiting.current && !moving && target !== waiting.current.pane) stopWaiting();
+      if (commenting()) { stopWaiting(); return; }
+      if (!(target instanceof HTMLElement) || !scope.contains(target)) return;
+      if (target === content || target.classList.contains("ks-window-content")) return;
+      capture(target);
     };
     const collectionTarget = (changes: MutationRecord[]): HTMLElement | undefined => {
       const collection = inContent ? focusPath.find(({ ancestor }) => ancestor.matches('.ks-repeat-content, .ks-agent-attachment-list, [role="list"], [role="listbox"], [role="table"]')) : undefined;
@@ -240,6 +244,10 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("keyup", onKeyUp, true);
     observer.observe(scope, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "hidden", "inert"] });
+    // StrictMode가 효과를 다시 붙였거나 창 조작 뒤에 다시 붙었을 때, 이 인스턴스가 붙기 전에
+    // 이미 창 안에 있던 초점을 이어받는다. 이어받지 않으면 그 초점이 사라져도 복구하지 못한다.
+    if (!commenting() && seeded instanceof HTMLElement && seeded !== content
+      && !seeded.classList.contains("ks-window-content") && seeded.isConnected && scope.contains(seeded)) capture(seeded);
     return () => {
       updateTop.current = () => undefined;
       cancelAnimationFrame(focusFrame);

@@ -43,7 +43,7 @@ export interface MenuProps {
 export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: MenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const position = useAnchoredOverlay(anchor, menuRef, { anchorPoint, keyboardRect });
+  const position = useAnchoredOverlay(anchor, menuRef, { anchorPoint, keyboardRect, observe: true });
 
   useLayoutEffect(() => {
     const menu = menuRef.current;

@@ -454,7 +454,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("client", CLIENT_FILE_OPEN_VERSION),
     ("process", 2),
     ("store", 4),
-    ("shell", 1),
+    ("shell", 2),
 ];
 
 /// 단추 강조 바인딩과 새 아이콘을 처음 지원한 블록 세트 판.

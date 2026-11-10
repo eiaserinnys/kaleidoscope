@@ -80,7 +80,7 @@ fn store_actions_resolve_event_and_state_bindings() {
     let event = json!({"release":2});
     let env = Env { state: &state, data: &empty, data_meta: &empty, storage: &empty, storage_meta: &empty, apps: None, event: &event, item: &Value::Null, modifiers: None };
     assert_eq!(app.action_step("/ui/children/0/on_select", 0, &env).unwrap(), Step::StoreInstall { permission:"catalog".into(), server:json!("https://store.example"), id:json!("notes"), release:json!(2.0), replace:true });
-    assert_eq!(app.action_step("/ui/children/0/on_select", 1, &env).unwrap(), Step::StoreRemove { permission:"catalog".into(), id:json!("notes") });
+    assert_eq!(app.action_step("/ui/children/0/on_select", 1, &env).unwrap(), Step::StoreRemove { permission:"catalog".into(), id:json!("notes"), allow_custom:false });
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn apps_expression_only_recalculates_the_selected_binding() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["ui"]["children"][1]["value"] = json!({"expr":"$count($apps)"});
     let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
-    let apps = vec![serde_json::from_value(json!({"id":"notes","name":"메모","version":1,"origin":null,"installed_version":null,"modified":false,"icon":null})).unwrap()];
+    let apps = vec![serde_json::from_value(json!({"id":"notes","builtin":false,"name":"메모","version":1,"origin":null,"installed_version":null,"modified":false,"icon":null})).unwrap()];
     let selected = app.binding_dependencies().iter().filter(|b| b.apps).map(|b| b.pointer.clone()).collect();
     let mut evaluated = Vec::new();
     let values = app.evaluate_profiled(&BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), &BTreeMap::new(), Some(&apps), &BTreeMap::new(), Some(&selected), &mut |binding, _| evaluated.push(binding.pointer.clone()));

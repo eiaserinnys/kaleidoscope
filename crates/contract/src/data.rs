@@ -548,6 +548,7 @@ pub enum Action {
     StoreRemove(StoreRemoveAction),
     ShellOpen(ShellOpenAction),
     ShellAddShortcut(ShellAddShortcutAction),
+    ShellImport(ShellImportAction),
     Client(ClientAction),
     PickFiles(PickFilesAction),
     SaveFile(SaveFileAction),
@@ -587,7 +588,14 @@ pub struct StoreRemoveAction { #[serde(rename = "store.remove")] pub store_remov
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
-pub struct StoreRemoveSpec { pub permission: String, pub id: Binding }
+pub struct StoreRemoveSpec {
+    pub permission: String,
+    pub id: Binding,
+    /// 출처 없는 앱(커스텀 앱)을 이 기기에서 지우는 요청. 생략은 false이며 store 모듈 4판부터다.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub allow_custom: bool,
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
@@ -600,6 +608,15 @@ pub struct ShellAppSpec { pub app_id: Binding }
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct ShellAddShortcutAction { #[serde(rename = "shell.add_shortcut")] pub shell_add_shortcut: ShellAppSpec }
+/// 앱 정의 파일 하나를 골라 이 기기에 가져온다. 인자가 없다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ShellImportAction { #[serde(rename = "shell.import_app")] pub shell_import_app: ShellImportSpec }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct ShellImportSpec {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -2457,6 +2474,7 @@ pub fn action_bindings(action: &Action) -> Vec<(String, &Binding)> {
             "shell.add_shortcut/app_id".into(),
             &action.shell_add_shortcut.app_id,
         )],
+        Action::ShellImport(_) => Vec::new(),
         Action::Call(call) => {
             let mut out = vec![("call/path".to_string(), &call.call.path)];
             for (key, value) in &call.call.query {

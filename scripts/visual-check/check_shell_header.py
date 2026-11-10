@@ -68,6 +68,24 @@ MEASURE = """() => {
     dot: dot ? { class: dot.className, color: getComputedStyle(dot).backgroundColor, rect: rect(dot), shadow: getComputedStyle(dot).boxShadow } : null,
     bar: { rect: rect(bar), scrollWidth: bar.scrollWidth, clientWidth: bar.clientWidth, scrollHeight: bar.scrollHeight, clientHeight: bar.clientHeight },
     actions: rect(actions),
+    import_buttons: [...bar.querySelectorAll('button')].filter((button) => /가져오기/.test(
+      `${button.getAttribute('aria-label') || ''} ${button.innerText || ''}`)).length,
+  };
+}"""
+# 머리 막대 안에서 Tab이 지나간 조작의 자리. 숨은 조작이 초점을 받았는지도 함께 본다.
+HEADER_ACTIVE = """() => {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return null;
+  const bar = el.closest('.ks-shell-bar');
+  const rect = el.getBoundingClientRect();
+  const style = getComputedStyle(el);
+  return {
+    tag: el.tagName,
+    label: el.getAttribute('aria-label') || (el.innerText || '').trim(),
+    in_bar: Boolean(bar),
+    x: rect.x,
+    width: rect.width,
+    visible: style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0,
   };
 }"""
 
@@ -144,6 +162,27 @@ def capture(page, output, key, clip=None):
     return str(path)
 
 
+def header_tab_order(page):
+    """머리 막대의 첫 조작에서 Tab을 눌러 지나간 조작을 화면 순서와 함께 남긴다."""
+    first = page.locator(
+        ".ks-shell-bar button:not([disabled]), .ks-shell-bar [href], "
+        ".ks-shell-bar input:not([disabled]), .ks-shell-bar select:not([disabled]), "
+        ".ks-shell-bar [tabindex]:not([tabindex='-1'])").first
+    if first.count() == 0:
+        return []
+    first.focus()
+    page.wait_for_timeout(60)
+    records = []
+    for _ in range(12):
+        info = page.evaluate(HEADER_ACTIVE)
+        if not info or not info["in_bar"]:
+            break
+        records.append(info)
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(60)
+    return records
+
+
 def header_scene(page, port, width, height, theme, query, key, output):
     page.set_viewport_size({"width": width, "height": height})
     # 리포의 테마 정본은 prefers-color-scheme 미디어 질의다(foundation.css, shell.css).
@@ -161,6 +200,7 @@ def header_scene(page, port, width, height, theme, query, key, output):
     actions_path = output / f"{key}-actions.png"
     page.locator(".ks-shell-actions").screenshot(path=str(actions_path), animations="disabled")
     facts["captures"].append(str(actions_path))
+    facts["tab_order"] = header_tab_order(page)
     server, gear = facts["server"], facts["gear"]
     if server and gear:
         server_rect, gear_rect = server["rect"], gear["rect"]
@@ -213,6 +253,20 @@ def main():
                             server = result[key]["server"] or {}
                             dot = result[key]["dot"] or {}
                             print(key, server.get("mode"), result[key]["icon_class"], result[key]["icon_dash"], dot.get("color"), flush=True)
+                scenes = {key: value for key, value in result.items()
+                          if key.startswith("shell-header-") and isinstance(value, dict)}
+                assert scenes, "머리 막대 장면이 하나도 없습니다"
+                assert all(scene["import_buttons"] == 0 for scene in scenes.values()), \
+                    "머리 막대에 가져오기 단추가 남아 있습니다"
+                result["assertions"] = {"header_import_absent": True}
+                for key, scene in scenes.items():
+                    records = scene["tab_order"]
+                    assert len(records) >= 2, f"{key}: 머리 막대 Tab 조작이 {len(records)}개뿐입니다"
+                    assert all(record["visible"] for record in records), \
+                        f"{key}: 숨은 조작이 초점을 받았습니다: {records}"
+                    xs = [record["x"] for record in records]
+                    assert xs == sorted(xs), f"{key}: Tab 순서가 화면 순서와 다릅니다: {xs}"
+                result["assertions"]["header_tab_order_matches_visual"] = True
                 page.close()
             finally:
                 browser.close()
@@ -221,7 +275,9 @@ def main():
             stop_server(app_server, app_log)
 
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    assertions = result.get("assertions", {})
     print("RESULT", output / "result.json")
+    print(f"{sum(1 for value in assertions.values() if value is True)}개 참 / {len(assertions)}개 단언", flush=True)
     return 0
 
 

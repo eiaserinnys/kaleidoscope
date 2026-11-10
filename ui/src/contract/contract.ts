@@ -12,7 +12,7 @@ export type ActWindowArgs = { window_id: string, view_id: string, action: Window
 /**
  * 동작 하나.
  */
-export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction | WorkerAction | StoreAllowServerAction | StoreInstallAction | StoreRemoveAction | ShellOpenAction | ShellAddShortcutAction | ClientAction | PickFilesAction | SaveFileAction | CopyTextAction;
+export type Action = SetStateAction | RefreshAction | CallAction | SetStorageAction | WorkerAction | StoreAllowServerAction | StoreInstallAction | StoreRemoveAction | ShellOpenAction | ShellAddShortcutAction | ShellImportAction | ClientAction | PickFilesAction | SaveFileAction | CopyTextAction;
 
 /**
  * 블록 이벤트에 거는 동작. 상태 키 하나에 이벤트 값을 쓰는 짧은 꼴(`{ "set_state": "키" }`)이나 동작 목록이다.
@@ -1133,7 +1133,11 @@ export type InstallConsentOwner = { "kind": "window", window_id: string, app_id:
 /**
  * 식 변수 $apps의 각 항목. 출처 없는 앱의 관련 값은 null이다.
  */
-export type InstalledAppValue = { id: string, name: string, version: number, origin: StoreOrigin | null, latest: StoreLatest | null, installed_version: number | null, modified: boolean, icon: AppIconRef | null, };
+export type InstalledAppValue = { id: string, 
+/**
+ * 쉘에 포함된 기본 앱인가. 기본 앱은 지울 수 없고 스토어 판으로 바꾸지 않는다.
+ */
+builtin: boolean, name: string, version: number, origin: StoreOrigin | null, latest: StoreLatest | null, installed_version: number | null, modified: boolean, icon: AppIconRef | null, };
 
 /**
  * 항목 메뉴의 동작. `$event`는 블록의 `on_select`와 같은 항목 키(트리도 같은 값), `$item`은 항목이다.
@@ -1532,6 +1536,13 @@ export type ShellAddShortcutAction = { "shell.add_shortcut": ShellAppSpec, };
 
 export type ShellAppSpec = { app_id: Binding, };
 
+/**
+ * 앱 정의 파일 하나를 골라 이 기기에 가져온다. 인자가 없다.
+ */
+export type ShellImportAction = { "shell.import_app": ShellImportSpec, };
+
+export type ShellImportSpec = Record<symbol, never>;
+
 export type ShellOpenAction = { "shell.open": ShellAppSpec, };
 
 /**
@@ -1709,7 +1720,11 @@ export type StoreRelease = { release: number, published_at: string, manifest: st
 
 export type StoreRemoveAction = { "store.remove": StoreRemoveSpec, };
 
-export type StoreRemoveSpec = { permission: string, id: Binding, };
+export type StoreRemoveSpec = { permission: string, id: Binding, 
+/**
+ * 출처 없는 앱(커스텀 앱)을 이 기기에서 지우는 요청. 생략은 false이며 store 모듈 4판부터다.
+ */
+allow_custom?: boolean, };
 
 /**
  * 스토어 원천은 종류별로 필요한 값을 선언한다.

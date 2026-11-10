@@ -78,6 +78,14 @@ error_catalog! { ENTRIES;
         class: Unavailable, place: "스토어 삭제 서버 연결", cause: "레지스트리가 연결되지 않았다",
         message: "앱을 삭제할 서버에 연결되지 않았습니다. 서버에 연결한 뒤 다시 삭제하세요.", fix: "서버에 연결하세요"
     }
+    STORECLIENT_REMOVE_CUSTOM_OFFLINE() {
+        class: Unavailable, place: "커스텀 앱 삭제 연결 검사", cause: "서버 연결이 끊긴 기기에서 로컬 삭제를 요청했다",
+        message: "서버 연결이 끊긴 동안에는 커스텀 앱을 지울 수 없습니다. 서버에 연결한 뒤 다시 지우세요.", fix: "서버에 연결한 뒤 다시 지우세요"
+    }
+    STORECLIENT_REMOVE_BUILTIN(app) {
+        class: InvalidRequest, place: "커스텀 앱 삭제 대상 검사", cause: "기본 앱 ID다",
+        message: "기본 앱 ID {app}: 지울 수 없습니다. 기본 앱은 쉘에 포함되어 있습니다.", fix: "쉘 업데이트로 기본 앱을 바꾸세요"
+    }
     STORECLIENT_INSTALL_REQUEST_EXPIRED() {
         class: NotFound, place: "스토어 설치 동의 응답", cause: "대기 중인 요청이 없다",
         message: "설치 동의 요청이 만료되었습니다. 앱에서 설치를 다시 시작하세요.", fix: "설치를 다시 시작하세요"

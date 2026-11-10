@@ -46,6 +46,7 @@ mod share_capture_tests;
 mod shared_state_recovery_tests;
 mod startup_readiness_tests;
 mod shell_actions_tests;
+mod shell_import_tests;
 mod store_allow_tests;
 mod store_runtime_tests;
 mod store_update_tests;
@@ -327,7 +328,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
         ("web-browser", 3),
         ("calculator", 4),
         ("weather", 5),
-        ("store", 8),
+        ("store", 9),
     ] {
         assert!(apps
             .iter()
@@ -433,7 +434,7 @@ fn store_moved_builtin_cache_is_removed_without_closing_windows() {
 }
 
 #[test]
-fn store_builtin_version_8_upgrades_saved_v7_definition_and_open_window() {
+fn store_builtin_version_9_upgrades_saved_v7_definition_and_open_window() {
     let temp = TempDir::new().unwrap();
     let core = open_core(temp.path(), vec![], &Arc::new(FakeHost::default()));
     let (_, desktop) = active_ids(&core);
@@ -469,7 +470,7 @@ fn store_builtin_version_8_upgrades_saved_v7_definition_and_open_window() {
     crate::app_commands::ensure_builtin(&mut state);
 
     let app = state.shared.apps.iter().find(|app| app.id == "store").unwrap();
-    assert_eq!(app.current_version, 8);
+    assert_eq!(app.current_version, 9);
     let store_versions: Vec<_> = state
         .shared
         .app_versions
@@ -477,7 +478,7 @@ fn store_builtin_version_8_upgrades_saved_v7_definition_and_open_window() {
         .filter(|item| item.app_id == "store")
         .collect();
     assert_eq!(store_versions.len(), 1);
-    assert_eq!(store_versions[0].version, 8);
+    assert_eq!(store_versions[0].version, 9);
     assert!(store_versions[0].definition.single_window);
     let window = state
         .shared
@@ -485,7 +486,7 @@ fn store_builtin_version_8_upgrades_saved_v7_definition_and_open_window() {
         .iter()
         .find(|window| window.id == window_id)
         .unwrap();
-    assert_eq!(window.app_version, 8);
+    assert_eq!(window.app_version, 9);
 }
 
 #[test]

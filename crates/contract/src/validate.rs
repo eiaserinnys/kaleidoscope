@@ -446,7 +446,14 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
                     }
                 }
             }
-            Action::StoreRemove(action) => check_permission(&location, &action.store_remove.permission)?,
+            Action::StoreRemove(action) => {
+                check_permission(&location, &action.store_remove.permission)?;
+                if action.store_remove.allow_custom
+                    && definition.requires.modules.get("store").copied().unwrap_or(0) < 4
+                {
+                    return Err(crate::errors::APP_STORE_REMOVE_CUSTOM_VERSION_LOW());
+                }
+            }
             Action::StoreAllowServer(action) => {
                 if definition.requires.modules.get("store").copied().unwrap_or(0) < 3 {
                     return Err(crate::errors::APP_STORE_ALLOW_SERVER_VERSION_LOW(&location));
@@ -461,16 +468,22 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
 
 /// 쉘 동작을 쓰는 자리가 `requires.modules.shell`을 선언했는지 확인한다.
 fn validate_shell_contract(definition: &AppDefinition) -> Result<(), CoreError> {
-    let used = data::ui_actions(definition)
-        .into_iter()
-        .any(|(_, group)| match group {
-            Actions::Many(list) => list.iter().any(|action| {
-                matches!(action, Action::ShellOpen(_) | Action::ShellAddShortcut(_))
-            }),
-            _ => false,
-        });
-    if used && definition.requires.modules.get("shell").copied().unwrap_or(0) < 1 {
+    let mut used = false;
+    let mut used_import = false;
+    for (_, group) in data::ui_actions(definition) {
+        if let Actions::Many(list) = group {
+            for action in list {
+                used |= matches!(action, Action::ShellOpen(_) | Action::ShellAddShortcut(_) | Action::ShellImport(_));
+                used_import |= matches!(action, Action::ShellImport(_));
+            }
+        }
+    }
+    let version = definition.requires.modules.get("shell").copied().unwrap_or(0);
+    if used && version < 1 {
         return Err(crate::errors::APP_SHELL_MODULE_REQUIRED(&definition.id));
+    }
+    if used_import && version < 2 {
+        return Err(crate::errors::APP_SHELL_IMPORT_VERSION_LOW());
     }
     Ok(())
 }
@@ -2214,6 +2227,7 @@ fn validate_actions(
                     Action::ShellAddShortcut(action) => {
                         validate_binding_shape(&action.shell_add_shortcut.app_id, definition, details, &format!("{at}/shell.add_shortcut/app_id"));
                     }
+                    Action::ShellImport(_) => {}
                     Action::Client(action) => {
                         if list.len() != 1 {
                             details.push(format!("{at}: 클라이언트 동작은 단독으로 써야 합니다"));

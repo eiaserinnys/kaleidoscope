@@ -8,7 +8,7 @@ import { bookmarkTarget, dialogActionFocus, dialogFirstFocus, focusBookmark, foc
 
 const interactiveSelector = 'button, a[href], input, textarea, select, label, summary, iframe, [tabindex], [contenteditable], .cm-editor';
 
-export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, windowId, busy = false, rootProps, ownerAnchor, noticeSlotRef }: { ownerAnchor?: Element | null; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; windowId?: string; busy?: boolean }) {
+export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, surfaceFocus = false, windowId, busy = false, rootProps, ownerAnchor, noticeSlotRef }: { ownerAnchor?: Element | null; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; surfaceFocus?: boolean; windowId?: string; busy?: boolean }) {
   const titleId = useId();
   const bodyId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -95,8 +95,14 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   }, [host, inertSelector, windowModal]);
   useLayoutEffect(() => {
     const owner = windowId ?? ownerOf(host);
-    if (windowModal && active && (!owner || !preserveWindowActionFocus(owner))) root.current?.focus({ preventScroll: true });
-  }, [windowModal, active]);
+    if (windowModal && active && (!owner || !preserveWindowActionFocus(owner))) {
+      // 창 대화상자는 보통 첫 조작으로 초점을 옮긴다. 대화상자 틀에 두면 다시 그려질 때
+      // 초점이 열었던 단추로 돌아갔다가 틀에 남아, 키보드로 바로 조작할 수 없게 된다.
+      // 실행 허용처럼 틀 자체가 안전을 지키는 대화상자는 틀에 둔다(Enter로 허용하지 않는다).
+      const target = surfaceFocus ? root.current : root.current ? dialogFirstFocus(root.current) : null;
+      target?.focus({ preventScroll: true });
+    }
+  }, [windowModal, active, host, surfaceFocus]);
   useLayoutEffect(() => {
     const finished = wasBusy.current && !busy;
     wasBusy.current = busy;
