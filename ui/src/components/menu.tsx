@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ownerOf } from "../share/overlay-owner";
 import { useAnchoredOverlay } from "./anchored-overlay";
+import { focusByInput } from "./focus-rescue";
 import { preserveWindowActionFocus, windowActionActive } from "../share/action-context";
 
 export interface MenuItem {
@@ -58,9 +59,9 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
       : initial.find((item) => item && !item.disabled && !item.classList.contains("ks-menu-item-danger"))
         ?? initial.find((item) => item && !item.disabled);
     if (!owner || !preserveWindowActionFocus(owner)) {
-      if (checked) focusTarget?.focus({ preventScroll: true });
-      else if (focusTarget) focusTarget.focus();
-      else if (items.some((entry) => entry.type !== "separator" && entry.type !== "heading" && entry.skipInitialFocus)) menu?.focus();
+      if (checked) { if (focusTarget) focusByInput(focusTarget, { preventScroll: true }); }
+      else if (focusTarget) focusByInput(focusTarget);
+      else if (menu && items.some((entry) => entry.type !== "separator" && entry.type !== "heading" && entry.skipInitialFocus)) focusByInput(menu);
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -78,7 +79,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
-        if (!owner || !preserveWindowActionFocus(owner)) anchor.focus();
+        if (!owner || !preserveWindowActionFocus(owner)) focusByInput(anchor);
         return;
       }
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -113,7 +114,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
         event.stopPropagation();
         onClose();
         const owner = ownerOf(anchor);
-        if (!owner || !preserveWindowActionFocus(owner)) anchor.focus();
+        if (!owner || !preserveWindowActionFocus(owner)) focusByInput(anchor);
       }}
       ref={menuRef}
       role="menu"
@@ -133,7 +134,7 @@ export function Menu({ anchor, anchorPoint, keyboardRect, items, onClose }: Menu
           onClick={() => {
             if (item.disabled) return;
             const owner = ownerOf(anchor);
-            if (!owner || !preserveWindowActionFocus(owner)) anchor.focus();
+            if (!owner || !preserveWindowActionFocus(owner)) focusByInput(anchor);
             item.onSelect?.();
             onClose();
           }}

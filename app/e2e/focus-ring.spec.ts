@@ -110,4 +110,34 @@ test.describe("입력 방식에 따른 초점 링", () => {
     expect(entry.ring).toBe(false);
     await page.screenshot({ path: testInfo.outputPath("no-content-no-ring.png") });
   });
+
+  test("마우스로 연 메뉴는 첫 항목에 링을 그리지 않고 키보드로 연 메뉴는 그린다", async ({ page }, testInfo) => {
+    await page.goto("/harness.html?preview=app-settings");
+    await page.getByRole("button", { name: "앱 설정", exact: true }).click();
+    const field = page.getByLabel("에이전트", { exact: true });
+    await expect(field).toHaveValue("seosoyoung");
+
+    // 입력에 키보드로 조작한 뒤 마우스 우클릭으로 연 메뉴: 첫 항목이 초점을 갖되 링은 그리지 않는다.
+    await field.click();
+    await page.keyboard.press("End");
+    await field.click({ button: "right" });
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expect.poll(async () => (await focusState(page)).role).toBe("menuitem");
+    const pointer = await focusState(page);
+    await testInfo.attach("pointer-menu-focus", { body: JSON.stringify(pointer), contentType: "application/json" });
+    expect(pointer.ring).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath("pointer-menu-no-ring.png") });
+
+    // 키보드로 연 메뉴: 첫 항목이 초점을 갖고 링을 그린다.
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toBeHidden();
+    await field.focus();
+    await page.keyboard.press("Shift+F10");
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expect.poll(async () => (await focusState(page)).role).toBe("menuitem");
+    const keyboard = await focusState(page);
+    await testInfo.attach("keyboard-menu-focus", { body: JSON.stringify(keyboard), contentType: "application/json" });
+    expect(keyboard.ring).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("keyboard-menu-ring.png") });
+  });
 });

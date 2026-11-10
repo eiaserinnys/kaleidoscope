@@ -138,12 +138,17 @@ export function restoreWindowFocus(content: HTMLElement) {
   focusRescued(target, { preventScroll: true });
 }
 
+/** 쉘이 옮기는 초점에 마지막 입력 방식대로 링을 정한다. 대신 옮긴 초점(rescued)으로 표시하지는 않는다. */
+export function focusByInput(element: HTMLElement, options?: FocusOptionsWithVisibility) {
+  element.focus({ ...options, focusVisible: options?.focusVisible ?? keyboardInput } as FocusOptions);
+}
+
 export function focusRescued(element: HTMLElement, options?: FocusOptionsWithVisibility) {
   const owner = ownerOf(element);
   if (owner && preserveWindowActionFocus(owner)) return;
   rescued.add(element);
   element.addEventListener("blur", () => rescued.delete(element), { once: true });
-  element.focus({ ...options, focusVisible: options?.focusVisible ?? keyboardInput } as FocusOptions);
+  focusByInput(element, options);
 }
 
 /** 초점이 아직 사용자 것으로 정해지지 않았는가: 문서 본문이거나 쉘이 대신 옮긴 요소. */
