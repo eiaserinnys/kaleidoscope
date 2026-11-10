@@ -742,6 +742,56 @@ it("toggles collapse from a checked feed entry header without selecting it", asy
   expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
 });
 
+it("본문과 미디어가 빈 행에는 접기 단추와 빈 본문 띠를 그리지 않는다", async () => {
+  setup({
+    type: "feed", collapsible: true,
+    entries: [
+      { key: "empty", name: "빈 행", body: "", table: true, collapsed: true },
+      { key: "blank-parts", name: "공백 조각", body: ["", "  "], table: true },
+      { key: "filled", name: "본문 행", body: "본문", table: true },
+    ],
+  } as unknown as Block);
+  const empty = (await screen.findByText("빈 행")).closest("article")!;
+  expect(within(empty).queryByRole("button", { name: "본문 펴기" })).toBeNull();
+  expect(within(empty).queryByRole("button", { name: "접기" })).toBeNull();
+  expect(empty.querySelector(".ks-feed-body")).toBeNull();
+
+  const blank = screen.getByText("공백 조각").closest("article")!;
+  expect(within(blank).queryByRole("button", { name: "접기" })).toBeNull();
+  expect(blank.querySelector(".ks-feed-body")).toBeNull();
+
+  const filled = screen.getByText("본문 행").closest("article")!;
+  expect(within(filled).getByRole("button", { name: "접기" })).toBeTruthy();
+  expect(filled.querySelector(".ks-feed-body")).not.toBeNull();
+});
+
+it("체크 피드의 제외 행은 확인 상자 자리를 비우고 행 선택을 받지 않으며 헤더로 접힌다", async () => {
+  const { calls } = setup({
+    type: "feed", collapsible: true,
+    entries: [
+      { key: "done", name: "체크 행", body: "체크 본문", table: true, checked: true },
+      { key: "skip", name: "제외 행", body: "제외 본문", table: true },
+    ],
+    on_select: { set_state: "choice" },
+  } as unknown as Block, { choice: null });
+  const acts = () => calls.mock.calls.filter(([request]) => request.op === "data.act");
+  const skip = (await screen.findByText("제외 행")).closest("article")!;
+  expect(within(skip).queryByRole("checkbox")).toBeNull();
+  const placeholder = skip.querySelector(".ks-feed-name-line > .ks-tree-check.is-placeholder");
+  expect(placeholder).not.toBeNull();
+  expect(placeholder!.getAttribute("aria-hidden")).toBe("true");
+  expect(skip.classList.contains("is-selectable")).toBe(false);
+  expect(screen.getByText("체크 행").closest("article")!.classList.contains("is-selectable")).toBe(false);
+
+  fireEvent.click(screen.getByText("제외 본문"));
+  expect(acts()).toHaveLength(0);
+
+  fireEvent.click(screen.getByText("제외 행"));
+  expect(skip.classList.contains("is-collapsed")).toBe(true);
+  expect(screen.queryByText("제외 본문")).toBeNull();
+  expect(acts()).toHaveLength(0);
+});
+
 it("starts feed entries collapsed from data and applies changed data without undoing manual toggles", async () => {
   const entries = [{ key: "a", name: "이름", body: "숨은 본문", collapsed: true }];
   const { transport } = setup({ type: "feed", collapsible: true, entries: { expr: "$state.entries" } } as unknown as Block, { entries });
