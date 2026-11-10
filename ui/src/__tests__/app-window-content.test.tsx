@@ -601,6 +601,19 @@ describe("app definition renderer", () => {
     store.dispose();
   });
 
+  it("초점을 쥔 글칸이 같은 자리의 Tab 순서 밖 트리 행으로 바뀌면 그 행으로 옮긴다", async () => {
+    await focusFixture('<div role="tree"><div class="ks-tree-virtual-row"><button role="treeitem" tabindex="0">앞 행</button></div><div class="ks-tree-virtual-row"><div class="ks-file-tree-entry"><input aria-label="항목 이름" /></div></div></div>');
+    const input = screen.getByRole("textbox", { name: "항목 이름" });
+    input.focus();
+    fireEvent.keyDown(input, { key: "Enter" });
+    const next = document.createElement("button");
+    next.setAttribute("role", "treeitem");
+    next.tabIndex = -1;
+    next.textContent = "확정한 행";
+    input.parentElement!.replaceWith(next);
+    await waitFor(() => expect(document.activeElement).toBe(next));
+  });
+
   it("승인 목록이 비면 말풍선 대신 대화 입력칸으로 초점을 옮긴다", async () => {
     await focusFixture('<div><button>내 말풍선</button><div role="list"><button role="listitem">허용</button></div></div><textarea class="ks-agent-chat-input" aria-label="메시지"></textarea>');
     const allow = screen.getByRole("listitem");

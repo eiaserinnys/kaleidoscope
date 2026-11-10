@@ -30,7 +30,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let focusedDialogElement: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
-    let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number }> = [];
+    let focusPath: Array<{ ancestor: HTMLElement; controlIndex: number; swapIndex: number }> = [];
     let bookmark = focusBookmark(null, body);
     // StrictMode가 효과를 다시 붙일 때처럼 이 인스턴스가 붙기 전에 초점을 받은 내용 칸을 이어받는다.
     const seeded = document.activeElement;
@@ -41,8 +41,12 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let tabMove = false;
     let onTop = false;
     let moving = false;
-    const visibleControls = (within: ParentNode) => Array.from(within.querySelectorAll<HTMLElement>('button, input:not([type="hidden"]), textarea, select, a[href], [tabindex]'))
-      .filter((element) => element.tabIndex >= 0 && usableFocus(element) && !element.matches('.ks-split-handle, [role="separator"]'));
+    // 초점을 받을 수 있는 조작. 프로그램으로 초점을 받는 tabIndex=-1도 들어간다.
+    const focusableControls = (within: ParentNode) => Array.from(within.querySelectorAll<HTMLElement>('button, input:not([type="hidden"]), textarea, select, a[href], [tabindex]'))
+      .filter((element) => usableFocus(element) && !element.matches('.ks-split-handle, [role="separator"]'));
+    const tabbableControls = (controls: HTMLElement[]) => controls.filter((element) => element.tabIndex >= 0);
+    // 기존 복구 경로(모음, 북마크, 본문 밖)는 Tab 순서에 드는 조작만 고른다.
+    const visibleControls = (within: ParentNode) => tabbableControls(focusableControls(within));
     const move = (target: HTMLElement, stay?: boolean) => {
       moving = true;
       focusRescued(target, (stay ?? pointer) ? { preventScroll: true } : undefined);
@@ -51,6 +55,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     const isControl = (element: HTMLElement) => element.matches('button, input:not([type="hidden"]), textarea, select, a[href], [tabindex]') && element.tabIndex >= 0;
     // 사라진 조작과 같은 자리에 새 조작이 한 번의 변경 알림으로 함께 들어오면 그것이 사용자가 이어서
     // 다루려던 조작이다. 이때 문서 첫 내용 초점으로 가면 칸이 맨 위로 튄다.
+    // 같은 자리의 새 조작은 트리 행처럼 Tab 순서에 들지 않아도(tabIndex=-1) 받는다.
     const swapTarget = (changes: MutationRecord[]): HTMLElement | undefined => {
       if (!focused || focused.isConnected || !isControl(focused)) return undefined;
       // 사라진 조작이 속한 모음 항목까지 사라졌으면 기존 모음 복구가 맡는다.
@@ -59,10 +64,10 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
         .flatMap((change) => Array.from(change.addedNodes))
         .filter((node): node is HTMLElement => node instanceof HTMLElement);
       if (!added.length) return undefined;
-      for (const { ancestor, controlIndex } of focusPath) {
-        if (!body.contains(ancestor) || controlIndex < 0) continue;
-        const controls = visibleControls(ancestor);
-        const target = controls[Math.max(0, controlIndex)] ?? controls[controls.length - 1];
+      for (const { ancestor, swapIndex } of focusPath) {
+        if (!body.contains(ancestor) || swapIndex < 0) continue;
+        const controls = focusableControls(ancestor);
+        const target = controls[Math.max(0, swapIndex)] ?? controls[controls.length - 1];
         if (target && !target.matches(".ks-button-emphasis") && added.some((node) => node === target || node.contains(target))) return target;
       }
       return undefined;
@@ -106,7 +111,8 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       }
       focusPath = [];
       for (let ancestor = target.parentElement; ancestor && body.contains(ancestor); ancestor = ancestor.parentElement) {
-        focusPath.push({ ancestor, controlIndex: visibleControls(ancestor).indexOf(target) });
+        const controls = focusableControls(ancestor);
+        focusPath.push({ ancestor, controlIndex: tabbableControls(controls).indexOf(target), swapIndex: controls.indexOf(target) });
       }
     };
     const collectionTarget = (changes: MutationRecord[]): HTMLElement | undefined => {
