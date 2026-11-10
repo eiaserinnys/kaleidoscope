@@ -548,6 +548,72 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "새 항목" })));
   });
 
+  it("초점을 쥔 글칸이 같은 자리의 단추로 바뀌면 그 단추로 옮기고 스크롤을 건드리지 않는다", async () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const rows = Array.from({ length: 30 }, (_, index) => ({ key: `r${index}`, title: `행 ${String(index + 1).padStart(2, "0")}` }));
+    const definition: AppDefinition = {
+      id: "focus-swap", name: "같은 자리 교체", requires: { blocks: 14, modules: {} }, permissions: [],
+      state: { rows, idle: true, editing: false, name: "" },
+      ui: { type: "stack", direction: "column", children: [
+        { type: "list", items: { state: "rows" } },
+        { type: "when", value: { state: "idle" }, child: { type: "button", label: "편집 시작", on_click: [{ set_state: "idle", value: false }, { set_state: "editing", value: true }] } },
+        { type: "when", value: { state: "editing" }, child: {
+          type: "input", label: "이름", value: { state: "name" }, on_change: { set_state: "name" }, focus: { state: "editing" },
+          on_submit: [{ set_state: "editing", value: false }, { set_state: "idle", value: true }],
+          on_cancel: [{ set_state: "editing", value: false }, { set_state: "idle", value: true }],
+        } },
+      ] },
+    };
+    const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+    const original = transport.call.bind(transport);
+    // 실제 코어는 연속된 SetState를 한 번의 상태 갱신으로 모아 보낸다(crates/core/src/data_runtime/actions.rs).
+    // 가짜 전송은 한 번에 하나씩 적용해 제거와 생성이 다른 MutationObserver 알림으로 오므로,
+    // 같은 알림으로 오는 실제 동작을 여기서 재현한다.
+    vi.spyOn(transport, "call").mockImplementation(async (request) => {
+      if (request.op === "data.act" && (request.pointer.endsWith("/on_submit") || request.pointer.endsWith("/on_cancel"))) {
+        await original({ op: "window.patch_state", window_id: request.window_id, patch: { editing: false, idle: true } });
+        return { op: "data.act", sequence: 0 };
+      }
+      return original(request);
+    });
+    const store = createShellStore(transport);
+    render(<AppWindowContent store={store} windowId="viewer-window" />);
+    const open = await screen.findByRole("button", { name: "편집 시작" });
+    fireEvent.click(open);
+    const input = await screen.findByRole("textbox", { name: "이름" });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    const afterEnter = await screen.findByRole("button", { name: "편집 시작" });
+    await waitFor(() => expect(document.activeElement).toBe(afterEnter));
+    // jsdom에는 배치가 없어 스크롤 자체는 잴 수 없다. 쉘이 옮기는 초점이 스크롤을 건드리지 않는지로 확인한다.
+    expect(focus.mock.calls.at(-1)?.[0]).toMatchObject({ preventScroll: true });
+
+    fireEvent.click(afterEnter);
+    const again = await screen.findByRole("textbox", { name: "이름" });
+    await waitFor(() => expect(document.activeElement).toBe(again));
+
+    fireEvent.keyDown(again, { key: "Escape" });
+    const afterEscape = await screen.findByRole("button", { name: "편집 시작" });
+    await waitFor(() => expect(document.activeElement).toBe(afterEscape));
+    expect(focus.mock.calls.at(-1)?.[0]).toMatchObject({ preventScroll: true });
+    store.dispose();
+  });
+
+  it("초점을 쥔 글칸이 같은 자리의 Tab 순서 밖 트리 행으로 바뀌면 그 행으로 옮긴다", async () => {
+    await focusFixture('<div role="tree"><div class="ks-tree-virtual-row"><button role="treeitem" tabindex="0">앞 행</button></div><div class="ks-tree-virtual-row"><div class="ks-file-tree-entry"><input aria-label="항목 이름" /></div></div></div>');
+    const input = screen.getByRole("textbox", { name: "항목 이름" });
+    input.focus();
+    fireEvent.keyDown(input, { key: "Enter" });
+    const next = document.createElement("button");
+    next.setAttribute("role", "treeitem");
+    next.tabIndex = -1;
+    next.textContent = "확정한 행";
+    input.parentElement!.replaceWith(next);
+    await waitFor(() => expect(document.activeElement).toBe(next));
+  });
+
   it("승인 목록이 비면 말풍선 대신 대화 입력칸으로 초점을 옮긴다", async () => {
     await focusFixture('<div><button>내 말풍선</button><div role="list"><button role="listitem">허용</button></div></div><textarea class="ks-agent-chat-input" aria-label="메시지"></textarea>');
     const allow = screen.getByRole("listitem");
