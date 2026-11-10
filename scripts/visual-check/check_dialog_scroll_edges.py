@@ -7,12 +7,16 @@
 - 본문 내용의 좌우 여백이 스크롤바 유무와 관계없이 같고(양쪽 0), 스크롤바가 생겨도 본문 폭이 그대로다.
 - 맨 위 상호작용 글과 단추의 초점 고리가 스크롤 칸 안에 들어온다.
 - 선택기(is-picker) 대화상자에서 본문이 스크롤 칸 내용 상자를 채운다.
-- 알림 자리가 채워지면 스크롤 칸 아래 초점 고리 자리가 본문 안쪽으로 옮겨진다.
+- 알림 자리가 채워지면 스크롤 칸의 초점 고리 자리가 본문 안쪽으로 옮겨져 칸이 0까지 접힌다.
+- 최소 창의 알림 장면은 제목 아래 끝과 알림 위 끝 사이가 space-2이고 알림 높이가 main(55.5) 이상이다.
+- 넓은 창의 알림 장면은 칸이 접히지 않고, 끝까지 스크롤한 마지막 줄과 알림 사이가 space-3이다.
+- 설치 동의 바꾸기와 실행 허용 오버레이에서 Tab 첫 초점이 스크롤 칸에 가고, 칸 상자 좌우가 대화상자 가장자리에서 같은 거리다.
 
 장면:
 - 확인 대화상자(짧은 본문), 긴 본문(맨 위 상호작용 글 + 단추 + 40줄), 긴 본문 중간 스크롤
 - 선택기(채움 목록, 표), 알림 자리(?preview=notice-fixture + noticeFixture.alert)
 - 설치 동의 하네스의 일반 설치와 바꾸기 갈래(modified-to-store), 창 동의 오버레이(showProcess)
+- 바꾸기 갈래와 실행 허용 오버레이의 스크롤 칸 초점(384×317, 밝음·어두움)
 
 크기와 테마: 넓은 창 1180×720(밝음), 최소 창 360×240(밝음·어두움). 설치 동의 장면은 쉘
 최소 창이 그려지는 384×317을 쓴다(check_store_replace_consent.py와 같은 값). 설치 동의 장면은
@@ -43,6 +47,8 @@ STYLE = (
 DATA_SIZES = ((1180, 720), (360, 240))
 CONSENT_SIZES = ((1180, 720), (384, 317))
 TOLERANCE = 1.0
+# 최소 창의 알림 높이 기준. 수정 전(main) 값 55.5에서 줄지 않아야 한다(세라피엘 1차 반려 실측).
+NOTICE_HEIGHT_MAIN = 55.5
 
 LONG_TEXT = "\n".join(f"{index + 1}번째 줄: 받은 문서를 확인하고 저장할 곳을 고릅니다." for index in range(40))
 SLOT_MESSAGE = "내려받지 못했습니다. https://example.com/app. 잠시 뒤 다시 시도하세요."
@@ -91,14 +97,14 @@ SLOT_UI = {
          "child": {"type": "text", "value": LONG_TEXT}},
     ],
 }
+CONSENT_MODIFIED_TO_STORE = (
+    "async () => { window.installationHarness.show('light', {}, 2, "
+    "{ replacing: true, modified: true, store_url: 'https://apps.example.org/store', "
+    "from_origin: { store_url: 'https://apps.example.org/store', store_app_id: 'clock', release: 2, digest: 'old-digest' } }); }"
+)
 CONSENT_SCENES = (
     ("consent-install", "async () => { window.installationHarness.show('light'); }"),
-    (
-        "consent-modified-to-store",
-        "async () => { window.installationHarness.show('light', {}, 2, "
-        "{ replacing: true, modified: true, store_url: 'https://apps.example.org/store', "
-        "from_origin: { store_url: 'https://apps.example.org/store', store_app_id: 'clock', release: 2, digest: 'old-digest' } }); }",
-    ),
+    ("consent-modified-to-store", CONSENT_MODIFIED_TO_STORE),
 )
 
 MEASURE_JS = """() => {
@@ -130,7 +136,8 @@ MEASURE_JS = """() => {
   return {
     titleBottom: titleRect.bottom,
     gap: round(scrollRect.top - titleRect.bottom),
-    firstLine: round(bodyRect.top - titleRect.bottom),
+    // 첫 줄은 본문 내용 상자의 위 끝이다. 알림이 있으면 본문이 초점 고리 자리를 안쪽 여백으로 갖는다.
+    firstLine: round(bodyRect.top + px(bodyStyle.paddingTop) - titleRect.bottom),
     bodyLeftInset: round(bodyLeft - contentLeft),
     bodyRightInset: round(contentRight - bodyRight),
     bodyWidth: bodyRect.width,
@@ -151,8 +158,20 @@ MEASURE_JS = """() => {
     clientHeight: scroll.clientHeight,
     overflowY: scroll.scrollHeight > scroll.clientHeight + 1,
     scrollContentHeight: round(scroll.clientHeight - px(scrollStyle.paddingTop) - px(scrollStyle.paddingBottom)),
+    // 칸 상자의 좌우가 대화상자 가장자리에서 같은 거리인지(초점 고리가 쏠리지 않는지) 잰다.
+    scrollLeftEdge: round(scrollRect.left - dialogRect.left - px(dialogStyle.borderLeftWidth)),
+    scrollRightEdge: round(dialogRect.right - px(dialogStyle.borderRightWidth) - scrollRect.right),
+    scrollBoxHeight: round(scrollRect.height),
     notice: notice ? { left: round(rect(notice).left - contentLeft), right: round(contentRight - rect(notice).right), height: rect(notice).height } : null,
+    noticeTop: notice ? round(rect(notice).top) : null,
+    noticeHeight: notice ? round(rect(notice).height) : null,
+    // 칸이 접혔을 때는 제목과 알림 사이, 칸이 남았을 때는 칸의 잘림 경계와 알림 사이를 본다.
+    titleNoticeGap: notice ? round(rect(notice).top - titleRect.bottom) : null,
+    scrollClipBottomToNotice: notice ? round(rect(notice).top - scrollRect.bottom) : null,
+    // 끝까지 스크롤했을 때 마지막 줄(본문 내용 상자 아래 끝)과 알림 위 끝 사이.
+    lastLineToNotice: notice ? round(rect(notice).top - (bodyRect.bottom - px(bodyStyle.paddingBottom))) : null,
     space2: px(dialogStyle.getPropertyValue('--ks-space-2')),
+    space3: px(dialogStyle.getPropertyValue('--ks-space-3')),
     // --ks-dialog-ring은 calc() 토큰 그대로 돌아오므로 그 구성 값에서 센다.
     ring: px(dialogStyle.getPropertyValue('--ks-focus-width')) + px(dialogStyle.getPropertyValue('--ks-focus-offset')),
   };
@@ -166,6 +185,36 @@ RING_FOCUS_JS = """() => {
   target.focus();
   scroll.scrollTop = 0;
   return true;
+}"""
+
+SCROLL_FOCUS_MEASURE_JS = """() => {
+  const round = (value) => Math.round(value * 100) / 100;
+  const dialog = document.querySelector('.ks-dialog');
+  const scroll = dialog ? dialog.querySelector(':scope > .ks-dialog-scroll') : null;
+  const active = document.activeElement;
+  if (!scroll) return { error: '스크롤 칸이 없습니다' };
+  if (active !== scroll) {
+    const name = active ? `${active.tagName}.${typeof active.className === 'string' ? active.className : ''}` : null;
+    return { error: '스크롤 칸에 초점이 없습니다', active: name };
+  }
+  const style = getComputedStyle(scroll);
+  const dialogStyle = getComputedStyle(dialog);
+  const dialogRect = dialog.getBoundingClientRect();
+  const box = scroll.getBoundingClientRect();
+  const left = round(box.left - dialogRect.left - (parseFloat(dialogStyle.borderLeftWidth) || 0));
+  const right = round(dialogRect.right - (parseFloat(dialogStyle.borderRightWidth) || 0) - box.right);
+  return {
+    tag: active.tagName,
+    className: typeof active.className === 'string' ? active.className : '',
+    focusVisible: scroll.matches(':focus-visible'),
+    outlineStyle: style.outlineStyle,
+    outlineWidth: parseFloat(style.outlineWidth) || 0,
+    outlineOffset: parseFloat(style.outlineOffset) || 0,
+    left,
+    right,
+    symmetric: Math.abs(left - right) <= 1,
+    height: round(box.height),
+  };
 }"""
 
 RING_MEASURE_JS = """() => {
@@ -285,6 +334,25 @@ def scroll_middle(page):
     page.wait_for_timeout(200)
 
 
+def scroll_bottom(page):
+    page.evaluate(
+        "() => { const scroll = document.querySelector('.ks-dialog .ks-dialog-scroll');"
+        " if (scroll) scroll.scrollTop = scroll.scrollHeight; }"
+    )
+    page.wait_for_timeout(200)
+
+
+def focus_scroll(page):
+    """탭으로 첫 초점을 스크롤 칸에 준다(대화상자 뿌리가 처음 초점을 쥐고 있다)."""
+    for _ in range(4):
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(120)
+        check = page.evaluate(SCROLL_FOCUS_MEASURE_JS)
+        if not check.get("error"):
+            return check
+    return check
+
+
 def measure_ring(page):
     if page.evaluate(RING_FOCUS_JS) is not True:
         return {"error": "초점 대상이 없습니다"}
@@ -299,7 +367,7 @@ def measure_ring(page):
     return check
 
 
-def judge(kind, top, scrolled, require_overflow):
+def judge(kind, top, scrolled, require_overflow, notice_minimal=False, bottom=None):
     if top.get("error"):
         return {"dialog_present": False}
     checks = {
@@ -319,12 +387,24 @@ def judge(kind, top, scrolled, require_overflow):
     if kind == "picker":
         checks["picker_fill"] = abs(top.get("bodyMarginTop", 0) + top.get("bodyHeight", 0) - top.get("scrollContentHeight", 0)) <= TOLERANCE
     if kind == "notice":
+        ring = top.get("ring", 0)
         checks["notice_present"] = top.get("notice") is not None
-        checks["notice_bottom_rule"] = top.get("scrollPadBottom") == 0 and abs(top.get("bodyPadBottom", -1) - top.get("ring", 0)) <= TOLERANCE
+        # 알림이 있는 동안은 칸의 세로 여백을 본문이 맡는다. 칸은 0까지 접힐 수 있고, 마지막 줄과 알림 사이는 space-3이다.
+        checks["notice_scroll_pad_zero"] = top.get("scrollPadTop") == 0 and top.get("scrollPadBottom") == 0
+        checks["notice_body_pad_ring"] = abs(top.get("bodyPadTop", -1) - ring) <= TOLERANCE
+        checks["notice_body_pad_space3_minus_ring"] = abs(top.get("bodyPadBottom", -1) - (top.get("space3", 0) - ring)) <= TOLERANCE
+        if notice_minimal:
+            checks["notice_scroll_collapsed"] = top.get("scrollBoxHeight", 99) <= TOLERANCE
+            checks["notice_title_gap_space_2"] = abs(top.get("titleNoticeGap", 0) - top.get("space2", 0)) <= TOLERANCE
+            checks["notice_height_main"] = (top.get("noticeHeight") or 0) >= NOTICE_HEIGHT_MAIN - TOLERANCE
+        else:
+            checks["notice_not_collapsed"] = top.get("scrollBoxHeight", 0) > TOLERANCE
+            checks["notice_clip_gap_ring"] = abs(top.get("scrollClipBottomToNotice", 0) - ring) <= TOLERANCE
+            checks["notice_last_line_space_3"] = bottom is not None and abs(bottom.get("lastLineToNotice", 0) - top.get("space3", 0)) <= TOLERANCE
     return checks
 
 
-def run_scene(page, output, key, kind, opener, require_overflow, ring=False):
+def run_scene(page, output, key, kind, opener, require_overflow, ring=False, notice_minimal=False):
     opener()
     top = measure(page)
     captures = [capture(page, output, key)]
@@ -333,24 +413,45 @@ def run_scene(page, output, key, kind, opener, require_overflow, ring=False):
         scroll_middle(page)
         scrolled = measure(page, reset=False)
         captures.append(capture(page, output, f"{key}-scrolled"))
+    bottom = None
+    if kind == "notice" and top.get("overflowY"):
+        scroll_bottom(page)
+        bottom = measure(page, reset=False)
+        captures.append(capture(page, output, f"{key}-bottom"))
     ring_measure = None
     if ring:
         ring_measure = measure_ring(page)
-    checks = judge(kind, top, scrolled, require_overflow)
+    checks = judge(kind, top, scrolled, require_overflow, notice_minimal=notice_minimal, bottom=bottom)
     if ring:
         checks["ring_visible"] = ring_measure.get("focusVisible") is True
         checks["ring_inside"] = ring_measure.get("inside") is True
     failed = [name for name, ok in checks.items() if not ok]
-    print(key, json.dumps({"top": summary(top), "scrolled": summary(scrolled) if scrolled else None, "ring": ring_measure}, ensure_ascii=False),
+    print(key, json.dumps({"top": summary(top), "scrolled": summary(scrolled) if scrolled else None,
+                           "bottom": summary(bottom) if bottom else None, "ring": ring_measure}, ensure_ascii=False),
           "FAIL " + ",".join(failed) if failed else "ok")
     return {
         "kind": kind,
         "top": top,
         "scrolled": scrolled,
+        "bottom": bottom,
         "ring": ring_measure,
         "checks": checks,
         "captures": captures,
     }
+
+
+def run_scroll_focus(page, output, key, opener):
+    opener()
+    check = focus_scroll(page)
+    captures = [capture(page, output, key)]
+    checks = {
+        "scroll_focus_reaches_box": not check.get("error"),
+        "scroll_focus_visible": check.get("focusVisible") is True,
+        "scroll_box_symmetric": check.get("symmetric") is True,
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+    print(key, json.dumps({"scroll_focus": check}, ensure_ascii=False), "FAIL " + ",".join(failed) if failed else "ok")
+    return {"kind": "scroll-focus", "scrollFocus": check, "checks": checks, "captures": captures}
 
 
 def summary(measurement):
@@ -364,6 +465,13 @@ def summary(measurement):
         "width": measurement.get("bodyWidth"),
         "overflow": measurement.get("overflowY"),
         "scrollbar": (measurement.get("scrollOffsetWidth") or 0) - (measurement.get("scrollClientWidth") or 0),
+        "scrollBox": measurement.get("scrollBoxHeight"),
+        "scrollLeft": measurement.get("scrollLeftEdge"),
+        "scrollRight": measurement.get("scrollRightEdge"),
+        "titleNotice": measurement.get("titleNoticeGap"),
+        "noticeHeight": measurement.get("noticeHeight"),
+        "clipToNotice": measurement.get("scrollClipBottomToNotice"),
+        "lastLineToNotice": measurement.get("lastLineToNotice"),
     }
 
 
@@ -414,7 +522,7 @@ def main():
                     page.wait_for_selector(".ks-dialog-notice-slot .ks-notice-message", timeout=30000)
                     page.wait_for_timeout(200)
 
-                return run_scene(page, output, key, "notice", opener, False)
+                return run_scene(page, output, key, "notice", opener, False, notice_minimal=width == 360)
 
             for scheme in ("light", "dark"):
                 sizes = DATA_SIZES if scheme == "light" else (DATA_SIZES[1],)
@@ -450,6 +558,27 @@ def main():
                             overlay=".ks-window-consent-overlay",
                         ),
                         False,
+                    )
+
+            # 스크롤 칸의 키보드 초점 고리. 대화상자를 열고 Tab의 첫 초점이 스크롤 칸에 가는지와 칸 상자의 좌우 거리를 잰다.
+            focus_scenes = (
+                ("consent-modified-to-store", CONSENT_MODIFIED_TO_STORE, None),
+                (
+                    "consent-heavy-modified-to-store",
+                    "async () => { window.installationHarness.show('heavy', {}, 2, "
+                    "{ replacing: true, modified: true, store_url: 'https://apps.example.org/store', "
+                    "from_origin: { store_url: 'https://apps.example.org/store', store_app_id: 'research-desk', release: 2, digest: 'old-digest' } }); }",
+                    None,
+                ),
+                ("consent-process-command", "() => { window.installationHarness.showProcess('command'); }", ".ks-window-consent-overlay"),
+            )
+            for name, show, overlay in focus_scenes:
+                for scheme in ("light", "dark"):
+                    page.emulate_media(color_scheme=scheme)
+                    key = f"{name}-{scheme}-384x317-scrollfocus"
+                    scenes[key] = run_scroll_focus(
+                        page, output, key,
+                        lambda show=show, overlay=overlay: open_consent_scene(page, args.port, show, 384, 317, overlay=overlay),
                     )
             browser.close()
     finally:
