@@ -115,7 +115,7 @@
         "type": "stack",
         "direction": "column",
         "gap": "none",
-        "fill": 1,
+        "fill": [2, 3],
         "children": [
           {
             "type": "toolbar",
