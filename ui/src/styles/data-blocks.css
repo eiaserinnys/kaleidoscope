@@ -448,19 +448,23 @@
   .ks-properties .ks-data-state-compact .ks-empty-state-text { flex: 1 1 calc(100% - var(--ks-space-5)); }
 }
 .ks-dialog-overlay { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; padding: var(--ks-space-4); background: var(--ks-material-overlay); backdrop-filter: blur(var(--ks-blur-overlay)); }
-.ks-dialog { display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; min-height: 0; flex-direction: column; overflow: hidden; border-color: var(--ks-color-glass-edge); border-radius: var(--ks-radius-window); background: var(--ks-material-dialog); box-shadow: inset 0 0 0 var(--ks-line-width) var(--ks-color-glass-edge), var(--ks-shadow-popover); padding: var(--ks-space-4); backdrop-filter: blur(var(--ks-blur-popover)); }
+.ks-dialog { --ks-dialog-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); display: flex; width: min(100%, var(--ks-window-min-width)); max-height: 100%; min-height: 0; flex-direction: column; overflow: hidden; border-color: var(--ks-color-glass-edge); border-radius: var(--ks-radius-window); background: var(--ks-material-dialog); box-shadow: inset 0 0 0 var(--ks-line-width) var(--ks-color-glass-edge), var(--ks-shadow-popover); padding: var(--ks-space-4); backdrop-filter: blur(var(--ks-blur-popover)); }
 .ks-dialog-overlay.is-picker { padding: var(--ks-space-6); }
 .ks-dialog-overlay.is-picker > .ks-dialog { width: 100%; height: 100%; }
-.ks-dialog-overlay.is-picker .ks-dialog-body { height: calc(100% - var(--ks-space-2)); min-height: 0; }
+.ks-dialog-overlay.is-picker .ks-dialog-body { height: 100%; min-height: 0; }
 .ks-dialog-title { flex: 0 0 auto; font-size: var(--ks-type-title); font-weight: 600; }
-.ks-dialog-scroll { --ks-dialog-ring: calc(var(--ks-focus-width) + var(--ks-focus-offset)); min-height: 0; flex: 1 100000 auto; overflow: auto; padding: 0 var(--ks-dialog-ring) var(--ks-dialog-ring); margin: 0 calc(-1 * var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring)); scroll-padding: var(--ks-dialog-ring); }
+/* 제목과의 간격은 스크롤되지 않는 바깥 여백이 맡고, 안쪽 위 여백은 맨 위 입력과 단추의 초점 고리 자리다.
+   스크롤바 칸은 양쪽에 늘 비워 두고 그만큼 바깥 여백에서 내준다. 그래서 칸 상자는 대화상자 가장자리에서 좌우가 같고, 스크롤이 생겨도 본문 내용의 좌우 여백이 같다(.ks-app-settings-scroll과 같은 꼴). */
+.ks-dialog-scroll { min-height: 0; flex: 1 100000 auto; overflow: auto; scrollbar-gutter: stable both-edges; padding: var(--ks-dialog-ring); margin: calc(var(--ks-space-2) - var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring) - var(--ks-space-2)) calc(-1 * var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring) - var(--ks-space-2)); scroll-padding: var(--ks-dialog-ring); }
 .ks-dialog-scroll:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
-/* 알림이 있으면 스크롤 칸의 초점 고리 자리를 본문 안쪽으로 옮겨 스크롤 칸이 0까지 줄어들게 한다. 그 자리는 스크롤 내용이 되어 알림이 있는 동안 본문 띠가 남지 않는다. */
-.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll { padding-block-end: 0; }
-.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll > .ks-dialog-body { padding-block-end: var(--ks-dialog-ring); }
+/* 알림이 있으면 스크롤 칸의 초점 고리 자리를 본문 안쪽으로 옮겨 스크롤 칸이 0까지 줄어들게 한다. 그 자리는 스크롤 내용이 되어 알림이 있는 동안 본문 띠가 남지 않는다.
+   본문 아래 여백은 끝까지 스크롤한 마지막 줄과 알림 사이를 space-3으로 두고, 알림 자리의 위 여백은 칸이 접혔을 때 제목과 알림 사이를 space-2로 둔다. */
+.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll { padding-block: 0; }
+.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll > .ks-dialog-body { padding-block-start: var(--ks-dialog-ring); padding-block-end: calc(var(--ks-space-3) - var(--ks-dialog-ring)); }
+.ks-dialog:has(> .ks-dialog-notice-slot:not(:empty)) > .ks-dialog-scroll + .ks-dialog-notice-slot { margin-top: calc(2 * var(--ks-dialog-ring)); }
 .ks-dialog-confirm.is-danger .ks-button { border-color: var(--ks-color-danger); background-color: var(--ks-color-danger); color: var(--ks-color-danger-contrast); }
 .ks-dialog-confirm.is-danger .ks-button:active:not(:disabled) { background-image: linear-gradient(color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent), color-mix(in srgb, var(--ks-color-danger-contrast) 8%, transparent)), linear-gradient(var(--ks-color-hover), var(--ks-color-hover)); }
-.ks-dialog-body { margin-top: var(--ks-space-2); white-space: pre-wrap; }
+.ks-dialog-body { white-space: pre-wrap; }
 .ks-dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: var(--ks-space-2); margin-top: var(--ks-space-4); }
 /* 진행 중인 대화상자 단추는 눌리지 않지만 초점은 남는다. 모양과 호버와 누름은 예전 disabled와 같게 둔다. */
 .ks-dialog-actions .ks-button[aria-disabled="true"] { cursor: default; opacity: .56; }
