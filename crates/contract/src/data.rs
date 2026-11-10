@@ -1257,6 +1257,10 @@ pub struct TreeItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub checked: Option<bool>,
+    /// 참이면 그 항목의 행을 글칸으로 그린다. 블록의 `on_edit`이 있을 때만 쓴다.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub editing: bool,
 }
 
 /// `feed` 항목. 이름(색과 초상)과 본문 줄들. 본문은 줄바꿈을 지키고 글을 고르고 복사할 수 있다.
@@ -2003,10 +2007,35 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
                 act!("on_select", on_select);
             }
         }
-        Block::Section { title, meta, .. } => {
+        Block::Section {
+            title,
+            meta,
+            menu,
+            editing,
+            on_edit,
+            on_edit_cancel,
+            ..
+        } => {
             bind!("title", title);
             if let Some(meta) = meta {
                 bind!("meta", meta);
+            }
+            if let Some(entries) = menu {
+                for (index, entry) in entries.iter().enumerate() {
+                    act!(format!("menu/{index}/on_select"), &entry.on_select);
+                    if let Some(body) = entry.confirm.as_ref().and_then(|confirm| confirm.body.as_ref()) {
+                        bind!(format!("menu/{index}/confirm/body"), body);
+                    }
+                }
+            }
+            if let Some(editing) = editing {
+                bind!("editing", editing);
+            }
+            if let Some(on_edit) = on_edit {
+                act!("on_edit", on_edit);
+            }
+            if let Some(on_edit_cancel) = on_edit_cancel {
+                act!("on_edit_cancel", on_edit_cancel);
             }
         }
         Block::List {
@@ -2049,6 +2078,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             items: Some(items),
             on_select,
             on_check,
+            on_edit,
+            on_edit_cancel,
+            on_move,
             ..
         } => {
             bind!("items", items);
@@ -2057,6 +2089,15 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(on_check) = on_check {
                 act!("on_check", on_check);
+            }
+            if let Some(on_edit) = on_edit {
+                act!("on_edit", on_edit);
+            }
+            if let Some(on_edit_cancel) = on_edit_cancel {
+                act!("on_edit_cancel", on_edit_cancel);
+            }
+            if let Some(on_move) = on_move {
+                act!("on_move", on_move);
             }
         }
         Block::Tree { items: None, .. } => {}

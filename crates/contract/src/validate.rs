@@ -2667,6 +2667,18 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             }
         }
     }
+    if let Block::Section { menu: Some(entries), .. } = block {
+        if entries.is_empty() || entries.len() > 4 {
+            details.push(format!("{at}/menu: 메뉴는 1개 이상 4개 이하여야 합니다"));
+        }
+        for (index, entry) in entries.iter().enumerate() {
+            if entry.label.trim().is_empty() {
+                details.push(format!(
+                    "{at}/menu/{index}/label: 메뉴 항목의 이름이 비어 있습니다"
+                ));
+            }
+        }
+    }
     let uses_v14_fields = match block {
         Block::Canvas { surface, .. } => !matches!(surface, Binding::Literal(Value::String(_))),
         Block::Timeline {
