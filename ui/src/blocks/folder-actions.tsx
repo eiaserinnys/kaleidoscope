@@ -11,7 +11,8 @@ import { FileText, FolderOpen } from "../components/icons";
 import { Dialog } from "../components/dialog";
 import { Menu, type MenuEntry } from "../components/menu";
 import { Button, ErrorId, Notice } from "../components/primitives";
-import { TextInput, type TextInputCancelReason } from "../components/text-input";
+import type { TextInputCancelReason } from "../components/text-input";
+import { TreeEditRow } from "../components/tree/tree-edit-row";
 import type { FolderBackend, FolderItem } from "./folder-backend";
 import { editorRevision, flushEditors } from "./file-editor-session";
 import { clipboardListeners, getClipboard, setClipboard, type ShellClipboard } from "./folder-clipboard";
@@ -81,23 +82,19 @@ export function FolderInlineRow({ edit, onCommit, onCancel }: {
     : edit.kind === "directory" ? "새 폴더 이름"
       : edit.document ? "새 문서 이름" : "새 파일 이름";
   const directory = edit.kind === "directory" || (edit.kind === "rename" && edit.item?.kind === "dir");
-  return <div className="ks-file-tree-entry">
-    <div className="ks-row ks-file-tree-row ks-file-tree-create-row">
-      <span aria-hidden="true" className="ks-file-tree-icon">{directory ? <FolderOpen size="inline" /> : <FileText size="inline" />}</span>
-      <TextInput
-        key={`${edit.path ?? edit.directory}:${edit.attempt}`}
-        aria-label={label}
-        cancelOnBlur
-        cancelOnEscape
-        commitOnBlur={false}
-        onCancel={onCancel}
-        onCommit={onCommit}
-        selectBeforeExtension={edit.kind === "rename" || edit.kind === "file"}
-        value={edit.initialName}
-      />
-    </div>
-    {edit.error ? <span className="ks-inline-error" role="alert">{edit.error.message}{edit.error.id ? <> <ErrorId id={edit.error.id} /></> : null}</span> : null}
-  </div>;
+  return <TreeEditRow
+    ariaLabel={label}
+    cancelOnBlur
+    cancelOnEscape
+    commitOnBlur={false}
+    columns={[directory ? <FolderOpen size="inline" /> : <FileText size="inline" />]}
+    error={edit.error}
+    inputKey={`${edit.path ?? edit.directory}:${edit.attempt}`}
+    onCancel={onCancel}
+    onCommit={onCommit}
+    selectBeforeExtension={edit.kind === "rename" || edit.kind === "file"}
+    value={edit.initialName}
+  />;
 }
 
 export function useFolderActions({

@@ -98,6 +98,7 @@ export interface TreeViewProps {
     targetId: string | null;
     hoveredId?: string | null;
     valid: boolean;
+    position?: "before" | "after";
     onStart: (row: TreeRowModel, event: DragEvent<HTMLElement>) => void;
     onOver: (row: TreeRowModel | null, event: DragEvent<HTMLElement>) => void;
     onDrop: (row: TreeRowModel | null, event: DragEvent<HTMLElement>) => void;
@@ -469,6 +470,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
           menuTarget={menuTargetId === row.id}
           multiSelected={selection ? selection.includes(row.id) : undefined}
           draggable={drag?.enabled && row.node.content === undefined}
+          dropPosition={dropTargetId === row.id ? drag?.position : undefined}
           dropState={dropTargetId === row.id ? drag?.valid ? "valid" : "invalid" : undefined}
           row={row}
           selected={row.node.selectable !== false && row.node.id === selectedId}

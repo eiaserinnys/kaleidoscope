@@ -128,10 +128,13 @@ function drag(type: string, target: Element, dataTransfer: object, clientY = 0) 
 }
 
 function rowRect(row: Element) {
-  (row as HTMLElement).getBoundingClientRect = () => ({
-    top: 0, bottom: 40, height: 40, left: 0, right: 800, width: 800, x: 0, y: 0,
-    toJSON: () => ({}),
-  }) as DOMRect;
+  Object.defineProperty(row, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({
+      top: 0, bottom: 40, height: 40, left: 0, right: 800, width: 800, x: 0, y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect,
+  });
 }
 
 const moveItems = [{ key: "a", title: "가" }, { key: "b", title: "나" }];

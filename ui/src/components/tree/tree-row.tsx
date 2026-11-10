@@ -10,6 +10,7 @@ export interface TreeRowProps {
   selected: boolean;
   multiSelected?: boolean;
   dropState?: "valid" | "invalid";
+  dropPosition?: "before" | "after";
   draggable?: boolean;
   focused: boolean;
   menuTarget?: boolean;
@@ -24,7 +25,7 @@ export interface TreeRowProps {
   onDoubleClick?: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
 }
 
-function TreeRowView({ row, commentKey, index, start, selected, multiSelected, dropState, draggable, focused, menuTarget = false, checkEnabled = false, measure, onFocus, onKeyDown, onActivate, onCheck, onToggleExpand, onContextMenu, onDoubleClick }: TreeRowProps) {
+function TreeRowView({ row, commentKey, index, start, selected, multiSelected, dropState, dropPosition, draggable, focused, menuTarget = false, checkEnabled = false, measure, onFocus, onKeyDown, onActivate, onCheck, onToggleExpand, onContextMenu, onDoubleClick }: TreeRowProps) {
   const { node } = row;
   const check = node.checked !== undefined
     ? <span
@@ -74,7 +75,8 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
       aria-selected={multiSelected !== undefined ? multiSelected : node.ariaSelectable === false ? undefined : selected}
       aria-setsize={row.setSize}
       className={`ks-row ks-file-tree-row${multiSelected === undefined ? selected ? " is-selected" : "" : `${multiSelected ? " is-selected" : ""}${selected ? " is-open-file" : ""}`}${node.rowClassName ? ` ${node.rowClassName}` : ""}`}
-      data-drop-state={dropState}
+      data-drop-state={dropPosition === undefined ? dropState : undefined}
+      data-drop-position={dropPosition}
       draggable={draggable || undefined}
       data-menu-target={menuTarget && node.content === undefined ? "" : undefined}
       data-index={index}

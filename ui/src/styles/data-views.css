@@ -1,8 +1,12 @@
 .ks-list-row:focus-visible, .ks-icon-tile:focus-visible, .ks-table-row:focus-visible, .ks-data-tree .ks-row:focus-visible, .ks-file-tree-list:focus-visible, .ks-file-tree-list .ks-row:focus-visible, .ks-feed-entry:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-row[data-menu-target] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-file-tree-list .ks-file-tree-row.is-open-file { box-shadow: inset var(--ks-focus-width) 0 var(--ks-color-accent); }
-.ks-file-tree-list [data-drop-state="valid"], .ks-file-tree-list[data-drop-state="valid"] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
-.ks-file-tree-list [data-drop-state="invalid"], .ks-file-tree-list[data-drop-state="invalid"] { outline: var(--ks-focus-width) solid var(--ks-color-danger); outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-file-tree-list [data-drop-state="valid"], .ks-file-tree-list[data-drop-state="valid"],
+.ks-data-tree [data-drop-state="valid"], .ks-data-tree[data-drop-state="valid"] { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-file-tree-list [data-drop-state="invalid"], .ks-file-tree-list[data-drop-state="invalid"],
+.ks-data-tree [data-drop-state="invalid"], .ks-data-tree[data-drop-state="invalid"] { outline: var(--ks-focus-width) solid var(--ks-color-danger); outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-data-tree .ks-file-tree-row[data-drop-position="before"] { box-shadow: inset 0 var(--ks-line-width) 0 0 var(--ks-color-focus); }
+.ks-data-tree .ks-file-tree-row[data-drop-position="after"] { box-shadow: inset 0 calc(-1 * var(--ks-line-width)) 0 0 var(--ks-color-focus); }
 .ks-file-tree-list .ks-tree-virtual-row[data-menu-target] .ks-file-tree-empty { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); border-radius: var(--ks-radius-small); }
 .ks-badge { display: inline-block; flex: 0 0 auto; padding-inline: var(--ks-space-2); border-radius: var(--ks-radius-large); background: var(--ks-color-hover); color: var(--ks-color-text); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); white-space: nowrap; }
 .ks-badge.is-count { box-sizing: border-box; min-width: calc(var(--ks-type-meta) * var(--ks-line-body)); padding-inline: var(--ks-space-1); border-radius: var(--ks-radius-bar); background: var(--ks-color-danger); color: var(--ks-color-danger-contrast); text-align: center; font-variant-numeric: tabular-nums; }

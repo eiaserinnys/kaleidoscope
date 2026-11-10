@@ -177,17 +177,19 @@
 
 .ks-tree-check {
   display: inline-grid;
-  width: var(--ks-space-4);
-  height: var(--ks-space-4);
-  align-items: center;
-  justify-items: center;
+  width: calc(var(--ks-space-3) + 2 * var(--ks-line-width));
+  height: calc(var(--ks-space-3) + 2 * var(--ks-line-width));
+  place-items: center;
   border: var(--ks-line-width) solid var(--ks-color-muted);
-  border-radius: var(--ks-radius-small);
+  border-radius: calc(var(--ks-space-1) - var(--ks-line-width));
   color: var(--ks-color-accent);
   cursor: pointer;
 }
 
-.ks-file-tree-row[aria-disabled="true"] .ks-tree-check { cursor: default; }
+.ks-tree-check > svg { width: 100%; height: 100%; }
+
+.ks-file-tree-row[aria-disabled="true"] .ks-tree-check,
+.ks-file-tree-create-row .ks-tree-check { cursor: default; }
 
 .ks-tree-name.is-checked {
   color: var(--ks-color-muted);

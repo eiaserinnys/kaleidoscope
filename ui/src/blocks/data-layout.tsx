@@ -1,5 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant, useWindowData } from "../data/window-data";
@@ -10,6 +10,9 @@ import { ErrorId, IconButton } from "../components/primitives";
 import { Menu } from "../components/menu";
 import { MarkdownText } from "./markdown-text";
 import { renderBlock } from "../render/render-block";
+import { TreeEditInput } from "../components/tree/tree-edit-row";
+import { useItemScope } from "../data/item-scope";
+import { useItemMenu } from "./item-menu";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data/window-state";
 import { eventModifiers } from "../runtime/shortcuts";
 import { formatClockTime, isClock, useClockPosition } from "../data/clock";
@@ -298,17 +301,77 @@ export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
 
 export function SectionBlock({ block, context, pointer }: Props<"section">) {
   const blockRoot = useBlockRootProps();
+  const data = useWindowData();
+  const scope = useItemScope();
   const title = useBinding(`${pointer}/title`, block.title);
   const meta = useBinding(`${pointer}/meta`, block.meta ?? null);
+  const editingValue = useBinding(`${pointer}/editing`, block.editing ?? false);
+  const menu = useItemMenu(block.menu, pointer, true);
   const [collapsed, setCollapsed] = useState(Boolean(block.collapsed));
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
+  const [ended, setEnded] = useState(false);
+  const [pending, setPending] = useState<{ text: string; base: unknown } | null>(null);
+  const editingFlag = editingValue.status === "ready" && editingValue.value === true;
+  // 앱이 editing을 다시 켤 때(꺼졌다 켜지는 전이) 지역 종료 표시를 거둔다.
+  const previousEditing = useRef(false);
+  useEffect(() => {
+    if (editingFlag && !previousEditing.current) setEnded(false);
+    previousEditing.current = editingFlag;
+  }, [editingFlag]);
+  const titleValue = title.status === "ready" ? title.value : null;
+  // 확정한 이름은 앱 값이 처음 값에서 바뀌면 거둔다. 그 전까지는 친 이름을 제목으로 보인다.
+  useEffect(() => {
+    if (pending === null) return;
+    if (JSON.stringify(titleValue) !== JSON.stringify(pending.base)) setPending(null);
+  }, [pending, titleValue]);
+  const editing = block.on_edit !== undefined && editingFlag && !ended;
+  // 글칸이 사라진 뒤 초점이 갈 곳이 없으면 머리의 접기 단추로 돌린다.
+  const wasEditing = useRef(false);
+  useLayoutEffect(() => {
+    if (wasEditing.current && !editing) {
+      const active = document.activeElement;
+      if (!active || active === document.body || !active.isConnected) toggleRef.current?.focus({ preventScroll: true });
+    }
+    wasEditing.current = editing;
+  }, [editing]);
   // 머리 전체가 접기 단추다(빈 곳을 눌러도 접힌다). 상태 단추(로그인, 다시 받기)는 단추 밖 형제로 둔다.
-  const titleText = title.status === "ready" && title.value !== null ? <span className="ks-data-section-title">{display(title.value)}</span> : null;
+  const shownTitle = pending !== null && JSON.stringify(titleValue) === JSON.stringify(pending.base) ? pending.text : titleValue;
+  const titleText = shownTitle !== null && shownTitle !== undefined ? <span className="ks-data-section-title">{display(shownTitle)}</span> : null;
   const metaText = block.meta !== undefined && meta.status === "ready" && meta.value !== null ? <span className="ks-data-section-meta">{display(meta.value)}</span> : null;
   const actions = block.actions?.map((action, index) => <div className="ks-data-section-action" key={index}>{renderBlock(action, context, `${pointer}/actions/${index}`)}</div>);
+  const initialName = title.status === "ready" && title.value !== null ? display(title.value) : "";
+  const commitEdit = (draft: string) => {
+    const next = draft.trim();
+    setEnded(true);
+    if (next.length === 0 || next === initialName) {
+      setPending(null);
+      void data.act(`${pointer}/on_edit_cancel`, null);
+      return;
+    }
+    setPending({ text: next, base: titleValue });
+    void data.act(`${pointer}/on_edit`, next);
+  };
+  const cancelEdit = () => {
+    setEnded(true);
+    setPending(null);
+    void data.act(`${pointer}/on_edit_cancel`, null);
+  };
+  const openMenu = block.menu?.length ? (event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || target.closest(".ks-data-section-actions") || target.closest("input, textarea, [contenteditable='true']")) return;
+    menu.open(event, toggleRef.current ?? event.currentTarget, scope?.item, scope === null ? pointer : String(scope.key), "제목 복사", initialName);
+  } : undefined;
   return <section {...blockRoot} className="ks-data-section">
-    <div className="ks-data-section-header">
-      {block.collapsible
-        ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={titleText === null ? collapsed ? "펼치기" : "접기" : undefined} onClick={() => setCollapsed(!collapsed)} type="button">
+    <div className={`ks-data-section-header${editing ? " is-editing" : ""}`} onContextMenu={openMenu}>
+      {editing ? <>
+        {block.collapsible
+          ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "펼치기" : "접기"} onClick={() => setCollapsed(!collapsed)} ref={toggleRef} type="button">
+            {collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />}
+          </button>
+          : null}
+        <TreeEditInput ariaLabel="구역 이름" value={initialName} onCancel={cancelEdit} onCommit={commitEdit} />
+      </> : block.collapsible
+        ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={titleText === null ? collapsed ? "펼치기" : "접기" : undefined} onClick={() => setCollapsed(!collapsed)} ref={toggleRef} type="button">
           {collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />}
           <span className="ks-data-section-heading">{titleText}{metaText}</span>
         </button>
@@ -318,6 +381,7 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
     <BindingFailureNotice value={title} />
     <DormantPointer dormant={collapsed} pointer={`${pointer}/child`} />
     {!collapsed ? <div className="ks-data-section-child">{renderBlock(block.child, context, `${pointer}/child`)}</div> : null}
+    {menu.dialog}
   </section>;
 }
 
