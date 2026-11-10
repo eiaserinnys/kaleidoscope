@@ -175,7 +175,7 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
     crate::process_host::server_changed(inner);
     crate::realtime_host::shutdown_sessions(inner);
     crate::client_services::server_changed(inner);
-    let changed = {
+    let result = (|| {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
         crate::store_server_consent::shutdown(inner);
@@ -186,15 +186,16 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         *inner.link_file.lock().unwrap() = None;
         state.sync = Default::default();
         inner.link_connecting.store(false, Ordering::SeqCst);
-        set_link_locked(&mut state, LinkStatus::Unlinked {})
-    };
+        Ok(set_link_locked(&mut state, LinkStatus::Unlinked {}))
+    })();
+    // 연결 파일 정리가 실패해 일찍 돌아가도 이미 지운 쉘 동의는 화면에 알린다.
+    crate::installation_consent::flush_closed(inner);
+    let changed = result?;
     crate::process_host::rebind_unlinked(inner, &previous_scope);
     if changed {
         inner.layout_signal.notify();
         emit_state(inner);
     }
-    // 이미 연결이 없어 상태 이벤트를 내보내지 않았어도 닫힌 쉘 동의는 알린다.
-    crate::installation_consent::flush_closed(inner);
     Ok(CoreReply::LinkUnlink {})
 }
 

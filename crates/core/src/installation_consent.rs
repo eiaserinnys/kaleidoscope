@@ -57,10 +57,19 @@ pub(crate) fn register_shell(inner: &Arc<Inner>, generation: u64, release: u32, 
     let owner = InstallConsentOwner::Shell { generation, request_id: request_id.clone() };
     {
         let mut pending = inner.installation_consents.pending.lock().unwrap();
-        if inner.shutting_down.load(Ordering::SeqCst) { return Ok(None); }
+        // 등록하는 사이 링크 세대가 바뀌었으면 곧 지워질 동의다. 창을 열지 않고 끝낸다.
+        if inner.shutting_down.load(Ordering::SeqCst) || inner.generation.load(Ordering::SeqCst) != generation {
+            return Ok(None);
+        }
         pending.insert(request_id.clone(), Pending { owner: owner.clone(), digest: digest.into(), reply, outcome: Some(outcome_receiver) });
     }
     emit(inner, owner, request_id.clone(), release, store_url, digest, definition, from_origin, replacing, modified);
+    // 열림을 보내는 사이 링크가 바뀌어 지워졌을 수 있다. 그때는 닫힘을 한 번 더 보내 만료된 창이 남지 않게 한다.
+    // 화면은 같은 request_id의 닫힘을 두 번 받아도 무해하다.
+    let still_pending = inner.installation_consents.pending.lock().unwrap().contains_key(&request_id);
+    if !still_pending {
+        inner.emit(&CoreEvent::AppInstallPermissionClosed { request_id: request_id.clone() });
+    }
     Ok(Some((request_id, receiver, outcome)))
 }
 

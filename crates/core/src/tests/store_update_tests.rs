@@ -775,7 +775,7 @@ fn returning_to_the_local_server_reports_the_closed_shell_consent() {
     *core.inner.store_transport.lock().unwrap() = Some(Arc::new(crate::store::tests::fixture().0));
     let closed = closed_consents(&core);
     let consent = pending_shell_consent(&core, &registry);
-    // use_local은 세대만 올리고 shutdown_shell을 부르지 않는다. 세대 비교로 닫힌 동의를 알린다.
+    // use_local은 다른 링크 전환처럼 쉘 동의를 지우고, 잠금을 놓은 뒤 닫힘을 화면에 알린다.
     core.handle(CoreRequest::LinkUseLocal {}).unwrap();
     assert_eq!(
         closed.recv_timeout(Duration::from_secs(5)).unwrap(),
@@ -800,6 +800,90 @@ fn a_user_answer_does_not_report_a_close() {
         closed.recv_timeout(Duration::from_millis(300)).is_err(),
         "화면이 이미 아는 사용자 응답은 닫힘이 아니다"
     );
+}
+
+/// 열림을 보내는 사이 다른 스레드가 동의를 닫으면, 늦은 열림 뒤에 닫힘을 한 번 더 보내 창이 남지 않게 한다.
+#[test]
+fn a_close_that_lands_during_open_is_reported_after_the_open() {
+    let (_temp, core, _registry) = setup();
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let inner = Arc::clone(&core.inner);
+    let log = Arc::clone(&events);
+    core.subscribe(Box::new(move |event| match event {
+        CoreEvent::AppInstallPermission { request_id, .. } => {
+            log.lock().unwrap().push(("open".to_string(), request_id.clone()));
+            // 열림을 보내는 도중에 링크가 바뀐 경우를 흉내 낸다.
+            crate::installation_consent::shutdown_shell(&inner);
+        }
+        CoreEvent::AppInstallPermissionClosed { request_id } => {
+            log.lock().unwrap().push(("close".to_string(), request_id.clone()));
+        }
+        _ => {}
+    }));
+    let definition: kaleidoscope_contract::AppDefinition = serde_json::from_value(json!({
+        "id":"fixture", "name":"보기", "requires":{"blocks":1,"modules":{}},
+        "permissions":[], "ui":{"type":"text","value":"보기"}
+    }))
+    .unwrap();
+    let registered = crate::installation_consent::register_shell(
+        &core.inner, generation(&core), 3, STORE, "digest", &definition, None, false, false,
+    )
+    .unwrap();
+    let (request_id, _receiver, _outcome) = registered.expect("동의를 등록한다");
+    let events = events.lock().unwrap();
+    let kinds: Vec<&str> = events.iter().map(|(kind, _)| kind.as_str()).collect();
+    assert_eq!(kinds, ["open", "close"], "열림 뒤에 닫힘이 나가야 한다");
+    assert!(events.iter().all(|(_, id)| *id == request_id));
+}
+
+/// 등록 시점에 이미 링크 세대가 바뀌었으면 동의 창을 열지 않는다.
+#[test]
+fn registering_a_consent_for_a_stale_generation_opens_no_window() {
+    let (_temp, core, _registry) = setup();
+    let definition: kaleidoscope_contract::AppDefinition = serde_json::from_value(json!({
+        "id":"fixture", "name":"보기", "requires":{"blocks":1,"modules":{}},
+        "permissions":[], "ui":{"type":"text","value":"보기"}
+    }))
+    .unwrap();
+    let registered = crate::installation_consent::register_shell(
+        &core.inner, generation(&core) + 1, 3, STORE, "digest", &definition, None, false, false,
+    )
+    .unwrap();
+    assert!(registered.is_none(), "세대가 바뀐 동의는 등록하지 않는다");
+}
+
+/// 링크 세대가 오르면 대기 중인 쉘 동의를 닫힘으로 알린다.
+#[test]
+fn a_generation_change_closes_the_pending_shell_consent() {
+    let (_temp, core, registry) = setup();
+    let closed = closed_consents(&core);
+    let consent = pending_shell_consent(&core, &registry);
+    core.inner.generation.fetch_add(1, Ordering::SeqCst);
+    crate::installation_consent::state_changed(&core.inner);
+    assert_eq!(
+        closed.recv_timeout(Duration::from_secs(5)).unwrap(),
+        consent.request_id
+    );
+    assert!(closed.recv_timeout(Duration::from_millis(300)).is_err());
+}
+
+/// 연결 파일 정리가 실패해 일찍 돌아가도 이미 지운 쉘 동의는 화면에 알린다.
+#[test]
+fn an_unlink_failure_still_reports_the_closed_shell_consent() {
+    let (_temp, core, registry) = setup();
+    let closed = closed_consents(&core);
+    let consent = pending_shell_consent(&core, &registry);
+    // 연결 파일 자리에 폴더를 두어 정리(remove_file)가 실패하게 만든다.
+    let path = core.inner.data_dir.join("link.json");
+    let _ = std::fs::remove_file(&path);
+    std::fs::create_dir(&path).unwrap();
+    let error = core.handle(CoreRequest::LinkUnlink {}).unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("DESK_LOCAL_LINK_REMOVE_FAILED"));
+    assert_eq!(
+        closed.recv_timeout(Duration::from_secs(5)).unwrap(),
+        consent.request_id
+    );
+    assert!(closed.recv_timeout(Duration::from_millis(300)).is_err());
 }
 
 #[test]
