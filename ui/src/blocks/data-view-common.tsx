@@ -93,8 +93,15 @@ export function useVirtualRows(count: number, estimate: number, supplied?: RefOb
     return !old.virtual.getVirtualItems().some((row) => row.end > offset && row.start < offset + (size ?? 0)
       && old.keys[row.index]?.some((key) => next.has(key)));
   }, [rowKeys]);
+  // 행 높이를 자리 번호가 아니라 줄에 담긴 항목으로 기억한다. 창 폭이 바뀌면 같은 항목이
+  // 다른 줄 묶음으로 나뉘어 자리 번호의 뜻이 달라지는데, 자리 번호로 기억하면 예전 폭에서
+  // 잰 높이가 남아 전체 높이와 스크롤 자리가 어긋난다.
+  const rowIdentity = useMemo(() => rowKeys
+    ? (index: number) => `${index}\u0000${rowKeys[index]?.join("\u0001") ?? ""}`
+    : undefined, [rowKeys]);
   const virtual = useVirtualizer({
-    count, getScrollElement: () => viewport?.element ?? scroll.current, estimateSize: () => estimate, overscan: 4, horizontal, getItemKey,
+    count, getScrollElement: () => viewport?.element ?? scroll.current, estimateSize: () => estimate, overscan: 4, horizontal,
+    getItemKey: getItemKey ?? rowIdentity,
     scrollMargin: viewport?.margin ?? 0,
     scrollPaddingStart: scrollPadding?.start ?? 0,
     scrollPaddingEnd: scrollPadding?.end ?? 0,

@@ -37,6 +37,90 @@ CUSTOM = "커스텀 앱"
 STATUS_OTHER = "사설 1에서 설치한 앱입니다. 스토어 판으로 바꿀 수 있습니다."
 STATUS_MODIFIED = "설치 뒤 고친 앱이라 업데이트하지 않습니다"
 ERROR_TEXT = "스토어가 요청을 거부했습니다. 잠시 뒤 다시 받으세요."
+# 초점이 어디에 있는지, 그 조작이 어느 칸에 있고 지금 보이는지 한 번에 잰다.
+ACTIVE_JS = """() => {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return null;
+  const pane = el.closest('.ks-split-pane');
+  const parent = pane ? pane.parentElement : null;
+  const panes = parent ? [...parent.children].filter((child) => child.classList && child.classList.contains('ks-split-pane')) : [];
+  const style = getComputedStyle(el);
+  const rect = el.getBoundingClientRect();
+  const dialog = el.closest('.ks-dialog');
+  return {
+    tag: el.tagName,
+    role: el.getAttribute('role'),
+    label: el.getAttribute('aria-label'),
+    text: (el.innerText || '').trim().slice(0, 80),
+    pane: pane ? panes.indexOf(pane) : -1,
+    in_dialog: Boolean(dialog),
+    dialog_role: dialog ? dialog.getAttribute('role') : null,
+    visible: style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0,
+    hidden_ancestor: Boolean(el.closest('[hidden], [inert], [aria-hidden="true"]')),
+    tab_index: el.tabIndex,
+  };
+}"""
+# 최소 창에서 가로로 넘치는 칸과 상세 칸 밖으로 나가거나 겹치는 단추를 찾는다.
+OVERFLOW_JS = """(root) => {
+  const box = (el) => { const r = el.getBoundingClientRect(); return {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height}; };
+  // 창 바깥 상자(.ks-window)는 크기 조절 손잡이를 일부러 밖으로 내놓아 overflow가 늘 크다.
+  // 내용이 실제로 넘치는지는 내용을 자르는 틀과 그 안쪽에서 잰다.
+  const targets = [root.querySelector('.ks-window-frame'), root.querySelector('.ks-window-content'),
+    ...root.querySelectorAll('.ks-data-window-body, .ks-split, .ks-split-pane, .ks-data-toolbar, .ks-list, .ks-properties, .ks-data-stack')].filter(Boolean);
+  const overflow = targets
+    .filter((el) => el.scrollWidth > el.clientWidth + 1)
+    .map((el) => ({tag: el.tagName, className: String(el.className), scrollWidth: el.scrollWidth, clientWidth: el.clientWidth}));
+  const panes = [...root.querySelectorAll('.ks-split-pane')];
+  const pane = panes[panes.length - 1];
+  const paneBox = pane ? pane.getBoundingClientRect() : null;
+  const buttons = pane ? [...pane.querySelectorAll('button')].filter((el) => {
+    const style = getComputedStyle(el); const rect = el.getBoundingClientRect();
+    return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+  }) : [];
+  const outside = buttons
+    .map((el) => ({label: el.getAttribute('aria-label') || (el.innerText || '').trim(), ...box(el)}))
+    .filter((item) => !paneBox || item.left < paneBox.left - 1 || item.right > paneBox.right + 1);
+  const overlaps = [];
+  for (let first = 0; first < buttons.length; first += 1) {
+    for (let second = first + 1; second < buttons.length; second += 1) {
+      const a = buttons[first].getBoundingClientRect(); const b = buttons[second].getBoundingClientRect();
+      const width = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const height = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (width > 1 && height > 1) overlaps.push([
+        buttons[first].getAttribute('aria-label') || (buttons[first].innerText || '').trim(),
+        buttons[second].getAttribute('aria-label') || (buttons[second].innerText || '').trim(),
+      ]);
+    }
+  }
+  return {overflow, outside, overlaps};
+}"""
+# 긴 주소가 들어간 동의 창이 최소 창에서 넘치는지 잰다.
+CONSENT_JS = """() => {
+  const dialog = document.querySelector('.ks-install-consent .ks-dialog');
+  if (!dialog) return null;
+  const box = (el) => { const r = el.getBoundingClientRect(); return {left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height}; };
+  const overflow = [dialog, ...dialog.querySelectorAll('.ks-dialog-body, .ks-dialog-title')]
+    .filter((el) => el.scrollWidth > el.clientWidth + 1)
+    .map((el) => ({tag: el.tagName, className: String(el.className), scrollWidth: el.scrollWidth, clientWidth: el.clientWidth}));
+  const rect = dialog.getBoundingClientRect();
+  const buttons = [...dialog.querySelectorAll('.ks-dialog-actions button')].map((el) => ({label: el.getAttribute('aria-label') || (el.innerText || '').trim(), ...box(el)}));
+  const outside = buttons.filter((item) => item.left < rect.left - 1 || item.right > rect.right + 1);
+  return {rect: box(dialog), viewport: {width: window.innerWidth, height: window.innerHeight}, overflow, buttons, outside};
+}"""
+LIST_SCROLL_JS = """(pane) => {
+  const list = pane.querySelector('.ks-list');
+  if (!list) return null;
+  const box = list.getBoundingClientRect();
+  // 창 폭이 바뀌면 줄 높이가 달라져 scrollTop만으로는 같은 자리인지 알 수 없다.
+  // 화면 맨 위에 걸친 항목과 그 항목이 목록 위에서 떨어진 거리를 함께 남긴다.
+  const visible = [...list.querySelectorAll('[data-row-key][role="option"]')].map((node) => {
+    const rect = node.getBoundingClientRect();
+    return {key: node.getAttribute('data-row-key'), title: node.getAttribute('aria-label'),
+            top: Math.round(rect.top - box.top), bottom: Math.round(rect.bottom - box.top)};
+  }).filter((item) => item.bottom > 0 && item.top < box.height).sort((a, b) => a.top - b.top);
+  return {top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight,
+          first: visible.length ? visible[0] : null};
+}"""
 
 
 def load_sandbox():
@@ -132,6 +216,7 @@ def main() -> int:
         "settings_captures": [],
         "windows": {},
         "assertions": {},
+        "details": {},
         "console": [],
         "apps": [],
         "fake_store_requests": {},
@@ -288,6 +373,28 @@ def main() -> int:
                         wait_until(lambda: dialog.count() > 0 and dialog.first.is_visible(), 20,
                                    "설치 동의 창이 없습니다")
                         return dialog
+
+                    def active_info():
+                        return page.evaluate(ACTIVE_JS)
+
+                    def assert_focused(locator, message):
+                        assert locator.first.evaluate("el => document.activeElement === el"), \
+                            f"{message}: {active_info()}"
+
+                    def assert_dialog_first_action(dialog, message):
+                        first_action = dialog.locator(".ks-dialog-actions > button").first
+                        wait_until(lambda: first_action.count() > 0, 10, f"{message}: 동작 단추가 없습니다")
+                        assert_focused(first_action, message)
+
+                    def assert_content_focus(message):
+                        inside = app.evaluate(
+                            "(root) => Boolean(document.activeElement) && root.contains(document.activeElement)"
+                            " && Boolean(document.activeElement.closest('.ks-data-window-body'))")
+                        assert inside, f"{message}: {active_info()}"
+
+                    def close_menu(menu):
+                        wait_until(lambda: menu.count() == 0 or not menu.first.is_visible(), 10,
+                                   "메뉴가 닫히지 않았습니다")
 
                     def reopen():
                         # 새 창의 데이터 런타임은 값이 없어 처음 받는 동안 로딩 표시가 보인다.
@@ -546,6 +653,11 @@ def main() -> int:
                         reopen()
                         wait_until(lambda: pane1.inner_text().count(ERROR_TEXT) >= 2, 30,
                                    "가짜 스토어 실패 상태가 두 곳에 보이지 않습니다")
+                        retry_buttons = pane1.get_by_role("button", name="다시 받기", exact=True).count()
+                        assert retry_buttons >= 3, \
+                            f"스토어 실패 화면에 다시 받기 길이 모자랍니다: {retry_buttons}개"
+                        result["details"]["store_failure_retry_buttons"] = retry_buttons
+                        result["assertions"]["store_failure_has_retry"] = True
                         capture("store-failure", pane=1)
                         operate()
                         choose_category(CUSTOM)
@@ -563,6 +675,311 @@ def main() -> int:
                             "option", name="나중에 읽기", exact=True).count() > 0, 30,
                             "실패를 푼 뒤 사설 2 목록이 돌아오지 않았습니다")
                         search("")
+
+                        # §0 14~18: 초점, Tab, 최소 폭, 실패, 크기 바꾸기.
+                        # 장면마다 필요한 상태만 만들고 그 밖의 조합은 늘리지 않는다.
+                        operate()
+                        choose_category(CUSTOM)
+                        search("")
+                        import_file(write_definition(fixture.LONG_ID, fixture.LONG_NAME,
+                                                     "긴 이름과 긴 id를 가진 표본입니다.", "custom-long"))
+                        wait_until(lambda: pane1.get_by_role(
+                            "option", name=fixture.LONG_NAME, exact=True).count() > 0, 30,
+                            "긴 이름 커스텀 앱이 목록에 없습니다")
+                        wait_custom_count(3)
+                        long_row = pane1.get_by_role("option", name=fixture.LONG_NAME, exact=True)
+                        long_row.first.click()
+                        select_button = pane2.locator("button.ks-select-button")
+                        convert = pane2.get_by_role("button", name="스토어 판으로 바꾸기", exact=True)
+                        wait_until(lambda: select_button.count() > 0, 30, "긴 앱의 스토어 고르기가 없습니다")
+
+                        # §0 16: 360x241에서 긴 이름, 긴 id, 긴 주소 동의 창이 가로로 넘치지 않는지 잰다.
+                        page.emulate_media(color_scheme="light")
+                        page.set_viewport_size({"width": SIZES[1][0] + 24, "height": SIZES[1][1] + 124})
+                        page.wait_for_timeout(200)
+                        set_rect(sb, window_id, *SIZES[1])
+                        page.wait_for_timeout(250)
+                        focus_pane(2)
+                        page.wait_for_timeout(200)
+                        narrow = app.evaluate(OVERFLOW_JS)
+                        result["details"]["narrow_long_name"] = narrow
+                        assert not narrow["overflow"], f"최소 폭에서 가로로 넘칩니다: {narrow['overflow']}"
+                        assert not narrow["outside"], \
+                            f"최소 폭에서 단추가 상세 칸 밖으로 나갑니다: {narrow['outside']}"
+                        assert not narrow["overlaps"], f"최소 폭에서 단추가 겹칩니다: {narrow['overlaps']}"
+                        result["assertions"]["narrow_no_horizontal_overflow"] = True
+                        page.mouse.move(2, 2)
+                        app.screenshot(path=str(output / "narrow-long-name-light-360x241.png"),
+                                       animations="disabled")
+                        result["captures"].append("narrow-long-name-light-360x241.png")
+                        print("capture narrow-long-name-light-360x241.png", flush=True)
+
+                        select_button.first.click()
+                        menu = page.locator(".ks-menu")
+                        wait_until(lambda: menu.count() > 0 and menu.first.is_visible(), 10,
+                                   "스토어 고르기 메뉴가 없습니다")
+                        page.get_by_role("menuitem", name="사설 1", exact=True).click()
+                        wait_until(lambda: convert.first.is_enabled(), 20,
+                                   "최소 폭에서 후보를 골라도 바꾸기 단추가 꺼져 있습니다")
+                        convert.first.click()
+                        consent = confirm_install_dialog()
+                        page.wait_for_timeout(250)
+                        consent_text = consent.first.inner_text()
+                        assert a_url in consent_text, f"동의 창에 긴 주소가 없습니다: {consent_text!r}"
+                        dialog_facts = app.evaluate(CONSENT_JS)
+                        result["details"]["narrow_consent"] = dialog_facts
+                        assert dialog_facts is not None, "동의 창 상자를 재지 못했습니다"
+                        consent_rect = dialog_facts["rect"]
+                        assert consent_rect["left"] >= -1 and \
+                            consent_rect["right"] <= dialog_facts["viewport"]["width"] + 1, \
+                            f"동의 창이 화면 밖으로 나갑니다: {consent_rect}"
+                        assert not dialog_facts["overflow"], \
+                            f"동의 창 안에서 가로로 넘칩니다: {dialog_facts['overflow']}"
+                        assert not dialog_facts["outside"], \
+                            f"동의 창 단추가 창 밖으로 나갑니다: {dialog_facts['outside']}"
+                        result["assertions"]["narrow_consent_no_overflow"] = True
+                        app.screenshot(path=str(output / "narrow-consent-light-360x241.png"),
+                                       animations="disabled")
+                        result["captures"].append("narrow-consent-light-360x241.png")
+                        print("capture narrow-consent-light-360x241.png", flush=True)
+                        assert_dialog_first_action(consent, "바꾸기 동의 창의 첫 동작에 초점이 없습니다")
+                        result["assertions"]["focus_convert_consent_first_action"] = True
+                        page.keyboard.press("Escape")
+                        wait_until(lambda: consent.count() == 0 or not consent.first.is_visible(), 20,
+                                   "바꾸기 동의 창이 Esc로 닫히지 않았습니다")
+                        assert_focused(convert, "동의 창을 Esc로 닫은 뒤 초점이 바꾸기 단추로 돌아오지 않았습니다")
+                        assert app_entry(fixture.LONG_ID) is not None and \
+                            app_entry(fixture.LONG_ID).get("origin") is None, \
+                            "동의를 취소했는데 앱이 바뀌었습니다"
+                        result["assertions"]["focus_convert_consent_esc_returns"] = True
+
+                        # §0 14: 스토어 고르기 메뉴를 Esc로 닫으면 고르기 단추로 초점이 돌아온다.
+                        operate()
+                        select_button.first.focus()
+                        select_button.first.click()
+                        wait_until(lambda: menu.count() > 0 and menu.first.is_visible(), 10,
+                                   "스토어 고르기 메뉴가 없습니다")
+                        page.keyboard.press("Escape")
+                        close_menu(menu)
+                        assert_focused(select_button, "고르기 메뉴를 Esc로 닫은 뒤 초점이 돌아오지 않았습니다")
+                        wait_custom_count(3)
+                        result["assertions"]["focus_select_esc_returns"] = True
+
+                        # §0 17: 전환 후보를 고른 뒤 상세 요청이 실패하면 안내와 다시 받기가 보이고,
+                        # 도구 막대의 다시 받기로 회복하면 바꾸기 단추가 다시 켜진다.
+                        operate()
+                        store_a.fail_apps = {fixture.LONG_ID}
+                        pane1.get_by_role("option", name=fixture.CUSTOM_READING, exact=True).click()
+                        page.wait_for_timeout(200)
+                        long_row.first.click()
+                        # 바꿀 스토어를 이 장면에서 직접 고른다. 앞 장면이 남긴 상태에 기대지 않는다.
+                        select_button.first.click()
+                        wait_until(lambda: menu.count() > 0 and menu.first.is_visible(), 10,
+                                   "전환 실패 장면의 스토어 고르기 메뉴가 없습니다")
+                        page.get_by_role("menuitem", name="사설 1", exact=True).click()
+                        failure = pane2.locator(".ks-data-state").filter(has_text=ERROR_TEXT)
+                        wait_until(lambda: failure.count() > 0, 30,
+                                   "전환 상세 실패 안내가 보이지 않습니다")
+                        failure_text = failure.first.inner_text()
+                        assert "STORECLIENT_FETCH_HTTP_REJECTED" in failure_text, failure_text
+                        assert failure.first.get_by_role(
+                            "button", name="다시 받기", exact=True).count() == 1, \
+                            "전환 실패 안내에 다시 받기가 없습니다"
+                        assert convert.first.is_disabled(), "전환 상세가 실패했는데 바꾸기 단추가 켜져 있습니다"
+                        result["details"]["convert_failure"] = failure_text
+                        result["assertions"]["convert_failure_shows_notice"] = True
+                        capture("convert-failure", pane=2)
+                        operate()
+                        store_a.fail_apps = set()
+                        refresh()
+                        wait_until(lambda: pane2.locator(".ks-data-state").filter(
+                            has_text=ERROR_TEXT).count() == 0, 30,
+                            "다시 받은 뒤에도 전환 실패 안내가 남아 있습니다")
+                        wait_until(lambda: convert.first.is_enabled(), 20,
+                                   "다시 받은 뒤에도 바꾸기 단추가 꺼져 있습니다")
+                        result["assertions"]["convert_retry_recovers"] = True
+
+                        # §0 18: 커스텀 상세를 연 채 목록만 길게 만들고, 1180 -> 360 -> 1180으로
+                        # 크기를 바꾸며 목록 스크롤이 남는지, 메뉴가 옛 자리에 남지 않는지 잰다.
+                        operate()
+                        choose_category("전체")
+                        search("")
+                        wait_until(lambda: pane1.get_by_role("option").count() > 10, 30,
+                                   "스크롤할 만큼 목록이 길지 않습니다")
+                        page.wait_for_timeout(300)
+                        initial_scroll = pane1.evaluate(LIST_SCROLL_JS)
+                        assert initial_scroll and initial_scroll["height"] > initial_scroll["client"] + 20, \
+                            f"목록이 스크롤되지 않습니다: {initial_scroll}"
+                        pane1.evaluate("(pane) => { const list = pane.querySelector('.ks-list');"
+                                       " if (list) list.scrollTop = 240; }")
+                        page.wait_for_timeout(200)
+                        before_scroll = pane1.evaluate(LIST_SCROLL_JS)
+                        assert before_scroll["top"] > 100, f"목록 스크롤을 옮기지 못했습니다: {before_scroll}"
+                        select_button.first.click()
+                        wait_until(lambda: menu.count() > 0 and menu.first.is_visible(), 10,
+                                   "크기 바꾸기 전 스토어 고르기 메뉴가 없습니다")
+                        wide_menu = menu.first.bounding_box()
+                        page.emulate_media(color_scheme="light")
+                        page.set_viewport_size({"width": SIZES[1][0] + 24, "height": SIZES[1][1] + 124})
+                        page.wait_for_timeout(200)
+                        set_rect(sb, window_id, *SIZES[1])
+                        page.wait_for_timeout(400)
+                        narrow_menu = menu.first.bounding_box()
+                        assert narrow_menu is not None, "크기를 바꾸는 동안 스토어 고르기 메뉴가 사라졌습니다"
+                        viewport = page.viewport_size
+                        assert narrow_menu["x"] >= -1 and \
+                            narrow_menu["x"] + narrow_menu["width"] <= viewport["width"] + 1 and \
+                            narrow_menu["y"] >= -1 and \
+                            narrow_menu["y"] + narrow_menu["height"] <= viewport["height"] + 1, \
+                            f"메뉴가 화면 밖 옛 자리에 남았습니다: {narrow_menu} (화면 {viewport})"
+                        assert wide_menu is not None and abs(narrow_menu["x"] - wide_menu["x"]) > 10, \
+                            f"메뉴가 옛 좌표에 그대로 있습니다: 넓을 때 {wide_menu}, 좁을 때 {narrow_menu}"
+                        result["details"]["resize_menu"] = {"wide": wide_menu, "narrow": narrow_menu}
+                        result["assertions"]["resize_menu_anchor_fresh"] = True
+                        stacked_narrow = app.locator(".ks-split").first.evaluate(
+                            "el => el.classList.contains('is-stacked')")
+                        assert stacked_narrow, "최소 폭에서 칸이 세로로 접히지 않았습니다"
+                        result["assertions"]["resize_reflows_360"] = True
+                        page.mouse.move(2, 2)
+                        page.screenshot(path=str(output / "resize-menu-open-360x241.png"),
+                                        animations="disabled")
+                        result["captures"].append("resize-menu-open-360x241.png")
+                        print("capture resize-menu-open-360x241.png", flush=True)
+                        page.keyboard.press("Escape")
+                        close_menu(menu)
+                        assert_focused(select_button, "크기를 바꾼 뒤 메뉴를 닫아도 초점이 돌아오지 않았습니다")
+                        narrow_scroll = pane1.evaluate(LIST_SCROLL_JS)
+                        page.set_viewport_size({"width": SIZES[0][0] + 24, "height": SIZES[0][1] + 124})
+                        page.wait_for_timeout(200)
+                        set_rect(sb, window_id, *SIZES[0])
+                        page.wait_for_timeout(400)
+                        stacked_back = app.locator(".ks-split").first.evaluate(
+                            "el => el.classList.contains('is-stacked')")
+                        assert not stacked_back, "넓은 폭에서 칸이 세로로 접힌 채입니다"
+                        back_scroll = pane1.evaluate(LIST_SCROLL_JS)
+                        result["details"]["resize_scroll"] = {
+                            "before": before_scroll, "narrow": narrow_scroll, "back": back_scroll}
+                        assert back_scroll and back_scroll["height"] > back_scroll["client"], \
+                            f"돌아온 넓은 폭에서 목록이 스크롤되지 않습니다: {back_scroll}"
+                        assert before_scroll["first"] and back_scroll["first"], \
+                            f"목록의 보던 자리를 재지 못했습니다: {before_scroll} -> {back_scroll}"
+                        # 줄 높이는 창 폭에 따라 달라지므로 scrollTop 대신 화면 맨 위에 걸친 항목으로 견준다.
+                        assert back_scroll["first"]["key"] == before_scroll["first"]["key"], \
+                            "크기를 바꾸는 동안 목록의 보던 자리가 바뀌었습니다: " \
+                            f"{before_scroll['first']} -> {back_scroll['first']}"
+                        assert back_scroll["first"]["top"] < 0 < back_scroll["first"]["bottom"], \
+                            f"돌아온 넓은 폭에서 보던 항목이 목록 위에 걸쳐 있지 않습니다: {back_scroll}"
+                        assert back_scroll["top"] > 100, \
+                            f"돌아온 넓은 폭에서 목록이 맨 위로 돌아갔습니다: {back_scroll}"
+                        result["assertions"]["resize_keeps_list_scroll"] = True
+                        result["assertions"]["resize_reflows_1180"] = True
+                        app.screenshot(path=str(output / "resize-list-scroll-1180x720.png"),
+                                       animations="disabled")
+                        result["captures"].append("resize-list-scroll-1180x720.png")
+                        print("capture resize-list-scroll-1180x720.png", flush=True)
+
+                        # §0 14: 파일 고르기를 취소하면 가져오기 단추로 초점이 돌아오고 앱은 그대로다.
+                        operate()
+                        choose_category(CUSTOM)
+                        search("")
+                        import_button = app.get_by_role("button", name="파일에서 가져오기")
+                        wait_until(lambda: import_button.count() > 0 and import_button.first.is_visible(), 10,
+                                   "파일에서 가져오기 단추가 없습니다")
+                        import_button.first.focus()
+                        queue.write_text("[]", encoding="utf-8")
+                        import_button.first.click()
+                        page.wait_for_timeout(700)
+                        wait_custom_count(3)
+                        assert_focused(import_button, "파일 고르기를 취소한 뒤 초점이 가져오기 단추로 돌아오지 않았습니다")
+                        result["assertions"]["focus_import_cancel_returns"] = True
+
+                        # §0 14: 지우기 확인 창은 첫 동작(취소)에 초점을 두고, Esc로 닫으면 지우기로 돌아온다.
+                        long_row.first.click()
+                        delete_button = pane2.get_by_role("button", name="지우기", exact=True)
+                        wait_until(lambda: delete_button.count() > 0 and delete_button.first.is_enabled(), 20,
+                                   "커스텀 상세의 지우기 단추가 없습니다")
+                        delete_button.first.click()
+                        delete_dialog = app.locator(".ks-dialog")
+                        wait_until(lambda: delete_dialog.count() > 0 and delete_dialog.first.is_visible(), 20,
+                                   "지우기 확인 창이 없습니다")
+                        assert_dialog_first_action(delete_dialog, "지우기 확인 창의 첫 동작에 초점이 없습니다")
+                        result["assertions"]["focus_delete_dialog_first_action"] = True
+                        page.keyboard.press("Escape")
+                        wait_until(lambda: delete_dialog.count() == 0 or not delete_dialog.first.is_visible(), 20,
+                                   "지우기 확인 창이 Esc로 닫히지 않았습니다")
+                        assert_focused(delete_button, "지우기 확인 창을 닫은 뒤 초점이 지우기로 돌아오지 않았습니다")
+                        wait_custom_count(3)
+                        assert app.get_by_role("button", name="지우기", exact=True).count() > 0, \
+                            "Esc로 닫은 뒤 창 내용이 그대로이지 않습니다"
+                        result["assertions"]["focus_delete_esc_returns"] = True
+                        result["assertions"]["dialog_esc_keeps_window"] = True
+                        # 확인을 누른 뒤에는 고른 앱과 단추가 사라지므로 창 앞이 아니라 내용 안에 초점이 남아야 한다.
+                        delete_button.first.click()
+                        wait_until(lambda: delete_dialog.count() > 0 and delete_dialog.first.is_visible(), 20,
+                                   "지우기 확인 창이 없습니다")
+                        delete_dialog.locator(".ks-dialog-confirm button").first.click()
+                        wait_custom_count(2)
+                        wait_until(lambda: app_entry(fixture.LONG_ID) is None, 20,
+                                   "지운 커스텀 앱이 남아 있습니다")
+                        page.wait_for_timeout(500)
+                        assert_content_focus("앱을 지운 뒤 초점이 내용 밖으로 사라졌습니다")
+                        result["details"]["focus_after_delete"] = active_info()
+                        result["assertions"]["focus_delete_confirm_stays_in_content"] = True
+
+                        # §0 15: Tab 순서가 분류 목록 -> 커스텀 목록 -> 상세 동작이고,
+                        # 숨은 조작은 초점을 받지 않는다. Esc로 연 창은 그대로 둔다.
+                        pane1.get_by_role("option", name=fixture.CUSTOM_READING, exact=True).click()
+                        wait_until(lambda: pane2.get_by_role("button", name="지우기", exact=True).count() > 0,
+                                   20, "커스텀 상세의 지우기 단추가 없습니다")
+                        category_option = pane0.locator('[data-row-key="__custom"]')
+                        wait_until(lambda: category_option.count() > 0, 10, "커스텀 분류 줄이 없습니다")
+                        category_option.first.focus()
+                        page.wait_for_timeout(100)
+                        tab_records = [active_info()]
+                        for _ in range(40):
+                            page.keyboard.press("Tab")
+                            page.wait_for_timeout(60)
+                            if not app.evaluate("(root) => root.contains(document.activeElement)"):
+                                break
+                            tab_records.append(active_info())
+                        result["details"]["tab_order"] = [
+                            {key: record.get(key) for key in ("tag", "role", "label", "text", "pane",
+                                                              "visible", "hidden_ancestor", "tab_index")}
+                            for record in tab_records if record]
+                        pane_records = [record["pane"] for record in tab_records
+                                        if record and record["pane"] >= 0]
+                        assert pane_records == sorted(pane_records), \
+                            f"Tab 순서가 칸 순서와 다릅니다: {pane_records}"
+                        assert 0 in pane_records and 1 in pane_records and 2 in pane_records, \
+                            f"Tab이 세 칸을 모두 지나지 않았습니다: {pane_records}"
+                        assert any(record and record["role"] == "option" and record["pane"] == 1
+                                   for record in tab_records), "Tab이 커스텀 목록을 지나지 않았습니다"
+                        assert any(record and record["pane"] == 2 and record["tag"] == "BUTTON"
+                                   for record in tab_records), "Tab이 상세 동작을 지나지 않았습니다"
+                        assert all(record and record["visible"] and not record["hidden_ancestor"]
+                                   for record in tab_records), \
+                            f"숨은 조작이 초점을 받았습니다: {result['details']['tab_order']}"
+                        result["assertions"]["tab_order_category_list_detail"] = True
+                        result["assertions"]["tab_order_skips_hidden"] = True
+
+                        # §0 17: 너무 큰 파일을 가져오면 안내가 어디에 어떤 문구로 뜨는지 남긴다.
+                        operate()
+                        huge = write_definition("oversize-app", "너무 큰 앱", "x" * 1_100_000, "too-large")
+                        import_file(huge)
+                        notice = app.locator(".ks-data-window-notice .ks-notice")
+                        wait_until(lambda: notice.count() > 0 and notice.first.is_visible(), 20,
+                                   "너무 큰 파일 안내가 없습니다")
+                        notice_text = notice.first.inner_text()
+                        assert "too-large.json" in notice_text, notice_text
+                        assert "큽니다" in notice_text, notice_text
+                        assert "DESK_APP_IMPORT_FILE_TOO_LARGE" in notice_text, notice_text
+                        assert notice.first.get_attribute("role") == "alert", notice_text
+                        result["details"]["import_failure"] = notice_text
+                        result["assertions"]["import_failure_too_large_notice"] = True
+                        capture("import-failure-too-large", pane=1)
+                        notice.locator('[aria-label="닫기"]').first.click()
+                        wait_until(lambda: notice.count() == 0 or not notice.first.is_visible(), 10,
+                                   "가져오기 실패 안내가 닫히지 않았습니다")
                     else:
                         assert pane0.locator('[data-row-key="__custom"]').count() == 0, \
                             "이 판에 커스텀 앱 분류가 있습니다"
@@ -633,6 +1050,9 @@ def main() -> int:
                       "captures": len(result["captures"]) + len(result["settings_captures"]),
                       "assertions": result["assertions"], "teardown": result["teardown"]},
                      ensure_ascii=False, indent=2), flush=True)
+    assertions = result["assertions"]
+    print(f"{sum(1 for value in assertions.values() if value is True)}개 참 / {len(assertions)}개 단언",
+          flush=True)
     return 0
 
 

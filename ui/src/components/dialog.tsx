@@ -95,8 +95,12 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   }, [host, inertSelector, windowModal]);
   useLayoutEffect(() => {
     const owner = windowId ?? ownerOf(host);
-    if (windowModal && active && (!owner || !preserveWindowActionFocus(owner))) root.current?.focus({ preventScroll: true });
-  }, [windowModal, active]);
+    if (windowModal && active && (!owner || !preserveWindowActionFocus(owner))) {
+      // 창 대화상자도 첫 조작으로 초점을 옮긴다. 대화상자 틀에 두면 다시 그려질 때 초점이
+      // 열었던 단추로 돌아갔다가 틀에 남아, 키보드로 바로 조작할 수 없게 된다.
+      (root.current ? dialogFirstFocus(root.current) : null)?.focus({ preventScroll: true });
+    }
+  }, [windowModal, active, host]);
   useLayoutEffect(() => {
     const finished = wasBusy.current && !busy;
     wasBusy.current = busy;

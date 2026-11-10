@@ -34,6 +34,17 @@ def definition(app_id: str, name: str, text: str) -> dict:
     }
 
 
+LONG_ID = "quarterly-planning-and-decisions-archive-2026-autumn"
+LONG_NAME = "분기 계획과 결정과 후속 일을 한자리에 모아 두는 아주 긴 회의 기록 노트"
+FILLER_CATEGORIES = ("업무", "그림", "읽기")
+FILLER_APPS = [
+    {"id": f"sample-app-{index:02d}", "name": f"표본 앱 {index:02d}", "release": 1,
+     "category": FILLER_CATEGORIES[index % len(FILLER_CATEGORIES)], "publisher": "디렉터",
+     "summary": f"표본 {index:02d}번 앱의 한 줄 설명입니다.",
+     "description": f"목록이 길 때의 스크롤과 검색을 보려고 둔 표본 {index:02d}번 앱입니다."}
+    for index in range(1, 31)
+]
+
 APPS_A = [
     {"id": "meeting-cards", "name": "회의 카드", "release": 1, "category": "업무", "publisher": "디렉터",
      "summary": "회의 안건과 결정을 한 창에 모읍니다.",
@@ -41,6 +52,10 @@ APPS_A = [
     {"id": "sketch-notes", "name": "스케치 노트", "release": 1, "category": "그림", "publisher": "디렉터",
      "summary": "떠오른 그림과 메모를 모읍니다.",
      "description": "손으로 그린 그림과 짧은 메모를 한 자리에 놓고 봅니다."},
+    {"id": LONG_ID, "name": LONG_NAME, "release": 1, "category": "업무", "publisher": "디렉터",
+     "summary": "긴 이름과 긴 id로 좁은 창의 배치를 확인합니다.",
+     "description": "긴 이름과 긴 id가 좁은 창에서도 넘치지 않는지 보는 표본입니다."},
+    *FILLER_APPS,
 ]
 APPS_B = [
     {"id": "meeting-cards", "name": "회의 카드 (팀)", "release": 2, "category": "업무", "publisher": "라인게임즈",
@@ -49,6 +64,9 @@ APPS_B = [
     {"id": "read-later", "name": "나중에 읽기", "release": 1, "category": "읽기", "publisher": "라인게임즈",
      "summary": "나중에 읽을 글을 모아 둡니다.",
      "description": "주소와 한 줄 메모를 모아 두고 시간이 날 때 하나씩 엽니다."},
+    {"id": LONG_ID, "name": LONG_NAME, "release": 1, "category": "업무", "publisher": "라인게임즈",
+     "summary": "긴 이름과 긴 id로 좁은 창의 배치를 확인합니다.",
+     "description": "긴 이름과 긴 id가 좁은 창에서도 넘치지 않는지 보는 표본입니다."},
 ]
 
 CUSTOM_MEETING = "회의 카드 (내 판)"
@@ -142,7 +160,8 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if store.fail:
+        if store.fail or any(self.path.endswith(f"/apps/{app_id}/index.json")
+                             for app_id in store.fail_apps):
             self.send_response(503)
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -170,6 +189,8 @@ class FakeStore:
         self.files = store_files(prefix, apps)
         self.delay = 0.0
         self.fail = False
+        # 앱 상세(index.json)만 실패시킨다. 목록은 살아 있어야 전환 후보를 고를 수 있다.
+        self.fail_apps: set[str] = set()
         self.requests: list[tuple[float, str, str | None]] = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
         self.server.store = self

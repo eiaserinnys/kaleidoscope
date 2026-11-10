@@ -631,12 +631,12 @@ fn custom_detail_shows_version_and_single_store_conversion() {
     assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
     assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(true));
     // JSONata는 한 원소 배열을 값 하나로 접는다. 화면은 asArray로 읽으므로 같게 맞춘다.
-    let options = value(&values, "/ui/children/2/children/10/child/end/0/options");
+    let options = value(&values, "/ui/children/2/children/10/child/children/1/end/0/options");
     let options = Value::Array(options.as_array().cloned().unwrap_or_else(|| vec![options]));
     assert_eq!(options, json!([{"value":"https://a.example","label":"기본 앱스토어"}]));
-    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["end"][0]["value"], json!({"state":"custom_store"}));
-    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["end"][1]["label"], "스토어 판으로 바꾸기");
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/end/1/disabled"), json!(false));
+    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["children"][1]["end"][0]["value"], json!({"state":"custom_store"}));
+    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["children"][1]["end"][1]["label"], "스토어 판으로 바꾸기");
+    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(false));
     assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(true));
     assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(false));
 
@@ -650,7 +650,7 @@ fn custom_detail_shows_version_and_single_store_conversion() {
 
     let event = Value::Null;
     let env = Env { state:&state, data:&data, data_meta:&data_meta, storage:&empty, storage_meta:&empty, apps:Some(&apps), event:&event, item:&event, modifiers:None };
-    match app.action_step("/ui/children/2/children/10/child/end/1/on_click", 0, &env).unwrap() {
+    match app.action_step("/ui/children/2/children/10/child/children/1/end/1/on_click", 0, &env).unwrap() {
         Step::StoreInstall { permission, server, id, release, replace } => {
             assert_eq!(permission, "catalog");
             assert_eq!(server, json!("https://a.example"));
@@ -668,7 +668,7 @@ fn custom_detail_shows_version_and_single_store_conversion() {
         (5, "custom_store", Value::Null),
     ] {
         assert_eq!(
-            app.action_step("/ui/children/2/children/10/child/end/1/on_click", index, &env).unwrap(),
+            app.action_step("/ui/children/2/children/10/child/children/1/end/1/on_click", index, &env).unwrap(),
             Step::SetState { key: key.into(), value: expected }
         );
     }
@@ -709,7 +709,7 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &idle_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
     assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(true));
     assert_eq!(
-        value(&values, "/ui/children/2/children/10/child/end/0/options"),
+        value(&values, "/ui/children/2/children/10/child/children/1/end/0/options"),
         json!([
             {"value":"https://b.example","label":"사설 1"},
             {"value":"https://c.example","label":"사설 2"}
@@ -717,13 +717,13 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
     );
     // 후보가 둘이면 고르기 전에는 비어 있고 전환할 수 없다. 고르기는 고른 스토어 상태를 그대로 읽는다.
     let raw: Value = serde_json::from_str(include_str!("../../../apps/store.json")).unwrap();
-    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["end"][0]["value"], json!({"state":"custom_store"}));
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/end/1/disabled"), json!(true));
+    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["children"][1]["end"][0]["value"], json!({"state":"custom_store"}));
+    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(true));
 
     state.insert("custom_store".into(), json!("https://c.example"));
     let loading_meta = map(json!({"convert":{"state":"loading"}}));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &loading_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/end/1/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(true));
 
     let ready_meta = map(json!({"convert":{"state":"ready"}}));
     let with_convert = map(json!({
@@ -735,7 +735,7 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
         "convert":{"server":"https://c.example","release":4,"compatible":false}
     }));
     let values = app.evaluate_profiled(&state, &with_convert, &empty, &empty, &ready_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/end/1/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(true));
     let compatible = map(json!({
         "catalog":{"stores":[
             {"server":"https://a.example","state":"ready","items":[{"id":"other","name":"다른 앱"}]},
@@ -745,7 +745,7 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
         "convert":{"server":"https://c.example","release":4,"compatible":true}
     }));
     let values = app.evaluate_profiled(&state, &compatible, &empty, &empty, &ready_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/end/1/disabled"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(false));
 
     // 후보가 아닌 스토어를 기억하고 있으면 전환 대상을 잡지 않는다.
     state.insert("custom_store".into(), json!("https://a.example"));

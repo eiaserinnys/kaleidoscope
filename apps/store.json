@@ -120,7 +120,7 @@
           {
             "type": "toolbar",
             "start": [{"type": "input", "kind": "search", "value": {"state": "query"}, "on_change": {"set_state": "query"}, "placeholder": "앱 이름이나 id로 찾기"}],
-            "end": [{"type": "button", "label": "다시 받기", "icon": "refresh-cw", "icon_only": true, "variant": "ghost", "on_click": [{"refresh": ["catalog", "detail"]}]}]
+            "end": [{"type": "button", "label": "다시 받기", "icon": "refresh-cw", "icon_only": true, "variant": "ghost", "on_click": [{"refresh": ["catalog", "detail", "convert"]}]}]
           },
           {
             "type": "when",
@@ -392,28 +392,40 @@
             "type": "when",
             "value": {"expr": "(\n  $id := $state.selected;\n  $custom := $id != null and $state.selected_store = null and $count($apps[id = $id and builtin = false and origin = null]) > 0;\n  $custom and $count([$data.catalog.stores[state = 'ready' and $count(items[id = $id]) > 0]]) > 0\n)"},
             "child": {
-              "type": "toolbar",
-              "start": [],
-              "end": [
+              "type": "stack",
+              "direction": "column",
+              "gap": "small",
+              "children": [
                 {
-                  "type": "select",
-                  "placeholder": "스토어 고르기",
-                  "value": {"state": "custom_store"},
-                  "options": {"expr": "(\n  $id := $state.selected;\n  [$map($data.catalog.stores, function($s, $i) { $s.state = 'ready' and $count($s.items[id = $id]) > 0 ? { \"value\": $s.server, \"label\": ($i = 0 ? '기본 앱스토어' : '사설 ' & $string($i)) } : null })][$ != null]\n)"},
-                  "on_change": {"set_state": "custom_store"}
+                  "type": "when",
+                  "value": {"expr": "$data_meta.convert.state = 'failed' or $data_meta.convert.state = 'loading'"},
+                  "child": {"type": "text", "value": {"expr": "$data.convert.name"}}
                 },
                 {
-                  "type": "button",
-                  "variant": "primary",
-                  "label": "스토어 판으로 바꾸기",
-                  "disabled": {"expr": "$data_meta.convert.state = 'ready' ? $not($data.convert.compatible) : true"},
-                  "on_click": [
-                    {"store.install": {"permission": "catalog", "server": {"expr": "$data.convert.server"}, "id": {"state": "selected"}, "release": {"expr": "$data.convert.release"}, "replace": true}},
-                    {"set_state": "selected", "value": null},
-                    {"set_state": "selected_name", "value": ""},
-                    {"set_state": "selected_store", "value": null},
-                    {"set_state": "selected_key", "value": null},
-                    {"set_state": "custom_store", "value": null}
+                  "type": "toolbar",
+                  "start": [],
+                  "end": [
+                    {
+                      "type": "select",
+                      "placeholder": "스토어 고르기",
+                      "value": {"state": "custom_store"},
+                      "options": {"expr": "(\n  $id := $state.selected;\n  [$map($data.catalog.stores, function($s, $i) { $s.state = 'ready' and $count($s.items[id = $id]) > 0 ? { \"value\": $s.server, \"label\": ($i = 0 ? '기본 앱스토어' : '사설 ' & $string($i)) } : null })][$ != null]\n)"},
+                      "on_change": {"set_state": "custom_store"}
+                    },
+                    {
+                      "type": "button",
+                      "variant": "primary",
+                      "label": "스토어 판으로 바꾸기",
+                      "disabled": {"expr": "$data_meta.convert.state = 'ready' ? $not($data.convert.compatible) : true"},
+                      "on_click": [
+                        {"store.install": {"permission": "catalog", "server": {"expr": "$data.convert.server"}, "id": {"state": "selected"}, "release": {"expr": "$data.convert.release"}, "replace": true}},
+                        {"set_state": "selected", "value": null},
+                        {"set_state": "selected_name", "value": ""},
+                        {"set_state": "selected_store", "value": null},
+                        {"set_state": "selected_key", "value": null},
+                        {"set_state": "custom_store", "value": null}
+                      ]
+                    }
                   ]
                 }
               ]
