@@ -4,19 +4,19 @@
 :is(.ks-split-pane, .ks-data-window-body, .ks-data-stack.is-column > .ks-data-stack-item.is-fill) > .ks-list:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-load-more { padding-block-end: var(--ks-space-3); }
 
 /* 결정 줄과의 기존 gap을 보존하고 gap-none에서만 내용 끝을 보충한다. */
-.ks-data-stack.gap-none.has-action-tail > .ks-stack-scroll > .ks-stack-scroll-content:has(> .ks-data-stack-item:last-child > :is(.ks-field, .ks-data-input, .ks-data-toggle, .ks-data-text, .ks-data-button, .ks-data-stack.is-row)),
-.ks-data-stack.gap-none.has-action-tail > .ks-stack-scroll .ks-data-stack-item.is-fill > .ks-data-stack.is-column:has(> .ks-data-stack-item:last-child > :is(.ks-field, .ks-data-input, .ks-data-toggle, .ks-data-text, .ks-data-button, .ks-data-stack.is-row)),
-.ks-data-stack-item.is-fill:is(:last-child, .ks-data-stack.gap-none > *) > .ks-data-stack.is-column:not(.has-action-tail, .has-action-tail *, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-data-stack-item:last-child > :is(.ks-field, .ks-data-toggle, .ks-data-text, .ks-data-button, .ks-data-stack.is-row)) { padding-block-end: var(--ks-space-3); }
+.ks-data-stack.gap-none.has-action-tail > .ks-stack-scroll > .ks-stack-scroll-content:has(> .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > :is(.ks-field, .ks-data-input, .ks-data-toggle, .ks-data-text, .ks-data-button, .ks-data-stack.is-row)),
+.ks-data-stack.gap-none.has-action-tail > .ks-stack-scroll .ks-data-stack-item.is-fill > .ks-data-stack.is-column:has(> .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > :is(.ks-field, .ks-data-input, .ks-data-toggle, .ks-data-text, .ks-data-button, .ks-data-stack.is-row)),
+.ks-data-stack-item.is-fill:is(:nth-last-child(1 of :not(:empty)), .ks-data-stack.gap-none > *) > .ks-data-stack.is-column:not(.has-action-tail, .has-action-tail *, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > :is(.ks-field, .ks-data-toggle, .ks-data-text, .ks-data-button, .ks-data-stack.is-row)) { padding-block-end: var(--ks-space-3); }
 
 /* 결정 줄 없이 스크롤 영역이 쌓기의 끝이면 스크롤 내용의 끝이 곧 칸의 끝이다. gap과 상관없이 끝 여백을 둔다. 구역, 탭, 대화상자 안은 그쪽이 끝 여백을 소유한다. */
-.ks-data-stack.has-action-tail:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-stack-scroll:last-child > .ks-stack-scroll-content { padding-block-end: var(--ks-space-3); }
+.ks-data-stack.has-action-tail:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-stack-scroll:nth-last-child(1 of :not(:empty)) > .ks-stack-scroll-content { padding-block-end: var(--ks-space-3); }
 
 /* 안쪽 채움 칸이 없는 자연 높이 구역만 구역 끝 여백을 소유한다. */
 .ks-data-stack.gap-none.has-action-tail > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill:nth-last-child(1 of :not(:empty)) > .ks-data-section:not(:has(.ks-data-stack-item.is-fill > :not(.ks-data-text))),
 .ks-data-stack-item.is-fill .ks-data-stack.is-column.gap-none > .ks-data-stack-item:nth-last-child(2 of :not(:empty)):has(~ .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > .ks-data-toolbar) > .ks-data-section:not(:has(.ks-data-stack-item.is-fill > :not(.ks-data-text))) { padding-block-end: var(--ks-space-3); }
 
 /* 부모가 끝 여백을 맡으면 본문 마지막 글의 기존 여백을 중복하지 않는다. */
-.ks-data-stack-item.is-fill:is(:last-child, .ks-data-stack.gap-none > *) > .ks-data-stack.is-column:not(.has-action-tail, .has-action-tail *, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-data-stack-item:last-child > .ks-data-text) > .ks-data-stack-item:last-child > .ks-data-text { padding-block-end: 0; }
+.ks-data-stack-item.is-fill:is(:nth-last-child(1 of :not(:empty)), .ks-data-stack.gap-none > *) > .ks-data-stack.is-column:not(.has-action-tail, .has-action-tail *, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > .ks-data-text) > .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > .ks-data-text { padding-block-end: 0; }
 
 /* 별도 여백 주인이 없는 고정 결정 줄 꼬리의 끝은 마지막 꼬리 칸이 맡는다. 도구 막대는 자기 안쪽 여백이 맡고, 구역, 탭, 대화상자 안은 그쪽이 끝 여백을 소유한다. */
-.ks-data-stack.is-column.has-action-tail:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-data-stack-item:last-child:not(.ks-stack-scroll):not(:has(.ks-data-toolbar)) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }
+.ks-data-stack.is-column.has-action-tail:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-data-stack-item:nth-last-child(1 of :not(:empty)):not(.ks-stack-scroll):not(:has(.ks-data-toolbar)) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }

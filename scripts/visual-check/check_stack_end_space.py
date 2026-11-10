@@ -56,6 +56,9 @@ action_row = {
         "children": [{"type": "button", "label": "취소", "on_click": []}, button],
     }],
 }
+when_false = {"state": "dialogOpen"}
+hidden_tail = {**reproduction, "children": [toolbar, item_list, input_, {"type": "when", "value": when_false, "child": button}]}
+hidden_last = {**reproduction, "children": [toolbar, item_list, input_, button, {"type": "when", "value": when_false, "child": {"type": "button", "label": "지우기", "on_click": []}}]}
 
 # (이름, 정의, 판정 종류, 입력과 단추 사이를 함께 재는지)
 SCENES = [
@@ -65,6 +68,8 @@ SCENES = [
     ("labeled-none", labeled_none, "tail", True),
     ("row-small", action_row, "tail", False),
     ("toolbar-tail", {**reproduction, "children": [toolbar, item_list, input_, {"type": "toolbar", "start": [], "end": [button]}]}, "toolbar", False),
+    ("hidden-tail", hidden_tail, "hidden-content", False),
+    ("hidden-last", hidden_last, "hidden-tail", False),
     ("section", {"type": "section", "title": "받은 항목", "child": action_small}, "context", False),
     ("tab", {"type": "tabs", "tabs": [{"label": "탭", "child": action_small}]}, "context", False),
     ("dialog", {"type": "dialog", "title": "대화", "open": True, "on_close": [], "child": action_small}, "context", False),
@@ -90,6 +95,34 @@ TAIL_SPACE_JS = """(el) => {
     inputToButton: inputEl ? rect(button).top - rect(inputEl).bottom : null,
     stackHasActionTail: stack.classList.contains('has-action-tail'),
     space: parseFloat(getComputedStyle(stack).getPropertyValue('--ks-space-3')),
+  };
+}"""
+
+HIDDEN_CONTENT_JS = """(el) => {
+  const root = el.querySelector('.ks-data-window-body').firstElementChild;
+  const scroll = root.querySelector(':scope > .ks-stack-scroll');
+  const content = scroll.querySelector('.ks-stack-scroll-content');
+  const hidden = [...root.children].find((child) => child.classList.contains('ks-data-stack-item') && getComputedStyle(child).display === 'none');
+  const inputBox = scroll.querySelector('input[placeholder="메모"]').closest('.ks-data-stack-item');
+  return {
+    contentPadding: parseFloat(getComputedStyle(content).paddingBottom),
+    hiddenPadding: hidden ? parseFloat(getComputedStyle(hidden).paddingBottom) : null,
+    inputGap: scroll.getBoundingClientRect().bottom - inputBox.getBoundingClientRect().bottom,
+    space: parseFloat(getComputedStyle(root).getPropertyValue('--ks-space-3')),
+  };
+}"""
+
+HIDDEN_TAIL_JS = """(el) => {
+  const root = el.querySelector('.ks-data-window-body').firstElementChild;
+  const items = [...root.children];
+  const visibleLast = items.filter((item) => getComputedStyle(item).display !== 'none' && item.querySelector('button')).at(-1);
+  const hidden = items.find((item) => item.classList.contains('ks-data-stack-item') && getComputedStyle(item).display === 'none');
+  const visibleButton = visibleLast.querySelector('button');
+  return {
+    visiblePadding: parseFloat(getComputedStyle(visibleLast).paddingBottom),
+    hiddenPadding: hidden ? parseFloat(getComputedStyle(hidden).paddingBottom) : null,
+    buttonToStack: root.getBoundingClientRect().bottom - visibleButton.getBoundingClientRect().bottom,
+    space: parseFloat(getComputedStyle(root).getPropertyValue('--ks-space-3')),
   };
 }"""
 
@@ -124,6 +157,16 @@ SCROLL_END_JS = """async () => {
   }
   return scrolled.size;
 }"""
+
+
+MEASURE_JS = {
+    "text": TEXT_END_SPACE_JS,
+    "toolbar": TAIL_SPACE_JS,
+    "context": TAIL_SPACE_JS,
+    "tail": TAIL_SPACE_JS,
+    "hidden-content": HIDDEN_CONTENT_JS,
+    "hidden-tail": HIDDEN_TAIL_JS,
+}
 
 
 def wait_server(port):
@@ -176,6 +219,14 @@ def judge(kind, measurement, input_gap):
         checks["stack_has_action_tail"] = measurement.get("stackHasActionTail") is True
         checks["tail_padding_zero"] = measurement.get("tailPadding") == 0
         checks["button_to_stack"] = abs(measurement.get("buttonToStack", 0) - TOOLBAR_TAIL_GAP) <= TOLERANCE
+    elif kind == "hidden-content":
+        checks["content_padding"] = abs(measurement.get("contentPadding", 0) - space) <= TOLERANCE
+        checks["hidden_padding_zero"] = measurement.get("hiddenPadding") == 0
+        checks["input_to_scroll_end"] = abs(measurement.get("inputGap", 0) - space) <= TOLERANCE
+    elif kind == "hidden-tail":
+        checks["visible_padding"] = abs(measurement.get("visiblePadding", 0) - space) <= TOLERANCE
+        checks["hidden_padding_zero"] = measurement.get("hiddenPadding") == 0
+        checks["button_to_stack"] = abs(measurement.get("buttonToStack", 0) - space) <= TOLERANCE
     elif kind == "context":
         checks["tail_padding_zero"] = measurement.get("tailPadding") == 0
     else:
@@ -219,7 +270,7 @@ def main():
                     app = open_scene(page, args.port, ui, width, height)
                     for state in ("default", "end"):
                         scrolled = page.evaluate(SCROLL_END_JS) if state == "end" else 0
-                        measurement = app.evaluate(TEXT_END_SPACE_JS if kind == "text" else TAIL_SPACE_JS)
+                        measurement = app.evaluate(MEASURE_JS[kind])
                         key = f"{name}-{width}x{height}-{state}"
                         page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
                         checks = judge(kind, measurement, input_gap)
