@@ -191,7 +191,7 @@ impl AppState {
                 loop {
                     tokio::select! {
                         received=rx.recv()=>match received {
-                            Ok(event)=>if !(matches!(event.event, DeviceEvent::WindowControl { .. }) && registry_version < 12) && !(matches!(event.event, DeviceEvent::PreferencesChanged { .. } | DeviceEvent::PreferencesSnapshot { .. }) && registry_version < registry::PREFERENCES_REGISTRY_VERSION) && !(matches!(event.event, DeviceEvent::AppCommentsChanged { .. } | DeviceEvent::AppCommentsSnapshot { .. }) && registry_version < registry::APP_COMMENTS_REGISTRY_VERSION) { if let Some(mut event) = state.event_for_broadcast(&device_id, event) { if !project_layout_event(registry_version, &mut event) { continue; } return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); } },
+                            Ok(event)=>if !(matches!(event.event, DeviceEvent::WindowControl { .. }) && registry_version < 12) && !(matches!(event.event, DeviceEvent::StoreUpdateRequested { .. }) && registry_version < kaleidoscope_contract::STORE_UPDATE_REGISTRY_VERSION) && !(matches!(event.event, DeviceEvent::PreferencesChanged { .. } | DeviceEvent::PreferencesSnapshot { .. }) && registry_version < registry::PREFERENCES_REGISTRY_VERSION) && !(matches!(event.event, DeviceEvent::AppCommentsChanged { .. } | DeviceEvent::AppCommentsSnapshot { .. }) && registry_version < registry::APP_COMMENTS_REGISTRY_VERSION) { if let Some(mut event) = state.event_for_broadcast(&device_id, event) { if !project_layout_event(registry_version, &mut event) { continue; } return Some((Ok(Event::default().data(serde_json::to_string(&event).unwrap())),(rx,interval,state,device_id,guard))); } },
                             Err(broadcast::error::RecvError::Closed)|Err(broadcast::error::RecvError::Lagged(_))=>{drop(guard);return None}
                         },
                         _=interval.tick()=>{
@@ -274,6 +274,8 @@ impl Drop for ConnectionGuard {
                     self.state.delete_device_shared_views(&self.device_id);
                     self.state
                         .window_control_device_disconnected(&self.device_id);
+                    self.state
+                        .store_update_device_disconnected(&self.device_id);
                     if let Ok(mut support) = self.state.0.device_support.lock() {
                         support.remove(&self.device_id);
                     }

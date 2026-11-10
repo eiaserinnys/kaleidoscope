@@ -1,12 +1,10 @@
-//! 설치 요청의 소유 창과 확인한 묶음을 묶어 동의를 기다린다.
+//! 설치 요청의 소유자(앱 창 또는 쉘 전체)와 확인한 묶음을 묶어 동의를 기다린다.
 use std::{collections::HashMap, sync::{atomic::Ordering, mpsc, Arc, Mutex}};
-use kaleidoscope_contract::{errors, store::StoreOrigin, AppDefinition, CoreError, CoreEvent, CoreReply};
+use kaleidoscope_contract::{errors, store::StoreOrigin, AppDefinition, CoreError, CoreEvent, CoreReply, InstallConsentOwner};
 use crate::Inner;
 
 struct Pending {
-    window: String,
-    app: String,
-    version: u32,
+    owner: InstallConsentOwner,
     digest: String,
     reply: mpsc::SyncSender<bool>,
 }
@@ -14,37 +12,61 @@ struct Pending {
 #[derive(Default)]
 pub(crate) struct Consents { pending: Mutex<HashMap<String, Pending>> }
 
+fn emit(inner: &Arc<Inner>, owner: InstallConsentOwner, request_id: String, release: u32, store_url: &str, digest: &str, definition: &AppDefinition, from_origin: Option<StoreOrigin>, replacing: bool, modified: bool) {
+    // 사용자가 아는 판은 스토어 릴리스다. 앱 목록 항목도 `origin.release`를 보여 준다.
+    let installed_release = inner.state.lock().unwrap().shared.apps.iter().find(|item| item.id == definition.id)
+        .and_then(|item| item.origin.as_ref()).map(|origin| origin.release);
+    inner.emit(&CoreEvent::AppInstallPermission {
+        owner, request_id, app_name: definition.name.clone(), release, installed_release,
+        store_url: store_url.into(), from_origin, replacing, modified,
+        digest: digest.into(), definition: definition.clone(),
+    });
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, release: u32, store_url: &str, digest: &str, definition: &AppDefinition, from_origin: Option<StoreOrigin>, replacing: bool, modified: bool) -> Result<bool, CoreError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (reply, receiver) = mpsc::sync_channel(1);
-    let installed_release;
+    let owner = InstallConsentOwner::Window { window_id: window.into(), app_id: app.into(), app_version: version };
     {
         let state = inner.state.lock().unwrap();
         if !state.shared.windows.iter().any(|w| w.id == window && w.app_id == app && w.app_version == version) {
             return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED());
         }
-        // 사용자가 아는 판은 스토어 릴리스다. 앱 목록 항목도 `origin.release`를 보여 준다.
-        installed_release = state.shared.apps.iter().find(|item| item.id == definition.id)
-            .and_then(|item| item.origin.as_ref()).map(|origin| origin.release);
         let mut pending = inner.installation_consents.pending.lock().unwrap();
         if inner.shutting_down.load(Ordering::SeqCst) { return Ok(false); }
-        pending.insert(request_id.clone(), Pending {
-            window: window.into(), app: app.into(), version, digest: digest.into(), reply,
-        });
+        pending.insert(request_id.clone(), Pending { owner: owner.clone(), digest: digest.into(), reply });
     }
-    inner.emit(&CoreEvent::AppInstallPermission {
-        window_id: window.into(), request_id, app_name: definition.name.clone(), release, installed_release,
-        store_url: store_url.into(), from_origin, replacing, modified,
-        digest: digest.into(), definition: definition.clone(),
-    });
+    emit(inner, owner, request_id, release, store_url, digest, definition, from_origin, replacing, modified);
     Ok(receiver.recv().unwrap_or(false))
 }
 
-pub(crate) fn respond(inner: &Inner, window: &str, request_id: &str, digest: &str, allow: bool) -> Result<CoreReply, CoreError> {
+/// MCP가 시작한 쉘 전체 동의를 등록하고 응답을 기다릴 수신자를 돌려준다.
+/// 셧다운 중이면 None이며, 호출자는 동의 창 없이 요청을 끝낸다.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn register_shell(inner: &Arc<Inner>, generation: u64, release: u32, store_url: &str, digest: &str, definition: &AppDefinition, from_origin: Option<StoreOrigin>, replacing: bool, modified: bool) -> Result<Option<(String, mpsc::Receiver<bool>)>, CoreError> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let (reply, receiver) = mpsc::sync_channel(1);
+    let owner = InstallConsentOwner::Shell { generation, request_id: request_id.clone() };
+    {
+        let mut pending = inner.installation_consents.pending.lock().unwrap();
+        if inner.shutting_down.load(Ordering::SeqCst) { return Ok(None); }
+        pending.insert(request_id.clone(), Pending { owner: owner.clone(), digest: digest.into(), reply });
+    }
+    emit(inner, owner, request_id.clone(), release, store_url, digest, definition, from_origin, replacing, modified);
+    Ok(Some((request_id, receiver)))
+}
+
+pub(crate) fn respond(inner: &Inner, owner: &InstallConsentOwner, request_id: &str, digest: &str, allow: bool) -> Result<CoreReply, CoreError> {
     let mut pending = inner.installation_consents.pending.lock().unwrap();
     let request = pending.get(request_id).ok_or_else(errors::STORECLIENT_INSTALL_REQUEST_EXPIRED)?;
-    if request.window != window { return Err(errors::STORECLIENT_INSTALL_WINDOW_MISMATCH()); }
+    // 응답한 창이 다르면 창 안내를, 창과 쉘 사이처럼 소유자 종류가 다르면 소유자 안내를 돌려준다.
+    if &request.owner != owner {
+        return Err(match (&request.owner, owner) {
+            (InstallConsentOwner::Window { .. }, InstallConsentOwner::Window { .. }) => errors::STORECLIENT_INSTALL_WINDOW_MISMATCH(),
+            _ => errors::STORECLIENT_INSTALL_OWNER_MISMATCH(),
+        });
+    }
     if request.digest != digest { return Err(errors::STORECLIENT_INSTALL_DIGEST_MISMATCH()); }
     let request = pending.remove(request_id).unwrap();
     request.reply.send(allow).map_err(|_| errors::STORECLIENT_INSTALL_RESPONSE_CLOSED())?;
@@ -53,9 +75,18 @@ pub(crate) fn respond(inner: &Inner, window: &str, request_id: &str, digest: &st
 
 pub(crate) fn state_changed(inner: &Inner) {
     let state = inner.state.lock().unwrap();
-    inner.installation_consents.pending.lock().unwrap().retain(|_, pending| {
-        state.shared.windows.iter().any(|w| w.id == pending.window && w.app_id == pending.app && w.app_version == pending.version)
+    let generation = inner.generation.load(Ordering::SeqCst);
+    inner.installation_consents.pending.lock().unwrap().retain(|_, pending| match &pending.owner {
+        InstallConsentOwner::Window { window_id, app_id, app_version } => state.shared.windows.iter()
+            .any(|w| w.id == *window_id && w.app_id == *app_id && w.app_version == *app_version),
+        InstallConsentOwner::Shell { generation: owner_generation, .. } => *owner_generation == generation,
     });
+}
+
+/// 링크가 바뀌면 쉘 전체 동의를 취소한다. 응답을 기다리는 쪽은 채널이 닫혀 취소로 읽는다.
+pub(crate) fn shutdown_shell(inner: &Inner) {
+    inner.installation_consents.pending.lock().unwrap()
+        .retain(|_, pending| !matches!(pending.owner, InstallConsentOwner::Shell { .. }));
 }
 
 pub(crate) fn shutdown(inner: &Inner) { inner.installation_consents.pending.lock().unwrap().clear(); }

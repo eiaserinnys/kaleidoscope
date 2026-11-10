@@ -214,7 +214,8 @@ fn consent_and_install_wire_roundtrip_and_legacy_app_omits_origin() {
         App, CoreEvent, CoreRequest,
     };
     let app_json = definition();
-    let event = json!({"event":"app.install_permission", "window_id":"window", "request_id":"request", "app_name":"앱", "release":3, "store_url":"https://example.test/store", "digest":"abc", "definition":app_json});
+    let owner = json!({"kind":"window", "window_id":"window", "app_id":"example", "app_version":1});
+    let event = json!({"event":"app.install_permission", "owner":owner, "request_id":"request", "app_name":"앱", "release":3, "store_url":"https://example.test/store", "digest":"abc", "definition":app_json});
     let parsed: CoreEvent = serde_json::from_value(event.clone()).unwrap();
     assert_eq!(
         serde_json::to_value(parsed).unwrap()["store_url"],
@@ -223,7 +224,7 @@ fn consent_and_install_wire_roundtrip_and_legacy_app_omits_origin() {
     let mut missing_store = event.clone();
     missing_store.as_object_mut().unwrap().remove("store_url");
     assert!(serde_json::from_value::<CoreEvent>(missing_store).is_err());
-    let response = json!({"op":"app.respond_install_permission", "window_id":"window", "request_id":"request", "digest":"abc", "allow":true});
+    let response = json!({"op":"app.respond_install_permission", "owner":owner, "request_id":"request", "digest":"abc", "allow":true});
     let parsed: CoreRequest = serde_json::from_value(response.clone()).unwrap();
     assert_eq!(serde_json::to_value(parsed).unwrap(), response);
     let install = json!({"definition_json":"{}", "asset_uploads":[], "manifest_base64":"e30=", "approved_digest":"abc", "origin":{"store_url":"https://example.test/store", "store_app_id":"example", "release":3, "digest":"abc"}, "expected_current_version":null});

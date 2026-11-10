@@ -303,7 +303,7 @@ pub const REGISTRY_HEADER: &str = "x-kaleidoscope-registry";
 /// 기기 토큰을 쓴 MCP 호출의 작업 기본값.
 pub const WORKSPACE_HEADER: &str = "x-kaleidoscope-workspace";
 /// 이 빌드가 아는 레지스트리 판.
-pub const REGISTRY_VERSION: u32 = WALLPAPER_REGISTRY_VERSION;
+pub const REGISTRY_VERSION: u32 = crate::store_update::STORE_UPDATE_REGISTRY_VERSION;
 /// 데스크톱 배경 그림 동기화를 처음 지원하는 레지스트리 판.
 pub const WALLPAPER_REGISTRY_VERSION: u32 = 16;
 /// 데스크톱 바로가기 동기화를 처음 지원하는 레지스트리 판.
@@ -611,6 +611,13 @@ pub enum DeviceEvent {
     #[serde(rename = "window.control")]
     WindowControl {
         request: crate::WindowControlRequest,
+    },
+    /// (17판) 에이전트가 기기의 앱을 스토어 판으로 바꾸거나 설치해 달라고 한다.
+    /// 결과는 같은 `request_id`로 `POST /api/device/store-updates/{request_id}`에 보낸다.
+    #[serde(rename = "store.update_requested")]
+    StoreUpdateRequested {
+        #[serde(flatten)]
+        request: crate::store_update::StoreUpdateRequest,
     },
     /// 연결 직후 한 번. 레지스트리의 모든 앱의 지금 버전.
     #[serde(rename = "apps.snapshot")]

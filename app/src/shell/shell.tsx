@@ -41,6 +41,7 @@ import { serverLabel } from "./server-label";
 import { ShellSettings } from "./shell-settings";
 import { MessageAppPrompt } from "./message-app-prompt";
 import { UpdateDialog } from "./update-dialog";
+import { ShellInstallationConsent } from "./installation-consent";
 import { BrandMark } from "./brand-mark";
 import { DesktopArea } from "./desktop-area";
 import { WallpaperLayer } from "./wallpaper-layer";
@@ -276,6 +277,7 @@ export function Shell({ store }: { store: ShellStore }) {
           action={snapshot.link.state === "connected" ? <Button onClick={() => void runCommand({ op: "workspace.create", name: "작업 1" })}>작업 만들기</Button> : undefined} />} />
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
+      {host ? <ShellInstallationConsent store={store} host={host} /> : null}
     </main>;
   }
 
@@ -483,6 +485,7 @@ export function Shell({ store }: { store: ShellStore }) {
 
       {host ? <MessageAppPrompt store={store} host={host} /> : null}
       {host ? <UpdateDialog store={store} host={host} openRequest={updateOpenRequest} seen={seenUpdates.current} /> : null}
+      {host ? <ShellInstallationConsent store={store} host={host} /> : null}
       {launcher ? <AppLauncher store={store} anchor={launcher.anchor} activeDesktopId={activeDesktop.id} onCall={runCommand} onClose={closeLauncher} onSelect={selectApp} /> : null}
       {menu ? (
         <Menu anchor={menu.anchor} items={menu.entries} onClose={closeMenu} />

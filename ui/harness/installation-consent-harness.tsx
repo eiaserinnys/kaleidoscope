@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createFakeTransport, createShellStore } from "../src/index";
 import type { AppDefinition, CoreRequest, ProcessSpec } from "../src/contract/contract";
 import { makeTestSeed } from "../src/__tests__/fixtures";
+import { BrandMark } from "../../app/src/shell/brand-mark";
 import { WindowFrame } from "../../app/src/shell/window-frame";
+import { ShellInstallationConsent } from "../../app/src/shell/installation-consent";
 import "../src/styles/index.css";
 import "../../app/src/shell.css";
 
@@ -46,7 +49,12 @@ Object.assign(window, { installationHarness: {
   ready: store.ready,
   show: (kind: string, overrides: Partial<AppDefinition> = {}, installedRelease?: number, extra: ConsentExtra = {}) => {
     const definition = { ...(kind === "heavy" ? sample : light), ...overrides };
-    fake.emit({ event: "app.install_permission", window_id: appWindow.id, request_id: kind, app_name: definition.name, release: 3, installed_release: installedRelease, store_url: extra.store_url ?? "https://apps.example.org/store", ...(extra.from_origin ? { from_origin: extra.from_origin } : {}), replacing: extra.replacing, modified: extra.modified, digest: "sha256-test-digest", definition });
+    fake.emit({ event: "app.install_permission", owner: { kind: "window", window_id: appWindow.id, app_id: definition.id, app_version: 1 }, request_id: kind, app_name: definition.name, release: 3, installed_release: installedRelease, store_url: extra.store_url ?? "https://apps.example.org/store", ...(extra.from_origin ? { from_origin: extra.from_origin } : {}), replacing: extra.replacing, modified: extra.modified, digest: "sha256-test-digest", definition });
+  },
+  /** 창 없이 쉘 전체에 뜨는 동의(MCP가 시작한 설치)를 띄운다. */
+  showShell: (kind: string, overrides: Partial<AppDefinition> = {}, installedRelease?: number, extra: ConsentExtra = {}) => {
+    const definition = { ...(kind === "heavy" ? sample : light), ...overrides };
+    fake.emit({ event: "app.install_permission", owner: { kind: "shell", generation: 0, request_id: kind }, request_id: kind, app_name: definition.name, release: 3, installed_release: installedRelease, store_url: extra.store_url ?? "https://apps.example.org/store", ...(extra.from_origin ? { from_origin: extra.from_origin } : {}), replacing: extra.replacing, modified: extra.modified, digest: "sha256-test-digest", definition });
   },
   showProcess: (scope: "spec" | "command", spec: Partial<ProcessSpec> = {}) => {
     fake.emit({ event: "process.permission", window_id: appWindow.id, request_id: `process-${scope}`, scope,
@@ -54,9 +62,21 @@ Object.assign(window, { installationHarness: {
   },
   answers,
 } });
-createRoot(document.getElementById("root")!).render(<main className="ks-desktop-area" style={{ width: "100vw", height: "100vh" }}>
-  <WindowFrame area={{ width: window.innerWidth, height: window.innerHeight }} appName="앱 목록" isTop sharing={false} shareable={false} store={store}
-    onCall={async () => undefined} onMinimize={() => {}} onMaximize={() => {}} onRestore={() => {}} window={seed.snapshot.shared.windows[0]}>
-    <div>앱 목록</div>
-  </WindowFrame>
-</main>);
+/** ?shell이면 실제 쉘처럼 쉘 막대와 데스크톱 위에 창을 두고, 창 없는 동의도 같은 자리에 포털한다. */
+const shellMode = new URLSearchParams(window.location.search).has("shell");
+const desktop = <WindowFrame area={{ width: window.innerWidth, height: window.innerHeight }} appName="앱 목록" isTop sharing={false} shareable={false} store={store}
+  onCall={async () => undefined} onMinimize={() => {}} onMaximize={() => {}} onRestore={() => {}} window={seed.snapshot.shared.windows[0]}>
+  <div>앱 목록</div>
+</WindowFrame>;
+
+function Harness() {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  if (!shellMode) return <main className="ks-desktop-area" style={{ width: "100vw", height: "100vh" }}>{desktop}</main>;
+  return <main className="app-root" ref={setHost}>
+    <header className="ks-shell-bar"><BrandMark /></header>
+    <div className="ks-desktop-area">{desktop}</div>
+    {host ? <ShellInstallationConsent store={store} host={host} /> : null}
+  </main>;
+}
+
+createRoot(document.getElementById("root")!).render(<Harness />);

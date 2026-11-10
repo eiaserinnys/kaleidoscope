@@ -37,6 +37,9 @@ pub(crate) fn apply_event(inner: &Arc<Inner>, generation: u64, event: DeviceEven
         DeviceEvent::WindowControl { request } => {
             crate::window_control::handle_device_event(inner, generation, request);
         }
+        DeviceEvent::StoreUpdateRequested { request } => {
+            crate::store_update::handle_device_event(inner, generation, request);
+        }
         DeviceEvent::AppsSnapshot { apps, deleted } => {
             let link_file = inner.link_file.lock().unwrap().clone();
             let result = apply_registry_change(inner, |state| {

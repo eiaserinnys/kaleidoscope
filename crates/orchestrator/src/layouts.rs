@@ -344,7 +344,15 @@ impl AppState {
         broadcast: Broadcast,
     ) -> Option<DeviceEvent> {
         let mut event = broadcast.event;
-        if matches!(event, DeviceEvent::WindowControl { .. }) {
+        // 대상이 정해진 기기 이벤트는 그 기기의 연결 판이 지원할 때만 보낸다.
+        let required = match event {
+            DeviceEvent::WindowControl { .. } => Some(12),
+            DeviceEvent::StoreUpdateRequested { .. } => {
+                Some(kaleidoscope_contract::STORE_UPDATE_REGISTRY_VERSION)
+            }
+            _ => None,
+        };
+        if let Some(required) = required {
             let supported = self
                 .0
                 .window_control_versions
@@ -353,7 +361,7 @@ impl AppState {
                 .and_then(|versions| {
                     versions
                         .get(device_id)
-                        .map(|versions| versions.iter().any(|v| *v >= 12))
+                        .map(|versions| versions.iter().any(|v| *v >= required))
                 })
                 .unwrap_or(false);
             if !broadcast.strict_open_target

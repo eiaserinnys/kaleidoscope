@@ -123,6 +123,7 @@ impl<T: Transport> StoreClient<T> {
             invite: None,
         }
     }
+    pub(crate) fn server(&self) -> &StoreUrl { &self.server }
     /// 사설 스토어 초대코드를 붙인다. 빈 값은 붙이지 않는다.
     pub(crate) fn with_invite(mut self, invite: Option<String>) -> Self {
         self.invite = invite

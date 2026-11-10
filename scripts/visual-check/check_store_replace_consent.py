@@ -41,9 +41,10 @@ SCENES = (
     ),
     (
         "modified-to-store",
+        # 실제 스토어 주소 꼴의 긴 주소로, 같은 스토어에서 온 전환 줄이 호스트만 보이는지와 최소 창에서 경고가 다 보이는지 함께 본다.
         "async () => { window.installationHarness.show('light', {}, 2, "
-        "{ replacing: true, modified: true, store_url: 'https://apps.example.org/store', "
-        "from_origin: { store_url: 'https://apps.example.org/store', store_app_id: 'clock', release: 2, digest: 'old-digest' } }); }",
+        "{ replacing: true, modified: true, store_url: 'https://eiaserinnys.me/appstore-eias/', "
+        "from_origin: { store_url: 'https://eiaserinnys.me/appstore-eias/', store_app_id: 'clock', release: 2, digest: 'old-digest' } }); }",
     ),
 )
 

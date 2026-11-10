@@ -174,4 +174,25 @@ error_catalog! { ENTRIES;
         class: InvalidRequest, place: "스토어 미디어 형식 검사", cause: "허용하지 않는 그림 형식이다",
         message: "스토어 그림 {path}의 형식이 올바르지 않습니다. 게시자가 그림을 다시 올려야 합니다.", fix: "게시자가 그림을 다시 올려야 합니다"
     }
+
+    STORECLIENT_UPDATE_APP_MISSING(id) {
+        class: NotFound, place: "스토어 갱신 대상 검사", cause: "앱이 이 기기에 설치되어 있지 않다",
+        message: "'{id}' 앱이 이 기기에 설치되어 있지 않습니다. 앱을 올린 스토어 주소를 store_url에 지정해 주세요.", fix: "앱을 올린 스토어 주소를 store_url에 지정하세요"
+    }
+    STORECLIENT_UPDATE_STORE_REQUIRED(id) {
+        class: InvalidRequest, place: "스토어 갱신 출처 검사", cause: "앱에 스토어 출처가 없다",
+        message: "'{id}' 앱은 스토어 출처가 없습니다. 올려 둔 스토어 주소를 store_url에 지정해 주세요.", fix: "앱을 올린 스토어 주소를 store_url에 지정하세요"
+    }
+    STORECLIENT_UPDATE_REQUEST_EXPIRED() {
+        class: NotFound, place: "스토어 갱신 요청 만료 검사", cause: "요청 유효 시간이 지났다",
+        message: "앱 갱신 요청의 유효 시간이 지났습니다. 다시 요청해 주세요.", fix: "다시 요청하세요"
+    }
+    STORECLIENT_UPDATE_BUILTIN(id) {
+        class: InvalidAppDefinition, place: "스토어 갱신 기본 앱 검사", cause: "쉘에 포함된 기본 앱이다",
+        message: "'{id}'은 쉘에 포함된 기본 앱입니다. 쉘을 업데이트해 주세요.", fix: "쉘을 업데이트하세요"
+    }
+    STORECLIENT_INSTALL_OWNER_MISMATCH() {
+        class: PermissionDenied, place: "스토어 설치 동의 응답 소유자 검사", cause: "응답한 소유자가 요청과 다르다",
+        message: "설치 동의 응답이 요청한 소유자와 다릅니다. 동의를 시작한 화면에서 응답하세요.", fix: "동의를 시작한 화면에서 응답하세요"
+    }
 }

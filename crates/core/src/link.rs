@@ -43,6 +43,7 @@ pub(crate) fn start(
             let _state = inner.state.lock().unwrap();
             let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
             crate::store_server_consent::shutdown(inner);
+            crate::installation_consent::shutdown_shell(inner);
             generation
         };
         crate::server_switch::activate(inner, file.clone(), generation)?;
@@ -99,6 +100,7 @@ pub(crate) fn start(
         let _state = inner.state.lock().unwrap();
         let generation = inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
         crate::store_server_consent::shutdown(inner);
+        crate::installation_consent::shutdown_shell(inner);
         generation
     };
     let pairing = LinkStatus::Pairing {
@@ -146,6 +148,7 @@ pub(crate) fn cancel(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         } else {
             inner.generation.fetch_add(1, Ordering::SeqCst);
             crate::store_server_consent::shutdown(inner);
+            crate::installation_consent::shutdown_shell(inner);
             inner.link_connecting.store(false, Ordering::SeqCst);
             set_link_locked(&mut state, LinkStatus::Unlinked {})
         }
@@ -171,6 +174,7 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         let mut state = inner.state.lock().unwrap();
         inner.generation.fetch_add(1, Ordering::SeqCst);
         crate::store_server_consent::shutdown(inner);
+        crate::installation_consent::shutdown_shell(inner);
         storage::remove_link(&inner.data_dir)?;
         inner.flusher.clear_sync();
         crate::sync_state::remove(&inner.data_dir)?;
@@ -508,6 +512,7 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
         }
         inner.generation.fetch_add(1, Ordering::SeqCst);
         crate::store_server_consent::shutdown(inner);
+        crate::installation_consent::shutdown_shell(inner);
         inner.link_connecting.store(false, Ordering::SeqCst);
         inner.layout_signal.notify();
         if file.mode == kaleidoscope_contract::ServerMode::Remote {

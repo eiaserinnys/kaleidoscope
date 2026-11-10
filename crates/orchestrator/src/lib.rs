@@ -132,6 +132,7 @@ struct Inner {
     connections: Mutex<HashMap<String, usize>>,
     shares: Mutex<share::ShareStore>,
     window_control: Mutex<window_control::ControlState>,
+    store_update: Mutex<store_update::StoreUpdateState>,
     window_control_versions: Mutex<HashMap<String, Vec<u32>>>,
     device_support: Mutex<HashMap<String, Option<Supported>>>,
     layout_sync_devices: Mutex<HashSet<String>>,
@@ -225,6 +226,7 @@ impl AppState {
             connections: Mutex::new(HashMap::new()),
             shares: Mutex::new(share::ShareStore::default()),
             window_control: Mutex::new(window_control::ControlState::default()),
+            store_update: Mutex::new(store_update::StoreUpdateState::default()),
             window_control_versions: Mutex::new(HashMap::new()),
             device_support: Mutex::new(HashMap::new()),
             layout_sync_devices: Mutex::new(HashSet::new()),
@@ -691,6 +693,7 @@ impl AppState {
         if changed > 0 {
             self.delete_device_shared_views(id);
             self.window_control_device_disconnected(id);
+            self.store_update_device_disconnected(id);
         }
         Ok(changed > 0)
     }
@@ -733,10 +736,13 @@ mod registry_install;
 mod registry_install_tests;
 mod share;
 mod storage;
+mod store_update;
 mod storage_items;
 mod storage_scope_migration;
 mod storage_target;
 mod window_control;
+#[cfg(test)]
+mod store_update_tests;
 #[cfg(test)]
 mod window_control_tests;
 pub mod worker;
