@@ -738,7 +738,19 @@ details: Array<string>, };
 /**
  * 코어가 화면에 보내는 이벤트. `event`로 가른다.
  */
-export type CoreEvent = { "event": "window.control", request: WindowControlRequest, } | { "event": "state.changed", snapshot: ShellSnapshot, sequence: number, } | { "event": "files.changed", root: string, changes: Array<FileChange>, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, error: CoreError, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, } | { "event": "store.server_permission", window_id: string, request_id: string, app_name: string, server: string, } | { "event": "app.install_permission", window_id: string, request_id: string, app_name: string, release: number, installed_release?: number, store_url: string, digest: string, definition: AppDefinition, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, scope: ProcessGrantScope, } | { "event": "connection.realtime.ready", window_id: string, session: string, handle: string, } | { "event": "connection.realtime.closed", window_id: string, session: string, handle: string, code: number, reason: string, error: CoreError | null, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, };
+export type CoreEvent = { "event": "window.control", request: WindowControlRequest, } | { "event": "state.changed", snapshot: ShellSnapshot, sequence: number, } | { "event": "files.changed", root: string, changes: Array<FileChange>, } | { "event": "conversation.apply_status", app_id: string, status: ConversationApplyStatus, } | { "event": "app.open_requested", app_id: string, workspace_id?: string, } | { "event": "conversation.update", thread_id: string, update: ConversationEvent, } | { "event": "conversation.error", thread_id: string, error: CoreError, } | { "event": "conversation.draft", window_id: string, request_id: string, text: string, attachments: Array<ConversationUpload>, failed: boolean, } | { "event": "web.update", window_id: string, page: WebPage, } | { "event": "data.update", window_id: string, view: DataView, } | { "event": "storage.update", window_id: string, update: StorageUpdate, } | { "event": "store.server_permission", window_id: string, request_id: string, app_name: string, server: string, } | { "event": "app.install_permission", window_id: string, request_id: string, app_name: string, release: number, installed_release?: number, store_url: string, 
+/**
+ * 지금 설치된 앱의 스토어 출처. 커스텀 앱이면 없다.
+ */
+from_origin?: StoreOrigin, 
+/**
+ * 이번 설치가 커스텀 앱, 다른 출처, 수정본을 대체하는지.
+ */
+replacing?: boolean, 
+/**
+ * 설치된 앱을 고친 뒤라 스토어 판이 그 내용을 대체하는지.
+ */
+modified?: boolean, digest: string, definition: AppDefinition, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, scope: ProcessGrantScope, } | { "event": "connection.realtime.ready", window_id: string, session: string, handle: string, } | { "event": "connection.realtime.closed", window_id: string, session: string, handle: string, code: number, reason: string, error: CoreError | null, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.
@@ -1643,7 +1655,11 @@ export type StoreIndexesValue = { stores: Array<StoreIndexRow>, };
 
 export type StoreInstallAction = { "store.install": StoreInstallSpec, };
 
-export type StoreInstallSpec = { permission: string, server: Binding, id: Binding, release: Binding, };
+export type StoreInstallSpec = { permission: string, server: Binding, id: Binding, release: Binding, 
+/**
+ * 명시적 스토어 판 전환 요청. 생략은 false이며 store 모듈 4판부터다.
+ */
+replace?: boolean, };
 
 export type StoreLatest = { release: number, compatible: boolean, };
 

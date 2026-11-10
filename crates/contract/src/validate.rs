@@ -435,6 +435,9 @@ fn validate_store_contract(definition: &AppDefinition) -> Result<(), CoreError> 
             Action::StoreInstall(action) => {
                 let spec = &action.store_install;
                 check_permission(&location, &spec.permission)?;
+                if spec.replace && definition.requires.modules.get("store").copied().unwrap_or(0) < 4 {
+                    return Err(crate::errors::APP_STORE_REPLACE_VERSION_LOW());
+                }
                 if let Binding::Literal(value) = &spec.release {
                     if !value.as_u64().is_some_and(|number| number > 0) {
                         return Err(crate::errors::APP_STORE_RELEASE_INVALID(

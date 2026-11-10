@@ -42,11 +42,20 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
   const place = workerLocation === "embedded" ? "embedded" : workerLocation ? "remote" : "unknown";
   const groups = describeInstallScope(request.definition, place, place === "remote" ? new URL(workerLocation).host : undefined);
   const installed = request.installed_release;
+  const replacing = request.replacing === true;
   return <Dialog key={request.request_id} host={host} windowId={windowId} userConsent windowModal active={active}
     overlayClassName="ks-window-consent-overlay ks-install-consent" inertSelector=":scope > .ks-window-content"
-    title={installed === undefined ? "이 앱을 설치할까요?" : "이 앱을 업데이트할까요?"} ok={installed === undefined ? "허용하고 설치" : "허용하고 업데이트"} onCancel={cancel} onConfirm={confirm}
+    title={replacing ? "스토어 판으로 바꿀까요?" : installed === undefined ? "이 앱을 설치할까요?" : "이 앱을 업데이트할까요?"}
+    ok={replacing ? "허용하고 바꾸기" : installed === undefined ? "허용하고 설치" : "허용하고 업데이트"} onCancel={cancel} onConfirm={confirm}
     body={<>
-      <div><strong className="ks-consent-value">{request.app_name}</strong> · {installed === undefined ? `${request.release}판` : `${installed}판에서 ${request.release}판으로`}<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>
+      {replacing
+        ? <div>
+          <strong className="ks-consent-value">{request.app_name}</strong><br />
+          <span className="ks-install-meta">{request.from_origin === undefined ? "커스텀 앱" : request.from_origin.store_url === request.store_url ? "고친 판" : <span className="ks-consent-value">{request.from_origin.store_url}</span>}에서 <span className="ks-consent-value">{request.store_url}</span> {request.release}판으로</span>
+        </div>
+        : <div><strong className="ks-consent-value">{request.app_name}</strong> · {installed === undefined ? `${request.release}판` : `${installed}판에서 ${request.release}판으로`}<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>}
+      {replacing && request.modified === true ? <strong className="ks-install-sentence is-warning"><TriangleAlert size="inline" /><span>고친 내용을 스토어 판으로 대체합니다.</span></strong> : null}
+      {replacing ? <span>창과 저장한 값은 유지됩니다.</span> : null}
       {groups.length === 0 ? <span>이 앱은 창 안에서만 동작합니다</span> : groups.map((group) => {
         const details = group.details;
         const hostPaths = details?.label === "자세히" ? details.hosts.map(({ host, paths }) => {

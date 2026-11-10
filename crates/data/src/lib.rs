@@ -107,7 +107,7 @@ pub struct Env<'a> {
 #[derive(Debug, PartialEq)]
 pub enum Step {
     StoreAllowServer { permission: String, server: Value },
-    StoreInstall { permission: String, server: Value, id: Value, release: Value },
+    StoreInstall { permission: String, server: Value, id: Value, release: Value, replace: bool },
     StoreRemove { permission: String, id: Value },
     ShellOpen { app_id: String },
     ShellAddShortcut { app_id: String },
@@ -606,6 +606,7 @@ impl CompiledApp {
                             server: self.binding(&spec.server, &format!("{base}/store.install/server"), env.state, &vars)?,
                             id: self.binding(&spec.id, &format!("{base}/store.install/id"), env.state, &vars)?,
                             release: self.binding(&spec.release, &format!("{base}/store.install/release"), env.state, &vars)?,
+                            replace: spec.replace,
                         })
                     }
                     Action::StoreRemove(action) => {

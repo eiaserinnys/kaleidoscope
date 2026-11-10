@@ -36,11 +36,17 @@ const sample = {
   agent: { protocol: "conversation-v1", permission: "notes", base_path: "/conversation", namespace: "research", profile: "assistant", collection: "threads", model_order: ["model"], selected_model: "model", title_template: "자료 정리", initial_instruction_template: "자료를 정리합니다.", instructions_template: "출처를 함께 기록합니다.", thread_entry: "settings" },
 } as unknown as AppDefinition;
 const light = { ...sample, id: "clock", name: "간단한 시계", permissions: [], storage: undefined, client: undefined, worker: undefined, agent: undefined };
+type ConsentExtra = {
+  store_url?: string;
+  from_origin?: { store_url: string; store_app_id: string; release: number; digest: string };
+  replacing?: boolean;
+  modified?: boolean;
+};
 Object.assign(window, { installationHarness: {
   ready: store.ready,
-  show: (kind: string, overrides: Partial<AppDefinition> = {}, installedRelease?: number) => {
+  show: (kind: string, overrides: Partial<AppDefinition> = {}, installedRelease?: number, extra: ConsentExtra = {}) => {
     const definition = { ...(kind === "heavy" ? sample : light), ...overrides };
-    fake.emit({ event: "app.install_permission", window_id: appWindow.id, request_id: kind, app_name: definition.name, release: 3, installed_release: installedRelease, store_url: "https://apps.example.org/store", digest: "sha256-test-digest", definition });
+    fake.emit({ event: "app.install_permission", window_id: appWindow.id, request_id: kind, app_name: definition.name, release: 3, installed_release: installedRelease, store_url: extra.store_url ?? "https://apps.example.org/store", ...(extra.from_origin ? { from_origin: extra.from_origin } : {}), replacing: extra.replacing, modified: extra.modified, digest: "sha256-test-digest", definition });
   },
   showProcess: (scope: "spec" | "command", spec: Partial<ProcessSpec> = {}) => {
     fake.emit({ event: "process.permission", window_id: appWindow.id, request_id: `process-${scope}`, scope,
