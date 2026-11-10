@@ -49,5 +49,6 @@ export function LinkedText({ text }: { text: string }) {
     last = start + raw.length;
   }
   if (last < text.length) parts.push(text.slice(last));
-  return <>{parts}</>;
+  // 조각을 한 인라인 흐름으로 묶는다. 그대로 돌려주면 flex 자리에서 조각마다 항목이 되어 제 줄을 잡는다.
+  return <span>{parts}</span>;
 }

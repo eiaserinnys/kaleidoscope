@@ -20,6 +20,14 @@ it("주소를 누르면 external.open을 부른다", () => {
   expect(runtime.store.call).toHaveBeenCalledWith({ op: "external.open", window_id: "w", url: "https://example.com/app" });
 });
 
+it("결과를 루트 요소 하나로 감싸 글 조각이 flex 항목으로 갈라지지 않는다", () => {
+  const text = "받지 못했습니다. https://example.com/app. 다시 받으세요.";
+  const { container } = render(<LinkedText text={text} />);
+  expect(container.children).toHaveLength(1);
+  expect(container.firstElementChild?.tagName).toBe("SPAN");
+  expect(container.textContent).toBe(text);
+});
+
 it("주소가 없는 글은 그대로 그린다", () => {
   const { container } = render(<LinkedText text="주소가 없는 알림입니다." />);
   expect(container.querySelector("a")).toBeNull();

@@ -164,9 +164,9 @@
 }
 
 .ks-notice-message {
-  /* 단추 수와 상관없이 한 값을 쓴다. 좁은 창에서는 100%까지 줄고, 넓은 창에서는 이 값에서 자란다. */
-  min-width: min(100%, calc(var(--ks-pane-min-size) * 1.75));
-  flex: 1 1 min(100%, calc(var(--ks-pane-min-size) * 1.75));
+  /* 글의 자연 폭이 단추 옆에 들어가면 한 줄에 함께 두고, 접혀야 할 때만 단추가 다음 줄로 내려간다. */
+  min-width: 0;
+  flex: 1 1 auto;
   font-size: var(--ks-type-body);
 }
 
