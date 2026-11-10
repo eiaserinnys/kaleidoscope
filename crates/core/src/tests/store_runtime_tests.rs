@@ -353,12 +353,13 @@ fn store_source_and_consent_install_update_modified_and_remove() {
         approved_digest: prepared.digest.clone(),
         origin: kaleidoscope_contract::store::StoreOrigin { store_url: "https://example.com/appstore".into(), store_app_id: "example".into(), release: 3, digest: prepared.digest },
         expected_current_version: None,
+        replace: false,
     };
     let _: kaleidoscope_contract::store::DeviceInstallReply = server_request(&server, "POST", "/api/device/app-installs", &concurrent).unwrap();
     core.handle(CoreRequest::AppRespondInstallPermission { window_id: window.clone(), request_id: request, digest, allow: true }).unwrap();
     let error = raced.join().unwrap().unwrap_err();
     assert_eq!(error.id.as_deref(), Some("REGISTRYINSTALL_EXPECTED_VERSION_CONFLICT"));
-    let _: Value = server_request(&server, "DELETE", "/api/device/apps/example", &kaleidoscope_contract::store::DeviceRemoveRequest { expected_current_version: std::num::NonZeroU32::new(1).unwrap() }).unwrap();
+    let _: Value = server_request(&server, "DELETE", "/api/device/apps/example", &kaleidoscope_contract::store::DeviceRemoveRequest { expected_current_version: std::num::NonZeroU32::new(1).unwrap(), allow_custom: false }).unwrap();
     registry.store_requests.lock().unwrap().clear();
 
     let second = act(core.clone(), window.clone());

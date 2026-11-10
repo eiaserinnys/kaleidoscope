@@ -9,6 +9,7 @@ impl AppState {
         app_id: &str,
         device_id: Option<&str>,
         expected: Option<u32>,
+        allow_custom: bool,
     ) -> Result<usize, CoreError> {
         if kaleidoscope_contract::builtin::is_builtin(app_id) {
             return Err(errors::MCP_DELETE_APP_BUILTIN(app_id));
@@ -36,10 +37,11 @@ impl AppState {
                 if current.as_ref().map(|(version, _)| *version) != Some(expected) {
                     return Err(errors::REGISTRYINSTALL_EXPECTED_VERSION_CONFLICT(app_id));
                 }
-                if current
-                    .as_ref()
-                    .and_then(|(_, origin)| origin.as_ref())
-                    .is_none()
+                if !allow_custom
+                    && current
+                        .as_ref()
+                        .and_then(|(_, origin)| origin.as_ref())
+                        .is_none()
                 {
                     return Err(errors::REGISTRYINSTALL_NOT_STORE_APP(app_id));
                 }
@@ -101,6 +103,7 @@ pub(super) async fn device_delete(
         &app_id,
         Some(&device.0),
         Some(request.expected_current_version.get()),
+        request.allow_custom,
     ) {
         Ok(closed_windows) => (
             StatusCode::OK,

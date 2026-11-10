@@ -118,7 +118,8 @@ pub(super) fn publish_transaction(
             .and_details(vec![error.to_string()])
         })?;
         if previous == *definition {
-            (version, true)
+            // 기기 설치 guard가 있으면 출처나 설치 기준 판이 바뀌므로 unchanged로 끝내지 않는다.
+            (version, guard.is_none())
         } else {
             super::app_storage::validate_storage_publish(
                 tx,

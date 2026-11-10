@@ -21,6 +21,8 @@ pub(super) struct InstallGuard {
     pub expected: Option<u32>,
     pub account: String,
     pub connections: Vec<StoreConnection>,
+    /// 기기가 스토어 판으로의 명시 전환을 요청했다.
+    pub replace: bool,
 }
 
 fn store_connections(request: &DeviceInstallRequest) -> Result<Vec<StoreConnection>, CoreError> {
@@ -97,13 +99,19 @@ pub(super) fn check_guard(
     let Some((version, installation)) = current else {
         return Ok(false);
     };
-    let installation = installation.ok_or_else(|| errors::REGISTRYINSTALL_ORIGIN_CONFLICT(id))?;
+    let Some(installation) = installation else {
+        // 출처 없는 커스텀 앱은 명시 전환일 때만 스토어 판으로 대체한다.
+        return if guard.replace { Ok(false) } else { Err(errors::REGISTRYINSTALL_ORIGIN_CONFLICT(id)) };
+    };
     let old = &installation.origin;
     let new = &guard.origin;
     if old.store_url != new.store_url || old.store_app_id != new.store_app_id {
-        return Err(errors::REGISTRYINSTALL_ORIGIN_CONFLICT(id));
+        // 다른 스토어 출처는 명시 전환일 때만 옛 출처와 비교하지 않고 대체한다.
+        return if guard.replace { Ok(false) } else { Err(errors::REGISTRYINSTALL_ORIGIN_CONFLICT(id)) };
     }
-    if installation.installed_version != Some(version) {
+    // 설치 뒤 고친 앱은 명시 전환일 때만 스토어 판으로 되돌린다. 같은 출처라 판과 해시 검사는 그대로 거친다.
+    let modified = installation.installed_version != Some(version);
+    if modified && !guard.replace {
         return Err(errors::REGISTRYINSTALL_LOCAL_MODIFIED(id));
     }
     if new.release < old.release {
@@ -113,7 +121,8 @@ pub(super) fn check_guard(
         if new.digest != old.digest {
             return Err(errors::REGISTRYINSTALL_RELEASE_DIGEST_CONFLICT(id));
         }
-        return Ok(true);
+        // 고친 앱을 같은 판으로 되돌리는 것은 이미 설치된 상태가 아니다.
+        return Ok(!modified);
     }
     Ok(false)
 }
@@ -262,6 +271,7 @@ pub(super) async fn device_install(
             expected: request.expected_current_version.map(|v| v.get()),
             account,
             connections,
+            replace: request.replace,
         };
         let (app, unchanged, _) = state.publish_install(
             &request.definition_json,
