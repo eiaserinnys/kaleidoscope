@@ -193,4 +193,23 @@ describe("Menu", () => {
     ]} />);
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "복사" }));
   });
+
+  it("입력 방식에 맞춰 첫 항목의 초점 링을 정한다", () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    const anchor = document.createElement("button");
+    const items = [{ id: "first", label: "First" }, { id: "second", label: "Second" }];
+
+    // 마우스로 연 메뉴: 첫 항목이 초점을 갖되 링은 그리지 않는다.
+    document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    const pointer = render(<Menu anchor={anchor} items={items} onClose={() => undefined} />);
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "First" }));
+    expect(focus).toHaveBeenLastCalledWith({ focusVisible: false });
+    pointer.unmount();
+
+    // 키보드로 연 메뉴: 첫 항목이 초점을 갖고 링을 그린다.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    render(<Menu anchor={anchor} items={items} onClose={() => undefined} />);
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "First" }));
+    expect(focus).toHaveBeenLastCalledWith({ focusVisible: true });
+  });
 });

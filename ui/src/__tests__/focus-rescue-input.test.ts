@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { focusRescued } from "../components/focus-rescue";
+import { focusByInput, focusRescued, isUnclaimedFocus } from "../components/focus-rescue";
 
 // 쉘이 대신 옮기는 초점은 마지막 입력 방식을 따른다. 키보드를 쓰지 않았는데 링이 보이면
 // 창을 열자마자 첫 행이나 첫 단추가 골라진 것처럼 보인다.
@@ -41,5 +41,24 @@ describe("focusRescued 초점 링", () => {
     const focus = vi.spyOn(HTMLElement.prototype, "focus");
     focusRescued(element, { focusVisible: true });
     expect(focus).toHaveBeenLastCalledWith({ focusVisible: true });
+  });
+
+  it("focusByInput은 입력 방식을 따르되 대신 옮긴 초점으로 표시하지 않는다", () => {
+    const element = document.createElement("button");
+    document.body.append(element);
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+
+    // 키보드 입력 뒤에는 링을 그리고, 포인터 입력 뒤에는 그리지 않는다.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    focusByInput(element, { preventScroll: true });
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true, focusVisible: true });
+    document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    focusByInput(element);
+    expect(focus).toHaveBeenLastCalledWith({ focusVisible: false });
+
+    // rescued로 표시하면 다른 부품이 이 초점을 가져갈 수 있다. focusByInput은 표시하지 않는다.
+    expect(isUnclaimedFocus(element)).toBe(false);
+    focusRescued(element);
+    expect(isUnclaimedFocus(element)).toBe(true);
   });
 });
