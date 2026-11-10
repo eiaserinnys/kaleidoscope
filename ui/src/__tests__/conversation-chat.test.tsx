@@ -54,7 +54,7 @@ it("클라이언트 채팅의 미디어 첨부 응답을 호스트에서 읽어 
   const originalCall = transport.call.bind(transport);
   const media = { permission: "cards", path: "/api/attachments/a1/content" };
   const call = vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "data.media"
-    ? { op: "data.media", media: { mime: "image/png", data_base64: "aW1hZ2U=" } }
+    ? { op: "data.media", media: { mime: "image/png", data_base64: "aW1hZ2U=", width: 1, height: 1 } }
     : originalCall(request));
   const store = createShellStore(transport);
   const window = snapshot.shared.windows[0];
