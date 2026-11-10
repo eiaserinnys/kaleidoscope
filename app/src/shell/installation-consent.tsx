@@ -51,7 +51,7 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
       {replacing
         ? <div>
           <strong className="ks-consent-value">{request.app_name}</strong><br />
-          <span className="ks-install-meta">{request.from_origin === undefined ? "커스텀 앱" : <span className="ks-consent-value">{request.from_origin.store_url}</span>}에서 <span className="ks-consent-value">{request.store_url}</span> {request.release}판으로</span>
+          <span className="ks-install-meta">{request.from_origin === undefined ? "커스텀 앱" : request.from_origin.store_url === request.store_url ? "고친 판" : <span className="ks-consent-value">{request.from_origin.store_url}</span>}에서 <span className="ks-consent-value">{request.store_url}</span> {request.release}판으로</span>
         </div>
         : <div><strong className="ks-consent-value">{request.app_name}</strong> · {installed === undefined ? `${request.release}판` : `${installed}판에서 ${request.release}판으로`}<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>}
       {replacing ? <span>현재 정의를 바꿉니다. 창과 저장한 값은 유지됩니다.</span> : null}
