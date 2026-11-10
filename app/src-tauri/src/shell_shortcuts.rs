@@ -13,14 +13,15 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 
 const EVENT: &str = "shell-shortcut";
-const KEYS: &[(u32, &str, bool)] = &[
-    (0x25, "ArrowLeft", false),
-    (0x27, "ArrowRight", false),
-    (0x09, "Tab", true),
-    (0x22, "PageDown", false),
-    (0x21, "PageUp", false),
-    (0x26, "ArrowUp", true),
-    (0x28, "ArrowDown", true),
+/// (가상 키, 쉘 표의 code, Ctrl+Alt에서 Shift 허용, Ctrl만 눌러도 받음)
+const KEYS: &[(u32, &str, bool, bool)] = &[
+    (0x25, "ArrowLeft", false, false),
+    (0x27, "ArrowRight", false, false),
+    (0x09, "Tab", true, false),
+    (0x22, "PageDown", false, true),
+    (0x21, "PageUp", false, true),
+    (0x26, "ArrowUp", true, false),
+    (0x28, "ArrowDown", true, false),
 ];
 
 struct Registration {
@@ -62,15 +63,18 @@ pub(crate) unsafe fn register(
             return Ok(());
         }
         let down = |key: u16| GetKeyState(key as i32) < 0;
-        if !down(VK_CONTROL.0) || !down(VK_MENU.0) || down(VK_LWIN.0) || down(VK_RWIN.0) {
+        if !down(VK_CONTROL.0) || down(VK_LWIN.0) || down(VK_RWIN.0) {
             return Ok(());
         }
+        let alt = down(VK_MENU.0);
         let shift = down(VK_SHIFT.0);
         let mut key = 0;
         args.VirtualKey(&mut key)?;
-        let Some(&(_, code, _)) = KEYS
+        let Some(&(_, code, ..)) = KEYS
             .iter()
-            .find(|&&(vk, _, allow_shift)| vk == key && (!shift || allow_shift))
+            .find(|&&(vk, _, allow_shift, ctrl_only)| {
+                vk == key && if alt { !shift || allow_shift } else { ctrl_only && !shift }
+            })
         else {
             return Ok(());
         };
@@ -88,7 +92,7 @@ pub(crate) unsafe fn register(
                 if let Err(error) = target.emit_to(
                     EventTarget::webview("main"),
                     EVENT,
-                    serde_json::json!({"code":code,"shift":shift}),
+                    serde_json::json!({"code":code,"shift":shift,"alt":alt}),
                 ) {
                     eprintln!("쉘 단축키 전달 실패: {error}");
                 }
@@ -119,7 +123,7 @@ mod tests {
     fn 예약_키는_쉘_표에도_있다() {
         let shell = include_str!("../../src/shell/shell-shortcuts.ts");
         assert!(shell.contains(&format!("\"{EVENT}\"")));
-        for &(_, code, _) in KEYS {
+        for &(_, code, _, _) in KEYS {
             assert!(shell.contains(&format!("\"{code}\"")), "{code}");
         }
     }

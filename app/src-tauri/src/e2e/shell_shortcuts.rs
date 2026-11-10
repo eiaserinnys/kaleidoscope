@@ -48,6 +48,23 @@ fn eval(view: &tauri::Webview, script: &str) -> Result<Value, String> {
     }
     Ok(reply["result"]["value"].clone())
 }
+fn active_workspace(core: &Core) -> Result<String, String> {
+    Ok(ui::driver::snapshot(core)?
+        .device
+        .active_workspace_id
+        .ok_or("활성 작업 없음")?)
+}
+
+fn next_workspace(core: &Core, workspace: &str) -> Result<String, String> {
+    let snapshot = ui::driver::snapshot(core)?;
+    let workspaces = &snapshot.shared.workspaces;
+    let index = workspaces
+        .iter()
+        .position(|item| item.id == workspace)
+        .ok_or("시험 작업이 스냅숏에 없음")?;
+    Ok(workspaces[(index + 1) % workspaces.len()].id.clone())
+}
+
 fn state(core: &Core, workspace: &str) -> Result<(String, String), String> {
     let snapshot = ui::driver::snapshot(core)?;
     let desktop = snapshot
@@ -125,7 +142,7 @@ pub(super) fn scenario(
         .collect();
     let mut rows = Vec::new();
     for surface in ["main", "html", "sandbox", "client", "web"] {
-        for code in ["ArrowRight", "PageDown", "Tab"] {
+        for code in ["ArrowRight", "PageDown", "Tab", "CtrlPageDown"] {
             let row = events.iter().find(|event| {
                 event["step"] == "shortcut.measure"
                     && event["data"]["surface"] == surface
@@ -186,6 +203,12 @@ fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), S
         CoreReply::WorkspaceCreate { workspace, desktop } => (workspace.id, desktop.id),
         _ => return Err("작업 생성 응답 없음".into()),
     };
+    call(
+        core,
+        CoreRequest::WorkspaceCreate {
+            name: "단축키 다음 작업".into(),
+        },
+    )?;
     let other = match call(
         core,
         CoreRequest::DesktopCreate {
@@ -263,7 +286,18 @@ fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), S
                 height: 400,
             },
         )?;
-        for (key, code) in [(0x27, "ArrowRight"), (0x22, "PageDown"), (0x09, "Tab")] {
+        for (modifiers, key, code) in [
+            (&[0x11, 0x12][..], 0x27, "ArrowRight"),
+            (&[0x11, 0x12][..], 0x22, "PageDown"),
+            (&[0x11, 0x12][..], 0x09, "Tab"),
+            (&[0x11][..], 0x22, "CtrlPageDown"),
+        ] {
+            call(
+                core,
+                CoreRequest::WorkspaceActivate {
+                    workspace_id: workspace.clone(),
+                },
+            )?;
             call(
                 core,
                 CoreRequest::DesktopActivate {
@@ -295,9 +329,42 @@ fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), S
                 _ => ".ks-web-surface",
             };
             focus(app, &a, selector, &view)?;
+            if code == "CtrlPageDown" {
+                let before = active_workspace(core)?;
+                let expected = next_workspace(core, &workspace)?;
+                let mark = ui::mark_requests();
+                native_input::chord(modifiers, key)?;
+                let _ = ui::driver::wait_until("작업 전환 또는 앱 도착", || {
+                    let current = active_workspace(core)?;
+                    Ok(current == expected
+                        || eval(&view, "window.__ksAppKeys")?.as_u64().unwrap_or(0) > 0)
+                });
+                thread::sleep(Duration::from_millis(700));
+                let after = active_workspace(core)?;
+                let commands = ui::requests_since(mark)
+                    .iter()
+                    .filter(|r| matches!(r, CoreRequest::WorkspaceActivate { .. }))
+                    .count();
+                let app_keys = eval(&view, "window.__ksAppKeys")?
+                    .as_u64()
+                    .ok_or("앱 키 관찰값 없음")?;
+                let foreground = unsafe { super::native_target::describe(GetForegroundWindow()) };
+                let ok = checks::switched(&before, &after, &expected, commands, app_keys);
+                record(
+                    log,
+                    "shortcut.measure",
+                    json!({"surface":name,"code":code,"before":before,"after":after,"commands":commands,"app_keys":app_keys,"foreground":foreground,"passed":ok}),
+                )?;
+                if !ok {
+                    return Err(format!(
+                        "{name} {code}: 실측 전제가 깨져 중단: commands={commands}, app_keys={app_keys}"
+                    ));
+                }
+                continue;
+            }
             let before = state(core, &workspace)?;
             let mark = ui::mark_requests();
-            native_input::chord(&[0x11, 0x12], key)?;
+            native_input::chord(modifiers, key)?;
             if key != 0x09 {
                 let _ = ui::driver::wait_until("단축키 전환 또는 앱 도착", || {
                     let current = state(core, &workspace)?;
@@ -348,6 +415,12 @@ fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), S
         }
         call(
             core,
+            CoreRequest::WorkspaceActivate {
+                workspace_id: workspace.clone(),
+            },
+        )?;
+        call(
+            core,
             CoreRequest::DesktopActivate {
                 desktop_id: desktop.clone(),
             },
@@ -355,6 +428,7 @@ fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), S
         call(core, CoreRequest::WindowClose { window_id: a })?;
         call(core, CoreRequest::WindowClose { window_id: b })?;
     }
+    let workspace_before = active_workspace(core)?;
     let before = state(core, &workspace)?;
     let shell = unsafe { GetShellWindow() };
     if shell.0.is_null() || !unsafe { SetForegroundWindow(shell) }.as_bool() {
@@ -368,22 +442,27 @@ fn run(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<(), S
     let mark = ui::mark_requests();
     native_input::chord(&[0x11, 0x12], 0x27)?;
     thread::sleep(Duration::from_millis(500));
+    native_input::chord(&[0x11], 0x22)?;
+    thread::sleep(Duration::from_millis(500));
     let after = state(core, &workspace)?;
+    let workspace_after = active_workspace(core)?;
     let commands = ui::requests_since(mark)
         .iter()
         .filter(|r| {
             matches!(
                 r,
-                CoreRequest::DesktopActivate { .. } | CoreRequest::WindowRaise { .. }
+                CoreRequest::DesktopActivate { .. }
+                    | CoreRequest::WindowRaise { .. }
+                    | CoreRequest::WorkspaceActivate { .. }
             )
         })
         .count();
     record(
         log,
         "shortcut.other-foreground",
-        json!({"before":before,"after":after,"commands":commands,"foreground":foreground,"passed":other_process && before==after && commands==0}),
+        json!({"before":before,"after":after,"workspace_before":workspace_before,"workspace_after":workspace_after,"commands":commands,"foreground":foreground,"passed":other_process && before==after && workspace_before==workspace_after && commands==0}),
     )?;
-    if !other_process || before != after || commands != 0 {
+    if !other_process || before != after || workspace_before != workspace_after || commands != 0 {
         return Err("다른 앱 포커스에서 쉘이 바뀜".into());
     }
     record(

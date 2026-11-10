@@ -61,6 +61,17 @@ export function createShellWindowActions(store: ShellStore, call: Call, getSyste
       releaseActiveFocus();
       await call({ op: "desktop.activate", desktop_id: next.id });
     },
+    async workspace(direction: -1 | 1) {
+      const { snapshot, workspace } = current();
+      if (!snapshot || !workspace) return;
+      const workspaces = snapshot.shared.workspaces;
+      if (workspaces.length < 2) return;
+      const index = workspaces.findIndex((item) => item.id === workspace.id);
+      const next = workspaces[(index + direction + workspaces.length) % workspaces.length];
+      if (next.id === workspace.id) return;
+      releaseActiveFocus();
+      await call({ op: "workspace.activate", workspace_id: next.id });
+    },
     async minimizeAll() {
       const { windows, system } = current();
       for (const target of targets(windows, system).filter(visible)) if (!await apply(target, "minimize")) return;
