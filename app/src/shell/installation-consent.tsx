@@ -54,8 +54,8 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
           <span className="ks-install-meta">{request.from_origin === undefined ? "커스텀 앱" : request.from_origin.store_url === request.store_url ? "고친 판" : <span className="ks-consent-value">{request.from_origin.store_url}</span>}에서 <span className="ks-consent-value">{request.store_url}</span> {request.release}판으로</span>
         </div>
         : <div><strong className="ks-consent-value">{request.app_name}</strong> · {installed === undefined ? `${request.release}판` : `${installed}판에서 ${request.release}판으로`}<br /><span className="ks-install-meta">{new URL(request.store_url).host}</span></div>}
-      {replacing ? <span>현재 정의를 바꿉니다. 창과 저장한 값은 유지됩니다.</span> : null}
       {replacing && request.modified === true ? <strong className="ks-install-sentence is-warning"><TriangleAlert size="inline" /><span>고친 내용을 스토어 판으로 대체합니다.</span></strong> : null}
+      {replacing ? <span>창과 저장한 값은 유지됩니다.</span> : null}
       {groups.length === 0 ? <span>이 앱은 창 안에서만 동작합니다</span> : groups.map((group) => {
         const details = group.details;
         const hostPaths = details?.label === "자세히" ? details.hosts.map(({ host, paths }) => {

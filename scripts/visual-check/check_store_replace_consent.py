@@ -24,7 +24,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
-SIZES = ((1180, 720), (360, 240))
+# 좁은 장면은 쉘 최소 창(360×241)이 그려지는 브라우저 크기다. 360×240 화면에서는 창이 최소보다 작게 그려진다.
+SIZES = ((1180, 720), (384, 317))
 SCENES = (
     ("install", "async () => { window.installationHarness.show('light'); }"),
     (

@@ -96,7 +96,9 @@ it("커스텀 앱을 스토어 판으로 바꾸면 교체로 묻는다", async (
   expect(dialog.textContent).toContain("커스텀 앱");
   expect(dialog.querySelector(".ks-install-meta")?.textContent).toContain("https://store.example.org/apps");
   expect(dialog.textContent).toContain("3판으로");
-  expect(dialog.textContent).toContain("현재 정의를 바꿉니다. 창과 저장한 값은 유지됩니다.");
+  expect(dialog.textContent).toContain("창과 저장한 값은 유지됩니다.");
+  // 제목과 전환 줄이 이미 말하는 「바꾼다」를 본문에서 되풀이하지 않는다.
+  expect(dialog.textContent).not.toContain("현재 정의를 바꿉니다");
   expect(within(dialog).getByRole("button", { name: "허용하고 바꾸기" })).toBeTruthy();
   store.dispose();
 });
@@ -118,7 +120,10 @@ it("수정본을 스토어 판으로 되돌리면 고친 내용이 대체된다�
   emit(definition, "replace", 2, { replacing: true, modified: true, from_origin: { store_url: "https://store.example.org/apps", store_app_id: "research", release: 2, digest: "old-digest" } });
   const dialog = screen.getByRole("dialog");
   expect(dialog.querySelector(".ks-install-sentence.is-warning")?.textContent).toContain("고친 내용을 스토어 판으로 대체합니다.");
-  expect(dialog.textContent).toContain("현재 정의를 바꿉니다. 창과 저장한 값은 유지됩니다.");
+  // 잃는 것을 알리는 경고가 유지된다는 안내보다 먼저 온다.
+  const text = dialog.textContent!;
+  expect(text.indexOf("고친 내용을 스토어 판으로 대체합니다.")).toBeGreaterThan(-1);
+  expect(text.indexOf("고친 내용을 스토어 판으로 대체합니다.")).toBeLessThan(text.indexOf("창과 저장한 값은 유지됩니다."));
   // 같은 출처로 되돌리면 같은 주소를 두 번 쓰지 않고 출발점을 「고친 판」으로 보인다.
   const meta = dialog.querySelector(".ks-install-meta")!.textContent!;
   expect(meta).toBe("고친 판에서 https://store.example.org/apps 3판으로");
@@ -132,7 +137,7 @@ it("전환 요청이 아니면 지금 설치 화면 그대로다", async () => {
   expect(dialog.textContent).toContain("이 앱을 설치할까요?");
   expect(dialog.textContent).toContain("store.example.org");
   expect(dialog.textContent).not.toContain("스토어 판으로 바꿀까요?");
-  expect(dialog.textContent).not.toContain("현재 정의를 바꿉니다");
+  expect(dialog.textContent).not.toContain("창과 저장한 값은 유지됩니다.");
   expect(dialog.textContent).not.toContain("고친 내용을 스토어 판으로 대체합니다.");
   store.dispose();
 });
