@@ -182,8 +182,8 @@ pub(crate) fn act(
             Step::StoreAllowServer { permission, server } => {
                 if !crate::store_server_consent::allow(inner, window_id, &permission, server)? { break; }
             }
-            Step::StoreInstall { permission, server, id, release } => {
-                if !crate::store::install::install(inner, window_id, &permission, server, id, release)? { break; }
+            Step::StoreInstall { permission, server, id, release, replace } => {
+                if !crate::store::install::install(inner, window_id, &permission, server, id, release, replace)? { break; }
             }
             Step::StoreRemove { permission, id } => {
                 crate::store::install::remove(inner, window_id, &permission, id)?;

@@ -72,7 +72,7 @@ fn store_example_roundtrips_and_is_valid_with_store_support() {
 }
 
 #[test]
-fn current_shell_supports_store_three_but_rejects_newer_versions() {
+fn current_shell_supports_store_four_but_rejects_newer_versions() {
     parse_app_definition(&definition().to_string()).unwrap();
     let mut newer = definition();
     newer["requires"]["modules"]["store"] = json!(2);
@@ -80,11 +80,54 @@ fn current_shell_supports_store_three_but_rejects_newer_versions() {
     newer["requires"]["modules"]["store"] = json!(3);
     parse_app_definition(&newer.to_string()).unwrap();
     newer["requires"]["modules"]["store"] = json!(4);
+    parse_app_definition(&newer.to_string()).unwrap();
+    newer["requires"]["modules"]["store"] = json!(5);
     let error = parse_app_definition(&newer.to_string()).unwrap_err();
     assert_eq!(
         error.id.as_deref(),
         Some("APP_DEFINITION_REQUIRES_NEWER_SHELL")
     );
+}
+
+#[test]
+fn install_replace_roundtrips_and_is_omitted_when_false() {
+    let mut replaced = definition();
+    replaced["requires"]["modules"]["store"] = json!(4);
+    replaced["ui"]["on_click"][0]["store.install"]["replace"] = json!(true);
+    let parsed = parse_app_definition(&replaced.to_string()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&parsed).unwrap()["ui"]["on_click"],
+        replaced["ui"]["on_click"]
+    );
+
+    let plain = definition();
+    let parsed = parse_app_definition(&plain.to_string()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&parsed).unwrap()["ui"]["on_click"],
+        plain["ui"]["on_click"]
+    );
+    assert!(!serde_json::to_string(&parsed).unwrap().contains("\"replace\""));
+
+    let mut explicit_false = definition();
+    explicit_false["ui"]["on_click"][0]["store.install"]["replace"] = json!(false);
+    let parsed = parse_app_definition(&explicit_false.to_string()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&parsed).unwrap()["ui"]["on_click"],
+        plain["ui"]["on_click"]
+    );
+}
+
+#[test]
+fn replace_requires_store_four() {
+    let mut value = definition();
+    value["requires"]["modules"]["store"] = json!(3);
+    value["ui"]["on_click"][0]["store.install"]["replace"] = json!(true);
+    assert_eq!(
+        parse_app_definition(&value.to_string()).unwrap_err().id.as_deref(),
+        Some("APP_STORE_REPLACE_VERSION_LOW")
+    );
+    value["requires"]["modules"]["store"] = json!(4);
+    parse_app_definition(&value.to_string()).unwrap();
 }
 
 #[test]

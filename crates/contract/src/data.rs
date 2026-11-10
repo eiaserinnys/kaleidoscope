@@ -570,7 +570,16 @@ pub struct StoreInstallAction { #[serde(rename = "store.install")] pub store_ins
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
-pub struct StoreInstallSpec { pub permission: String, pub server: Binding, pub id: Binding, pub release: Binding }
+pub struct StoreInstallSpec {
+    pub permission: String,
+    pub server: Binding,
+    pub id: Binding,
+    pub release: Binding,
+    /// 명시적 스토어 판 전환 요청. 생략은 false이며 store 모듈 4판부터다.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    #[ts(optional, as = "Option<bool>")]
+    pub replace: bool,
+}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]

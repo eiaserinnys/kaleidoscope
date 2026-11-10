@@ -444,7 +444,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("profiler", 1),
     ("client", CLIENT_FILE_OPEN_VERSION),
     ("process", 2),
-    ("store", 3),
+    ("store", 4),
     ("shell", 1),
 ];
 
@@ -6424,6 +6424,18 @@ pub enum CoreEvent {
         #[ts(optional)]
         installed_release: Option<u32>,
         store_url: String,
+        /// 지금 설치된 앱의 스토어 출처. 커스텀 앱이면 없다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        from_origin: Option<store::StoreOrigin>,
+        /// 이번 설치가 커스텀 앱, 다른 출처, 수정본을 대체하는지.
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        replacing: bool,
+        /// 설치된 앱을 고친 뒤라 스토어 판이 그 내용을 대체하는지.
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        modified: bool,
         digest: String,
         definition: AppDefinition,
     },

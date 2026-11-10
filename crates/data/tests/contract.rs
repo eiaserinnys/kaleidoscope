@@ -71,7 +71,7 @@ fn store_indexes_plan_validates_the_server_list() {
 fn store_actions_resolve_event_and_state_bindings() {
     let mut definition = serde_json::to_value(fixture()).unwrap();
     definition["ui"]["children"][0]["on_select"] = json!([
-        {"store.install":{"permission":"catalog","server":"https://store.example","id":{"state":"selected"},"release":{"expr":"$event.release"}}},
+        {"store.install":{"permission":"catalog","server":"https://store.example","id":{"state":"selected"},"release":{"expr":"$event.release"},"replace":true}},
         {"store.remove":{"permission":"catalog","id":{"state":"selected"}}}
     ]);
     let app = CompiledApp::compile(&serde_json::from_value(definition).unwrap());
@@ -79,7 +79,7 @@ fn store_actions_resolve_event_and_state_bindings() {
     let empty = BTreeMap::new();
     let event = json!({"release":2});
     let env = Env { state: &state, data: &empty, data_meta: &empty, storage: &empty, storage_meta: &empty, apps: None, event: &event, item: &Value::Null, modifiers: None };
-    assert_eq!(app.action_step("/ui/children/0/on_select", 0, &env).unwrap(), Step::StoreInstall { permission:"catalog".into(), server:json!("https://store.example"), id:json!("notes"), release:json!(2.0) });
+    assert_eq!(app.action_step("/ui/children/0/on_select", 0, &env).unwrap(), Step::StoreInstall { permission:"catalog".into(), server:json!("https://store.example"), id:json!("notes"), release:json!(2.0), replace:true });
     assert_eq!(app.action_step("/ui/children/0/on_select", 1, &env).unwrap(), Step::StoreRemove { permission:"catalog".into(), id:json!("notes") });
 }
 

@@ -1,6 +1,6 @@
 //! 설치 요청의 소유 창과 확인한 묶음을 묶어 동의를 기다린다.
 use std::{collections::HashMap, sync::{atomic::Ordering, mpsc, Arc, Mutex}};
-use kaleidoscope_contract::{errors, AppDefinition, CoreError, CoreEvent, CoreReply};
+use kaleidoscope_contract::{errors, store::StoreOrigin, AppDefinition, CoreError, CoreEvent, CoreReply};
 use crate::Inner;
 
 struct Pending {
@@ -14,7 +14,8 @@ struct Pending {
 #[derive(Default)]
 pub(crate) struct Consents { pending: Mutex<HashMap<String, Pending>> }
 
-pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, release: u32, store_url: &str, digest: &str, definition: &AppDefinition) -> Result<bool, CoreError> {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, release: u32, store_url: &str, digest: &str, definition: &AppDefinition, from_origin: Option<StoreOrigin>, replacing: bool, modified: bool) -> Result<bool, CoreError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (reply, receiver) = mpsc::sync_channel(1);
     let installed_release;
@@ -34,7 +35,8 @@ pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, re
     }
     inner.emit(&CoreEvent::AppInstallPermission {
         window_id: window.into(), request_id, app_name: definition.name.clone(), release, installed_release,
-        store_url: store_url.into(), digest: digest.into(), definition: definition.clone(),
+        store_url: store_url.into(), from_origin, replacing, modified,
+        digest: digest.into(), definition: definition.clone(),
     });
     Ok(receiver.recv().unwrap_or(false))
 }

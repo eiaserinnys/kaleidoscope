@@ -38,7 +38,13 @@ async function setup() {
   const appWindow = snapshot.shared.windows[0];
   render(<WindowFrame area={{ width: 960, height: 552 }} appName="앱" isTop sharing={false} shareable={false} store={store}
     onCall={async () => undefined} onMinimize={() => {}} onMaximize={() => {}} onRestore={() => {}} window={appWindow}><button>본문</button></WindowFrame>);
-  const emit = (app = definition, id = "request", installedRelease?: number) => act(() => receive({ event: "app.install_permission", window_id: appWindow.id, request_id: id, app_name: id === "request" ? "자료 수집" : id, release: 3, installed_release: installedRelease, store_url: "https://store.example.org/apps", digest: `digest-${id}`, definition: app } as CoreEvent));
+  const emit = (app = definition, id = "request", installedRelease?: number, extra: { store_url?: string; from_origin?: { store_url: string; store_app_id: string; release: number; digest: string }; replacing?: boolean; modified?: boolean } = {}) => act(() => receive({
+    event: "app.install_permission", window_id: appWindow.id, request_id: id, app_name: id === "request" ? "자료 수집" : id, release: 3, installed_release: installedRelease,
+    store_url: extra.store_url ?? "https://store.example.org/apps",
+    ...(extra.from_origin ? { from_origin: extra.from_origin } : {}),
+    replacing: extra.replacing, modified: extra.modified,
+    digest: `digest-${id}`, definition: app,
+  } as CoreEvent));
   const change = (next: (value: ShellSnapshot) => ShellSnapshot) => act(() => { snapshot = next(snapshot); receive({ event: "state.changed", snapshot, sequence: 2 }); });
   call.mockClear();
   return { appWindow, call, store, emit, change, receive };
@@ -78,6 +84,53 @@ it("새로 설치하는 앱은 설치로 묻는다", async () => {
   expect(dialog.textContent).toContain("이 앱을 설치할까요?");
   expect(dialog.textContent).not.toContain("업데이트할까요?");
   expect(within(dialog).getByRole("button", { name: "허용하고 설치" })).toBeTruthy();
+  store.dispose();
+});
+
+it("커스텀 앱을 스토어 판으로 바꾸면 교체로 묻는다", async () => {
+  const { emit, store } = await setup();
+  emit(definition, "replace", undefined, { replacing: true });
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("스토어 판으로 바꿀까요?");
+  expect(dialog.textContent).not.toContain("이 앱을 설치할까요?");
+  expect(dialog.textContent).toContain("커스텀 앱");
+  expect(dialog.querySelector(".ks-install-meta")?.textContent).toContain("https://store.example.org/apps");
+  expect(dialog.textContent).toContain("3판으로");
+  expect(dialog.textContent).toContain("현재 정의를 바꿉니다. 창과 저장한 값은 유지됩니다.");
+  expect(within(dialog).getByRole("button", { name: "허용하고 바꾸기" })).toBeTruthy();
+  store.dispose();
+});
+
+it("다른 스토어 판으로 바꾸면 옛 출처와 새 출처의 전체 경로를 보여 준다", async () => {
+  const { emit, store } = await setup();
+  emit(definition, "replace", 2, { replacing: true, store_url: "https://new.example.org/store/lg", from_origin: { store_url: "https://old.example.org/store/eias", store_app_id: "research", release: 2, digest: "old-digest" } });
+  const dialog = screen.getByRole("dialog");
+  const meta = dialog.querySelector(".ks-install-meta")!.textContent!;
+  expect(meta).toContain("https://old.example.org/store/eias");
+  expect(meta).toContain("https://new.example.org/store/lg");
+  expect(meta.indexOf("https://old.example.org/store/eias")).toBeLessThan(meta.indexOf("https://new.example.org/store/lg"));
+  expect(meta).toContain("3판으로");
+  store.dispose();
+});
+
+it("수정본을 스토어 판으로 되돌리면 고친 내용이 대체된다고 경고한다", async () => {
+  const { emit, store } = await setup();
+  emit(definition, "replace", 2, { replacing: true, modified: true, from_origin: { store_url: "https://store.example.org/apps", store_app_id: "research", release: 2, digest: "old-digest" } });
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.querySelector(".ks-install-sentence.is-warning")?.textContent).toContain("고친 내용을 스토어 판으로 대체합니다.");
+  expect(dialog.textContent).toContain("현재 정의를 바꿉니다. 창과 저장한 값은 유지됩니다.");
+  store.dispose();
+});
+
+it("전환 요청이 아니면 지금 설치 화면 그대로다", async () => {
+  const { emit, store } = await setup();
+  emit(definition, "plain", undefined, { modified: true });
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.textContent).toContain("이 앱을 설치할까요?");
+  expect(dialog.textContent).toContain("store.example.org");
+  expect(dialog.textContent).not.toContain("스토어 판으로 바꿀까요?");
+  expect(dialog.textContent).not.toContain("현재 정의를 바꿉니다");
+  expect(dialog.textContent).not.toContain("고친 내용을 스토어 판으로 대체합니다.");
   store.dispose();
 });
 

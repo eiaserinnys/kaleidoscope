@@ -49,8 +49,30 @@ pub(crate) fn registry_error(error: RegistryError, install: bool, app_id: &str) 
     }
 }
 
-/// false는 사용자가 취소한 경우이며 호출자는 나머지 동작을 실행하지 않는다.
-pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server: Value, id: Value, release: Value) -> Result<bool, CoreError> {
+/// 사용자 동의를 받기 전에 확정한 설치 대상과 스토어가 준 바이트.
+/// 동의 정책은 부르는 쪽이 정하고, 확정 단계는 여기 담긴 같은 바이트를 보낸다.
+pub(crate) struct PreparedInstall {
+    window: String,
+    permission: String,
+    caller: String,
+    caller_version: u32,
+    link: crate::storage::LinkFile,
+    generation: u64,
+    server: String,
+    id: String,
+    release: u32,
+    bundle: super::bundle::PreparedBundle,
+    /// 설치 뒤 상태를 비교할 기준 판. 확정 단계에서 다시 대조한다.
+    expected_current_version: Option<u32>,
+    replace: bool,
+    from_origin: Option<StoreOrigin>,
+    replacing: bool,
+    modified: bool,
+    needs_consent: bool,
+}
+
+/// 대상을 잡고 스토어가 준 묶음을 검증해 설치 준비를 만든다. 사용자 동의는 아직 받지 않는다.
+pub(crate) fn prepare_install(inner: &Arc<Inner>, window: &str, permission: &str, server: Value, id: Value, release: Value, replace: bool) -> Result<PreparedInstall, CoreError> {
     let (caller, caller_version, link, generation) = context(inner, window, permission, true)?;
     let server = server.as_str().ok_or_else(errors::STORECLIENT_INSTALL_SERVER_INVALID)?;
     let id = id.as_str().ok_or_else(errors::STORECLIENT_INSTALL_ID_INVALID)?;
@@ -64,36 +86,62 @@ pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server
         (current, previous)
     };
     let manifest_path = format!("{}manifest.json", release_path(id, release)?);
-    let prepared = client.prepare(id, release, &manifest_path).map_err(|failure| {
+    let bundle = client.prepare(id, release, &manifest_path).map_err(|failure| {
         if failure.error.id.as_deref() == Some("APP_DEFINITION_REQUIRES_NEWER_SHELL") { errors::STORECLIENT_INSTALL_INCOMPATIBLE(id) } else { failure.error }
     })?;
-    if !crate::supported().renders_app(&prepared.definition) { return Err(errors::STORECLIENT_INSTALL_INCOMPATIBLE(id)); }
-    if current.as_ref().is_some_and(|app| app.origin.is_some() && app.installed_version != Some(app.current_version)) {
-        return Err(errors::STORECLIENT_INSTALL_LOCAL_MODIFIED(id));
-    }
+    if !crate::supported().renders_app(&bundle.definition) { return Err(errors::STORECLIENT_INSTALL_INCOMPATIBLE(id)); }
+    let modified = current.as_ref().is_some_and(|app| app.origin.is_some() && app.installed_version != Some(app.current_version));
+    // 스토어 판으로 바꾸는 요청은 수정본을 되돌리는 것이 목적이므로 사전 거부하지 않고 동의로 확인한다.
+    if modified && !replace { return Err(errors::STORECLIENT_INSTALL_LOCAL_MODIFIED(id)); }
     let same_origin = current.as_ref().and_then(|app| app.origin.as_ref())
         .is_some_and(|origin| origin.store_url == client.server.as_str() && origin.store_app_id == id);
-    let needs_consent = !same_origin || previous.as_ref().is_none_or(|old| scope(old) != scope(&prepared.definition));
-    if needs_consent && !crate::installation_consent::wait(inner, window, &caller, caller_version, release, client.server.as_str(), &prepared.digest, &prepared.definition)? { return Ok(false); }
-    if needs_consent && !crate::link::is_current(inner, generation) { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
-    let (current_caller, current_version, _, current_generation) = context(inner, window, permission, true).map_err(|error| {
-        if needs_consent && !crate::link::is_current(inner, generation) { errors::STORECLIENT_INSTALL_CONTEXT_CHANGED() } else { error }
+    let needs_consent = replace || !same_origin || previous.as_ref().is_none_or(|old| scope(old) != scope(&bundle.definition));
+    let from_origin = current.as_ref().and_then(|app| app.origin.clone());
+    let replacing = replace && current.is_some() && !(same_origin && !modified);
+    Ok(PreparedInstall {
+        window: window.into(),
+        permission: permission.into(),
+        caller,
+        caller_version,
+        link,
+        generation,
+        server: client.server.as_str().into(),
+        id: id.into(),
+        release,
+        bundle,
+        expected_current_version: current.as_ref().map(|app| app.current_version),
+        replace,
+        from_origin,
+        replacing,
+        modified,
+        needs_consent,
+    })
+}
+
+/// 동의받은 준비 그대로 보낸다. 기다리는 동안 연결 세대나 대상 판이 바뀌었으면 보내지 않는다.
+pub(crate) fn commit_prepared_install(inner: &Arc<Inner>, prepared: PreparedInstall) -> Result<bool, CoreError> {
+    let PreparedInstall { window, permission, caller, caller_version, link, generation, server, id, release, bundle, expected_current_version, replace, .. } = prepared;
+    if !crate::link::is_current(inner, generation) { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
+    let (current_caller, current_version, _, current_generation) = context(inner, &window, &permission, true).map_err(|error| {
+        if !crate::link::is_current(inner, generation) { errors::STORECLIENT_INSTALL_CONTEXT_CHANGED() } else { error }
     })?;
-    if current_caller != caller || current_version != caller_version || (needs_consent && current_generation != generation) { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
+    if current_caller != caller || current_version != caller_version || current_generation != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
+    let installed_version = inner.state.lock().unwrap().shared.apps.iter().find(|app| app.id == id).map(|app| app.current_version);
+    if installed_version != expected_current_version { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
     let request = DeviceInstallRequest {
-        definition_json: prepared.definition_json,
-        asset_uploads: prepared.assets,
-        connections: prepared.connections,
-        manifest_base64: STANDARD.encode(prepared.manifest),
-        approved_digest: prepared.digest.clone(),
-        origin: StoreOrigin { store_url: client.server.as_str().into(), store_app_id: id.into(), release, digest: prepared.digest },
-        expected_current_version: current.and_then(|app| NonZeroU32::new(app.current_version)),
-        replace: false,
+        definition_json: bundle.definition_json,
+        asset_uploads: bundle.assets,
+        connections: bundle.connections,
+        manifest_base64: STANDARD.encode(&bundle.manifest),
+        approved_digest: bundle.digest.clone(),
+        origin: StoreOrigin { store_url: server, store_app_id: id, release, digest: bundle.digest },
+        expected_current_version: expected_current_version.and_then(NonZeroU32::new),
+        replace,
     };
     let result = inner.registry.install_store_app(&link.server_url, &link.token, &request);
     let (applied, event) = registry_events::apply_registry_change(inner, |state| {
         if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
-        let result = result.map_err(|error| registry_error(error, true, id))?;
+        let result = result.map_err(|error| registry_error(error, true, &request.origin.store_app_id))?;
         app_commands::import_registry(state, result.app);
         Ok(())
     })?;
@@ -101,6 +149,17 @@ pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server
     crate::data_runtime::apps_changed(inner);
     if let Some(event) = event { inner.emit_state(&event); }
     Ok(true)
+}
+
+/// false는 사용자가 취소한 경우이며 호출자는 나머지 동작을 실행하지 않는다.
+pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server: Value, id: Value, release: Value, replace: bool) -> Result<bool, CoreError> {
+    let prepared = prepare_install(inner, window, permission, server, id, release, replace)?;
+    if prepared.needs_consent && !crate::installation_consent::wait(
+        inner, &prepared.window, &prepared.caller, prepared.caller_version, prepared.release,
+        &prepared.server, &prepared.bundle.digest, &prepared.bundle.definition,
+        prepared.from_origin.clone(), prepared.replacing, prepared.modified,
+    )? { return Ok(false); }
+    commit_prepared_install(inner, prepared)
 }
 
 pub(crate) fn remove(inner: &Arc<Inner>, window: &str, permission: &str, id: Value) -> Result<(), CoreError> {

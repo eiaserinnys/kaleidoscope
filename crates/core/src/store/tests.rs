@@ -181,6 +181,7 @@ pub(crate) fn fixture() -> (Loopback, Vec<u8>, Vec<u8>) {
         "id":"example","name":"보기","requires":{"blocks":26,"modules":{"assets":1,"worker":1}},
         "assets":[{"id":"icon","version":1}],"icon":{"asset":"icon","version":1},
         "permissions":[],"worker":{"runtime":"python3","code":"print('{}')"},
+        "state":{"draft":""},
         "ui":{"type":"text","value":"보기"}
     })
     .to_string()
