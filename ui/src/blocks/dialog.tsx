@@ -10,11 +10,23 @@ import { renderBlock } from "../render/render-block";
 
 export type DialogBlockData = Extract<Block, { type: "dialog" }>;
 
+// 쌓기의 채움 칸을 layout과 같은 규칙으로 고른다(0부터, place:"center"는 채우지 않음, 생략하면 마지막 자식).
+function stackFill(block: Extract<Block, { type: "stack" }>): number[] {
+  if (block.place === "center") return [];
+  if (block.fill === undefined) return block.children.length ? [block.children.length - 1] : [];
+  return Array.isArray(block.fill) ? block.fill : [block.fill];
+}
+
 function hasPicker(block: Block): boolean {
   switch (block.type) {
     case "table": return true;
     case "list": return block.layout === "grid";
-    case "stack": case "split": return block.children.some(hasPicker);
+    case "stack": {
+      // 채움 칸에 둔 줄 목록은 대화상자 안에서 남은 자리를 다 차지하므로 표와 같은 고르기 상자로 본다.
+      const fill = stackFill(block);
+      return block.children.some((child, index) => hasPicker(child) || (fill.includes(index) && child.type === "list"));
+    }
+    case "split": return block.children.some(hasPicker);
     case "tabs": return block.tabs.some((tab) => hasPicker(tab.child));
     case "toolbar": return [...block.start, ...(block.end ?? [])].some(hasPicker);
     case "section": return hasPicker(block.child) || (block.actions ?? []).some(hasPicker);

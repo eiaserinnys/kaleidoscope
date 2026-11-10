@@ -1,6 +1,7 @@
 import { useBlockRootProps } from "../comments/block-root";
 import type { Block } from "../contract/contract";
 import { BindingFailureNotice, DataState } from "../components/data-state";
+import { LinkedText } from "../components/external-link";
 import { Button, Notice } from "../components/primitives";
 import { useBinding, useWindowData } from "../data/window-data";
 
@@ -27,5 +28,5 @@ export function NoticeBlock({ block, pointer }: Props) {
 
   const id = errorId.status === "ready" && typeof errorId.value === "string" ? errorId.value : null;
   const actions = block.actions.map((action, index) => <NoticeActionButton key={index} action={action} pointer={pointer} index={index} />);
-  return <Notice rootProps={blockRoot} role={block.kind === "error" ? "alert" : "status"} errorId={id} actions={actions.length ? actions : undefined}>{display(message.value)}</Notice>;
+  return <Notice rootProps={blockRoot} role={block.kind === "error" ? "alert" : "status"} errorId={id} actions={actions.length ? actions : undefined}><LinkedText text={display(message.value)} /></Notice>;
 }

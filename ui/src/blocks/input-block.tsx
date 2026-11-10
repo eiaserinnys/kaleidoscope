@@ -23,6 +23,8 @@ import { createDateTimeFormat, parseISODate, parseISOTime } from "./input-date-t
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 const uninitializedFocus = Symbol("uninitialized focus");
 const fieldPosition = (position: "inline" | "top" | "hidden" | undefined) => position && position !== "inline" ? ` is-label-${position}` : "";
+// 숫자 칸에 아직 숫자가 되는 도중인 글자만 받는다. 부호 하나, 숫자, 소수점 하나(파서와 같은 `.`)이고 빈 글도 받는다.
+const numberDraft = (text: string) => /^[+-]?\d*\.?\d*$/.test(text);
 function bindingText(value: ReturnType<typeof useBinding>): string {
   return value.status === "ready" && value.value !== null && value.value !== undefined ? display(value.value) : "";
 }
@@ -243,7 +245,12 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
       else if (dateTime || optionsOnly || (block.commit ?? "debounce") !== "submit") commit(draft);
       finish(dateTime || block.options !== undefined ? canSyncExternal() : !edited.current);
     },
-    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { latestDraft.current = event.currentTarget.value; markChanged(event.currentTarget.value); }, onKeyDown: keyDown,
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const next = event.currentTarget.value;
+      if (block.kind === "number" && !numberDraft(next)) return;
+      latestDraft.current = next;
+      markChanged(next);
+    }, onKeyDown: keyDown,
     onKeyDownCapture: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => { if (dateTime && !isDate) tabKey.current = event.key === "Tab"; },
     onCompositionStart: () => { composing.current = true; if (block.options !== undefined || dateTime) { if (timer.current) clearTimeout(timer.current); timer.current = null; unregisterFlush.current?.(); unregisterFlush.current = null; } },
     onCompositionEnd: (event: React.CompositionEvent<HTMLInputElement | HTMLTextAreaElement>) => { composing.current = false; if ((block.options !== undefined || dateTime) && edited.current) markChanged(event.currentTarget.value); },

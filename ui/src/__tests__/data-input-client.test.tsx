@@ -708,3 +708,31 @@ it.each([false, true])("앱이 잠근 단추는 미리보기 %s에서도 기본 
   fireEvent.click(control);
   expect(runtime.act).not.toHaveBeenCalled();
 });
+
+it("분할 고르기는 이름표를 묶음 이름으로만 쓰고 첫 단추의 이름을 빼앗지 않는다", () => {
+  runtime.values = { choice: "둘" };
+  const block = { type: "select", label: "형식", label_position: "top", style: "segmented", value: { client: "choice" }, on_change: { client: "choice" }, options: ["하나", "둘"] };
+  const { container } = render(<SelectBlock block={block as never} context={{} as never} pointer="/select" />);
+  expect(screen.getByRole("group", { name: "형식" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "하나" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "둘" })).toBeTruthy();
+  expect(container.querySelector("label.ks-select-field")).toBeNull();
+  fireEvent.click(screen.getByText("형식"));
+  expect(runtime.act).not.toHaveBeenCalled();
+});
+
+it("숫자 칸은 숫자로 이어지는 글자만 받는다", () => {
+  runtime.values = { value: null };
+  const input = { type: "input", kind: "number", value: { client: "value" }, on_change: { client: "change" } };
+  render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+  const field = screen.getByRole("spinbutton") as HTMLInputElement;
+  fireEvent.focus(field);
+  for (const rejected of ["0\\", "1a", "--1", "1..2"]) {
+    fireEvent.change(field, { target: { value: rejected } });
+    expect(field.value).toBe("");
+  }
+  for (const accepted of ["-", "1.", "-0.5", ""]) {
+    fireEvent.change(field, { target: { value: accepted } });
+    expect(field.value).toBe(accepted);
+  }
+});
