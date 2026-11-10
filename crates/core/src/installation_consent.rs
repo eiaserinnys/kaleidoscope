@@ -12,7 +12,11 @@ struct Pending {
 }
 
 #[derive(Default)]
-pub(crate) struct Consents { pending: Mutex<HashMap<String, Pending>> }
+pub(crate) struct Consents {
+    pending: Mutex<HashMap<String, Pending>>,
+    /// 응답 없이 닫힌 쉘 전체 동의의 request_id. 상태 잠금을 쥔 자리에서 담고, 잠금을 놓은 뒤 이벤트로 보낸다.
+    closed: Mutex<Vec<String>>,
+}
 
 fn emit(inner: &Arc<Inner>, owner: InstallConsentOwner, request_id: String, release: u32, store_url: &str, digest: &str, definition: &AppDefinition, from_origin: Option<StoreOrigin>, replacing: bool, modified: bool) {
     // 사용자가 아는 판은 스토어 릴리스다. 앱 목록 항목도 `origin.release`를 보여 준다.
@@ -87,20 +91,51 @@ pub(crate) fn respond(inner: &Inner, owner: &InstallConsentOwner, request_id: &s
     Ok(CoreReply::AppRespondInstallPermission {})
 }
 
-pub(crate) fn state_changed(inner: &Inner) {
-    let state = inner.state.lock().unwrap();
-    let generation = inner.generation.load(Ordering::SeqCst);
-    inner.installation_consents.pending.lock().unwrap().retain(|_, pending| match &pending.owner {
-        InstallConsentOwner::Window { window_id, app_id, app_version } => state.shared.windows.iter()
-            .any(|w| w.id == *window_id && w.app_id == *app_id && w.app_version == *app_version),
-        InstallConsentOwner::Shell { generation: owner_generation, .. } => *owner_generation == generation,
-    });
+pub(crate) fn state_changed(inner: &Arc<Inner>) {
+    let mut closed = Vec::new();
+    {
+        let state = inner.state.lock().unwrap();
+        let generation = inner.generation.load(Ordering::SeqCst);
+        inner.installation_consents.pending.lock().unwrap().retain(|request_id, pending| match &pending.owner {
+            InstallConsentOwner::Window { window_id, app_id, app_version } => state.shared.windows.iter()
+                .any(|w| w.id == *window_id && w.app_id == *app_id && w.app_version == *app_version),
+            InstallConsentOwner::Shell { generation: owner_generation, .. } => {
+                if *owner_generation == generation { true } else { closed.push(request_id.clone()); false }
+            }
+        });
+    }
+    if !closed.is_empty() {
+        inner.installation_consents.closed.lock().unwrap().extend(closed);
+    }
+    flush_closed(inner);
 }
 
 /// 링크가 바뀌면 쉘 전체 동의를 취소한다. 응답을 기다리는 쪽은 채널이 닫혀 취소로 읽는다.
+/// 닫힌 요청은 모아 두었다가 상태 잠금을 놓은 뒤 [`flush_closed`]가 화면에 알린다.
 pub(crate) fn shutdown_shell(inner: &Inner) {
-    inner.installation_consents.pending.lock().unwrap()
-        .retain(|_, pending| !matches!(pending.owner, InstallConsentOwner::Shell { .. }));
+    let mut pending = inner.installation_consents.pending.lock().unwrap();
+    let mut closed = inner.installation_consents.closed.lock().unwrap();
+    pending.retain(|request_id, request| {
+        if matches!(request.owner, InstallConsentOwner::Shell { .. }) {
+            closed.push(request_id.clone());
+            false
+        } else {
+            true
+        }
+    });
 }
 
-pub(crate) fn shutdown(inner: &Inner) { inner.installation_consents.pending.lock().unwrap().clear(); }
+/// 응답 없이 닫힌 쉘 전체 동의를 화면에 알린다. 상태 잠금 밖에서 부른다.
+/// 사용자 응답으로 지운 동의는 화면이 이미 알므로 담기지 않는다. 셧다운은 알릴 화면이 없어 보내지 않는다.
+pub(crate) fn flush_closed(inner: &Arc<Inner>) {
+    let closed = std::mem::take(&mut *inner.installation_consents.closed.lock().unwrap());
+    if inner.shutting_down.load(Ordering::SeqCst) { return; }
+    for request_id in closed {
+        inner.emit(&CoreEvent::AppInstallPermissionClosed { request_id });
+    }
+}
+
+pub(crate) fn shutdown(inner: &Inner) {
+    inner.installation_consents.pending.lock().unwrap().clear();
+    inner.installation_consents.closed.lock().unwrap().clear();
+}

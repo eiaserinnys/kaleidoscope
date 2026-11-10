@@ -46,7 +46,10 @@ pub(crate) fn start(
             crate::installation_consent::shutdown_shell(inner);
             generation
         };
-        crate::server_switch::activate(inner, file.clone(), generation)?;
+        let activated = crate::server_switch::activate(inner, file.clone(), generation);
+        // 전환이 상태 이벤트를 내보내지 못하고 끝나도 닫힌 쉘 동의는 화면에 알린다.
+        crate::installation_consent::flush_closed(inner);
+        activated?;
         start_stream(inner.clone(), generation, file);
         return Ok(CoreReply::LinkStart {
             user_code: String::new(),
@@ -121,6 +124,8 @@ pub(crate) fn start(
         inner.layout_signal.notify();
         emit_state(inner);
     }
+    // 링크 상태가 그대로라 상태 이벤트를 내보내지 않았어도 닫힌 쉘 동의는 알린다.
+    crate::installation_consent::flush_closed(inner);
     if current {
         let inner = Arc::clone(inner);
         let poll_reply = reply.clone();
@@ -188,6 +193,8 @@ pub(crate) fn unlink(inner: &Arc<Inner>) -> Result<CoreReply, CoreError> {
         inner.layout_signal.notify();
         emit_state(inner);
     }
+    // 이미 연결이 없어 상태 이벤트를 내보내지 않았어도 닫힌 쉘 동의는 알린다.
+    crate::installation_consent::flush_closed(inner);
     Ok(CoreReply::LinkUnlink {})
 }
 
@@ -545,6 +552,8 @@ pub(crate) fn token_rejected(inner: &Arc<Inner>, mut file: LinkFile) {
         crate::realtime_host::shutdown_sessions(inner);
         emit_state(inner);
     }
+    // 이미 철회 상태라 상태 이벤트를 내보내지 않았어도 닫힌 쉘 동의는 알린다.
+    crate::installation_consent::flush_closed(inner);
 }
 
 fn wait_before_retry(inner: &Inner, generation: u64, seconds: u64) -> bool {

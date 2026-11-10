@@ -780,7 +780,7 @@ replacing?: boolean,
 /**
  * 설치된 앱을 고친 뒤라 스토어 판이 그 내용을 대체하는지.
  */
-modified?: boolean, digest: string, definition: AppDefinition, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, scope: ProcessGrantScope, } | { "event": "connection.realtime.ready", window_id: string, session: string, handle: string, } | { "event": "connection.realtime.closed", window_id: string, session: string, handle: string, code: number, reason: string, error: CoreError | null, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, };
+modified?: boolean, digest: string, definition: AppDefinition, } | { "event": "app.install_permission_closed", request_id: string, } | { "event": "process.permission", window_id: string, request_id: string, spec: ProcessSpec, scope: ProcessGrantScope, } | { "event": "connection.realtime.ready", window_id: string, session: string, handle: string, } | { "event": "connection.realtime.closed", window_id: string, session: string, handle: string, code: number, reason: string, error: CoreError | null, } | { "event": "process.ready", window_id: string, handle: string, } | { "event": "process.services_changed", window_id: string, handle: string, };
 
 /**
  * 코어의 응답. `op`는 명령과 같다.

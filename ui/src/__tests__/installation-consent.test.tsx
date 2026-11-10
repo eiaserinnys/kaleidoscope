@@ -377,29 +377,51 @@ it("쉘 전체 동의와 창 동의는 서로 섞이지 않는다", async () => 
   store.dispose();
 });
 
-it("링크가 바뀌면 쉘 동의 창을 거두고 늦은 응답을 보내지 않는다", async () => {
-  const { call, change, emitShell, store } = await setup();
+it("링크 전환 스냅샷만으로는 쉘 동의 창을 거두지 않고 코어의 닫힘 이벤트로만 거둔다", async () => {
+  const { call, change, emitShell, receive, store } = await setup();
   change((snapshot) => ({ ...snapshot, link: { state: "connected", mode: "embedded", server_url: "http://localhost:1", device_name: "기기" } }));
   emitShell("shell");
   expect(store.getShellInstallConsent()?.request_id).toBe("shell");
   call.mockClear();
   change((snapshot) => ({ ...snapshot, link: { state: "unlinked" } }));
+  // 코어가 닫힘을 알리기 전에는 창을 유지한다. 링크 전환만 보고 거두면 응답 없는 요청이 남는다.
+  expect(store.getShellInstallConsent()?.request_id).toBe("shell");
+  expect(screen.queryByRole("dialog")).not.toBeNull();
+  act(() => receive({ event: "app.install_permission_closed", request_id: "shell" }));
+  expect(store.getShellInstallConsent()).toBeUndefined();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  // 거둔 뒤에는 늦은 응답을 보내지 않는다. 근거는 코어 이벤트뿐이다.
+  expect(call).not.toHaveBeenCalled();
+  store.dispose();
+});
+
+it("같은 서버 주소가 철회돼도 쉘 동의 창은 코어의 닫힘 이벤트로만 거둔다", async () => {
+  const { call, change, emitShell, receive, store } = await setup();
+  change((snapshot) => ({ ...snapshot, link: { state: "connected", mode: "remote", server_url: "https://server.example.org", device_name: "기기" } }));
+  emitShell("shell");
+  expect(store.getShellInstallConsent()?.request_id).toBe("shell");
+  call.mockClear();
+  change((snapshot) => ({ ...snapshot, link: { state: "revoked", server_url: "https://server.example.org" } }));
+  expect(store.getShellInstallConsent()?.request_id).toBe("shell");
+  expect(screen.queryByRole("dialog")).not.toBeNull();
+  act(() => receive({ event: "app.install_permission_closed", request_id: "shell" }));
   expect(store.getShellInstallConsent()).toBeUndefined();
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(call).not.toHaveBeenCalled();
   store.dispose();
 });
 
-it("같은 서버 주소가 철회되면 쉘 동의 창을 거두고 늦은 응답을 보내지 않는다", async () => {
-  const { call, change, emitShell, store } = await setup();
-  change((snapshot) => ({ ...snapshot, link: { state: "connected", mode: "remote", server_url: "https://server.example.org", device_name: "기기" } }));
-  emitShell("shell");
-  expect(store.getShellInstallConsent()?.request_id).toBe("shell");
-  call.mockClear();
-  change((snapshot) => ({ ...snapshot, link: { state: "revoked", server_url: "https://server.example.org" } }));
+it("쉘 동의 닫힘 이벤트는 그 request_id의 창만 거둔다", async () => {
+  const { emitShell, receive, store } = await setup();
+  emitShell("one");
+  emitShell("two");
+  expect(store.getShellInstallConsent()?.request_id).toBe("one");
+  act(() => receive({ event: "app.install_permission_closed", request_id: "two" }));
+  expect(store.getShellInstallConsent()?.request_id).toBe("one");
+  expect(screen.getByRole("dialog").textContent).toContain("자료 수집");
+  act(() => receive({ event: "app.install_permission_closed", request_id: "one" }));
   expect(store.getShellInstallConsent()).toBeUndefined();
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect(call).not.toHaveBeenCalled();
   store.dispose();
 });
 

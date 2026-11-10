@@ -83,10 +83,9 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       const nextLink = event.snapshot.link;
       const previousServer = previousLink && "server_url" in previousLink ? previousLink.server_url : "";
       const nextServer = "server_url" in nextLink ? nextLink.server_url : "";
-      // 코어는 링크 교체와 토큰 거부(revoked) 때 쉘 전체 동의를 취소한다. 같은 서버 주소의 철회도 포함한다.
+      // 링크가 바뀌면 아이콘 캐시와 창별 서버 동의를 거둔다. 쉘 전체 동의는 코어의 `app.install_permission_closed`로만 거둔다.
       if (previousServer !== nextServer || (nextLink.state === "unlinked" && previousLink?.state !== "unlinked") || (nextLink.state === "revoked" && previousLink?.state !== "revoked")) {
         iconCache.clear();
-        setShellConsent([]);
         for (const [windowId, requests] of installConsents) {
           const remaining = requests.filter((request) => request.event !== "store.server_permission");
           for (const request of requests) if (request.event === "store.server_permission") {
@@ -103,7 +102,10 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       notify();
       advance(event.sequence);
     } else {
-      if (event.event === "app.install_permission" || event.event === "store.server_permission") {
+      // 코어가 응답 없이 닫은 쉘 전체 동의만 거둔다. 창 동의는 창 스냅샷이 알린다.
+      if (event.event === "app.install_permission_closed") {
+        setShellConsent(shellConsents.filter((item) => item.request_id !== event.request_id));
+      } else if (event.event === "app.install_permission" || event.event === "store.server_permission") {
         const windowId = consentWindowId(event);
         if (windowId) setConsent(windowId, [...(installConsents.get(windowId) ?? []), event]);
         else if (event.event === "app.install_permission") setShellConsent([...shellConsents, event]);

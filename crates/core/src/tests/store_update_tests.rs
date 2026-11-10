@@ -663,6 +663,145 @@ fn a_failed_install_after_shell_approval_is_returned_to_the_approval_call() {
     );
 }
 
+/// 응답 없이 닫힌 쉘 전체 동의의 request_id를 모은다.
+fn closed_consents(core: &Core) -> mpsc::Receiver<String> {
+    let (tx, rx) = mpsc::channel();
+    core.subscribe(Box::new(move |event| {
+        if let CoreEvent::AppInstallPermissionClosed { request_id } = event {
+            let _ = tx.send(request_id.clone());
+        }
+    }));
+    rx
+}
+
+/// 쉘 전체 동의가 떠 있는 상태를 만든다. 설치되지 않은 앱은 늘 동의를 묻는다.
+fn pending_shell_consent(core: &Arc<Core>, registry: &FakeRegistryClient) -> Consent {
+    let consents = consents(core);
+    let request_id = deliver(core, request("example", Some(STORE), false));
+    let result = response(registry, &request_id).result;
+    assert!(
+        matches!(result, StoreUpdateResult::ConsentRequired { .. }),
+        "동의 대신 다른 결과: {result:?}"
+    );
+    consents.recv_timeout(Duration::from_secs(5)).unwrap()
+}
+
+#[test]
+fn linking_to_the_same_server_again_reports_the_closed_shell_consent() {
+    let (_temp, core, registry) = setup();
+    let closed = closed_consents(&core);
+    let consent = pending_shell_consent(&core, &registry);
+    *registry.pair_start.lock().unwrap() = Some(Ok(PairStartReply {
+        device_code: "pair".into(),
+        user_code: "123456".into(),
+        expires_at: (chrono::Utc::now() + chrono::Duration::seconds(600)).to_rfc3339(),
+        interval_secs: 600,
+    }));
+    core.handle(CoreRequest::LinkStart {
+        server_url: Some("https://registry.test".into()),
+    })
+    .unwrap();
+    assert_eq!(
+        closed.recv_timeout(Duration::from_secs(5)).unwrap(),
+        consent.request_id,
+        "같은 주소로 다시 연결하면 쉘 동의가 닫혔다고 알린다"
+    );
+    assert!(
+        closed.recv_timeout(Duration::from_millis(300)).is_err(),
+        "닫힘은 한 번만 알린다"
+    );
+    let error = core
+        .handle(CoreRequest::AppRespondInstallPermission {
+            owner: consent.owner,
+            request_id: consent.request_id,
+            digest: consent.digest,
+            allow: true,
+        })
+        .unwrap_err();
+    assert_eq!(
+        error.id.as_deref(),
+        Some("STORECLIENT_INSTALL_REQUEST_EXPIRED")
+    );
+}
+
+#[test]
+fn a_rejected_token_reports_the_closed_shell_consent() {
+    let (_temp, core, registry) = setup();
+    let closed = closed_consents(&core);
+    let consent = pending_shell_consent(&core, &registry);
+    crate::link::token_rejected(&core.inner, crate::link::load_link(&core.inner));
+    assert_eq!(
+        closed.recv_timeout(Duration::from_secs(5)).unwrap(),
+        consent.request_id
+    );
+    assert!(closed.recv_timeout(Duration::from_millis(300)).is_err());
+}
+
+#[test]
+fn returning_to_the_local_server_reports_the_closed_shell_consent() {
+    let temp = TempDir::new().unwrap();
+    // 기동 시 이벤트 스트림을 열지 않도록 철회된 원격 연결을 남긴다. 쉘 동의는 mark_connected로 연결 상태를 만든다.
+    let revoked = LinkFile {
+        revoked: true,
+        mode: kaleidoscope_contract::ServerMode::Remote,
+        format: 1,
+        server_url: "https://remote.test".into(),
+        device_id: "device".into(),
+        device_name: "시험".into(),
+        token: "token".into(),
+    };
+    std::fs::write(temp.path().join("link.json"), serde_json::to_vec(&revoked).unwrap()).unwrap();
+    let registry = registry_client();
+    let core = Arc::new(
+        Core::open_with_client(
+            CoreConfig {
+                media_origin: None,
+                data_dir: temp.path().into(),
+                seed_definitions: vec![],
+                server_url: "https://remote.test".into(),
+                device_name: "시험".into(),
+                embedded_server: Some(crate::EmbeddedServerInfo {
+                    server_url: "http://local.test".into(),
+                    device_id: "local-device".into(),
+                    token: "local-token".into(),
+                }),
+            },
+            Arc::new(FakeHost::default()),
+            registry.clone(),
+        )
+        .unwrap(),
+    );
+    mark_connected(&core);
+    *core.inner.store_transport.lock().unwrap() = Some(Arc::new(crate::store::tests::fixture().0));
+    let closed = closed_consents(&core);
+    let consent = pending_shell_consent(&core, &registry);
+    // use_local은 세대만 올리고 shutdown_shell을 부르지 않는다. 세대 비교로 닫힌 동의를 알린다.
+    core.handle(CoreRequest::LinkUseLocal {}).unwrap();
+    assert_eq!(
+        closed.recv_timeout(Duration::from_secs(5)).unwrap(),
+        consent.request_id
+    );
+    assert!(closed.recv_timeout(Duration::from_millis(300)).is_err());
+}
+
+#[test]
+fn a_user_answer_does_not_report_a_close() {
+    let (_temp, core, registry) = setup();
+    let closed = closed_consents(&core);
+    let consent = pending_shell_consent(&core, &registry);
+    core.handle(CoreRequest::AppRespondInstallPermission {
+        owner: consent.owner,
+        request_id: consent.request_id,
+        digest: consent.digest,
+        allow: false,
+    })
+    .unwrap();
+    assert!(
+        closed.recv_timeout(Duration::from_millis(300)).is_err(),
+        "화면이 이미 아는 사용자 응답은 닫힘이 아니다"
+    );
+}
+
 #[test]
 fn a_link_change_before_shell_approval_reports_the_disconnect_to_the_approval_call() {
     let (_temp, core, registry) = setup();

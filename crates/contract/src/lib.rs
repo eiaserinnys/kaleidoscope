@@ -6526,6 +6526,10 @@ pub enum CoreEvent {
         digest: String,
         definition: AppDefinition,
     },
+    /// 쉘 전체 동의(`owner.kind == "shell"`)가 사용자 응답 없이 닫혔다(링크 교체, 토큰 거부, 링크 세대 변경).
+    /// 쉘은 같은 request_id의 확인 창을 거둔다. 창 동의는 창 스냅샷으로 가리므로 이 이벤트를 보내지 않는다.
+    #[serde(rename = "app.install_permission_closed")]
+    AppInstallPermissionClosed { request_id: String },
     /// 쉘이 사용자에게 실행 허용을 묻는다.
     #[serde(rename = "process.permission")]
     ProcessPermission {
