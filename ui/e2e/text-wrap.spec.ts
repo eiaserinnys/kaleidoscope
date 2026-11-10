@@ -215,6 +215,61 @@ test("긴 사용자 말, 알림, 오류와 도구 이름이 360 폭 기록 안�
   for (const [scrollWidth, clientWidth] of widths.text) expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 });
 
+const LONG_URL = "https://example.org/very/long/path/segments/that/keeps/going/and/going/abcdefghijklmnopqrstuvwxyz";
+const TABLE_DOCUMENT = `# 긴 주소가 든 표
+
+| 항목 | 주소 | 상태 |
+|---|---|---|
+| 공지 | ${LONG_URL} | 열림 |
+| 문서 | https://example.org/short | 닫힘 |
+`;
+
+async function openTableDocument(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 732 });
+  await page.goto("/?preview=md-editor");
+  await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
+  await page.waitForFunction(() => (window as any).__ksHarness !== undefined);
+  await page.evaluate(async (text) => {
+    const harness = (window as any).__ksHarness;
+    await harness.call({ op: "files.pick_folder", window_id: "editor-window", permission: "docs" });
+    await harness.call({ op: "files.write", window_id: "editor-window", permission: "docs", path: "wide-table.md", text });
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const win = snapshot.shared.windows.find((window: any) => window.app_id === "md-editor");
+    win.state = { ...win.state, source: 1, current_file: "wide-table.md" };
+    harness.emit({ event: "state.changed", snapshot });
+  }, TABLE_DOCUMENT);
+  const app = page.getByTestId("app-window-md-editor");
+  await expect(app.locator(".cm-content")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  return app;
+}
+
+test("마크다운 편집기의 표 칸은 낱말 단위로 줄바꿈하고 긴 주소만 끊는다", async ({ page }) => {
+  const app = await openTableDocument(page, 1132);
+  const table = app.locator(".ks-live-table").first();
+  await expect(table).toBeVisible();
+  const lines = await table.locator("th, td").evaluateAll((cells) =>
+    cells
+      .filter((cell) => !(cell.textContent ?? "").startsWith("http"))
+      .map((cell) => {
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        return {
+          text: cell.textContent,
+          lines: new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size,
+        };
+      }),
+  );
+  expect(lines.length).toBeGreaterThanOrEqual(6);
+  for (const cell of lines) expect(cell.lines, cell.text ?? "").toBe(1);
+
+  await page.setViewportSize({ width: 392, height: 732 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const scroller = app.locator(".cm-scroller");
+  const dimensions = await scroller.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+});
+
 test("마크다운 편집기의 표와 긴 코드 줄이 창 폭에 맞는다", async ({ page }) => {
   await page.setViewportSize({ width: 392, height: 732 });
   await page.goto("/?preview=md-editor");

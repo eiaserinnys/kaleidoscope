@@ -53,3 +53,9 @@
   max-width: 100%;
   overflow-wrap: normal;
 }
+
+/* 표 칸은 아무 곳에서나 끊어 창 폭에 맞춘다. 공백 없는 긴 주소와 코드가 남는 폭을 다 가져가 짧은 낱말을 한 글자씩 끊지 않도록, 그런 것이 든 칸은 내용 폭을 20em까지만 내세운다. */
+.ks-live-table :is(th, td):has(.ks-live-url, .ks-live-link, code),
+.ks-markdown-text :is(th, td):has(a, code) {
+  max-width: 20em;
+}

@@ -56,12 +56,13 @@ function appendInline(parent: HTMLElement, node: SyntaxNode, state: EditorState,
   for (const child of children(node)) {
     if (child.from < from || child.to > to) continue;
     if (child.from > cursor) appendSourceText(parent, state, cursor, child.from);
-    const tags: Record<string, string> = { StrongEmphasis: "strong", Emphasis: "em", Strikethrough: "s", InlineCode: "code", Link: "span", Image: "span" };
+    const tags: Record<string, string> = { StrongEmphasis: "strong", Emphasis: "em", Strikethrough: "s", InlineCode: "code", Link: "span", Image: "span", URL: "span" };
     const tag = child.name === "Link" && !resolvedLink(child, state, references) ? undefined : tags[child.name];
     if (tag) {
       const el = document.createElement(tag);
       if (child.name === "Link") el.className = "ks-live-link";
       if (child.name === "Image") el.className = "ks-live-image";
+      if (child.name === "URL") el.className = "ks-live-url";
       const label = child.name === "Link" || child.name === "Image" ? labelBounds(child) : null;
       if (label) appendInline(el, child, state, references, label[0], label[1]);
       else {
