@@ -163,6 +163,44 @@ it.each([
   }
 });
 
+const fillStatusRow: Block = { type: "stack", direction: "row", gap: "small", children: [fillButton, { type: "text", value: "3개 고름" }] };
+const fillTextOnlyRow: Block = { type: "stack", direction: "row", gap: "small", children: [{ type: "text", value: "왼쪽" }, { type: "text", value: "오른쪽" }] };
+
+async function renderLayout(ui: Block) {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  const definition: AppDefinition = { ...mdEditorDefinition, state: { value: "" }, ui };
+  const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
+  const view = render(<AppWindowContent store={createShellStore(transport)} windowId="editor-window" />);
+  await waitFor(() => expect(view.container.querySelector(".ks-data-stack")).not.toBeNull());
+  return view.container.querySelector(".ks-data-stack") as HTMLElement;
+}
+
+it.each([
+  ["글 한 칸", fillStatusRow],
+  ["조건에 든 글", { type: "stack", direction: "row", gap: "small", children: [fillButton, { type: "when", value: true, child: { type: "text", value: "3개 고름" } }] }],
+  ["앵커에 든 글", { type: "stack", direction: "row", gap: "small", children: [fillButton, { type: "anchor", id: "status", child: { type: "text", value: "3개 고름" } }] }],
+] as Array<[string, Block]>)("단추와 글이 한 줄인 결정 줄은 스크롤 밖 꼬리로 나눈다: %s", async (_name, row) => {
+  const stack = await renderLayout({ type: "stack", direction: "column", gap: "small", fill: 1, children: [fillToolbar, fillList, row] });
+  expect(stack.classList.contains("has-action-tail")).toBe(true);
+  expect(stack.querySelector(":scope > .ks-stack-scroll .ks-data-stack.is-row")).toBeNull();
+  const tail = stack.lastElementChild as HTMLElement;
+  expect(tail.classList.contains("ks-data-stack-item")).toBe(true);
+  expect(tail.classList.contains("ks-stack-scroll")).toBe(false);
+  expect(tail.querySelector(".ks-data-stack.is-row")).not.toBeNull();
+});
+
+it("글만 든 가로 줄은 결정 줄로 보지 않는다", async () => {
+  const stack = await renderLayout({ type: "stack", direction: "column", gap: "small", fill: 1, children: [fillToolbar, fillList, fillTextOnlyRow] });
+  expect(stack.classList.contains("has-action-tail")).toBe(false);
+});
+
+it("맨 끝 결정 줄은 암묵 채움 칸이 되지 않는다", async () => {
+  const stack = await renderLayout({ type: "stack", direction: "column", gap: "small", children: [fillText, fillList, fillStatusRow] });
+  const content = stack.querySelector(":scope > .ks-stack-scroll > .ks-stack-scroll-content") ?? stack;
+  expect(stack.classList.contains("has-action-tail")).toBe(false);
+  expect(Array.from(content.children).flatMap((child, index) => child.classList.contains("is-fill") ? [index] : [])).toEqual([]);
+});
+
 function setup(rows?: number) {
   const definition: AppDefinition = {
     ...mdEditorDefinition, requires: { blocks: 4, modules: {} },

@@ -303,6 +303,56 @@ test("도구 막대 결정 줄 꼬리는 자기 안쪽 여백을 그대로 쓴�
   expect(Math.abs(m.buttonToStack - 8)).toBeLessThanOrEqual(1);
 });
 
+// 카드 #1137: when 거짓 칸이 맨 끝에 남아도 보이는 마지막 칸이 끝 여백을 맡는다.
+const hiddenTail = { ...reproduction, children: [toolbar, itemList, input, { type: "when", value: { state: "dialogOpen" }, child: button }] };
+const hiddenLast = { ...reproduction, children: [toolbar, itemList, input, button, { type: "when", value: { state: "dialogOpen" }, child: { type: "button", label: "지우기", on_click: [] } }] };
+
+for (const [width, height] of [[1180, 720], [360, 240]] as const) {
+  test(`when 거짓 꼬리 뒤에서도 스크롤 내용 끝이 끝 여백을 갖는다 (${width}×${height})`, async ({ page }, testInfo) => {
+    const app = await open(page, hiddenTail, width, height);
+    const m = await app.evaluate((el) => {
+      const root = el.querySelector(".ks-data-window-body")!.firstElementChild as HTMLElement;
+      const scroll = root.querySelector(":scope > .ks-stack-scroll") as HTMLElement;
+      const content = scroll.querySelector(".ks-stack-scroll-content") as HTMLElement;
+      const hidden = [...root.children].find((child) => child.classList.contains("ks-data-stack-item") && getComputedStyle(child).display === "none") as HTMLElement | undefined;
+      const inputBox = scroll.querySelector('input[placeholder="메모"]')!.closest(".ks-data-stack-item") as HTMLElement;
+      return {
+        contentPadding: parseFloat(getComputedStyle(content).paddingBottom),
+        hiddenPadding: hidden ? parseFloat(getComputedStyle(hidden).paddingBottom) : null,
+        inputGap: scroll.getBoundingClientRect().bottom - inputBox.getBoundingClientRect().bottom,
+        space: parseFloat(getComputedStyle(root).getPropertyValue("--ks-space-3")),
+      };
+    });
+    await record(testInfo, `hidden-tail-${width}x${height}`, m);
+    await page.screenshot({ path: testInfo.outputPath(`hidden-tail-${width}x${height}.png`) });
+    expect(Math.abs(m.contentPadding - m.space)).toBeLessThanOrEqual(1);
+    expect(m.hiddenPadding).toBe(0);
+    expect(Math.abs(m.inputGap - m.space)).toBeLessThanOrEqual(1);
+  });
+
+  test(`when 거짓 단추가 맨 끝이어도 보이는 단추가 끝 여백을 갖는다 (${width}×${height})`, async ({ page }, testInfo) => {
+    const app = await open(page, hiddenLast, width, height);
+    const m = await app.evaluate((el) => {
+      const root = el.querySelector(".ks-data-window-body")!.firstElementChild as HTMLElement;
+      const items = [...root.children] as HTMLElement[];
+      const visibleLast = items.filter((item) => getComputedStyle(item).display !== "none" && item.querySelector("button")).at(-1)!;
+      const hidden = items.find((item) => item.classList.contains("ks-data-stack-item") && getComputedStyle(item).display === "none");
+      const visibleButton = visibleLast.querySelector("button") as HTMLButtonElement;
+      return {
+        visiblePadding: parseFloat(getComputedStyle(visibleLast).paddingBottom),
+        hiddenPadding: hidden ? parseFloat(getComputedStyle(hidden).paddingBottom) : null,
+        buttonToStack: root.getBoundingClientRect().bottom - visibleButton.getBoundingClientRect().bottom,
+        space: parseFloat(getComputedStyle(root).getPropertyValue("--ks-space-3")),
+      };
+    });
+    await record(testInfo, `hidden-last-${width}x${height}`, m);
+    await page.screenshot({ path: testInfo.outputPath(`hidden-last-${width}x${height}.png`) });
+    expect(Math.abs(m.visiblePadding - m.space)).toBeLessThanOrEqual(1);
+    expect(m.hiddenPadding).toBe(0);
+    expect(Math.abs(m.buttonToStack - m.space)).toBeLessThanOrEqual(1);
+  });
+}
+
 for (const [name, ui] of [["section", sectionAction], ["tab", tabAction], ["dialog", dialogAction]] as const) {
   test(`구역, 탭, 대화상자 안 결정 줄 꼬리는 그쪽이 끝 여백을 소유한다 (${name})`, async ({ page }, testInfo) => {
     const app = await open(page, ui, 1180, 720);

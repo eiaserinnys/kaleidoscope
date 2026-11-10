@@ -21,18 +21,36 @@ export function isMultilineInput(block: Extract<Block, { type: "input" }>): bool
   return Boolean(block.multiline || (block.rows ?? 0) >= 2);
 }
 
+function isActionRowChild(block: Block | undefined): boolean {
+  if (!block) return false;
+  if (block.type === "when" || block.type === "anchor") return isActionRowChild(block.child);
+  return block.type === "button" || block.type === "toolbar" || block.type === "text";
+}
+
+function hasButton(block: Block | undefined): boolean {
+  if (!block) return false;
+  if (block.type === "when" || block.type === "anchor") return hasButton(block.child);
+  return block.type === "button";
+}
+
+// 단추와 상태 글을 한 줄에 두는 결정 줄. 글만 든 가로 줄은 결정 줄이 아니다.
+function isActionRow(block: Extract<Block, { type: "stack" }>): boolean {
+  return block.direction === "row" && block.place !== "center" && block.children.length > 0
+    && block.children.every(isActionRowChild) && block.children.some(hasButton);
+}
+
 function isFixedHeightControl(block: Block | undefined): boolean {
   if (!block) return false;
   if (block.type === "input") return !isMultilineInput(block);
   if (block.type === "when" || block.type === "anchor") return isFixedHeightControl(block.child);
-  if (block.type === "stack") return block.place !== "center" && block.children.length > 0 && block.children.every(isFixedHeightControl);
+  if (block.type === "stack") return block.place !== "center" && block.children.length > 0 && (block.children.every(isFixedHeightControl) || isActionRow(block));
   return ["button", "select", "toggle", "slider", "color", "toolbar"].includes(block.type);
 }
 
 function isActionControl(block: Block | undefined): boolean {
   if (!block) return false;
   if (block.type === "when" || block.type === "anchor") return isActionControl(block.child);
-  if (block.type === "stack") return block.place !== "center" && block.children.length > 0 && block.children.every(isActionControl);
+  if (block.type === "stack") return block.place !== "center" && block.children.length > 0 && (block.children.every(isActionControl) || isActionRow(block));
   return block.type === "button" || block.type === "toolbar";
 }
 
