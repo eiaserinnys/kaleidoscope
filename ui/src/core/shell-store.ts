@@ -83,9 +83,9 @@ export function createShellStore(transport: CoreTransport): ShellStore {
       const nextLink = event.snapshot.link;
       const previousServer = previousLink && "server_url" in previousLink ? previousLink.server_url : "";
       const nextServer = "server_url" in nextLink ? nextLink.server_url : "";
-      if (previousServer !== nextServer || (nextLink.state === "unlinked" && previousLink?.state !== "unlinked")) {
+      // 코어는 링크 교체와 토큰 거부(revoked) 때 쉘 전체 동의를 취소한다. 같은 서버 주소의 철회도 포함한다.
+      if (previousServer !== nextServer || (nextLink.state === "unlinked" && previousLink?.state !== "unlinked") || (nextLink.state === "revoked" && previousLink?.state !== "revoked")) {
         iconCache.clear();
-        // 쉘 전체 동의는 링크 교체 때 코어가 이미 취소한다. 늦은 거절 응답을 보내지 않고 화면만 거둔다.
         setShellConsent([]);
         for (const [windowId, requests] of installConsents) {
           const remaining = requests.filter((request) => request.event !== "store.server_permission");

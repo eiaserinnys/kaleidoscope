@@ -14,7 +14,12 @@ use crate::{link, store, store_latest, Inner};
 
 enum Applied {
     Reply(StoreUpdateResult),
-    Consent { consent_request_id: String, receiver: mpsc::Receiver<bool>, prepared: PreparedInstall },
+    Consent {
+        consent_request_id: String,
+        receiver: mpsc::Receiver<bool>,
+        outcome: mpsc::Sender<Result<(), CoreError>>,
+        prepared: PreparedInstall,
+    },
 }
 
 fn expired(request: &StoreUpdateRequest) -> Result<(), CoreError> {
@@ -56,8 +61,8 @@ fn register_consent(inner: &Arc<Inner>, generation: u64, request: &StoreUpdateRe
         inner, generation, prepared.release, &prepared.server, &prepared.bundle.digest,
         &prepared.bundle.definition, prepared.from_origin.clone(), prepared.replacing, prepared.modified,
     )?;
-    let (consent_request_id, receiver) = registered.ok_or_else(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED)?;
-    Ok(Applied::Consent { consent_request_id, receiver, prepared })
+    let (consent_request_id, receiver, outcome) = registered.ok_or_else(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED)?;
+    Ok(Applied::Consent { consent_request_id, receiver, outcome, prepared })
 }
 
 fn begin(inner: &Arc<Inner>, generation: u64, request: &StoreUpdateRequest) -> Result<Applied, CoreError> {
@@ -96,22 +101,25 @@ fn post(inner: &Inner, generation: u64, response: &StoreUpdateResponse) {
 }
 
 /// 승인 뒤 설치는 준비한 같은 바이트와 기대 판, 세대 검사를 그대로 쓴다.
-/// 끝난 MCP 요청에는 두 번째 결과를 보내지 않고 기존 앱 변경 이벤트로 결과를 보인다.
-fn await_consent(inner: Arc<Inner>, generation: u64, request_id: String, receiver: mpsc::Receiver<bool>, prepared: PreparedInstall) {
+/// 끝난 MCP 요청에는 두 번째 결과를 보내지 않고, 승인 호출의 응답으로 실패를 알리며 성공은 앱 변경 이벤트로 보인다.
+fn await_consent(inner: Arc<Inner>, generation: u64, receiver: mpsc::Receiver<bool>, outcome: mpsc::Sender<Result<(), CoreError>>, prepared: PreparedInstall) {
     std::thread::spawn(move || {
         // 링크 교체·코어 종료로 동의가 취소되면 채널이 닫혀 취소로 읽는다.
         if !receiver.recv().unwrap_or(false) { return; }
         if !link::is_current(&inner, generation) {
-            eprintln!("앱 갱신 동의 뒤 연결이 바뀌어 설치하지 않았습니다: request_id={request_id}");
+            // 사용자는 이미 승인했다. 링크가 바뀌어 설치하지 않았다는 사실을 승인 호출에 돌려준다.
+            let _ = outcome.send(Err(errors::STORECLIENT_INSTALL_SERVER_DISCONNECTED()));
             return;
         }
-        if let Err(error) = install::commit_prepared_install(&inner, prepared) {
+        let result = install::commit_prepared_install(&inner, prepared);
+        if let Err(error) = &result {
             if let Some(code) = error.id.as_deref() {
                 eprintln!("앱 갱신 설치 실패: code={code} {}", error.message);
             } else {
                 eprintln!("앱 갱신 설치 실패: {}", error.message);
             }
         }
+        let _ = outcome.send(result.map(|_| ()));
     });
 }
 
@@ -122,12 +130,12 @@ pub(crate) fn handle_device_event(inner: &Arc<Inner>, generation: u64, request: 
         let request_id = request.request_id.clone();
         match begin(&inner, generation, &request) {
             Ok(Applied::Reply(result)) => post(&inner, generation, &StoreUpdateResponse { request_id, result }),
-            Ok(Applied::Consent { consent_request_id, receiver, prepared }) => {
+            Ok(Applied::Consent { consent_request_id, receiver, outcome, prepared }) => {
                 post(&inner, generation, &StoreUpdateResponse {
                     request_id: request_id.clone(),
                     result: StoreUpdateResult::ConsentRequired { consent_request_id },
                 });
-                await_consent(Arc::clone(&inner), generation, request_id, receiver, prepared);
+                await_consent(Arc::clone(&inner), generation, receiver, outcome, prepared);
             }
             Err(error) => post(&inner, generation, &StoreUpdateResponse {
                 request_id,

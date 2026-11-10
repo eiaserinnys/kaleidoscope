@@ -159,7 +159,7 @@ fn store_install_transmits_connections_from_the_approved_manifest() {
     assert_eq!(format!("{:x}", Sha256::digest(base64::Engine::decode(&base64::engine::general_purpose::STANDARD, &requests[0].manifest_base64).unwrap())), digest);
 }
 
-fn switch_cache(core: &Core) {
+pub(super) fn switch_cache(core: &Core) {
     let definition = json!({"id":"example","name":"새 서버 앱","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"새 서버"}}).to_string();
     let mut state = core.inner.state.lock().unwrap();
     core.inner.generation.fetch_add(1, Ordering::SeqCst);

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """MCP가 시작한 쉘 전체 설치 동의를 두 크기와 라이트·다크 테마에서 캡처한다.
 
-장면: 새 설치, 고친 판에서 같은 스토어의 스토어 판으로 전환(수정본 경고 포함).
+장면: 새 설치, 고친 판에서 같은 스토어의 스토어 판으로 전환(수정본 경고 포함), 넘치지 않는 짧은 설치.
+각 장면에서 Tab 순서와 스크롤 칸의 키보드 스크롤도 재서 result.json에 남긴다.
 
   python3 scripts/visual-check/check_store_update_shell_consent.py [--output 산출폴더] [--port 5293] [--label after]
 
@@ -40,6 +41,11 @@ SCENES = (
         "async () => { window.installationHarness.showShell('heavy', {}, 2, "
         "{ replacing: true, modified: true, store_url: 'https://eiaserinnys.me/appstore-eias/', "
         "from_origin: { store_url: 'https://eiaserinnys.me/appstore-eias/', store_app_id: 'research-desk', release: 2, digest: 'old-digest' } }); }",
+    ),
+    (
+        "install-light",
+        "async () => { window.installationHarness.showShell('light', {}, undefined, "
+        "{ store_url: 'https://eiaserinnys.me/appstore-eias/' }); }",
     ),
 )
 
@@ -100,6 +106,57 @@ def capture(page, output, key):
     return str(path)
 
 
+def focus_fact(page):
+    return page.evaluate(
+        "() => { const el = document.activeElement;"
+        " if (!el || el === document.body) return null;"
+        " return { tag: el.tagName,"
+        " scroll: el.classList.contains('ks-dialog-scroll'),"
+        " summary: el.tagName === 'SUMMARY',"
+        " text: (el.textContent || '').trim().slice(0, 40) }; }"
+    )
+
+
+def keyboard_probe(page):
+    """쉘 전체 동의의 Tab 순서와 스크롤 칸 키보드 스크롤을 잰다."""
+    state = page.evaluate(
+        "() => { const el = document.querySelector('.ks-install-consent .ks-dialog-scroll');"
+        " if (!el) return null;"
+        " return { tabindex: el.getAttribute('tabindex'), client: el.clientHeight,"
+        " scroll: el.scrollHeight, scrollable: el.clientHeight > 0 && el.scrollHeight > el.clientHeight }; }"
+    )
+    order = [focus_fact(page)]
+    reached = False
+    keyboard_scroll = None
+    for _ in range(6):
+        page.keyboard.press("Tab")
+        current = focus_fact(page)
+        order.append(current)
+        if current and current["scroll"] and not reached:
+            reached = True
+            before = page.evaluate(
+                "() => document.querySelector('.ks-install-consent .ks-dialog-scroll').scrollTop"
+            )
+            page.keyboard.press("End")
+            # 크로미엄은 키보드 스크롤을 부드럽게 옮기므로 다 옮길 때까지 조금 기다린다.
+            after = before
+            for _ in range(10):
+                page.wait_for_timeout(100)
+                after = page.evaluate(
+                    "() => document.querySelector('.ks-install-consent .ks-dialog-scroll').scrollTop"
+                )
+                if after > before:
+                    break
+            keyboard_scroll = {"before": before, "after": after, "moved": after > before}
+    return {
+        "state": state,
+        "tab_reached": reached,
+        "tab_order": order,
+        "summaries_reached": sum(1 for item in order if item and item["summary"]),
+        "keyboard_scroll": keyboard_scroll,
+    }
+
+
 def shell_scene(page, port, width, height, theme, key, output, show):
     page.emulate_media(color_scheme=theme)
     page.set_viewport_size({"width": width, "height": height})
@@ -138,6 +195,7 @@ def shell_scene(page, port, width, height, theme, key, output, show):
         ),
     }
     facts["capture"] = capture(page, output, key)
+    facts["keyboard"] = keyboard_probe(page)
     return facts
 
 

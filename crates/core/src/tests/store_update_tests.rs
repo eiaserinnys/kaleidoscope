@@ -606,3 +606,89 @@ fn a_link_change_cancels_the_shell_consent() {
     );
     assert_eq!(app(&core).origin.unwrap().release, 2);
 }
+
+#[test]
+fn a_failed_install_after_shell_approval_is_returned_to_the_approval_call() {
+    let (_temp, core, registry) = setup();
+    let consents = consents(&core);
+    let request_id = deliver(&core, request("example", Some(STORE), false));
+    let consent = consents.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(matches!(
+        response(&registry, &request_id).result,
+        StoreUpdateResult::ConsentRequired { .. }
+    ));
+
+    // 설치 전송을 붙잡아 둔 사이 서버 캐시가 바뀌면 확정 단계가 문맥 변경으로 실패한다.
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (resume_tx, resume_rx) = mpsc::channel();
+    *registry.store_install_pause.lock().unwrap() = Some((ready_tx, resume_rx));
+    let approval = {
+        let core = Arc::clone(&core);
+        let owner = consent.owner;
+        let request_id = consent.request_id;
+        let digest = consent.digest;
+        thread::spawn(move || {
+            core.handle(CoreRequest::AppRespondInstallPermission {
+                owner,
+                request_id,
+                digest,
+                allow: true,
+            })
+        })
+    };
+    ready_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("설치 전송이 시작되지 않았다");
+    store_runtime_tests::switch_cache(&core);
+    resume_tx.send(()).unwrap();
+
+    let error = approval
+        .join()
+        .unwrap()
+        .expect_err("승인 호출이 설치 결과를 기다리지 않았다");
+    assert_eq!(
+        error.id.as_deref(),
+        Some("STORECLIENT_INSTALL_CONTEXT_CHANGED")
+    );
+    // 끝난 MCP 요청에는 두 번째 결과를 보내지 않는다.
+    assert_eq!(
+        registry
+            .store_update_responses
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|item| item.request_id == request_id)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn a_link_change_before_shell_approval_reports_the_disconnect_to_the_approval_call() {
+    let (_temp, core, registry) = setup();
+    let consents = consents(&core);
+    let request_id = deliver(&core, request("example", Some(STORE), false));
+    let consent = consents.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert!(matches!(
+        response(&registry, &request_id).result,
+        StoreUpdateResult::ConsentRequired { .. }
+    ));
+    // 승인 뒤 확정 전에 연결 세대가 바뀐 경우. 사용자는 이미 승인했으므로 실패를 승인 호출로 돌려준다.
+    store_runtime_tests::switch_cache(&core);
+    let error = core
+        .handle(CoreRequest::AppRespondInstallPermission {
+            owner: consent.owner,
+            request_id: consent.request_id,
+            digest: consent.digest,
+            allow: true,
+        })
+        .unwrap_err();
+    assert_eq!(
+        error.id.as_deref(),
+        Some("STORECLIENT_INSTALL_SERVER_DISCONNECTED")
+    );
+    assert!(
+        registry.store_requests.lock().unwrap().is_empty(),
+        "연결이 바뀐 뒤에는 설치를 보내지 않는다"
+    );
+}

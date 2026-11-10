@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useLayoutEffect, useSyncExternalStore, type MouseEvent } from "react";
-import { Dialog, isWindowTop, TriangleAlert, useShellSelector, type InstallConsent, type ShellInstallConsent, type ShellStore } from "@kaleidoscope/ui";
+import { Dialog, isWindowTop, toCoreError, TriangleAlert, useShellSelector, type CoreError, type InstallConsent, type ShellInstallConsent, type ShellStore } from "@kaleidoscope/ui";
 import { describeInstallScope } from "./install-scope";
 import { useHoldWhileWriting } from "./use-hold-while-writing";
 
@@ -96,7 +96,7 @@ export function InstallationConsent({ store, windowId, host }: { store: ShellSto
 }
 
 /** 창 없이 쉘 전체에 뜨는 설치 동의. MCP가 시작한 요청이라 앱스토어 창이 없어도 된다. */
-export function ShellInstallationConsent({ store, host }: { store: ShellStore; host: HTMLElement | null }) {
+export function ShellInstallationConsent({ store, host, onError }: { store: ShellStore; host: HTMLElement | null; onError?: (error: CoreError) => void }) {
   const subscribe = useCallback((listener: () => void) => store.subscribeShellInstallConsent(listener), [store]);
   const getRequest = useCallback(() => store.getShellInstallConsent(), [store]);
   const request = useSyncExternalStore(subscribe, getRequest, getRequest);
@@ -104,8 +104,10 @@ export function ShellInstallationConsent({ store, host }: { store: ShellStore; h
   const hold = useHoldWhileWriting(request !== undefined);
   const answer = useCallback((allow: boolean) => {
     if (!request) return;
-    void store.call({ op: "app.respond_install_permission", owner: request.owner, request_id: request.request_id, digest: request.digest, allow });
-  }, [request, store]);
+    // 승인 호출은 설치가 끝난 뒤 결과를 돌려준다. 실패는 이미 닫힌 MCP 요청이 아니라 쉘 알림으로 보인다.
+    store.call({ op: "app.respond_install_permission", owner: request.owner, request_id: request.request_id, digest: request.digest, allow })
+      .catch((reason: unknown) => { if (allow) onError?.(toCoreError(reason)); });
+  }, [request, store, onError]);
   const cancel = useCallback(() => answer(false), [answer]);
   const confirm = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     if (event.nativeEvent.isTrusted) answer(true);

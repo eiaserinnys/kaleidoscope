@@ -7,6 +7,8 @@ struct Pending {
     owner: InstallConsentOwner,
     digest: String,
     reply: mpsc::SyncSender<bool>,
+    /// 쉘 승인 호출이 설치 결과를 기다리는 수신자. 창 동의는 호출자가 이미 동기로 결과를 받으므로 없다.
+    outcome: Option<mpsc::Receiver<Result<(), CoreError>>>,
 }
 
 #[derive(Default)]
@@ -35,26 +37,27 @@ pub(crate) fn wait(inner: &Arc<Inner>, window: &str, app: &str, version: u32, re
         }
         let mut pending = inner.installation_consents.pending.lock().unwrap();
         if inner.shutting_down.load(Ordering::SeqCst) { return Ok(false); }
-        pending.insert(request_id.clone(), Pending { owner: owner.clone(), digest: digest.into(), reply });
+        pending.insert(request_id.clone(), Pending { owner: owner.clone(), digest: digest.into(), reply, outcome: None });
     }
     emit(inner, owner, request_id, release, store_url, digest, definition, from_origin, replacing, modified);
     Ok(receiver.recv().unwrap_or(false))
 }
 
-/// MCP가 시작한 쉘 전체 동의를 등록하고 응답을 기다릴 수신자를 돌려준다.
+/// MCP가 시작한 쉘 전체 동의를 등록하고 응답과 설치 결과를 기다릴 수신자를 돌려준다.
 /// 셧다운 중이면 None이며, 호출자는 동의 창 없이 요청을 끝낸다.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn register_shell(inner: &Arc<Inner>, generation: u64, release: u32, store_url: &str, digest: &str, definition: &AppDefinition, from_origin: Option<StoreOrigin>, replacing: bool, modified: bool) -> Result<Option<(String, mpsc::Receiver<bool>)>, CoreError> {
+pub(crate) fn register_shell(inner: &Arc<Inner>, generation: u64, release: u32, store_url: &str, digest: &str, definition: &AppDefinition, from_origin: Option<StoreOrigin>, replacing: bool, modified: bool) -> Result<Option<(String, mpsc::Receiver<bool>, mpsc::Sender<Result<(), CoreError>>)>, CoreError> {
     let request_id = uuid::Uuid::new_v4().to_string();
     let (reply, receiver) = mpsc::sync_channel(1);
+    let (outcome, outcome_receiver) = mpsc::channel();
     let owner = InstallConsentOwner::Shell { generation, request_id: request_id.clone() };
     {
         let mut pending = inner.installation_consents.pending.lock().unwrap();
         if inner.shutting_down.load(Ordering::SeqCst) { return Ok(None); }
-        pending.insert(request_id.clone(), Pending { owner: owner.clone(), digest: digest.into(), reply });
+        pending.insert(request_id.clone(), Pending { owner: owner.clone(), digest: digest.into(), reply, outcome: Some(outcome_receiver) });
     }
     emit(inner, owner, request_id.clone(), release, store_url, digest, definition, from_origin, replacing, modified);
-    Ok(Some((request_id, receiver)))
+    Ok(Some((request_id, receiver, outcome)))
 }
 
 pub(crate) fn respond(inner: &Inner, owner: &InstallConsentOwner, request_id: &str, digest: &str, allow: bool) -> Result<CoreReply, CoreError> {
@@ -69,7 +72,18 @@ pub(crate) fn respond(inner: &Inner, owner: &InstallConsentOwner, request_id: &s
     }
     if request.digest != digest { return Err(errors::STORECLIENT_INSTALL_DIGEST_MISMATCH()); }
     let request = pending.remove(request_id).unwrap();
+    // 설치가 상태 변경 이벤트를 보내며 이 잠금을 다시 잡으므로 기다리기 전에 놓는다.
+    drop(pending);
+    let outcome = request.outcome.filter(|_| allow);
     request.reply.send(allow).map_err(|_| errors::STORECLIENT_INSTALL_RESPONSE_CLOSED())?;
+    // 쉘 승인은 설치가 끝날 때까지 기다려 결과를 돌려준다. 실패는 이미 끝난 MCP 요청이 아니라 이 응답으로 알린다.
+    if let Some(outcome) = outcome {
+        match outcome.recv() {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => return Err(error),
+            Err(_) => return Err(errors::STORECLIENT_INSTALL_RESPONSE_CLOSED()),
+        }
+    }
     Ok(CoreReply::AppRespondInstallPermission {})
 }
 

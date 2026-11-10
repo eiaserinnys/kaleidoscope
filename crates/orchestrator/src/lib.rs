@@ -23,6 +23,7 @@ use kaleidoscope_contract::{
         self, DeviceEvent, DeviceUploadRequest, PairPollReply, PairPollRequest, PairStartReply,
         PairStartRequest, RegistryApp,
     },
+    store::StoreOrigin,
     validate::parse_app_definition,
     App, AppDefinition, AppVersion, CoreError, ErrorCode, Requires, Supported,
     LEGACY_BLOCK_SET_VERSION,
@@ -171,6 +172,10 @@ struct AppSummary {
     updated_at: String,
     builtin: bool,
     definition_available: bool,
+    /// 스토어 설치 기록이 있을 때만 있다. 에이전트가 스토어 앱과 커스텀 앱을 가리는 데 쓴다.
+    origin: Option<StoreOrigin>,
+    /// 출처가 있고 지금 판이 설치 기준 판과 다르면 true다. upload_app으로 고친 수정본이다.
+    modified: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -545,6 +550,9 @@ impl AppState {
                 .map(|row| AppSummary {
                     builtin: false,
                     definition_available: true,
+                    modified: row.app.origin.is_some()
+                        && row.app.installed_version != Some(row.app.current_version),
+                    origin: row.app.origin,
                     id: row.app.id,
                     name: row.app.name,
                     description: row.version.definition.description,
@@ -563,6 +571,8 @@ impl AppState {
                         updated_at: identity.updated_at.into(),
                         builtin: true,
                         definition_available: false,
+                        origin: None,
+                        modified: false,
                     }),
             );
             summaries.sort_by(|a, b| a.id.cmp(&b.id));

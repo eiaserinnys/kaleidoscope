@@ -1,4 +1,5 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Profiler, useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { WindowFrame } from "../../../app/src/shell/window-frame";
@@ -10,12 +11,28 @@ import { beginWindowAction } from "../share/action-context";
 import { executeWindowAction, readWindowView, registerControlWindow } from "../share/window-control";
 import { makeTestSnapshot } from "./fixtures";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 /** 앱 셸처럼 쉘 전체 동의를 main에 포털하는 자리를 만든다. */
 function ShellConsentHost({ store }: { store: ShellStore }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
   return <main ref={setHost}>{host ? <ShellInstallationConsent store={store} host={host} /> : null}</main>;
+}
+
+/** ResizeObserver가 없는 jsdom에서 칸 크기 변화를 직접 알리기 위한 대체물. */
+let observerCallbacks: (() => void)[] = [];
+function mockResizeObserver() {
+  observerCallbacks = [];
+  vi.stubGlobal("ResizeObserver", class {
+    private readonly callback: ResizeObserverCallback;
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+      observerCallbacks.push(() => this.callback([], this as unknown as ResizeObserver));
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
 }
 
 const definition = {
@@ -370,5 +387,81 @@ it("링크가 바뀌면 쉘 동의 창을 거두고 늦은 응답을 보내지 �
   expect(store.getShellInstallConsent()).toBeUndefined();
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(call).not.toHaveBeenCalled();
+  store.dispose();
+});
+
+it("같은 서버 주소가 철회되면 쉘 동의 창을 거두고 늦은 응답을 보내지 않는다", async () => {
+  const { call, change, emitShell, store } = await setup();
+  change((snapshot) => ({ ...snapshot, link: { state: "connected", mode: "remote", server_url: "https://server.example.org", device_name: "기기" } }));
+  emitShell("shell");
+  expect(store.getShellInstallConsent()?.request_id).toBe("shell");
+  call.mockClear();
+  change((snapshot) => ({ ...snapshot, link: { state: "revoked", server_url: "https://server.example.org" } }));
+  expect(store.getShellInstallConsent()).toBeUndefined();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(call).not.toHaveBeenCalled();
+  store.dispose();
+});
+
+it("쉘 전체 동의 창은 내용이 넘칠 때만 스크롤 칸과 상세 요약에 Tab으로 닿는다", async () => {
+  mockResizeObserver();
+  const { emitShell, store } = await setup();
+  emitShell("shell");
+  const dialog = screen.getByRole("dialog");
+  const scroll = dialog.querySelector<HTMLElement>(".ks-dialog-scroll")!;
+  const summaries = Array.from(dialog.querySelectorAll("summary"));
+  expect(summaries).toHaveLength(2);
+  // jsdom 기본 높이는 0이라 처음에는 칸이 Tab 대상이 아니다.
+  expect(scroll.getAttribute("tabindex")).toBeNull();
+  const setSize = async (clientHeight: number, scrollHeight: number) => {
+    Object.defineProperty(scroll, "clientHeight", { configurable: true, value: clientHeight });
+    Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: scrollHeight });
+    await act(async () => { observerCallbacks.forEach((callback) => callback()); });
+  };
+
+  // 높이가 0이거나 내용이 넘치지 않으면 칸을 건너뛴다.
+  await setSize(0, 600);
+  expect(scroll.getAttribute("tabindex")).toBeNull();
+  await setSize(300, 300);
+  expect(scroll.getAttribute("tabindex")).toBeNull();
+
+  await setSize(300, 600);
+  expect(scroll.getAttribute("tabindex")).toBe("0");
+  const cancel = within(dialog).getByRole("button", { name: "취소" });
+  const confirm = within(dialog).getByRole("button", { name: "허용하고 설치" });
+  await waitFor(() => expect(document.activeElement).toBe(cancel));
+  await userEvent.tab();
+  expect(document.activeElement).toBe(confirm);
+  // 마지막 단추에서 Tab하면 가둔 첫 대상인 스크롤 칸으로 간다.
+  await userEvent.tab();
+  expect(document.activeElement).toBe(scroll);
+  await userEvent.tab();
+  expect(document.activeElement).toBe(summaries[0]);
+  await userEvent.tab();
+  expect(document.activeElement).toBe(summaries[1]);
+  await userEvent.tab();
+  expect(document.activeElement).toBe(cancel);
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  store.dispose();
+});
+
+it("넘치지 않는 쉘 전체 동의 창은 스크롤 칸을 건너뛰고 요약과 단추만 Tab 대상으로 둔다", async () => {
+  mockResizeObserver();
+  const { emitShell, store } = await setup();
+  emitShell("shell");
+  const dialog = screen.getByRole("dialog");
+  const scroll = dialog.querySelector<HTMLElement>(".ks-dialog-scroll")!;
+  const summaries = Array.from(dialog.querySelectorAll("summary"));
+  Object.defineProperty(scroll, "clientHeight", { configurable: true, value: 300 });
+  Object.defineProperty(scroll, "scrollHeight", { configurable: true, value: 300 });
+  await act(async () => { observerCallbacks.forEach((callback) => callback()); });
+  expect(scroll.getAttribute("tabindex")).toBeNull();
+  const cancel = within(dialog).getByRole("button", { name: "취소" });
+  const confirm = within(dialog).getByRole("button", { name: "허용하고 설치" });
+  await waitFor(() => expect(document.activeElement).toBe(cancel));
+  await userEvent.tab();
+  expect(document.activeElement).toBe(confirm);
+  await userEvent.tab();
+  expect(document.activeElement).toBe(summaries[0]);
   store.dispose();
 });

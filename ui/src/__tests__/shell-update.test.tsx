@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Shell } from "../../../app/src/shell/shell";
 import { FileEditorSession, flushEditors } from "../blocks/file-editor-session";
-import type { CoreRequest } from "../contract/contract";
+import type { AppDefinition, CoreEvent, CoreRequest } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { grantFor, makeTestSeed } from "./fixtures";
@@ -171,6 +171,50 @@ describe("shell update action", () => {
     const alert = await screen.findByRole("alert");
     await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: "nearest" }));
     expect(scroll.mock.contexts.some((element) => element instanceof Element && element.contains(alert))).toBe(true);
+    store.dispose();
+  });
+});
+
+describe("shell install consent failure", () => {
+  it("shows the failure in the shell notice after an approved install fails", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    const originalCall = transport.call.bind(transport);
+    vi.spyOn(transport, "call").mockImplementation(async (request) => {
+      if (request.op === "app.respond_install_permission") {
+        throw {
+          id: "STORECLIENT_INSTALL_CONTEXT_CHANGED",
+          code: "invalid_request",
+          message: "설치하던 서버 연결이 바뀌었습니다. 다시 설치하세요.",
+          details: [],
+        };
+      }
+      return originalCall(request as never) as never;
+    });
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+    act(() => transport.emit({
+      event: "app.install_permission",
+      owner: { kind: "shell", generation: 0, request_id: "shell-fail" },
+      request_id: "shell-fail",
+      app_name: "자료 수집",
+      release: 3,
+      store_url: "https://store.example.org/apps",
+      digest: "digest-shell",
+      definition: {
+        id: "research", name: "자료 수집", requires: { blocks: 1, modules: {} }, permissions: [], state: {},
+        ui: { type: "text", text: "안녕" },
+      } as unknown as AppDefinition,
+    } as CoreEvent));
+    const dialog = await screen.findByRole("dialog");
+    const approve = within(dialog).getByRole("button", { name: "허용하고 설치" });
+    // jsdom은 isTrusted가 참인 사용자 입력을 만들 수 없어 React가 단추에 넘긴 처리기를 직접 부른다.
+    const propsKey = Object.getOwnPropertyNames(approve).find((name) => name.startsWith("__reactProps$"));
+    const onClick = (approve as unknown as Record<string, { onClick?: (event: { nativeEvent: { isTrusted: boolean } }) => void }>)[propsKey!].onClick!;
+    act(() => onClick({ nativeEvent: { isTrusted: true } }));
+    const notice = await screen.findByRole("alert");
+    expect(notice.textContent).toContain("STORECLIENT_INSTALL_CONTEXT_CHANGED");
+    expect(notice.textContent).toContain("설치하던 서버 연결이 바뀌었습니다");
     store.dispose();
   });
 });

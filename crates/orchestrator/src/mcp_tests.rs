@@ -675,3 +675,133 @@ async fn connection_rejects_environment_references() {
     assert_eq!(error["code"], "invalid_request");
     assert!(server.state.connection("board").unwrap().is_none());
 }
+
+#[tokio::test]
+async fn list_apps_and_get_app_expose_store_origin_and_modified() {
+    let state = AppState::in_memory("secret");
+    let origin = kaleidoscope_contract::store::StoreOrigin {
+        store_url: "https://store.example".into(),
+        store_app_id: "workspace-pas".into(),
+        release: 3,
+        digest: "digest-3".into(),
+    };
+    let (installed, unchanged, _) = state
+        .publish_install(
+            LEGACY_APP,
+            "device:pc",
+            &[],
+            registry_install::InstallGuard {
+                origin: origin.clone(),
+                expected: None,
+                account: state.mcp_account_id().unwrap(),
+                connections: Vec::new(),
+                replace: false,
+            },
+        )
+        .unwrap();
+    assert!(!unchanged);
+    let app_id = installed.app.id.clone();
+    let server = McpServer::new(state.clone());
+
+    let listed = serde_json::to_value(server.list_apps().await.unwrap()).unwrap();
+    let value: Value =
+        serde_json::from_str(listed["content"][0]["text"].as_str().unwrap()).unwrap();
+    let summary = value
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == app_id.as_str())
+        .unwrap();
+    assert_eq!(summary["origin"], json!(origin));
+    assert_eq!(summary["modified"], false);
+
+    let got = serde_json::to_value(
+        server
+            .get_app(Parameters(VersionArgs {
+                app_id: app_id.clone(),
+                version: None,
+            }))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let value: Value = serde_json::from_str(got["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(value["origin"], json!(origin));
+    assert_eq!(value["modified"], false);
+
+    // 스토어 설치 뒤 upload_app으로 고친 사본은 설치 기준 판과 달라진다.
+    let mut changed: Value = serde_json::from_str(LEGACY_APP).unwrap();
+    changed["name"] = json!("마크다운 보기 (고침)");
+    let (published, unchanged) = state
+        .publish_app(&changed.to_string(), "test", false, None)
+        .unwrap();
+    assert!(!unchanged);
+    assert_eq!(published.version.version, 2);
+
+    let listed = serde_json::to_value(server.list_apps().await.unwrap()).unwrap();
+    let value: Value =
+        serde_json::from_str(listed["content"][0]["text"].as_str().unwrap()).unwrap();
+    let summary = value
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == app_id.as_str())
+        .unwrap();
+    assert_eq!(summary["origin"], json!(origin));
+    assert_eq!(summary["modified"], true);
+    let got = serde_json::to_value(
+        server
+            .get_app(Parameters(VersionArgs {
+                app_id,
+                version: None,
+            }))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let value: Value = serde_json::from_str(got["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(value["modified"], true);
+}
+
+#[tokio::test]
+async fn list_apps_and_get_app_leave_origin_empty_for_custom_and_builtin_apps() {
+    let state = AppState::in_memory("secret");
+    let mut definition: Value = serde_json::from_str(LEGACY_APP).unwrap();
+    definition["id"] = json!("custom-app");
+    definition["name"] = json!("커스텀 앱");
+    state
+        .publish_app(&definition.to_string(), "test", false, None)
+        .unwrap();
+    let server = McpServer::new(state);
+
+    let listed = serde_json::to_value(server.list_apps().await.unwrap()).unwrap();
+    let value: Value =
+        serde_json::from_str(listed["content"][0]["text"].as_str().unwrap()).unwrap();
+    let apps = value.as_array().unwrap();
+    let custom = apps
+        .iter()
+        .find(|item| item["id"] == "custom-app")
+        .unwrap();
+    assert_eq!(custom["origin"], Value::Null);
+    assert_eq!(custom["modified"], false);
+    let builtin = apps
+        .iter()
+        .find(|item| item["id"] == "md-editor")
+        .unwrap();
+    assert_eq!(builtin["origin"], Value::Null);
+    assert_eq!(builtin["modified"], false);
+
+    let got = serde_json::to_value(
+        server
+            .get_app(Parameters(VersionArgs {
+                app_id: "custom-app".into(),
+                version: None,
+            }))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let value: Value = serde_json::from_str(got["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(value["origin"], Value::Null);
+    assert_eq!(value["modified"], false);
+}
