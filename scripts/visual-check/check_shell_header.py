@@ -8,11 +8,14 @@
 
 app의 vite 개발 서버를 /harness.html?link=...에 띄워 그린다. 창 폭마다 상태를 모두 찍고,
 단추의 이름·모드·그림·점 색·좌표와 톱니 단추의 좌표를 result.json에 남긴다.
-이 스크립트는 판정하지 않는다. 고치기 전과 뒤의 result.json과 캡처를 같은 장면끼리 비교하는 것이 목적이다.
+머리 막대가 화면보다 넓은 창에서는 오른쪽 단추가 화면 밖에 있으므로, 단추 자체의 생김새는
+`.ks-shell-actions` 요소 캡처로 따로 남긴다. 이 스크립트는 판정하지 않는다.
+고치기 전과 뒤의 result.json과 캡처를 같은 장면끼리 비교하는 것이 목적이다.
 """
 import argparse
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -78,7 +81,17 @@ def wait_server(port, path, seconds=120):
     raise RuntimeError(f"서버가 뜨지 않았습니다: {url}")
 
 
+def ensure_port_free(port):
+    """다른 체크아웃의 서버가 먼저 그 포트를 잡고 있으면 그 화면을 찍게 되므로 시작 전에 막는다."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError as error:
+            raise RuntimeError(f"포트 {port}를 이미 다른 서버가 쓰고 있습니다: {error}") from error
+
+
 def start_server(command, cwd, port, path, log_path, env):
+    ensure_port_free(port)
     log = open(log_path, "w", encoding="utf-8")
     server = subprocess.Popen(
         command,
@@ -90,7 +103,13 @@ def start_server(command, cwd, port, path, log_path, env):
     )
     try:
         wait_server(port, path)
-    except Exception:
+        time.sleep(0.5)
+        if server.poll() is not None:
+            raise RuntimeError(
+                f"띄운 서버가 곧바로 끝났습니다(종료 코드 {server.returncode}). 포트 {port}를 다른 서버가 쓰고 있는지 확인하십시오."
+            )
+    except BaseException:
+        # 시작을 기다리다 끊겨도(Ctrl-C 포함) 띄운 서버를 남기지 않는다. 남으면 다음 실행이 그 서버의 화면을 찍는다.
         stop_server(server, log)
         raise
     return server, log
@@ -131,6 +150,10 @@ def header_scene(page, port, width, height, query, key, output):
     bar = facts["bar"]["rect"]
     clip = {"x": 0, "y": 0, "width": width, "height": min(height, max(1, int(bar["bottom"]) + 4))}
     facts["captures"] = [capture(page, output, key), capture(page, output, f"{key}-header", clip=clip)]
+    # 최소 창에서는 머리 막대가 넘쳐 오른쪽 단추가 화면 밖에 있다. 단추 자체의 생김새를 남기려고 막대를 스크롤해 따로 찍는다.
+    actions_path = output / f"{key}-actions.png"
+    page.locator(".ks-shell-actions").screenshot(path=str(actions_path), animations="disabled")
+    facts["captures"].append(str(actions_path))
     server, gear = facts["server"], facts["gear"]
     if server and gear:
         server_rect, gear_rect = server["rect"], gear["rect"]

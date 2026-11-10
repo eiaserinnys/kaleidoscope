@@ -806,6 +806,7 @@ describe("shell server link control", () => {
     const button = screen.getByRole("button", { name: "내 PC 서버" });
     expect(gear.classList.contains("ks-icon-button")).toBe(true);
     expect(button.classList.contains("ks-icon-button")).toBe(true);
+    expect(button.classList.contains("shell-link-button")).toBe(true);
     expect(button.getAttribute("aria-label")).toBe("내 PC 서버");
     expect(button.getAttribute("title")).toBe("내 PC 서버");
     expect(button.getAttribute("data-server-mode")).toBe("embedded");
@@ -844,13 +845,28 @@ describe("shell server link control", () => {
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     const button = screen.getByRole("button", { name: "페어링 코드 123456" });
     expect(button.classList.contains("ks-button-quiet")).toBe(true);
+    expect(button.classList.contains("shell-link-button")).toBe(true);
     expect(button.getAttribute("data-server-mode")).toBe("remote");
     expect(button.querySelector(".lucide-cloud")).toBeTruthy();
     expect(button.querySelector(".shell-server-dot")?.classList.contains("is-pairing")).toBe(true);
     expect(button.querySelector(".ks-truncate")?.textContent).toBe("페어링 코드 123456");
     store.dispose();
   });
-  it("offers prefilled remote re-pairing after revocation", async () => {
+  it("서버 단추로 연 설정을 닫으면 다시 만들어진 서버 단추로 초점이 돌아온다", async () => {
+    const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
+    const transport = createFakeTransport(seed);
+    transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
+    const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
+    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
+    expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
+    // 페어링으로 바뀌면 단추가 글 단추로 다시 만들어져 연 단추가 문서에서 떨어진다. 닫을 때는 같은 자리의 새 단추로 초점이 간다.
+    act(() => transport.setLink({ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" }));
+    await screen.findByRole("button", { name: "페어링 코드 123456" });
+    fireEvent.click(within(screen.getByTestId("system-window-settings")).getByRole("button", { name: "창 닫기" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "페어링 코드 123456" }));
+    store.dispose();
+  });
+  it("offers prefilled remote re-pairing after checkout revocation", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "revoked", server_url: "https://revoked.example" });
