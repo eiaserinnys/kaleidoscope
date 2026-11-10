@@ -110,7 +110,8 @@ export function useDataTreeDrag({ enabled, windowId, onMove }: {
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
-      if (owner === instance) { active = null; owner = null; }
+      // 끌던 원본 트리가 사라지면 다른 트리가 그린 놓을 자리 표시도 지운다.
+      if (owner === instance) { active = null; owner = null; clearDisplays(); }
       releaseDisplay(instance);
     };
   }, [instance]);

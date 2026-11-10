@@ -2,7 +2,8 @@ import type { AppDefinition } from "../../src/contract/contract";
 
 // 블록 세트 60의 데이터 트리 바로 입력, 끌어 옮기기와 구역 메뉴, 이름 바꾸기를 눈으로 확인하는 앱 정의.
 // 화면은 앱 고유의 것을 담지 않는 시험용이며, 상태 갱신은 모두 단순 set_state로 둔다.
-// 구역 둘(짧은 쪽과 칸보다 긴 쪽)을 두어 트리 사이 끌기, 트리 밖 끌기, 긴 목록 끝 바로 입력을 함께 다룬다.
+// 구역 넷(짧은 쪽, 칸보다 긴 쪽, 빈 쪽, 이름을 받아들이지 않는 쪽)을 두어 트리 사이 끌기, 트리 밖 끌기,
+// 긴 목록 끝 바로 입력, 빈 구역으로 끌기, 거절된 구역 이름을 함께 다룬다.
 
 const deepEdit = '( $f := function($i){ $merge([$i, {"editing": false, "title": $i.key = $item.key ? $event : $i.title}]) }; '
   + '$deep := function($i){ $exists($i.children) ? $merge([$f($i), {"children": $map($i.children, $f)}]) : $f($i) }; '
@@ -17,6 +18,12 @@ const deepRename = '( $f := function($i){ $merge([$i, {"editing": $i.key = $item
 const deepCheck = '( $f := function($i){ $i.key = $item.key ? $merge([$i, {"checked": $event}]) : $i }; '
   + '$deep := function($i){ $exists($i.children) ? $merge([$f($i), {"children": $map($i.children, $f)}]) : $f($i) }; '
   + '$map($state.sections, function($s){ $merge([$s, {"rows": $map($s.rows, $deep)}]) }) )';
+// 접힌 부모 안에 바로 입력 항목을 넣는 하위 항목 추가.
+const deepAdd = '( $new := function($i){ [{"key": "new-" & $i.key, "title": "", "checked": false, "editing": true}] }; '
+  + '$deep := function($i){ $exists($i.children) '
+  + '? $merge([$i, {"children": $append($append([], $map($i.children, $deep)), $i.key = $item.key ? $new($i) : [])}]) '
+  + ': ($i.key = $item.key ? $merge([$i, {"children": $new($i)}]) : $i) }; '
+  + '$map($state.sections, function($s){ $merge([$s, {"rows": $append([], $map($s.rows, $deep))}]) }) )';
 
 const longRows = Array.from({ length: 22 }, (_, index) => ({
   key: `n${index + 1}`, title: `다음 항목 ${index + 1}`, checked: false,
@@ -32,6 +39,8 @@ export const treeEditMoveApp: AppDefinition = {
         { key: "c", title: "배포 준비", checked: false },
       ] },
       { key: "g2", title: "다음 주", editing: false, rows: longRows },
+      { key: "g3", title: "빈 구역", editing: false, rows: [] },
+      { key: "g4", title: "고정 구역", editing: false, rejectName: true, rows: [{ key: "d", title: "고정 항목", checked: false }] },
     ],
     lastMove: "",
     lastEdit: "",
@@ -44,14 +53,18 @@ export const treeEditMoveApp: AppDefinition = {
         { label: "첫 항목 이름 바꾸기", on_select: [{ set_state: "sections", value: { expr: '$map($state.sections, function($s){ $merge([$s, {"rows": $map($s.rows, function($r, $i){ $merge([$r, {"editing": $s.key = $item.key and $i = 0}]) }) }]) })' } }] },
       ],
       on_edit: [
-        { set_state: "sections", value: { expr: '$map($state.sections, function($s){ $s.editing ? $merge([$s, {"title": $event, "editing": false}]) : $s })' } },
+        // rejectName 구역은 이름을 받아들이지 않는다. 값을 그대로 두고 editing만 끈다.
+        { set_state: "sections", value: { expr: '$map($state.sections, function($s){ $s.editing ? ($s.rejectName = true ? $merge([$s, {"editing": false}]) : $merge([$s, {"title": $event, "editing": false}])) : $s })' } },
       ],
       on_edit_cancel: [{ set_state: "sections", value: { expr: '$map($state.sections, function($s){ $merge([$s, {"editing": false}]) })' } }],
       actions: [{ type: "button", label: "+", on_click: [
         { set_state: "sections", value: { expr: '$map($state.sections, function($s){ $s.key = $item.key ? $merge([$s, {"rows": $append($s.rows, [{"key": "new-" & $s.key, "title": "", "checked": false, "editing": true}])}]) : $s })' } },
       ] }],
       child: { type: "tree", items: { item: "rows" }, by: "children", default_expanded: true,
-        item_menu: [{ label: "이름 바꾸기", on_select: [{ set_state: "sections", value: { expr: deepRename } }] }],
+        item_menu: [
+          { label: "이름 바꾸기", on_select: [{ set_state: "sections", value: { expr: deepRename } }] },
+          { label: "하위 항목 추가", on_select: [{ set_state: "sections", value: { expr: deepAdd } }] },
+        ],
         on_check: [{ set_state: "sections", value: { expr: deepCheck } }],
         on_edit: [
           { set_state: "lastEdit", value: { expr: '$item.key & ": " & $event' } },

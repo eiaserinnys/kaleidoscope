@@ -2,7 +2,8 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 // 블록 세트 60의 눈 확인용 시나리오. 확인 상자, 데이터 트리 바로 입력과 끌어 옮기기, 구역 머리 메뉴와
 // 이름 바꾸기를 실제 브라우저에서 캡처하고, 확인 상자 크기, 행 높이, 머리 높이, 정렬 좌표를 잰다.
-// 구역이 둘이므로 트리 사이 끌기, 트리 밖 끌기, 긴 목록 끝 바로 입력의 초점과 스크롤도 함께 본다.
+// 구역이 여럿이므로 트리 사이 끌기, 트리 밖 끌기, 빈 구역으로 끌기, 긴 목록 끝 바로 입력의 초점과 스크롤도 함께 본다.
+// 접힌 부모 안 바로 입력, 접힌 구역 머리 +, 앱이 받아들이지 않은 구역 이름의 화면도 함께 확인한다.
 const APP = "tree-edit-move-1112";
 const ROW = (key: string) => `[data-tree-id="item:${key}"]`;
 const HIDE_CHROME = `
@@ -97,6 +98,34 @@ async function pageDragEnd(page: Page) {
     source.dispatchEvent(new DragEvent("dragend", { bubbles: true, cancelable: true, dataTransfer: drag.dataTransfer }));
     delete holder.__ksDrag;
   });
+}
+
+// 항목이 없어 빈 상태만 그린 트리도 같은 트리 뿌리로 끌기 이벤트를 받는다.
+async function pageDragOverTree(page: Page, index: number) {
+  await page.evaluate((index) => {
+    const holder = window as unknown as { __ksDrag?: DragState };
+    const dataTransfer = holder.__ksDrag!.dataTransfer;
+    const element = document.querySelectorAll<HTMLElement>(".ks-data-tree")[index]!;
+    const rect = element.getBoundingClientRect();
+    element.dispatchEvent(new DragEvent("dragover", {
+      bubbles: true, cancelable: true, dataTransfer,
+      clientX: rect.left + Math.min(20, rect.width / 2), clientY: rect.bottom - 2,
+    }));
+  }, index);
+}
+
+async function pageDropTree(page: Page, index: number) {
+  await page.evaluate((index) => {
+    const holder = window as unknown as { __ksDrag?: DragState };
+    const dataTransfer = holder.__ksDrag!.dataTransfer;
+    const element = document.querySelectorAll<HTMLElement>(".ks-data-tree")[index]!;
+    const rect = element.getBoundingClientRect();
+    element.dispatchEvent(new DragEvent("drop", {
+      bubbles: true, cancelable: true, dataTransfer,
+      clientX: rect.left + Math.min(20, rect.width / 2), clientY: rect.bottom - 2,
+    }));
+    delete holder.__ksDrag;
+  }, index);
 }
 
 async function openSectionMenu(page: Page, app: Locator) {
@@ -483,4 +512,79 @@ test("폴더 트리의 새 항목, 하위 항목, 이름 바꾸기 글칸 행", 
   expect(selection.start, "확장자 앞까지 고른다").toBe(0);
   expect(selection.end, "확장자 앞까지 고른다").toBe("README.md".length - ".md".length);
   await capture(app, testInfo, "넓은-이름바꾸기-밝음.png");
+});
+
+test("접힌 부모의 하위 항목 추가: 부모가 펼쳐지고 새 글칸이 보인다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+  const parent = app.locator(ROW("b"));
+  await expect(parent).toHaveAttribute("aria-expanded", "true");
+  await parent.locator(".ks-tree-chevron-trigger").click();
+  await expect(parent).toHaveAttribute("aria-expanded", "false");
+  await expect(app.locator(ROW("b1")), "부모가 접혀 자식이 보이지 않는다").toHaveCount(0);
+
+  await parent.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "하위 항목 추가" }).click();
+  const input = app.getByRole("textbox", { name: "항목 이름" });
+  await expect(input).toBeVisible();
+  await expect(input).toBeFocused();
+  await expect(app.locator(ROW("b"))).toHaveAttribute("aria-expanded", "true");
+  await expect(app.locator(ROW("b1")), "펼쳐서 기존 자식도 보인다").toBeVisible();
+  await capture(app, testInfo, "접힌-부모-하위추가.png");
+});
+
+test("접힌 구역의 머리 +: 구역을 먼저 펼치고 새 글칸이 보인다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+  const section = app.locator(".ks-data-section").first();
+  const toggle = section.locator(".ks-data-section-toggle");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(section.locator(".ks-data-tree"), "접힌 구역 안은 그리지 않는다").toHaveCount(0);
+
+  await section.getByRole("button", { name: "+", exact: true }).click();
+  const input = section.getByRole("textbox", { name: "항목 이름" });
+  await expect(input).toBeVisible();
+  await expect(input).toBeFocused();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await capture(app, testInfo, "접힌-구역-더하기.png");
+});
+
+test("앱이 받아들이지 않은 구역 이름은 머리에 남지 않는다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+  // 편집 중에는 머리에 제목 글이 사라지므로 구역 자리로 잡고, 그 전에 이름을 확인한다.
+  const section = app.locator(".ks-data-section").nth(3);
+  const header = section.locator(".ks-data-section-header");
+  await expect(header.locator(".ks-data-section-title")).toHaveText("고정 구역");
+  await header.locator(".ks-data-section-title").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "구역 이름 바꾸기" }).click();
+  const input = section.getByRole("textbox", { name: "구역 이름" });
+  await expect(input).toBeFocused();
+  await input.fill("바뀐 이름");
+  await input.press("Enter");
+  await expect(input).toHaveCount(0);
+  await expect(header.locator(".ks-data-section-title"), "거절되면 원래 이름이 남는다").toHaveText("고정 구역");
+  await expect(app.getByText("바뀐 이름", { exact: true })).toHaveCount(0);
+  await capture(app, testInfo, "구역-이름-거절.png");
+});
+
+test("빈 구역 트리로 끌어 놓으면 놓을 자리 하나를 보이고 끝으로 옮긴다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+  const trees = app.locator(".ks-data-tree");
+  await expect(trees).toHaveCount(4);
+  const emptyTree = trees.nth(2);
+  await expect(emptyTree.getByText("없음")).toBeVisible();
+  await emptyTree.scrollIntoViewIfNeeded();
+
+  await pageDragStart(page, "a");
+  await pageDragOverTree(page, 2);
+  await expect(emptyTree).toHaveAttribute("data-drop-state", "valid");
+  await expect(app.locator("[data-drop-state]"), "놓을 자리 표시는 한 곳뿐").toHaveCount(1);
+  await capture(app, testInfo, "빈-구역-끌기-중.png");
+
+  await pageDropTree(page, 2);
+  const lastMove = app.getByText("마지막 이동: a → 끝 (end)", { exact: true });
+  await expect(lastMove).toBeVisible();
+  await expect(emptyTree).not.toHaveAttribute("data-drop-state");
+  await lastMove.scrollIntoViewIfNeeded();
+  await capture(app, testInfo, "빈-구역-놓은뒤.png");
 });
