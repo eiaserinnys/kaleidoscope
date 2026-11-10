@@ -19,6 +19,7 @@ pub(super) fn observe(request: &CoreRequest) {
             | CoreRequest::FilesOpen { .. }
             | CoreRequest::WindowRaise { .. }
             | CoreRequest::DesktopActivate { .. }
+            | CoreRequest::WorkspaceActivate { .. }
             | CoreRequest::ShareView { .. }
             | CoreRequest::ShareFreeze { .. }
             | CoreRequest::ShareCapture { .. }
@@ -294,9 +295,11 @@ mod tests {
         let mark = request_mark();
         observe(&CoreRequest::DesktopActivate { desktop_id: "shortcut-observer-desktop".into() });
         observe(&CoreRequest::WindowRaise { window_id: "shortcut-observer-window".into() });
+        observe(&CoreRequest::WorkspaceActivate { workspace_id: "shortcut-observer-workspace".into() });
         let requests = requests_since(mark);
         assert_eq!(requests.iter().filter(|request| matches!(request, CoreRequest::DesktopActivate { desktop_id } if desktop_id == "shortcut-observer-desktop")).count(), 1);
         assert_eq!(requests.iter().filter(|request| matches!(request, CoreRequest::WindowRaise { window_id } if window_id == "shortcut-observer-window")).count(), 1);
+        assert_eq!(requests.iter().filter(|request| matches!(request, CoreRequest::WorkspaceActivate { workspace_id } if workspace_id == "shortcut-observer-workspace")).count(), 1);
     }
 
     #[test]
