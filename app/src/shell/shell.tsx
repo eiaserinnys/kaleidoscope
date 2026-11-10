@@ -6,10 +6,13 @@ import {
   SHELL_WINDOW_CLOSE_UNSAVED,
   SHELL_WORKSPACE_DELETE_UNSAVED,
   ChevronDown,
+  Cloud,
+  CloudOff,
   EmptyState,
   Import,
   IconButton,
   LayoutGrid,
+  Monitor,
   Menu,
   Notice,
   Plus,
@@ -46,6 +49,19 @@ import { installShellShortcuts } from "./shell-shortcuts";
 import { installNativeClose } from "../core/native-close";
 
 type OpenMenu = { kind: "items"; anchor: HTMLElement; entries: MenuEntry[] };
+type ServerModeFlag = "embedded" | "remote" | "none";
+
+// 연결 중이거나 끊긴 동안에도 어느 서버에 붙으려는지가 그림으로 남는다. 페어링과 거부는 원격이다.
+function serverModeOf(link: ShellSnapshot["link"]): ServerModeFlag {
+  if (link.state === "connected" || link.state === "offline") return link.mode;
+  return link.state === "unlinked" ? "none" : "remote";
+}
+
+function serverIconOf(link: ShellSnapshot["link"]) {
+  const mode = serverModeOf(link);
+  if (mode === "embedded") return <Monitor />;
+  return mode === "remote" ? <Cloud /> : <CloudOff />;
+}
 
 export function Shell({ store }: { store: ShellStore }) {
   useWindowControlHost(store);
@@ -199,11 +215,25 @@ export function Shell({ store }: { store: ShellStore }) {
   const windowActions = useMemo(() => createShellWindowActions(store, runCommand, () => systemStateRef.current), [store, runCommand]);
   useEffect(() => installShellShortcuts(windowActions), [windowActions]);
 
+  const serverLabelText = snapshot ? serverLabel(snapshot) : "";
+  const serverMode: ServerModeFlag = snapshot ? serverModeOf(snapshot.link) : "none";
+  const serverStatusMark = snapshot ? (
+    <span aria-hidden="true" className="shell-server-icon">
+      {serverIconOf(snapshot.link)}
+      <span className={`shell-server-dot is-${snapshot.link.state}`} />
+    </span>
+  ) : null;
   const serverButton = snapshot ? (
-    <Button className="ks-button-quiet shell-link-button" onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabel(snapshot)}>
-      <span aria-hidden="true" className={`shell-server-dot is-${snapshot.link.state}`} />
-      <span className="ks-truncate">{serverLabel(snapshot)}</span>
-    </Button>
+    snapshot.link.state === "pairing" ? (
+      <Button className="ks-button-quiet shell-link-button" data-server-mode={serverMode} onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabelText} title={serverLabelText}>
+        {serverStatusMark}
+        <span className="ks-truncate">{serverLabelText}</span>
+      </Button>
+    ) : (
+      <IconButton className="shell-link-button" data-server-mode={serverMode} onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabelText} title={serverLabelText}>
+        {serverStatusMark}
+      </IconButton>
+    )
   ) : null;
   const settingsButton = <IconButton aria-label="설정" title="설정" onClick={(event) => openSettings(event.currentTarget, "gear")}><Settings /></IconButton>;
   const canvasKey = snapshot ? (snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state) : "";
