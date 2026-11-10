@@ -3,14 +3,17 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { coreUrl, pathsFor, requiredRuntimeDir } from "./runtime.ts";
 
-const { docsDir } = pathsFor(requiredRuntimeDir());
+const paths = pathsFor(requiredRuntimeDir());
+const { docsDir } = paths;
+// 시험이 단계마다 고를 파일을 바꾸도록 devbridge의 파일 고르기 주입에 경로를 써 둔다.
+const pickFiles = (files: string[]) => writeFile(paths.pickFilesFile, JSON.stringify(files));
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`/?core=${coreUrl}`);
 });
 
 test("creates desktops, edits files, imports an app, and rejects an outside path", async ({ page }, testInfo) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const measurements: Record<string, unknown> = {};
 
   // 창은 영역 폭에 맞춰 밀리고(clamp) 영역이 다시 넓어지면 제자리로 돌아온다.
@@ -351,8 +354,20 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
       { type: "markdown_view", file: { permission: "docs", path: { state: "current_file" } } },
     ] },
   };
-  await page.locator('input[type="file"]').setInputFiles({ name: "viewer.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(viewerDefinition)) });
+  await writeFile(path.join(docsDir, "viewer.json"), JSON.stringify(viewerDefinition));
+  await pickFiles([path.join(docsDir, "viewer.json")]);
+  // 파일 가져오기는 쉘 머리 막대가 아니라 앱스토어의 커스텀 앱 칸에서 한다.
+  await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
+  await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "앱스토어" }).click();
+  const storeWindow = page.getByTestId("app-window-store");
+  await expect(storeWindow).toBeVisible();
+  await storeWindow.getByRole("option", { name: "커스텀 앱" }).click();
+  await storeWindow.getByRole("button", { name: "파일에서 가져오기" }).click();
   const viewerWindow = page.getByTestId("app-window-test-md-viewer");
+  await expect(viewerWindow).toHaveCount(0);
+  await expect(storeWindow.getByRole("option", { name: "마크다운 보기" })).toBeVisible();
+  await storeWindow.getByRole("option", { name: "마크다운 보기" }).click();
+  await storeWindow.getByRole("button", { name: "열기" }).click();
   await expect(viewerWindow).toBeVisible();
   await expect(viewerWindow.locator(".ks-markdown-view")).toHaveCount(0);
   await captureThemePair("viewer-empty-path");
@@ -393,26 +408,27 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
     state: {},
     ui: { type: "markdown_view", file: { permission: "docs", path: "../secret.md" } },
   };
-  await page.locator('input[type="file"]').setInputFiles({
-    name: "outside.json",
-    mimeType: "application/json",
-    buffer: Buffer.from(JSON.stringify(invalidDefinition)),
-  });
-  await expect(page.getByRole("alert")).toContainText("앱 정의");
-  await expect(page.getByRole("alert")).toContainText("../secret.md");
-  const importDetailsColor = await page.locator(".ks-notice-details").evaluate((element) => getComputedStyle(element).color);
-  const importTextColor = await page.locator(".ks-notice").evaluate((element) => getComputedStyle(element).color);
-  expect(importDetailsColor).toBe(importTextColor);
-  measurements.importDetailsColor = importDetailsColor;
+  await writeFile(path.join(docsDir, "outside.json"), JSON.stringify(invalidDefinition));
+  await pickFiles([path.join(docsDir, "outside.json")]);
+  // 뷰어 창이 앱스토어를 덮고 있으므로 작업 표시줄로 앱스토어를 올린 뒤 누른다.
+  await page.locator(".ks-taskbar").getByRole("button", { name: "앱스토어", exact: true }).click();
+  await storeWindow.getByRole("button", { name: "파일에서 가져오기" }).click();
+  // 앱 창 알림은 오류 문구만 보여 준다. 검사에 걸린 정의는 목록에 남지 않는다.
+  await expect(storeWindow.getByRole("alert")).toContainText("앱 정의");
+  await expect(storeWindow.getByRole("option", { name: "Outside path" })).toHaveCount(0);
   await captureMatrix("import-rejection");
-  await page.getByRole("alert").getByRole("button", { name: "닫기" }).click();
+  await storeWindow.getByRole("alert").getByRole("button", { name: "닫기" }).click();
+  await storeWindow.getByRole("button", { name: "창 닫기" }).click();
+  await expect(storeWindow).toBeHidden();
 
   const editorBounds = await editorWindow.boundingBox();
   const viewerBounds = await viewerWindow.boundingBox();
   if (!editorBounds || !viewerBounds) throw new Error("겹친 앱 창의 위치를 확인하지 못했습니다");
+  // 뷰어 오른쪽 바깥이면서 편집기 안쪽인 제목 줄 자리를 고른다. 앱스토어 창이 열렸다
+  // 닫히면서 창 배치가 한 칸 밀려도 이 겹침 검사가 같은 것을 재도록 한다.
   const exposedTitleX = Math.min(
-    editorBounds.x + editorBounds.width - 64,
-    viewerBounds.x + viewerBounds.width + 8,
+    editorBounds.x + editorBounds.width - 8,
+    Math.max(viewerBounds.x + viewerBounds.width + 8, editorBounds.x + 8),
   );
   await page.mouse.click(exposedTitleX, editorBounds.y + 60);
   await expect.poll(async () => {
@@ -433,11 +449,9 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   const crlfExpected = `${crlfBefore.slice(0, 1)}X${crlfBefore.slice(1)}`;
   await expect.poll(async () => readFile(crlfPath, "utf8")).toBe(crlfExpected);
 
-  const viewerBoundsForClose = await viewerWindow.boundingBox();
-  const editorBoundsAfterRaise = await editorWindow.boundingBox();
-  if (!viewerBoundsForClose || !editorBoundsAfterRaise) throw new Error("겹친 앱 창의 위치를 확인하지 못했습니다");
-  const viewerTitleX = Math.min(viewerBoundsForClose.x + 64, editorBoundsAfterRaise.x - 8);
-  await page.mouse.click(viewerTitleX, viewerBoundsForClose.y + 16);
+  // 창이 겹칠 때는 작업 표시줄로 올린다. 앱스토어 창이 열렸다 닫히면서 창 배치가
+  // 달라져도 제목 줄 좌표를 다시 계산하지 않는다.
+  await page.locator(".ks-taskbar").getByRole("button", { name: "마크다운 보기", exact: true }).click();
   await expect.poll(async () => {
     const [viewerZ, editorZ] = await Promise.all([
       viewerWindow.evaluate((element) => Number(getComputedStyle(element).zIndex)),
@@ -468,6 +482,27 @@ test("creates desktops, edits files, imports an app, and rejects an outside path
   await wideClose.click();
   await expect(viewerWindow).toBeHidden();
   await page.setViewportSize({ width: 1440, height: 900 });
+
+  // 커스텀 앱 지우기는 확인을 받는다. 취소하면 그대로 두고, 확인하면 목록에서 사라진다.
+  await page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" }).click();
+  await page.getByRole("dialog", { name: "앱 열기" }).getByRole("button", { name: "앱스토어" }).click();
+  const reopenedStore = page.getByTestId("app-window-store");
+  await expect(reopenedStore).toBeVisible();
+  await reopenedStore.getByRole("option", { name: "커스텀 앱" }).click();
+  const customOption = reopenedStore.getByRole("option", { name: "마크다운 보기" });
+  await customOption.click();
+  await reopenedStore.getByRole("button", { name: "지우기" }).click();
+  const deleteDialog = reopenedStore.getByRole("dialog", { name: "앱을 지울까요?" });
+  await expect(deleteDialog).toContainText("마크다운 보기");
+  await deleteDialog.getByRole("button", { name: "취소" }).click();
+  await expect(deleteDialog).toHaveCount(0);
+  await expect(customOption).toBeVisible();
+  await reopenedStore.getByRole("button", { name: "지우기" }).click();
+  await deleteDialog.getByRole("button", { name: "지우기" }).click();
+  await expect(customOption).toHaveCount(0);
+  await expect(reopenedStore.getByRole("button", { name: "파일에서 가져오기" })).toBeVisible();
+  await reopenedStore.getByRole("button", { name: "창 닫기" }).click();
+  await expect(reopenedStore).toBeHidden();
 
   const longDocument = "긴 문서.md";
   await editorWindow.getByRole("treeitem", { name: longDocument }).click();

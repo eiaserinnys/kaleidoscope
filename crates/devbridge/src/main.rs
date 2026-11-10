@@ -42,7 +42,11 @@ impl Host for DevHost {
     }
 
     fn pick_files(&self, _: &[kaleidoscope_contract::data::FileAccept], multiple: bool) -> Option<Vec<PathBuf>> {
-        let raw = env::var("KALEIDOSCOPE_DEV_PICK_FILES").ok()?;
+        // 파일 경로를 담은 파일을 고르면 시험이 단계마다 고를 파일을 바꿀 수 있다.
+        let raw = match env::var("KALEIDOSCOPE_DEV_PICK_FILES_FILE") {
+            Ok(queue) => std::fs::read_to_string(queue).ok()?,
+            Err(_) => env::var("KALEIDOSCOPE_DEV_PICK_FILES").ok()?,
+        };
         let mut paths: Vec<PathBuf> = serde_json::from_str(&raw).ok()?;
         if !multiple { paths.truncate(1); }
         if paths.is_empty() { None } else { Some(paths) }
@@ -88,14 +92,31 @@ impl Host for DevHost {
 #[cfg(test)]
 mod host_tests {
     use super::{parse_args, DevHost, Host};
+    use std::sync::Mutex;
+
+    // 환경 변수를 쓰는 시험은 한 번에 하나만 돈다.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn devbridge_picks_the_configured_files() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("KALEIDOSCOPE_DEV_PICK_FILES", r#"["/tmp/sample-a.txt","/tmp/sample-b.txt"]"#);
         let paths = DevHost::default().pick_files(&[], true).unwrap();
         assert_eq!(paths, ["/tmp/sample-a.txt", "/tmp/sample-b.txt"].map(std::path::PathBuf::from));
         assert_eq!(DevHost::default().pick_files(&[], false).unwrap().len(), 1);
         std::env::remove_var("KALEIDOSCOPE_DEV_PICK_FILES");
+    }
+
+    #[test]
+    fn devbridge_reads_the_configured_files_from_a_queue_file() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let queue = dir.path().join("pick-files.json");
+        std::fs::write(&queue, r#"["/tmp/from-queue.json"]"#).unwrap();
+        std::env::set_var("KALEIDOSCOPE_DEV_PICK_FILES_FILE", &queue);
+        let paths = DevHost::default().pick_files(&[], false).unwrap();
+        assert_eq!(paths, ["/tmp/from-queue.json"].map(std::path::PathBuf::from));
+        std::env::remove_var("KALEIDOSCOPE_DEV_PICK_FILES_FILE");
     }
 
     #[test]
