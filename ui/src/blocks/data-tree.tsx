@@ -1,5 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Binding, Block, TreeItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { isBadge } from "../components/badge";
@@ -55,13 +55,35 @@ function editingInputActive(key: string): boolean {
 }
 
 /** 바로 입력 행의 표식 열. 트리 행과 같은 두 열 규칙을 쓴다. 상자는 눌러도 확인 동작을 하지 않는다. */
-function editColumns(checked: boolean | undefined, hasChildren: boolean, checkEnabled: boolean) {
+function editColumns(checked: boolean | undefined, hasChildren: boolean, checkEnabled: boolean, expanded: boolean) {
   const check = checked !== undefined
     ? <span className={`ks-tree-check${checked ? " is-checked" : ""}`} data-tree-check="">{checked ? <Check size="chrome" /> : null}</span>
     : undefined;
   const marker = check ?? (hasChildren ? undefined : <FileText size="inline" />);
-  const chevron = hasChildren ? <ChevronRight className="ks-chevron" size="inline" /> : undefined;
+  const chevron = hasChildren ? <ChevronRight className={`ks-chevron${expanded ? " is-expanded" : ""}`} size="inline" /> : undefined;
   return checkEnabled && !(check === undefined && hasChildren) ? [chevron, marker] : [chevron ?? marker];
+}
+
+/** 편집 행이 그 행의 펼침 상태를 그리게 하는 조회 함수. 펼침 상태는 행 모형을 다시 만들지 않으므로 문맥으로 건넨다. */
+const TreeEditExpansion = createContext<((id: string) => boolean) | null>(null);
+
+function DataTreeEditRow({ id, checked, hasChildren, checkEnabled, value, onCommit, onCancel }: {
+  id: string;
+  checked: boolean | undefined;
+  hasChildren: boolean;
+  checkEnabled: boolean;
+  value: string;
+  onCommit: (draft: string) => void;
+  onCancel: () => void;
+}) {
+  const isExpanded = useContext(TreeEditExpansion);
+  return <TreeEditRow
+    ariaLabel="항목 이름"
+    columns={editColumns(checked, hasChildren, checkEnabled, hasChildren && (isExpanded?.(id) ?? false))}
+    onCancel={onCancel}
+    onCommit={onCommit}
+    value={value}
+  />;
 }
 
 interface DataNode extends TreeNode {
@@ -90,9 +112,11 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
       leading: <FileText size="inline" />,
       meta: item.meta,
       trailing: <Badges values={item.badges} />,
-      content: editingState === undefined ? undefined : <TreeEditRow
-        ariaLabel="항목 이름"
-        columns={editColumns(checked, children.length > 0, editingState.checkEnabled)}
+      content: editingState === undefined ? undefined : <DataTreeEditRow
+        id={`item:${item.key}`}
+        checked={checked}
+        hasChildren={children.length > 0}
+        checkEnabled={editingState.checkEnabled}
         onCancel={() => editingState.cancel(item)}
         onCommit={(draft) => editingState.commit(item, draft)}
         value={item.title ?? ""}
@@ -151,11 +175,14 @@ function ancestors(nodes: DataNode[], key: unknown, parents: string[] = []): str
 export function TreeBlock({ block, context, pointer }: { block: DataTreeBlockData; context: BlockContext; pointer: string }) {
   const blockRoot = useBlockRootProps();
   const value = useBinding(`${pointer}/items`, block.items);
+  // empty_text가 없으면 null로 두어 지금의 빈 상태 상자를 그리고, 있으면 계산한 값을 문자열로만 받아들인다.
+  const emptyText = useBinding(`${pointer}/empty_text`, block.empty_text ?? null);
+  const emptyTextValue = emptyText.status === "ready" ? emptyText.value : null;
   if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} loading="tree" />;
-  return <TreeReady block={block} context={context} pointer={pointer} value={value.value} />;
+  return <TreeReady block={block} context={context} pointer={pointer} value={value.value} emptyText={block.empty_text === undefined ? null : typeof emptyTextValue === "string" ? emptyTextValue : ""} />;
 }
 
-function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockData; context: BlockContext; pointer: string; value: unknown }) {
+function TreeReady({ block, context, pointer, value, emptyText }: { block: DataTreeBlockData; context: BlockContext; pointer: string; value: unknown; emptyText: string | null }) {
   const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
@@ -355,12 +382,23 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   }, [block.on_check, data, pointer]);
 
   // on_move가 있는 트리는 항목이 없어도 빈 상태 자체를 놓을 자리로 받는다. 놓으면 트리 끝(end)과 같다.
-  if (!nodes.length && !drag.enabled) return <NoItems rootProps={blockRoot} />;
-  return <><TreeView
+  // empty_text가 있으면 빈 상태는 트리 행 하나 높이의 한 줄이고, 그 한 줄이 놓을 자리 표시를 받는다.
+  const expandedOf = useCallback((id: string) => visibleExpanded.has(id), [visibleExpanded]);
+  const emptyLine = emptyText === null ? undefined : <div
+    className="ks-row ks-file-tree-row ks-tree-empty"
+    data-drop-state={drag.targetId === "" ? drag.valid ? "valid" : "invalid" : undefined}
+  >
+    <span aria-hidden="true" className="ks-file-tree-icon" />
+    {block.on_check !== undefined ? <span aria-hidden="true" className="ks-file-tree-icon" /> : null}
+    {emptyText ? <span className="ks-view-meta">{emptyText}</span> : null}
+  </div>;
+  if (!nodes.length && !drag.enabled && emptyText === null) return <NoItems rootProps={blockRoot} />;
+  return <><TreeEditExpansion.Provider value={expandedOf}><TreeView
     rootProps={blockRoot}
     className="ks-data-view ks-data-tree"
     drag={drag}
-    emptyContent={nodes.length ? undefined : <NoItems />}
+    emptyContent={nodes.length ? undefined : emptyLine ?? <NoItems />}
+    emptyContentDropTarget={!nodes.length && emptyText !== null}
     expanded={visibleExpanded}
     label="트리"
     nodes={nodes}
@@ -370,5 +408,5 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
     onFocusController={setFocusController}
     onContextMenu={(row, anchor, _point, _focus, event) => { if (row) { const item = row.node.data as TreeItem | undefined; menu.open(event, anchor, item as unknown as JsonValue | undefined, item?.key ?? row.id, "제목 복사", row.node.label); } }}
     selectedId={selected === null ? null : `item:${selected}`}
-  />{menu.dialog}</>;
+  /></TreeEditExpansion.Provider>{menu.dialog}</>;
 }

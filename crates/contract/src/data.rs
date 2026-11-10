@@ -2081,9 +2081,13 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             on_edit,
             on_edit_cancel,
             on_move,
+            empty_text,
             ..
         } => {
             bind!("items", items);
+            if let Some(empty_text) = empty_text {
+                bind!("empty_text", empty_text);
+            }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
             }

@@ -1,5 +1,8 @@
 use crate::data::Binding;
-use crate::{AppDefinition, Block, CoreError, TREE_CHECK_BLOCK_SET_VERSION, TREE_EDIT_MOVE_BLOCK_SET_VERSION};
+use crate::{
+    AppDefinition, Block, CoreError, TREE_CHECK_BLOCK_SET_VERSION, TREE_EDIT_MOVE_BLOCK_SET_VERSION,
+    TREE_EMPTY_TEXT_BLOCK_SET_VERSION,
+};
 
 fn uses_check(block: &Block) -> bool {
     matches!(
@@ -48,6 +51,16 @@ fn uses_edit_move(block: &Block) -> bool {
         } => menu.is_some() || editing.is_some() || on_edit.is_some() || on_edit_cancel.is_some(),
         _ => false,
     }
+}
+
+fn uses_empty_text(block: &Block) -> bool {
+    matches!(
+        block,
+        Block::Tree {
+            empty_text: Some(_),
+            ..
+        }
+    )
 }
 
 fn uses_edit_move_actions(block: &Block) -> bool {
@@ -127,6 +140,21 @@ pub(crate) fn validate_tree_extensions(definition: &AppDefinition) -> Result<(),
                     TREE_EDIT_MOVE_BLOCK_SET_VERSION,
                 ),
             });
+        });
+        if let Some(error) = version_error {
+            return Err(error);
+        }
+    }
+    if definition.requires.blocks < TREE_EMPTY_TEXT_BLOCK_SET_VERSION {
+        let mut version_error = None;
+        crate::data::walk_definition_blocks(definition, &mut |pointer, block| {
+            if version_error.is_some() || !uses_empty_text(block) {
+                return;
+            }
+            version_error = Some(crate::errors::APP_TREE_EMPTY_TEXT_VERSION_LOW(
+                pointer,
+                TREE_EMPTY_TEXT_BLOCK_SET_VERSION,
+            ));
         });
         if let Some(error) = version_error {
             return Err(error);

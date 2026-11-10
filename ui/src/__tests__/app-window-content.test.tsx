@@ -7,6 +7,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
+import { ContextMenuHost } from "../components/context-menu";
 import type { WindowData } from "../data/window-data";
 import { normalizeBlock } from "../render/render-block";
 import { bookmarkTarget, focusBookmark, focusRescued, isUnclaimedFocus, restoreWindowFocus } from "../components/focus-rescue";
@@ -647,6 +648,70 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement).toBe(added));
     expect(focus.mock.calls.at(-1)?.[0]).toMatchObject({ preventScroll: true });
     store.dispose();
+  });
+
+  // 구역 반복 key가 이름인 앱. 이름을 바꾸면 그 구역이 새 key로 다시 만들어져 머리 글칸이 사라진다.
+  async function sectionNameFixture() {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const rename = '$map($state.sections, function($s){ $s.title = $item.title ? $merge([$s, {"editing": true}]) : $s })';
+    const commit = '$map($state.sections, function($s){ $s.title = $item.title ? $merge([$s, {"title": ($event = "막힌 이름" ? $s.title : $event), "editing": false}]) : $s })';
+    const cancel = '$map($state.sections, function($s){ $merge([$s, {"editing": false}]) })';
+    const definition: AppDefinition = {
+      id: "section-name-focus", name: "구역 이름 초점", requires: { blocks: 60, modules: {} }, permissions: [],
+      state: { sections: [
+        { title: "이번 주", editing: false, rows: [{ key: "a", title: "첫 항목" }] },
+        { title: "다음 주", editing: false, rows: [{ key: "b", title: "둘째 항목" }] },
+      ] },
+      ui: { type: "repeat", items: { state: "sections" }, key: "title", layout: "column", template: {
+        type: "section", collapsible: true, title: { item: "title" }, editing: { item: "editing" },
+        menu: [{ label: "이름 바꾸기", on_select: [{ set_state: "sections", value: { expr: rename } }] }],
+        on_edit: [{ set_state: "sections", value: { expr: commit } }],
+        on_edit_cancel: [{ set_state: "sections", value: { expr: cancel } }],
+        child: { type: "tree", items: { item: "rows" } },
+      } },
+    };
+    const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+    render(<><ContextMenuHost /><AppWindowContent store={store} windowId="viewer-window" /></>);
+    return store;
+  }
+
+  async function openSectionNameEdit(title: string) {
+    fireEvent.contextMenu(await screen.findByRole("button", { name: title }), { clientX: 10, clientY: 10 });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "이름 바꾸기" }));
+    const input = await screen.findByRole("textbox", { name: "구역 이름" });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    return input;
+  }
+
+  it("구역 이름을 확정해 구역이 다시 만들어져도 같은 자리 구역의 접기 단추로 초점을 옮긴다", async () => {
+    await sectionNameFixture();
+    const input = await openSectionNameEdit("다음 주");
+    fireEvent.change(input, { target: { value: "새 이름" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // 확정 전에도 옛 구역의 접기 단추가 친 이름을 보여 주므로, 새 key로 다시 만들어진 구역의 단추를 기다려 확인한다.
+    await waitFor(() => {
+      const item = document.querySelector('.ks-repeat-item[data-repeat-key="새 이름"]');
+      expect(item).not.toBeNull();
+      expect(document.activeElement).toBe(item!.querySelector(".ks-data-section-toggle"));
+    });
+    const samePosition = screen.getByRole("button", { name: "새 이름" });
+    expect(samePosition.closest(".ks-repeat-item")?.getAttribute("data-repeat-key")).toBe("새 이름");
+  });
+
+  it("구역 이름 바꾸기 Escape와 거절은 지금처럼 그 구역 접기 단추로 초점을 돌려준다", async () => {
+    await sectionNameFixture();
+    const input = await openSectionNameEdit("다음 주");
+    fireEvent.change(input, { target: { value: "버릴 이름" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    const toggle = screen.getByRole("button", { name: "다음 주" });
+    await waitFor(() => expect(document.activeElement).toBe(toggle));
+
+    const again = await openSectionNameEdit("다음 주");
+    fireEvent.change(again, { target: { value: "막힌 이름" } });
+    fireEvent.keyDown(again, { key: "Enter" });
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "구역 이름" })).toBeNull());
+    expect(screen.getByRole("button", { name: "다음 주" })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "다음 주" })));
   });
 
   it("승인 목록이 비면 말풍선 대신 대화 입력칸으로 초점을 옮긴다", async () => {

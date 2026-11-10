@@ -30,7 +30,7 @@ const longRows = Array.from({ length: 22 }, (_, index) => ({
 }));
 
 export const treeEditMoveApp: AppDefinition = {
-  id: "tree-edit-move-1112", name: "작업 목록", requires: { blocks: 60, modules: {} }, permissions: [],
+  id: "tree-edit-move-1112", name: "작업 목록", requires: { blocks: 61, modules: {} }, permissions: [],
   state: {
     sections: [
       { key: "g1", title: "이번 주", editing: false, rows: [
@@ -41,6 +41,13 @@ export const treeEditMoveApp: AppDefinition = {
       { key: "g2", title: "다음 주", editing: false, rows: longRows },
       { key: "g3", title: "빈 구역", editing: false, rows: [] },
       { key: "g4", title: "고정 구역", editing: false, rejectName: true, rows: [{ key: "d", title: "고정 항목", checked: false }] },
+    ],
+    // empty_text를 쓰는 트리 셋. 확인 상자가 없는 같은 트리 모양의 뿌리 행을 기준선으로 두고,
+    // 글 없는 한 줄과 짧은 글 한 줄을 나란히 둔다.
+    plainSections: [
+      { key: "p1", title: "기준 구역", rows: [{ key: "r1", title: "기준 항목" }] },
+      { key: "p2", title: "글 없는 빈 구역", rows: [], emptyText: "" },
+      { key: "p3", title: "안내 글 빈 구역", rows: [], emptyText: "아직 항목이 없습니다" },
     ],
     lastMove: "",
     lastEdit: "",
@@ -77,7 +84,39 @@ export const treeEditMoveApp: AppDefinition = {
         on_move: [{ set_state: "lastMove", value: { expr: '$event.key & " → " & ($event.target ? $event.target : "끝") & " (" & $event.position & ")"' } }],
       } },
     },
+    { type: "repeat", items: { state: "plainSections" }, key: "key", layout: "column", gap: "small", template: {
+      type: "section", collapsible: true, title: { item: "title" },
+      child: { type: "tree", items: { item: "rows" }, by: "children", default_expanded: true,
+        empty_text: { item: "emptyText" },
+        on_move: [{ set_state: "lastMove", value: { expr: '$event.key & " → " & ($event.target ? $event.target : "끝") & " (" & $event.position & ")"' } }],
+      },
+    } },
     { type: "text", style: "meta", value: { expr: '"마지막 이동: " & ($state.lastMove ? $state.lastMove : "없음")' } },
     { type: "text", style: "meta", value: { expr: '"마지막 이름: " & ($state.lastEdit ? $state.lastEdit : "없음")' } },
+  ] },
+};
+
+// 구역 반복 key가 구역 이름인 앱. 이름을 확정하면 그 구역이 새 key로 다시 만들어져 초점을 쥔 머리가 사라진다.
+// 쉘의 같은 자리 초점 규칙이 새 구역의 접기 단추로 초점을 옮기는지 브라우저에서 확인한다.
+export const treeNameKeyApp: AppDefinition = {
+  id: "tree-name-key-1112", name: "이름이 key인 구역", requires: { blocks: 60, modules: {} }, permissions: [],
+  state: {
+    sections: [
+      { title: "이번 주", editing: false, rows: [{ key: "a", title: "첫 항목" }] },
+      { title: "다음 주", editing: false, rows: [{ key: "b", title: "둘째 항목" }] },
+    ],
+  },
+  ui: { type: "stack", direction: "column", children: [
+    { type: "repeat", items: { state: "sections" }, key: "title", layout: "column", gap: "small", template: {
+      type: "section", collapsible: true, title: { item: "title" }, editing: { item: "editing" },
+      menu: [
+        { label: "구역 이름 바꾸기", on_select: [{ set_state: "sections", value: { expr: '$map($state.sections, function($s){ $merge([$s, {"editing": $s.title = $item.title}]) })' } }] },
+      ],
+      on_edit: [
+        { set_state: "sections", value: { expr: '$map($state.sections, function($s){ $s.editing ? $merge([$s, {"title": $event, "editing": false}]) : $s })' } },
+      ],
+      on_edit_cancel: [{ set_state: "sections", value: { expr: '$map($state.sections, function($s){ $merge([$s, {"editing": false}]) })' } }],
+      child: { type: "tree", items: { item: "rows" }, by: "children" },
+    } },
   ] },
 };

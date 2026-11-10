@@ -368,13 +368,13 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
     <div className={`ks-data-section-header${editing ? " is-editing" : ""}`} onContextMenu={openMenu}>
       {editing ? <>
         {block.collapsible
-          ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "펼치기" : "접기"} onClick={() => setCollapsed(!collapsed)} ref={toggleRef} type="button">
+          ? <button className="ks-data-section-toggle" data-focus-return=".ks-data-section-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "펼치기" : "접기"} onClick={() => setCollapsed(!collapsed)} ref={toggleRef} type="button">
             {collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />}
           </button>
           : null}
-        <TreeEditInput ariaLabel="구역 이름" value={initialName} onCancel={cancelEdit} onCommit={commitEdit} />
+        <TreeEditInput ariaLabel="구역 이름" focusReturn=".ks-data-section-toggle" value={initialName} onCancel={cancelEdit} onCommit={commitEdit} />
       </> : block.collapsible
-        ? <button className="ks-data-section-toggle" aria-expanded={!collapsed} aria-label={titleText === null ? collapsed ? "펼치기" : "접기" : undefined} onClick={() => setCollapsed(!collapsed)} ref={toggleRef} type="button">
+        ? <button className="ks-data-section-toggle" data-focus-return=".ks-data-section-toggle" aria-expanded={!collapsed} aria-label={titleText === null ? collapsed ? "펼치기" : "접기" : undefined} onClick={() => setCollapsed(!collapsed)} ref={toggleRef} type="button">
           {collapsed ? <ChevronRight size="inline" /> : <ChevronDown size="inline" />}
           <span className="ks-data-section-heading">{titleText}{metaText}</span>
         </button>
