@@ -12,8 +12,11 @@ Kaleidoscope.md와 Create-plugins-preview.md의 표다. 앞의 여섯은 마크�
 긴 영어 낱말 표와 맨 SHA 표는 is-tight로 물러서 넘치지 않아야 한다. 편집기의 맨 주소는
 .ks-live-link span으로 그려져야 한다.
 
---baseline에 수정 전 result.json이 있는 폴더를 주면 장면마다 표 높이가 1px 넘게 늘거나
-어느 칸의 줄 수가 늘거나 넘침이 생긴 것을 실패로 적고, 칸 폭 차이는 모두 출력한다.
+--baseline에 수정 전 result.json이 있는 폴더를 주면 장면마다 기준과 대조한다. 표 수나 칸 수가
+다르거나 기준에 없던 넘침이 생기면 실패로 적는다. 표 높이가 1px 넘게 늘거나 어느 칸의 줄 수가
+는 것은 실패가 아니라 변화로 출력하고 result.json의 장면 changes에 남긴다. 짧은 칸이 낱말 폭을
+받으면 표 자동 배치가 긴 칸의 폭을 조금 가져가 긴 칸이 한 줄 늘 수 있고, 2차 화면 검수가 이를
+main과 나란히 보고 받아들였다(카드 #1137). 칸 폭 차이는 모두 출력한다.
 
 요소를 찾지 못하면 그 장면은 실패다. 찾지 못한 채 통과하는 판정을 두지 않는다.
 
@@ -278,10 +281,12 @@ def judge_scene(scene, name, kind, width):
 
 
 def compare_scene(scene, base):
-    """기준 폴더의 같은 장면과 표 높이, 칸 줄 수, 넘침을 대조한다. 칸 폭 차이는 모아 돌려준다."""
+    """기준 폴더의 같은 장면과 대조한다. 구조 차이와 새 넘침은 problems, 높이와 줄 수 증가는 changes,
+    칸 폭 차이는 width_changes로 돌려준다."""
     width_changes = []
+    changes = []
     if base is None:
-        return ["기준 폴더에 장면 없음"], width_changes
+        return ["기준 폴더에 장면 없음"], changes, width_changes
     # result.json의 장면은 {kind, document, size, measurement, checks}이므로 실측치는 measurement 아래에 있다.
     base = base.get("measurement") or {}
     before_tables = base.get("tables", [])
@@ -291,12 +296,12 @@ def compare_scene(scene, base):
         problems.append(f"표 수 {len(tables)} != {len(before_tables)}")
     for index, (table, before) in enumerate(zip(tables, before_tables)):
         if table["height"] > before["height"] + TOLERANCE:
-            problems.append(f"표 {index} 높이 {before['height']} -> {table['height']}")
+            changes.append(f"표 {index} 높이 {before['height']} -> {table['height']}")
         if len(table["cells"]) != len(before["cells"]):
             problems.append(f"표 {index} 칸 수 {len(table['cells'])} != {len(before['cells'])}")
         for cell_index, (cell, before_cell) in enumerate(zip(table["cells"], before["cells"])):
             if cell["lines"] > before_cell["lines"]:
-                problems.append(f"표 {index} 칸 {cell_index} 「{cell['text'][:16]}」 줄 수 {before_cell['lines']} -> {cell['lines']}")
+                changes.append(f"표 {index} 칸 {cell_index} 「{cell['text'][:16]}」 줄 수 {before_cell['lines']} -> {cell['lines']}")
             delta = round(cell["width"] - before_cell["width"], 1)
             if abs(delta) >= 0.1:
                 width_changes.append(f"표 {index} 칸 {cell_index} 「{cell['text'][:12]}」 폭 {before_cell['width']} -> {cell['width']} ({delta:+})")
@@ -305,7 +310,7 @@ def compare_scene(scene, base):
     before_overflows = before_container.get("scrollWidth", 0) > before_container.get("clientWidth", 0)
     if after_overflows and not before_overflows:
         problems.append(f"넘침 {scene['container']} (기준 {before_container})")
-    return problems, width_changes
+    return problems, changes, width_changes
 
 
 def main():
@@ -366,14 +371,15 @@ def main():
                         measurement = measure_and_capture(key, name, kind, width, height, f"{name}.md", text, marker)
                         checks = judge_scene(measurement, name, kind, width)
                         detail = ""
+                        changes = []
                         if baseline is not None:
                             if measurement.get("error"):
                                 checks["matches_baseline"] = False
                                 detail = "요소를 찾지 못함"
                             else:
-                                problems, width_changes = compare_scene(measurement, baseline.get(key))
+                                problems, changes, width_changes = compare_scene(measurement, baseline.get(key))
                                 checks["matches_baseline"] = not problems
-                                detail = "; ".join(problems)
+                                detail = "; ".join(problems + [f"변화 {change}" for change in changes])
                                 for change in width_changes:
                                     print("  폭 변화", key, change)
                         scenes[key] = {
@@ -382,6 +388,7 @@ def main():
                             "size": f"{width}x{height}",
                             "measurement": measurement,
                             "checks": checks,
+                            "changes": changes,
                         }
                         failed = [check for check, ok in checks.items() if not ok]
                         failures.extend(f"{key}.{check}" for check in failed)
@@ -394,14 +401,15 @@ def main():
                     measurement = measure_and_capture(key, name, "editor", width, height, file, marker=marker, wait_table=False)
                     checks = {"table_present": bool(measurement.get("tables"))}
                     detail = ""
+                    changes = []
                     if baseline is not None:
                         if measurement.get("error") or not measurement.get("tables"):
                             checks["matches_baseline"] = False
                             detail = "요소를 찾지 못함"
                         else:
-                            problems, width_changes = compare_scene(measurement, baseline.get(key))
+                            problems, changes, width_changes = compare_scene(measurement, baseline.get(key))
                             checks["matches_baseline"] = not problems
-                            detail = "; ".join(problems)
+                            detail = "; ".join(problems + [f"변화 {change}" for change in changes])
                             for change in width_changes:
                                 print("  폭 변화", key, change)
                     scenes[key] = {
@@ -410,6 +418,7 @@ def main():
                         "size": f"{width}x{height}",
                         "measurement": measurement,
                         "checks": checks,
+                        "changes": changes,
                     }
                     failed = [check for check, ok in checks.items() if not ok]
                     failures.extend(f"{key}.{check}" for check in failed)

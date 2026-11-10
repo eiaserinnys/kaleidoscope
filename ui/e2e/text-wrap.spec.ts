@@ -368,16 +368,23 @@ test("1180 폭 저장소 문서 보기의 긴 주소 표와 긴 문장 칸 표�
   }
 });
 
-test("360 폭의 긴 영어 낱말 표와 맨 SHA 표는 is-tight로 물러서 넘치지 않는다", async ({ page }) => {
+test("360 폭의 긴 영어 낱말 표와 맨 SHA 표는 is-tight로 물러서 넘치지 않고, 창을 넓히면 다시 낱말 단위로 돌아온다", async ({ page }) => {
   for (const [name, text] of [["en-words.md", EN_WORDS_TABLE], ["plain-sha.md", PLAIN_SHA_TABLE]] as const) {
     const app = await openTableDocument(page, 360, 240, text, name);
-    await expect(app.locator(".ks-table-fit").first()).toHaveClass(/is-tight/, { timeout: 5000 });
+    const editorFit = app.locator(".ks-table-fit").first();
+    await expect(editorFit).toHaveClass(/is-tight/, { timeout: 5000 });
     const dimensions = await app.locator(".cm-scroller").evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
     expect(dimensions.scrollWidth, name).toBeLessThanOrEqual(dimensions.clientWidth);
+    // 같은 표를 넓은 창에서 다시 맞추면 is-tight를 뗀다.
+    await page.setViewportSize({ width: 1180, height: 720 });
+    await expect(editorFit, name).not.toHaveClass(/is-tight/, { timeout: 5000 });
 
     const viewApp = await openStorageDocument(page, 360, 240, text);
-    await expect(viewApp.locator(".ks-markdown-text .ks-table-fit").first()).toHaveClass(/is-tight/, { timeout: 5000 });
+    const viewFit = viewApp.locator(".ks-markdown-text .ks-table-fit").first();
+    await expect(viewFit).toHaveClass(/is-tight/, { timeout: 5000 });
     const viewDimensions = await viewApp.locator(".ks-markdown-text").evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
     expect(viewDimensions.scrollWidth, name).toBeLessThanOrEqual(viewDimensions.clientWidth);
+    await page.setViewportSize({ width: 1180, height: 720 });
+    await expect(viewFit, name).not.toHaveClass(/is-tight/, { timeout: 5000 });
   }
 });
