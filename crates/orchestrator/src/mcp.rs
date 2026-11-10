@@ -342,7 +342,7 @@ impl McpServer {
         &self,
         Parameters(args): Parameters<DeleteAppArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        let result = self.state.delete_app(&args.app_id, None, None);
+        let result = self.state.delete_app(&args.app_id, None, None, false);
         Ok(match result {
             Ok(closed_windows) => json_result(
                 json!({"app_id":args.app_id,"deleted":true,"closed_windows":closed_windows}),

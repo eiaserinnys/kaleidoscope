@@ -49,6 +49,28 @@ fn connection_bundle(id: &str, connections: Value) -> Value {
     request
 }
 
+fn bundle_with_storage(id: &str, release: u32, name: &str, expected: Option<u32>) -> Value {
+    let mut request = bundle(id, release, name, expected);
+    let mut definition: Value =
+        serde_json::from_str(request["definition_json"].as_str().unwrap()).unwrap();
+    definition["requires"]["blocks"] = json!(6);
+    definition["requires"]["modules"]["storage"] = json!(1);
+    definition["storage"] = json!({"entries":[{"id":"title","key":"settings/title","kind":"json","schema":{"type":"string"},"default":"","label":"제목","presentation":"settings"}]});
+    let raw = definition.to_string();
+    let bytes = STANDARD.decode(request["manifest_base64"].as_str().unwrap()).unwrap();
+    let mut manifest: Value = serde_json::from_slice(&bytes).unwrap();
+    manifest["requires"] = definition["requires"].clone();
+    manifest["files"][format!("apps/{id}/{release}/app.json")] =
+        json!({"sha256":sha256_hex(raw.as_bytes()),"bytes":raw.len()});
+    let manifest = manifest.to_string();
+    let digest = sha256_hex(manifest.as_bytes());
+    request["definition_json"] = json!(raw);
+    request["manifest_base64"] = json!(STANDARD.encode(manifest));
+    request["approved_digest"] = json!(digest);
+    request["origin"]["digest"] = json!(digest);
+    request
+}
+
 #[tokio::test]
 async fn store_connections_are_atomic_preserved_and_broadcast() {
     let (_dir, state) = setup();
@@ -579,6 +601,269 @@ async fn byte_count_hash_and_encoding_failures_have_distinct_codes() {
     encoding["manifest_base64"] = json!("***");
     let (_, error) = call(&state, "POST", "/api/device/app-installs", encoding).await;
     assert_eq!(error["id"], "REGISTRYINSTALL_MANIFEST_ENCODING_INVALID");
+}
+
+fn window_layout(app_id: &str, window_id: &str) -> registry::LayoutChanges {
+    serde_json::from_value(json!({
+        "workspaces":[{"id":"w","name":"작업","created_at":"t","updated_at":"t"}],
+        "desktops":[{"id":"d","workspace_id":"w","name":"화면","position":0,"created_at":"t","updated_at":"t"}],
+        "windows":[{"id":window_id,"desktop_id":"d","app_id":app_id,"app_version":1,"rect":{"x":0,"y":0,"width":100,"height":100},"z":1,"state":{},"created_at":"t","updated_at":"t"}]
+    }))
+    .unwrap()
+}
+
+fn insert_store_storage_item(state: &AppState, app_id: &str) {
+    let account = state.mcp_account_id().unwrap();
+    let db = state.lock_db().unwrap();
+    db.execute(
+        "INSERT INTO app_storage_buckets(id,account_id,app_id) VALUES('bucket-' || ?1,?2,?1)",
+        params![app_id, account],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO app_storage_items(bucket_id,key,kind,content,revision,updated_at) VALUES('bucket-' || ?1,'settings/title','json','\"kept\"','rev','now')",
+        [app_id],
+    )
+    .unwrap();
+}
+
+#[tokio::test]
+async fn replace_turns_a_custom_app_into_the_store_app_and_keeps_window_and_storage() {
+    let (_dir, state) = setup();
+    let custom = bundle_with_storage("custom-replace", 1, "개인", None);
+    state
+        .publish_app(
+            custom["definition_json"].as_str().unwrap(),
+            "agent",
+            false,
+            None,
+        )
+        .unwrap();
+    state
+        .apply_layout_changes(None, &window_layout("custom-replace", "win-custom"))
+        .unwrap();
+    insert_store_storage_item(&state, "custom-replace");
+    let mut request = bundle_with_storage("custom-replace", 2, "스토어 판", Some(1));
+    request["replace"] = json!(true);
+    let (status, reply) = call(&state, "POST", "/api/device/app-installs", request).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["unchanged"], false);
+    assert_eq!(reply["app"]["app"]["origin"]["store_url"], "https://store.example");
+    assert_eq!(reply["app"]["app"]["origin"]["release"], 2);
+    assert_eq!(reply["app"]["app"]["current_version"], 2);
+    assert_eq!(reply["app"]["app"]["installed_version"], 2);
+    let db = state.lock_db().unwrap();
+    let window_version: u32 = db
+        .query_row(
+            "SELECT json_extract(data,'$.app_version') FROM windows WHERE id='win-custom'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(window_version, 2);
+    let stored: String = db
+        .query_row(
+            "SELECT content FROM app_storage_items WHERE bucket_id='bucket-custom-replace' AND key='settings/title'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored, "\"kept\"");
+}
+
+#[tokio::test]
+async fn replace_changes_only_the_origin_when_the_definition_is_identical() {
+    let (_dir, state) = setup();
+    let same = bundle("same-def", 1, "같은 정의", None);
+    state
+        .publish_app(
+            same["definition_json"].as_str().unwrap(),
+            "agent",
+            false,
+            None,
+        )
+        .unwrap();
+    let mut request = same;
+    request["expected_current_version"] = json!(1);
+    request["replace"] = json!(true);
+    let (status, reply) = call(&state, "POST", "/api/device/app-installs", request).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["unchanged"], false);
+    assert_eq!(reply["app"]["app"]["current_version"], 1);
+    assert_eq!(reply["app"]["app"]["installed_version"], 1);
+    assert_eq!(reply["app"]["app"]["origin"]["store_url"], "https://store.example");
+}
+
+#[tokio::test]
+async fn replace_switches_between_store_origins() {
+    let (_dir, state) = setup();
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle("origin-switch", 1, "첫 판", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let mut request = bundle("origin-switch", 2, "둘째 판", Some(1));
+    request["origin"]["store_url"] = json!("https://other.example");
+    request["replace"] = json!(true);
+    let (status, reply) = call(&state, "POST", "/api/device/app-installs", request).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["app"]["app"]["origin"]["store_url"], "https://other.example");
+    assert_eq!(reply["app"]["app"]["origin"]["release"], 2);
+    assert_eq!(reply["app"]["app"]["current_version"], 2);
+    assert_eq!(reply["app"]["app"]["installed_version"], 2);
+}
+
+#[tokio::test]
+async fn replace_restores_a_modified_store_app_from_the_same_release() {
+    let (_dir, state) = setup();
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle("restore-test", 1, "원래", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let changed = json!({"id":"restore-test","name":"수정","requires":{"blocks":4,"modules":{}},"permissions":[],"ui":{"type":"text","value":"안녕"}}).to_string();
+    state.publish_app(&changed, "agent", false, None).unwrap();
+    let modified = state.app("restore-test", None).unwrap().unwrap();
+    assert_eq!(modified.app.installed_version, Some(1));
+    assert_eq!(modified.app.current_version, 2);
+    let mut request = bundle("restore-test", 1, "원래", Some(2));
+    request["replace"] = json!(true);
+    let (status, reply) = call(&state, "POST", "/api/device/app-installs", request).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["unchanged"], false);
+    assert_eq!(reply["app"]["app"]["current_version"], 3);
+    assert_eq!(reply["app"]["app"]["installed_version"], 3);
+    assert_eq!(reply["app"]["version"]["definition"]["name"], "원래");
+}
+
+#[tokio::test]
+async fn replace_does_not_bypass_builtin_expected_version_or_downgrade_checks() {
+    let (_dir, state) = setup();
+    let mut builtin = bundle("explorer", 1, "탐색기", None);
+    builtin["replace"] = json!(true);
+    let (status, error) = call(&state, "POST", "/api/device/app-installs", builtin).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["id"], "REGISTRYINSTALL_ORIGIN_CONFLICT");
+
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle("guard-replace", 1, "가드", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let mut stale = bundle("guard-replace", 2, "가드", Some(5));
+    stale["replace"] = json!(true);
+    let (_, error) = call(&state, "POST", "/api/device/app-installs", stale).await;
+    assert_eq!(error["id"], "REGISTRYINSTALL_EXPECTED_VERSION_CONFLICT");
+
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle("down-replace", 2, "둘", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let mut down = bundle("down-replace", 1, "하나", Some(1));
+    down["replace"] = json!(true);
+    let (_, error) = call(&state, "POST", "/api/device/app-installs", down).await;
+    assert_eq!(error["id"], "REGISTRYINSTALL_RELEASE_DOWNGRADE");
+
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle("digest-replace", 1, "에이", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let mut digest = bundle("digest-replace", 1, "비", Some(1));
+    digest["replace"] = json!(true);
+    let (_, error) = call(&state, "POST", "/api/device/app-installs", digest).await;
+    assert_eq!(error["id"], "REGISTRYINSTALL_RELEASE_DIGEST_CONFLICT");
+}
+
+#[tokio::test]
+async fn custom_app_can_be_removed_by_device_with_allow_custom() {
+    let (_dir, state) = setup();
+    let custom = bundle("custom-delete", 1, "개인", None);
+    state
+        .publish_app(
+            custom["definition_json"].as_str().unwrap(),
+            "agent",
+            false,
+            None,
+        )
+        .unwrap();
+    state
+        .apply_layout_changes(None, &window_layout("custom-delete", "win-custom-delete"))
+        .unwrap();
+    insert_store_storage_item(&state, "custom-delete");
+    let mut events = state.0.events.subscribe();
+    let (status, reply) = call(
+        &state,
+        "DELETE",
+        "/api/device/apps/custom-delete",
+        json!({"expected_current_version":1,"allow_custom":true}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["closed_windows"], 1);
+    assert!(
+        matches!(events.try_recv().unwrap().event, DeviceEvent::LayoutChanged { changes } if changes.deleted_windows == ["win-custom-delete"])
+    );
+    assert!(matches!(
+        events.try_recv().unwrap().event,
+        DeviceEvent::AppDeleted { .. }
+    ));
+    assert!(state.app("custom-delete", None).unwrap().is_none());
+    let stored: String = state
+        .lock_db()
+        .unwrap()
+        .query_row(
+            "SELECT content FROM app_storage_items WHERE bucket_id='bucket-custom-delete' AND key='settings/title'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored, "\"kept\"");
+}
+
+#[tokio::test]
+async fn builtin_app_cannot_be_removed_by_device_even_with_allow_custom() {
+    let (_dir, state) = setup();
+    let (status, error) = call(
+        &state,
+        "DELETE",
+        "/api/device/apps/explorer",
+        json!({"expected_current_version":1,"allow_custom":true}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["id"], "MCP_DELETE_APP_BUILTIN");
 }
 
 fn add_other_device(state: &AppState) {

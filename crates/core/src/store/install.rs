@@ -88,6 +88,7 @@ pub(crate) fn install(inner: &Arc<Inner>, window: &str, permission: &str, server
         approved_digest: prepared.digest.clone(),
         origin: StoreOrigin { store_url: client.server.as_str().into(), store_app_id: id.into(), release, digest: prepared.digest },
         expected_current_version: current.and_then(|app| NonZeroU32::new(app.current_version)),
+        replace: false,
     };
     let result = inner.registry.install_store_app(&link.server_url, &link.token, &request);
     let (applied, event) = registry_events::apply_registry_change(inner, |state| {
@@ -111,7 +112,7 @@ pub(crate) fn remove(inner: &Arc<Inner>, window: &str, permission: &str, id: Val
         state.shared.apps.iter().find(|app| app.id == id)
             .and_then(|app| NonZeroU32::new(app.current_version)).ok_or_else(|| errors::STORECLIENT_REMOVE_APP_MISSING(id))?
     };
-    let result = inner.registry.remove_store_app(&link.server_url, &link.token, id, &DeviceRemoveRequest { expected_current_version: version });
+    let result = inner.registry.remove_store_app(&link.server_url, &link.token, id, &DeviceRemoveRequest { expected_current_version: version, allow_custom: false });
     let (applied, event) = registry_events::apply_registry_change(inner, |state| {
         if inner.generation.load(Ordering::SeqCst) != generation { return Err(errors::STORECLIENT_INSTALL_CONTEXT_CHANGED()); }
         result.map_err(|error| registry_error(error, false, id))?;

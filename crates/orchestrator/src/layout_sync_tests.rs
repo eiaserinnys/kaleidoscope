@@ -191,7 +191,7 @@ fn shortcuts_survive_legacy_desktop_updates_and_parent_deletion_cascades() {
     state.apply_layout_changes(None, &changes).unwrap();
     let app = json!({"id":"app", "name":"시험", "requires":{"blocks":4,"modules":{}}, "permissions":[], "state":{}, "ui":{"type":"text", "value":"시험"}}).to_string();
     state.publish_app(&app, "test", false, None).unwrap();
-    state.delete_app("app", None, None).unwrap();
+    state.delete_app("app", None, None, false).unwrap();
     state
         .apply_layout_changes(
             None,

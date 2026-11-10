@@ -219,6 +219,30 @@ fn consent_and_install_wire_roundtrip_and_legacy_app_omits_origin() {
 }
 
 #[test]
+fn install_replace_and_remove_allow_custom_default_to_false_and_are_omitted() {
+    use kaleidoscope_contract::store::{DeviceInstallRequest, DeviceRemoveRequest};
+    let install = json!({"definition_json":"{}", "asset_uploads":[], "manifest_base64":"e30=", "approved_digest":"abc", "origin":{"store_url":"https://example.test/store", "store_app_id":"example", "release":3, "digest":"abc"}, "expected_current_version":null});
+    let parsed: DeviceInstallRequest = serde_json::from_value(install.clone()).unwrap();
+    assert!(!parsed.replace);
+    assert_eq!(serde_json::to_value(parsed).unwrap(), install);
+    let mut replace = install;
+    replace["replace"] = json!(true);
+    let parsed: DeviceInstallRequest = serde_json::from_value(replace.clone()).unwrap();
+    assert!(parsed.replace);
+    assert_eq!(serde_json::to_value(parsed).unwrap(), replace);
+
+    let remove = json!({"expected_current_version":3});
+    let parsed: DeviceRemoveRequest = serde_json::from_value(remove.clone()).unwrap();
+    assert!(!parsed.allow_custom);
+    assert_eq!(serde_json::to_value(parsed).unwrap(), remove);
+    let mut allow = remove;
+    allow["allow_custom"] = json!(true);
+    let parsed: DeviceRemoveRequest = serde_json::from_value(allow.clone()).unwrap();
+    assert!(parsed.allow_custom);
+    assert_eq!(serde_json::to_value(parsed).unwrap(), allow);
+}
+
+#[test]
 fn store_connection_contract_rejects_secret_fields_and_relay() {
     use kaleidoscope_contract::store::StoreConnection;
     let oauth = json!({"name":"fixture","kind":"oauth","base_url":"https://example.com","paths":["/api/"],"writable":false,"description":"시험"});

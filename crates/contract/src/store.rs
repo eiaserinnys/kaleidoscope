@@ -165,6 +165,12 @@ pub struct DeviceInstallRequest {
     pub connections: Option<serde_json::Value>,
     #[serde(deserialize_with = "required_expected_version")]
     pub expected_current_version: Option<NonZeroU32>,
+    /// 스토어 판으로 명시 전환할 때만 true다. 옛 기기의 요청에는 이 필드가 없어 false로 읽힌다.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub replace: bool,
+}
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 fn present_connections<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
 where
@@ -189,4 +195,7 @@ pub struct DeviceInstallReply {
 #[serde(deny_unknown_fields)]
 pub struct DeviceRemoveRequest {
     pub expected_current_version: NonZeroU32,
+    /// 출처 없는 커스텀 앱도 지우도록 명시할 때만 true다. 옛 기기의 요청에는 이 필드가 없어 false로 읽힌다.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub allow_custom: bool,
 }
