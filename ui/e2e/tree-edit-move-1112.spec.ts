@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 // 블록 세트 60의 눈 확인용 시나리오. 확인 상자, 데이터 트리 바로 입력과 끌어 옮기기, 구역 머리 메뉴와
 // 이름 바꾸기를 실제 브라우저에서 캡처하고, 확인 상자 크기·행 높이·머리 높이·정렬 좌표를 잰다.
+// 구역이 둘이므로 트리 사이 끌기, 트리 밖 끌기, 긴 목록 끝 바로 입력의 초점과 스크롤도 함께 본다.
 const APP = "tree-edit-move-1112";
 const ROW = (key: string) => `[data-tree-id="item:${key}"]`;
 const HIDE_CHROME = `
@@ -65,6 +66,14 @@ async function pageDragOver(page: Page, target: string | null, ratio: number) {
   }, { target, ratio });
 }
 
+async function pageDragLeave(page: Page, relatedSelector: string) {
+  await page.evaluate((relatedSelector) => {
+    const tree = document.querySelector<HTMLElement>(".ks-data-tree")!;
+    const relatedTarget = document.querySelector<HTMLElement>(relatedSelector)!;
+    tree.dispatchEvent(new DragEvent("dragleave", { bubbles: true, cancelable: true, relatedTarget }));
+  }, relatedSelector);
+}
+
 async function pageDrop(page: Page, target: string | null, ratio: number) {
   await page.evaluate(({ target, ratio }) => {
     const holder = window as unknown as { __ksDrag?: DragState };
@@ -91,17 +100,17 @@ async function pageDragEnd(page: Page) {
 }
 
 async function openSectionMenu(page: Page, app: Locator) {
-  await app.locator(".ks-data-section-title").click({ button: "right" });
+  await app.locator(".ks-data-section-title").first().click({ button: "right" });
   await expect(page.getByRole("menu")).toBeVisible();
 }
 
 test("넓은 창 확인 상자: 크기·둥글기·세로 가운데·열 정렬 (밝음)", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "light");
-  const tree = app.locator(".ks-data-tree");
+  const tree = app.locator(".ks-data-tree").first();
   await expect(tree).toBeVisible();
 
-  const unchecked = app.locator(".ks-tree-check:not(.is-checked)");
-  const checked = app.locator(".ks-tree-check.is-checked");
+  const unchecked = tree.locator(".ks-tree-check:not(.is-checked)");
+  const checked = tree.locator(".ks-tree-check.is-checked");
   await expect(unchecked).toHaveCount(3);
   await expect(checked).toHaveCount(1);
 
@@ -163,20 +172,20 @@ test("넓은 창 확인 상자: 크기·둥글기·세로 가운데·열 정렬 
 
 test("넓은 창 확인 상자 (어두움)", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "dark");
-  await expect(app.locator(".ks-tree-check.is-checked")).toHaveCount(1);
+  await expect(app.locator(".ks-data-tree").first().locator(".ks-tree-check.is-checked")).toHaveCount(1);
   await capture(app, testInfo, "넓은-확인상자-어두움.png");
 });
 
 test("구역 머리 메뉴와 이름 바꾸기: 높이 유지, 초점 복귀, pending 제목 (밝음)", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "light");
-  const header = app.locator(".ks-data-section-header");
-  const toggle = app.locator(".ks-data-section-toggle");
+  const header = app.locator(".ks-data-section-header").first();
+  const toggle = app.locator(".ks-data-section-toggle").first();
   await expect(header).toBeVisible();
   const before = await box(header);
 
   await openSectionMenu(page, app);
   await expect(page.getByRole("menuitem", { name: "구역 이름 바꾸기" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "할 일 이름 바꾸기" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "첫 항목 이름 바꾸기" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "제목 복사" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("넓은-구역-메뉴-밝음.png") });
 
@@ -199,28 +208,28 @@ test("구역 머리 메뉴와 이름 바꾸기: 높이 유지, 초점 복귀, pe
   expect(toggleBox.width, "편집 중 접기 단추는 화살표 폭").toBeLessThanOrEqual(32);
   expect(inputBox.width, "글칸이 남은 폭을 쓴다").toBeGreaterThan(toggleBox.width);
   await expect(toggle.locator("input")).toHaveCount(0);
-  await expect(app.getByRole("button", { name: "+", exact: true })).toBeVisible();
+  await expect(app.getByRole("button", { name: "+", exact: true }).first()).toBeVisible();
   await capture(app, testInfo, "넓은-구역-이름-밝음.png");
 
   await input.press("Escape");
   await expect(input).toHaveCount(0);
-  await expect(app.locator(".ks-data-section-title")).toHaveText("이번 주");
+  await expect(app.locator(".ks-data-section-title").first()).toHaveText("이번 주");
   await expect(toggle).toBeFocused();
 
   await openSectionMenu(page, app);
   await page.getByRole("menuitem", { name: "구역 이름 바꾸기" }).click();
   const second = app.getByRole("textbox", { name: "구역 이름" });
   await expect(second).toBeFocused();
-  await second.fill("다음 주");
+  await second.fill("다음 구역");
   await second.press("Enter");
   await expect(second).toHaveCount(0);
-  await expect(app.locator(".ks-data-section-title")).toHaveText("다음 주");
+  await expect(app.locator(".ks-data-section-title").first()).toHaveText("다음 구역");
   await expect(toggle).toBeFocused();
 });
 
 test("구역 이름 글칸 (어두움)", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "dark");
-  const header = app.locator(".ks-data-section-header");
+  const header = app.locator(".ks-data-section-header").first();
   const before = await box(header);
   await openSectionMenu(page, app);
   await page.getByRole("menuitem", { name: "구역 이름 바꾸기" }).click();
@@ -258,7 +267,7 @@ test("트리 행 이름 바꾸기: 전체 고름, 행 높이, 취소와 확정",
 
   await input.press("Escape");
   await expect(input).toHaveCount(0);
-  await expect(app.getByText("마지막 이름: 취소", { exact: true })).toBeVisible();
+  await expect(app.getByText("마지막 이름: a: 취소", { exact: true })).toBeVisible();
 
   await app.locator(ROW("a")).click({ button: "right" });
   await page.getByRole("menuitem", { name: "이름 바꾸기" }).click();
@@ -266,12 +275,12 @@ test("트리 행 이름 바꾸기: 전체 고름, 행 높이, 취소와 확정",
   await second.fill("설계 정리 v2");
   await second.press("Enter");
   await expect(second).toHaveCount(0);
-  await expect(app.getByText("마지막 이름: 설계 정리 v2", { exact: true })).toBeVisible();
+  await expect(app.getByText("마지막 이름: a: 설계 정리 v2", { exact: true })).toBeVisible();
 });
 
 test("끌어 옮기기: before·inside·after·end 표시와 놓은 뒤", async ({ page }, testInfo) => {
   const app = await open(page, APP, 1182, 800, "light");
-  const tree = app.locator(".ks-data-tree");
+  const tree = app.locator(".ks-data-tree").first();
   await expect(tree).toBeVisible();
 
   await pageDragStart(page, "a");
@@ -318,12 +327,107 @@ test("끌어 옮기기: before·inside·after·end 표시와 놓은 뒤", async 
   await expect(app.getByText("마지막 이동: a → 끝 (end)", { exact: true })).toBeVisible();
 });
 
+test("트리 사이 끌기: 표시는 목표 하나뿐이고 놓으면 그 트리의 자리로 간다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+
+  await pageDragStart(page, "a");
+  await pageDragOver(page, "n5", 0.1);
+  await expect(app.locator(ROW("n5"))).toHaveAttribute("data-drop-position", "before");
+  await expect(app.locator("[data-drop-position]"), "놓을 자리 표시는 하나뿐").toHaveCount(1);
+  await expect(app.locator("[data-drop-state]"), "앞 트리의 끝 자리 표시는 사라진다").toHaveCount(0);
+  await capture(app, testInfo, "트리-사이-끌기.png");
+
+  await pageDrop(page, "n5", 0.1);
+  await expect(app.getByText("마지막 이동: a → n5 (before)", { exact: true })).toBeVisible();
+  await expect(app.locator("[data-drop-position]")).toHaveCount(0);
+  await expect(app.locator("[data-drop-state]")).toHaveCount(0);
+});
+
+test("트리 밖으로 나가면 표시가 사라지고 그 상태로 놓으면 아무 일도 없다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+
+  await pageDragStart(page, "a");
+  await pageDragOver(page, "c", 0.9);
+  await expect(app.locator(ROW("c"))).toHaveAttribute("data-drop-position", "after");
+  await pageDragLeave(page, ".ks-data-text");
+  await expect(app.locator("[data-drop-position]"), "트리 밖에서는 표시가 없다").toHaveCount(0);
+  await expect(app.locator("[data-drop-state]")).toHaveCount(0);
+  await capture(app, testInfo, "트리-밖-표시-없음.png");
+
+  await app.locator(".ks-data-text").first().dispatchEvent("drop");
+  await pageDragEnd(page);
+  await expect(app.getByText("마지막 이동: 없음", { exact: true })).toBeVisible();
+  await expect(app.locator("[data-drop-position]")).toHaveCount(0);
+  await expect(app.locator("[data-drop-state]")).toHaveCount(0);
+});
+
+test("다른 트리 위에서 Escape로 끄면 모든 놓을 자리 표시가 사라진다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+
+  await pageDragStart(page, "a");
+  await pageDragOver(page, "n6", 0.5);
+  await expect(app.locator(ROW("n6"))).toHaveAttribute("data-drop-state", "valid");
+  await page.keyboard.press("Escape");
+  await expect(app.locator("[data-drop-state]")).toHaveCount(0);
+  await expect(app.locator("[data-drop-position]")).toHaveCount(0);
+  await capture(app, testInfo, "Escape-취소.png");
+  await pageDragEnd(page);
+  await expect(app.locator("[data-drop-state]")).toHaveCount(0);
+  await expect(app.getByText("마지막 이동: 없음", { exact: true })).toBeVisible();
+});
+
+test("긴 목록 끝: +로 더한 항목은 Enter 뒤 스크롤을 지키고 그 행이 초점을 받으며 Escape는 +로 돌아온다", async ({ page }, testInfo) => {
+  const app = await open(page, APP, 1182, 800, "light");
+  const body = app.locator(".ks-data-window-body");
+  const plus = app.getByRole("button", { name: "+", exact: true }).nth(1);
+
+  await plus.scrollIntoViewIfNeeded();
+  await plus.click();
+  const input = app.getByRole("textbox", { name: "항목 이름" });
+  await expect(input).toBeFocused();
+  await input.press("Escape");
+  await expect(input).toHaveCount(0);
+  await expect(plus, "취소하면 연 자리인 + 단추로 돌아온다").toBeFocused();
+
+  await plus.click();
+  const typed = app.getByRole("textbox", { name: "항목 이름" });
+  await expect(typed).toBeFocused();
+  await typed.fill("끝에 더한 항목");
+  const before = await body.evaluate((element) => element.scrollTop);
+  expect(before, "긴 목록 끝으로 스크롤된 상태").toBeGreaterThan(0);
+  await typed.press("Enter");
+  await expect(typed).toHaveCount(0);
+  const after = await body.evaluate((element) => element.scrollTop);
+  console.log(`긴 목록 스크롤: ${JSON.stringify({ before: round(before), after: round(after) })}`);
+  expect(Math.abs(after - before), "Enter 뒤 스크롤이 튀지 않는다").toBeLessThanOrEqual(1);
+  const added = app.locator('[data-tree-id="item:new-g2"]');
+  await expect(added).toHaveText(/끝에 더한 항목/);
+  await expect(added, "확정한 새 행이 초점을 받는다").toBeFocused();
+  await expect(app.locator(ROW("a")), "창 첫 행으로 돌아가지 않는다").not.toBeFocused();
+  await capture(app, testInfo, "긴-목록-Enter.png");
+});
+
+test("끌기 선 3배 확대: 곧은 --ks-focus-width 선", async ({ browser }, testInfo) => {
+  const context = await browser.newContext({ deviceScaleFactor: 3, viewport: { width: 1182, height: 800 } });
+  const page = await context.newPage();
+  const app = await open(page, APP, 1182, 800, "light");
+  await pageDragStart(page, "a");
+  await pageDragOver(page, "c", 0.9);
+  await expect(app.locator(ROW("c"))).toHaveAttribute("data-drop-position", "after");
+  await app.locator(ROW("c")).screenshot({ path: testInfo.outputPath("끌기-선-3배-아래.png") });
+  await pageDragOver(page, "c", 0.1);
+  await expect(app.locator(ROW("c"))).toHaveAttribute("data-drop-position", "before");
+  await app.locator(ROW("c")).screenshot({ path: testInfo.outputPath("끌기-선-3배-위.png") });
+  await pageDragEnd(page);
+  await context.close();
+});
+
 test("좁은 창: 확인 상자와 구역 이름 글칸", async ({ page }, testInfo) => {
   const app = await open(page, APP, 560, 800, "light");
-  await expect(app.locator(".ks-data-tree")).toBeVisible();
+  await expect(app.locator(".ks-data-tree").first()).toBeVisible();
   await capture(app, testInfo, "좁은-확인상자-밝음.png");
 
-  const header = app.locator(".ks-data-section-header");
+  const header = app.locator(".ks-data-section-header").first();
   const before = await box(header);
   await openSectionMenu(page, app);
   await page.getByRole("menuitem", { name: "구역 이름 바꾸기" }).click();
@@ -331,7 +435,7 @@ test("좁은 창: 확인 상자와 구역 이름 글칸", async ({ page }, testI
   await expect(input).toBeFocused();
   const during = await box(header);
   expect(Math.abs(before.height - during.height), "좁은 창에서도 머리 높이는 같다").toBeLessThanOrEqual(1);
-  const overflow = await app.locator(".ks-data-section").evaluate((element) => element.scrollWidth - element.clientWidth);
+  const overflow = await app.locator(".ks-data-section").first().evaluate((element) => element.scrollWidth - element.clientWidth);
   expect(overflow, "가로로 넘치지 않는다").toBeLessThanOrEqual(1);
   await capture(app, testInfo, "좁은-구역-이름-밝음.png");
 });

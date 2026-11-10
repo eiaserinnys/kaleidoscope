@@ -20,6 +20,29 @@ interface ActiveDrag extends DragPayload {
 /** dragover 중에는 dataTransfer를 읽을 수 없으므로 끄는 항목을 모듈 전역에 둔다(folder-drag.ts와 같은 방식). */
 let active: ActiveDrag | null = null;
 let owner: object | null = null;
+/** 지금 표시를 그리고 있는 트리 하나. 다른 트리가 표시를 맡으면 앞 트리의 표시를 지운다. */
+let displayOwner: object | null = null;
+let displayClear: (() => void) | null = null;
+
+function takeDisplay(instance: object, clear: () => void) {
+  if (displayOwner !== null && displayOwner !== instance) displayClear?.();
+  displayOwner = instance;
+  displayClear = clear;
+}
+
+function releaseDisplay(instance: object) {
+  if (displayOwner !== instance) return;
+  displayOwner = null;
+  displayClear = null;
+}
+
+/** 끌기가 끝났을 때 표시를 남길 수 있는 트리가 여럿이므로 모든 트리의 표시를 지운다. */
+function clearDisplays() {
+  const clear = displayClear;
+  displayOwner = null;
+  displayClear = null;
+  clear?.();
+}
 
 function itemOf(row: TreeRowModel | null): TreeItem | undefined {
   const value = row?.node.data as TreeItem | undefined;
@@ -65,33 +88,45 @@ export function useDataTreeDrag({ enabled, windowId, onMove }: {
 }): DataTreeDrag {
   const [target, setTarget] = useState<{ id: string; hoveredId: string | null; valid: boolean; position?: "before" | "after" } | null>(null);
   const instance = useRef({}).current;
+  const clearTarget = useCallback(() => setTarget(null), []);
   const clear = useCallback(() => {
     if (owner === instance) { active = null; owner = null; }
-    setTarget(null);
-  }, [instance]);
+    releaseDisplay(instance);
+    clearTarget();
+  }, [clearTarget, instance]);
+  const end = useCallback(() => {
+    if (owner === instance) { active = null; owner = null; }
+    clearDisplays();
+    clearTarget();
+  }, [clearTarget, instance]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !active || owner !== instance) return;
+      if (event.key !== "Escape" || !active) return;
       event.preventDefault();
-      clear();
+      active = null;
+      owner = null;
+      clearDisplays();
     };
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
       if (owner === instance) { active = null; owner = null; }
+      releaseDisplay(instance);
     };
-  }, [clear, instance]);
+  }, [instance]);
   const onStart = useCallback((row: TreeRowModel, event: DragEvent<HTMLElement>) => {
     const item = itemOf(row);
     if (!item) { event.preventDefault(); return; }
     active = { window: windowId, key: item.key, item };
     owner = instance;
+    clearDisplays();
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData(TREE_ITEM_MIME, JSON.stringify({ window: windowId, key: item.key } satisfies DragPayload));
   }, [instance, windowId]);
   const onOver = useCallback((row: TreeRowModel | null, event: DragEvent<HTMLElement>) => {
     if (!active) return;
     const sameWindow = active.window === windowId;
+    takeDisplay(instance, clearTarget);
     if (row === null) {
       event.preventDefault();
       event.stopPropagation();
@@ -106,7 +141,7 @@ export function useDataTreeDrag({ enabled, windowId, onMove }: {
     event.dataTransfer.dropEffect = valid ? "move" : "none";
     const drop = valid ? positionOf(event) : undefined;
     setTarget({ id: row.id, hoveredId: row.id, valid, position: drop === "inside" ? undefined : drop });
-  }, [windowId]);
+  }, [clearTarget, instance, windowId]);
   const onDrop = useCallback((row: TreeRowModel | null, event: DragEvent<HTMLElement>) => {
     const current = active;
     if (!current) return;
@@ -123,7 +158,13 @@ export function useDataTreeDrag({ enabled, windowId, onMove }: {
       );
     } finally {
       clear();
+      clearDisplays();
     }
   }, [clear, onMove, windowId]);
-  return { enabled, targetId: target === null ? null : target.id, hoveredId: target?.hoveredId ?? null, valid: target?.valid ?? false, position: target?.position, onStart, onOver, onDrop, onEnd: clear, onLeave: () => undefined };
+  const onLeave = useCallback((event: DragEvent<HTMLElement>) => {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    releaseDisplay(instance);
+    clearTarget();
+  }, [clearTarget, instance]);
+  return { enabled, targetId: target === null ? null : target.id, hoveredId: target?.hoveredId ?? null, valid: target?.valid ?? false, position: target?.position, onStart, onOver, onDrop, onEnd: end, onLeave };
 }

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block, CoreReply, CoreRequest } from "../contract/contract";
+import { ContextMenuHost } from "../components/context-menu";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
@@ -259,4 +260,99 @@ it("같은 창의 다른 데이터 트리에 놓으면 그 트리의 parent_item
     context: expect.objectContaining({ event: { key: "a", target: null, position: "end" }, item: null, parent_item: sections[1] }),
   }), "*"));
   store.dispose();
+});
+
+it("제목이 없는 바로 입력 항목도 빈 글칸 행으로 그린다", async () => {
+  setup(editBlock({ key: "new", editing: true }), { last: null, cancelled: null });
+  expect(await screen.findByRole("textbox", { name: "항목 이름" })).toBeTruthy();
+});
+
+it("같은 창의 다른 트리 위에서 Escape로 끄면 그 트리의 놓을 자리 표시도 지운다", async () => {
+  setup({ type: "repeat", items: { state: "sections" }, key: "id", template: {
+    type: "tree", items: { item: "rows" }, on_move: [{ set_state: "moved", value: { expr: "$event" } }],
+  } } as unknown as Block, { sections, moved: null });
+  const source = await screen.findByRole("treeitem", { name: "첫째 항목" });
+  const target = screen.getByRole("treeitem", { name: "둘째 항목" });
+  rowRect(target);
+  const transferValue = transfer();
+  drag("dragstart", source, transferValue);
+  drag("dragover", target, transferValue, 20);
+  expect(target.getAttribute("data-drop-state")).toBe("valid");
+  fireEvent.keyDown(document, { key: "Escape" });
+  drag("dragend", source, transferValue);
+  expect(target.getAttribute("data-drop-state")).toBeNull();
+});
+
+it("포인터가 트리 밖으로 나가면 놓을 자리 표시를 지운다", async () => {
+  setup(moveBlock, { moved: null });
+  const source = await screen.findByRole("treeitem", { name: "가" });
+  const target = screen.getByRole("treeitem", { name: "나" });
+  rowRect(target);
+  const transferValue = transfer();
+  drag("dragstart", source, transferValue);
+  drag("dragover", target, transferValue, 20);
+  expect(target.getAttribute("data-drop-state")).toBe("valid");
+  fireEvent.dragLeave(screen.getByRole("tree"), { relatedTarget: document.body });
+  expect(target.getAttribute("data-drop-state")).toBeNull();
+});
+
+it("긴 목록 끝 바로 입력은 Enter 확정 뒤 그 행이 초점을 받고 첫 행으로 돌아가지 않는다", async () => {
+  const items = [
+    { key: "a", title: "첫째", editing: false },
+    { key: "b", title: "둘째", editing: false },
+    { key: "c", title: "새 항목", editing: true },
+  ];
+  setup({ type: "tree", items: { state: "items" }, on_edit: [{ set_state: "last", value: { expr: "$event" } }] } as unknown as Block, { items, last: null });
+  const input = await screen.findByRole("textbox", { name: "항목 이름" });
+  expect(document.activeElement).toBe(input);
+  fireEvent.change(input, { target: { value: "끝 항목" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  const row = await screen.findByRole("treeitem", { name: "끝 항목" });
+  await waitFor(() => expect(document.activeElement).toBe(row));
+  expect(row.getAttribute("tabindex")).toBe("0");
+  expect(document.activeElement).not.toBe(screen.getByRole("treeitem", { name: "첫째" }));
+});
+
+it("바로 입력 Escape는 메뉴를 연 행으로 초점을 돌려준다", async () => {
+  const items = [{ key: "a", title: "첫째" }, { key: "b", title: "둘째" }];
+  const state = { items, last: null, cancelled: null };
+  const definition: AppDefinition = {
+    ...mdViewerDefinition, requires: { blocks: 60, modules: {} }, permissions: [], state,
+    ui: {
+      type: "tree", items: { state: "items" },
+      item_menu: [{ label: "이름 바꾸기", on_select: [{ set_state: "items", value: { expr: '$map($state.items, function($v) { $v.key = $item.key ? $merge([$v, {"editing": true}]) : $v })' } }] }],
+      on_edit: [{ set_state: "last", value: { expr: "$event" } }],
+      on_edit_cancel: [{ set_state: "cancelled" }],
+    } as unknown as Block,
+  };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { ...state };
+  const transport = createFakeTransport(seed);
+  render(<><ContextMenuHost /><AppWindowContent store={createShellStore(transport)} windowId="viewer-window" /></>);
+  const row = await screen.findByRole("treeitem", { name: "둘째" });
+  fireEvent.contextMenu(row, { clientX: 10, clientY: 10 });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "이름 바꾸기" }));
+  const input = await screen.findByRole("textbox", { name: "항목 이름" });
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  fireEvent.keyDown(input, { key: "Escape" });
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("treeitem", { name: "둘째" })));
+});
+
+it("바로 입력 Escape는 연 자리인 구역 머리 + 단추로 초점을 돌려준다", async () => {
+  const items = [{ key: "a", title: "첫째" }];
+  setup({
+    type: "stack", direction: "column", children: [{
+      type: "section", collapsible: true, title: "구역",
+      actions: [{ type: "button", label: "+", on_click: [{ set_state: "items", value: { expr: '$append($state.items, [{"key":"new","title":"","editing":true}])' } }] }],
+      child: { type: "tree", items: { state: "items" }, on_edit: [{ set_state: "last", value: { expr: "$event" } }], on_edit_cancel: [{ set_state: "cancelled" }] },
+    }],
+  } as unknown as Block, { items, last: null, cancelled: null });
+  const button = await screen.findByRole("button", { name: "+" });
+  button.focus();
+  fireEvent.click(button);
+  const input = await screen.findByRole("textbox", { name: "항목 이름" });
+  expect(document.activeElement).toBe(input);
+  fireEvent.keyDown(input, { key: "Escape" });
+  await waitFor(() => expect(document.activeElement).toBe(button));
 });

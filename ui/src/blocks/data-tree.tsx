@@ -1,11 +1,11 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Binding, Block, TreeItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { isBadge } from "../components/badge";
 import { Check, ChevronRight, FileText } from "../components/icons";
 import { DataState } from "../components/data-state";
-import { TreeView } from "../components/tree/tree-view";
+import { TreeView, type TreeFocusController } from "../components/tree/tree-view";
 import { TreeEditRow } from "../components/tree/tree-edit-row";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import { useBinding, useWindowData } from "../data/window-data";
@@ -47,6 +47,13 @@ function isEditing(item: TreeItem, editing: InlineEditing | undefined): boolean 
   return editing !== undefined && item.editing === true && !editing.ended.has(item.key);
 }
 
+/** 그 항목의 바로 입력 글칸이 지금 초점을 쥐고 있는지. 초점을 잃어 확정한 경우에는 초점을 빼앗지 않는다. */
+function editingInputActive(key: string): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !active.matches("input, textarea")) return false;
+  return active.closest<HTMLElement>("[data-tree-row]")?.dataset.treeRow === `item:${key}`;
+}
+
 /** 바로 입력 행의 표식 열. 트리 행과 같은 두 열 규칙을 쓴다. 상자는 눌러도 확인 동작을 하지 않는다. */
 function editColumns(checked: boolean | undefined, hasChildren: boolean, checkEnabled: boolean) {
   const check = checked !== undefined
@@ -65,14 +72,15 @@ interface DataNode extends TreeNode {
 function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: ReadonlyMap<string, boolean> = new Map(), editing?: InlineEditing): DataNode[] {
   const items = asArray(value).filter((item): item is TreeItem => valid(item, byPath));
   if (!byPath) return items.flatMap((item): DataNode[] => {
+    const editingState = isEditing(item, editing) ? editing : undefined;
     const title = titleOf(item, editing);
-    if (typeof title !== "string") return [];
+    // 새 항목은 제목이 없다. 바로 입력 중이면 빈 글칸 행으로 그린다.
+    if (typeof title !== "string" && editingState === undefined) return [];
     const children = tree(item.children, false, [...parent, item.key], pending, editing);
     const checked = pending.get(item.key) ?? item.checked;
-    const editingState = isEditing(item, editing) ? editing : undefined;
     return [{
       id: `item:${item.key}`,
-      label: title,
+      label: title ?? "",
       item,
       data: item,
       commentKey: [...parent, item.key],
@@ -155,6 +163,27 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   const [ended, setEnded] = useState<ReadonlySet<string>>(() => new Set());
   const [titles, setTitles] = useState<ReadonlyMap<string, { text: string; base: string }>>(() => new Map());
   const editable = block.on_edit !== undefined && block.by !== "path";
+  const focusRef = useRef<TreeFocusController | null>(null);
+  const setFocusController = useCallback((focus: TreeFocusController) => { focusRef.current = focus; }, []);
+  // 글칸이 초점을 받기 직전에 초점을 쥐고 있던 요소. 바로 입력을 연 자리로 되돌릴 때 쓴다.
+  const opener = useRef<HTMLElement | null>(null);
+  const lastExternalFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!editable) return;
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.matches('input[aria-label="항목 이름"], textarea[aria-label="항목 이름"]')) {
+        opener.current = lastExternalFocus.current;
+        return;
+      }
+      // 메뉴 항목은 곧 사라진다. 메뉴를 연 행이 그 앞에 초점을 쥐었으므로 그대로 둔다.
+      if (target.closest('[role="menu"]')) return;
+      lastExternalFocus.current = target;
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => document.removeEventListener("focusin", onFocusIn, true);
+  }, [editable]);
   const inline = useMemo<InlineEditing | undefined>(() => {
     if (!editable) return undefined;
     return {
@@ -162,19 +191,28 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
       titles,
       checkEnabled: block.on_check !== undefined,
       commit: (item, draft) => {
+        const keyboard = editingInputActive(item.key);
         const next = draft.trim();
         const base = item.title ?? "";
         setEnded((old) => old.has(item.key) ? old : new Set(old).add(item.key));
+        opener.current = null;
         if (next.length === 0 || next === base) {
           void data.act(`${pointer}/on_edit_cancel`, null, item as unknown as JsonValue);
-          return;
+        } else {
+          setTitles((old) => new Map(old).set(item.key, { text: next, base }));
+          void data.act(`${pointer}/on_edit`, next, item as unknown as JsonValue);
         }
-        setTitles((old) => new Map(old).set(item.key, { text: next, base }));
-        void data.act(`${pointer}/on_edit`, next, item as unknown as JsonValue);
+        if (keyboard) focusRef.current?.row(`item:${item.key}`, true);
       },
       cancel: (item) => {
+        const keyboard = editingInputActive(item.key);
+        const target = opener.current;
+        opener.current = null;
         setEnded((old) => old.has(item.key) ? old : new Set(old).add(item.key));
         void data.act(`${pointer}/on_edit_cancel`, null, item as unknown as JsonValue);
+        if (!keyboard) return;
+        if (target?.isConnected) target.focus({ preventScroll: true });
+        else focusRef.current?.row(`item:${item.key}`);
       },
     };
   }, [block.on_check, data, editable, ended, pointer, titles]);
@@ -286,6 +324,7 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
     onActivate={activate}
     onCheck={block.on_check ? check : undefined}
     onExpandedChange={toggle}
+    onFocusController={setFocusController}
     onContextMenu={(row, anchor, _point, _focus, event) => { if (row) { const item = row.node.data as TreeItem | undefined; menu.open(event, anchor, item as unknown as JsonValue | undefined, item?.key ?? row.id, "제목 복사", row.node.label); } }}
     selectedId={selected === null ? null : `item:${selected}`}
   />{menu.dialog}</>;
