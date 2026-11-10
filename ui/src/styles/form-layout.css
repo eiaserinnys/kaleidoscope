@@ -43,12 +43,12 @@
 
 /* 구역·탭·대화상자는 이미 좌우 여백을 소유한다. 그 밖의 세로
    쌓기에서는 내용 칸이 여백을 맡아 입력과 글의 폭을 함께 줄인다. */
-.ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item:has(> :is(.ks-data-text, .ks-data-button, .ks-field, .ks-data-input, .ks-select-button, .ks-data-toggle, .ks-data-segmented)) { padding-inline: var(--ks-space-3); }
+.ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item:has(> :is(.ks-data-text, .ks-data-button, .ks-field, .ks-data-input, .ks-select-button, .ks-data-toggle, .ks-data-segmented, .ks-data-progress-field, .ks-notice)) { padding-inline: var(--ks-space-3); }
 .ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item:has(> .ks-data-stack.is-row > .ks-data-stack-item > :is(.ks-data-text, .ks-data-button, .ks-field, .ks-data-input, .ks-select-button, .ks-data-toggle, .ks-data-segmented)):not(:has(> .ks-data-stack.is-row > .ks-data-stack-item > :is(.ks-data-stack, .ks-data-section, .ks-list, .ks-table-scroll, .ks-split, .ks-data-tabs))) { padding-inline: var(--ks-space-3); }
 .ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item > .ks-data-text,
 .ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item > .ks-data-stack.is-row > .ks-data-stack-item > .ks-data-text { padding-inline: 0; }
 .ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item > .ks-data-input { width: 100%; margin-inline: 0; }
-.ks-data-window-body > .ks-data-text { padding-inline: var(--ks-space-3); }
+.ks-data-window-body > :is(.ks-data-text, .ks-data-progress-field, .ks-notice) { padding-inline: var(--ks-space-3); }
 
 /* 내용 칸으로 옮긴 입력 여백은 자식에 다시 더하지 않는다. */
 .ks-data-stack.is-column:not(.is-center, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *, .ks-properties *, .ks-settings-custom *, .ks-shell-settings *, .ks-data-stack.is-row *) > .ks-data-stack-item > .ks-input-field.is-label-hidden { width: 100%; margin-inline: 0; }
