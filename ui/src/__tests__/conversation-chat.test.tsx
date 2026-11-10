@@ -613,6 +613,20 @@ describe("공용 대화 부품", () => {
     expect(onSend).toHaveBeenCalledWith();
   });
 
+  it("채팅 영역에 붙여넣은 이미지를 입력칸 밖에서도 첨부로 받는다", async () => {
+    if (!URL.createObjectURL) URL.createObjectURL = () => "";
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = () => {};
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:시험");
+    setup(async (request) => request.op === "conversation.get" ? get() : (() => { throw new Error(request.op); })());
+    await screen.findByText("기록");
+    const section = document.querySelector<HTMLElement>(".ks-agent-chat")!;
+    const image = new File(["png"], "image.png", { type: "image/png" });
+    const clipboardData = { items: [{ kind: "file", getAsFile: () => image }], files: [image], types: ["Files"], getData: () => "" } as unknown as DataTransfer;
+    fireEvent.paste(section, { clipboardData });
+    expect(await screen.findByText("붙여넣은 이미지.png")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "메시지" }));
+  });
+
   it("기록 그림은 불러오는 중과 표시된 뒤 같은 틀을 쓴다", async () => {
     const attachment = { id: "0", name: "기록.png", mime: "image/png" };
     let resolveLoad!: (value: { mime: string; data_base64: string }) => void;

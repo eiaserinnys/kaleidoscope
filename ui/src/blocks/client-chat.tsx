@@ -5,7 +5,7 @@ import type { Block, ChatClient, ConversationAttachment, ConversationItem } from
 import type { ClientChatAttachment, ClientChatQueuedMessage } from "../data/client-chat";
 import { useBinding, useChatDraft, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
-import { ChatComposer } from "./chat-composer";
+import { ChatComposer, chatAreaPaste } from "./chat-composer";
 import { ChatHistory, messageContextMenu, type ChatPendingMessage } from "./chat-history";
 import { HistoryAttachmentView, ImagePreview, PendingAttachment, type Preview } from "./agent-attachments";
 import { useFrameCoalesced } from "./frame-coalesced";
@@ -218,7 +218,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const pendingForDisplay = pending?.generation === chat.generation && !chat.queued.some((message) => message.id === pending.requestId)
     && !chat.items.some((item) => matchesPending(item, pending)) ? pending : null;
 
-  return <section {...blockRoot} className="ks-agent-chat">
+  return <section {...blockRoot} className="ks-agent-chat" onPaste={(event) => chatAreaPaste(event, inputRef.current, disabled)}>
     <ChatHistory
       items={chat.items}
       pending={pendingForDisplay}

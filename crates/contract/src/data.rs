@@ -1291,6 +1291,18 @@ pub struct FeedEntry {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(optional, as = "Option<Vec<FeedEntry>>")]
     pub children: Vec<FeedEntry>,
+    /// 참이면 처음부터 접힌 모습으로 그린다. `collapsible`인 피드에서 접고 펼 수 있다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub collapsed: Option<bool>,
+    /// 있으면 그 줄에 확인 상자를 그린다. 참이면 확인된 상태다. 없으면 확인 상자를 그리지 않는다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub checked: Option<bool>,
+    /// 참이면 항목마다 테두리와 머리 배경을 둔 표 행으로 그린다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub table: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
