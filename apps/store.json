@@ -115,20 +115,27 @@
         "type": "stack",
         "direction": "column",
         "gap": "none",
-        "fill": [2, 3],
+        "fill": [2, 3, 4],
         "children": [
           {
-            "type": "toolbar",
-            "start": [{"type": "input", "kind": "search", "value": {"state": "query"}, "on_change": {"set_state": "query"}, "placeholder": "앱 이름이나 id로 찾기"}],
-            "end": [{"type": "button", "label": "다시 받기", "icon": "refresh-cw", "icon_only": true, "variant": "ghost", "on_click": [{"refresh": ["catalog", "detail", "convert"]}]}]
+            "type": "when",
+            "value": {"expr": "$state.category != '__custom'"},
+            "child": {
+              "type": "toolbar",
+              "start": [{"type": "input", "kind": "search", "value": {"state": "query"}, "on_change": {"set_state": "query"}, "placeholder": "앱 이름이나 id로 찾기"}],
+              "end": [{"type": "button", "label": "다시 받기", "icon": "refresh-cw", "icon_only": true, "variant": "ghost", "on_click": [{"refresh": ["catalog", "detail", "convert"]}]}]
+            }
           },
           {
             "type": "when",
             "value": {"expr": "$state.category = '__custom'"},
             "child": {
               "type": "toolbar",
-              "start": [],
-              "end": [{"type": "button", "label": "파일에서 가져오기", "icon": "upload", "icon_only": true, "variant": "ghost", "on_click": [{"shell.import_app": {}}]}]
+              "start": [{"type": "input", "kind": "search", "value": {"state": "query"}, "on_change": {"set_state": "query"}, "placeholder": "앱 이름이나 id로 찾기"}],
+              "end": [
+                {"type": "button", "label": "파일에서 가져오기", "icon": "upload", "icon_only": true, "variant": "ghost", "on_click": [{"shell.import_app": {}}]},
+                {"type": "button", "label": "다시 받기", "icon": "refresh-cw", "icon_only": true, "variant": "ghost", "on_click": [{"refresh": ["catalog", "detail", "convert"]}]}
+              ]
             }
           },
           {
@@ -154,11 +161,11 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.category = '__custom'"},
+            "value": {"expr": "$state.category = '__custom' and $count($apps[builtin = false and origin = null]) > 0"},
             "child": {
               "type": "list",
               "layout": "icons",
-              "items": {"expr": "(\n  $q := $lowercase($trim($state.query));\n  $hits := [$apps[builtin = false and origin = null and ($q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q))]];\n  $items := [$map($hits, function($a) { { \"key\": $a.id, \"title\": $a.name, \"dot\": false, \"server\": null, \"id\": $a.id } })];\n  [$merge([{ \"key\": \"__custom\", \"title\": \"커스텀 앱\", \"items\": $items },\n    $count($items) = 0 ? { \"status\": { \"state\": \"empty\" } } : {}])]\n)"},
+              "items": {"expr": "(\n  $q := $lowercase($trim($state.query));\n  [$map($apps[builtin = false and origin = null and ($q = '' or $contains($lowercase(name), $q) or $contains($lowercase(id), $q))], function($a) { { \"key\": $a.id, \"title\": $a.name, \"dot\": false, \"server\": null, \"id\": $a.id } })]\n)"},
               "selected": {"state": "selected_key"},
               "on_select": [
                 {"set_state": "selected_key", "value": {"expr": "$item.key"}},
@@ -166,8 +173,18 @@
                 {"set_state": "selected_store", "value": {"expr": "$item.server"}},
                 {"set_state": "selected_name", "value": {"expr": "$item.title"}},
                 {"set_state": "custom_store", "value": {"expr": "($cands := [$data.catalog.stores[state = 'ready' and $count(items[id = $item.id]) > 0].server]; $count($cands) = 1 ? $cands[0] : null)"}}
-              ],
-              "grouped": true
+              ]
+            }
+          },
+          {
+            "type": "when",
+            "value": {"expr": "$state.category = '__custom' and $count($apps[builtin = false and origin = null]) = 0"},
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "place": "center",
+              "children": [{"type": "text", "value": "커스텀 앱이 없습니다.", "format": "plain", "style": "meta"}]
             }
           }
         ]
@@ -180,7 +197,7 @@
         "children": [
           {
             "type": "when",
-            "value": {"expr": "$not($state.selected != null and $state.selected_store = null and $count($apps[id = $state.selected and builtin = false and origin = null]) > 0)"},
+            "value": {"expr": "$state.selected != null and $not($state.selected_store = null and $count($apps[id = $state.selected and builtin = false and origin = null]) > 0)"},
             "child": {
               "type": "toolbar",
               "start": [
@@ -229,7 +246,7 @@
                     },
                     {
                       "label": "상태",
-                      "value": {"expr": "(\n  $a := $apps[id = $state.selected]; $d := $data.detail;\n  $names := [$map($data.catalog.stores, function($s, $i) { $s.server = $a.origin.store_url ? ($i = 0 ? '기본 앱스토어' : '사설 ' & $string($i)) : null })][$ != null];\n  $not($exists($a)) ? '설치 전' : ($a.origin = null ? '같은 id의 다른 앱이 있어 설치할 수 없습니다' :\n    ($a.origin.store_url != $state.selected_store ? ($count($names) > 0 ? $names[0] : '다른 스토어') & '에서 설치한 앱입니다. 스토어 판으로 바꿀 수 있습니다.' :\n      ($a.modified ? '설치 뒤 고친 앱이라 업데이트하지 않습니다' : ($a.origin.release < $d.release ? $string($a.origin.release) & '판 설치됨, 새 판 있음' : $string($a.origin.release) & '판 설치됨'))))\n)"},
+                      "value": {"expr": "(\n  $a := $apps[id = $state.selected]; $d := $data.detail;\n  $names := [$map($data.catalog.stores, function($s, $i) { $s.server = $a.origin.store_url ? ($i = 0 ? '기본 앱스토어' : '사설 ' & $string($i)) : null })][$ != null];\n  $not($exists($a)) ? '설치 전' : ($a.origin = null ? '같은 id의 다른 앱이 있어 설치할 수 없습니다' :\n    ($a.origin.store_url != $state.selected_store ? ($count($names) > 0 ? $names[0] : '다른 스토어') & '에서 설치한 앱입니다.' :\n      ($a.modified ? '설치 뒤 고친 앱이라 업데이트하지 않습니다' : ($a.origin.release < $d.release ? $string($a.origin.release) & '판 설치됨, 새 판 있음' : $string($a.origin.release) & '판 설치됨'))))\n)"},
                       "format": "text"
                     },
                     {"label": "id", "value": {"state": "selected"}, "format": "code"}
@@ -289,7 +306,7 @@
                 },
                 {
                   "type": "button",
-                  "variant": "primary",
+                  "variant": {"expr": "(\n  $id := $state.selected;\n  $a := $apps[id = $id];\n  $d := $data.detail;\n  $custom := $state.selected_store = null and $count($apps[id = $id and builtin = false and origin = null]) > 0;\n  $candidates := $count([$data.catalog.stores[state = 'ready' and $count(items[id = $id]) > 0]]) > 0;\n  $ready := $data_meta.detail.state = 'ready' and $d.compatible;\n  $installed := $count($apps[id = $id and origin != null]) > 0;\n  $same := $exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.store_app_id = $id;\n  $convert := $exists($a) and $a.builtin = false and ($a.origin = null or $not($same) or $a.modified);\n  $emphasis := $custom ? $candidates : ($installed\n    ? ($ready and ($convert ? ($not($same) or $a.origin.release <= $d.release) : $a.origin.release < $d.release))\n    : ($ready and $not($exists($a))));\n  $emphasis ? 'default' : 'primary'\n)"},
                   "label": "열기",
                   "on_click": [{"shell.open": {"app_id": {"state": "selected"}}}]
                 }
@@ -298,7 +315,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready' and $count($apps[id = $state.selected and origin != null]) > 0"},
+            "value": {"expr": "( $a := $apps[id = $state.selected]; $state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready' and $exists($a) and $a.origin != null and $a.builtin = false and $a.origin.store_url = $state.selected_store and $a.origin.store_app_id = $state.selected and $not($a.modified) )"},
             "child": {
               "type": "toolbar",
               "start": [
@@ -313,12 +330,41 @@
               "end": [
                 {
                   "type": "button",
-                  "variant": "primary",
-                  "label": {"expr": "( $a := $apps[id = $state.selected]; $exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.release < $data.detail.release ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )"},
-                  "disabled": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($d.compatible) or ($exists($a) and ($a.origin = null or $a.origin.store_url != $state.selected_store or $a.modified or $a.origin.release >= $d.release)) )"},
+                  "variant": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $d.compatible and $a.origin.release < $d.release ? 'primary' : 'default' )"},
+                  "label": {"expr": "( $a := $apps[id = $state.selected]; $a.origin.release < $data.detail.release ? '업데이트' : '설치됨' )"},
+                  "disabled": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($d.compatible) or $a.origin.release >= $d.release )"},
                   "on_click": [
                     {
                       "store.install": {"permission": "catalog", "server": {"expr": "$data.detail.server"}, "id": {"state": "selected"}, "release": {"expr": "$data.detail.release"}}
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "type": "when",
+            "value": {"expr": "( $a := $apps[id = $state.selected]; $state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready' and $exists($a) and $a.origin != null and $a.builtin = false and ($a.origin.store_url != $state.selected_store or $a.origin.store_app_id != $state.selected or $a.modified) )"},
+            "child": {
+              "type": "toolbar",
+              "start": [
+                {
+                  "type": "button",
+                  "label": "지우기",
+                  "variant": "danger",
+                  "confirm": {"title": "앱을 지울까요?", "body": {"state": "selected_name"}, "ok": "지우기"},
+                  "on_click": [{"store.remove": {"permission": "catalog", "id": {"state": "selected"}}}]
+                }
+              ],
+              "end": [
+                {
+                  "type": "button",
+                  "variant": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $data_meta.detail.state = 'ready' and $d.compatible and $not($exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.store_app_id = $state.selected and $a.origin.release > $d.release) ? 'primary' : 'default' )"},
+                  "label": {"expr": "( $a := $apps[id = $state.selected]; $exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.store_app_id = $state.selected and $a.modified ? '스토어 판으로 되돌리기' : '스토어 판으로 바꾸기' )"},
+                  "disabled": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($data_meta.detail.state = 'ready' and $d.compatible) or ($exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.store_app_id = $state.selected and $a.origin.release > $d.release) )"},
+                  "on_click": [
+                    {
+                      "store.install": {"permission": "catalog", "server": {"expr": "$data.detail.server"}, "id": {"state": "selected"}, "release": {"expr": "$data.detail.release"}, "replace": true}
                     }
                   ]
                 }
@@ -343,7 +389,7 @@
                 {
                   "type": "button",
                   "label": {"expr": "( $a := $apps[id = $state.selected]; $exists($a[origin != null and origin.store_url = $state.selected_store and $not(modified) and latest.compatible = true and latest.release > origin.release]) ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )"},
-                  "variant": "primary",
+                  "variant": "default",
                   "disabled": true,
                   "on_click": [{"set_state": "selected", "value": {"state": "selected"}}]
                 }
@@ -359,7 +405,7 @@
               "end": [
                 {
                   "type": "button",
-                  "variant": "primary",
+                  "variant": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $d.compatible and $not($exists($a)) ? 'primary' : 'default' )"},
                   "label": {"expr": "( $a := $apps[id = $state.selected]; $exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.release < $data.detail.release ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )"},
                   "disabled": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($d.compatible) or ($exists($a) and ($a.origin = null or $a.origin.store_url != $state.selected_store or $a.modified or $a.origin.release >= $d.release)) )"},
                   "on_click": [
@@ -381,7 +427,7 @@
                 {
                   "type": "button",
                   "label": {"expr": "( $a := $apps[id = $state.selected]; $exists($a[origin != null and origin.store_url = $state.selected_store and $not(modified) and latest.compatible = true and latest.release > origin.release]) ? '업데이트' : ($exists($a) ? '설치됨' : '설치') )"},
-                  "variant": "primary",
+                  "variant": "default",
                   "disabled": true,
                   "on_click": [{"set_state": "selected", "value": {"state": "selected"}}]
                 }
@@ -403,10 +449,27 @@
                 },
                 {
                   "type": "toolbar",
-                  "start": [],
+                  "start": [
+                    {
+                      "type": "button",
+                      "label": "지우기",
+                      "variant": "danger",
+                      "confirm": {"title": "앱을 지울까요?", "body": {"state": "selected_name"}, "ok": "지우기"},
+                      "on_click": [
+                        {"store.remove": {"permission": "catalog", "id": {"state": "selected"}, "allow_custom": true}},
+                        {"set_state": "selected", "value": null},
+                        {"set_state": "selected_name", "value": ""},
+                        {"set_state": "selected_store", "value": null},
+                        {"set_state": "selected_key", "value": null},
+                        {"set_state": "custom_store", "value": null}
+                      ]
+                    }
+                  ],
                   "end": [
                     {
                       "type": "select",
+                      "label": "스토어",
+                      "label_position": "hidden",
                       "placeholder": "스토어 고르기",
                       "value": {"state": "custom_store"},
                       "options": {"expr": "(\n  $id := $state.selected;\n  [$map($data.catalog.stores, function($s, $i) { $s.state = 'ready' and $count($s.items[id = $id]) > 0 ? { \"value\": $s.server, \"label\": ($i = 0 ? '기본 앱스토어' : '사설 ' & $string($i)) } : null })][$ != null]\n)"},
@@ -433,45 +496,36 @@
           },
           {
             "type": "when",
-            "value": {"expr": "$state.selected != null and $state.selected_store = null and $count($apps[id = $state.selected and builtin = false and origin = null]) > 0"},
+            "value": {"expr": "(\n  $id := $state.selected;\n  $custom := $id != null and $state.selected_store = null and $count($apps[id = $id and builtin = false and origin = null]) > 0;\n  $custom and $count([$data.catalog.stores[state = 'ready' and $count(items[id = $id]) > 0]]) = 0\n)"},
             "child": {
-              "type": "toolbar",
-              "start": [
+              "type": "stack",
+              "direction": "column",
+              "gap": "small",
+              "children": [
                 {
-                  "type": "button",
-                  "label": "지우기",
-                  "variant": "danger",
-                  "confirm": {"title": "앱을 지울까요?", "body": {"state": "selected_name"}, "ok": "지우기"},
-                  "on_click": [
-                    {"store.remove": {"permission": "catalog", "id": {"state": "selected"}, "allow_custom": true}},
-                    {"set_state": "selected", "value": null},
-                    {"set_state": "selected_name", "value": ""},
-                    {"set_state": "selected_store", "value": null},
-                    {"set_state": "selected_key", "value": null},
-                    {"set_state": "custom_store", "value": null}
-                  ]
-                }
-              ],
-              "end": []
-            }
-          },
-          {
-            "type": "when",
-            "value": {"expr": "(\n  $id := $state.selected;\n  $a := $apps[id = $id];\n  $listed := $state.selected_store != null and $count($data.catalog.stores[server = $state.selected_store and $count(items[id = $id]) > 0]) > 0;\n  $listed and $exists($a) and $a.builtin = false and ($a.origin = null or $a.origin.store_url != $state.selected_store or $a.origin.store_app_id != $id or $a.modified)\n)"},
-            "child": {
-              "type": "toolbar",
-              "start": [],
-              "end": [
+                  "type": "when",
+                  "value": {"expr": "$data_meta.convert.state = 'failed' or $data_meta.convert.state = 'loading'"},
+                  "child": {"type": "text", "value": {"expr": "$data.convert.name"}}
+                },
                 {
-                  "type": "button",
-                  "variant": "primary",
-                  "label": {"expr": "( $a := $apps[id = $state.selected]; ($exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.store_app_id = $state.selected and $a.modified) ? '스토어 판으로 되돌리기' : '스토어 판으로 바꾸기' )"},
-                  "disabled": {"expr": "( $a := $apps[id = $state.selected]; $d := $data.detail; $not($data_meta.detail.state = 'ready' and $d.compatible) or ($exists($a) and $a.origin != null and $a.origin.store_url = $state.selected_store and $a.origin.store_app_id = $state.selected and $a.origin.release > $d.release) )"},
-                  "on_click": [
+                  "type": "toolbar",
+                  "start": [
                     {
-                      "store.install": {"permission": "catalog", "server": {"expr": "$data.detail.server"}, "id": {"state": "selected"}, "release": {"expr": "$data.detail.release"}, "replace": true}
+                      "type": "button",
+                      "label": "지우기",
+                      "variant": "danger",
+                      "confirm": {"title": "앱을 지울까요?", "body": {"state": "selected_name"}, "ok": "지우기"},
+                      "on_click": [
+                        {"store.remove": {"permission": "catalog", "id": {"state": "selected"}, "allow_custom": true}},
+                        {"set_state": "selected", "value": null},
+                        {"set_state": "selected_name", "value": ""},
+                        {"set_state": "selected_store", "value": null},
+                        {"set_state": "selected_key", "value": null},
+                        {"set_state": "custom_store", "value": null}
+                      ]
                     }
-                  ]
+                  ],
+                  "end": []
                 }
               ]
             }

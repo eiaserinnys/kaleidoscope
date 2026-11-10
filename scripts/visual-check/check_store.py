@@ -34,7 +34,7 @@ THEMES = ("light", "dark")
 WIDE = (1280, 800)
 NARROW = (520, 760)
 CUSTOM = "커스텀 앱"
-STATUS_OTHER = "사설 1에서 설치한 앱입니다. 스토어 판으로 바꿀 수 있습니다."
+STATUS_OTHER = "사설 1에서 설치한 앱입니다."
 STATUS_MODIFIED = "설치 뒤 고친 앱이라 업데이트하지 않습니다"
 ERROR_TEXT = "스토어가 요청을 거부했습니다. 잠시 뒤 다시 받으세요."
 # 초점이 어디에 있는지, 그 조작이 어느 칸에 있고 지금 보이는지 한 번에 잰다.
@@ -119,8 +119,85 @@ LIST_SCROLL_JS = """(pane) => {
             top: Math.round(rect.top - box.top), bottom: Math.round(rect.bottom - box.top)};
   }).filter((item) => item.bottom > 0 && item.top < box.height).sort((a, b) => a.top - b.top);
   return {top: list.scrollTop, height: list.scrollHeight, client: list.clientHeight,
-          first: visible.length ? visible[0] : null};
+          first: visible.length ? visible[0] : null, rows: visible};
 }"""
+# 가상 목록의 이어진 줄 상자와, 아이콘 줄 안 항목들의 위 끝을 잰다.
+# 줄 높이를 잘못 기억하면 다음 줄이 앞 줄의 아래 끝을 파고들고, 격자 열 수가 묶음과
+# 어긋나면 한 줄의 항목이 두 줄로 접혀 위 끝이 갈린다.
+ROW_GEOMETRY_JS = """(pane) => {
+  const list = pane.querySelector('.ks-list');
+  if (!list) return null;
+  const rows = [...list.querySelectorAll('[data-index]')].map((row) => {
+    const rect = row.getBoundingClientRect();
+    const tiles = [...row.querySelectorAll(':scope > .ks-icon-tile')].map((tile) => {
+      const tileRect = tile.getBoundingClientRect();
+      return {top: tileRect.top, bottom: tileRect.bottom, height: tileRect.height};
+    });
+    return {index: Number(row.getAttribute('data-index')), top: rect.top, bottom: rect.bottom, tiles};
+  });
+  return rows.sort((a, b) => a.index - b.index);
+}"""
+
+
+def row_overlaps(rows, tolerance=0.5):
+    """이어진 가상 줄의 아래 끝이 다음 줄의 위 끝을 넘는 쌍."""
+    return [(first["index"], second["index"], round(first["bottom"] - second["top"], 1))
+            for first, second in zip(rows, rows[1:]) if first["bottom"] - second["top"] > tolerance]
+
+
+def grid_rows_misaligned(rows, tolerance=0.5):
+    """한 가상 줄 안에서 항목들의 위 끝이 어긋난 줄. 격자가 두 줄로 접힌 경우."""
+    return [row["index"] for row in rows
+            if row["tiles"] and
+            max(tile["top"] for tile in row["tiles"]) - min(tile["top"] for tile in row["tiles"]) > tolerance]
+
+
+# 분류별로 목록이 시작하는 높이. 위 도구 막대 높이가 달라지면 값이 갈린다.
+LIST_TOP_JS = """(pane) => {
+  const list = pane.querySelector('.ks-list');
+  const paneBox = pane.getBoundingClientRect();
+  return list ? Math.round((list.getBoundingClientRect().top - paneBox.top) * 10) / 10 : null;
+}"""
+# 가운데 쌓기 빈 상태의 상자. 글과 칸의 가운데가 맞는지 잰다.
+EMPTY_STATE_JS = """(pane) => {
+  const stack = pane.querySelector('.ks-data-stack.is-center');
+  const text = stack ? stack.querySelector('.ks-data-text') : null;
+  if (!text) return null;
+  const box = (el) => { const r = el.getBoundingClientRect();
+    return {left: r.left, right: r.right, top: r.top, bottom: r.bottom}; };
+  const toolbar = pane.querySelector('.ks-data-toolbar');
+  // 칸에 안쪽 여백이 있으면 내용 상자는 칸 상자보다 작다. 쌓기는 내용 상자를 다 채운다.
+  const container = stack.parentElement.closest('.ks-data-stack.is-column') || stack.parentElement;
+  return {pane: box(pane), container: box(container), stack: box(stack), text: box(text),
+          toolbarBottom: toolbar ? toolbar.getBoundingClientRect().bottom : null};
+}"""
+# 상세 칸의 바닥 도구 막대와 강조 단추. 이름표가 없으면 안쪽 글을 읽는다.
+DETAIL_ACTIONS_JS = """(pane) => {
+  const visible = (el) => {
+    const rect = el.getBoundingClientRect(); const style = getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+  };
+  const label = (el) => (el.getAttribute('aria-label') || (el.innerText || '')).trim();
+  const toolbars = [...pane.querySelectorAll('.ks-data-toolbar')]
+    .filter((el) => visible(el) && el.querySelector('button'))
+    .map((el) => [...el.querySelectorAll('button')].filter(visible).map(label));
+  const emphasis = [...pane.querySelectorAll('button.ks-button-emphasis')].filter(visible).map(label);
+  return {toolbars, emphasis};
+}"""
+
+
+def empty_state_centered(facts, tolerance=2.0):
+    """빈 상태 글이 칸 가운데에 있고, 남는 높이를 다 쓰는지."""
+    if not facts or facts["toolbarBottom"] is None:
+        return False
+    container_mid = (facts["container"]["left"] + facts["container"]["right"]) / 2
+    text_mid = (facts["text"]["left"] + facts["text"]["right"]) / 2
+    stack_mid = (facts["stack"]["top"] + facts["stack"]["bottom"]) / 2
+    text_mid_y = (facts["text"]["top"] + facts["text"]["bottom"]) / 2
+    return (abs(text_mid - container_mid) <= tolerance
+            and abs(text_mid_y - stack_mid) <= tolerance
+            and facts["stack"]["top"] >= facts["toolbarBottom"] - 1
+            and facts["stack"]["bottom"] >= facts["container"]["bottom"] - 1)
 
 
 def load_sandbox():
@@ -283,7 +360,7 @@ def main() -> int:
                                 "el => el.scrollIntoView({block: 'start'})")
                             page.wait_for_timeout(120)
 
-                    def capture(scene, pane=None):
+                    def capture(scene, pane=None, check=None):
                         for theme in THEMES:
                             for width, height in SIZES:
                                 page.emulate_media(color_scheme=theme)
@@ -296,6 +373,8 @@ def main() -> int:
                                 # 누른 자리에 마우스가 남아 있으면 단추 강조와 풍선 도움말이 증거에 찍힌다.
                                 page.mouse.move(2, 2)
                                 page.wait_for_timeout(120)
+                                if check is not None:
+                                    check(theme, width, height)
                                 box = app.bounding_box()
                                 assert box is not None, f"{scene}: 창 상자를 재지 못했습니다"
                                 assert abs(box["width"] - width) <= 1 and abs(box["height"] - height) <= 1, \
@@ -367,6 +446,21 @@ def main() -> int:
                     def wait_custom_count(count):
                         wait_until(lambda: pane1.get_by_role("option").count() == count, 20,
                                    f"커스텀 앱이 {count}개가 아닙니다")
+
+                    def check_detail_actions(theme, width, height, primary, delete_and_convert=False):
+                        actions = pane2.evaluate(DETAIL_ACTIONS_JS)
+                        assert len(actions["toolbars"]) <= 2, \
+                            f"상세 {theme} {width}x{height}: 바닥 도구 막대가 둘을 넘습니다: {actions['toolbars']}"
+                        if delete_and_convert:
+                            same = [labels for labels in actions["toolbars"]
+                                    if "지우기" in labels and "스토어 판으로 바꾸기" in labels]
+                            assert len(same) == 1, \
+                                f"상세 {theme} {width}x{height}: 지우기와 바꾸기가 같은 막대에 있지 않습니다: {actions['toolbars']}"
+                            result["assertions"]["delete_and_convert_same_toolbar"] = True
+                        assert actions["emphasis"] == [primary], \
+                            f"상세 {theme} {width}x{height}: 강조 단추가 {primary!r} 하나가 아닙니다: {actions['emphasis']}"
+                        result["assertions"]["detail_bottom_toolbars_at_most_two"] = True
+                        result["assertions"]["detail_single_primary"] = True
 
                     def confirm_install_dialog():
                         dialog = app.locator(".ks-install-consent")
@@ -471,14 +565,22 @@ def main() -> int:
                     if custom_mode:
                         operate()
                         choose_category(CUSTOM)
-                        empty_row = pane1.locator('[data-row-key="__custom"]')
-                        wait_until(lambda: empty_row.count() > 0, 20, "커스텀 앱 빈 상태가 없습니다")
-                        assert "없음" in empty_row.first.inner_text(), empty_row.first.inner_text()
+                        empty_text = pane1.get_by_text("커스텀 앱이 없습니다.", exact=True)
+                        wait_until(lambda: empty_text.count() > 0, 20, "커스텀 앱 빈 상태가 없습니다")
+                        assert pane1.get_by_role("option").count() == 0, "빈 커스텀 목록에 항목이 있습니다"
                         wait_until(lambda: app.get_by_role(
                             "button", name="파일에서 가져오기").count() > 0, 10,
                             "빈 상태에 가져오기 단추가 없습니다")
                         result["assertions"]["custom_empty_keeps_import_button"] = True
-                        capture("custom-empty", pane=1)
+
+                        def check_empty_center(theme, width, height):
+                            facts = pane1.evaluate(EMPTY_STATE_JS)
+                            assert empty_state_centered(facts), \
+                                f"custom-empty {theme} {width}x{height}: 빈 상태가 칸 가운데가 아닙니다: {facts}"
+                            result["details"]["custom_empty"] = facts
+                            result["assertions"]["custom_empty_centered"] = True
+
+                        capture("custom-empty", pane=1, check=check_empty_center)
 
                         operate()
                         import_file(write_definition("meeting-cards", fixture.CUSTOM_MEETING,
@@ -501,6 +603,22 @@ def main() -> int:
                         result["assertions"]["custom_list_two_items"] = True
                         capture("custom-list-two", pane=1)
 
+                        # 커스텀 분류도 다른 분류와 같은 높이에서 목록이 시작해야 한다.
+                        # 가져오기 단추를 따로 선 막대에 두면 목록이 49px 내려간다.
+                        operate()
+                        choose_category("전체")
+                        search("")
+                        page.wait_for_timeout(300)
+                        store_top = pane1.evaluate(LIST_TOP_JS)
+                        choose_category(CUSTOM)
+                        page.wait_for_timeout(300)
+                        custom_top = pane1.evaluate(LIST_TOP_JS)
+                        assert store_top is not None and custom_top is not None \
+                            and abs(store_top - custom_top) <= 1, \
+                            f"커스텀 목록 시작 높이가 다른 분류와 다릅니다: 전체 {store_top}, 커스텀 {custom_top}"
+                        result["details"]["list_top"] = {"store": store_top, "custom": custom_top}
+                        result["assertions"]["custom_list_top_matches_store"] = True
+
                         operate()
                         pane1.get_by_role("option", name=fixture.CUSTOM_READING, exact=True).click()
                         select_button = pane2.locator("button.ks-select-button")
@@ -512,7 +630,9 @@ def main() -> int:
                         wait_until(lambda: convert.count() > 0 and convert.first.is_enabled(), 20,
                                    "바꾸기 단추가 활성화되지 않았습니다")
                         result["assertions"]["one_candidate_auto_selected"] = True
-                        capture("custom-detail-one", pane=2)
+                        capture("custom-detail-one", pane=2,
+                                check=lambda theme, width, height: check_detail_actions(
+                                    theme, width, height, "스토어 판으로 바꾸기", delete_and_convert=True))
 
                         operate()
                         pane1.get_by_role("option", name=fixture.CUSTOM_MEETING, exact=True).click()
@@ -591,7 +711,9 @@ def main() -> int:
                         assert pane2.get_by_role("button", name="스토어 판으로 바꾸기", exact=True).count() == 0, \
                             "후보가 없는데 바꾸기 단추가 있습니다"
                         result["assertions"]["no_candidate_hides_convert"] = True
-                        capture("custom-detail-none", pane=2)
+                        capture("custom-detail-none", pane=2,
+                                check=lambda theme, width, height: check_detail_actions(
+                                    theme, width, height, "열기"))
 
                         operate()
                         choose_category("전체")
@@ -605,7 +727,9 @@ def main() -> int:
                         wait_until(lambda: convert_button.count() > 0 and convert_button.first.is_enabled(), 20,
                                    "다른 출처 앱의 바꾸기 단추가 꺼져 있습니다")
                         result["assertions"]["other_origin_enables_convert"] = True
-                        capture("other-origin", pane=2)
+                        capture("other-origin", pane=2,
+                                check=lambda theme, width, height: check_detail_actions(
+                                    theme, width, height, "스토어 판으로 바꾸기", delete_and_convert=True))
 
                         operate()
                         choose_category(CUSTOM)
@@ -625,7 +749,9 @@ def main() -> int:
                         wait_until(lambda: restore.count() > 0 and restore.first.is_enabled(), 20,
                                    "되돌리기 단추가 없거나 꺼져 있습니다")
                         result["assertions"]["modified_copy_offers_restore"] = True
-                        capture("restore", pane=2)
+                        capture("restore", pane=2,
+                                check=lambda theme, width, height: check_detail_actions(
+                                    theme, width, height, "스토어 판으로 되돌리기"))
 
                         operate()
                         store_a.delay = store_b.delay = 4.0
@@ -658,7 +784,41 @@ def main() -> int:
                             f"스토어 실패 화면에 다시 받기 길이 모자랍니다: {retry_buttons}개"
                         result["details"]["store_failure_retry_buttons"] = retry_buttons
                         result["assertions"]["store_failure_has_retry"] = True
-                        capture("store-failure", pane=1)
+
+                        def check_store_failure_rows(theme, width, height):
+                            rows = pane1.evaluate(ROW_GEOMETRY_JS)
+                            assert rows, f"store-failure {theme} {width}x{height}: 가상 목록 줄을 재지 못했습니다"
+                            overlaps = row_overlaps(rows)
+                            assert not overlaps, \
+                                f"store-failure {theme} {width}x{height}: 이어진 줄이 겹칩니다: {overlaps}"
+                            misaligned = grid_rows_misaligned(rows)
+                            assert not misaligned, \
+                                f"store-failure {theme} {width}x{height}: 격자 한 줄의 항목이 같은 높이에 있지 않습니다: {misaligned}"
+                            result["assertions"]["store_failure_rows_do_not_overlap"] = True
+                            result["assertions"]["store_failure_grid_rows_aligned"] = True
+
+                        capture("store-failure", pane=1, check=check_store_failure_rows)
+
+                        # 캡처는 360×241에서 끝난다. 좁은 창에서 1180×720으로 돌아온 뒤에도
+                        # 앞 줄의 아래 끝이 다음 줄을 넘지 않고 격자 한 줄이 펴지는지 다시 잰다.
+                        page.emulate_media(color_scheme="light")
+                        page.set_viewport_size({"width": SIZES[0][0] + 24, "height": SIZES[0][1] + 124})
+                        page.wait_for_timeout(200)
+                        set_rect(sb, window_id, *SIZES[0])
+                        page.wait_for_timeout(160)
+                        focus_pane(1)
+                        page.mouse.move(2, 2)
+                        page.wait_for_timeout(120)
+                        resized_rows = pane1.evaluate(ROW_GEOMETRY_JS)
+                        assert resized_rows, "store-failure 크기 바꾸기 뒤 가상 목록 줄을 재지 못했습니다"
+                        resized_overlaps = row_overlaps(resized_rows)
+                        assert not resized_overlaps, \
+                            f"store-failure 크기 바꾸기 뒤 이어진 줄이 겹칩니다: {resized_overlaps}"
+                        resized_misaligned = grid_rows_misaligned(resized_rows)
+                        assert not resized_misaligned, \
+                            f"store-failure 크기 바꾸기 뒤 격자 한 줄의 항목이 같은 높이에 있지 않습니다: {resized_misaligned}"
+                        result["assertions"]["store_failure_resized_rows_do_not_overlap"] = True
+                        result["assertions"]["store_failure_resized_grid_rows_aligned"] = True
                         operate()
                         choose_category(CUSTOM)
                         assert pane1.get_by_role("option").count() == 2, "실패 중에 커스텀 목록이 사라졌습니다"
@@ -863,12 +1023,21 @@ def main() -> int:
                             f"돌아온 넓은 폭에서 목록이 스크롤되지 않습니다: {back_scroll}"
                         assert before_scroll["first"] and back_scroll["first"], \
                             f"목록의 보던 자리를 재지 못했습니다: {before_scroll} -> {back_scroll}"
-                        # 줄 높이는 창 폭에 따라 달라지므로 scrollTop 대신 화면 맨 위에 걸친 항목으로 견준다.
-                        assert back_scroll["first"]["key"] == before_scroll["first"]["key"], \
-                            "크기를 바꾸는 동안 목록의 보던 자리가 바뀌었습니다: " \
-                            f"{before_scroll['first']} -> {back_scroll['first']}"
+                        # 줄 높이가 창 폭에 따라 달라지므로 scrollTop과 맨 위 줄은 그대로일 수 없다.
+                        # 보던 항목이 돌아온 폭의 화면 안에 남아 있는지로 견준다.
+                        before_key = before_scroll["first"]["key"]
+                        back_keys = {row["key"] for row in back_scroll["rows"]}
+                        assert before_key in back_keys, \
+                            "크기를 바꾸는 동안 목록의 보던 항목이 화면 밖으로 밀려났습니다: " \
+                            f"{before_scroll['first']} -> {back_scroll['rows'][:3]}"
+                        # 같은 폭으로 돌아왔으면 줄 높이 기억도 처음과 같아야 전체 높이가 같다.
+                        assert back_scroll["height"] == before_scroll["height"], \
+                            "돌아온 목록의 전체 높이가 처음과 다릅니다. 줄 높이 기억이 어긋났습니다: " \
+                            f"{before_scroll['height']} -> {back_scroll['height']}"
+                        assert narrow_scroll["top"] > 100, \
+                            f"최소 폭에서 목록이 맨 위로 돌아갔습니다: {narrow_scroll}"
                         assert back_scroll["first"]["top"] < 0 < back_scroll["first"]["bottom"], \
-                            f"돌아온 넓은 폭에서 보던 항목이 목록 위에 걸쳐 있지 않습니다: {back_scroll}"
+                            f"돌아온 넓은 폭에서 맨 위 줄이 목록 위에 걸쳐 있지 않습니다: {back_scroll}"
                         assert back_scroll["top"] > 100, \
                             f"돌아온 넓은 폭에서 목록이 맨 위로 돌아갔습니다: {back_scroll}"
                         result["assertions"]["resize_keeps_list_scroll"] = True

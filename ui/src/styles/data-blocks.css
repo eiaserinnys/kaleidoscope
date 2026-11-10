@@ -51,6 +51,10 @@
 .ks-data-toolbar-group.is-end { flex: 0 0 auto; margin-inline-start: auto; }
 .ks-data-toolbar-item { min-width: 0; max-width: 100%; }
 .ks-data-toolbar-item:not(.is-input):not(.is-text) { flex: 0 0 auto; }
+/* 폭이 모자라면 고르기가 이름을 줄여 자리를 내준다. 단추는 줄이지 않는다. */
+.ks-data-toolbar:has(.ks-select-button) > .ks-data-toolbar-group.is-end { flex: 0 1 auto; min-width: 0; }
+.ks-data-toolbar .ks-data-toolbar-item:has(> .ks-select-field, > .ks-select-button) { flex: 0 1 auto; min-width: 0; }
+.ks-data-toolbar .ks-data-toolbar-item > .ks-select-field { width: 100%; }
 .ks-data-toolbar-item.is-text { flex: 0 1 auto; }
 /* 글은 최소 폭에 기여하지 않지만 실제 글 너비를 먼저 확보한다. 입력은 최소 폭부터 늘어난다. */
 .ks-data-toolbar-group.is-start > .ks-data-toolbar-item.is-text { width: 0; flex: 0 1 max-content; max-width: max-content; }

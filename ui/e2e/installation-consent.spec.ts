@@ -87,7 +87,7 @@ test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme });
     await page.goto("/installation-consent.html");
     await page.evaluate(async () => { await (window as any).installationHarness.ready; (window as any).installationHarness.show("light"); });
-    await expect(page.getByRole("dialog")).toContainText("이 앱은 창 안에서만 동작합니다");
+    await expect(page.getByRole("dialog")).toContainText("이 앱은 창 안에서만 동작합니다.");
     await page.screenshot({ path: `test-results/installation-consent-light-${width}-${theme}.png` });
     await page.keyboard.press("Escape");
     expect(await page.evaluate(() => (window as any).installationHarness.answers[0].allow)).toBe(false);

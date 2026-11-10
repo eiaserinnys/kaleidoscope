@@ -187,7 +187,7 @@ it("빈 선언을 표시하고 합성 허용은 거부하며 취소는 같은 di
   const { call, emit, owner, store } = await setup();
   emit({ ...definition, permissions: [], storage: undefined, client: undefined, worker: undefined, agent: undefined });
   const dialog = screen.getByRole("dialog");
-  expect(dialog.textContent).toContain("이 앱은 창 안에서만 동작합니다");
+  expect(dialog.textContent).toContain("이 앱은 창 안에서만 동작합니다.");
   fireEvent.click(within(dialog).getByRole("button", { name: "허용하고 설치" }));
   expect(call).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole("button", { name: "취소" }));
