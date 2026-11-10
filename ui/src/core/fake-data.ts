@@ -24,6 +24,7 @@ function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
     case "section": return [...(block.actions ?? []).map((child, index): [string, Block] => [`${pointer}/actions/${index}`, child]), [`${pointer}/child`, block.child]];
     case "when": return [[`${pointer}/child`, block.child]];
     case "dialog": return [[`${pointer}/child`, block.child]];
+    case "repeat": return [[`${pointer}/template`, block.template]];
     default: return [];
   }
 }
@@ -35,7 +36,14 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   switch (block.type) {
     case "button_grid": add("on_press"); break;
     case "timeline": for (const field of ["on_select", "on_edit", "on_viewport"] as const) add(field, block[field] !== undefined); break;
-    case "tree": if (block.items !== undefined) { add("on_select", block.on_select !== undefined); add("on_check", block.on_check !== undefined); } break;
+    case "tree": if (block.items !== undefined) {
+      add("on_select", block.on_select !== undefined);
+      add("on_check", block.on_check !== undefined);
+      add("on_edit", block.on_edit !== undefined);
+      add("on_edit_cancel", block.on_edit_cancel !== undefined);
+      add("on_move", block.on_move !== undefined);
+    } break;
+    case "section": block.menu?.forEach((_, index) => { add(`menu/${index}/on_select`); add(`menu/${index}/confirm/body`); }); add("on_edit", block.on_edit !== undefined); add("on_edit_cancel", block.on_edit_cancel !== undefined); break;
     case "folder": add("on_select", block.on_select !== undefined); break;
     case "list": add("on_select", block.on_select !== undefined); add("on_activate", block.on_activate !== undefined); add("on_remove", block.on_remove !== undefined); block.group_actions?.forEach((_, index) => add(`group_actions/${index}/on_click`)); break;
     case "map": case "chart": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
@@ -56,7 +64,7 @@ function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]
   const slots: Array<[string, Binding]> = [];
   const add = (name: string, value: Binding | undefined) => { if (value !== undefined) slots.push([`${pointer}/${name}`, value]); };
   switch (block.type) {
-    case "section": add("title", block.title); add("meta", block.meta); break;
+    case "section": add("title", block.title); add("meta", block.meta); add("editing", block.editing); block.menu?.forEach((entry, index) => add(`menu/${index}/confirm/body`, entry.confirm?.body)); break;
     case "list": add("items", block.items); add("current", block.current); break;
     case "stack": add("scroll_reset", block.scroll_reset); break;
     case "tree": if (block.items !== undefined) add("items", block.items); break;

@@ -9,7 +9,9 @@ import type { MenuEntry } from "../components/menu";
 import { ItemScopeProvider, useItemScope } from "../data/item-scope";
 import { useBinding, useWindowData } from "../data/window-data";
 
-type Pending = { entry: ItemMenuEntry; index: number; item: JsonValue; key: string; anchor: HTMLElement; container: HTMLElement | null; rowIndex: string | undefined; tree: boolean };
+type Pending = { entry: ItemMenuEntry; index: number; item: JsonValue | undefined; key: string; anchor: HTMLElement; container: HTMLElement | null; rowIndex: string | undefined; tree: boolean };
+/** 데이터 트리와 구역 머리의 메뉴는 같은 장치를 쓰고 동작 포인터의 갈래만 다르다. */
+type MenuSegment = "item_menu" | "menu";
 
 function restoreAfterAction({ anchor, container, rowIndex, tree }: Pending) {
   // 동작을 기다리는 사이 사용자가 옮긴 초점은 그대로 둔다.
@@ -21,8 +23,8 @@ function restoreAfterAction({ anchor, container, rowIndex, tree }: Pending) {
   target?.focus({ preventScroll: true });
 }
 
-function Confirmation({ pending, pointer, onCancel, onConfirm }: { pending: Pending; pointer: string; onCancel: () => void; onConfirm: () => void }) {
-  const body = useBinding(`${pointer}/item_menu/${pending.index}/confirm/body`, pending.entry.confirm?.body ?? null);
+function Confirmation({ pending, pointer, segment, onCancel, onConfirm }: { pending: Pending; pointer: string; segment: MenuSegment; onCancel: () => void; onConfirm: () => void }) {
+  const body = useBinding(`${pointer}/${segment}/${pending.index}/confirm/body`, pending.entry.confirm?.body ?? null);
   const host = pending.anchor.closest<HTMLElement>(".ks-data-window");
   const confirm = pending.entry.confirm;
   if (!host || !confirm) return null;
@@ -30,9 +32,10 @@ function Confirmation({ pending, pointer, onCancel, onConfirm }: { pending: Pend
   return <Dialog host={host} title={confirm.title} ok={confirm.ok ?? pending.entry.label} danger={pending.entry.danger} body={content} onCancel={onCancel} onConfirm={onConfirm} />;
 }
 
-export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: string) {
+export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: string, section = false) {
   const data = useWindowData();
   const parent = useItemScope();
+  const segment: MenuSegment = section ? "menu" : "item_menu";
   const [pending, setPending] = useState<Pending | null>(null);
   const restoreAnchor = useRef<HTMLElement | null>(null);
   const stopRestore = useRef<() => void>(() => {});
@@ -44,15 +47,17 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
     }
   }, [pending]);
   const run = useCallback((entry: Pending) => {
-    const scope = { item: entry.item, parent_item: parent?.item, key: entry.key, index: 0, instance: entry.anchor, parentScope: parent ?? undefined };
+    // 구역 머리 메뉴는 둘러싼 범위(section.actions 단추와 같은 범위)를 그대로 쓰고 `$event`는 null이다.
+    if (section) return data.act(`${pointer}/menu/${entry.index}/on_select`, null);
+    const scope = entry.item === undefined ? undefined : { item: entry.item, parent_item: parent?.item, key: entry.key, index: 0, instance: entry.anchor, parentScope: parent ?? undefined };
     return data.act(`${pointer}/item_menu/${entry.index}/on_select`, entry.key, entry.item, undefined, scope);
-  }, [data, parent, pointer]);
+  }, [data, parent, pointer, section]);
   const open = useCallback((event: MouseEvent | ReactMouseEvent<HTMLElement> | undefined, anchor: HTMLElement, item: JsonValue | undefined, key: string, copyLabel: string, copyText: string) => {
     anchor.focus({ preventScroll: true });
     const container = anchor.closest<HTMLElement>('.ks-data-view, [role="tree"]');
     const tree = anchor.getAttribute("role") === "treeitem";
     const rowIndex = tree ? anchor.dataset.index : anchor.dataset.focusIndex;
-    const menu: MenuEntry[] = item === undefined ? [] : (entries ?? []).map((entry, index) => ({
+    const menu: MenuEntry[] = item === undefined && !section ? [] : (entries ?? []).map((entry, index) => ({
       id: `item-menu-${index}`, label: entry.label, danger: entry.danger,
       onSelect: () => {
         const chosen = { entry, index, item, key, anchor, container, rowIndex, tree };
@@ -71,7 +76,7 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
       const rect = anchor.getBoundingClientRect();
       openContextMenu(new MouseEvent("contextmenu", { cancelable: true }), menu, { anchor, anchorPoint: { x: rect.left, y: rect.bottom }, keyboard: true });
     }
-  }, [entries, run]);
+  }, [entries, run, section]);
   const close = useCallback(() => setPending(null), []);
   const confirm = useCallback(() => {
     if (!pending) return;
@@ -105,5 +110,5 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
     restoreAnchor.current = pending.anchor;
     setPending(null);
   }, [pending, run]);
-  return { open, dialog: pending ? <ItemScopeProvider value={{ item: pending.item, parent_item: parent?.item, key: pending.key, index: 0, instance: pending.anchor }}><Confirmation pending={pending} pointer={pointer} onCancel={close} onConfirm={confirm} /></ItemScopeProvider> : null };
+  return { open, dialog: pending ? <ItemScopeProvider value={{ item: pending.item ?? null, parent_item: parent?.item, key: pending.key, index: 0, instance: pending.anchor }}><Confirmation pending={pending} pointer={pointer} segment={segment} onCancel={close} onConfirm={confirm} /></ItemScopeProvider> : null };
 }

@@ -1,15 +1,17 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Binding, Block, TreeItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { isBadge } from "../components/badge";
-import { FileText } from "../components/icons";
+import { Check, ChevronRight, FileText } from "../components/icons";
 import { DataState } from "../components/data-state";
-import { TreeView } from "../components/tree/tree-view";
+import { TreeView, type TreeFocusController } from "../components/tree/tree-view";
+import { TreeEditRow } from "../components/tree/tree-edit-row";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
+import { useDataTreeDrag } from "./data-tree-drag";
 import { Badges, NoItems, asArray, isObject } from "./data-view-common";
 import { useWindowStateValue } from "../data/window-state";
 
@@ -21,8 +23,45 @@ function valid(value: unknown, byPath: boolean): value is TreeItem {
   if (byPath ? typeof value.path !== "string" : value.path != null && typeof value.path !== "string") return false;
   if (value.meta != null && typeof value.meta !== "string") return false;
   if (value.checked != null && typeof value.checked !== "boolean") return false;
+  if (value.editing != null && typeof value.editing !== "boolean") return false;
   if (value.children != null && !Array.isArray(value.children) && !isObject(value.children)) return false;
   return asArray(value.badges).every((badge) => isBadge(badge) && (typeof badge === "string" || badge.color == null || typeof badge.color === "string"));
+}
+
+/** 바로 입력 상태. 끝난 행(ended)과 확정했지만 앱 값이 아직 오지 않은 제목(titles)을 지역으로 기억한다. */
+interface InlineEditing {
+  ended: ReadonlySet<string>;
+  titles: ReadonlyMap<string, { text: string; base: string }>;
+  checkEnabled: boolean;
+  commit: (item: TreeItem, draft: string) => void;
+  cancel: (item: TreeItem) => void;
+}
+
+function titleOf(item: TreeItem, editing: InlineEditing | undefined): string | undefined {
+  const pending = editing?.titles.get(item.key);
+  if (pending !== undefined && (item.title ?? "") === pending.base) return pending.text;
+  return item.title ?? item.path?.split("/").pop();
+}
+
+function isEditing(item: TreeItem, editing: InlineEditing | undefined): boolean {
+  return editing !== undefined && item.editing === true && !editing.ended.has(item.key);
+}
+
+/** 그 항목의 바로 입력 글칸이 지금 초점을 쥐고 있는지. 초점을 잃어 확정한 경우에는 초점을 빼앗지 않는다. */
+function editingInputActive(key: string): boolean {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !active.matches("input, textarea")) return false;
+  return active.closest<HTMLElement>("[data-tree-row]")?.dataset.treeRow === `item:${key}`;
+}
+
+/** 바로 입력 행의 표식 열. 트리 행과 같은 두 열 규칙을 쓴다. 상자는 눌러도 확인 동작을 하지 않는다. */
+function editColumns(checked: boolean | undefined, hasChildren: boolean, checkEnabled: boolean) {
+  const check = checked !== undefined
+    ? <span className={`ks-tree-check${checked ? " is-checked" : ""}`} data-tree-check="">{checked ? <Check size="chrome" /> : null}</span>
+    : undefined;
+  const marker = check ?? (hasChildren ? undefined : <FileText size="inline" />);
+  const chevron = hasChildren ? <ChevronRight className="ks-chevron" size="inline" /> : undefined;
+  return checkEnabled && !(check === undefined && hasChildren) ? [chevron, marker] : [chevron ?? marker];
 }
 
 interface DataNode extends TreeNode {
@@ -30,23 +69,36 @@ interface DataNode extends TreeNode {
   children: DataNode[];
 }
 
-function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: ReadonlyMap<string, boolean> = new Map()): DataNode[] {
+function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: ReadonlyMap<string, boolean> = new Map(), editing?: InlineEditing): DataNode[] {
   const items = asArray(value).filter((item): item is TreeItem => valid(item, byPath));
   if (!byPath) return items.flatMap((item): DataNode[] => {
-    const title = item.title ?? item.path?.split("/").pop();
-    return typeof title === "string" ? [{
+    const editingState = isEditing(item, editing) ? editing : undefined;
+    const title = titleOf(item, editing);
+    // 새 항목은 제목이 없다. 바로 입력 중이면 빈 글칸 행으로 그린다.
+    if (typeof title !== "string" && editingState === undefined) return [];
+    const children = tree(item.children, false, [...parent, item.key], pending, editing);
+    const checked = pending.get(item.key) ?? item.checked;
+    return [{
       id: `item:${item.key}`,
-      label: title,
+      label: title ?? "",
       item,
       data: item,
       commentKey: [...parent, item.key],
-      children: tree(item.children, false, [...parent, item.key], pending),
+      children,
       selectable: true,
-      checked: pending.get(item.key) ?? item.checked,
+      checked,
       leading: <FileText size="inline" />,
       meta: item.meta,
       trailing: <Badges values={item.badges} />,
-    }] : [];
+      content: editingState === undefined ? undefined : <TreeEditRow
+        ariaLabel="항목 이름"
+        columns={editColumns(checked, children.length > 0, editingState.checkEnabled)}
+        onCancel={() => editingState.cancel(item)}
+        onCommit={(draft) => editingState.commit(item, draft)}
+        value={item.title ?? ""}
+      />,
+      interactiveContent: editingState === undefined ? undefined : true,
+    }];
   });
 
   const root: DataNode[] = [];
@@ -108,7 +160,92 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   const data = useWindowData();
   const menu = useItemMenu(block.item_menu, pointer);
   const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(() => new Map());
-  const nodes = useMemo(() => tree(value, block.by === "path", [], pending), [value, block.by, pending]);
+  const [ended, setEnded] = useState<ReadonlySet<string>>(() => new Set());
+  const [titles, setTitles] = useState<ReadonlyMap<string, { text: string; base: string }>>(() => new Map());
+  const editable = block.on_edit !== undefined && block.by !== "path";
+  const focusRef = useRef<TreeFocusController | null>(null);
+  const setFocusController = useCallback((focus: TreeFocusController) => { focusRef.current = focus; }, []);
+  // 글칸이 초점을 받기 직전에 초점을 쥐고 있던 요소. 바로 입력을 연 자리로 되돌릴 때 쓴다.
+  const opener = useRef<HTMLElement | null>(null);
+  const lastExternalFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!editable) return;
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.matches('input[aria-label="항목 이름"], textarea[aria-label="항목 이름"]')) {
+        opener.current = lastExternalFocus.current;
+        return;
+      }
+      // 메뉴 항목은 곧 사라진다. 메뉴를 연 행이 그 앞에 초점을 쥐었으므로 그대로 둔다.
+      if (target.closest('[role="menu"]')) return;
+      lastExternalFocus.current = target;
+    };
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => document.removeEventListener("focusin", onFocusIn, true);
+  }, [editable]);
+  const inline = useMemo<InlineEditing | undefined>(() => {
+    if (!editable) return undefined;
+    return {
+      ended,
+      titles,
+      checkEnabled: block.on_check !== undefined,
+      commit: (item, draft) => {
+        const keyboard = editingInputActive(item.key);
+        const next = draft.trim();
+        const base = item.title ?? "";
+        setEnded((old) => old.has(item.key) ? old : new Set(old).add(item.key));
+        opener.current = null;
+        if (next.length === 0 || next === base) {
+          void data.act(`${pointer}/on_edit_cancel`, null, item as unknown as JsonValue);
+        } else {
+          setTitles((old) => new Map(old).set(item.key, { text: next, base }));
+          void data.act(`${pointer}/on_edit`, next, item as unknown as JsonValue);
+        }
+        if (keyboard) focusRef.current?.row(`item:${item.key}`, true);
+      },
+      cancel: (item) => {
+        const keyboard = editingInputActive(item.key);
+        const target = opener.current;
+        opener.current = null;
+        setEnded((old) => old.has(item.key) ? old : new Set(old).add(item.key));
+        void data.act(`${pointer}/on_edit_cancel`, null, item as unknown as JsonValue);
+        if (!keyboard) return;
+        if (target?.isConnected) target.focus({ preventScroll: true });
+        else focusRef.current?.row(`item:${item.key}`);
+      },
+    };
+  }, [block.on_check, data, editable, ended, pointer, titles]);
+  const nodes = useMemo(() => tree(value, block.by === "path", [], pending, inline), [value, block.by, pending, inline]);
+  // 앱이 항목의 editing을 끄면 지역 종료 표시를 거둔다. 같은 키가 다시 editing이 참이 되면 새 글칸을 연다.
+  useEffect(() => {
+    const live = new Set<string>();
+    const visit = (list: DataNode[]) => list.forEach((node) => { if (node.item?.editing === true) live.add(node.item.key); visit(node.children); });
+    visit(nodes);
+    setEnded((old) => {
+      if (!old.size) return old;
+      const next = new Set([...old].filter((key) => live.has(key)));
+      return next.size === old.size ? old : next;
+    });
+    // 확정한 제목은 앱 값이 그 처음 값에서 바뀌면 거둔다. 바뀌지 않았으면 확정한 글을 그대로 보인다.
+    setTitles((old) => {
+      if (!old.size) return old;
+      const current = new Map<string, string>();
+      const collect = (list: DataNode[]) => list.forEach((node) => { if (node.item) current.set(node.item.key, node.item.title ?? ""); collect(node.children); });
+      collect(nodes);
+      let changed = false;
+      const next = new Map(old);
+      for (const [key, entry] of old) {
+        if (current.get(key) !== entry.base) { next.delete(key); changed = true; }
+      }
+      return changed ? next : old;
+    });
+  }, [nodes]);
+  const drag = useDataTreeDrag({
+    enabled: block.on_move !== undefined && block.by !== "path",
+    windowId: data.windowId,
+    onMove: (event, item) => { void data.act(`${pointer}/on_move`, event, item); },
+  });
   const selectedValue = useWindowStateValue(context, block.selected?.state ?? null);
   const selected = typeof selectedValue === "string" ? selectedValue : null;
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set(ancestors(nodes, selected) ?? []));
@@ -180,12 +317,14 @@ function TreeReady({ block, context, pointer, value }: { block: DataTreeBlockDat
   return <><TreeView
     rootProps={blockRoot}
     className="ks-data-view ks-data-tree"
+    drag={drag}
     expanded={visibleExpanded}
     label="트리"
     nodes={nodes}
     onActivate={activate}
     onCheck={block.on_check ? check : undefined}
     onExpandedChange={toggle}
+    onFocusController={setFocusController}
     onContextMenu={(row, anchor, _point, _focus, event) => { if (row) { const item = row.node.data as TreeItem | undefined; menu.open(event, anchor, item as unknown as JsonValue | undefined, item?.key ?? row.id, "제목 복사", row.node.label); } }}
     selectedId={selected === null ? null : `item:${selected}`}
   />{menu.dialog}</>;

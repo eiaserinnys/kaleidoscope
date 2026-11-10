@@ -98,6 +98,7 @@ export interface TreeViewProps {
     targetId: string | null;
     hoveredId?: string | null;
     valid: boolean;
+    position?: "before" | "after";
     onStart: (row: TreeRowModel, event: DragEvent<HTMLElement>) => void;
     onOver: (row: TreeRowModel | null, event: DragEvent<HTMLElement>) => void;
     onDrop: (row: TreeRowModel | null, event: DragEvent<HTMLElement>) => void;
@@ -289,17 +290,19 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     event.stopPropagation();
   }, [focus, selectRange]);
 
-  useEffect(() => {
+  const focusableRow = useCallback((id: string | null | undefined) => id
+    ? Array.from(scrollRef.current?.querySelectorAll<HTMLElement>("[data-tree-row]") ?? [])
+      .find((element) => element.dataset.treeRow === id)?.querySelector<HTMLElement>("[role=treeitem]")
+    : undefined, []);
+  // 초점 요청은 레이아웃 효과에서 바로 옮긴다. 그리기 전에 옮겨 두어야 다른 초점 구조 장치가 첫 행으로 가로채지 않는다.
+  useLayoutEffect(() => {
     const request = focusRequest;
     if (!request) return;
     const found = request.targets.find((id) => id === null || treeRows.some((row) => row.id === id));
     const target = found === null && request.currentOnNull ? effectiveFocus : found;
     if (request.visibleOnly) {
       const visible = isRowVisible(target);
-      const element = visible
-        ? Array.from(scrollRef.current?.querySelectorAll<HTMLElement>("[data-tree-row]") ?? [])
-          .find((row) => row.dataset.treeRow === target)?.querySelector<HTMLElement>("[role=treeitem]")
-        : scrollRef.current;
+      const element = visible ? focusableRow(target) : scrollRef.current;
       if (visible && target) setFocusId(target);
       element?.focus({ preventScroll: true });
       setPendingFocus(null);
@@ -322,23 +325,28 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     }
     setFocusId(target);
     if (request.select) handlers.current.onSelectionChange?.([target]);
-    virtual.scrollToIndex(flat.indexOf(row), { align: "auto" });
-    setPendingFocus(target);
+    const element = focusableRow(target);
+    const active = document.activeElement;
+    if (element && (isUnclaimedFocus(active) || scrollRef.current?.contains(active))) {
+      element.focus({ preventScroll: true });
+      setPendingFocus(null);
+    } else {
+      virtual.scrollToIndex(flat.indexOf(row), { align: "auto" });
+      setPendingFocus(target);
+    }
     setFocusRequest(null);
-  }, [effectiveFocus, flat, focusRequest, isRowVisible, treeRows, virtual]);
+  }, [effectiveFocus, flat, focusRequest, focusableRow, isRowVisible, treeRows, virtual]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pendingFocus) return;
-    const row = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>("[data-tree-row]") ?? [])
-      .find((element) => element.dataset.treeRow === pendingFocus)
-      ?.querySelector<HTMLElement>("[role=treeitem]");
+    const row = focusableRow(pendingFocus);
     if (!row) return;
     const active = document.activeElement;
     if (!isUnclaimedFocus(active) && !scrollRef.current?.contains(active)) {
       setPendingFocus(null);
       return;
     }
-    row.focus();
+    row.focus({ preventScroll: true });
     setPendingFocus(null);
   });
 
@@ -469,6 +477,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
           menuTarget={menuTargetId === row.id}
           multiSelected={selection ? selection.includes(row.id) : undefined}
           draggable={drag?.enabled && row.node.content === undefined}
+          dropPosition={dropTargetId === row.id ? drag?.position : undefined}
           dropState={dropTargetId === row.id ? drag?.valid ? "valid" : "invalid" : undefined}
           row={row}
           selected={row.node.selectable !== false && row.node.id === selectedId}

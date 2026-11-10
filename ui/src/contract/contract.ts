@@ -411,7 +411,20 @@ default_expanded?: boolean,
 /**
  * (20판) 데이터 항목의 메뉴. 동작 문맥은 `on_select`와 같다.
  */
-item_menu?: Array<ItemMenuEntry>, } | { "type": "folder", root: FolderRoot, 
+item_menu?: Array<ItemMenuEntry>, 
+/**
+ * (60판) 바로 입력을 확정할 때 실행한다. `$event`는 앞뒤 공백을 뺀 글, `$item`은 그 항목이다.
+ * 항목의 `editing`이 참이고 이 동작이 있을 때만 그 행을 글칸으로 그린다.
+ */
+on_edit?: Actions, 
+/**
+ * (60판) 바로 입력을 취소할 때 실행한다. `$event`는 null, `$item`은 그 항목이다.
+ */
+on_edit_cancel?: Actions, 
+/**
+ * (60판) 항목을 끌어 놓을 때 실행한다. `$event`는 `{key, target, position}`, `$item`은 놓은 자리 항목(없으면 null)이다.
+ */
+on_move?: Actions, } | { "type": "folder", root: FolderRoot, 
 /**
  * (15판) 거짓이면 폴더 머리 줄을 숨긴다.
  */
@@ -475,7 +488,24 @@ collapsible?: boolean, selected?: StateRef, on_change?: SetState, } | { "type": 
 /**
  * 제목 옆에 작게 보일 부가 정보(개수 등).
  */
-meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, 
+meta?: Binding, collapsible?: boolean, collapsed?: boolean, actions?: Array<Block>, 
+/**
+ * (60판) 구역 머리의 메뉴. 1~4개이고 항목 모양은 `item_menu`와 같다. 동작의 범위는 구역을 둘러싼 범위이며
+ * `$event`는 null이다. 있으면 머리 우클릭과 접기 단추의 Shift+F10으로 열고, 앱 항목 뒤에 쉘 기본 「제목 복사」를 붙인다.
+ */
+menu?: Array<ItemMenuEntry>, 
+/**
+ * (60판) 참이면 구역 제목 자리가 글칸이 된다. `on_edit`이 있을 때만 쓴다.
+ */
+editing?: Binding, 
+/**
+ * (60판) 구역 이름을 확정할 때 실행한다. `$event`는 앞뒤 공백을 뺀 새 이름이다.
+ */
+on_edit?: Actions, 
+/**
+ * (60판) 구역 이름 바꾸기를 취소할 때 실행한다. `$event`는 null이다.
+ */
+on_edit_cancel?: Actions, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, 
 /**
  * 격자 칸의 최소 폭. 생략하면 medium이다.
  */
@@ -1786,7 +1816,11 @@ title?: string, path?: string, meta?: string, badges?: Array<Badge>, children?: 
 /**
  * 있으면 그 줄에 확인 상자를 그린다. 참이면 확인된 상태다. 없으면 확인 상자를 그리지 않는다.
  */
-checked?: boolean, };
+checked?: boolean, 
+/**
+ * 참이면 그 항목의 행을 글칸으로 그린다. 블록의 `on_edit`이 있을 때만 쓴다.
+ */
+editing?: boolean, };
 
 /**
  * Long Animation Frame 관측값.

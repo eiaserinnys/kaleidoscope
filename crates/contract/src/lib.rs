@@ -338,7 +338,11 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 57판: 문서 모음의 없는 문서를 markdown 블록이 빈 문서로 열고 처음 고칠 때 만든다.
 /// - 58판: 표 내용 칸의 muted(덜 띄는 칸).
 /// - 59판: 트리 확인 모드의 부모 행 확인 상자와 확인 상자가 있는 행의 본문 클릭 시 펼침 유지.
-pub const BLOCK_SET_VERSION: u32 = TREE_CHECK_PARENT_ROW_BLOCK_SET_VERSION;
+/// - 60판: 데이터 트리의 바로 입력과 끌어 옮기기, 구역 머리의 메뉴와 바로 이름 바꾸기.
+pub const BLOCK_SET_VERSION: u32 = TREE_EDIT_MOVE_BLOCK_SET_VERSION;
+/// 데이터 트리의 바로 입력(`editing`, `on_edit`, `on_edit_cancel`)과 끌어 옮기기(`on_move`), 구역 머리의 메뉴와
+/// 바로 이름 바꾸기를 처음 지원하는 블록 세트 판.
+pub const TREE_EDIT_MOVE_BLOCK_SET_VERSION: u32 = 60;
 /// 트리 확인 모드에서 부모 행도 확인 상자를 그리고 확인 상자가 있는 행은 본문 클릭으로 접히지 않는 것을 처음 지원하는 블록 세트 판.
 pub const TREE_CHECK_PARENT_ROW_BLOCK_SET_VERSION: u32 = 59;
 /// 표 내용 칸의 muted(덜 띄는 칸)를 처음 지원하는 블록 세트 판.
@@ -1944,6 +1948,19 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         item_menu: Option<Vec<ItemMenuEntry>>,
+        /// (60판) 바로 입력을 확정할 때 실행한다. `$event`는 앞뒤 공백을 뺀 글, `$item`은 그 항목이다.
+        /// 항목의 `editing`이 참이고 이 동작이 있을 때만 그 행을 글칸으로 그린다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_edit: Option<Actions>,
+        /// (60판) 바로 입력을 취소할 때 실행한다. `$event`는 null, `$item`은 그 항목이다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_edit_cancel: Option<Actions>,
+        /// (60판) 항목을 끌어 놓을 때 실행한다. `$event`는 `{key, target, position}`, `$item`은 놓은 자리 항목(없으면 null)이다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_move: Option<Actions>,
     },
     /// (13판) 파일 폴더 또는 선언된 저장소 문서 모음을 읽고 항목을 고른다.
     /// PC 전체 권한은 탐색기만 받는다. `read_only`는 쓰기 UI를 보이지 않게 한다.
@@ -2186,6 +2203,23 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         actions: Option<Vec<Block>>,
+        /// (60판) 구역 머리의 메뉴. 1~4개이고 항목 모양은 `item_menu`와 같다. 동작의 범위는 구역을 둘러싼 범위이며
+        /// `$event`는 null이다. 있으면 머리 우클릭과 접기 단추의 Shift+F10으로 열고, 앱 항목 뒤에 쉘 기본 「제목 복사」를 붙인다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        menu: Option<Vec<ItemMenuEntry>>,
+        /// (60판) 참이면 구역 제목 자리가 글칸이 된다. `on_edit`이 있을 때만 쓴다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        editing: Option<Binding>,
+        /// (60판) 구역 이름을 확정할 때 실행한다. `$event`는 앞뒤 공백을 뺀 새 이름이다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_edit: Option<Actions>,
+        /// (60판) 구역 이름 바꾸기를 취소할 때 실행한다. `$event`는 null이다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_edit_cancel: Option<Actions>,
         child: Box<Block>,
     },
 
@@ -2801,6 +2835,12 @@ enum RawBlock {
         default_expanded: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         item_menu: Option<Vec<ItemMenuEntry>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_edit: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_edit_cancel: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_move: Option<Actions>,
     },
     Folder {
         root: FolderRoot,
@@ -2992,6 +3032,14 @@ enum RawBlock {
         collapsed: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         actions: Option<Vec<Block>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        menu: Option<Vec<ItemMenuEntry>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        editing: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_edit: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_edit_cancel: Option<Actions>,
         child: Box<Block>,
     },
 
@@ -3548,6 +3596,9 @@ impl From<RawBlock> for Block {
                 on_check,
                 default_expanded,
                 item_menu,
+                on_edit,
+                on_edit_cancel,
+                on_move,
             } => Block::Tree {
                 items,
                 root,
@@ -3558,6 +3609,9 @@ impl From<RawBlock> for Block {
                 on_check,
                 default_expanded,
                 item_menu,
+                on_edit,
+                on_edit_cancel,
+                on_move,
             },
             RawBlock::Folder {
                 root,
@@ -3670,6 +3724,10 @@ impl From<RawBlock> for Block {
                 collapsible,
                 collapsed,
                 actions,
+                menu,
+                editing,
+                on_edit,
+                on_edit_cancel,
                 child,
             } => Block::Section {
                 title,
@@ -3677,6 +3735,10 @@ impl From<RawBlock> for Block {
                 collapsible,
                 collapsed,
                 actions,
+                menu,
+                editing,
+                on_edit,
+                on_edit_cancel,
                 child,
             },
             RawBlock::List {
@@ -3988,6 +4050,9 @@ impl From<RawBlock> for Block {
                 on_check: None,
                 default_expanded: false,
                 item_menu: None,
+                on_edit: None,
+                on_edit_cancel: None,
+                on_move: None,
             },
             RawBlock::MarkdownEditor { file, document } => Block::Markdown {
                 file,

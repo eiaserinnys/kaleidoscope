@@ -173,6 +173,20 @@
 /* 머리 폭 전체를 차지하는 단추라 바깥 외곽선이 이웃 요소에 가려진다. 파일 트리의 접힌 단추처럼 안쪽에 그린다. */
 .ks-data-section-toggle { padding-block: var(--ks-space-1); border-radius: var(--ks-radius-small); }
 .ks-data-section-toggle:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
+/* 구역 머리 바로 이름 바꾸기(블록 세트 60). 편집 중에만 화살표 단추는 화살표 폭, 글칸이 남은 폭을 차지하고
+   머리 높이는 편집 전과 같다. 접기 단추가 있던 머리는 그 단추의 안쪽 높이(제목 줄 + 위아래 여백)를 글칸이 잇는다. */
+.ks-data-section-header.is-editing { flex-wrap: nowrap; }
+.ks-data-section-header.is-editing > .ks-data-section-toggle { flex: 0 0 auto; }
+.ks-data-section-header.is-editing > .ks-text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding-block: 0;
+  font-size: var(--ks-type-title);
+  font-weight: 600;
+}
+.ks-data-section-header.is-editing:has(> .ks-data-section-toggle) > .ks-text-input { height: calc(var(--ks-type-title) * var(--ks-line-body) + 2 * var(--ks-space-1)); }
+.ks-data-section-header.is-editing:not(:has(> .ks-data-section-toggle)) > .ks-text-input { height: calc(var(--ks-type-title) * var(--ks-line-body)); }
 .ks-data-section-title { font-size: var(--ks-type-title); font-weight: 600; }
 .ks-data-section-meta { font-size: var(--ks-type-meta); color: var(--ks-color-muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ks-data-section-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: var(--ks-space-2); margin-inline-start: auto; }

@@ -133,14 +133,15 @@ it("선택적 창 데이터 훅의 동작은 블록이 넘긴 항목을 그 항�
 it("반복 항목의 값과 중첩 항목의 부모를 표시하고 템플릿 포인터로 동작을 보낸다", async () => {
   const definition: AppDefinition = {
     id: "repeat-test", name: "반복 시험", requires: { blocks: 14, modules: {} }, permissions: [],
-    state: { rows: [{ id: "one", name: "첫 항목", children: [{ id: "child", name: "안쪽" }] }] },
+    state: { rows: [{ id: "one", name: "첫 항목", children: [{ id: "child", name: "안쪽" }] }], clicked: null },
     ui: { type: "repeat", items: { state: "rows" }, key: "id", virtual: false, template: {
       type: "stack", direction: "column", children: [
         { type: "input", value: { item: "name" }, on_change: [{ set_state: "rows", value: { expr: "$item" } }] },
         { type: "repeat", items: { item: "children" }, key: "id", virtual: false, template: {
           type: "stack", direction: "row", children: [
             { type: "text", value: { parent_item: "name" } },
-            { type: "button", label: { item: "name" }, on_click: [{ set_state: "rows", value: { expr: "$item" } }] },
+            // 안쪽 동작은 바깥 반복의 items(rows)를 덮지 않는다. 이 시험은 그 뒤에도 입력 값과 on_change를 확인한다.
+            { type: "button", label: { item: "name" }, on_click: [{ set_state: "clicked", value: { expr: "$item" } }] },
           ],
         } },
       ],
