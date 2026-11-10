@@ -134,7 +134,7 @@ Click the server label at the top right of the shell (it reads `내 PC 서버` w
 
 ### 6. Ask for an app
 
-The shell ships with built-in apps such as the file explorer, Markdown editor, web browser, and Agent; their definitions live in [apps/](apps/) and change with shell releases. Ask the agent to create a personal app with `upload_app`, which also opens it; [examples](examples/) include a block gallery. You can also load a definition file yourself with `앱 정의 가져오기` (import app definition) next to the app menu. Apps that use files ask for a folder when needed. Apps that use service connections need the connection set up first; the orchestrator does not run an AI model itself.
+The shell ships with built-in apps such as the file explorer, Markdown editor, web browser, and Agent; their definitions live in [apps/](apps/) and change with shell releases. Ask the agent to create a personal app with `upload_app`, which also opens it; [examples](examples/) include a block gallery. To load a definition file yourself, open `앱스토어` (app store) from the app menu and choose `커스텀 앱` (custom apps), then press `파일에서 가져오기` (import from file). The imported app is listed in that category and opens only when you press `열기` (open) or launch it from the app menu; `지우기` (delete) removes it from this device after a confirmation. Apps that use files ask for a folder when needed. Apps that use service connections need the connection set up first; the orchestrator does not run an AI model itself.
 
 Agents work with the shell through these MCP tools:
 
