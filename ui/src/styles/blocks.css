@@ -517,6 +517,11 @@
   white-space: normal;
 }
 
+/* 표를 감싼 div가 표의 위아래 여백을 받는다. 표가 첫 자식이나 마지막 자식일 때의 여백 규칙이 감싼 div에 그대로 걸린다. */
+.ks-markdown-text .ks-table-fit {
+  margin-block: var(--ks-space-3);
+}
+
 .ks-markdown-text > :first-child {
   margin-block-start: 0;
 }
@@ -543,7 +548,6 @@
 .ks-markdown-text ul,
 .ks-markdown-text ol,
 .ks-markdown-text blockquote,
-.ks-markdown-text table,
 .ks-markdown-text pre {
   margin-block: var(--ks-space-3);
 }

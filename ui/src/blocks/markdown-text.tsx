@@ -1,8 +1,9 @@
 import ReactMarkdown, { type Components } from "react-markdown";
-import { memo, type CSSProperties } from "react";
+import { memo, useLayoutEffect, useRef, type CSSProperties } from "react";
 import remarkGfm from "remark-gfm";
 import { ExternalLink } from "../components/external-link";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
+import { watchTableFit } from "./table-fit";
 
 const remarkPlugins = [remarkGfm];
 
@@ -31,12 +32,30 @@ const MarkdownPre: NonNullable<Components["pre"]> = ({ node, children: _children
   })}</code></pre>;
 };
 
+const MarkdownTable: NonNullable<Components["table"]> = ({ node: _node, children, ...props }) => {
+  const wrap = useRef<HTMLDivElement>(null);
+  const table = useRef<HTMLTableElement>(null);
+  const probe = useRef<HTMLDivElement>(null);
+  // 표 내용이 바뀌어 다시 그리면 관찰을 새로 걸어 첫 알림으로 다시 맞춘다.
+  useLayoutEffect(() => {
+    if (!wrap.current || !table.current || !probe.current) return;
+    return watchTableFit(wrap.current, probe.current, table.current);
+  });
+  return (
+    <div className="ks-table-fit" ref={wrap}>
+      <table {...props} ref={table}>{children}</table>
+      <div className="ks-table-fit-probe" aria-hidden="true" ref={probe} />
+    </div>
+  );
+};
+
 export const MarkdownText = memo(function MarkdownText({ children }: { children: string }) {
   return (
     <div className="ks-markdown-text">
       <ReactMarkdown
         components={{
           pre: MarkdownPre,
+          table: MarkdownTable,
           a: ({ href, children: linkText }) => <ExternalLink href={href}>{linkText}</ExternalLink>,
           img: ({ alt }) => <span className="ks-markdown-image-alt">{alt ?? ""}</span>,
         }}

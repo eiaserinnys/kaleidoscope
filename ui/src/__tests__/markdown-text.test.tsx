@@ -38,3 +38,13 @@ it("24칸까지 첫 글자를 묶고 25칸부터는 원문 그대로 줄바꿈�
   expect(lines[1].querySelector(".ks-code-indent")).toBeNull();
   expect(pre.textContent).toBe(code);
 });
+
+it("표는 맞춤 관찰용 감싼 div와 크기 probe를 두고, probe는 보조기기에서 숨긴다", () => {
+  const { container } = render(<MarkdownText>{"| 항목 | 상태 |\n| --- | --- |\n| 공지 | 열림 |"}</MarkdownText>);
+  const wrap = container.querySelector(".ks-markdown-text > .ks-table-fit");
+  expect(wrap).toBeTruthy();
+  expect(wrap!.querySelector(":scope > table")).toBeTruthy();
+  const probe = wrap!.querySelector(".ks-table-fit-probe");
+  expect(probe).toBeTruthy();
+  expect(probe!.getAttribute("aria-hidden")).toBe("true");
+});
