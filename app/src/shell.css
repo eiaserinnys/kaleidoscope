@@ -607,9 +607,12 @@
 
 .shell-link-button { min-width: 0; max-width: var(--ks-workspace-label-max-width); gap: var(--ks-space-2); }
 .shell-link-button > .ks-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell-server-icon { position: relative; display: inline-grid; place-items: center; }
 .shell-server-dot { width: var(--ks-space-2); height: var(--ks-space-2); flex-shrink: 0; border-radius: var(--ks-radius-large); background: var(--ks-color-muted); }
+.shell-server-icon > .shell-server-dot { position: absolute; inset-block-end: calc(-1 * var(--ks-space-1)); inset-inline-end: calc(-1 * var(--ks-space-1)); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-surface-solid); }
 .shell-server-dot.is-connected { background: var(--ks-color-positive); }
 .shell-server-dot.is-pairing, .shell-server-dot.is-offline { background: var(--ks-color-warning); }
+.shell-server-icon > .shell-server-dot.is-revoked { background: var(--ks-color-danger); }
 .ks-shell-settings { box-sizing: border-box; height: 100%; }
 .ks-shell-settings h3 { margin: 0; }
 .ks-shell-settings-body { width: 100%; max-width: calc(var(--ks-window-min-width) * 2); margin-inline: auto; }
