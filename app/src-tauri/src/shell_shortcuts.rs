@@ -70,7 +70,7 @@ pub(crate) unsafe fn register(
         let shift = down(VK_SHIFT.0);
         let mut key = 0;
         args.VirtualKey(&mut key)?;
-        let Some(&(_, code, allow_shift, ctrl_only)) = KEYS
+        let Some(&(_, code, ..)) = KEYS
             .iter()
             .find(|&&(vk, _, allow_shift, ctrl_only)| {
                 vk == key && if alt { !shift || allow_shift } else { ctrl_only && !shift }

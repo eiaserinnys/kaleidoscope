@@ -49,10 +49,10 @@ fn eval(view: &tauri::Webview, script: &str) -> Result<Value, String> {
     Ok(reply["result"]["value"].clone())
 }
 fn active_workspace(core: &Core) -> Result<String, String> {
-    ui::driver::snapshot(core)?
+    Ok(ui::driver::snapshot(core)?
         .device
         .active_workspace_id
-        .ok_or("활성 작업 없음")?
+        .ok_or("활성 작업 없음")?)
 }
 
 fn next_workspace(core: &Core, workspace: &str) -> Result<String, String> {
