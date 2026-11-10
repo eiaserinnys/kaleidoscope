@@ -344,7 +344,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "( $a := $apps[id = $state.selected]; $state.selected != null and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready' and $exists($a) and $a.origin != null and $a.builtin = false and ($a.origin.store_url != $state.selected_store or $a.origin.store_app_id != $state.selected or $a.modified) )"},
+            "value": {"expr": "( $id := $state.selected; $a := $apps[id = $id]; $listed := $state.selected_store != null and $count($data.catalog.stores[server = $state.selected_store and $count(items[id = $id]) > 0]) > 0; $id != null and $listed and ($state.selected_store in $data.catalog.stores.server or $state.selected_store in $apps.origin.store_url) and $data_meta.detail.state = 'ready' and $exists($a) and $a.origin != null and $a.builtin = false and ($a.origin.store_url != $state.selected_store or $a.origin.store_app_id != $id or $a.modified) )"},
             "child": {
               "type": "toolbar",
               "start": [
@@ -436,7 +436,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "(\n  $id := $state.selected;\n  $custom := $id != null and $state.selected_store = null and $count($apps[id = $id and builtin = false and origin = null]) > 0;\n  $custom and $count([$data.catalog.stores[state = 'ready' and $count(items[id = $id]) > 0]]) > 0\n)"},
+            "value": {"expr": "(\n  $id := $state.selected;\n  $custom := $id != null and $state.selected_store = null and $count($apps[id = $id and builtin = false and origin = null]) > 0;\n  $custom and $count([$lookup($data, 'catalog').stores[state = 'ready' and $count(items[id = $id]) > 0]]) > 0\n)"},
             "child": {
               "type": "stack",
               "direction": "column",
@@ -496,7 +496,7 @@
           },
           {
             "type": "when",
-            "value": {"expr": "(\n  $id := $state.selected;\n  $custom := $id != null and $state.selected_store = null and $count($apps[id = $id and builtin = false and origin = null]) > 0;\n  $custom and $count([$data.catalog.stores[state = 'ready' and $count(items[id = $id]) > 0]]) = 0\n)"},
+            "value": {"expr": "(\n  $id := $state.selected;\n  $custom := $id != null and $state.selected_store = null and $count($apps[id = $id and builtin = false and origin = null]) > 0;\n  $custom and $count([$lookup($data, 'catalog').stores[state = 'ready' and $count(items[id = $id]) > 0]]) = 0\n)"},
             "child": {
               "type": "stack",
               "direction": "column",

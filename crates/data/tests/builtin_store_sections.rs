@@ -123,19 +123,27 @@ fn store_icon_tiles_mark_apps_with_available_updates() {
 }
 
 #[test]
-fn another_store_install_cannot_be_updated() {
+fn another_store_install_offers_conversion_instead_of_update() {
     let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let mut state = definition.state.clone();
     state.insert("selected".into(), json!("same"));
     state.insert("selected_store".into(), json!("https://b.example"));
-    let data = map(json!({"detail":{"release":2,"compatible":true}}));
+    let data = map(json!({"catalog":{"stores":[
+        {"server":"https://b.example","state":"ready","items":[{"id":"same","name":"메모"}]}
+    ]},"detail":{"release":2,"compatible":true}}));
+    let data_meta = map(json!({"detail":{"state":"ready"}}));
     let apps: Vec<kaleidoscope_contract::store::InstalledAppValue> = serde_json::from_value(json!([{"id":"same","builtin":false,"name":"메모","version":1,"origin":{"store_url":"https://a.example","store_app_id":"same","release":1,"digest":"abc"},"latest":{"release":2,"compatible":true},"installed_version":1,"modified":false,"icon":null}])).unwrap();
     let empty = BTreeMap::new();
-    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/6/child/end/0/disabled"), json!(true));
-    assert_ne!(value(&values, "/ui/children/2/children/6/child/end/0/label"), "업데이트");
-    assert!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value").as_str().unwrap().contains("다른 스토어"));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    // 다른 스토어에서 설치한 앱은 보통 업데이트 줄 대신 바꾸기 줄을 쓴다.
+    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/7/child/end/0/label"), "스토어 판으로 바꾸기");
+    assert_eq!(value(&values, "/ui/children/2/children/7/child/end/0/disabled"), json!(false));
+    let status = value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value");
+    assert!(status.as_str().unwrap().contains("다른 스토어"));
+    assert!(!status.as_str().unwrap().contains("바꿀 수 있습니다"));
 }
 
 #[test]
@@ -230,8 +238,8 @@ fn removed_stores_remain_removable_in_installed_and_updates() {
     assert!(matches!(app.plan_source_with_apps("detail", &state, &data, &empty, &empty, Some(&apps)), SourcePlan::StoreApp { id, .. } if id == "gone"));
     let data_meta = map(json!({"detail":{"state":"loading"}}));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/8/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(false));
 }
 
 #[test]
@@ -251,12 +259,12 @@ fn invalid_store_address_has_no_retry_and_names_the_installed_origin() {
     let empty = BTreeMap::new();
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
     assert!(value(&values, "/ui/children/1/children/2/child/items")[1].get("action").is_none());
-    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "사설 1에서 설치한 앱입니다. 스토어 판으로 바꿀 수 있습니다.");
+    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "사설 1에서 설치한 앱입니다.");
     state.insert("selected_store".into(), json!("https://b.example"));
     let mut first_apps = apps.clone();
     first_apps[0].origin.as_mut().unwrap().store_url = "https://a.example".into();
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&first_apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "기본 앱스토어에서 설치한 앱입니다. 스토어 판으로 바꿀 수 있습니다.");
+    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "기본 앱스토어에서 설치한 앱입니다.");
 }
 
 #[test]
@@ -348,23 +356,23 @@ fn delete_button_shows_only_for_store_installed_apps() {
 
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &ready_meta, Some(&[]), &BTreeMap::new(), None, &mut |_, _| {});
     assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/8/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(true));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &ready_meta, Some(&no_origin), &BTreeMap::new(), None, &mut |_, _| {});
     assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/8/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(true));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &ready_meta, Some(&with_origin), &BTreeMap::new(), None, &mut |_, _| {});
     assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/8/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(false));
 
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&[]), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/8/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(true));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&no_origin), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/8/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(true));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &not_ready_meta, Some(&with_origin), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/8/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(false));
 }
 
 #[test]
@@ -430,8 +438,9 @@ fn shortcut_row_shows_for_installed_apps_and_tracks_the_selection() {
     let end = &raw["ui"]["children"][2]["children"][5]["child"]["end"];
     assert_eq!(end[0]["on_click"][0], json!({"shell.add_shortcut":{"app_id":{"state":"selected"}}}));
     assert_eq!(end[1]["label"], "열기");
-    assert_eq!(end[1]["variant"], "primary");
     assert_eq!(end[1]["on_click"][0], json!({"shell.open":{"app_id":{"state":"selected"}}}));
+    // 바꾸기 후보가 없는 커스텀 앱은 열기가 강조다.
+    assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "primary");
 
     state.insert("shortcut_added".into(), json!("notes"));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&installed), &BTreeMap::new(), None, &mut |_, _| {});
@@ -561,24 +570,25 @@ fn custom_category_lists_origin_less_apps_while_the_store_source_fails() {
     assert_eq!(import["label"], "파일에서 가져오기");
     assert_eq!(import["icon_only"], json!(true));
     assert_eq!(import["on_click"], json!([{"shell.import_app":{}}]));
-    // 커스텀 목록은 $apps만으로 채워진다.
-    let groups = value(&values, "/ui/children/1/children/3/child/items");
-    assert_eq!(groups[0]["title"], "커스텀 앱");
-    assert_eq!(groups[0]["items"][0]["key"], "my-tool");
-    assert_eq!(groups[0]["items"][0]["title"], "내 도구");
-    assert_eq!(groups[0]["items"][0]["id"], "my-tool");
-    assert_eq!(groups[0]["items"][0]["server"], Value::Null);
-    assert!(groups[0].get("status").is_none());
+    // 커스텀 목록은 $apps만으로 채워진다. 묶음 머리 없이 항목이 바로 온다.
+    let rows = value(&values, "/ui/children/1/children/3/child/items");
+    assert_eq!(rows[0]["key"], "my-tool");
+    assert_eq!(rows[0]["title"], "내 도구");
+    assert_eq!(rows[0]["id"], "my-tool");
+    assert_eq!(rows[0]["server"], Value::Null);
     assert_eq!(value(&values, "/ui/children/1/children/2/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/1/children/3/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/1/children/4/value"), json!(false));
 
     state.insert("query".into(), json!("도구"));
     let values = app.evaluate_profiled(&state, &empty, &empty, &empty, &data_meta, Some(&apps), &statuses, None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/1/children/3/child/items")[0]["items"][0]["id"], "my-tool");
+    assert_eq!(value(&values, "/ui/children/1/children/3/child/items")[0]["id"], "my-tool");
     state.insert("query".into(), json!("스토어 앱"));
     let values = app.evaluate_profiled(&state, &empty, &empty, &empty, &data_meta, Some(&apps), &statuses, None, &mut |_, _| {});
-    let groups = value(&values, "/ui/children/1/children/3/child/items");
-    assert!(groups[0]["items"].as_array().unwrap().is_empty());
-    assert_eq!(groups[0]["status"]["state"], "empty");
+    let rows = value(&values, "/ui/children/1/children/3/child/items");
+    assert!(rows.as_array().unwrap().is_empty());
+    assert_eq!(value(&values, "/ui/children/1/children/3/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/1/children/4/value"), json!(false));
 
     // 스토어 원천이 실패해도 선택한 커스텀 앱의 상세와 열기와 지우기는 열린다.
     state.insert("query".into(), json!(""));
@@ -590,12 +600,12 @@ fn custom_category_lists_origin_less_apps_while_the_store_source_fails() {
     assert_eq!(value(&values, "/ui/children/2/children/1/value"), json!(true));
     assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(true));
     assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(true));
-    // 후보 스토어를 읽을 수 없으면 전환 줄은 뜨지 않는다.
-    assert!(matches!(
-        values.get("/ui/children/2/children/10/value"),
-        Some(BindingValue::Failed { .. })
-    ));
+    // 후보 스토어를 읽을 수 없으면 바꾸기 없이 지우기만 남는다.
+    assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(true));
+    let row = &raw["ui"]["children"][2]["children"][12]["child"]["children"][1];
+    assert_eq!(row["start"][0]["label"], "지우기");
+    assert!(row["end"].as_array().unwrap().is_empty());
 
     state.insert("category".into(), json!(""));
     let values = app.evaluate_profiled(&state, &empty, &empty, &empty, &data_meta, Some(&apps), &statuses, None, &mut |_, _| {});
@@ -613,7 +623,7 @@ fn custom_detail_shows_version_and_single_store_conversion() {
         "catalog":{"stores":[{"server":"https://a.example","state":"ready","items":[{"id":"my-tool","name":"내 도구","category":"도구","summary":""}]}]},
         "convert":{"server":"https://a.example","release":2,"compatible":true}
     }));
-    let data_meta = map(json!({"convert":{"state":"ready"}}));
+    let data_meta = map(json!({"catalog":{"state":"ready"},"convert":{"state":"ready"}}));
     let mut state = definition.state.clone();
     state.insert("selected".into(), json!("my-tool"));
     state.insert("selected_name".into(), json!("내 도구"));
@@ -629,18 +639,18 @@ fn custom_detail_shows_version_and_single_store_conversion() {
     assert_eq!(value(&values, "/ui/children/2/children/4/child/children/0/fields/0/value"), json!("3"));
     assert_eq!(raw["ui"]["children"][2]["children"][4]["child"]["children"][0]["fields"][1]["value"], json!({"state":"selected"}));
     assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(true));
     // JSONata는 한 원소 배열을 값 하나로 접는다. 화면은 asArray로 읽으므로 같게 맞춘다.
-    let options = value(&values, "/ui/children/2/children/10/child/children/1/end/0/options");
+    let options = value(&values, "/ui/children/2/children/11/child/children/1/end/0/options");
     let options = Value::Array(options.as_array().cloned().unwrap_or_else(|| vec![options]));
     assert_eq!(options, json!([{"value":"https://a.example","label":"기본 앱스토어"}]));
-    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["children"][1]["end"][0]["value"], json!({"state":"custom_store"}));
-    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["children"][1]["end"][1]["label"], "스토어 판으로 바꾸기");
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(false));
-    assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(true));
+    assert_eq!(raw["ui"]["children"][2]["children"][11]["child"]["children"][1]["end"][0]["value"], json!({"state":"custom_store"}));
+    assert_eq!(raw["ui"]["children"][2]["children"][11]["child"]["children"][1]["end"][1]["label"], "스토어 판으로 바꾸기");
+    assert_eq!(value(&values, "/ui/children/2/children/11/child/children/1/end/1/disabled"), json!(false));
+    // 후보가 있으면 지우기만 있는 줄은 뜨지 않는다.
     assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(false));
 
-    let delete = &raw["ui"]["children"][2]["children"][11]["child"]["start"][0];
+    let delete = &raw["ui"]["children"][2]["children"][11]["child"]["children"][1]["start"][0];
     assert_eq!(delete["variant"], "danger");
     assert_eq!(delete["confirm"]["body"], json!({"state":"selected_name"}));
     assert_eq!(
@@ -650,7 +660,7 @@ fn custom_detail_shows_version_and_single_store_conversion() {
 
     let event = Value::Null;
     let env = Env { state:&state, data:&data, data_meta:&data_meta, storage:&empty, storage_meta:&empty, apps:Some(&apps), event:&event, item:&event, modifiers:None };
-    match app.action_step("/ui/children/2/children/10/child/children/1/end/1/on_click", 0, &env).unwrap() {
+    match app.action_step("/ui/children/2/children/11/child/children/1/end/1/on_click", 0, &env).unwrap() {
         Step::StoreInstall { permission, server, id, release, replace } => {
             assert_eq!(permission, "catalog");
             assert_eq!(server, json!("https://a.example"));
@@ -668,7 +678,7 @@ fn custom_detail_shows_version_and_single_store_conversion() {
         (5, "custom_store", Value::Null),
     ] {
         assert_eq!(
-            app.action_step("/ui/children/2/children/10/child/children/1/end/1/on_click", index, &env).unwrap(),
+            app.action_step("/ui/children/2/children/11/child/children/1/end/1/on_click", index, &env).unwrap(),
             Step::SetState { key: key.into(), value: expected }
         );
     }
@@ -680,11 +690,11 @@ fn custom_detail_shows_version_and_single_store_conversion() {
         Step::SetState { key: "custom_store".into(), value: json!("https://a.example") }
     );
     assert_eq!(
-        app.action_step("/ui/children/2/children/11/child/start/0/on_click", 0, &env).unwrap(),
+        app.action_step("/ui/children/2/children/11/child/children/1/start/0/on_click", 0, &env).unwrap(),
         Step::StoreRemove { permission:"catalog".into(), id:json!("my-tool"), allow_custom:true }
     );
     assert_eq!(
-        app.action_step("/ui/children/2/children/11/child/start/0/on_click", 1, &env).unwrap(),
+        app.action_step("/ui/children/2/children/11/child/children/1/start/0/on_click", 1, &env).unwrap(),
         Step::SetState { key:"selected".into(), value:Value::Null }
     );
 }
@@ -701,15 +711,15 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
         {"server":"https://c.example","state":"ready","items":[{"id":"my-tool","name":"내 도구"}]},
         {"server":"https://d.example","state":"error","items":[],"error":{"id":"OFFLINE","message":"오류"}}
     ]}}));
-    let idle_meta = map(json!({"convert":{"state":"idle"}}));
+    let idle_meta = map(json!({"catalog":{"state":"ready"},"convert":{"state":"idle"}}));
     let mut state = definition.state.clone();
     state.insert("selected".into(), json!("my-tool"));
     state.insert("selected_name".into(), json!("내 도구"));
     state.insert("selected_store".into(), Value::Null);
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &idle_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(true));
     assert_eq!(
-        value(&values, "/ui/children/2/children/10/child/children/1/end/0/options"),
+        value(&values, "/ui/children/2/children/11/child/children/1/end/0/options"),
         json!([
             {"value":"https://b.example","label":"사설 1"},
             {"value":"https://c.example","label":"사설 2"}
@@ -717,15 +727,15 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
     );
     // 후보가 둘이면 고르기 전에는 비어 있고 전환할 수 없다. 고르기는 고른 스토어 상태를 그대로 읽는다.
     let raw: Value = serde_json::from_str(include_str!("../../../apps/store.json")).unwrap();
-    assert_eq!(raw["ui"]["children"][2]["children"][10]["child"]["children"][1]["end"][0]["value"], json!({"state":"custom_store"}));
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(true));
+    assert_eq!(raw["ui"]["children"][2]["children"][11]["child"]["children"][1]["end"][0]["value"], json!({"state":"custom_store"}));
+    assert_eq!(value(&values, "/ui/children/2/children/11/child/children/1/end/1/disabled"), json!(true));
 
     state.insert("custom_store".into(), json!("https://c.example"));
-    let loading_meta = map(json!({"convert":{"state":"loading"}}));
+    let loading_meta = map(json!({"catalog":{"state":"ready"},"convert":{"state":"loading"}}));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &loading_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/11/child/children/1/end/1/disabled"), json!(true));
 
-    let ready_meta = map(json!({"convert":{"state":"ready"}}));
+    let ready_meta = map(json!({"catalog":{"state":"ready"},"convert":{"state":"ready"}}));
     let with_convert = map(json!({
         "catalog":{"stores":[
             {"server":"https://a.example","state":"ready","items":[{"id":"other","name":"다른 앱"}]},
@@ -735,7 +745,7 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
         "convert":{"server":"https://c.example","release":4,"compatible":false}
     }));
     let values = app.evaluate_profiled(&state, &with_convert, &empty, &empty, &ready_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/11/child/children/1/end/1/disabled"), json!(true));
     let compatible = map(json!({
         "catalog":{"stores":[
             {"server":"https://a.example","state":"ready","items":[{"id":"other","name":"다른 앱"}]},
@@ -745,7 +755,7 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
         "convert":{"server":"https://c.example","release":4,"compatible":true}
     }));
     let values = app.evaluate_profiled(&state, &compatible, &empty, &empty, &ready_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/child/children/1/end/1/disabled"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/11/child/children/1/end/1/disabled"), json!(false));
 
     // 후보가 아닌 스토어를 기억하고 있으면 전환 대상을 잡지 않는다.
     state.insert("custom_store".into(), json!("https://a.example"));
@@ -764,14 +774,15 @@ fn custom_conversion_lists_only_ready_stores_that_have_the_app() {
         SourcePlan::Idle
     );
 
-    // 같은 id가 어느 스토어에도 없으면 전환 줄이 없다.
+    // 같은 id가 어느 스토어에도 없으면 전환 줄 없이 지우기만 남는다.
     let none = map(json!({"catalog":{"stores":[{"server":"https://a.example","state":"ready","items":[{"id":"other","name":"다른 앱"}]}]}}));
     let values = app.evaluate_profiled(&state, &none, &empty, &empty, &idle_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/10/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(true));
 }
 
 #[test]
-fn store_detail_conversion_replaces_custom_other_origin_and_modified_apps() {
+fn store_detail_conversion_replaces_other_origin_and_modified_apps() {
     let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
     let app = CompiledApp::compile(&definition);
     let empty = BTreeMap::new();
@@ -794,53 +805,81 @@ fn store_detail_conversion_replaces_custom_other_origin_and_modified_apps() {
     let other_origin = json!({"store_url":"https://b.example","store_app_id":"notes","release":1,"digest":"def"});
     let same_origin = json!({"store_url":"https://a.example","store_app_id":"notes","release":2,"digest":"abc"});
 
-    for (origin, modified, version, installed_version, label, disabled) in [
-        (Value::Null, false, 1, None, "스토어 판으로 바꾸기", false),
-        (other_origin.clone(), false, 1, Some(1), "스토어 판으로 바꾸기", false),
-        (same_origin.clone(), true, 2, Some(1), "스토어 판으로 되돌리기", false),
+    // 다른 스토어에서 설치했거나 설치 뒤 고친 앱은 둘째 줄의 설치 단추가 바꾸기를 겸한다.
+    for (origin, modified, version, installed_version, label) in [
+        (other_origin.clone(), false, 1, Some(1), "스토어 판으로 바꾸기"),
+        (same_origin.clone(), true, 2, Some(1), "스토어 판으로 되돌리기"),
     ] {
         let apps = installed(origin, modified, version, installed_version);
         let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-        assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(true));
-        assert_eq!(value(&values, "/ui/children/2/children/12/child/end/0/label"), label);
-        assert_eq!(value(&values, "/ui/children/2/children/12/child/end/0/disabled"), json!(disabled));
+        assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(true));
+        assert_eq!(value(&values, "/ui/children/2/children/7/child/end/0/label"), label);
+        assert_eq!(value(&values, "/ui/children/2/children/7/child/end/0/disabled"), json!(false));
+        // 바꾸기 단추가 강조를 가져가고 열기는 기본이다.
+        assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "default");
     }
 
     // 같은 출처 수정본이라도 스토어 판이 설치 판보다 낮으면 바꾸지 않는다.
     let apps = installed(json!({"store_url":"https://a.example","store_app_id":"notes","release":3,"digest":"abc"}), true, 3, Some(2));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/12/child/end/0/label"), "스토어 판으로 되돌리기");
-    assert_eq!(value(&values, "/ui/children/2/children/12/child/end/0/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/7/child/end/0/label"), "스토어 판으로 되돌리기");
+    assert_eq!(value(&values, "/ui/children/2/children/7/child/end/0/disabled"), json!(true));
+    // 잠긴 단추는 강조로 그리지 않는다.
+    assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "primary");
+
+    // 같은 id의 커스텀 앱은 스토어 상세의 설치 판과 섞이지 않고, 바꾸기는 커스텀 상세에서 한다.
+    let apps = installed(Value::Null, false, 1, None);
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/9/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/9/child/end/0/label"), "설치됨");
+    assert_eq!(value(&values, "/ui/children/2/children/9/child/end/0/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "primary");
 
     // 고치지 않은 같은 출처 앱은 보통 업데이트 줄을 쓴다.
+    let apps = installed(json!({"store_url":"https://a.example","store_app_id":"notes","release":1,"digest":"abc"}), false, 1, Some(1));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/6/child/end/0/label"), "업데이트");
+    assert_eq!(value(&values, "/ui/children/2/children/6/child/end/0/variant"), "primary");
+    // 업데이트할 일이 있으면 그 단추가 강조이고 열기는 기본이다.
+    assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "default");
+
+    // 할 일이 없으면 열기가 강조이고 잠긴 설치는 강조가 아니다.
     let apps = installed(same_origin.clone(), false, 2, Some(2));
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/6/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/6/child/end/0/label"), "설치됨");
+    assert_eq!(value(&values, "/ui/children/2/children/6/child/end/0/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/6/child/end/0/variant"), "default");
+    assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "primary");
 
-    // 호환되지 않는 판이면 전환 줄은 뜨지만 단추는 잠긴다.
+    // 호환되지 않는 판이면 바꾸기 줄은 뜨지만 단추는 잠긴다.
     let incompatible = map(json!({
         "catalog":{"stores":[{"server":"https://a.example","state":"ready","items":[{"id":"notes","name":"메모"}]}]},
         "detail":{"server":"https://a.example","release":2,"compatible":false}
     }));
-    let apps = installed(Value::Null, false, 1, None);
+    let apps = installed(other_origin.clone(), false, 1, Some(1));
     let values = app.evaluate_profiled(&state, &incompatible, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(true));
-    assert_eq!(value(&values, "/ui/children/2/children/12/child/end/0/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/7/child/end/0/disabled"), json!(true));
+    assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "primary");
 
     // 스토어 목록에 같은 id가 없으면 전환 줄이 없다.
     let unlisted = map(json!({
         "catalog":{"stores":[{"server":"https://a.example","state":"ready","items":[{"id":"other","name":"다른 앱"}]}]},
         "detail":{"server":"https://a.example","release":2,"compatible":true}
     }));
-    let apps = installed(Value::Null, false, 1, None);
+    let apps = installed(other_origin.clone(), false, 1, Some(1));
     let values = app.evaluate_profiled(&state, &unlisted, &empty, &empty, &data_meta, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(false));
+    assert_eq!(value(&values, "/ui/children/2/children/7/value"), json!(false));
 
     // 전환은 명시적 replace 요청으로 보낸다.
-    let apps = installed(Value::Null, false, 1, None);
+    let apps = installed(other_origin.clone(), false, 1, Some(1));
     let event = Value::Null;
     let env = Env { state:&state, data:&data, data_meta:&data_meta, storage:&empty, storage_meta:&empty, apps:Some(&apps), event:&event, item:&event, modifiers:None };
-    match app.action_step("/ui/children/2/children/12/child/end/0/on_click", 0, &env).unwrap() {
+    match app.action_step("/ui/children/2/children/7/child/end/0/on_click", 0, &env).unwrap() {
         Step::StoreInstall { permission, server, id, release, replace } => {
             assert_eq!(permission, "catalog");
             assert_eq!(server, json!("https://a.example"));
