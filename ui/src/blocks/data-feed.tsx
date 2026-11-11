@@ -227,18 +227,16 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
   const handlers = useRef<FeedHandlers>(null!);
   if (items.length) keepRovingRow(virtual, rowOf(roving.focus));
-  const atEnd = useRef(true); const lastCount = useRef(0); const lastScrollTop = useRef(0); const lastTotalSize = useRef(0);
+  const atEnd = useRef(true); const lastScrollTop = useRef(0);
   const totalSize = virtual.getTotalSize();
   useLayoutEffect(() => {
-    if (block.follow && atEnd.current && rows.length && (rows.length > lastCount.current || totalSize > lastTotalSize.current)) {
-      virtual.scrollToIndex(rows.length - 1, { align: "end" });
-      if (scroll.current) {
-        scroll.current.scrollTop = scroll.current.scrollHeight;
-        lastScrollTop.current = scroll.current.scrollTop;
-      }
+    if (!block.follow || !atEnd.current || !rows.length) return;
+    virtual.scrollToIndex(rows.length - 1, { align: "end" });
+    if (scroll.current) {
+      scroll.current.scrollTop = scroll.current.scrollHeight;
+      virtual.scrollOffset = scroll.current.scrollTop;
+      lastScrollTop.current = scroll.current.scrollTop;
     }
-    lastCount.current = rows.length;
-    lastTotalSize.current = totalSize;
   }, [rows.length, totalSize, block.follow, scroll, virtual]);
   const vrows = virtual.getVirtualItems();
   const footer = useLoadMore(block.follow ? undefined : more, rows.length, vrows.at(-1)?.index ?? -1, data, useWindowVisible(context));
