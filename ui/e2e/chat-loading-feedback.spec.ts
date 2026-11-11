@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 
 test("잠긴 입력과 기록 칸의 실패·로그인 상태를 표시한다", async ({ page }) => {
   const phase = process.env.KS_CHAT_EVIDENCE ?? "after";
-  const capture = "/home/eias/workspace/.local/artifacts/c1009-chat-review";
+  const capture = test.info().outputPath("captures");
   await mkdir(capture, { recursive: true });
   const results: Array<{ state: string; width: number; inputOpacity: string; buttonOpacity: string; historyCenter?: number; stateCenter?: number }> = [];
   for (const mode of ["loading", "failed", "login"]) {

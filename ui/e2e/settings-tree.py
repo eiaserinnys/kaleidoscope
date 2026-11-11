@@ -15,7 +15,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "ui/e2e/fixtures/settings-tree"
-OUTPUT = Path("/home/eias/workspace/.local/tmp/card933/blocks-e2")
+OUTPUT: Path | None = None
 COMMON = Path(os.environ["AGENT_COMMON_FILES_DIR"])
 module_path = COMMON / "skills/kaleidoscope-app/scripts/sandbox.py"
 module_spec = importlib.util.spec_from_file_location("kaleidoscope_sandbox", module_path)
@@ -65,7 +65,7 @@ def set_rect(sb, window_id, width, height):
 def main():
     global OUTPUT
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=OUTPUT)
+    parser.add_argument("--output", type=Path, required=True)
     OUTPUT = parser.parse_args().output
     OUTPUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ks-settings-tree-") as directory:

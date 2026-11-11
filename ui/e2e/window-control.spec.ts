@@ -41,7 +41,7 @@ test("다른 창의 초안과 선택을 유지하며 입력, 메뉴와 탭을 �
   expect(await other.inputValue()).toBe("미확정 초안");
   expect(await other.evaluate((input: HTMLInputElement) => [document.activeElement === input, input.selectionStart, input.selectionEnd])).toEqual([true, 1, 4]);
   expect(await page.evaluate(() => (window as any).controlHarness.blurCommits)).toBe(0);
-  await page.screenshot({ path: "test-results/window-control-focus.png" });
+  await page.screenshot({ path: test.info().outputPath("window-control-focus.png") });
 });
 
 test("좌표와 편집기, 허용 차단, 프레임 응답 완료를 실제 Chromium에서 확인한다", async ({ page }) => {
@@ -86,7 +86,7 @@ test("좌표와 편집기, 허용 차단, 프레임 응답 완료를 실제 Chro
     expect(result.error.id).toBe("SHELL_WINDOW_CONTROL_CONSENT_BLOCKED");
   }
   await page.evaluate(()=>(window as any).controlHarness.clearConsent());
-  await page.screenshot({path:"test-results/window-control-surfaces.png"});
+  await page.screenshot({path:test.info().outputPath("window-control-surfaces.png")});
 });
 
 test("실제 격리 프레임에서 좌표 클릭과 더블클릭이 동작한다", async ({ page }) => {
@@ -108,7 +108,7 @@ test("실제 격리 프레임에서 좌표 클릭과 더블클릭이 동작한�
   result = await point("#label", "click");
   await expect(sandbox.locator("#check")).toBeChecked(); expect(result.after.text).toContain("켜짐");
   await point("summary", "click"); await expect(sandbox.locator("details")).toHaveAttribute("open", "");
-  await page.screenshot({ path: "test-results/frame-point-sandbox.png" });
+  await page.screenshot({ path: test.info().outputPath("frame-point-sandbox.png") });
   await page.evaluate(() => (window as any).controlHarness.chooseFrame("html"));
   const html = page.frameLocator('iframe[title="실제 HTML"]');
   await expect(html.locator("#target")).toHaveText("편집할 글");
@@ -116,5 +116,5 @@ test("실제 격리 프레임에서 좌표 클릭과 더블클릭이 동작한�
   result = await point("#target", "double_click");
   expect(result.applied).toBe(true); expect(result.after.settled).toBe(true);
   await expect(html.locator("#target")).toHaveAttribute("contenteditable", "plaintext-only");
-  await page.screenshot({ path: "test-results/frame-point-html.png" });
+  await page.screenshot({ path: test.info().outputPath("frame-point-html.png") });
 });
