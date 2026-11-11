@@ -1126,6 +1126,10 @@ pub struct ChartSeries {
     pub key: String,
     pub name: String,
     pub points: Vec<ChartPoint>,
+    /// (62판) 계열의 색. `#rgb` 또는 `#rrggbb`. 형식이 다르면 표의 팔레트 색을 쓴다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -2009,9 +2013,15 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             act!("on_press", on_press);
         }
         Block::Chart {
-            series, on_select, ..
+            series,
+            selected,
+            on_select,
+            ..
         } => {
             bind!("series", series);
+            if let Some(selected) = selected {
+                bind!("selected", selected);
+            }
             if let Some(on_select) = on_select {
                 act!("on_select", on_select);
             }

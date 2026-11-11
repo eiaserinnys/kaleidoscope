@@ -568,7 +568,19 @@ disabled?: Binding, } | { "type": "toggle", value: Binding, on_change: Actions, 
 /**
  * (18판) 참이면 이 켜고 끄기를 사용할 수 없다.
  */
-disabled?: Binding, } | { "type": "notice", message: Binding, error_id?: Binding, kind?: NoticeKind, actions: Array<NoticeAction>, } | { "type": "button", pressed?: Binding, label: Binding, description?: Binding, icon?: Binding, icon_only?: boolean, variant?: Binding, on_click: Actions, confirm?: Confirm, disabled?: Binding, preview?: Block, prefix?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
+disabled?: Binding, } | { "type": "notice", message: Binding, error_id?: Binding, kind?: NoticeKind, actions: Array<NoticeAction>, } | { "type": "button", pressed?: Binding, label: Binding, description?: Binding, icon?: Binding, icon_only?: boolean, variant?: Binding, on_click: Actions, confirm?: Confirm, disabled?: Binding, preview?: Block, prefix?: Binding, } | { "type": "code", value?: Binding, file?: FileRef, language?: CodeLanguage, read_only?: boolean, follow?: boolean, wrap?: boolean, } | { "type": "image", src: Binding, fit?: ImageFit, zoom?: boolean, } | { "type": "media", src: Binding, kind?: MediaKind, autoplay?: boolean, } | { "type": "metrics", items: Binding, columns?: number, } | { "type": "button_grid", columns: number, buttons: Binding, on_press: Actions, } | { "type": "chart", kind?: ChartKind, series: Binding, y_unit?: string, height?: ChartHeight, 
+/**
+ * (62판) `kind: "bar"`일 때 계열을 한 막대에 쌓는지. 기본은 거짓이다.
+ */
+stacked?: boolean, 
+/**
+ * (62판) 눈금, 값 표시, 접근 가능한 표의 수 표시 형식.
+ */
+number_format?: NumberFormat, 
+/**
+ * (62판) 처음 고른 칸의 시점 값. 포인터나 키보드가 떠나면 이 칸으로 돌아온다.
+ */
+selected?: Binding, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
 /**
  * 단추 격자 항목이 지원하는 변형.
@@ -601,7 +613,11 @@ export type ChartKind = "line" | "bar" | "area" | "candlestick";
 
 export type ChartPoint = { x: string, y?: number | null, open?: number, high?: number, low?: number, close?: number, label?: string, };
 
-export type ChartSeries = { key: string, name: string, points: Array<ChartPoint>, };
+export type ChartSeries = { key: string, name: string, points: Array<ChartPoint>, 
+/**
+ * (62판) 계열의 색. `#rgb` 또는 `#rrggbb`. 형식이 다르면 표의 팔레트 색을 쓴다.
+ */
+color?: string, };
 
 /**
  * (블록 세트 18판, client 4판) `chat` 블록이 클라이언트 채널과 사용자 조작을 연결한다.
@@ -686,7 +702,11 @@ export type Column = {
 /**
  * 행 객체의 키.
  */
-field: string, label: string, width?: ColumnWidth, format?: CellFormat, max_lines?: number, };
+field: string, label: string, width?: ColumnWidth, format?: CellFormat, max_lines?: number, 
+/**
+ * (62판) 머리를 눌러 정렬할 때 이 열의 칸 대신 읽을 행 필드. 보이는 칸 글은 그대로 둔다.
+ */
+sort_field?: string, };
 
 /**
  * 열 너비. 남은 폭은 `fill` 열들이 나눈다.
@@ -1278,6 +1298,31 @@ export type MoreState = "ready" | "loading" | "failed";
 export type NoticeAction = { label: Binding, on_click: Actions, };
 
 export type NoticeKind = "info" | "error" | "loading";
+
+/**
+ * 차트의 수 표시 형식. 눈금, 값 표시, 접근 가능한 표의 수에 함께 쓴다.
+ */
+export type NumberFormat = { 
+/**
+ * 수를 보이는 방법. `compact`는 1.6억처럼 짧게 줄인다.
+ */
+notation?: NumberNotation, 
+/**
+ * 수의 갈래. `currency`면 `currency`에 통화 코드가 필요하다.
+ */
+style?: NumberStyle, 
+/**
+ * `style: "currency"`일 때 쓸 ISO 4217 통화 코드 세 글자(예: `USD`, `KRW`).
+ */
+currency?: string, 
+/**
+ * 소수 아래 최대 자릿수(0~6). 생략하면 기기의 기본값을 쓴다.
+ */
+maximum_fraction_digits?: number, };
+
+export type NumberNotation = "standard" | "compact";
+
+export type NumberStyle = "decimal" | "currency" | "percent";
 
 /**
  * (블록 세트 36판) 바인딩이 낸 공개 HTTPS 주소를 기본 브라우저로 연다.
