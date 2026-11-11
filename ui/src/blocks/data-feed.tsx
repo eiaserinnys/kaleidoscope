@@ -85,8 +85,9 @@ type FeedHandlers = {
   toggle: (key: string) => void;
   copy: (target: string, text: string) => React.ReactNode;
 };
-const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, focused, selectable, checkable, copy, columns, format, collapsible, handlers }: { item: FlattenedFeedItem; index: number; count: number; collapsed: boolean; active: boolean; focused: boolean; selectable: boolean; checkable: boolean; copy: boolean; columns: boolean; format: string | undefined; collapsible: boolean; feedback: string; handlers: React.RefObject<FeedHandlers> }) {
+const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, focused, selectable, checkable, copy, columns, format, collapsible, avatar, handlers }: { item: FlattenedFeedItem; index: number; count: number; collapsed: boolean; active: boolean; focused: boolean; selectable: boolean; checkable: boolean; copy: boolean; columns: boolean; format: string | undefined; collapsible: boolean; avatar: boolean; feedback: string; handlers: React.RefObject<FeedHandlers> }) {
   const entry = item.entry;
+  const nameColor = validColor(entry.color) ? entry.color : undefined;
   const data = useWindowData();
   const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
@@ -116,11 +117,11 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
   const collapseBadge = collapsed ? item.replyCount > 0 ? `답글 ${item.replyCount}개 접힘` : table ? null : "접힘" : item.replyCount > 0 ? `답글 ${item.replyCount}` : null;
   const collapseLabel = collapsed ? item.replyCount ? `답글 ${item.replyCount}개 펴기` : "본문 펴기" : item.replyCount ? `답글 ${item.replyCount}개 접기` : "접기";
   return <><article data-ks-comment-key={encodeCommentKey(entry.key)} aria-setsize={count} aria-posinset={index + 1} className={`ks-feed-entry${item.depth > 0 ? " ks-feed-entry-nested" : ""}${table ? " is-table-row" : ""}${collapsed ? " is-collapsed" : ""}${active ? " is-selected" : ""}${selectable ? " is-selectable" : ""}`} aria-current={active ? "true" : undefined} data-depth={item.depth} style={{ "--ks-feed-depth": Math.min(item.depth, 6) } as React.CSSProperties} data-focus-index={index} tabIndex={focused ? 0 : -1} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => { if (event.target === event.currentTarget) handlers.current.keyDown(event, index, entry); }} onClick={() => { if (selectable) handlers.current.choose(entry); }} onContextMenu={(event) => handlers.current.menu(event, entry)}>
-    {isMedia(entry.image) && <MediaThumbnail media={entry.image} className="ks-feed-avatar" />}
+    {isMedia(entry.image) ? <MediaThumbnail media={entry.image} className="ks-feed-avatar" /> : avatar ? <span aria-hidden="true" className="ks-feed-avatar is-placeholder" /> : null}
     <div className="ks-feed-content"><div className={`ks-feed-header${copy || canCollapse ? " is-copy" : ""}${headerToggle ? " is-collapsible" : ""}`} onClick={headerToggle ? () => handlers.current.toggle(entry.key) : undefined}>
-      <div className="ks-feed-ident"><div className="ks-feed-name-line">{hasCheck ? <button type="button" role="checkbox" aria-checked={checked} aria-label={checked ? "완료 취소" : "완료"} title={checked ? "완료 취소" : "완료"} className={`ks-tree-check${checked ? " is-checked" : ""}`} onClick={(event) => { event.stopPropagation(); handlers.current.choose(entry); }}>{checked ? "✓" : ""}</button> : checkable ? <span aria-hidden="true" className="ks-tree-check is-placeholder" /> : null}{typeof entry.name === "string" && <strong style={validColor(entry.color) ? { color: entry.color } : undefined}>{entry.name}</strong>}<Badges values={entry.badges} />{collapseBadge && <Badges values={[collapseBadge]} />}</div>
-        {meta && (copy ? <span className="ks-feed-meta-copy">{meta}{!collapsed && handlers.current.copy(JSON.stringify([entry.key, "meta"]), entry.meta!)}</span> : meta)}</div>
-      <div className="ks-feed-head-actions">{canCollapse && <IconButton className="ks-feed-collapse-btn" aria-label={collapseLabel} title={collapseLabel} onClick={(event) => { event.stopPropagation(); handlers.current.toggle(entry.key); }}><DataIcon name={collapsed ? "chevron-right" : "chevron-down"} /></IconButton>}</div>
+      <div className="ks-feed-ident"><div className="ks-feed-name-line">{hasCheck ? <button type="button" role="checkbox" aria-checked={checked} aria-label={checked ? "완료 취소" : "완료"} title={checked ? "완료 취소" : "완료"} className={`ks-tree-check${checked ? " is-checked" : ""}`} onClick={(event) => { event.stopPropagation(); handlers.current.choose(entry); }}>{checked ? "✓" : ""}</button> : checkable ? <span aria-hidden="true" className="ks-tree-check is-placeholder" /> : null}{typeof entry.name === "string" && <strong className={nameColor ? "has-color" : undefined} style={nameColor ? { "--ks-feed-name-color": nameColor } as React.CSSProperties : undefined}>{entry.name}</strong>}<Badges values={entry.badges} />{collapseBadge && <Badges values={[collapseBadge]} />}</div>
+        {meta && (copy ? <span className="ks-feed-meta-copy">{!collapsed && handlers.current.copy(JSON.stringify([entry.key, "meta"]), entry.meta!)}{meta}</span> : meta)}</div>
+      {canCollapse && <div className="ks-feed-head-actions"><IconButton className="ks-feed-collapse-btn" aria-label={collapseLabel} title={collapseLabel} onClick={(event) => { event.stopPropagation(); handlers.current.toggle(entry.key); }}><DataIcon name={collapsed ? "chevron-right" : "chevron-down"} /></IconButton></div>}
     </div>
     {!collapsed && hasBody && <div className={`ks-feed-body tone-${entry.tone ?? "default"}${columns ? " is-columns" : ""}`}>{bodyParts.map((line, part) => copy ? <div className="ks-feed-copy-cell" key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}{handlers.current.copy(JSON.stringify([entry.key, "body", part]), line)}</div> : <div key={part}>{format === "markdown" ? <MarkdownText>{line}</MarkdownText> : line}</div>)}</div>}
     {!collapsed && hasMedia ? <div className="ks-feed-media">{entry.media!.map((media, index) => isMedia(media.image) &&
@@ -184,6 +185,11 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   }, [value, block.grouped, collapsedGroups, collapsedKeys]);
   const items = useMemo(() => rows.flatMap((row) => row.kind === "entry" ? [row.item.entry] : []), [rows]);
   const checkable = useMemo(() => items.some((entry) => typeof entry.checked === "boolean"), [items]);
+  // 접힌 묶음과 답글까지 모든 항목을 본다. 보이는 줄만 세면 초상이 든 묶음을 접을 때 다른 줄의 빈 초상 칸이 사라져 글이 옮겨진다.
+  const avatars = useMemo(() => groups(value, Boolean(block.grouped), valid).some((group) => {
+    const entries = group.items.map((entry) => asFeedEntry(entry)!).filter(Boolean);
+    return flattenFeedEntries(entries).some((item) => isMedia(item.entry.image));
+  }), [value, block.grouped]);
   const entryRows = useMemo(() => rows.flatMap((row, index) => row.kind === "entry" ? [index] : []), [rows]);
   const rowKeys = useMemo(() => rows.map((row) => row.kind === "entry" ? [row.item.entry.key] : []), [rows]);
   const { scroll, virtual } = useVirtualRows(rows.length, 72, undefined, false, undefined, undefined, rowKeys);
@@ -275,7 +281,7 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
         </div> : <GroupHeading title={row.title} meta={row.meta} /> : (() => {
           const entry = row.item.entry;
           const feedback = JSON.stringify([copyFeedback[JSON.stringify([entry.key, "meta"])], ...(typeof entry.body === "string" ? [entry.body] : entry.body).map((_, index) => copyFeedback[JSON.stringify([entry.key, "body", index])])]);
-          return <FeedRow item={row.item} index={row.index} count={entryRows.length} collapsed={collapsedKeys.has(entry.key)} active={entry.key === selected} focused={roving.focus === row.index} selectable={Boolean(block.on_select) && !checkable} checkable={checkable} copy={Boolean(block.copy)} columns={Boolean(block.columns)} format={block.format} collapsible={Boolean(block.collapsible)} feedback={feedback} handlers={handlers} />;
+          return <FeedRow item={row.item} index={row.index} count={entryRows.length} collapsed={collapsedKeys.has(entry.key)} active={entry.key === selected} focused={roving.focus === row.index} selectable={Boolean(block.on_select) && !checkable} checkable={checkable} copy={Boolean(block.copy)} columns={Boolean(block.columns)} format={block.format} collapsible={Boolean(block.collapsible)} avatar={avatars} feedback={feedback} handlers={handlers} />;
         })()}
       </div>;
     })}</VirtualSurface>

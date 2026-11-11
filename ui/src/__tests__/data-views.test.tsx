@@ -909,6 +909,87 @@ it("does not add feed copy controls when copy is off", async () => {
   expect(document.querySelector(".ks-feed-copy-cell")).toBeNull();
 });
 
+it("사진이 있는 feed는 사진 없는 줄에도 글 시작선을 맞출 빈 초상 자리를 둔다", async () => {
+  setup({ type: "feed", entries: [
+    { key: "with-image", name: "사진 있음", image: { permission: "media", path: "landscape.png" }, body: "사진 본문" },
+    { key: "no-image", name: "사진 없음", body: "사진 없는 본문" },
+  ] } as unknown as Block);
+  const withImage = (await screen.findByText("사진 본문")).closest("article")!;
+  const noImage = screen.getByText("사진 없는 본문").closest("article")!;
+  expect(withImage.querySelector(".ks-media-thumbnail.ks-feed-avatar")).not.toBeNull();
+  expect(withImage.querySelector(".ks-feed-avatar.is-placeholder")).toBeNull();
+  const placeholder = noImage.querySelector(".ks-feed-avatar.is-placeholder");
+  expect(placeholder).not.toBeNull();
+  expect(placeholder!.getAttribute("aria-hidden")).toBe("true");
+});
+
+it("사진이 하나도 없는 feed에는 초상 자리를 만들지 않는다", async () => {
+  setup({ type: "feed", entries: [{ key: "a", name: "이름", body: "사진 없는 본문" }] } as unknown as Block);
+  const entry = (await screen.findByText("사진 없는 본문")).closest("article")!;
+  expect(entry.querySelector(".ks-feed-avatar")).toBeNull();
+});
+
+it("사진 든 묶음을 접어도 다른 묶음 줄의 초상 자리는 남는다", async () => {
+  setup({ type: "feed", grouped: true, collapsible: true, entries: [
+    { title: "사진", items: [{ key: "with-image", name: "사진 있음", image: { permission: "media", path: "landscape.png" }, body: "사진 본문" }] },
+    { title: "글", items: [{ key: "no-image", name: "사진 없음", body: "사진 없는 본문" }] },
+  ] } as unknown as Block);
+  const noImage = () => screen.getByText("사진 없는 본문").closest("article")!;
+  expect(await screen.findByText("사진 없는 본문")).toBeTruthy();
+  expect(noImage().querySelector(".ks-feed-avatar.is-placeholder")).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "사진" }));
+  expect(screen.queryByText("사진 본문")).toBeNull();
+  expect(noImage().querySelector(".ks-feed-avatar.is-placeholder")).not.toBeNull();
+});
+
+it("feed 메타 복사는 메타 글 앞에 서고 머리 동작 칸은 접을 수 있는 줄에만 있다", async () => {
+  setup({ type: "feed", copy: true, collapsible: true, entries: [
+    { key: "reply-parent", name: "부모", meta: "id-1", body: "부모 본문", children: [{ key: "reply-child", name: "자식", body: "자식 본문" }] },
+  ] } as unknown as Block);
+  const parent = (await screen.findByText("부모 본문")).closest("article")!;
+  const metaCopy = parent.querySelector(".ks-feed-meta-copy")!;
+  const first = metaCopy.firstElementChild!;
+  expect(first.classList.contains("ks-feed-copy-control")).toBe(true);
+  expect(first.querySelector("button")?.getAttribute("aria-label")).toBe("복사");
+  expect(metaCopy.textContent).toBe("id-1");
+  expect(parent.querySelector(".ks-feed-head-actions button")?.getAttribute("aria-label")).toBe("답글 1개 접기");
+
+  cleanup();
+  setup({ type: "feed", copy: true, entries: [{ key: "flat", name: "단일", meta: "id-2", body: "단일 본문" }] } as unknown as Block);
+  const flat = (await screen.findByText("단일 본문")).closest("article")!;
+  expect(flat.querySelector(".ks-feed-head-actions")).toBeNull();
+  expect(flat.querySelector(".ks-feed-meta-copy")?.textContent).toBe("id-2");
+});
+
+it("feed 메타 링크가 있어도 복사 단추가 링크보다 먼저 탭 순서에 온다", async () => {
+  setup({ type: "feed", copy: true, entries: [
+    { key: "a", name: "이름", meta: "id-1", link: "https://example.com", body: "본문" },
+  ] } as unknown as Block);
+  const entry = (await screen.findByText("본문")).closest("article")!;
+  const copy = entry.querySelector(".ks-feed-meta-copy button")!;
+  const link = entry.querySelector(".ks-feed-meta-copy a")!;
+  expect(link.getAttribute("href")).toBe("https://example.com");
+  expect(copy.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("feed 이름 색은 인라인 color 대신 밝기 한계를 거는 토큰으로 넘긴다", async () => {
+  setup({ type: "feed", entries: [
+    { key: "colored", name: "색 이름", color: "#5b6fd6", body: "색 본문" },
+    { key: "invalid", name: "잘못된 색", color: "red", body: "잘못된 본문" },
+    { key: "plain", name: "민무늬 이름", body: "민무늬 본문" },
+  ] } as unknown as Block);
+  const colored = (await screen.findByText("색 이름")).closest("strong")!;
+  expect(colored.classList.contains("has-color")).toBe(true);
+  expect(colored.style.getPropertyValue("--ks-feed-name-color")).toBe("#5b6fd6");
+  expect(colored.style.color).toBe("");
+  const invalid = screen.getByText("잘못된 색").closest("strong")!;
+  expect(invalid.classList.contains("has-color")).toBe(false);
+  expect(invalid.style.getPropertyValue("--ks-feed-name-color")).toBe("");
+  const plain = screen.getByText("민무늬 이름").closest("strong")!;
+  expect(plain.classList.contains("has-color")).toBe(false);
+  expect(plain.getAttribute("style")).toBeNull();
+});
+
 it("does not select a feed entry with Enter while its text is selected", async () => {
   const { calls } = setup({ type: "feed", entries: [{ key: "a", name: "이름", body: "첫 줄" }], on_select: { set_state: "choice" } }, { choice: null });
   const text = await screen.findByText("첫 줄");
