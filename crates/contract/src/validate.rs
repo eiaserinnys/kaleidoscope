@@ -2657,6 +2657,10 @@ fn valid_permission_id(value: &str) -> bool {
         })
 }
 
+fn valid_currency_code(value: &str) -> bool {
+    value.len() == 3 && value.bytes().all(|byte| byte.is_ascii_uppercase())
+}
+
 fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<String>, at: &str) {
     let introduced_in = block.introduced_in();
     if definition.requires.blocks < introduced_in {
@@ -3004,7 +3008,39 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
         }
-        Block::Chart { kind, series, .. } => {
+        Block::Chart {
+            kind,
+            series,
+            stacked,
+            number_format,
+            selected,
+            ..
+        } => {
+            if *stacked && *kind != crate::ChartKind::Bar {
+                details.push(format!(
+                    "{at}: chart의 stacked는 kind가 bar일 때만 씁니다"
+                ));
+            }
+            if let Some(format) = number_format {
+                if format.style == crate::NumberStyle::Currency
+                    && !format.currency.as_deref().is_some_and(valid_currency_code)
+                {
+                    details.push(format!(
+                        "{at}/number_format: style이 currency면 currency에 USD 같은 통화 코드 세 글자가 필요합니다"
+                    ));
+                }
+                if format
+                    .maximum_fraction_digits
+                    .is_some_and(|digits| digits > 6)
+                {
+                    details.push(format!(
+                        "{at}/number_format: maximum_fraction_digits는 0부터 6까지입니다"
+                    ));
+                }
+            }
+            if let Some(selected) = selected {
+                validate_ui_binding(selected, definition, details, at);
+            }
             if let data::Binding::Literal(value) = series {
                 match serde_json::from_value::<Vec<data::ChartSeries>>(value.clone()) {
                     Err(_) => details.push(format!("{at}: chart series 형식이 올바르지 않습니다")),
@@ -3547,6 +3583,16 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                         column.field
                     ));
                 }
+                if column
+                    .sort_field
+                    .as_ref()
+                    .is_some_and(|sort_field| sort_field.is_empty())
+                {
+                    details.push(format!(
+                        "{at}: table 열 {}의 sort_field가 비어 있습니다",
+                        column.field
+                    ));
+                }
             }
             if let (Some(columns), Some(header)) = (static_columns, row_header) {
                 if !columns.first().is_some_and(|column| {
@@ -3594,6 +3640,13 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                                         || column.format != crate::CellFormat::Content
                                 }) {
                                     details.push(format!("{at}/columns: table 열 {}의 max_lines는 content에서 1부터 3까지입니다", column.field));
+                                }
+                                if column
+                                    .sort_field
+                                    .as_ref()
+                                    .is_some_and(|sort_field| sort_field.is_empty())
+                                {
+                                    details.push(format!("{at}/columns: table 열 {}의 sort_field가 비어 있습니다", column.field));
                                 }
                             }
                             if let Some(header) = row_header {

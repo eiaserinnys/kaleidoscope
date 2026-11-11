@@ -77,8 +77,9 @@ function normalizeColumns(value: unknown, rowHeader?: string, cell = false): { c
   const values = asArray(value);
   const fields = new Set<string>();
   for (const [index, column] of values.entries()) {
-    if (!isObject(column) || Object.keys(column).some((key) => !["field", "label", "width", "format", "max_lines"].includes(key)) || typeof column.field !== "string" || typeof column.label !== "string" ||
+    if (!isObject(column) || Object.keys(column).some((key) => !["field", "label", "width", "format", "max_lines", "sort_field"].includes(key)) || typeof column.field !== "string" || typeof column.label !== "string" ||
         (column.width !== undefined && (typeof column.width !== "string" || !["narrow", "medium", "wide", "fill"].includes(column.width))) ||
+        (column.sort_field !== undefined && typeof column.sort_field !== "string") ||
         (column.format !== undefined && (typeof column.format !== "string" || !["text", "number", "date", "badge", "delta", "sparkline", "content"].includes(column.format))) ||
         (column.max_lines !== undefined && (!Number.isInteger(column.max_lines) || Number(column.max_lines) < 1 || Number(column.max_lines) > 3 || column.format !== "content"))) {
       const field = isObject(column) && typeof column.field === "string" ? column.field : `${index + 1}번째`;
@@ -180,10 +181,11 @@ function RowTableView({ rootProps, columns: sourceColumns, rows: sourceRows, ini
       const customCompare = compareRows?.(a, b, sort);
       if (customCompare !== undefined) return customCompare;
       const cmp = (() => {
-        const left = a[sort.field], right = b[sort.field];
-        const format = sourceColumns.find((column) => column.field === sort.field)?.format;
-        if (format === "delta") return (numeric(left) ?? 0) - (numeric(right) ?? 0);
-        if (format === "sparkline") {
+        const column = sourceColumns.find((item) => item.field === sort.field);
+        const left = a[column?.sort_field ?? sort.field], right = b[column?.sort_field ?? sort.field];
+        if (column?.sort_field) return typeof left === "number" && typeof right === "number" ? left - right : String(left ?? "").localeCompare(String(right ?? ""), undefined, { numeric: true });
+        if (column?.format === "delta") return (numeric(left) ?? 0) - (numeric(right) ?? 0);
+        if (column?.format === "sparkline") {
           const change = (value: JsonValue | undefined) => { const values = trend(value); return values.length < 2 ? 0 : (values.at(-1)! - values[0]) / (Math.abs(values[0]) || 1); };
           return change(left) - change(right);
         }
