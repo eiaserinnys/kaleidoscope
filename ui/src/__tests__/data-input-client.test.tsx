@@ -158,6 +158,21 @@ it.each(["cancel", "lost", "unmount"])("스핀 %s 종료는 반복을 멈추고 
   } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
 });
 
+it.each(["key", "hold"])("스핀 중 해체되면 타이머를 남기지 않고 마지막 값을 바로 보낸다: %s", async (how) => {
+  vi.useFakeTimers(); vi.stubGlobal("PointerEvent", MouseEvent);
+  try {
+    const input = { type: "input", kind: "number", spin: true, value: 1, on_change: { client: "change" } };
+    const view = render(<InputBlock block={input as never} context={{} as never} pointer="/input" />);
+    if (how === "key") fireEvent.keyDown(screen.getByRole("spinbutton"), { key: "ArrowUp" });
+    else fireEvent.pointerDown(screen.getByRole("button", { name: "늘리기" }), { button: 0 });
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    await act(async () => { await Promise.resolve(); });
+    expect(runtime.act).toHaveBeenCalledTimes(1);
+    expect(runtime.act).toHaveBeenCalledWith("/input/on_change", 2, undefined, undefined, undefined, { input: true });
+  } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
+});
+
 it("빈 숫자는 0에서 시작하고 경계 없는 Home은 텍스트 조작에 남긴다", () => {
   vi.useFakeTimers();
   try {
