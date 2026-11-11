@@ -17,6 +17,7 @@ import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data
 import { eventModifiers } from "../runtime/shortcuts";
 import { formatClockTime, isClock, useClockPosition } from "../data/clock";
 import { SplitPaneContext } from "./split-pane-context";
+import { ToolbarContext } from "./toolbar-context";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 
@@ -296,7 +297,7 @@ export function ToolbarBlock({ block, context, pointer }: Props<"toolbar">) {
     if (focused.left < left) track.scrollLeft += focused.left - left;
     else if (focused.right > right) track.scrollLeft += focused.right - right;
   };
-  return <div {...blockRoot} className="ks-data-toolbar" onFocus={revealFocus} ref={trackRef}><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></div>;
+  return <div {...blockRoot} className="ks-data-toolbar" onFocus={revealFocus} ref={trackRef}><ToolbarContext.Provider value={true}><div className="ks-data-toolbar-group is-start">{children(block.start, "start")}</div><div className="ks-data-toolbar-group is-end">{children(block.end ?? [], "end")}</div></ToolbarContext.Provider></div>;
 }
 
 export function SectionBlock({ block, context, pointer }: Props<"section">) {
