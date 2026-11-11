@@ -125,9 +125,9 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
   const previousFocus = useRef<JsonValue | typeof uninitializedFocus>(uninitializedFocus);
   useEffect(() => () => {
     unregisterFlush.current?.();
-    if (spinPending.current && edited.current) {
-      if (!timer.current) timer.current = setTimeout(() => { void sendDraftRef.current(timerValue.current); }, 300);
-    } else if (timer.current) clearTimeout(timer.current);
+    // 사라지는 블록에는 더 이어질 스핀이 없으니 기다리지 않고 마지막 값을 바로 보낸다. 해체 뒤까지 남는 타이머를 두지 않는다.
+    if (spinPending.current && edited.current) void sendDraftRef.current(timerValue.current);
+    else if (timer.current) clearTimeout(timer.current);
   }, []);
   useLayoutEffect(() => {
     if (!locked) {

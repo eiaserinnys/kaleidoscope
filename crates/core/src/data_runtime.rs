@@ -640,9 +640,10 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
                     message: error.message,
                     has_value: false,
                     id: error.id,
+                    details: error.details,
                 }
             }
-            SourcePlan::StoreInvalid(error) => SourceStatus::Failed { message: error.message.clone(), has_value: false, id: error.id.clone() },
+            SourcePlan::StoreInvalid(error) => SourceStatus::Failed { message: error.message.clone(), has_value: false, id: error.id.clone(), details: error.details.clone() },
             _ => SourceStatus::Idle {},
         };
     }
@@ -940,6 +941,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                                 message: err.message,
                                 has_value: runtime.data.contains_key(&job.name),
                                 id: err.id,
+                                details: err.details,
                             }
                         }
                     }
@@ -1691,6 +1693,7 @@ mod freshness_tests {
             message: "원천 요청 실패".into(),
             has_value: false,
             id: Some("CONN_REQUEST_PUBLIC_HTTP_FAILED".into()),
+            details: Vec::new(),
         };
         let pointer = runtime
             .compiled
@@ -1833,6 +1836,7 @@ mod freshness_tests {
             message: "오류".into(),
             has_value: true,
             id: None,
+            details: Vec::new(),
         };
         let meta = &runtime.source_meta()["item"];
         assert!(meta.stale && meta.updated_at.is_some());

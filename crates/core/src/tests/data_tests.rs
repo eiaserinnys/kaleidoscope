@@ -1203,9 +1203,19 @@ fn source_safety_failed_refresh_keeps_value_and_reports_error_in_layout() {
         matches!(view.values.get("/ui/children/0/items"), Some(BindingValue::Ready { value, .. }) if value == &json!([{"key":"cached"}]))
     );
     let errors = crate::data_runtime::layout_errors(&core.inner);
-    assert!(errors
+    let entry = errors
         .iter()
-        .any(|entry| entry.window_id == window && entry.pointer == "/sources/items"));
+        .find(|entry| entry.window_id == window && entry.pointer == "/sources/items")
+        .expect("원천 실패가 배치 보고에 실린다");
+    assert_eq!(
+        entry.code.as_deref(),
+        Some("DATA_SOURCE_RESPONSE_SERVER_ERROR")
+    );
+    assert!(
+        entry.details.iter().any(|detail| detail == "HTTP 상태: 500"),
+        "원천 실패 원인이 실린다: {:?}",
+        entry.details
+    );
 }
 
 #[cfg(unix)]

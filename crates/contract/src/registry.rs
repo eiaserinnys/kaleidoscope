@@ -280,7 +280,8 @@
 //!   올리기를 거부한다. revision은 md 원문 UTF-8 바이트 또는 키를 정렬한 JSON 직렬화 바이트의 SHA-256이다.
 //!
 //! 식 오류 보고: 코어는 배치 보고([`DeviceLayout::data_errors`])에 이은 창의 식과 원천 오류를 창마다 앞에서부터
-//! [`LAYOUT_DATA_ERRORS_MAX`]개까지 싣는다. 에이전트가 MCP의 작업 조회로 보고 고친다.
+//! [`LAYOUT_DATA_ERRORS_MAX`]개까지 싣고, 오류마다 코드(`code`)와 원인(`details`, 앞 [`LAYOUT_DATA_ERROR_DETAILS_MAX`]개,
+//! 각 [`LAYOUT_DATA_ERROR_DETAIL_CHARS`]자까지)을 함께 실는다. 에이전트가 MCP의 작업 조회로 보고 고친다.
 
 use std::collections::BTreeMap;
 
@@ -365,6 +366,10 @@ pub fn device_app_storage_item_path(app_id: &str, entry_id: &str) -> String {
 
 /// 배치 보고에 창마다 싣는 식과 원천 오류의 최대 수.
 pub const LAYOUT_DATA_ERRORS_MAX: usize = 10;
+/// 오류 하나에 싣는 원인(`details`)의 최대 수.
+pub const LAYOUT_DATA_ERROR_DETAILS_MAX: usize = 4;
+/// 오류 원인 한 줄의 최대 글자 수. 넘으면 잘라내고 `…`를 붙인다.
+pub const LAYOUT_DATA_ERROR_DETAIL_CHARS: usize = 300;
 
 /// 배치가 바뀐 뒤 이만큼 더 바뀌지 않으면 보고한다.
 pub const LAYOUT_DEBOUNCE_MS: u64 = 1000;
@@ -482,6 +487,12 @@ pub struct LayoutDataError {
     pub window_id: String,
     pub pointer: String,
     pub message: String,
+    /// 오류 코드. 새 쉘이 싣는다. 옛 쉘 보고에는 없다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    /// 오류 원인. 새 쉘이 싣는다. 없으면 빈 배열이다.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<String>,
 }
 
 /// 창의 권한 하나에 고른 폴더의 이름. 절대 경로는 담지 않는다.

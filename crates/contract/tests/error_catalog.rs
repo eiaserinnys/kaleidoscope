@@ -21,19 +21,26 @@ fn conversation_binding_errors_use_the_workspace_name_once() {
 }
 
 #[test]
-fn process_names_use_particles_for_both_consonant_and_vowel_endings() {
+fn process_messages_put_fixed_nouns_after_names() {
     for name in ["cli", "프로그램"] {
-        for error in [
-            errors::PROCESS_START_COMMAND_NOT_FOUND(name),
-            errors::PROCESS_START_SPAWN_NOT_FOUND(name, "원인"),
-            errors::PROCESS_START_SPAWN_PERMISSION_DENIED(name, "원인"),
-            errors::PROCESS_START_SPAWN_FAILED(name, "원인"),
-            errors::PROCESS_START_SERVICE_UNKNOWN(name),
-        ] {
-            assert!(error.message.contains(&format!("{name}을(를)")), "{}", error.message);
-        }
-        for error in [errors::PROCESS_START_PERMISSION_UNDECLARED(name), errors::PROCESS_START_CLIENT_PERMISSION_UNDECLARED(name)] {
-            assert!(error.message.contains(&format!("{name}이(가)")), "{}", error.message);
+        assert_eq!(errors::PROCESS_START_PERMISSION_UNDECLARED(name).message, format!("앱 정의에 {name} 실행 권한이 선언되지 않았습니다. 앱 정의를 고치세요."));
+        assert_eq!(errors::PROCESS_START_CLIENT_PERMISSION_UNDECLARED(name).message, format!("클라이언트에 {name} 실행 권한이 선언되지 않았습니다. 앱 정의를 고치세요."));
+        assert_eq!(errors::PROCESS_START_COMMAND_MISMATCH(name, "승인된프로그램", "실행할프로그램").message, format!("{name} 실행 권한은 승인된프로그램 프로그램만 실행할 수 있는데 실행할프로그램 프로그램을 실행하려 했습니다. 앱 코드의 spec.command를 권한에 선언한 프로그램으로 고치세요."));
+        assert_eq!(errors::PROCESS_START_SERVICE_UNKNOWN(name).message, format!("{name} 프로그램 서비스를 알 수 없습니다. 앱 코드에서 지원하는 서비스 이름을 사용하세요."));
+        assert_eq!(errors::PROCESS_START_COMMAND_NOT_FOUND(name).message, format!("{name} 프로그램을 찾지 못했습니다. 이 PC에 설치되어 있는지 확인하세요."));
+        assert_eq!(errors::PROCESS_START_SPAWN_NOT_FOUND(name, "원인").message, format!("{name} 프로그램을 실행하는 데 필요한 파일을 찾지 못했습니다. 설치와 실행 환경을 확인하세요. 원인: 원인"));
+        assert_eq!(errors::PROCESS_START_SPAWN_PERMISSION_DENIED(name, "원인").message, format!("{name} 프로그램을 실행할 권한이 없습니다. 이 PC의 실행 권한을 확인하세요. 원인: 원인"));
+        assert_eq!(errors::PROCESS_START_SPAWN_FAILED(name, "원인").message, format!("{name} 프로그램을 실행하지 못했습니다. 원인을 확인한 뒤 다시 실행하세요. 원인: 원인"));
+    }
+}
+
+#[test]
+fn process_error_texts_have_no_alternate_particles() {
+    for entry in errors::all().filter(|entry| entry.id.starts_with("PROCESS_")) {
+        for text in [entry.place, entry.cause, entry.message, entry.fix] {
+            for particle in ["(를)", "(가)", "(는)", "(으)로"] {
+                assert!(!text.contains(particle), "{}: {text}", entry.id);
+            }
         }
     }
 }

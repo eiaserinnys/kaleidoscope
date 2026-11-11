@@ -296,6 +296,8 @@
 .ks-data-segmented .ks-button { border-radius: 0; }
 .ks-data-segmented > .ks-button { flex: 1 1 auto; min-width: 0; }
 .ks-data-segmented .ks-truncate-label { min-width: 1.5em; }
+/* 분할 단추에는 고르기 단추의 칸 간격이 없어, 같은 이름을 가르는 묶음 이름을 값과 같은 간격으로 띄운다. */
+.ks-data-segmented .ks-select-context-label { margin-inline-start: var(--ks-space-2); }
 .ks-data-segmented > .ks-button:has(> .ks-truncate-label) { padding-inline: var(--ks-space-1); }
 .ks-data-segmented > .ks-button:has(> .ks-truncate-label)::before, .ks-data-segmented > .ks-button:has(> .ks-truncate-label)::after { content: ""; width: calc(var(--ks-space-3) - var(--ks-space-1)); min-width: 0; flex: 0 100000 auto; }
 .ks-data-segmented .ks-button:first-child { border-radius: var(--ks-radius-small) 0 0 var(--ks-radius-small); }
@@ -579,6 +581,8 @@
 
 .ks-select-field { max-width: 100%; min-width: 0; }
 .ks-select-field > .ks-button { justify-content: space-between; text-align: start; }
+/* 겹칠 때 밝히는 묶음 이름은 고른 값 바로 옆에 붙고, 남는 자리는 펼침 표시 앞에서 비운다. */
+.ks-select-field > .ks-button > .ks-select-context-label { margin-inline-end: auto; }
 
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > .ks-input-field { display: flex; width: 100%; min-width: 0; }
 .ks-data-stack.is-row > .ks-data-stack-item.is-fill > :is(.ks-slider-field, .ks-select-field) { width: 100%; min-width: 0; }

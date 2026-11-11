@@ -11,10 +11,19 @@ async function capture(page: import("@playwright/test").Page, name: string) {
 
 test("범용 블록의 탭, 입력, 확인과 상태를 조작한다", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  // 하니스의 1초 지연은 페이지가 늦게 뜨면 시험이 보기 전에 끝난다(카드 #1167). 응답을 시험이 풀 때까지 붙잡는다.
+  await page.addInitScript(() => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const gate = { started: false, wait: () => { gate.started = true; return held; }, release: () => release() };
+    Object.assign(window, { dataSampleGate: gate });
+  });
   await page.goto("/?preview=data-controls");
   const app = page.getByTestId("app-window-data-controls");
+  await expect.poll(() => page.evaluate(() => (window as any).dataSampleGate.started)).toBe(true);
   await expect(app.getByRole("status", { name: "불러오는 중" })).toBeVisible();
   await capture(page, "wide-loading");
+  await page.evaluate(() => (window as any).dataSampleGate.release());
   await expect(app.getByText("데이터를 불러왔습니다")).toBeVisible();
   await expect(app.getByText("데이터를 받지 못했습니다").first()).toBeVisible();
   await capture(page, "wide-ready");
@@ -324,9 +333,10 @@ async function checkTabAndScroll(page: import("@playwright/test").Page, bar: imp
   }
 }
 
-test("도구 막대의 모든 조합은 같은 높이와 세로 가운데를 유지한다", async ({ page }) => {
-  for (const width of [1000, 360]) {
-    for (const scenario of ["split", "variants", "label"] as const) {
+// 페이지를 새로 띄우는 조합마다 시험을 나눈다. 한 시험에 여러 번 띄우기를 묶으면 부하에서 60초 제한을 넘는다(카드 #1167).
+for (const width of [1000, 360]) {
+  for (const scenario of ["split", "variants", "label"] as const) {
+    test(`도구 막대의 모든 조합은 같은 높이와 세로 가운데를 유지한다: ${scenario} ${width}`, async ({ page }) => {
       const app = await showToolbarScenario(page, width, scenario);
       await capture(page, `${scenario}-${width}`);
       const metrics = await checkToolbarGeometry(app);
@@ -336,13 +346,13 @@ test("도구 막대의 모든 조합은 같은 높이와 세로 가운데를 유
         await checkTabAndScroll(page, app.locator(".ks-data-toolbar").last());
         expect(await app.locator(".ks-data-window-body").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
       }
-    }
+    });
   }
-});
+}
 
-test("붐비는 도구 막대의 모든 조작을 가로 스크롤과 Tab으로 사용할 수 있다", async ({ page }) => {
-  for (const width of [1000, 800, 360]) {
-    for (const scenario of ["jizura", "ktx"] as const) {
+for (const width of [1000, 800, 360]) {
+  for (const scenario of ["jizura", "ktx"] as const) {
+    test(`붐비는 도구 막대의 모든 조작을 가로 스크롤과 Tab으로 사용할 수 있다: ${scenario} ${width}`, async ({ page }) => {
       const app = await showToolbarScenario(page, width, scenario);
       const bar = app.locator(".ks-data-toolbar");
       await capture(page, `${scenario}-${width}`);
@@ -364,9 +374,9 @@ test("붐비는 도구 막대의 모든 조작을 가로 스크롤과 Tab으로 
         await capture(page, "jizura-360-menu");
         await page.keyboard.press("Escape");
       }
-    }
+    });
   }
-});
+}
 
 test("긴 제목은 말줄임되고 끝 조작은 막대에 남는다", async ({ page }) => {
   for (const [width, scenario] of [[1000, "split"], [360, "variants"]] as const) {
@@ -480,9 +490,9 @@ test("빈 묶음은 간격을 차지하지 않고 끝 묶음만 있어도 오른
   expect(await rightInset(endOnly.locator(".ks-data-toolbar"))).toBe(12);
 });
 
-test("기본 앱은 최소 창에서는 두 줄이고 넓은 창에서는 기존 한 줄이다", async ({ page }) => {
-  for (const id of ["reader", "market", "earth", "profiler"]) {
-    for (const width of [360, 1000]) {
+for (const id of ["reader", "market", "earth", "profiler"]) {
+  for (const width of [360, 1000]) {
+    test(`기본 앱은 최소 창에서는 두 줄이고 넓은 창에서는 기존 한 줄이다: ${id} ${width}`, async ({ page }) => {
       await page.setViewportSize({ width:width + 40, height:400 });
       await page.goto(`/?preview=${id}`);
       await page.addStyleTag({ content:`.ks-harness-apps.is-preview .ks-harness-window { width:${width}px; height:240px; }` });
@@ -511,9 +521,9 @@ test("기본 앱은 최소 창에서는 두 줄이고 넓은 창에서는 기존
         await bars.nth(2).scrollIntoViewIfNeeded();
         if (output) await app.screenshot({ path:join(output, "revision-market-converter-360.png") });
       }
-    }
+    });
   }
-});
+}
 
 test("기본 앱은 폭 전환 뒤에도 고른 상태와 입력을 유지한다", async ({ page }) => {
   await page.setViewportSize({ width:400, height:400 });
@@ -534,15 +544,14 @@ test("기본 앱은 폭 전환 뒤에도 고른 상태와 입력을 유지한다
   await expect(app.getByPlaceholder("검색")).toHaveValue("kaleidoscope");
 });
 
-test("기본 앱의 두 줄 전환은 글꼴 폭 여유를 더한 막대 경계에서 일어난다", async ({ page }) => {
-  const cases = [
-    { id:"reader", boundary:558, narrow:2, wide:1 },
-    { id:"market", boundary:614, narrow:4, wide:3 },
-    { id:"market", boundary:715, narrow:3, wide:2 },
-    { id:"earth", boundary:612, narrow:2, wide:1 },
-    { id:"profiler", boundary:442, narrow:2, wide:1 },
-  ];
-  for (const { id, boundary, narrow, wide } of cases) {
+for (const { id, boundary, narrow, wide } of [
+  { id:"reader", boundary:558, narrow:2, wide:1 },
+  { id:"market", boundary:614, narrow:4, wide:3 },
+  { id:"market", boundary:715, narrow:3, wide:2 },
+  { id:"earth", boundary:612, narrow:2, wide:1 },
+  { id:"profiler", boundary:442, narrow:2, wide:1 },
+]) {
+  test(`기본 앱의 두 줄 전환은 글꼴 폭 여유를 더한 막대 경계에서 일어난다: ${id} ${boundary}`, async ({ page }) => {
     await page.setViewportSize({ width:1040, height:400 });
     await page.goto(`/?preview=${id}`);
     const style = await page.addStyleTag({ content:`.ks-harness-apps.is-preview .ks-harness-window { width:${boundary + 2}px; height:240px; }` });
@@ -552,8 +561,8 @@ test("기본 앱의 두 줄 전환은 글꼴 폭 여유를 더한 막대 경계�
     await style.evaluate((node, width) => { node.textContent = `.ks-harness-apps.is-preview .ks-harness-window { width:${width + 3}px; height:240px; }`; }, boundary);
     await expect(app.locator(".ks-data-window")).toHaveJSProperty("clientWidth", boundary + 1);
     await expect(app.locator(".ks-data-toolbar")).toHaveCount(wide);
-  }
-});
+  });
+}
 
 test("탭 안 분할의 도구 막대는 쌓인 칸과 나란한 칸에서 높이를 유지한다", async ({ page }) => {
   for (const width of [360, 1000]) {
