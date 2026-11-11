@@ -10,7 +10,9 @@ Kaleidoscope.md와 Create-plugins-preview.md의 표다. 앞의 여섯은 마크�
 장면마다 표 높이와 칸별 폭·줄 수, is-tight 여부, 가로 넘침을 result.json에 남긴다.
 1180×720에서 긴 주소 표와 긴 문장 칸 표의 짧은 칸은 한 줄이어야 하고, 360×240에서
 긴 영어 낱말 표와 맨 SHA 표는 is-tight로 물러서 넘치지 않아야 한다. 편집기의 맨 주소는
-.ks-live-link span으로 그려져야 한다.
+.ks-live-link span으로 그려져야 한다. 기본 문서 장면은 360×240에서 편집기 가로 넘침과
+표 오른쪽 넘침도 판정하고, 칸이 가장 많은 표를 화면에 올린 {장면}-widest-table.png를
+한 장 더 찍어 장면에 그 경로를 남긴다(카드 #1170).
 
 --baseline에 수정 전 result.json이 있는 폴더를 주면 장면마다 기준과 대조한다. 표 수나 칸 수가
 다르거나 기준에 없던 넘침이 생기면 실패로 적는다. 표 높이가 1px 넘게 늘거나 어느 칸의 줄 수가
@@ -345,7 +347,7 @@ def main():
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(ignore_default_args=["--hide-scrollbars"])
 
-            def measure_and_capture(key, name, kind, width, height, file, text=None, marker=None, wait_table=True):
+            def measure_and_capture(key, name, kind, width, height, file, text=None, marker=None, wait_table=True, widest_table=False):
                 # 장면마다 새 페이지를 연다. 한 페이지로 수십 장면을 넘기면 렌더러가 죽어 다음 장면이 뜨지 않는다.
                 page = browser.new_page()
                 try:
@@ -360,6 +362,29 @@ def main():
                         page.locator("[data-testid=app-window-storage-document] .ks-markdown-text table").first.wait_for(state="visible", timeout=30000)
                         measurement = page.evaluate(VIEW_TABLES_JS)
                     page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
+                    if widest_table and measurement.get("tables"):
+                        # 표가 화면 밖이라 기존 캡처에 없을 수 있다. 칸이 가장 많은 표의 문서 위치로 내려 한 장 더 찍는다.
+                        widest = max(measurement["tables"], key=lambda table: len(table["cells"]))
+                        page.evaluate(
+                            "(top) => { const scroller = document.querySelector('[data-testid=app-window-md-editor] .cm-scroller'); if (scroller) scroller.scrollTop = top; }",
+                            widest["offset"],
+                        )
+                        page.wait_for_function(
+                            "({ cells }) => {"
+                            " const scroller = document.querySelector('[data-testid=app-window-md-editor] .cm-scroller');"
+                            " if (!scroller) return false;"
+                            " const box = scroller.getBoundingClientRect();"
+                            " return [...scroller.querySelectorAll('.ks-live-table')].some((table) => {"
+                            "  const rect = table.getBoundingClientRect();"
+                            "  return table.querySelectorAll('th, td').length === cells && rect.top >= box.top - 1 && rect.top < box.bottom;"
+                            " });"
+                            "}",
+                            arg={"cells": len(widest["cells"])},
+                            timeout=30000,
+                        )
+                        capture = output / f"{key}-widest-table.png"
+                        page.screenshot(path=str(capture), animations="disabled")
+                        measurement["widest_table_capture"] = str(capture)
                     return measurement
                 finally:
                     page.close()
@@ -398,8 +423,8 @@ def main():
                             print(key, "ok", detail)
                 for name, (file, marker) in INVARIANT_DOCUMENTS.items():
                     key = f"{name}-editor-{width}x{height}"
-                    measurement = measure_and_capture(key, name, "editor", width, height, file, marker=marker, wait_table=False)
-                    checks = {"table_present": bool(measurement.get("tables"))}
+                    measurement = measure_and_capture(key, name, "editor", width, height, file, marker=marker, wait_table=False, widest_table=True)
+                    checks = judge_scene(measurement, name, "editor", width) if width == 360 else {"table_present": bool(measurement.get("tables"))}
                     detail = ""
                     changes = []
                     if baseline is not None:

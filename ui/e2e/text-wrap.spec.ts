@@ -238,6 +238,11 @@ const PLAIN_SHA_TABLE = `| PR | 커밋 | 상태 |
 |---|---|---|
 | 544 | 32cd90b8e06a3591092003c29cf3a0280464f39a | 머지 |
 `;
+// 기본 문서 Kaleidoscope.md에 든 6열 표와 같은 내용. 최소 창에서 칸 여섯 개의 좌우 여백만으로 감싼 폭을 넘던 표다(카드 #1170).
+const SIX_COLUMN_TABLE = `| 항목 | 상태 | 다음 동작 | 담당 | 날짜 | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| 긴 표 | 준비 중 | 좁은 창에서 줄바꿈 확인 | 테스트 | 오늘 | 표 셀 내용이 폭을 밀어내지 않습니다 |
+`;
 
 async function openTableDocument(page: Page, width: number, height = 720, text = TABLE_DOCUMENT, name = "wide-table.md") {
   await page.setViewportSize({ width, height });
@@ -387,4 +392,18 @@ test("360 폭의 긴 영어 낱말 표와 맨 SHA 표는 is-tight로 물러서 �
     await page.setViewportSize({ width: 1180, height: 720 });
     await expect(viewFit, name).not.toHaveClass(/is-tight/, { timeout: 5000 });
   }
+});
+
+test("360 폭 편집기의 6열 표는 is-tight에서 칸 좌우 여백을 줄여 넘치지 않는다", async ({ page }) => {
+  const app = await openTableDocument(page, 360, 240, SIX_COLUMN_TABLE, "six-columns.md");
+  const fit = app.locator(".ks-table-fit").first();
+  await expect(fit).toHaveClass(/is-tight/, { timeout: 5000 });
+  const dimensions = await app.locator(".cm-scroller").evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+  // 표의 오른쪽 끝이 감싼 폭의 오른쪽 끝을 넘지 않아야 마지막 칸 테두리가 잘리지 않는다. 표를 찾지 못하면 NaN이 되어 실패한다.
+  const rightOverflow = await fit.evaluate((element) => {
+    const table = element.querySelector(".ks-live-table");
+    return table ? table.getBoundingClientRect().right - element.getBoundingClientRect().right : Number.NaN;
+  });
+  expect(rightOverflow).toBeLessThanOrEqual(1);
 });
