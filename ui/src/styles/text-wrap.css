@@ -37,6 +37,9 @@
 
 .ks-field-label { overflow-wrap: break-word; word-break: keep-all; }
 
+/* 도구 막대 안 실패 문구는 한 줄 말줄임이라 아무 글자에서나 끊는다. 낱말 경계에서 끊으면 「…」 뒤에 다음 낱말 폭만큼 빈자리가 남아 에러코드가 문구에서 떨어져 보인다. */
+.ks-data-toolbar .ks-data-state-message { word-break: break-all; }
+
 .ks-markdown-text pre,
 .ks-process-command {
   white-space: pre-wrap;

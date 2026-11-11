@@ -21,9 +21,15 @@
   10. 실패 묶음 안 이웃 요소(아이콘, 문구, 코드, 「다시 받기」나 「로그인」) 사이 간격이
       각각 var(--ks-space-2) 이하이고 겹치지 않는다.
   11. 문구 span의 clientWidth가 calc(3 * var(--ks-space-6))의 계산값 이상이거나,
-      글 전체가 보인다(scrollWidth와 clientWidth 차이 1px 이하이고 한 줄).
+      글 전체가 보인다(가로와 세로 모두 넘치지 않는다. line-clamp로 잘린 글은 세로로 넘친다).
   12. 아이콘 가운데와 코드 가운데에서 elementFromPoint로 짚고 조상으로 올라가면
       title이 전체 문구인 요소가 잡힌다.
+
+말줄임 빈자리 장면(ellipsis-gap-mixed, ellipsis-gap-end-failure, ellipsis-gap-narrow-single):
+  13. 실패를 띄운 창을 1180에서 560까지 20px씩 줄여 가며(narrow-single은 360 하나) 캡처 픽셀로
+      문구 상자 안 마지막 글자(「…」 포함)의 오른쪽 끝을 찾고, 그 뒤 빈자리가
+      var(--ks-type-body) 이하인지 잰다. 낱말 경계에서 끊으면 다음 낱말 폭만큼 빈자리가 남아
+      에러코드가 문구에서 떨어져 보인다.
 
   python3 -P scripts/visual-check/check_toolbar_failure.py --output target/visual-check/toolbar-failure/after3 [--port 포트]
 
@@ -34,6 +40,7 @@
 판정이 하나라도 어긋나면 result.json과 캡처를 남긴 뒤 종료 코드 1로 끝난다.
 """
 import argparse
+import io
 import json
 import os
 import subprocess
@@ -171,6 +178,7 @@ MEASURE_JS = """() => {
   const barExpected = probe('var(--ks-bar-height)');
   const space2 = probe('var(--ks-space-2)');
   const minMessage = probe('calc(3 * var(--ks-space-6))');
+  const typeBody = probe('var(--ks-type-body)');
   const descendants = [...toolbar.querySelectorAll('*')].map((node) => ({ cls: cls(node), bottom: rect(node).bottom, height: rect(node).height, width: rect(node).width }));
   // 시작 무리와 종단 무리의 그려진 상자가 겹치면 좁은 폭에서 코드나 단추가 가려진다.
   const groupRects = (selector) => {
@@ -224,7 +232,7 @@ MEASURE_JS = """() => {
       message: message ? {
         text: message.textContent, clientWidth: message.clientWidth, scrollWidth: message.scrollWidth,
         clientHeight: message.clientHeight, scrollHeight: message.scrollHeight,
-        lineClamp: style.webkitLineClamp || style.WebkitLineClamp, lineCount: message.getClientRects().length,
+        lineClamp: style.webkitLineClamp || style.WebkitLineClamp, lineHeight: parseFloat(style.lineHeight),
         whiteSpace: style.whiteSpace, contain: style.contain,
       } : null,
       code: code ? { text: code.textContent.trim(), ...box(code) } : null,
@@ -248,7 +256,7 @@ MEASURE_JS = """() => {
   return {
     bar: { width: bar.width, height: bar.height, left: bar.left, right: bar.right, bottom: bar.bottom, scrollWidth: toolbar.scrollWidth, clientWidth: toolbar.clientWidth, scrollHeight: toolbar.scrollHeight, clientHeight: toolbar.clientHeight,
       barToken: cs.getPropertyValue('--ks-bar-height').trim(), controlToken: cs.getPropertyValue('--ks-control-height').trim(), expected: barExpected },
-    space2, minMessage,
+    space2, minMessage, typeBody,
     maxDescendantBottom: Math.max(bar.top, ...descendants.map((item) => item.bottom)),
     compactCount: toolbar.querySelectorAll('.ks-data-state-compact').length,
     stateCount: toolbar.querySelectorAll('.ks-data-state').length,
@@ -338,7 +346,7 @@ def judge(measurement, viewport_width, expected):
     checks["message_title_on_cluster"] = len(measurement["states"]) == len(expected["messages"]) and all(
         state["title"] == state["message"]["text"] for state in measurement["states"] if state["message"])
     checks["message_one_line_clamp"] = len(messages) == len(expected["messages"]) and all(
-        item["lineClamp"] == "1" and item["lineCount"] <= 1 for item in messages)
+        item["lineClamp"] == "1" and item["clientHeight"] < 2 * item["lineHeight"] for item in messages)
     ids = measurement["ids"]
     checks["error_codes_shown"] = len(ids) == expected["codes"] and all(
         item["text"] == CODE and item["width"] > 0 and item["height"] > 0 and item["bottom"] <= bar["bottom"] + TOLERANCE for item in ids)
@@ -364,7 +372,7 @@ def judge(measurement, viewport_width, expected):
     # 11. 문구 span의 보이는 폭이 최소 폭 이상이거나 글 전체가 한 줄로 보인다.
     checks["message_min_width_or_full"] = len(messages) == len(expected["messages"]) and all(
         item["clientWidth"] >= measurement["minMessage"] - TOLERANCE
-        or (item["scrollWidth"] - item["clientWidth"] <= TOLERANCE and item["lineCount"] <= 1)
+        or (item["scrollWidth"] - item["clientWidth"] <= TOLERANCE and item["scrollHeight"] - item["clientHeight"] <= TOLERANCE)
         for item in messages)
     # 12. 아이콘과 코드 가운데에서 올라가면 title이 전체 문구인 요소가 잡힌다.
     checks["title_on_icon_hit"] = len(measurement["states"]) == len(expected["messages"]) and all(
@@ -398,6 +406,66 @@ def run_interactions(page, app, harness_calls_before):
     result["retry_sends_refresh"] = any(call.get("sources") == RETRY for call in result["refresh_calls"])
     result["focus_after_retry"] = page.evaluate(FOCUS_JS)
     return result
+
+
+ELLIPSIS_JS = """() => {
+  const app = document.querySelector('[data-testid="app-window-data-views-test"]');
+  const toolbar = app ? app.querySelector('.ks-data-toolbar') : null;
+  if (!toolbar) return null;
+  const box = (node) => { if (!node) return null; const b = node.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width }; };
+  return [...toolbar.querySelectorAll('.ks-data-state-compact')].map((state) => ({
+    message: box(state.querySelector('.ks-data-state-message')), code: box(state.querySelector('.ks-error-id')),
+  }));
+}"""
+
+
+def ink_right(image, rect):
+    """문구 상자 안에서 바탕보다 어두운 픽셀이 있는 가장 오른쪽 열의 다음 x."""
+    left, top, right, bottom = int(rect["left"]), int(rect["top"]), int(rect["right"]), int(rect["bottom"])
+    crop = image.crop((left, top, right, bottom)).convert("L")
+    width, height = crop.size
+    pixels = crop.load()
+    background = pixels[width - 1, 0]
+    last = None
+    for x in range(width):
+        if any(background - pixels[x, y] > 40 for y in range(height)):
+            last = x
+    return None if last is None else left + last + 1
+
+
+def sweep_ellipsis(page, port, output, name, scene, type_body):
+    """13. 폭을 줄여 가며 말줄임 뒤 문구 상자 안 빈자리를 잰다."""
+    from PIL import Image
+    narrow = name == "narrow-single"
+    widths = [360] if narrow else list(range(1180, 559, -20))
+    height = 240 if narrow else 720
+    app = open_scene(page, port, widths[0], height, scene["scene"], scene["state"])
+    emit_failures(page, app, scene["pointers"])
+    rows, worst = [], None
+    for width in widths:
+        page.set_viewport_size({"width": width, "height": height})
+        page.wait_for_timeout(120)
+        states = page.evaluate(ELLIPSIS_JS) or []
+        shot = page.screenshot(animations="disabled")
+        image = Image.open(io.BytesIO(shot))
+        for index, state in enumerate(states):
+            if not state["message"] or state["message"]["width"] <= 0:
+                continue
+            ink = ink_right(image, state["message"])
+            if ink is None:
+                continue
+            row = {"width": width, "state": index, "message_width": round(state["message"]["width"], 1),
+                   "blank_after_text": round(state["message"]["right"] - ink, 1),
+                   "gap_text_to_code": round(state["code"]["left"] - ink, 1) if state["code"] else None}
+            rows.append(row)
+            if worst is None or row["blank_after_text"] > worst["blank_after_text"]:
+                worst = row
+                (output / f"ellipsis-gap-{name}-worst.png").write_bytes(shot)
+    checks = {
+        "samples_measured": len(rows) > 0,
+        "blank_within_type_body": all(row["blank_after_text"] <= type_body + TOLERANCE for row in rows),
+    }
+    return {"measurement": {"type_body": type_body, "worst": worst, "rows": rows}, "checks": checks}
 
 
 def main():
@@ -460,6 +528,15 @@ def main():
                         failed.extend(check_name for check_name, ok in (("tab_stays_visible", interactions["tab_stays_visible"]), ("escape_opens_nothing", interactions["escape_opens_nothing"]), ("retry_sends_refresh", interactions["retry_sends_refresh"])) if not ok)
                     failures.extend(f"{key}.{check}" for check in failed)
                     print(key, "FAIL " + ",".join(failed) if failed else "ok")
+            type_body = scenes["mixed-1180x720"]["measurement"].get("typeBody", 0)
+            for name in ("mixed", "end-failure", "narrow-single"):
+                key = f"ellipsis-gap-{name}"
+                scene_result = sweep_ellipsis(page, args.port, output, name, SCENES[name], type_body)
+                scenes[key] = scene_result
+                failed = [check for check, ok in scene_result["checks"].items() if not ok]
+                failures.extend(f"{key}.{check}" for check in failed)
+                worst = scene_result["measurement"]["worst"]
+                print(key, ("FAIL " + ",".join(failed) if failed else "ok"), "worst", worst)
             browser.close()
     finally:
         server.stdin.close()
