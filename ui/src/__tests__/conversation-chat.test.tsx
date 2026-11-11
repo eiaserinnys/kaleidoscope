@@ -692,7 +692,7 @@ describe("공용 대화 부품", () => {
     fireEvent.click(screen.getByRole("button", { name: "프로필" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "키키" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByText("키키(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
+    expect(screen.getByText("키키 프로필로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "바꾸기" }));
     await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, profile: "profile-b" }));
     expect(await screen.findByText("키키 프로필로 바꿨습니다")).toBeTruthy();
@@ -718,7 +718,7 @@ describe("공용 대화 부품", () => {
     fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "노드 B" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByText("노드 B의 모델 2(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
+    expect(screen.getByText("노드 B의 모델 2 모델로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "취소" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("button", { name: "실행 위치" }).textContent).toContain("노드 A");
@@ -728,6 +728,28 @@ describe("공용 대화 부품", () => {
     expect(await screen.findByRole("dialog")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "바꾸기" }));
     await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, model: "m2" }));
+  });
+
+  it("모델 이름이 이미 모델로 끝나면 바꾸기 제목에 모델을 겹쳐 쓰지 않는다", async () => {
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") {
+        return {
+          ...get(thread),
+          models: [
+            { id: "m", label: "모델", available: true, group: { id: "node-a", label: "노드 A" } },
+            { id: "m-end", label: "오픈 모델", available: true, group: { id: "node-b", label: "노드 B" } },
+          ],
+          start: { profile: "profile-a", model: "m" },
+        };
+      }
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "노드 B" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("노드 B의 오픈 모델로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
+    expect(state.call).not.toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, model: "m-end" });
   });
 
   it("다른 실행 위치 전환은 확인창을 닫고 기다린 뒤 새 위치와 모델을 보인다", async () => {

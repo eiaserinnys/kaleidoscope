@@ -333,15 +333,30 @@
   text-transform: uppercase;
 }
 
-.ks-select-group-label {
-  flex: 0 0 auto;
-  margin-inline-start: var(--ks-space-2);
+.ks-select-group-label,
+.ks-select-context-label {
   font-family: var(--ks-font-label);
   color: var(--ks-color-muted);
   font-size: var(--ks-type-meta);
   letter-spacing: var(--ks-letter-label);
   line-height: var(--ks-line-meta);
   text-transform: uppercase;
+}
+
+.ks-select-group-label {
+  flex: 0 0 auto;
+  margin-inline-start: var(--ks-space-2);
+}
+
+/* 묶음 이름은 고른 값이 다 보이고 남는 자리만 쓰고 자기 글 폭에서 멈춘다(기본 폭 0에서 자란다).
+   그래서 자리가 모자라면 묶음 이름만 말줄임되고, 묶음 이름이 다 사라진 뒤에야 고른 값이 준다. */
+.ks-select-context-label {
+  flex: 1 1 0;
+  max-width: max-content;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ks-select-choice-label {
