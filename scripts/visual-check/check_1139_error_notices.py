@@ -15,6 +15,8 @@
      - long-inline-tab: 탭 안에서 긴 묶음 이름과 긴 값이 겹칠 때 좁은 폭(360×240)과 창 크기 바꾸기에서도
        고른 값이 폭 0으로 밀리지 않고 묶음 이름보다 좁지 않은지.
      - long-label-top: 이름표 위(top) 배치의 좁은 폭에서 같은 판정.
+     - long-inline-tab-sweep, long-label-top-sweep: 1180에서 연 창을 760부터 360까지 줄여 가며, 묶음 이름이
+       조금이라도 보이는 동안 고른 값이 한 글자도 잘리지 않는지(값 상자 폭 >= 값 글 폭).
      - toolbar-duplicate: 도구 막대 안에서 값, 묶음 이름, 펼침 표시 사이 간격이 단추 gap과 같은지.
      - segmented-groups: 분할 모양에서 두 묶음의 같은 이름(서울)이 접근 이름과 묶음 이름 표시로 구분되는지.
 
@@ -81,7 +83,12 @@ SELECT_WIDTH_JS = """(el) => {
   const choice = button.querySelector('.ks-select-choice-label');
   const context = button.querySelector('.ks-select-context-label');
   const chevron = button.querySelector(':scope > svg');
+  const textWidth = (node) => { if (!node) return null; const range = document.createRange(); range.selectNodeContents(node); return range.getBoundingClientRect().width; };
   return {
+    choiceBoxWidth: choice ? choice.getBoundingClientRect().width : null,
+    choiceTextWidth: textWidth(choice),
+    contextBoxWidth: context ? context.getBoundingClientRect().width : null,
+    contextTextWidth: textWidth(context),
     choiceText: choice ? choice.textContent : null,
     contextText: context ? context.textContent : null,
     choiceClientWidth: choice ? choice.clientWidth : null,
@@ -134,6 +141,11 @@ toolbar_duplicate = {"type": "stack", "direction": "column", "gap": "medium", "c
 segmented_groups = {"type": "stack", "direction": "column", "gap": "medium", "children": [select_block(PLACE_OPTIONS, label="장소", label_position="top", style="segmented"), {"type": "text", "value": "아래 글"}]}
 
 
+SUBPIXEL = 0.01
+# 반려 r2: 창을 줄여 가며 묶음 이름이 반쯤 줄어드는 중간 폭까지 잰다.
+SWEEP_WIDTHS = (760, 700, 640, 600, 560, 520, 480, 440, 420, 400, 380, 360)
+
+
 def judge_value_room(measurement, value, group_name):
     if measurement.get("error"):
         return {"measured": False}
@@ -142,6 +154,9 @@ def judge_value_room(measurement, value, group_name):
         "group_shown": measurement["contextText"] == group_name,
         "choice_has_room": measurement["choiceClientWidth"] > 0,
         "group_not_wider_than_choice": measurement["choiceClientWidth"] >= measurement["contextClientWidth"],
+        # 반려 r2: 묶음 이름이 조금이라도 보이는 동안 고른 값은 한 글자도 잘리지 않는다.
+        "choice_whole_while_group_visible": measurement["contextBoxWidth"] <= 0 or measurement["choiceBoxWidth"] >= measurement["choiceTextWidth"] - SUBPIXEL,
+        "no_doc_overflow": measurement["docOverflowX"] is False,
     }
 
 
@@ -154,6 +169,9 @@ def judge_gaps(measurement, value, group_name):
         "group_shown": measurement["contextText"] == group_name,
         "before_gap_matches": abs((measurement["context"]["left"] - measurement["choice"]["right"]) - gap) <= 1,
         "after_gap_matches": abs((measurement["chevron"]["left"] - measurement["context"]["right"]) - gap) <= 1,
+        # 내용 폭 단추는 값과 묶음 이름을 다 담는 폭으로 선다.
+        "choice_whole": measurement["choiceBoxWidth"] >= measurement["choiceTextWidth"] - SUBPIXEL,
+        "group_whole": measurement["contextBoxWidth"] >= measurement["contextTextWidth"] - SUBPIXEL,
     }
 
 
@@ -296,6 +314,13 @@ def main():
 
             app = open_app(long_label_top, "a-opus", 360, 240, ".ks-select-button")
             record("long-label-top-360x240", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
+
+            for name, layout in (("long-inline-tab", long_inline_tab), ("long-label-top", long_label_top)):
+                app = open_app(layout, "a-opus", 1180, 720, ".ks-select-button")
+                for width in SWEEP_WIDTHS:
+                    page.set_viewport_size({"width": width, "height": 240 if width == 360 else 720})
+                    page.wait_for_timeout(250)
+                    record(f"{name}-sweep-w{width}", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
 
             for width, height in SIZES:
                 app = open_app(toolbar_duplicate, "seoul-far", width, height, ".ks-select-button")
