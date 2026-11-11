@@ -605,8 +605,10 @@
   display: block;
 }
 
-.shell-link-button { min-width: 0; max-width: var(--ks-workspace-label-max-width); gap: var(--ks-space-2); }
-.shell-link-button > .ks-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 서버 상태 표시. 누르지 않는 표시지만 곁의 설정 톱니와 같은 칸 크기를 차지해 머리 막대 배치가 그대로다. */
+.shell-link-status { display: inline-grid; width: var(--ks-icon-button-size); height: var(--ks-icon-button-size); flex: 0 0 var(--ks-icon-button-size); place-items: center; border: var(--ks-line-width) solid transparent; color: var(--ks-color-muted); cursor: default; }
+.shell-link-status.has-label { display: inline-flex; width: auto; height: var(--ks-control-height); flex: 0 1 auto; min-width: 0; max-width: var(--ks-workspace-label-max-width); align-items: center; justify-content: center; gap: var(--ks-space-2); padding: 0 var(--ks-space-3); color: var(--ks-color-text); font-size: var(--ks-type-body); line-height: 1; }
+.shell-link-status > .ks-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell-server-icon { position: relative; display: inline-grid; place-items: center; }
 .shell-server-dot { width: var(--ks-space-2); height: var(--ks-space-2); flex-shrink: 0; border-radius: var(--ks-radius-large); background: var(--ks-color-muted); }
 .shell-server-icon > .shell-server-dot { position: absolute; inset-block-end: calc(-1 * var(--ks-space-1)); inset-inline-end: calc(-1 * var(--ks-space-1)); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-surface-solid); }

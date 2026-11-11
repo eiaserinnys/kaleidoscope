@@ -762,10 +762,9 @@ describe("shell server link control", () => {
     transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
     const spy = vi.spyOn(transport, "call");
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
     const input = screen.getByRole("textbox", { name: "원격 서버 주소" });
-    expect(document.activeElement).toBe(input);
     const connect = screen.getByRole("button", { name: "연결" }) as HTMLButtonElement;
     expect(connect.disabled).toBe(true);
     fireEvent.keyDown(input, { key: "Enter" });
@@ -781,32 +780,35 @@ describe("shell server link control", () => {
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 돌아가기" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.use_local" })); store.dispose();
   });
-  it("opens the same server control in an empty workspace and groups its action", async () => {
+  it("빈 작업에서도 서버 상태를 머리 막대 묶음에 보이고 서버 설정은 톱니로 연다", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     seed.snapshot.shared.workspaces = []; seed.snapshot.shared.desktops = []; seed.snapshot.shared.windows = [];
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    const button = screen.getByRole("button", { name: "내 PC 서버" });
-    expect(button.closest(".ks-shell-actions")).toBeTruthy();
-    expect(button.querySelector(".shell-server-dot")).toBeTruthy();
-    expect(button.hasAttribute("aria-expanded")).toBe(false);
+    const status = screen.getByRole("status", { name: "내 PC 서버" });
+    expect(status.closest(".ks-shell-actions")).toBeTruthy();
+    expect(status.querySelector(".shell-server-dot")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "내 PC 서버" })).toBeNull();
     expect(screen.getByRole("button", { name: "작업 만들기" }).closest(".ks-empty-state-action")).toBeTruthy();
-    fireEvent.click(button);
-    expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
-    expect(button.hasAttribute("aria-expanded")).toBe(false);
+    fireEvent.click(status);
+    expect(screen.queryByRole("region", { name: "설정" })).toBeNull();
+    fireEvent.click(within(status.closest(".ks-shell-actions") as HTMLElement).getByRole("button", { name: "설정" }));
+    expect(screen.getByRole("textbox", { name: "원격 서버 주소" })).toBeTruthy();
     store.dispose();
   });
-  it("머리 막대 서버 단추는 설정 톱니와 같은 아이콘 단추로 서버 모드를 보인다", async () => {
+  it("머리 막대 서버 표시는 누르지 않는 상태 표시로 서버 모드를 보인다", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
     const gear = screen.getByRole("button", { name: "설정" });
-    const button = screen.getByRole("button", { name: "내 PC 서버" });
+    const button = screen.getByRole("status", { name: "내 PC 서버" });
     expect(gear.classList.contains("ks-icon-button")).toBe(true);
-    expect(button.classList.contains("ks-icon-button")).toBe(true);
-    expect(button.classList.contains("shell-link-button")).toBe(true);
+    expect(button.tagName).toBe("SPAN");
+    expect(button.hasAttribute("tabindex")).toBe(false);
+    expect(button.classList.contains("shell-link-status")).toBe(true);
+    expect(button.classList.contains("has-label")).toBe(false);
     expect(button.getAttribute("aria-label")).toBe("내 PC 서버");
     expect(button.getAttribute("title")).toBe("내 PC 서버");
     expect(button.getAttribute("data-server-mode")).toBe("embedded");
@@ -816,31 +818,31 @@ describe("shell server link control", () => {
     expect(button.querySelector(".ks-truncate")).toBeNull();
     expect(button.textContent).toBe("");
     act(() => transport.setLink({ state: "offline", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC", reason: { id: "CONN_EVENTS_SEND_FAILED", code: "server", message: "연결 끊김", details: ["host=127.0.0.1:4219"] } }));
-    const offline = await screen.findByRole("button", { name: "내 PC 서버 연결 중" });
+    const offline = await screen.findByRole("status", { name: "내 PC 서버 연결 중" });
     expect(offline.getAttribute("data-server-mode")).toBe("embedded");
     expect(offline.querySelector(".lucide-monitor")).toBeTruthy();
     expect(offline.querySelector("svg")?.getAttribute("stroke-dasharray")).toBe("3 2");
     expect(offline.querySelector(".shell-server-dot")?.classList.contains("is-offline")).toBe(true);
     store.dispose();
   });
-  it("머리 막대 서버 단추는 원격 연결·오프라인·연결 해제를 다른 그림과 점으로 보인다", async () => {
+  it("머리 막대 서버 표시는 원격 연결·오프라인·연결 해제를 다른 그림과 점으로 보인다", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    const remote = screen.getByRole("button", { name: "원격 서버 (remote.example)" });
+    const remote = screen.getByRole("status", { name: "원격 서버 (remote.example)" });
     expect(remote.getAttribute("data-server-mode")).toBe("remote");
     expect(remote.querySelector(".lucide-cloud")).toBeTruthy();
     expect(remote.querySelector("svg")?.getAttribute("stroke-dasharray")).toBeNull();
     expect(remote.querySelector(".lucide-monitor")).toBeNull();
     expect(remote.querySelector(".shell-server-dot")?.classList.contains("is-connected")).toBe(true);
     act(() => transport.setLink({ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "집", reason: { id: "CONN_EVENTS_SEND_FAILED", code: "server", message: "연결 끊김", details: ["host=remote.example"] } }));
-    const remoteOffline = await screen.findByRole("button", { name: "원격 오프라인" });
+    const remoteOffline = await screen.findByRole("status", { name: "원격 오프라인" });
     expect(remoteOffline.querySelector(".lucide-cloud")).toBeTruthy();
     expect(remoteOffline.querySelector("svg")?.getAttribute("stroke-dasharray")).toBe("3 2");
     expect(remoteOffline.querySelector(".shell-server-dot")?.classList.contains("is-offline")).toBe(true);
     act(() => transport.setLink({ state: "unlinked" }));
-    const unlinked = await screen.findByRole("button", { name: "연결 해제됨" });
+    const unlinked = await screen.findByRole("status", { name: "연결 해제됨" });
     expect(unlinked.getAttribute("data-server-mode")).toBe("none");
     expect(unlinked.querySelector(".lucide-cloud-off")).toBeTruthy();
     expect(unlinked.querySelector(".shell-server-dot")).toBeNull();
@@ -851,9 +853,10 @@ describe("shell server link control", () => {
     const transport = createFakeTransport(makeTestSeed());
     transport.setLink({ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    const button = screen.getByRole("button", { name: "페어링 코드 123456" });
-    expect(button.classList.contains("ks-button-quiet")).toBe(true);
-    expect(button.classList.contains("shell-link-button")).toBe(true);
+    const button = screen.getByRole("status", { name: "페어링 코드 123456" });
+    expect(button.tagName).toBe("SPAN");
+    expect(button.classList.contains("shell-link-status")).toBe(true);
+    expect(button.classList.contains("has-label")).toBe(true);
     expect(button.getAttribute("data-server-mode")).toBe("remote");
     expect(button.querySelector(".lucide-cloud")).toBeTruthy();
     expect(button.querySelectorAll("svg circle").length).toBe(3);
@@ -861,18 +864,19 @@ describe("shell server link control", () => {
     expect(button.querySelector(".ks-truncate")?.textContent).toBe("페어링 코드 123456");
     store.dispose();
   });
-  it("서버 단추로 연 설정을 닫으면 다시 만들어진 서버 단추로 초점이 돌아온다", async () => {
+  it("서버 연결이 페어링으로 바뀐 뒤 설정을 닫아도 초점은 연 톱니로 돌아온다", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
+    const gear = screen.getByRole("button", { name: "설정" });
+    fireEvent.click(gear);
     expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
-    // 페어링으로 바뀌면 단추가 글 단추로 다시 만들어져 연 단추가 문서에서 떨어진다. 닫을 때는 같은 자리의 새 단추로 초점이 간다.
+    // 페어링으로 바뀌면 서버 표시가 글이 붙은 표시로 다시 그려진다. 톱니는 그대로라 닫을 때 그 톱니로 초점이 간다.
     act(() => transport.setLink({ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" }));
-    await screen.findByRole("button", { name: "페어링 코드 123456" });
+    await screen.findByRole("status", { name: "페어링 코드 123456" });
     fireEvent.click(within(screen.getByTestId("system-window-settings")).getByRole("button", { name: "창 닫기" }));
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "페어링 코드 123456" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "설정" }));
     store.dispose();
   });
   it("offers prefilled remote re-pairing after checkout revocation", async () => {
@@ -881,16 +885,15 @@ describe("shell server link control", () => {
     transport.setLink({ state: "revoked", server_url: "https://revoked.example" });
     const spy = vi.spyOn(transport, "call");
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    const button = screen.getByRole("button", { name: "원격 연결 거부됨" });
-    expect(button.getAttribute("data-server-mode")).toBe("remote");
-    expect(button.querySelector(".lucide-cloud-off")).toBeTruthy();
-    expect(button.querySelector(".lucide-cloud")).toBeNull();
-    expect(button.querySelector(".shell-server-dot")?.classList.contains("is-revoked")).toBe(true);
-    fireEvent.click(button);
+    const status = screen.getByRole("status", { name: "원격 연결 거부됨" });
+    expect(status.getAttribute("data-server-mode")).toBe("remote");
+    expect(status.querySelector(".lucide-cloud-off")).toBeTruthy();
+    expect(status.querySelector(".lucide-cloud")).toBeNull();
+    expect(status.querySelector(".shell-server-dot")?.classList.contains("is-revoked")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     expect(screen.queryByRole("button", { name: "가져오기" })).toBeNull();
     const input = screen.getByRole("textbox", { name: "원격 서버 주소" }) as HTMLInputElement;
     expect((screen.getByRole("button", { name: "연결" }) as HTMLButtonElement).disabled).toBe(false);
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "내 PC 서버로 전환" }));
     expect(input.value).toBe("https://revoked.example");
     expect(screen.getByRole("button", { name: "내 PC 서버로 전환" })).toBeTruthy();
     fireEvent.keyDown(input, { key: "Enter" });
@@ -900,7 +903,7 @@ describe("shell server link control", () => {
   it("names an unlinked panel without claiming a local connection", async () => {
     const store = createShellStore(createFakeTransport(makeTestSeed()));
     render(<Shell store={store} />); await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "연결 해제됨" }));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     expect(within(screen.getByTestId("system-window-settings")).getByText("연결 해제됨")).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "원격 서버 주소" })).toBeTruthy();
     expect(screen.queryByText("내 PC 내장 서버")).toBeNull(); store.dispose();
@@ -911,8 +914,7 @@ describe("shell server link control", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "페어링 코드 123456" }));
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "코드 복사" }));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       fireEvent.click(screen.getByRole("button", { name: "코드 복사" }));
@@ -935,7 +937,7 @@ describe("shell server link control", () => {
     transport.setLink({ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" });
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error("거부")) } });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "페어링 코드 123456" }));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     fireEvent.click(screen.getByRole("button", { name: "코드 복사" }));
     expect(await screen.findByText("페어링 코드를 복사하지 못했습니다. 표시된 코드를 직접 복사하세요.")).toBeTruthy();
     expect(screen.getByText("SHELL_SERVER_PAIRING_CODE_COPY_FAILED")).toBeTruthy();
@@ -947,13 +949,13 @@ describe("shell server link control", () => {
     transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
     const spy = vi.spyOn(transport, "call");
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "원격 서버 (remote.example)" }));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     fireEvent.click(screen.getByRole("button", { name: "가져오기" }));
     expect(await screen.findByText("가져오기 완료 3개")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "내 PC 서버로 전환" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ op: "link.use_local" })); store.dispose();
   });
-  it("가져오는 동안 누른 서버 단추 자리에 진행 표시를 둔다", async () => {
+  it("가져오는 동안 누른 가져오기 단추 자리에 진행 표시를 둔다", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "connected", mode: "remote", server_url: "https://remote.example", device_name: "집" });
@@ -965,7 +967,7 @@ describe("shell server link control", () => {
       return original(request);
     }) as typeof transport.call);
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    fireEvent.click(screen.getByRole("button", { name: "원격 서버 (remote.example)" }));
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     const button = screen.getByRole("button", { name: "가져오기" });
     fireEvent.click(button);
     expect(button.classList.contains("is-progress")).toBe(true);
@@ -978,11 +980,11 @@ describe("shell server link control", () => {
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "offline", mode: "remote", server_url: "https://remote.example", device_name: "집", reason: { id: "CONN_EVENTS_SEND_FAILED", code: "server", message: "연결 끊김", details: ["host=remote.example"] } });
     const store = createShellStore(transport); render(<Shell store={store} />); await store.ready;
-    const button = screen.getByRole("button", { name: "원격 오프라인" });
-    expect(button.getAttribute("data-server-mode")).toBe("remote");
-    expect(button.querySelector(".lucide-cloud")).toBeTruthy();
-    expect(button.querySelector("svg")?.getAttribute("stroke-dasharray")).toBe("3 2");
-    fireEvent.click(button);
+    const status = screen.getByRole("status", { name: "원격 오프라인" });
+    expect(status.getAttribute("data-server-mode")).toBe("remote");
+    expect(status.querySelector(".lucide-cloud")).toBeTruthy();
+    expect(status.querySelector("svg")?.getAttribute("stroke-dasharray")).toBe("3 2");
+    fireEvent.click(screen.getByRole("button", { name: "설정" }));
     expect(screen.getByText("연결 끊김")).toBeTruthy();
     expect(screen.getByText("CONN_EVENTS_SEND_FAILED")).toBeTruthy();
     expect(screen.queryByText("host=remote.example")).toBeNull();
@@ -990,7 +992,7 @@ describe("shell server link control", () => {
     fireEvent.keyDown(screen.getByRole("region", { name: "설정" }), { key: "Escape" });
     expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
     fireEvent.click(within(screen.getByTestId("system-window-settings")).getByRole("button", { name: "창 닫기" }));
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "원격 오프라인" })); store.dispose();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "설정" })); store.dispose();
   });
   it("톱니와 창 닫기로 설정을 열고 닫으며 초점을 되돌린다", async () => {
     const store = createShellStore(createFakeTransport(makeTestSeed()));
@@ -1019,7 +1021,7 @@ describe("shell server link control", () => {
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ op }));
     store.dispose();
   });
-  it("열린 설정에서 서버 단추는 서버 구역에 초점을 옮기고 데스크톱 선택은 설정을 닫는다", async () => {
+  it("열린 설정에서 데스크톱 단추를 눌러도 설정 창이 남는다", async () => {
     const seed = makeTestSeed(); seed.snapshot.embedded_available = true;
     const transport = createFakeTransport(seed);
     transport.setLink({ state: "connected", mode: "embedded", server_url: "http://127.0.0.1:4219", device_name: "내 PC" });
@@ -1027,8 +1029,6 @@ describe("shell server link control", () => {
     fireEvent.click(screen.getByRole("button", { name: "설정" }));
     const desktop = screen.getByRole("button", { name: "Desktop" });
     expect(desktop.getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(screen.getByRole("button", { name: "내 PC 서버" }));
-    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "원격 서버 주소" }));
     fireEvent.click(desktop);
     expect(screen.getByRole("region", { name: "설정" })).toBeTruthy();
     expect(desktop.getAttribute("aria-pressed")).toBe("true");

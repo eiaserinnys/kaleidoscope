@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""머리 막대 오른쪽의 서버 단추를 연결 상태마다 넓은 창과 최소 창에서 캡처한다.
+"""머리 막대 오른쪽의 서버 상태 표시를 연결 상태마다 넓은 창과 최소 창에서 캡처한다.
 
 장면: 내 PC 서버 연결(embedded), 원격 서버 연결(connected), 내 PC 서버 연결 중
 (embedded-offline), 원격 오프라인(offline), 페어링 코드(pairing), 원격 연결
@@ -8,10 +8,10 @@
   python3 scripts/visual-check/check_shell_header.py [--output 산출폴더] [--port 5297] [--label after]
 
 app의 vite 개발 서버를 /harness.html?link=...에 띄워 그린다. 테마와 창 폭마다 상태를 모두
-찍고, 단추의 이름·모드·그림(점선 여부, 구름 점 개수)·점 색·좌표와 톱니 단추의 좌표를
-result.json에 남긴다. 머리 막대가 화면보다 넓은 창에서는 오른쪽 단추가 화면 밖에 있으므로,
-단추 자체의 생김새는 `.ks-shell-actions` 요소 캡처로 따로 남긴다. 이 스크립트는 판정하지
-않는다. 고치기 전과 뒤의 result.json과 캡처를 같은 장면끼리 비교하는 것이 목적이다.
+찍고, 서버 표시의 이름, 모드, 그림(점선 여부, 구름 점 개수), 점 색, 좌표와 톱니 단추의 좌표를
+result.json에 남긴다. 머리 막대가 화면보다 넓은 창에서는 오른쪽 조작이 화면 밖에 있으므로,
+그 생김새는 `.ks-shell-actions` 요소 캡처로 따로 남긴다. 서버 표시는 누르는 조작이 아니므로
+Tab이 서지 않고, 글이 없는 상태에서는 톱니 단추와 같은 칸을 차지하는지 단언한다.
 """
 import argparse
 import json
@@ -46,7 +46,7 @@ MEASURE = """() => {
     const box = element.getBoundingClientRect();
     return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
   };
-  const server = bar.querySelector('.shell-link-button');
+  const server = bar.querySelector('.shell-link-status');
   const gear = actions.querySelector('button[aria-label="설정"]');
   const dot = server.querySelector('.shell-server-dot');
   const svg = server.querySelector('svg');
@@ -56,7 +56,10 @@ MEASURE = """() => {
       label: server.getAttribute('aria-label'),
       title: server.getAttribute('title'),
       mode: server.getAttribute('data-server-mode'),
-      button_class: server.className,
+      tag: server.tagName,
+      role: server.getAttribute('role'),
+      tabindex: server.getAttribute('tabindex'),
+      class: server.className,
       text: server.innerText.trim(),
       rect: rect(server),
     } : null,
@@ -190,7 +193,7 @@ def header_scene(page, port, width, height, theme, query, key, output):
     url = f"http://127.0.0.1:{port}/harness.html" + (f"?{query}" if query else "")
     page.goto(url, wait_until="load")
     page.locator(".ks-shell-bar").wait_for(timeout=20000)
-    page.locator(".ks-shell-bar .shell-link-button").wait_for(timeout=20000)
+    page.locator(".ks-shell-bar .shell-link-status").wait_for(timeout=20000)
     settle(page)
     facts = page.evaluate(MEASURE)
     bar = facts["bar"]["rect"]
@@ -267,6 +270,20 @@ def main():
                     xs = [record["x"] for record in records]
                     assert xs == sorted(xs), f"{key}: Tab 순서가 화면 순서와 다릅니다: {xs}"
                 result["assertions"]["header_tab_order_matches_visual"] = True
+                for key, scene in scenes.items():
+                    server = scene["server"]
+                    assert server and server["tag"] == "SPAN" and server["role"] == "status" and server["tabindex"] is None, \
+                        f"{key}: 서버 표시가 누르는 조작으로 남아 있습니다: {server}"
+                    assert all(record["label"] != server["label"] for record in scene["tab_order"]), \
+                        f"{key}: 서버 표시에 Tab이 섰습니다"
+                result["assertions"]["server_status_not_control"] = True
+                for key, scene in scenes.items():
+                    if "has-label" in scene["server"]["class"]:
+                        continue
+                    align = scene["align"]
+                    assert align["top_diff"] <= 0.5 and align["height_diff"] <= 0.5 and align["width_diff"] <= 0.5, \
+                        f"{key}: 서버 표시 칸이 톱니 단추와 다릅니다: {align}"
+                result["assertions"]["server_status_same_box_as_gear"] = True
                 page.close()
             finally:
                 browser.close()

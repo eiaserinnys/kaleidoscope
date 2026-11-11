@@ -74,7 +74,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [launcher, setLauncher] = useState<{ anchor: HTMLElement } | null>(null);
   const closeLauncher = useCallback(() => setLauncher(null), []);
-  const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "server" | "agent"; entry: { kind: "gear" | "server" | "agent"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
+  const [settings, setSettings] = useState<{ anchor: HTMLElement; entry: { kind: "gear" | "agent"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
   const settingsRect = useRef<Rect | null>(null);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
@@ -183,22 +183,21 @@ export function Shell({ store }: { store: ShellStore }) {
     })();
   }), [newWindowRect, runCommand, store, waitForDesktopArea]);
 
-  const openSettings = (anchor: HTMLElement, kind: "gear" | "server" | "agent") => {
+  const openSettings = (anchor: HTMLElement, kind: "gear" | "agent") => {
     closeMenu(); closeLauncher();
     const z = maxZNow() + 1;
     setSettings((current) => current
       ? { ...current, minimized: false, z, entry: { kind, sequence: current.entry.sequence + 1 } }
-      : { anchor, origin: kind, entry: { kind, sequence: 0 }, minimized: false, maximized: false, z });
+      : { anchor, entry: { kind, sequence: 0 }, minimized: false, maximized: false, z });
   };
   const settingsAnchor = settings?.anchor;
-  const settingsOrigin = settings?.origin;
   const closeSettings = useCallback(() => {
     if (settingsAnchor) {
-      const target = settingsAnchor.isConnected ? settingsAnchor : document.querySelector<HTMLElement>(settingsOrigin === "server" ? ".ks-shell-bar .shell-link-button" : '.ks-shell-bar button[aria-label="설정"]');
+      const target = settingsAnchor.isConnected ? settingsAnchor : document.querySelector<HTMLElement>('.ks-shell-bar button[aria-label="설정"]');
       target?.focus();
     }
     setSettings(null);
-  }, [settingsAnchor, settingsOrigin]);
+  }, [settingsAnchor]);
   const raiseSettings = useCallback(() => {
     const z = maxZNow() + 1;
     setSettings((current) => current ? { ...current, minimized: false, z } : null);
@@ -227,17 +226,12 @@ export function Shell({ store }: { store: ShellStore }) {
       {snapshot.link.state === "unlinked" ? null : <span className={`shell-server-dot is-${snapshot.link.state}`} />}
     </span>
   ) : null;
-  const serverButton = snapshot ? (
-    snapshot.link.state === "pairing" ? (
-      <Button className="ks-button-quiet shell-link-button" data-server-mode={serverMode} onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabelText} title={serverLabelText}>
-        {serverStatusMark}
-        <span className="ks-truncate">{serverLabelText}</span>
-      </Button>
-    ) : (
-      <IconButton className="shell-link-button" data-server-mode={serverMode} onClick={(event) => openSettings(event.currentTarget, "server")} aria-label={serverLabelText} title={serverLabelText}>
-        {serverStatusMark}
-      </IconButton>
-    )
+  // 서버 표시는 누르는 조작이 아니라 상태다. 서버 설정은 바로 곁의 설정 톱니로 연다.
+  const serverStatus = snapshot ? (
+    <span className={`shell-link-status${snapshot.link.state === "pairing" ? " has-label" : ""}`} role="status" data-server-mode={serverMode} aria-label={serverLabelText} title={serverLabelText}>
+      {serverStatusMark}
+      {snapshot.link.state === "pairing" ? <span aria-hidden="true" className="ks-truncate">{serverLabelText}</span> : null}
+    </span>
   ) : null;
   const settingsButton = <IconButton aria-label="설정" title="설정" onClick={(event) => openSettings(event.currentTarget, "gear")}><Settings /></IconButton>;
   const canvasKey = snapshot ? (snapshot.link.state === "connected" || snapshot.link.state === "offline" ? snapshot.link.server_url : snapshot.link.state) : "";
@@ -288,7 +282,7 @@ export function Shell({ store }: { store: ShellStore }) {
   if (!activeWorkspace || !activeDesktop) {
     return <main className="app-root" ref={setHost}>
       <ContextMenuHost onError={setNotice} />
-      <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverButton}{settingsButton}</div></header>
+      <header className="ks-shell-bar"><BrandMark /><div className="ks-shell-actions">{serverStatus}{settingsButton}</div></header>
       {/* 아래 작업 있는 갈래와 main의 같은 자리에 DesktopArea를 두어야 연결 중과 페어링을 거쳐도 설정 창이 다시 만들어지지 않는다. */}
       <DesktopArea canvasKey={canvasKey} systemWindow={systemWindow} launcherOpen={false} onAreaChange={reportArea} onCall={runCommand} onOpenApps={() => {}} onChooseAgent={(anchor) => openSettings(anchor, "agent")} store={store} windowActions={windowActions}
         emptyState={<EmptyState icon={<LayoutGrid size="empty" />} text={snapshot.link.state === "connected" ? "작업 없음" : "서버에 연결하는 중"}
@@ -452,7 +446,7 @@ export function Shell({ store }: { store: ShellStore }) {
               <UpdateReady className="ks-link-icon-accent" />
             </IconButton>
           ) : null}
-          {serverButton}
+          {serverStatus}
           {settingsButton}
         </div>
       </header>
