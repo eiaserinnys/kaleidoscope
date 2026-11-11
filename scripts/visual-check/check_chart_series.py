@@ -13,6 +13,7 @@
 - 420px의 통화(USD) 세 계열 선 차트: 읽기 줄이 한 줄이고 수가 잘리지 않는지.
 - 시점 서른 개를 쌓은 막대.
 - 계열 하나짜리 막대: 강조색 그대로이고 지금 칸은 띠로 보이는지.
+- 360px 창의 9칸 막대(「26년 3월」부터 「26년 11월」): 눈금 글이 겹치지 않는지.
 
 재는 것: 막대마다 지금 칸 띠가 있고 그 좌우가 칸 경계와 1px 이내인지, 막대 차트에 값 점과
 안내선이 없는지(선과 면적에는 그대로인지), 막대가 계열 색 그대로인지(투명도 없이), 범례
@@ -51,6 +52,7 @@ ROOT = Path(__file__).resolve().parents[2]
 APP_ID = "data-controls"
 WIDE = (1180, 720)
 NARROW = (420, 720)
+TIGHT = (360, 720)
 STYLE = "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }"
 LABELS = [f"2026년 {month}월" for month in range(1, 8)]
 DAYS = [f"11월 {day}일" for day in range(9, 16)]
@@ -134,6 +136,12 @@ def single_series():
     return [{"key": "s", "name": "세션", "points": [{"x": DAYS[day], "y": values[day]} for day in range(7)]}]
 
 
+def axis_series():
+    values = [12, 18, 15, 22, 19, 27, 24, 30, 26]
+    return [{"key": "s", "name": "세션",
+             "points": [{"x": f"26년 {month}월", "y": values[month - 3]} for month in range(3, 12)]}]
+
+
 def main_scene():
     return {"type": "stack", "direction": "column", "gap": "none", "children": [
         {"type": "section", "title": "세션 통계", "child": {"type": "stack", "direction": "column", "gap": "none", "children": [
@@ -152,6 +160,12 @@ def main_scene():
                 {"key": "d", "value": "6276.2만+", "raw": 62762000},
             ]},
         ]}},
+    ]}
+
+
+def axis_scene():
+    return {"type": "stack", "direction": "column", "gap": "none", "children": [
+        {"type": "section", "title": "눈금 겹침", "child": {"type": "chart", "kind": "bar", "series": axis_series()}},
     ]}
 
 
@@ -242,6 +256,7 @@ MEASURE_JS = """(args) => {
         return { text: item.textContent, ...box(item), swatch: dot ? { ...box(dot), color: getComputedStyle(dot).backgroundColor } : null, seriesIndex: index };
       }) } : null,
       axisLabels: [...chart.querySelectorAll('.ks-chart-x-axis span')].map((span) => ({ text: span.textContent, ...box(span) })),
+      rowsLabels: [...chart.querySelectorAll('.ks-accessible-hidden tbody tr')].map((row) => row.querySelector('th')?.textContent ?? ''),
       headers: [...chart.querySelectorAll('.ks-accessible-hidden th')].map((th) => th.textContent),
     };
   });
@@ -400,6 +415,13 @@ def chart_common_verdicts(chart, width, key, verdicts):
     elif chart["kind"] in ("line", "area"):
         verdicts[f"{key}:guide"] = chart["guide"]
         verdicts[f"{key}:dots"] = chart["dots"] >= 1
+    # 보이는 x축 글 상자가 겹치지 않고 4px 이상 떨어지며, 마지막 칸 글이 보인다.
+    labels = chart["axisLabels"]
+    verdicts[f"{key}:axis_labels_apart"] = len(labels) >= 2 and all(
+        labels[index]["left"] >= labels[index - 1]["right"] + 4 for index in range(1, len(labels)))
+    verdicts[f"{key}:last_axis_label"] = bool(labels) and bool(chart.get("rowsLabels")) and (
+        labels[-1]["text"] == chart["rowsLabels"][-1]
+        and (chart["plot"] is None or labels[-1]["right"] <= chart["plot"]["right"] + 1))
     if chart["legend"] and chart["readoutX"]["height"]:
         verdicts[f"{key}:legend_left"] = abs(chart["legend"]["left"] - chart["readoutX"]["left"]) <= 1
         verdicts[f"{key}:legend_fit"] = all(item["right"] <= chart["frame"]["right"] + 1
@@ -464,6 +486,16 @@ def judge_extra(measurement, width):
     }
     for index, chart in enumerate(charts):
         chart_common_verdicts(chart, width, f"chart{index}", verdicts)
+    return verdicts
+
+
+def judge_axis(measurement, width):
+    chart = measurement["charts"][0]
+    verdicts = {
+        "at_least_two_labels": len(chart["axisLabels"]) >= 2,
+        "no_horizontal_overflow": measurement["scrollWidth"] <= measurement["clientWidth"] + 1,
+    }
+    chart_common_verdicts(chart, width, "chart0", verdicts)
     return verdicts
 
 
@@ -684,6 +716,22 @@ def main():
                                 result["pixel"][pixel_key] = verdict
                                 if verdict.get("passed") is False:
                                     result["failures"].append(f"{pixel_key}: bar_pixel_vs_legend")
+
+            # 눈금 겹침: 360px 창의 9칸 막대에서 보이는 눈금 글 사이가 4px 이상이고 마지막 글이 보인다.
+            page.emulate_media(color_scheme="light")
+            page.set_viewport_size({"width": TIGHT[0], "height": TIGHT[1]})
+            inject(page, axis_scene())
+            page.wait_for_timeout(500)
+            measurement = page.evaluate(MEASURE_JS, {"appId": APP_ID})
+            if measurement.get("error"):
+                raise AssertionError(measurement["error"])
+            key = f"axis-{TIGHT[0]}x{TIGHT[1]}-light"
+            capture = output / f"chart-series-{key}.png"
+            page.screenshot(path=str(capture), animations="disabled")
+            result["captures"].append(str(capture))
+            record(result, key, judge_axis(measurement, TIGHT[0]))
+            result["scenes"][key]["measurement"] = measurement
+            print("axis labels", [label["text"] for label in measurement["charts"][0]["axisLabels"]], flush=True)
 
             # 정본 CSS: data-blocks.css에는 user-select를 적지 않는다(selection.css가 정본).
             data_blocks = (ROOT / "ui/src/styles/data-blocks.css").read_text(encoding="utf-8")

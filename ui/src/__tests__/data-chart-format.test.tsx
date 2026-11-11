@@ -67,6 +67,15 @@ it("rounds a bar chart's axis end up to a readable number", () => {
   expect(geometry([[18]])).toMatchObject({ min: 0, max: 18 });
 });
 
+it("keeps x-axis labels apart in a nine-band bar chart inside a 360px window", () => {
+  // 360px 창에서 이 차트의 그리기 영역 폭은 285px이다.
+  const labels = Array.from({ length: 9 }, (_, index) => `26년 ${index + 3}월`);
+  const geometry = buildChartGeometry(
+    [{ key: "s", name: "값", points: labels.map((x, index) => ({ x, y: index + 1 })) }],
+    "bar", 285, undefined, { numberText: (value) => String(value) });
+  expect(geometry.axes.map((axis) => axis.label)).toEqual(["26년 3월", "26년 6월", "26년 11월"]);
+});
+
 it("formats the rounded bar axis with the block's notation", async () => {
   const compact = new Intl.NumberFormat(undefined, { notation: "compact" });
   const { container } = setup({ type: "chart", kind: "bar", stacked: true, number_format: { notation: "compact" }, series: [
