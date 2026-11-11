@@ -60,7 +60,8 @@ export function Select({ items, groups, value, onChange, placeholder = "", segme
     : (items ?? []).find((item) => equalOption(value, optionValue(item)));
   const selectedGroup = groups?.find((group) => group.options.some((item) => equalOption(value, item.value)));
   // 다른 묶음에도 같은 이름이 있을 때만 어느 묶음인지 밝힌다. 같은 묶음 안에서만 겹치면 값만으로 구분된다.
-  const selectedGroupName = groups && selectedGroup?.name && groups.some((group) => group !== selectedGroup && group.options.some((item) => item.label === (selected as SelectChoice | undefined)?.label)) ? selectedGroup.name : null;
+  const groupContext = (group: SelectGroup, label: string) => groups && group.name && groups.some((other) => other !== group && other.options.some((item) => item.label === label)) ? group.name : null;
+  const selectedGroupName = selectedGroup && selected ? groupContext(selectedGroup, (selected as SelectChoice).label) : null;
   const menuItems = groups
     ? groups.flatMap((group, groupIndex) => [
         ...(group.name ? [{ type: "heading" as const, id: `group-${groupIndex}`, label: group.name }] : []),
@@ -80,7 +81,12 @@ export function Select({ items, groups, value, onChange, placeholder = "", segme
         checked: equalOption(value, optionValue(item)),
         onSelect: () => { onChange(optionValue(item)); restore(); },
       }));
-  if (segmented) return <div {...rootProps} ref={control as React.RefObject<HTMLDivElement>} role="group" aria-label={label} aria-describedby={describedBy} className={`ks-data-segmented${className ? ` ${className}` : ""}`}>{choices.map((item, index) => <Button key={index} disabled={disabled} aria-pressed={equalOption(value, optionValue(item))} onClick={() => onChange(optionValue(item))}><span className="ks-truncate-label">{optionLabel(item)}</span></Button>)}</div>;
+  if (segmented) {
+    const segments = groups
+      ? groups.flatMap((group) => group.options.map((item) => ({ value: item.value, label: item.label, context: groupContext(group, item.label) })))
+      : (items ?? []).map((item) => ({ value: optionValue(item), label: optionLabel(item), context: null }));
+    return <div {...rootProps} ref={control as React.RefObject<HTMLDivElement>} role="group" aria-label={label} aria-describedby={describedBy} className={`ks-data-segmented${className ? ` ${className}` : ""}`}>{segments.map((item, index) => <Button key={index} disabled={disabled} aria-pressed={equalOption(value, item.value)} aria-label={item.context ? `${item.label} ${item.context}` : undefined} onClick={() => onChange(item.value)}><span className="ks-truncate-label">{item.label}</span>{item.context ? <span className="ks-select-context-label">{item.context}</span> : null}</Button>)}</div>;
+  }
   return <><Button rootProps={rootProps} ref={control as React.RefObject<HTMLButtonElement>} className={`ks-select-button${className ? ` ${className}` : ""}`} aria-label={label} aria-invalid={invalid} aria-describedby={describedBy} disabled={disabled || choices.length === 0} onClick={(event) => setAnchor(event.currentTarget)}>{prefix}{selected ? <span className="ks-select-choice-label">{groups ? (selected as SelectChoice).label : optionLabel(selected as SelectOption)}</span> : <span className="ks-select-choice-label">{placeholder}</span>}{selectedGroupName ? <span className="ks-select-context-label">{selectedGroupName}</span> : null}{suffix ? <span className="ks-select-group-label">{suffix}</span> : null}{add ? <Plus size="inline" /> : <ChevronDown size="inline" />}</Button>{anchor && menuItems.length > 0 ? <Menu anchor={anchor} onClose={close} items={menuItems} /> : null}</>;
 }
 

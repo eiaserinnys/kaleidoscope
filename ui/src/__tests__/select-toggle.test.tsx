@@ -33,8 +33,9 @@ it("같은 묶음 안에서만 이름이 겹치면 묶음 이름을 보이지 �
 it("분할 고르기에 묶음 선택지를 주면 선택지마다 단추를 그린다", () => {
   const onChange = vi.fn();
   render(<Select label="장소" segmented value="busan" onChange={onChange} groups={placeGroups()} />);
-  const buttons = within(screen.getByRole("group", { name: "장소" })).getAllByRole("button");
-  expect(buttons.map((button) => button.textContent)).toEqual(["서울", "부산", "도쿄", "서울"]);
+  const group = within(screen.getByRole("group", { name: "장소" }));
+  const buttons = ["서울 가까운 곳", "부산", "도쿄", "서울 먼 곳"].map((name) => group.getByRole("button", { name }));
+  expect(buttons.map((button) => button.querySelector(".ks-select-context-label")?.textContent ?? null)).toEqual(["가까운 곳", null, null, "먼 곳"]);
   fireEvent.click(buttons[3]);
   expect(onChange).toHaveBeenCalledWith("seoul-far");
 });

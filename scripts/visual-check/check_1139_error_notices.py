@@ -11,6 +11,13 @@
        이 항목은 단위 시험(ui/src/__tests__/client-runtime-files.test.ts,
        "거절 안내는 형식이 다섯 이상이면 넷만 나열하고 전체 개수를 밝힌다")이 잰다.
 
+  3. 세라피엘 PR #574 반려 장면(카드 #1139 보완).
+     - long-inline-tab: 탭 안에서 긴 묶음 이름과 긴 값이 겹칠 때 좁은 폭(360×240)과 창 크기 바꾸기에서도
+       고른 값이 폭 0으로 밀리지 않고 묶음 이름보다 좁지 않은지.
+     - long-label-top: 이름표 위(top) 배치의 좁은 폭에서 같은 판정.
+     - toolbar-duplicate: 도구 막대 안에서 값, 묶음 이름, 펼침 표시 사이 간격이 단추 gap과 같은지.
+     - segmented-groups: 분할 모양에서 두 묶음의 같은 이름(서울)이 접근 이름과 묶음 이름 표시로 구분되는지.
+
   python3 -P scripts/visual-check/check_1139_error_notices.py [--output 산출폴더] [--port 포트]
 
 중립 미리보기 ?preview=data-views-test에 장면 정의를 주입하고 1180×720과 360×240에서 잰다.
@@ -65,6 +72,103 @@ SELECT_JS = """(el) => {
     inTabPanel: button.closest('.ks-data-tab-panel') !== null,
   };
 }"""
+
+# 반려 1, 3: 고른 값과 묶음 이름의 폭과 간격을 잰다.
+SELECT_WIDTH_JS = """(el) => {
+  const button = el.querySelector('.ks-select-button');
+  if (!button) return { error: '고르기 단추를 찾지 못했습니다' };
+  const rect = (node) => { if (!node) return null; const box = node.getBoundingClientRect(); return { left: box.left, right: box.right }; };
+  const choice = button.querySelector('.ks-select-choice-label');
+  const context = button.querySelector('.ks-select-context-label');
+  const chevron = button.querySelector(':scope > svg');
+  return {
+    choiceText: choice ? choice.textContent : null,
+    contextText: context ? context.textContent : null,
+    choiceClientWidth: choice ? choice.clientWidth : null,
+    contextClientWidth: context ? context.clientWidth : null,
+    choice: rect(choice), context: rect(context), chevron: rect(chevron),
+    gap: parseFloat(getComputedStyle(button).columnGap),
+    docOverflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  };
+}"""
+
+# 반려 2: 분할 고르기 선택지 단추의 접근 이름과 묶음 이름 표시를 잰다.
+SEGMENTED_JS = """(el) => {
+  const group = el.querySelector('.ks-data-segmented');
+  if (!group) return { error: '분할 고르기를 찾지 못했습니다' };
+  return {
+    buttons: [...group.querySelectorAll(':scope > .ks-button')].map((button) => ({
+      label: button.querySelector('.ks-truncate-label') ? button.querySelector('.ks-truncate-label').textContent : null,
+      aria: button.getAttribute('aria-label'),
+      name: button.getAttribute('aria-label') || button.textContent,
+      contexts: [...button.querySelectorAll('.ks-select-context-label')].map((node) => node.textContent),
+      pressed: button.getAttribute('aria-pressed'),
+    })),
+  };
+}"""
+
+LONG_GROUPS = [
+    {"name": "eias-linegames-wsl", "options": [{"value": "a-opus", "label": "Claude Opus 5.5 (1M 문맥)"}, {"value": "a-argon", "label": "Argon"}]},
+    {"name": "eiaserinnys", "options": [{"value": "b-opus", "label": "Claude Opus 5.5 (1M 문맥)"}, {"value": "b-sol", "label": "Sol"}]},
+]
+LONG_LABEL = "Claude Opus 5.5 (1M 문맥)"
+LONG_GROUP = "eias-linegames-wsl"
+
+
+def select_block(options, label="모델", label_position=None, style=None):
+    block = {"type": "select", "label": label, "value": {"state": "choice"}, "on_change": {"set_state": "choice"}, "options": options}
+    if label_position:
+        block["label_position"] = label_position
+    if style:
+        block["style"] = style
+    return block
+
+
+long_inline_tab = {"type": "tabs", "tabs": [{"label": "설정", "child": {"type": "stack", "direction": "column", "gap": "medium", "children": [select_block(LONG_GROUPS), {"type": "text", "value": "아래 글"}]}}]}
+long_label_top = {"type": "stack", "direction": "column", "gap": "medium", "children": [select_block(LONG_GROUPS, label_position="top"), {"type": "text", "value": "아래 글"}]}
+toolbar_duplicate = {"type": "stack", "direction": "column", "gap": "medium", "children": [
+    {"type": "toolbar", "start": [select_block(PLACE_OPTIONS, label="장소"), {"type": "button", "label": "적용", "on_click": {"set_state": "value", "value": "x"}}]},
+    {"type": "text", "value": "아래 글"}]}
+segmented_groups = {"type": "stack", "direction": "column", "gap": "medium", "children": [select_block(PLACE_OPTIONS, label="장소", label_position="top", style="segmented"), {"type": "text", "value": "아래 글"}]}
+
+
+def judge_value_room(measurement, value, group_name):
+    if measurement.get("error"):
+        return {"measured": False}
+    return {
+        "value_shown": measurement["choiceText"] == value,
+        "group_shown": measurement["contextText"] == group_name,
+        "choice_has_room": measurement["choiceClientWidth"] > 0,
+        "group_not_wider_than_choice": measurement["choiceClientWidth"] >= measurement["contextClientWidth"],
+    }
+
+
+def judge_gaps(measurement, value, group_name):
+    if measurement.get("error"):
+        return {"measured": False}
+    gap = measurement["gap"]
+    return {
+        "value_shown": measurement["choiceText"] == value,
+        "group_shown": measurement["contextText"] == group_name,
+        "before_gap_matches": abs((measurement["context"]["left"] - measurement["choice"]["right"]) - gap) <= 1,
+        "after_gap_matches": abs((measurement["chevron"]["left"] - measurement["context"]["right"]) - gap) <= 1,
+    }
+
+
+def judge_segmented(measurement):
+    if measurement.get("error"):
+        return {"measured": False}
+    buttons = measurement["buttons"]
+    seoul = [index for index, button in enumerate(buttons) if button["label"] == "서울"]
+    with_context = [index for index, button in enumerate(buttons) if button["contexts"]]
+    names = [button["name"] for button in buttons]
+    pressed = [button for button in buttons if button["pressed"] == "true"]
+    return {
+        "two_seoul_buttons": len(seoul) == 2,
+        "seoul_names_differ": len(seoul) == 2 and names[seoul[0]] != names[seoul[1]],
+        "context_on_seoul_only": seoul == with_context and all(len(buttons[index]["contexts"]) == 1 for index in seoul),
+        "far_seoul_selected": len(pressed) == 1 and pressed[0]["contexts"] == ["먼 곳"],
+    }
 
 
 def wait_server(port):
@@ -163,6 +267,39 @@ def main():
                     failed = [check for check, ok in checks.items() if not ok]
                     failures.extend(f"{key}.{check}" for check in failed)
                     print(key, "FAIL " + ",".join(failed) if failed else "ok")
+
+            def open_app(layout, choice, width, height, selector):
+                state = {"value": "", "choice": choice, "selected": None, "tab": 0}
+                app = open_scene(page, args.port, layout, width, height, state)
+                app.locator(selector).first.wait_for()
+                return app
+
+            def record(key, measurement, judge_fn):
+                page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
+                checks = judge_fn(measurement)
+                scenes[key] = {"measurement": measurement, "checks": checks}
+                failed = [check for check, ok in checks.items() if not ok]
+                failures.extend(f"{key}.{check}" for check in failed)
+                print(key, "FAIL " + ",".join(failed) if failed else "ok")
+
+            for width, height in SIZES:
+                app = open_app(long_inline_tab, "a-opus", width, height, ".ks-select-button")
+                record(f"long-inline-tab-{width}x{height}", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
+            app = open_app(long_inline_tab, "a-opus", 1180, 720, ".ks-select-button")
+            page.set_viewport_size({"width": 360, "height": 240})
+            page.wait_for_timeout(400)
+            record("long-inline-tab-resize-1180-to-360", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
+
+            app = open_app(long_label_top, "a-opus", 360, 240, ".ks-select-button")
+            record("long-label-top-360x240", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
+
+            for width, height in SIZES:
+                app = open_app(toolbar_duplicate, "seoul-far", width, height, ".ks-select-button")
+                record(f"toolbar-duplicate-{width}x{height}", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_gaps(m, "서울", "먼 곳"))
+
+            for width, height in SIZES:
+                app = open_app(segmented_groups, "seoul-far", width, height, ".ks-data-segmented")
+                record(f"segmented-groups-{width}x{height}", app.evaluate(SEGMENTED_JS), judge_segmented)
             browser.close()
     finally:
         server.stdin.close()
