@@ -15,6 +15,7 @@ export type ClientChatEnvelope =
       busy: boolean;
       tool: string | null;
       queued: ClientChatQueuedMessage[];
+      scope?: string | null;
     }
   | { kind: "event"; event: ConversationEvent }
   | { kind: "attachment"; request_id: string; mime: string; bytes: ArrayBuffer }
@@ -26,6 +27,7 @@ export type ClientChatAttachment = { mime: string; bytes: ArrayBuffer } | { medi
 export type ClientChatState = {
   generation: number;
   loading: boolean;
+  scope: string | null;
   items: ConversationItem[];
   stream_id: string | null;
   text: string;
@@ -37,7 +39,7 @@ export type ClientChatState = {
 };
 
 export const emptyClientChatState: ClientChatState = {
-  generation: 0, loading: true, items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], error: null, attachments: new Map(),
+  generation: 0, loading: true, scope: null, items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], error: null, attachments: new Map(),
 };
 
 function uniqueItems(items: ConversationItem[]) {
@@ -52,11 +54,15 @@ function uniqueItems(items: ConversationItem[]) {
 export function applyClientChatEnvelope(state: ClientChatState, envelope: ClientChatEnvelope): ClientChatState {
   if (envelope.kind === "snapshot") {
     /* 기록을 그리지 않고 컴포저만 쓰는 채널은 보낸 메시지를 큐나 기록으로 돌려주지 않는다.
-       비어 있고 쉬는 스냅샷이 오면 세대를 올려 화면이 기다리는 보낸 메시지 표시를 지운다. */
+       비어 있고 쉬는 스냅샷이 오면 세대를 올려 화면이 기다리는 보낸 메시지 표시를 지운다.
+       보고 있는 카드나 세션이 바뀌어도 세대를 올려 이전 자리의 보낸 표시를 남기지 않는다. */
+    const nextScope = envelope.scope === undefined ? state.scope : (typeof envelope.scope === "string" ? envelope.scope : null);
+    const scopeChanged = nextScope !== state.scope;
     const empty = envelope.items.length === 0 && !envelope.busy && envelope.queued.length === 0;
     return {
       ...state,
-      generation: empty ? state.generation + 1 : state.generation,
+      scope: nextScope,
+      generation: empty || scopeChanged ? state.generation + 1 : state.generation,
       loading: false,
       items: uniqueItems(envelope.items),
       stream_id: envelope.stream_id,

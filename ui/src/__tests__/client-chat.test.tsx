@@ -29,6 +29,18 @@ describe("클라이언트 채팅 스냅샷", () => {
     expect(applyClientChatEnvelope(state(), snapshot([], true)).generation).toBe(3);
     expect(applyClientChatEnvelope(state(), snapshot([], false, [{ id: "q", text: "", attachments: [] }])).generation).toBe(3);
   });
+
+  it("스냅샷의 scope가 바뀌면 세대를 올리고 같은 자리면 그대로 둔다", () => {
+    const scoped = (scope?: string | null): ClientChatEnvelope =>
+      ({ kind: "snapshot", items: [item("a")], stream_id: null, text: "", busy: false, tool: null, queued: [], scope });
+    expect(applyClientChatEnvelope({ ...state(), scope: "card-a" }, scoped("card-b"))).toMatchObject({ generation: 4, scope: "card-b" });
+    expect(applyClientChatEnvelope({ ...state(), scope: "card-a" }, scoped("card-a"))).toMatchObject({ generation: 3, scope: "card-a" });
+    /* scope를 싣지 않은 스냅샷은 지금 자리를 유지한다. */
+    expect(applyClientChatEnvelope({ ...state(), scope: "card-a" }, scoped(undefined))).toMatchObject({ generation: 3, scope: "card-a" });
+    expect(applyClientChatEnvelope({ ...state(), scope: "card-a" }, scoped(null))).toMatchObject({ generation: 4, scope: null });
+    /* 빈 스냅샷과 scope 변경이 겹쳐도 세대는 한 번만 오른다. */
+    expect(applyClientChatEnvelope({ ...state(), scope: "card-a" }, snapshot())).toMatchObject({ generation: 4, scope: "card-a" });
+  });
 });
 
 const definition: AppDefinition = {
@@ -68,6 +80,43 @@ it("빈 채널에서 보낸 메시지는 빈 스냅샷이 오면 보낸 표시�
     await waitFor(() => expect(document.querySelector(".ks-agent-chat-user.is-pending")).not.toBeNull());
     act(() => publish!("thread", snapshot()));
     await waitFor(() => expect(document.querySelector(".ks-agent-chat-user.is-pending")).toBeNull());
+  } finally {
+    view.unmount();
+    store.dispose();
+  }
+});
+
+it("scope가 바뀌어도 초안은 카드별로 남고 돌아오면 되살아난다", async () => {
+  vi.spyOn(ClientRuntime.prototype, "start").mockResolvedValue(undefined);
+  const shellSnapshot = makeTestSnapshot({ definitions: [app] });
+  const transport = createFakeTransport({ snapshot: shellSnapshot, folder: null, files: {} });
+  const store = createShellStore(transport);
+  const window = shellSnapshot.shared.windows[0];
+  const scoped = (scope: string): ClientChatEnvelope =>
+    ({ kind: "snapshot", items: [item("m")], stream_id: null, text: "", busy: false, tool: null, queued: [], scope });
+  let publish: ((channel: string, envelope: ClientChatEnvelope) => void) | null = null;
+  function Chat() {
+    const data = useWindowData();
+    useEffect(() => {
+      publish = data.publishClientChat;
+      vi.spyOn(data, "requestClientAction").mockResolvedValue(undefined);
+      return () => { publish = null; };
+    }, [data]);
+    return <ClientChatBlock block={block} context={{ store, window, definition: app }} pointer="/ui" />;
+  }
+  const view = render(<WindowDataProvider store={store} windowId={window.id} definition={app}><Chat /></WindowDataProvider>);
+  try {
+    const input = (await screen.findByRole("textbox", { name: "메시지" })) as HTMLTextAreaElement;
+    act(() => publish!("thread", scoped("card-a")));
+    await waitFor(() => expect(input.disabled).toBe(false));
+    fireEvent.change(input, { target: { value: "카드 A 초안" } });
+    act(() => publish!("thread", scoped("card-b")));
+    await waitFor(() => expect(input.value).toBe(""));
+    fireEvent.change(input, { target: { value: "카드 B 초안" } });
+    act(() => publish!("thread", scoped("card-a")));
+    await waitFor(() => expect(input.value).toBe("카드 A 초안"));
+    act(() => publish!("thread", scoped("card-b")));
+    await waitFor(() => expect(input.value).toBe("카드 B 초안"));
   } finally {
     view.unmount();
     store.dispose();
@@ -115,7 +164,9 @@ describe("채팅 블록의 탭과 쌓기 배치", () => {
     expect(cssRule(blocks, ".ks-data-stack.is-column > .ks-data-stack-item:not(.is-fill) > .ks-agent-chat {").body).toContain("height: auto");
     const history = cssRule(blocks, ".ks-data-stack.is-column > .ks-data-stack-item:not(.is-fill) > .ks-agent-chat > .ks-agent-chat-history {");
     expect(history.body).toContain("contain: none");
-    expect(history.body).toContain("max-height: 220px");
+    expect(history.body).toContain("max-height: calc(var(--ks-pane-min-size) + var(--ks-control-height))");
+    /* 새로 더한 규칙에는 날값 px를 두지 않는다. */
+    expect(history.body).not.toMatch(/\d+px/);
     const guard = cssRule(blocks, ".ks-data-stack.is-column > .ks-data-stack-item:not(.is-fill) > .ks-agent-chat > .ks-agent-chat-history:not( :has(");
     expect(guard.body).toContain("display: none");
     /* 기록에 남는 실제 오류·바닥글 조작 UI가 있으면 숨기지 않는다. */

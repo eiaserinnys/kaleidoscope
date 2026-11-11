@@ -7,7 +7,7 @@ import { useBinding, useChatDraft, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { ChatComposer, chatAreaPaste } from "./chat-composer";
 import { ChatHistory, messageContextMenu, type ChatPendingMessage } from "./chat-history";
-import { HistoryAttachmentView, ImagePreview, PendingAttachment, type Preview } from "./agent-attachments";
+import { fromBase64, HistoryAttachmentView, ImagePreview, openPayload, PendingAttachment, type Preview } from "./agent-attachments";
 import { useFrameCoalesced } from "./frame-coalesced";
 import { renderBlock } from "../render/render-block";
 import { toCoreError } from "../core/core-transport";
@@ -22,10 +22,6 @@ function toBase64(bytes: ArrayBuffer) {
   return btoa(binary);
 }
 
-function fromBase64(dataBase64: string): ArrayBuffer {
-  return Uint8Array.from(atob(dataBase64), (char) => char.charCodeAt(0)).buffer;
-}
-
 function matchesPending(item: ConversationItem, pending: PendingMessage) {
   if (item.kind !== "user" || pending.knownIds.has(item.id)) return false;
   if (item.id === pending.requestId) return true;
@@ -33,22 +29,6 @@ function matchesPending(item: ConversationItem, pending: PendingMessage) {
   const expected = pending.attachments.map((attachment) => attachment.name).sort();
   const actual = (item.attachments ?? []).map((attachment) => attachment.name).sort();
   return expected.length === actual.length && expected.every((name, index) => name === actual[index]);
-}
-
-function openPayload(payload: { mime: string; bytes: ArrayBuffer }, name: string) {
-  const url = URL.createObjectURL(new Blob([payload.bytes], { type: payload.mime }));
-  const tab = window.open("about:blank", "_blank");
-  if (tab) {
-    tab.opener = null;
-    tab.location.href = url;
-  } else {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    link.rel = "noopener";
-    link.click();
-  }
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function ClientChatBlock({ block, context, pointer }: { block: ClientChatBlockData; context: BlockContext; pointer: string }) {
@@ -62,7 +42,9 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const historyState = loadingBinding.status !== "ready" ? loadingBinding
     : loadingBinding.value === true || chat.loading ? { status: "loading" as const } : null;
   const disabled = historyState !== null;
-  const { draft, setDraft, attachments, setAttachments, error: actionError, setError: setActionError } = useChatDraft(`client:${channelName}`);
+  /* 카드나 세션이 바뀌면 초안·첨부·동작 오류도 그 자리에 따로 둔다. 돌아오면 쓰던 초안이 그대로 있다. */
+  const draftKey = chat.scope ? `client:${channelName}:${chat.scope}` : `client:${channelName}`;
+  const { draft, setDraft, attachments, setAttachments, error: actionError, setError: setActionError } = useChatDraft(draftKey);
   const [pending, setPending] = useState<PendingMessage | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [delta, setDelta] = useState("");

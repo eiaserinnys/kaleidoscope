@@ -847,7 +847,7 @@
 .ks-data-stack.is-column > .ks-data-stack-item:not(.is-fill) > .ks-agent-chat > .ks-agent-chat-history {
   flex: 0 0 auto;
   height: auto;
-  max-height: 220px;
+  max-height: calc(var(--ks-pane-min-size) + var(--ks-control-height));
   contain: none;
   padding-block: var(--ks-space-2);
   border-top: var(--ks-line-width) solid var(--ks-color-border);
