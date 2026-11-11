@@ -4,10 +4,12 @@
 장면 A는 코르크시트 상세와 같은 꼴이다. split(row)의 오른쪽 칸 stack 안에 구역 셋을 두고,
 「대사」 구역의 feed는 묶음 둘에 항목 여섯(초상 둘, 초상 없음 넷)을 둔다. 장면 B는 같은
 feed를 split 칸에 바로 두고, 장면 C는 초상이 하나도 없는 feed다. 장면 D는 장면 A와 같되
-「대사」 구역의 feed가 접는 묶음(grouped, collapsible)이고, 구역 첫 내용 간격을 A와 같은
-기준으로 잰다. 장면 N은 이름 색만 담은 feed로, 테마마다 이름의 계산된 색을 canvas에서
-sRGB로 얻어 화면 바탕 픽셀과 쉘 창 바탕 기준값 모두에 4.5:1 이상인지 잰다. 입력 자리 글은
---ks-color-muted인지 밝은 테마와 어두운 테마에서 잰다.
+「대사」 구역의 feed가 접는 묶음(grouped, collapsible)이고, 구역 첫 내용 위끝을 첫 가상 행의
+묶음 머리 줄(.ks-feed-group-head) 상자 위끝으로 재며, 머리 줄 안 묶음 머리 글이 세로
+가운데인지도 잰다. 장면 N은 이름 색만 담은 feed로, 테마마다 이름의 계산된 색을 canvas에서
+sRGB로 얻어 화면 바탕 픽셀과 쉘 창 바탕 기준값 모두에 4.5:1 이상인지 잰다. 장면 P는 장면
+A와 같은 분할에서 「대사」 구역을 뺀 꼴이고, 입력 자리 글이 --ks-color-muted인지 밝은
+테마와 어두운 테마에서 재며 그 캡처를 남긴다.
 
   python3 scripts/visual-check/check_feed_alignment.py [--output 산출폴더] [--port 포트]
 
@@ -127,12 +129,22 @@ def pane_layout(avatars=True):
     ]}
 
 
+def placeholder_layout():
+    return {"type": "split", "direction": "row", "sizes": [70, 30], "children": [
+        {"type": "text", "value": "왼쪽 칸"},
+        {"type": "stack", "direction": "column", "gap": "medium", "children": [
+            CARDS, COMMENTS,
+        ]},
+    ]}
+
+
 SCENES = {
     "A": detail_layout(True),
     "B": pane_layout(True),
     "C": detail_layout(False),
     "D": detail_layout(True, collapsible=True),
     "N": color_feed(),
+    "P": placeholder_layout(),
 }
 
 SECTION_GAP_JS = """(el) => {
@@ -156,6 +168,44 @@ SECTION_GAP_JS = """(el) => {
       titleBottom: title ? rect(title).bottom : null,
       firstTextTop: first ? first.top : null,
       gap: title && first ? first.top - rect(title).bottom : null,
+    };
+  });
+  return { sections };
+}"""
+
+SCENE_D_GAP_JS = """(el) => {
+  const rect = (node) => node.getBoundingClientRect();
+  const firstTextRect = (root) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return range.getBoundingClientRect();
+    }
+    return null;
+  };
+  const sections = [...el.querySelectorAll('.ks-data-section')].map((section) => {
+    const title = section.querySelector(':scope > .ks-data-section-header .ks-data-section-title');
+    const child = section.querySelector(':scope > .ks-data-section-child');
+    const row = child ? child.querySelector('.ks-feed > div:not(.ks-view-sticky) > [data-index="0"]') : null;
+    const head = row ? row.querySelector(':scope > .ks-feed-group-head') : null;
+    const group = head ? head.querySelector(':scope > .ks-view-group') : null;
+    const text = child ? firstTextRect(child) : null;
+    const titleBottom = title ? rect(title).bottom : null;
+    const headTop = head ? rect(head).top : null;
+    const textTop = text ? text.top : null;
+    const firstTop = headTop === null ? textTop : headTop;
+    return {
+      title: title ? title.textContent : null,
+      titleBottom,
+      headTop,
+      textTop,
+      gap: titleBottom === null || firstTop === null ? null : firstTop - titleBottom,
+      textGap: titleBottom === null || textTop === null ? null : textTop - titleBottom,
+      headTextCenterDelta: head && group
+        ? (rect(group).top + rect(group).bottom - rect(head).top - rect(head).bottom) / 2
+        : null,
     };
   });
   return { sections };
@@ -350,6 +400,18 @@ def judge_gaps(measurement):
     return {"section_gaps": max(gaps) - min(gaps) <= TOLERANCE}
 
 
+def judge_scene_d(measurement):
+    sections = measurement.get("sections", [])
+    gaps = [section.get("gap") for section in sections]
+    centers = [abs(section["headTextCenterDelta"]) for section in sections if section.get("headTextCenterDelta") is not None]
+    if len(gaps) != 3 or any(gap is None for gap in gaps) or not centers:
+        return {"section_gaps": False, "group_head_center": False}
+    return {
+        "section_gaps": max(gaps) - min(gaps) <= TOLERANCE,
+        "group_head_center": max(centers) <= TOLERANCE,
+    }
+
+
 def judge_metas(measurement):
     metas = measurement.get("metas", [])
     if not metas or any(meta.get("heading") is None for meta in metas):
@@ -499,8 +561,8 @@ def main():
                 app = open_scene(page, args.port, SCENES["D"], width, height)
                 key = f"D-{width}x{height}"
                 page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
-                gap_measurement = app.evaluate(SECTION_GAP_JS)
-                record(key, gap_measurement, judge_gaps(gap_measurement))
+                gap_measurement = app.evaluate(SCENE_D_GAP_JS)
+                record(key, gap_measurement, judge_scene_d(gap_measurement))
 
             for name in ("A", "B", "C"):
                 for width, height in SIZES:
@@ -512,19 +574,16 @@ def main():
                     page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
                     record(key, overflow, judge_overflow(overflow))
 
-            app = open_scene(page, args.port, SCENES["A"], 1440, 880)
+            app = open_scene(page, args.port, SCENES["P"], 1440, 880)
             for theme in ("light", "dark"):
                 page.emulate_media(color_scheme=theme)
                 page.wait_for_timeout(300)
                 measurement = app.evaluate(THEME_JS)
-                key = f"A-1440x880-{theme}"
-                page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
-                record(key, measurement, judge_placeholder(measurement))
                 app.evaluate(PLACEHOLDER_SCROLL_JS, PLACEHOLDER)
                 page.wait_for_timeout(200)
+                key = f"P-1440x880-{theme}"
                 page.screenshot(path=str(output / f"{key}-placeholder.png"), animations="disabled")
-                app.locator(".ks-feed").scroll_into_view_if_needed()
-                page.wait_for_timeout(200)
+                record(key, measurement, judge_placeholder(measurement))
 
             for theme in ("light", "dark"):
                 page.emulate_media(color_scheme=theme)
