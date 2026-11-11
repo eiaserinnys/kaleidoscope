@@ -1,6 +1,6 @@
 import { chromium, expect, test, type Page } from "@playwright/test";
 
-const path = process.env.KS_CONVERSATION_CAPTURES ?? "/tmp/ks-conversation-captures";
+function capturePath() { return process.env.KS_CONVERSATION_CAPTURES ?? test.info().outputPath("captures"); }
 async function open(page: Page, mode: string) {
   await page.goto(`/?preview=workspace-pas&conversation=${mode}`);
   await page.addStyleTag({ content: ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }" });
@@ -8,9 +8,9 @@ async function open(page: Page, mode: string) {
 }
 async function capture(page: Page, name: string) {
   await page.setViewportSize({ width: 1100, height: 700 });
-  await page.screenshot({ path: `${path}/${name}-wide.png` });
+  await page.screenshot({ path: `${capturePath()}/${name}-wide.png` });
   await page.setViewportSize({ width: 400, height: 600 });
-  await page.screenshot({ path: `${path}/${name}-narrow.png` });
+  await page.screenshot({ path: `${capturePath()}/${name}-narrow.png` });
 }
 
 test("기록, 이전 페이지, 지연 발송과 진행문", async ({ page }) => {
@@ -106,7 +106,7 @@ test("시작 판은 새 대화와 기존 대화를 제목과 경계로 나누고
     // 두 구역은 경계선으로 나뉘고 가로로 넘치지 않는다.
     expect(second!.y).toBeGreaterThan(start!.y + start!.height);
     expect(first!.x + first!.width).toBeLessThanOrEqual(panel!.x + panel!.width);
-    await page.screenshot({ path: `${path}/attach-start-sections-${width}.png` });
+    await page.screenshot({ path: `${capturePath()}/attach-start-sections-${width}.png` });
   }
   expect(await sections.nth(1).evaluate((element) => getComputedStyle(element).borderTopWidth)).not.toBe("0px");
 });
@@ -125,14 +125,14 @@ test("시작과 연결의 오류는 그 구역 안 단추 줄 아래에 뜬다",
     await expect(attachError).toContainText("이미 다른 곳에 연결되어 있습니다");
     const [link, notice] = await Promise.all([chat.getByRole("button", { name: "연결", exact: true }).boundingBox(), attachError.boundingBox()]);
     expect(notice!.y).toBeGreaterThan(link!.y + link!.height);
-    await page.screenshot({ path: `${path}/start-error-attach-${width}.png` });
+    await page.screenshot({ path: `${capturePath()}/start-error-attach-${width}.png` });
     await chat.getByRole("button", { name: "시작" }).click();
     const createError = sections.nth(0).getByRole("alert");
     await expect(createError).toContainText("이미 다른 곳에 연결되어 있습니다");
     const [start, createNotice, second] = await Promise.all([chat.getByRole("button", { name: "시작" }).boundingBox(), createError.boundingBox(), sections.nth(1).boundingBox()]);
     expect(createNotice!.y).toBeGreaterThan(start!.y + start!.height);
     expect(second!.y).toBeGreaterThan(createNotice!.y + createNotice!.height);
-    await page.screenshot({ path: `${path}/start-error-both-${width}.png` });
+    await page.screenshot({ path: `${capturePath()}/start-error-both-${width}.png` });
   }
 });
 
@@ -145,7 +145,7 @@ test("좁은 창에서도 고른 대화와 연결 단추는 한 줄이다", asyn
   const link = chat.getByRole("button", { name: "연결", exact: true });
   await page.setViewportSize({ width: 1100, height: 700 });
   const wideArrow = (await picker.locator("svg").boundingBox())!.width;
-  await page.screenshot({ path: `${path}/attach-long-wide.png` });
+  await page.screenshot({ path: `${capturePath()}/attach-long-wide.png` });
   for (const width of [360, 400]) {
     await page.setViewportSize({ width, height: 600 });
     const [chatBox, pickerBox, linkBox] = await Promise.all([chat.boundingBox(), picker.boundingBox(), link.boundingBox()]);
@@ -154,7 +154,7 @@ test("좁은 창에서도 고른 대화와 연결 단추는 한 줄이다", asyn
     expect(linkBox!.x + linkBox!.width).toBeLessThanOrEqual(chatBox!.x + chatBox!.width);
     expect(await picker.locator(".ks-select-choice-label").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
     expect((await picker.locator("svg").boundingBox())!.width).toBeCloseTo(wideArrow, 1);
-    await page.screenshot({ path: `${path}/attach-long-narrow-${width}.png` });
+    await page.screenshot({ path: `${capturePath()}/attach-long-narrow-${width}.png` });
   }
 });
 
@@ -168,7 +168,7 @@ test("연결한 대화 머리는 49px 한 줄과 끝 단추를 지킨다", async
     ]);
     expect(Math.abs(toolbarBox!.height - 49)).toBeLessThanOrEqual(1);
     expect(Math.abs(buttonBox!.x + buttonBox!.width - (toolbarBox!.x + toolbarBox!.width - 12))).toBeLessThanOrEqual(1);
-    await page.screenshot({ path: `${path}/attach-attached-header-${width}.png` });
+    await page.screenshot({ path: `${capturePath()}/attach-attached-header-${width}.png` });
   }
 });
 
@@ -230,7 +230,7 @@ test("자기 대화는 두 막대에서 제목과 자연 폭 선택기를 지킨
         return { innerWidth: element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight), scroll: element.scrollWidth - element.clientWidth, height: element.getBoundingClientRect().height };
       });
       console.log(`대화 머리 실측 ${state} ${width}: ${JSON.stringify({ conversation: conversationMetrics, settings: metrics, buttonX: buttonBox!.x, buttonRight: buttonBox!.x + buttonBox!.width, attachedRight: attachedRight.get(width) })}`);
-      await page.screenshot({ path: `${path}/attach-owned-${state}-${width}.png` });
+      await page.screenshot({ path: `${capturePath()}/attach-owned-${state}-${width}.png` });
       expect(Math.abs(metrics.height - 49)).toBeLessThanOrEqual(1);
       expect(Math.abs(conversationBox!.height - 49)).toBeLessThanOrEqual(1);
       expect(Math.abs(settingsBox!.y - (conversationBox!.y + conversationBox!.height))).toBeLessThanOrEqual(1);
@@ -285,7 +285,7 @@ test.describe("디렉터 창 크기의 시작 판", () => {
         const picker = chat.getByRole("button", { name: "기존 대화" });
         const before = { start: await start.boundingBox(), link: await link.boundingBox(), picker: await picker.boundingBox(), panel: await geometry(panel) };
         if (width === 636) expect(before.panel.scrollHeight).toBeLessThanOrEqual(before.panel.clientHeight);
-        await page.screenshot({ path: `${path}/director-start-${width}.png` });
+        await page.screenshot({ path: `${capturePath()}/director-start-${width}.png` });
         await link.click();
         const progress = sections.nth(1).locator(".ks-agent-chat-start-head").getByText("연결하는 중");
         await expect(progress).toBeVisible();
@@ -294,7 +294,7 @@ test.describe("디렉터 창 크기의 시작 판", () => {
         expect(await picker.boundingBox()).toEqual(before.picker);
         expect(await start.boundingBox()).toEqual(before.start);
         expect(await geometry(panel)).toEqual(before.panel);
-        await page.screenshot({ path: `${path}/director-attaching-${width}.png` });
+        await page.screenshot({ path: `${capturePath()}/director-attaching-${width}.png` });
       } finally {
         await browser.close();
       }
@@ -313,7 +313,7 @@ test.describe("디렉터 창 크기의 시작 판", () => {
         expect(await start.boundingBox()).toEqual(before.start);
         expect(await link.boundingBox()).toEqual(before.link);
         expect(await geometry(second.panel)).toEqual(before.panel);
-        await second.page.screenshot({ path: `${path}/director-starting-${width}.png` });
+        await second.page.screenshot({ path: `${capturePath()}/director-starting-${width}.png` });
       } finally {
         await second.browser.close();
       }
@@ -334,7 +334,7 @@ test.describe("디렉터 창 크기의 시작 판", () => {
         await expect(progress).toBeVisible();
         expect(await insidePanel(first.panel, progress)).toBe(true);
         expect(await insidePanel(first.panel, first.chat.getByRole("button", { name: "시작" }))).toBe(true);
-        await first.page.screenshot({ path: `${path}/director-starting-after-attach-error-${width}x${height}.png` });
+        await first.page.screenshot({ path: `${capturePath()}/director-starting-after-attach-error-${width}x${height}.png` });
         // 시작도 실패하면 연결 알림은 걷히고 시작 알림이 그 구역에 뜬다.
         await expect(sections.nth(0).getByRole("alert")).toContainText("CONV_ATTACH_CONFLICT");
         await expect(sections.nth(1).getByRole("alert")).toHaveCount(0);
@@ -352,7 +352,7 @@ test.describe("디렉터 창 크기의 시작 판", () => {
         await expect.poll(() => insidePanel(second.panel, alert)).toBe(true);
         await expect(start).toBeEnabled();
         const before = { start: await start.boundingBox(), panel: await geometry(second.panel) };
-        await second.page.screenshot({ path: `${path}/director-start-error-${width}x${height}.png` });
+        await second.page.screenshot({ path: `${capturePath()}/director-start-error-${width}x${height}.png` });
         await start.click();
         const progress = sections.nth(0).locator(".ks-agent-chat-start-head").getByText("시작하는 중");
         await expect(progress).toBeVisible();
@@ -368,7 +368,7 @@ test.describe("디렉터 창 크기의 시작 판", () => {
         } else {
           expect(after.scrollTop).toBeLessThan(before.panel.scrollTop);
         }
-        await second.page.screenshot({ path: `${path}/director-start-retry-${width}x${height}.png` });
+        await second.page.screenshot({ path: `${capturePath()}/director-start-retry-${width}x${height}.png` });
       } finally {
         await second.browser.close();
       }
@@ -388,7 +388,7 @@ test.describe("디렉터 창 크기의 시작 판", () => {
             const [outer, notice] = await Promise.all([panel.boundingBox(), alert.boundingBox()]);
             return notice!.y >= outer!.y - 0.5 && notice!.y + notice!.height <= outer!.y + outer!.height + 0.5;
           }).toBe(true);
-          await page.screenshot({ path: `${path}/director-error-${name}-${width}.png` });
+          await page.screenshot({ path: `${capturePath()}/director-error-${name}-${width}.png` });
         }
       } finally {
         await browser.close();
@@ -440,7 +440,7 @@ test.describe("실제 스크롤바가 있는 대화 머리", () => {
       return result;
     });
     console.log(`실제 스크롤바 막대: ${JSON.stringify(dimensions)}`);
-    await page.screenshot({ path: `${path}/real-scrollbar-long-360.png` });
+    await page.screenshot({ path: `${capturePath()}/real-scrollbar-long-360.png` });
     expect(dimensions.scrollbar).toBeGreaterThan(0);
     expect(dimensions.height).toBe(49);
     expect(dimensions.top).toBeCloseTo(dimensions.reference.top, 1);
@@ -454,7 +454,7 @@ test.describe("실제 스크롤바가 있는 대화 머리", () => {
       return { right: bounds.right - button.right, scrollLeft: element.scrollLeft };
     });
     console.log(`모델 초점: ${JSON.stringify(focus)}`);
-    await page.screenshot({ path: `${path}/real-scrollbar-focus-360.png` });
+    await page.screenshot({ path: `${capturePath()}/real-scrollbar-focus-360.png` });
     expect(focus.right).toBeGreaterThanOrEqual(2);
 
     await page.evaluate(() => (window as any).conversationHarness.setBusy(true));
@@ -468,7 +468,7 @@ test.describe("실제 스크롤바가 있는 대화 머리", () => {
       });
       console.log(`안내 글 busy ${width}: ${JSON.stringify(hint)}`);
       expect(!hint.visible || (hint.fits && hint.scrollWidth <= hint.clientWidth && hint.width >= hint.scrollWidth)).toBe(true);
-      await page.screenshot({ path: `${path}/hint-busy-${width}.png` });
+      await page.screenshot({ path: `${capturePath()}/hint-busy-${width}.png` });
     }
     await page.evaluate(() => (window as any).conversationHarness.setBusy(false));
     await expect(profile).toBeEnabled();
@@ -484,7 +484,7 @@ test.describe("실제 스크롤바가 있는 대화 머리", () => {
       });
       console.log(`안내 글 switching ${width}: ${JSON.stringify(hint)}`);
       expect(!hint.visible || (hint.fits && hint.scrollWidth <= hint.clientWidth && hint.width >= hint.scrollWidth)).toBe(true);
-      await page.screenshot({ path: `${path}/hint-switching-${width}.png` });
+      await page.screenshot({ path: `${capturePath()}/hint-switching-${width}.png` });
       await expect(profile).toBeEnabled();
     }
     } finally {
@@ -504,7 +504,7 @@ test("연결하는 중에는 시작과 고른 줄을 잠근다", async ({ page }
     await expect(chat.getByRole("button", { name: "시작" })).toBeDisabled();
     await expect(chat.getByRole("button", { name: "프로필" })).toBeDisabled();
     await expect(chat.getByRole("button", { name: "모델" })).toBeDisabled();
-    await page.screenshot({ path: `${path}/${name}.png` });
+    await page.screenshot({ path: `${capturePath()}/${name}.png` });
   }
 });
 
@@ -561,7 +561,7 @@ test("짧은 기록은 스크롤 없이 이전 페이지를 모두 읽는다", a
   await expect.poll(() => page.evaluate(() => (window as any).conversationHarness.calls().filter((c: any) => c.op === "conversation.history").length)).toBe(2);
   const history = chat.getByRole("log");
   expect(await history.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
-  await page.screenshot({ path: `${path}/short-history-1440.png` });
+  await page.screenshot({ path: `${capturePath()}/short-history-1440.png` });
 });
 
 test("로그인 뒤 기록으로 복귀", async ({ page }) => {

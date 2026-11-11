@@ -72,14 +72,20 @@ test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
     await details.locator("summary").click();
     await dialog.getByText("코드 보기").click();
     await expect(dialog.getByText("def run(action, data):", { exact: false })).toBeVisible();
-    await page.screenshot({ path: `test-results/installation-consent-details-${width}-${theme}.png` });
+    await page.screenshot({ path: test.info().outputPath(`installation-consent-details-${width}-${theme}.png`) });
   }
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "허용하고 설치" }).evaluate((button: HTMLButtonElement) => button.click());
   expect(await page.evaluate(() => (window as any).installationHarness.answers)).toEqual([]);
   await dialog.getByRole("button", { name: "허용하고 설치" }).click();
   expect(await page.evaluate(() => (window as any).installationHarness.answers)).toEqual([
-    { op: "app.respond_install_permission", window_id: "editor-window", request_id: "heavy", digest: "sha256-test-digest", allow: true },
+    {
+      op: "app.respond_install_permission",
+      owner: { kind: "window", window_id: "editor-window", app_id: "research-desk", app_version: 1 },
+      request_id: "heavy",
+      digest: "sha256-test-digest",
+      allow: true,
+    },
   ]);
 
   for (const [width, theme] of [[1000, "light"], [360, "dark"], [1000, "dark"], [360, "light"]] as const) {
@@ -88,7 +94,7 @@ test("설치 전 권한의 실제 조작과 화면", async ({ page }) => {
     await page.goto("/installation-consent.html");
     await page.evaluate(async () => { await (window as any).installationHarness.ready; (window as any).installationHarness.show("light"); });
     await expect(page.getByRole("dialog")).toContainText("이 앱은 창 안에서만 동작합니다.");
-    await page.screenshot({ path: `test-results/installation-consent-light-${width}-${theme}.png` });
+    await page.screenshot({ path: test.info().outputPath(`installation-consent-light-${width}-${theme}.png`) });
     await page.keyboard.press("Escape");
     expect(await page.evaluate(() => (window as any).installationHarness.answers[0].allow)).toBe(false);
   }
@@ -216,7 +222,7 @@ test("설치 동의 창은 창 중앙에 놓이고 열두 경로를 펼치고 �
     console.log(`installation-consent-center-${width}:`, JSON.stringify({ state: "closed", ...before, diff: beforeDiff }));
     expect(beforeDiff.x).toBeLessThanOrEqual(1);
     expect(beforeDiff.y).toBeLessThanOrEqual(1);
-    await page.screenshot({ path: `test-results/installation-consent-omni-image-${width}-light.png` });
+    await page.screenshot({ path: test.info().outputPath(`installation-consent-omni-image-${width}-light.png`) });
     await summary.click();
     await expect(details).toHaveAttribute("open", "");
     await expect(details.locator(".ks-install-path")).toHaveCount(12);
@@ -226,7 +232,7 @@ test("설치 동의 창은 창 중앙에 놓이고 열두 경로를 펼치고 �
     console.log(`installation-consent-center-${width}:`, JSON.stringify({ state: "open", ...after, diff: afterDiff }));
     expect(afterDiff.x).toBeLessThanOrEqual(1);
     expect(afterDiff.y).toBeLessThanOrEqual(1);
-    await page.screenshot({ path: `test-results/installation-consent-omni-image-open-${width}-light.png` });
+    await page.screenshot({ path: test.info().outputPath(`installation-consent-omni-image-open-${width}-light.png`) });
     await summary.click();
     await expect(details).not.toHaveAttribute("open", "");
   }

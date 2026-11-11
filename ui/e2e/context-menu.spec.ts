@@ -137,7 +137,7 @@ test("CodeMirror 클립보드 대기 중 초점을 옮기면 문서를 바꾸지
 
 for (const [name, width, height] of [["wide", 1100, 760], ["narrow", 520, 720]] as const) {
   test(`${name} 메뉴 화면 캡처`, async ({ page }) => {
-    const directory = process.env.KS_CONTEXT_CAPTURE_DIR ?? resolve(process.cwd(), "../../../.local/artifacts/context-menu/20261104-0100");
+    const directory = process.env.KS_CONTEXT_CAPTURE_DIR ?? test.info().outputPath("captures");
     await page.setViewportSize({ width, height });
     const input = page.getByLabel("글", { exact: true });
     await input.click({ button: "right" });
@@ -161,7 +161,7 @@ test("실제 코어의 지연 응답 중 선택 위치와 프레임 입력을 �
   test.setTimeout(360_000);
   const fixtures = resolve(process.cwd(), "e2e/fixtures/context-menu");
   const folder = mkdtempSync(join(tmpdir(), "ks-context-menu-"));
-  const output = process.env.KS_CONTEXT_CAPTURE_DIR ?? resolve(process.cwd(), "../../../.local/artifacts/context-menu/review-fix-20261104-0200");
+  const output = process.env.KS_CONTEXT_CAPTURE_DIR ?? test.info().outputPath("captures");
   try {
     for (const name of ["a.ts", "b.md"]) cpSync(join(fixtures, name), join(folder, name));
     const script = join(process.env.AGENT_COMMON_FILES_DIR!, "skills/kaleidoscope-app/scripts/sandbox.py");

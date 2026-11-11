@@ -1,8 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
-import { resolve } from "node:path";
 
-const capture = resolve(process.cwd(), "../../../.local/artifacts/context-menu-content/20261104-0320");
+function captureDir() { return test.info().outputPath("captures"); }
 
 test.beforeEach(async ({ context }) => { await context.grantPermissions(["clipboard-read", "clipboard-write"]); });
 
@@ -56,7 +55,7 @@ test("실제 이미지 블록과 읽기 전용 코드 블록의 메뉴", async (
 
 for (const [label, width] of [["wide", 1100], ["narrow", 520]] as const) {
   test(`${label} 링크·코드·이미지·말 메뉴 캡처`, async ({ page }) => {
-    mkdirSync(capture, { recursive: true });
+    mkdirSync(captureDir(), { recursive: true });
     await page.setViewportSize({ width, height: 720 });
     await page.goto("/context-menu.html?content=1");
     for (const [name, selector] of [["link", "a"], ["code", "pre"], ["image", ".ks-agent-attachment-image"], ["message", ".ks-agent-chat-assistant"]] as const) {
@@ -64,7 +63,7 @@ for (const [label, width] of [["wide", 1100], ["narrow", 520]] as const) {
       if (name === "message") { await target.focus(); await page.keyboard.press("ContextMenu"); }
       else await target.click({ button: "right", position: { x: 4, y: 4 } });
       await expect(page.getByRole("menu")).toBeVisible();
-      await page.screenshot({ path: `${capture}/${label}-${name}.png` });
+      await page.screenshot({ path: `${captureDir()}/${label}-${name}.png` });
       await page.keyboard.press("Escape");
     }
   });

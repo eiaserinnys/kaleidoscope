@@ -7,7 +7,7 @@ test("실제 코어에서 데스크톱마다 다른 바탕화면을 저장하고
   test.skip(!process.env.KS_WALLPAPER_REAL_CORE, "전용 실제 코어 시험 캐시를 지정해야 합니다");
   test.setTimeout(360_000);
   const output = process.env.KS_WALLPAPER_CAPTURE_DIR
-    ?? resolve(process.cwd(), "../../../.local/tmp/card1043/wallpaper/e2e");
+    ?? test.info().outputPath("captures");
   mkdirSync(output, { recursive: true });
   const script = join(process.env.AGENT_COMMON_FILES_DIR!, "skills/kaleidoscope-app/scripts/sandbox.py");
   const run = spawnSync("python3", [script, "run", "--version", process.env.KS_WALLPAPER_REAL_CORE!, "--app",

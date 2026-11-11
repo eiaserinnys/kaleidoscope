@@ -5,7 +5,7 @@ import { expect, test, type FrameLocator, type Locator, type Page } from "@playw
 // 최소화 중에도 같이 보기 글 갱신은 이어진다. 프레임이 다시 붙지 않으므로 스크롤도 남는다.
 // 카드 #1136 B2: 클라이언트가 준비되기 전 canvas는 빈 어두운 화면이 아니라 기존 로딩 표시를 보여 준다.
 
-const CAPTURE = "/home/eias/workspace/.local/artifacts/c1136-frame-visibility-loading";
+function captureDir() { return test.info().outputPath("captures"); }
 const STYLE = ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }";
 
 test.setTimeout(120_000);
@@ -30,7 +30,7 @@ function railScroll(frame: FrameLocator) {
 }
 
 test("최소화하면 샌드박스의 rAF가 멈추고 복원하면 다시 돌며 같이 보기 글은 최소화 중에도 갱신된다", async ({ page }, testInfo) => {
-  await mkdir(CAPTURE, { recursive: true });
+  await mkdir(captureDir(), { recursive: true });
   await page.setViewportSize({ width: 1100, height: 820 });
   await page.goto("/?preview=frame-visibility-1136");
   await page.addStyleTag({ content: STYLE });
@@ -89,11 +89,11 @@ test("최소화하면 샌드박스의 rAF가 멈추고 복원하면 다시 돌�
   const measurements = { shownDelta, hiddenDelta, restoredDelta, hiddenStartSeq, hiddenEndSeq, hiddenStartText, hiddenEndText };
   const bodyText = JSON.stringify(measurements, null, 2);
   await testInfo.attach("frame-visibility.json", { body: bodyText, contentType: "application/json" });
-  await writeFile(`${CAPTURE}/frame-visibility.json`, bodyText);
+  await writeFile(`${captureDir()}/frame-visibility.json`, bodyText);
 });
 
 test("클라이언트가 준비되기 전 canvas는 빈 화면 대신 기존 로딩 표시를 보여 준다", async ({ page }, testInfo) => {
-  await mkdir(CAPTURE, { recursive: true });
+  await mkdir(captureDir(), { recursive: true });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   await page.route("**/__slow-client.js", async (route) => {
@@ -117,12 +117,12 @@ test("클라이언트가 준비되기 전 canvas는 빈 화면 대신 기존 로
     return { canvas: bounds(rect), overlay: bounds(overlay) };
   });
   const wide = await measure();
-  await app.screenshot({ path: `${CAPTURE}/wide-loading.png` });
+  await app.screenshot({ path: `${captureDir()}/wide-loading.png` });
 
   await page.setViewportSize({ width: 400, height: 760 });
   await expect(loading).toBeVisible();
   const narrow = await measure();
-  await app.screenshot({ path: `${CAPTURE}/narrow-loading.png` });
+  await app.screenshot({ path: `${captureDir()}/narrow-loading.png` });
 
   for (const [name, value] of [["wide", wide], ["narrow", narrow]] as const) {
     for (const edge of ["left", "top", "right", "bottom"] as const) {
@@ -135,9 +135,9 @@ test("클라이언트가 준비되기 전 canvas는 빈 화면 대신 기존 로
   await expect(loading).toHaveCount(0);
   await expect(canvas).toHaveAttribute("aria-label", "준비된 색상 무대");
   await expect(canvas).not.toHaveAttribute("aria-busy");
-  await app.screenshot({ path: `${CAPTURE}/narrow-ready.png` });
+  await app.screenshot({ path: `${captureDir()}/narrow-ready.png` });
 
   const bodyText = JSON.stringify({ wide, narrow }, null, 2);
   await testInfo.attach("canvas-loading.json", { body: bodyText, contentType: "application/json" });
-  await writeFile(`${CAPTURE}/canvas-loading.json`, bodyText);
+  await writeFile(`${captureDir()}/canvas-loading.json`, bodyText);
 });

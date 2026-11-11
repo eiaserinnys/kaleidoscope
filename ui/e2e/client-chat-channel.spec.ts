@@ -24,10 +24,10 @@ declare global {
   }
 }
 
-const captureDir = "/home/eias/workspace/.local/tmp/card933/chat-client";
+function captureDir() { return test.info().outputPath("captures"); }
 
 test("대화를 불러오는 동안 입력 줄과 초안은 유지된다", async ({ page }) => {
-  const capture = "/home/eias/workspace/.local/artifacts/c1009-chat-loading";
+  const capture = test.info().outputPath("captures");
   await mkdir(capture, { recursive: true });
   await page.setViewportSize({ width: 1100, height: 820 });
   await page.goto("/?preview=client-chat-test");
@@ -71,7 +71,7 @@ test("대화를 불러오는 동안 입력 줄과 초안은 유지된다", async
 });
 
 test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리로드 복구", async ({ page }) => {
-  await mkdir(captureDir, { recursive: true });
+  await mkdir(captureDir(), { recursive: true });
   await page.setViewportSize({ width: 1100, height: 820 });
   await page.goto("/?preview=client-chat-test&hold_chat_snapshot=1");
   await page.addStyleTag({ content: `
@@ -83,7 +83,7 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
   await expect(app).toBeVisible();
   await expect(app.locator(".ks-agent-chat-history")).toBeVisible();
   await expect(app.getByLabel("불러오는 중")).toBeVisible();
-  await app.screenshot({ path: `${captureDir}/loading.png` });
+  await app.screenshot({ path: `${captureDir()}/loading.png` });
   await expect.poll(() => page.evaluate(() => window.clientChatHarness.snapshotPending())).toBe(true);
   await page.evaluate(() => window.clientChatHarness.resumeSnapshot());
 
@@ -154,11 +154,11 @@ test("클라이언트 채팅 채널의 기록, 입력, 첨부, 바닥글과 리�
 
   await page.evaluate(() => window.clientChatHarness.control("chat-test-emit-many"));
   await expect(app.getByText("조각 100", { exact: true })).toBeVisible();
-  await app.screenshot({ path: `${captureDir}/wide.png` });
+  await app.screenshot({ path: `${captureDir()}/wide.png` });
 
   await page.setViewportSize({ width: 392, height: 700 });
   await expect(app.getByText("조각 100", { exact: true })).toBeVisible();
-  await app.screenshot({ path: `${captureDir}/narrow.png` });
+  await app.screenshot({ path: `${captureDir()}/narrow.png` });
   const overflow = await app.evaluate((element) => ({ client: element.clientWidth, scroll: element.scrollWidth }));
   expect(overflow.scroll).toBeLessThanOrEqual(overflow.client + 1);
 
