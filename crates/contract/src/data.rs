@@ -1468,6 +1468,10 @@ pub enum SourceStatus {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         id: Option<String>,
+        /// 오류 원인. 없으면 빈 배열이고 옛 값에도 없다.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(optional, as = "Option<Vec<String>>")]
+        details: Vec<String>,
     },
     /// 연결이 기기 로그인(`oauth`)인데 이 기기에 로그인 정보가 없거나 원천이 401을 돌려줬다.
     LoginRequired { permission: String },

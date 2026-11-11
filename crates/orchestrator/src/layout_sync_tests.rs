@@ -4,7 +4,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures::StreamExt;
 use kaleidoscope_contract::{
     assets::AssetDep,
-    registry::{DeviceLayout, LayoutChanges},
+    registry::{DeviceLayout, LayoutChanges, LayoutDataError, LayoutFolder},
     AppWindow, Desktop, DesktopShortcut, DesktopWallpaper, Rect, SentShareContext, Workspace,
 };
 use std::collections::BTreeMap;
@@ -935,7 +935,7 @@ fn revoking_device_drops_its_layout_report_from_workspace_queries() {
     std::thread::sleep(std::time::Duration::from_millis(1100));
     state.save_layout("probe", &report("w")).unwrap();
     assert_eq!(
-        state.get_workspace("w").unwrap().unwrap()["device"]["name"],
+        state.get_workspace("w").unwrap().unwrap()["devices"][0]["name"],
         "Probe"
     );
 
@@ -951,9 +951,109 @@ fn revoking_device_drops_its_layout_report_from_workspace_queries() {
         .unwrap();
     assert_eq!(rows, 0);
     assert_eq!(
-        state.get_workspace("w").unwrap().unwrap()["device"]["name"],
+        state.get_workspace("w").unwrap().unwrap()["devices"][0]["name"],
         "PC"
     );
+}
+
+#[tokio::test]
+async fn workspace_query_shows_each_devices_window_errors_with_code_and_details() {
+    let state = AppState::in_memory("secret");
+    insert_device(&state, "pc-a", "PC-A");
+    insert_device(&state, "pc-b", "PC-B");
+    state
+        .apply_layout_changes(
+            None,
+            &LayoutChanges {
+                workspaces: vec![workspace("w", "작업")],
+                desktops: vec![desktop("d", "w")],
+                windows: vec![window("two", "d", "missing")],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let _connected_a = state
+        .stream_with_registry(
+            "pc-a".into(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    let _connected_b = state
+        .stream_with_registry(
+            "pc-b".into(),
+            Some(Supported::current()),
+            registry::LAYOUT_SYNC_REGISTRY_VERSION,
+        )
+        .unwrap();
+    state
+        .save_layout(
+            "pc-a",
+            &DeviceLayout {
+                workspaces: vec![workspace("w", "작업")],
+                desktops: vec![desktop("d", "w")],
+                windows: vec![window("two", "d", "missing")],
+                active_workspace_id: Some("w".into()),
+                active_desktop_ids: BTreeMap::from([("w".into(), "d".into())]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    state
+        .save_layout(
+            "pc-b",
+            &DeviceLayout {
+                workspaces: vec![workspace("w", "작업")],
+                desktops: vec![desktop("d", "w")],
+                windows: vec![window("two", "d", "missing")],
+                folders: vec![LayoutFolder {
+                    window_id: "two".into(),
+                    permission: "docs".into(),
+                    root_name: "보고서".into(),
+                }],
+                active_workspace_id: Some("other".into()),
+                active_desktop_ids: BTreeMap::from([("w".into(), "d".into())]),
+                data_errors: vec![LayoutDataError {
+                    window_id: "two".into(),
+                    pointer: "/sources/cards".into(),
+                    message: "식을 계산하지 못했습니다".into(),
+                    code: Some("DATA_BINDING_EXPR_FAILED".into()),
+                    details: vec![
+                        "pointer: /ui/children/0/items".into(),
+                        "reason: T0412 식을 읽지 못했습니다".into(),
+                    ],
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let found = state.get_workspace("w").unwrap().unwrap();
+    assert_eq!(found["devices"][0]["device_id"], "pc-a");
+    assert_eq!(found["devices"][0]["connected"], true);
+    assert_eq!(found["devices"][0]["active"], true);
+    assert_eq!(found["devices"][0]["active_desktop_id"], "d");
+    assert_eq!(found["devices"][1]["device_id"], "pc-b");
+    assert_eq!(found["devices"][1]["connected"], true);
+    assert_eq!(found["devices"][1]["active"], false);
+    assert_eq!(found["devices"][1]["active_desktop_id"], "d");
+    let window = &found["desktops"][0]["windows"][0];
+    assert_eq!(window["window_id"], "two");
+    assert_eq!(window["folders"][0]["device_id"], "pc-b");
+    assert_eq!(window["folders"][0]["device_name"], "PC-B");
+    assert_eq!(window["folders"][0]["permission"], "docs");
+    assert_eq!(window["folders"][0]["root_name"], "보고서");
+    assert_eq!(window["data_errors"][0]["device_id"], "pc-b");
+    assert_eq!(window["data_errors"][0]["device_name"], "PC-B");
+    assert_eq!(window["data_errors"][0]["code"], "DATA_BINDING_EXPR_FAILED");
+    assert_eq!(
+        window["data_errors"][0]["details"],
+        json!([
+            "pointer: /ui/children/0/items",
+            "reason: T0412 식을 읽지 못했습니다"
+        ])
+    );
+    assert_eq!(found["desktops"][0]["active_on"], json!(["pc-a"]));
 }
 
 #[test]

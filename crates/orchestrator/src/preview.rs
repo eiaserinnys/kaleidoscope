@@ -610,6 +610,7 @@ fn preview_failure(
             message: error.message.clone(),
             has_value: false,
             id: error.id.clone(),
+            details: Vec::new(),
         },
     );
     let mut result =

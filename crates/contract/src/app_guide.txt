@@ -35,7 +35,7 @@ kaleidoscope는 에이전트가 올린 앱을 창으로 띄우는 데스크톱 �
 1. 고치는 앱이면 list_apps와 get_app으로 지금 판을 받습니다.
 2. preview_app으로 식이 내는 값과 warnings를 봅니다. 화면을 그리지는 않습니다. 기기 원천은 data로 표본을 줍니다.
 3. upload_app으로 올립니다. 기본으로 창도 띄우며, 이미 올린 앱을 다시 띄울 때는 open_app을 씁니다. 작업을 지정하면 그 작업을 지금 띄운 동기화 기기로 가며, 기기 MCP 연결은 그 기기로 갑니다. 응답의 open_sent_to는 띄우기를 요청한 기기 수입니다. 0이면 창이 뜨지 않으니 note가 있으면 읽고 사용자에게 알립니다.
-4. get_workspace로 창이 떴는지 봅니다. 창마다 상태, 고른 폴더, data_errors가 나옵니다.
+4. get_workspace로 기기별 창 상태, 고른 폴더, data_errors(코드와 원인), devices와 오류의 device_name을 봅니다.
 5. 사용자에게 창의 같이 보기를 켜 달라고 합니다. get_shared_view로 window_id를 찾고 read_window(window_id)로 view_id와 [번호]를 읽습니다. act_window(window_id, view_id, action)의 click, type, select, key, scroll로 조작하고 새 view_id와 mode(diff, full, unchanged)로 결과를 확인합니다. 다음 동작에는 새 view_id를 씁니다.
 6. 시각 확인이나 canvas·격리 프레임(sandbox, html_view)의 point에만 image: true로 그림과 geometry(css_width, css_height, pixel_width, pixel_height)를 받습니다. point는 그림의 픽셀 좌표입니다. settled: false나 applied: true 오류 뒤에는 다시 읽습니다. 같이 보기가 꺼진 창과 파일·실행 허용 화면은 사용자에게 조작을 요청합니다.
 7. 시험용 앱은 확인 뒤 지웁니다.

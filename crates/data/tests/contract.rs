@@ -262,6 +262,7 @@ fn source_meta_is_available_without_waiting_for_source_value() {
             message: "실패".into(),
             has_value: false,
             id: None,
+            details: Vec::new(),
         },
     )]);
     let values = app.evaluate_with_data_meta(
@@ -340,6 +341,7 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
             message: "failed".into(),
             has_value: false,
             id: None,
+            details: Vec::new(),
         },
     )]);
     let values = app.evaluate(&state, &data, &statuses);

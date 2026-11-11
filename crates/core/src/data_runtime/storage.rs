@@ -194,12 +194,18 @@ impl Runtime {
                         permission: permission.clone(),
                     },
                 ),
-                Some(SourceStatus::Failed { message, id, .. }) => (
+                Some(SourceStatus::Failed {
+                    message,
+                    id,
+                    details,
+                    ..
+                }) => (
                     2,
                     SourceStatus::Failed {
                         message: message.clone(),
                         has_value,
                         id: id.clone(),
+                        details: details.clone(),
                     },
                 ),
                 Some(SourceStatus::Loading { .. }) => (1, SourceStatus::Loading { has_value }),
@@ -219,9 +225,15 @@ impl Runtime {
             Some(BindingValue::Loading {}) => {
                 source.status = SourceStatus::Loading { has_value: false }
             }
-            Some(BindingValue::Failed { message, id, .. }) => {
+            Some(BindingValue::Failed {
+                message,
+                id,
+                details,
+                ..
+            }) => {
                 source.status = SourceStatus::Failed {
                     message,
+                    details: details.unwrap_or_default(),
                     has_value: false,
                     id,
                 }

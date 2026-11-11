@@ -568,7 +568,7 @@ impl McpServer {
 
     #[tool(
         name = "get_workspace",
-        description = "작업의 데스크톱과 창, 현재 상태를 읽습니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다."
+        description = "작업의 데스크톱과 창, 현재 상태를 읽습니다. 기기마다의 창 상태와 고른 폴더, data_errors(코드와 원인)가 나오고, 오류에는 그것을 낸 기기의 device_id와 device_name이 붙습니다. workspace_id를 빼면 이 MCP 연결의 작업을 사용합니다."
     )]
     async fn tool_get_workspace(
         &self,
