@@ -65,8 +65,10 @@ fn text(app: &AppHandle) -> Result<String, String> {
 }
 
 fn click(app: &AppHandle, label: &str) -> Result<(), String> {
-    let script = format!("const root=document.querySelector('[data-testid=\"app-window-realtime-fixture\"]');const b=[...(root?.querySelectorAll('button') ?? [])].find(b=>b.textContent.trim()==={});if(!b)return false;b.click();return true;", serde_json::to_string(label).unwrap());
-    ui::wait_dom(app, &script, label)
+    let label_json = serde_json::to_string(label).unwrap();
+    let find = format!("const root=document.querySelector('[data-testid=\"app-window-realtime-fixture\"]');const b=[...(root?.querySelectorAll('button') ?? [])].find(b=>b.textContent.trim()==={label_json});");
+    ui::wait_dom(app, &format!("{find}return !!b;"), label)?;
+    ui::action(app, &format!("{find}if(!b)return false;b.click();return true;"), label)
 }
 
 fn roundtrip(app: &AppHandle) -> Result<(), String> {

@@ -580,7 +580,11 @@ fn scenario(app: &AppHandle, core: &Core, out: &Path, log: &mut File) -> Result<
         let _ = screen(out, log, "99-ui-failure");
         return Err(error);
     }
-    record(log, "complete", json!({"ok": true}))
+    record(
+        log,
+        "complete",
+        json!({"ok": true, "eval_timeouts": ui::eval_timeouts()}),
+    )
 }
 
 pub fn start(app: AppHandle, core: Arc<Core>) {

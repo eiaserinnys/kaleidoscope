@@ -103,6 +103,7 @@ pub(super) fn scenario(
         "return location.origin === 'http://tauri.localhost' && !!document.body;",
         "최상위 쉘 로드",
     )?;
+    record(log, "media-stream.shell_ready", json!({}))?;
     let script = r#"
       const url = MEDIA_URL;
       const state = window.__ksMediaStream = {seeked:false, started:false, progress:false, errors:[], console:[], bufferedBeforeSeek:0, target:0, time:0, origin:location.origin};
@@ -137,9 +138,16 @@ pub(super) fn scenario(
       return true;
     "#.replace("MEDIA_URL", &serde_json::to_string(&url).map_err(|e| e.to_string())?);
     ui::evaluate(app, &script)?;
+    record(log, "media-stream.script_installed", json!({}))?;
     let deadline = Instant::now() + Duration::from_secs(60);
     let result = loop {
-        let state = ui::evaluate(app, "return window.__ksMediaStream ?? null;")?;
+        let Some(state) = ui::try_evaluate(app, "return window.__ksMediaStream ?? null;")? else {
+            if Instant::now() >= deadline {
+                break json!({"passed":false,"webview":Value::Null,"requests":core.media_stream_observations()});
+            }
+            thread::sleep(Duration::from_millis(100));
+            continue;
+        };
         let observations = core.media_stream_observations();
         let done = checks::passed(
             state["seeked"] == true,
@@ -167,6 +175,6 @@ pub(super) fn scenario(
     record(
         log,
         "complete",
-        json!({"scenario":"media-stream", "passed":true}),
+        json!({"scenario":"media-stream", "passed":true, "eval_timeouts": ui::eval_timeouts()}),
     )
 }
