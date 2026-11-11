@@ -1021,14 +1021,14 @@
     { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
-      "version": 9
+      "version": 10
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 9
+      "version": 10
     },
     "inputs": {},
     "outputs": {

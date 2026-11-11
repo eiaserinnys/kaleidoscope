@@ -2,8 +2,8 @@ import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { AppClient } from "../src/app.ts";
 
-const agent = { id: "a", name: "시험 에이전트", command: "missing", args: [], env: {} };
-const programs = { missing: { name: "시험 프로그램", winget: "Test.Program", url: "https://example.test/" } };
+const agent = { id: "a", name: "Claude Code", command: "missing", args: [], env: {} };
+const programs = { missing: { name: "Node.js", winget: "Test.Program", url: "https://example.test/" } };
 const missing = { id: "PROCESS_START_COMMAND_NOT_FOUND", code: "not_found", message: "명령 없음" };
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 async function until(condition: () => boolean) {
