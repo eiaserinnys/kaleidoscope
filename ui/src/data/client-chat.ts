@@ -51,8 +51,12 @@ function uniqueItems(items: ConversationItem[]) {
 
 export function applyClientChatEnvelope(state: ClientChatState, envelope: ClientChatEnvelope): ClientChatState {
   if (envelope.kind === "snapshot") {
+    /* 기록을 그리지 않고 컴포저만 쓰는 채널은 보낸 메시지를 큐나 기록으로 돌려주지 않는다.
+       비어 있고 쉬는 스냅샷이 오면 세대를 올려 화면이 기다리는 보낸 메시지 표시를 지운다. */
+    const empty = envelope.items.length === 0 && !envelope.busy && envelope.queued.length === 0;
     return {
       ...state,
+      generation: empty ? state.generation + 1 : state.generation,
       loading: false,
       items: uniqueItems(envelope.items),
       stream_id: envelope.stream_id,
