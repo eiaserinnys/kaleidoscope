@@ -36,6 +36,9 @@
   --ks-repeat-grid-item-width-medium: var(--ks-pane-min-size);
   --ks-repeat-grid-item-width-large: calc(var(--ks-pane-min-size) * 1.5);
   --ks-feed-column-min: 18em;
+  /* 이름 색의 밝기 한계. 0.54는 밝은 바탕(#f7f3f7)과 약 4.5:1이 되는 OKLCH 밝기다. */
+  --ks-name-lightness-min: 0;
+  --ks-name-lightness-max: 0.54;
   --ks-line-width: 1px;
   --ks-row-text-inset: calc(var(--ks-line-width) + var(--ks-space-2));
   --ks-scrollbar-thumb-inset: 2px;
@@ -101,6 +104,9 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
+    /* 0.7은 어두운 창 바탕(#39323D)과 약 4.5:1이 되는 OKLCH 밝기다. */
+    --ks-name-lightness-min: 0.7;
+    --ks-name-lightness-max: 1;
     --ks-color-share: #b394ff;
     --ks-color-positive: #9fc394;
     --ks-color-warning: #f2c66d;
@@ -186,6 +192,11 @@ body {
 button {
   color: inherit;
   font: inherit;
+}
+
+::placeholder {
+  color: var(--ks-color-muted);
+  opacity: 1;
 }
 
 *::-webkit-scrollbar {
