@@ -837,6 +837,58 @@
 
 .ks-agent-chat-footer .ks-data-stack-item > .ks-data-text { padding: 0; }
 
+/* 세로 쌓기의 비채움 자식으로 놓인 채팅은 남는 높이를 차지하지 않고 컴포저 높이만 쓴다.
+   대화가 없고 바닥글에도 고를 것이 없으면 기록 영역을 숨겨 입력창만 남긴다. */
+.ks-data-stack.is-column > .ks-data-stack-item:not(.is-fill) > .ks-agent-chat {
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.ks-data-stack.is-column > .ks-data-stack-item:not(.is-fill) > .ks-agent-chat > .ks-agent-chat-history {
+  flex: 0 0 auto;
+  height: auto;
+  max-height: calc(var(--ks-pane-min-size) + var(--ks-control-height));
+  contain: none;
+  padding-block: var(--ks-space-2);
+  border-top: var(--ks-line-width) solid var(--ks-color-border);
+}
+
+.ks-data-stack.is-column
+  > .ks-data-stack-item:not(.is-fill)
+  > .ks-agent-chat
+  > .ks-agent-chat-history:not(
+    :has(
+      .ks-agent-chat-user,
+      .ks-agent-chat-assistant,
+      .ks-agent-chat-notice,
+      .ks-agent-chat-working,
+      .ks-notice,
+      .ks-data-state,
+      .ks-repeat-item,
+      .ks-button,
+      .ks-data-button,
+      .ks-data-toggle,
+      .ks-data-input,
+      .ks-input-field,
+      .ks-field,
+      .ks-color-control,
+      .ks-data-text,
+      .ks-data-skeleton,
+      .ks-data-segmented
+    )
+  ) {
+  display: none;
+}
+
+.ks-data-stack.is-column
+  > .ks-data-stack-item:not(.is-fill)
+  > .ks-agent-chat
+  > .ks-agent-chat-history
+  > .ks-agent-chat-content
+  > .ks-agent-chat-footer {
+  margin-top: 0;
+}
+
 .ks-agent-chat-input-area {
   display: flex;
   min-width: 0;

@@ -42,6 +42,8 @@
 }
 .ks-repeat-content { display: flex; flex-direction: column; }
 .ks-repeat.is-row > .ks-repeat-content { flex-direction: row; }
+/* 가상 스크롤이 아닌 가로 반복은 좁은 창에서도 선택지가 잘리지 않도록 줄을 바꾼다. */
+.ks-repeat.is-row:not(.is-virtual) > .ks-repeat-content { flex-wrap: wrap; }
 .ks-repeat.is-grid > .ks-repeat-content, .ks-repeat-grid-row { display: grid; gap: var(--ks-space-3); }
 .ks-repeat.gap-none { --ks-repeat-gap: 0; }
 .ks-repeat.gap-small { --ks-repeat-gap: var(--ks-space-2); }

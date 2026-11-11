@@ -51,6 +51,26 @@ const button = { type: "button", label: "보내기", on_click: [] };
 const text = { type: "text", value: "맨 끝 글" };
 const reproduction = { type: "stack", direction: "column", gap: "small", fill: 1, children: [toolbar, itemList, input] };
 
+test("가운데 쌓기가 없는 일반 쌓기에서도 빈 반복은 간격을 차지하지 않는다", async ({ page }, testInfo) => {
+  const emptyRepeat = { type: "repeat", items: [], key: "key", layout: "row", template: { type: "text", value: { item: "name" } } };
+  const app = await open(page, { type: "stack", direction: "column", gap: "small", children: [
+    { type: "text", value: "질문" }, emptyRepeat, { type: "text", value: "답변" },
+  ] }, 1180, 720);
+  const m = await app.evaluate((el) => {
+    const stack = el.querySelector(".ks-data-window-body > .ks-data-stack") as HTMLElement;
+    const [first, repeat, last] = [...stack.children] as HTMLElement[];
+    return {
+      display: getComputedStyle(repeat).display,
+      gap: parseFloat(getComputedStyle(stack).rowGap),
+      distance: last.getBoundingClientRect().top - first.getBoundingClientRect().bottom,
+    };
+  });
+  await record(testInfo, "empty-repeat-gap", m);
+  await app.screenshot({ path: testInfo.outputPath("empty-repeat-gap.png") });
+  expect(m.display).toBe("none");
+  expect(Math.abs(m.distance - m.gap)).toBeLessThanOrEqual(1);
+});
+
 // 스크롤을 끝까지 내린 뒤 입력칸 바깥 상자 아래와 스크롤 영역 바닥 사이를 잰다.
 async function scrollEnd(app: Locator) {
   const scroll = app.locator(".ks-stack-scroll");
