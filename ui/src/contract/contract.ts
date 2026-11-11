@@ -1589,7 +1589,11 @@ export type SourceState = "idle" | "loading" | "ready" | "failed" | "login_requi
 /**
  * 원천 하나의 상태. `state`로 가른다.
  */
-export type SourceStatus = { "state": "idle", } | { "state": "loading", has_value: boolean, } | { "state": "ready", updated_at: string, } | { "state": "failed", message: string, has_value: boolean, id?: string, } | { "state": "login_required", permission: string, };
+export type SourceStatus = { "state": "idle", } | { "state": "loading", has_value: boolean, } | { "state": "ready", updated_at: string, } | { "state": "failed", message: string, has_value: boolean, id?: string, 
+/**
+ * 오류 원인. 없으면 빈 배열이고 옛 값에도 없다.
+ */
+details?: Array<string>, } | { "state": "login_required", permission: string, };
 
 export type SplitDirection = "row" | "column";
 

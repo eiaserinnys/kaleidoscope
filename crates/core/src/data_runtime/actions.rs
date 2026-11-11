@@ -2,7 +2,10 @@ use super::*;
 use crate::connections;
 use kaleidoscope_contract::{
     data::{self, BindingValue},
-    registry::{LayoutDataError, LAYOUT_DATA_ERRORS_MAX},
+    registry::{
+        LayoutDataError, LAYOUT_DATA_ERRORS_MAX, LAYOUT_DATA_ERROR_DETAILS_MAX,
+        LAYOUT_DATA_ERROR_DETAIL_CHARS,
+    },
     CoreRequest, LinkStatus,
 };
 use kaleidoscope_data::{Env, Step};
@@ -428,15 +431,27 @@ mod error_mapping_tests {
 
 pub(crate) fn layout_errors(inner: &Inner) -> Vec<LayoutDataError> {
     let windows = inner.data_runtimes.windows.lock().unwrap();
+    layout_errors_of(&windows)
+}
+
+fn layout_errors_of(windows: &BTreeMap<String, Runtime>) -> Vec<LayoutDataError> {
     let mut errors = Vec::new();
     for (id, runtime) in windows.iter().filter(|(_, runtime)| runtime.attached > 0) {
         let mut count = 0;
         for (name, source) in &runtime.sources {
-            if let SourceStatus::Failed { message, .. } = &source.status {
+            if let SourceStatus::Failed {
+                message,
+                id: code,
+                details,
+                ..
+            } = &source.status
+            {
                 errors.push(LayoutDataError {
                     window_id: id.clone(),
                     pointer: format!("/sources/{}", data::escape_pointer(name)),
                     message: message.clone(),
+                    code: code.clone(),
+                    details: bounded_details(details),
                 });
                 count += 1;
                 if count == LAYOUT_DATA_ERRORS_MAX {
@@ -448,15 +463,122 @@ pub(crate) fn layout_errors(inner: &Inner) -> Vec<LayoutDataError> {
             if count == LAYOUT_DATA_ERRORS_MAX {
                 break;
             }
-            if let Some(BindingValue::Failed { message, .. }) = runtime.last.values.get(&pointer) {
+            if let Some(BindingValue::Failed {
+                message,
+                id: code,
+                details,
+                ..
+            }) = runtime.last.values.get(&pointer)
+            {
                 errors.push(LayoutDataError {
                     window_id: id.clone(),
                     pointer,
                     message: message.clone(),
+                    code: code.clone(),
+                    details: bounded_details(details.as_deref().unwrap_or(&[])),
                 });
                 count += 1;
             }
         }
     }
     errors
+}
+
+fn bounded_details(details: &[String]) -> Vec<String> {
+    details
+        .iter()
+        .take(LAYOUT_DATA_ERROR_DETAILS_MAX)
+        .map(|detail| {
+            let mut chars = detail.chars();
+            let mut result: String = chars.by_ref().take(LAYOUT_DATA_ERROR_DETAIL_CHARS).collect();
+            if chars.next().is_some() {
+                result.push('…');
+            }
+            result
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod layout_error_tests {
+    use super::*;
+    use kaleidoscope_contract::{
+        data::SourceStatus,
+        registry::{LAYOUT_DATA_ERROR_DETAILS_MAX, LAYOUT_DATA_ERROR_DETAIL_CHARS},
+        validate::parse_app_definition,
+    };
+    use serde_json::json;
+
+    fn runtime() -> Runtime {
+        let definition = parse_app_definition(
+            &json!({
+                "id":"layout-error-app","name":"배치 오류",
+                "requires":{"blocks":4,"modules":{"files":1}},
+                "permissions":[{"module":"files","id":"docs","access":"read","label":"Docs"}],
+                "state":{"path":"items.json"},
+                "sources":{"file":{"kind":"file","permission":"docs","path":{"state":"path"}}},
+                "ui":{"type":"text","value":{"expr":"$data.file.title"}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        Runtime::new(
+            1,
+            definition.clone(),
+            definition.state.clone(),
+            true,
+            false,
+            Default::default(),
+        )
+    }
+
+    #[test]
+    fn source_and_binding_failures_carry_code_and_capped_details() {
+        let mut runtime = runtime();
+        runtime.attached = 1;
+        let long = format!("{}끝", "가".repeat(LAYOUT_DATA_ERROR_DETAIL_CHARS));
+        runtime.sources.get_mut("file").unwrap().status = SourceStatus::Failed {
+            message: "원천 실패".into(),
+            has_value: false,
+            id: Some("DATA_SOURCE_RESPONSE_SERVER_ERROR".into()),
+            details: vec![
+                long,
+                "둘째".into(),
+                "셋째".into(),
+                "넷째".into(),
+                "다섯째".into(),
+            ],
+        };
+        runtime.last.values.insert(
+            "/ui/value".into(),
+            BindingValue::Failed {
+                message: "식 실패".into(),
+                id: Some("DATA_BINDING_EXPR_FAILED".into()),
+                retry: Vec::new(),
+                details: Some(vec!["pointer: /ui/value".into(), "reason: T0412".into()]),
+            },
+        );
+        let windows = BTreeMap::from([("window".to_string(), runtime)]);
+
+        let errors = layout_errors_of(&windows);
+
+        assert_eq!(errors.len(), 2);
+        assert_eq!(errors[0].pointer, "/sources/file");
+        assert_eq!(
+            errors[0].code.as_deref(),
+            Some("DATA_SOURCE_RESPONSE_SERVER_ERROR")
+        );
+        assert_eq!(errors[0].details.len(), LAYOUT_DATA_ERROR_DETAILS_MAX);
+        assert_eq!(
+            errors[0].details[0],
+            format!("{}…", "가".repeat(LAYOUT_DATA_ERROR_DETAIL_CHARS))
+        );
+        assert_eq!(errors[0].details[1], "둘째");
+        assert_eq!(errors[1].pointer, "/ui/value");
+        assert_eq!(errors[1].code.as_deref(), Some("DATA_BINDING_EXPR_FAILED"));
+        assert_eq!(
+            errors[1].details,
+            vec!["pointer: /ui/value", "reason: T0412"]
+        );
+    }
 }

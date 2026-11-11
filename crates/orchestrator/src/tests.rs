@@ -1235,21 +1235,33 @@ async fn workspace_layout_is_reported_with_ordered_windows_and_folders() {
         StatusCode::OK
     );
     let workspace = state.get_workspace("w").unwrap().unwrap();
-    assert_eq!(workspace["device"]["id"], device_id);
-    assert_eq!(workspace["active"], true);
+    assert_eq!(workspace["devices"][0]["device_id"], device_id);
+    assert_eq!(workspace["devices"][0]["name"], "test");
+    assert_eq!(workspace["devices"][0]["active"], true);
+    assert_eq!(workspace["devices"][0]["active_desktop_id"], "d");
+    assert!(workspace.get("device").is_none());
+    assert!(workspace.get("active").is_none());
+    assert!(workspace.get("reported_at").is_none());
     assert_eq!(workspace["desktops"][0]["windows"][0]["window_id"], "two");
     assert_eq!(
-        workspace["desktops"][0]["windows"][0]["folders"]["docs"],
+        workspace["desktops"][0]["windows"][0]["folders"][0]["device_id"],
+        device_id
+    );
+    assert_eq!(
+        workspace["desktops"][0]["windows"][0]["folders"][0]["permission"],
+        "docs"
+    );
+    assert_eq!(
+        workspace["desktops"][0]["windows"][0]["folders"][0]["root_name"],
         "문서"
     );
-    assert_eq!(
-        workspace["desktops"][0]["windows"][0]["data_errors"][0]["pointer"],
-        "/sources/cards"
-    );
-    assert_eq!(
-        workspace["desktops"][0]["windows"][0]["data_errors"][0]["message"],
-        "원천 실패"
-    );
+    let error = &workspace["desktops"][0]["windows"][0]["data_errors"][0];
+    assert_eq!(error["device_id"], device_id);
+    assert_eq!(error["device_name"], "test");
+    assert_eq!(error["pointer"], "/sources/cards");
+    assert_eq!(error["message"], "원천 실패");
+    assert!(error.get("code").is_none(), "옛 보고에는 코드가 없다");
+    assert!(error.get("details").is_none(), "옛 보고에는 원인이 없다");
     let list = state.list_workspaces().unwrap();
     assert_eq!(list[0]["window_count"], 2);
 }

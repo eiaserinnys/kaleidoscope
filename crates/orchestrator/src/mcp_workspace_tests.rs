@@ -56,7 +56,8 @@ async fn workspace_tools_read_and_delete_canonical_entities() {
             .unwrap(),
     );
     assert_eq!(found["workspace_id"], "w1");
-    assert_eq!(found["device"], Value::Null);
+    assert_eq!(found["devices"], json!([]));
+    assert!(found.get("device").is_none());
     assert_eq!(found["desktops"], json!([]));
 
     let deleted = decode(
