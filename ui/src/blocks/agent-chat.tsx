@@ -642,7 +642,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
         const host = shareRef.current?.closest<HTMLElement>(".ks-data-window") ?? shareRef.current?.parentElement;
         return host ? <Dialog
           host={host}
-          title={`${pendingSwitch.label}(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
+          title={`${pendingSwitch.label} ${pendingSwitch.model ? "모델" : "프로필"}로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
           ok="바꾸기"
           onCancel={() => setPendingSwitch(null)}
           onConfirm={() => { setPendingSwitch(null); void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) }); }}

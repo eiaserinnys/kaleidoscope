@@ -692,7 +692,7 @@ describe("공용 대화 부품", () => {
     fireEvent.click(screen.getByRole("button", { name: "프로필" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "키키" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByText("키키(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
+    expect(screen.getByText("키키 프로필로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "바꾸기" }));
     await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, profile: "profile-b" }));
     expect(await screen.findByText("키키 프로필로 바꿨습니다")).toBeTruthy();
@@ -718,7 +718,7 @@ describe("공용 대화 부품", () => {
     fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "노드 B" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByText("노드 B의 모델 2(으)로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
+    expect(screen.getByText("노드 B의 모델 2 모델로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "취소" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("button", { name: "실행 위치" }).textContent).toContain("노드 A");
