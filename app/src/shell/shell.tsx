@@ -74,7 +74,7 @@ export function Shell({ store }: { store: ShellStore }) {
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [launcher, setLauncher] = useState<{ anchor: HTMLElement } | null>(null);
   const closeLauncher = useCallback(() => setLauncher(null), []);
-  const [settings, setSettings] = useState<{ anchor: HTMLElement; origin: "gear" | "agent"; entry: { kind: "gear" | "agent"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
+  const [settings, setSettings] = useState<{ anchor: HTMLElement; entry: { kind: "gear" | "agent"; sequence: number }; minimized: boolean; maximized: boolean; z: number } | null>(null);
   const settingsRect = useRef<Rect | null>(null);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [notice, setNotice] = useState<CoreError | null>(null);
@@ -188,7 +188,7 @@ export function Shell({ store }: { store: ShellStore }) {
     const z = maxZNow() + 1;
     setSettings((current) => current
       ? { ...current, minimized: false, z, entry: { kind, sequence: current.entry.sequence + 1 } }
-      : { anchor, origin: kind, entry: { kind, sequence: 0 }, minimized: false, maximized: false, z });
+      : { anchor, entry: { kind, sequence: 0 }, minimized: false, maximized: false, z });
   };
   const settingsAnchor = settings?.anchor;
   const closeSettings = useCallback(() => {
