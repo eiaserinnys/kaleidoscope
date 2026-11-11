@@ -206,6 +206,8 @@ SCENE_D_GAP_JS = """(el) => {
       headTextCenterDelta: head && group
         ? (rect(group).top + rect(group).bottom - rect(head).top - rect(head).bottom) / 2
         : null,
+      // 머리 줄 위끝은 가상 행이 고정해 옛 선택자에서도 같다. 구역 안 첫 묶음 머리의 위 여백이 0인지 직접 본다.
+      groupPaddingTop: group ? parseFloat(getComputedStyle(group).paddingTop) : null,
     };
   });
   return { sections };
@@ -404,11 +406,13 @@ def judge_scene_d(measurement):
     sections = measurement.get("sections", [])
     gaps = [section.get("gap") for section in sections]
     centers = [abs(section["headTextCenterDelta"]) for section in sections if section.get("headTextCenterDelta") is not None]
-    if len(gaps) != 3 or any(gap is None for gap in gaps) or not centers:
-        return {"section_gaps": False, "group_head_center": False}
+    paddings = [section["groupPaddingTop"] for section in sections if section.get("groupPaddingTop") is not None]
+    if len(gaps) != 3 or any(gap is None for gap in gaps) or not centers or not paddings:
+        return {"section_gaps": False, "group_head_center": False, "group_head_padding": False}
     return {
         "section_gaps": max(gaps) - min(gaps) <= TOLERANCE,
         "group_head_center": max(centers) <= TOLERANCE,
+        "group_head_padding": max(paddings) == 0,
     }
 
 
