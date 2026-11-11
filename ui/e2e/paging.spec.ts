@@ -394,6 +394,9 @@ for (const view of [
   await expect(scroll.locator(view.row).first()).toBeAttached();
   const rowStart = await scroll.locator(view.row).first().evaluate(element => element.getBoundingClientRect().left);
   if (view.name === "repeat") {
+    // 격자 반복은 392x700에서 행이 화면에 다 들어와, 탭을 그리자마자 useLoadMore가 다음 쪽을 저절로 부른다.
+    // 시드의 list_items 2쪽은 1.2초 뒤 실패로 끝나므로, 그 응답이 끝난 뒤에 바닥 줄 상태를 넣어야 늦게 온 응답이 덮지 않는다.
+    await expect(scroll.getByRole("button", { name: "다시 받기" })).toBeVisible();
     await emitFooter(page, { ...footerViews[0], pointer: view.pointer }, { source: "list_items", state: "loading", retry: false });
     const footer = await showFooter(scroll);
     const start = await footer.locator(".ks-data-skeleton").evaluate(element => element.getBoundingClientRect().left);
