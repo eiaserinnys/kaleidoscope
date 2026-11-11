@@ -86,6 +86,7 @@ function cssRule(css: string, marker: string) {
 describe("채팅 블록의 탭과 쌓기 배치", () => {
   const dataBlocks = readFileSync(resolve(cwd(), "src/styles/data-blocks.css"), "utf8");
   const blocks = readFileSync(resolve(cwd(), "src/styles/blocks.css"), "utf8");
+  const scrollEnd = readFileSync(resolve(cwd(), "src/styles/scroll-end-space.css"), "utf8");
 
   it("탭 패널은 채팅이나 결정 줄 꼬리를 담으면 바닥 여백을 두지 않는다", () => {
     const rule = cssRule(dataBlocks, ".ks-data-tab-panel:has( > .ks-agent-chat,");
@@ -121,5 +122,11 @@ describe("채팅 블록의 탭과 쌓기 배치", () => {
     expect(guard.selector).toContain(".ks-notice");
     expect(guard.selector).toContain(".ks-data-toggle");
     expect(guard.selector).toContain(".ks-data-input");
+  });
+
+  it("스크롤 끝이 탭이나 채팅이면 결정 줄 꼬리의 끝 여백을 더하지 않는다", () => {
+    const rule = cssRule(scrollEnd, ".ks-data-stack.has-action-tail:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-stack-scroll:nth-last-child(1 of :not(:empty)) > .ks-stack-scroll-content:not(");
+    expect(rule.selector).toContain("> .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > :is(.ks-data-tabs, .ks-agent-chat)");
+    expect(rule.body).toContain("padding-block-end: var(--ks-space-3)");
   });
 });

@@ -53,8 +53,9 @@ function setup(ui: Block, state: AppDefinition["state"] = {}, blocks = 4, media?
   const transport = createFakeTransport({ ...seed, media });
   const originalCall = transport.call.bind(transport);
   const calls = vi.spyOn(transport, "call");
-  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  return { calls, transport, originalCall };
+  const store = createShellStore(transport);
+  render(<AppWindowContent store={store} windowId="viewer-window" />);
+  return { calls, transport, originalCall, store };
 }
 it("다중 선택의 현재 칸은 바인딩에서 복원하고 바뀐 값이 지역 선택보다 우선한다", async () => {
   const { transport } = setup({ type: "list", layout: "grid", selection: "multiple", selected: { state: "choice" }, current: { state: "current" },
@@ -1092,4 +1093,29 @@ it("속성 배지는 잘린 동안만 초점을 받고 묶음의 폭 변화로 �
     expect(screen.getByText("긴 권한 전체 이름").getAttribute("tabindex")).toBe("0");
     expect(groups).toBe(1);
   } finally { vi.unstubAllGlobals(); }
+});
+
+async function followFeed(initial: Array<{ key: string; body: string }>) {
+  const { store } = setup({ type: "feed", follow: true, entries: { state: "entries" } } as unknown as Block, { entries: initial });
+  const feed = await screen.findByRole("feed");
+  let height = 900;
+  Object.defineProperty(feed, "scrollHeight", { configurable: true, get: () => height });
+  return { feed, grow: () => { height = 1200; }, initial, store };
+}
+
+it("피드가 바닥에 있으면 행 높이가 커지며 스크롤이 생겨도 새 항목을 따라간다", async () => {
+  const { feed, grow, initial, store } = await followFeed([{ key: "k0", body: "첫째" }, { key: "k1", body: "둘째" }, { key: "k2", body: "셋째" }]);
+  await act(async () => { feed.scrollTop = 420; fireEvent.scroll(feed); });
+  grow();
+  await act(async () => { fireEvent.scroll(feed); });
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { entries: [...initial, { key: "k3", body: "새 댓글" }] } }); });
+  expect(feed.scrollTop).toBe(1200);
+});
+
+it("사용자가 위로 스크롤한 피드는 새 항목이 와도 따라가지 않는다", async () => {
+  const { feed, initial, store } = await followFeed([{ key: "k0", body: "첫째" }, { key: "k1", body: "둘째" }, { key: "k2", body: "셋째" }]);
+  await act(async () => { feed.scrollTop = 420; fireEvent.scroll(feed); });
+  await act(async () => { feed.scrollTop = 100; fireEvent.scroll(feed); });
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { entries: [...initial, { key: "k3", body: "새 댓글" }] } }); });
+  expect(feed.scrollTop).toBe(100);
 });
