@@ -95,6 +95,30 @@ it("확장자 없는 수락 항목이 섞이면 거절 안내에서 형식 일�
   await runtime.stop();
 });
 
+it("거절 안내는 형식이 다섯 이상이면 넷만 나열하고 전체 개수를 밝힌다", async () => {
+  const call = vi.fn(async (request: any) => request.op === "data.media"
+    ? { op: "data.media", media: { mime: "text/javascript", data_base64: "" } } : { op: request.op });
+  const store = { getSnapshot: () => ({ device: {}, shared: { windows: [], desktops: [] } }), subscribe: () => () => undefined, subscribeEvents: () => () => undefined, nativeFiles: true, call } as unknown as ShellStore;
+  const setNotice = vi.fn(), clearNoticeIf = vi.fn(), act = vi.fn();
+  const client = { entry: { id: "runtime", version: 1 }, state_keys: [], storage_entries: [], inputs: {}, actions: ["open"], commands: {} };
+  const runtime = new ClientRuntime(store, { windowId: "window-1", failClient: vi.fn(), setClientReady: vi.fn(), setNotice, clearNoticeIf, act } as unknown as WindowData, { assets: [] } as unknown as AppDefinition, client as never);
+  await runtime.start();
+  const frame = document.querySelector("iframe")!;
+  window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "null", data: { token: (runtime as any).token, type: "ks-sandbox-ready" } }));
+  const bad = new NodeFile(["x"], "bad.bin", { type: "application/octet-stream" }) as unknown as File;
+  const drop = (extensions: string[]) => deliverClientFiles(store, "window-1", { client: "open", multiple: false, accept: [{ mime: "image/png", extensions }] }, { files: [bad], items: [] } as unknown as DataTransfer);
+  const lastMessage = () => (setNotice.mock.calls[setNotice.mock.calls.length - 1][0] as { message: string }).message;
+  drop([".png", "jpg", "gif"]);
+  expect(lastMessage()).toBe("bad.bin 파일은 이 앱에서 받지 않습니다. PNG, JPG, GIF 파일을 놓으세요.");
+  drop([".png", "jpg", "gif", "webp"]);
+  expect(lastMessage()).toBe("bad.bin 파일은 이 앱에서 받지 않습니다. PNG, JPG, GIF, WEBP 파일을 놓으세요.");
+  drop([".png", "jpg", "gif", "webp", "avif"]);
+  expect(lastMessage()).toBe("bad.bin 파일은 이 앱에서 받지 않습니다. PNG, JPG, GIF, WEBP 등 5가지 형식의 파일을 놓으세요.");
+  drop(["png", "jpg", "gif", "webp", "avif", ".bmp", "tiff", "PNG"]);
+  expect(lastMessage()).toBe("bad.bin 파일은 이 앱에서 받지 않습니다. PNG, JPG, GIF, WEBP 등 7가지 형식의 파일을 놓으세요.");
+  await runtime.stop();
+});
+
 it("네이티브 창의 브라우저 파일은 읽기, 공유, blob 저장에서 같은 바이트를 쓰고 다른 창에는 보이지 않는다", async () => {
   vi.stubGlobal("File", NodeFile);
   const originalNavigator = Object.getOwnPropertyDescriptor(window, "navigator")!;
