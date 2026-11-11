@@ -75,6 +75,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
 
   const select = (index: number) => {
     if (!block.on_select) return;
+    if (block.selected == null) setClicked(labels[index]);
     const atTime = series.map((entry) => entry.points.find((point) => point.x === labels[index]));
     const nonNull = atTime.findIndex((point) => point && point.y !== null);
     const chosen = nonNull < 0 ? atTime.findIndex(Boolean) : nonNull;
@@ -112,14 +113,14 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
         </span>)}</span>}
       </div>
       <div className="ks-chart-body">
-        <div className="ks-chart-y-axis" aria-hidden="true"><span>{numberText(max)}</span><span>{numberText((max + min) / 2)}</span><span>{numberText(min)}</span></div>
+        <div className="ks-chart-y-axis" aria-hidden="true">{[max, (max + min) / 2, min].map((value, index) => <span key={index} style={{ top: `${geometry.yAt(value) / 160 * 100}%` }}>{numberText(value)}</span>)}</div>
         <div ref={graph} className="ks-chart-graph" role="slider" tabIndex={0} aria-label="차트 시점"
           aria-valuemin={0} aria-valuemax={labels.length - 1} aria-valuenow={current}
           aria-valuetext={`${labels[current]} ${series.map((entry, index) => `${entry.name} ${accessibleValue(points[index])}`).join(", ")}`}
           onKeyDown={keyDown} onPointerMove={(event) => setRegional(pointerIndex(event))}
           onPointerLeave={() => setRegional(null)}
           onBlur={() => setRegional(null)}
-          onClick={(event) => { const index = pointerIndex(event); setRegional(index); if (block.on_select && block.selected == null) setClicked(labels[index]); select(index); }}>
+          onClick={(event) => { const index = pointerIndex(event); setRegional(index); select(index); }}>
           <div className="ks-chart-plot" aria-hidden="true">
           <svg viewBox="0 0 1000 160" preserveAspectRatio="none">
             {[10, 80, 150].map((y) => <line key={y} className="ks-chart-grid" x1="0" x2="1000" y1={y} y2={y} vectorEffect="non-scaling-stroke" />)}

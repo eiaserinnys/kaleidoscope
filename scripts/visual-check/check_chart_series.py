@@ -44,6 +44,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import chart_layout_checks
 from pathlib import Path
 
 from PIL import Image
@@ -1035,6 +1036,8 @@ def main():
                 "axis_rejects_wrong_end": not axis_verdict(21, 24, {"ticks": ["40", "20", "0"], "use": .525}),
                 "area_rejects_wrong_closure": not area_verdict({"bottomTick": "0", "closingY": [150, 150]}, 80),
             })
+
+            chart_layout_checks.check(page, application, output, result, sys.modules[__name__])
 
             # 정본 CSS: data-blocks.css에는 user-select를 적지 않는다(selection.css가 정본).
             data_blocks = (ROOT / "ui/src/styles/data-blocks.css").read_text(encoding="utf-8")

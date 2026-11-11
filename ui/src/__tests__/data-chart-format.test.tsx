@@ -185,6 +185,23 @@ it.each(["pointerLeave", "blur"] as const)("remembers a clicked band without sel
   expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("화");
 });
 
+it.each([false, true])("키보드로 고른 칸은 초점을 빼도 기억한다 (먼저 누름: %s)", async (clickFirst) => {
+  const { container } = setup({ type: "chart", kind: "bar", on_select: [], series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }, { x: "목", y: 4 }] },
+  ] });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  if (clickFirst) {
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({ left: 0, width: 400 } as DOMRect);
+    fireEvent.click(chart, { clientX: 150 });
+  }
+  fireEvent.keyDown(chart, { key: "Home" });
+  fireEvent.keyDown(chart, { key: "ArrowRight" });
+  fireEvent.keyDown(chart, { key: "ArrowRight" });
+  fireEvent.keyDown(chart, { key: "Enter" });
+  fireEvent.blur(chart);
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("수");
+});
+
 it.each(["pointerLeave", "blur"] as const)("uses only the selected binding after %s even after a click", async (leave) => {
   const { container } = setup({ type: "chart", kind: "bar", selected: { state: "picked" }, on_select: [], series: [
     { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }] },
