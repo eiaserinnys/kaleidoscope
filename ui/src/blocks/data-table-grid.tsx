@@ -121,14 +121,16 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
   };
   const reveal = (target: HTMLElement) => {
     const box = cellBounds(target); if (!box) return;
-    if (box.rect.left - box.leftGap < box.left) box.container.scrollLeft -= box.left - (box.rect.left - box.leftGap);
+    if (box.container.scrollLeft > 0 && box.rect.left - box.leftGap < box.left) box.container.scrollLeft -= box.left - (box.rect.left - box.leftGap);
     if (box.rect.right + box.ring > box.right) box.container.scrollLeft += box.rect.right + box.ring - box.right;
     if (box.rect.top - box.ring < box.top) box.container.scrollTop -= box.top - (box.rect.top - box.ring);
     else if (box.rect.bottom + box.ring > box.bottom) box.container.scrollTop += box.rect.bottom + box.ring - box.bottom;
   };
   const isVisible = (target: HTMLElement) => {
     const box = cellBounds(target); if (!box) return false;
-    return box.rect.left - box.leftGap >= box.left && box.rect.right + box.ring <= box.right && box.rect.top - box.ring >= box.top && box.rect.bottom + box.ring <= box.bottom;
+    // 왼쪽으로 스크롤되지 않았으면 칸을 덮는 것이 없고 더 왼쪽으로 옮길 수도 없다. 행 머리가 없는 표의 첫 열은 칸 간격 없이 표 왼쪽에 붙어 있다.
+    const left = box.container.scrollLeft <= 0 || box.rect.left - box.leftGap >= box.left;
+    return left && box.rect.right + box.ring <= box.right && box.rect.top - box.ring >= box.top && box.rect.bottom + box.ring <= box.bottom;
   };
   const revealRef = useRef(reveal);
   revealRef.current = reveal;

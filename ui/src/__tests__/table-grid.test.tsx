@@ -146,16 +146,17 @@ it("표 폭이 줄어 고른 칸이 화면 밖으로 나가면 스크롤로 그 
     const grid = container.querySelector<HTMLElement>('[role="grid"]')!;
     const cell = container.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]')!;
     Object.defineProperty(grid, "getBoundingClientRect", { configurable: true, value: () => ({ x: 0, y: 0, left: 0, top: 0, right: size.width, bottom: 200, width: size.width, height: 200, toJSON() {} }) });
-    let cellRect = { left: 400, right: 600 };
+    let cellRect = { left: 300, right: 480 };
     Object.defineProperty(cell, "getBoundingClientRect", { configurable: true, value: () => ({ x: cellRect.left, y: 0, left: cellRect.left, top: 0, right: cellRect.right, bottom: 32, width: cellRect.right - cellRect.left, height: 32, toJSON() {} }) });
     const resize = () => act(() => callbacks.forEach((callback) => callback([], {} as ResizeObserver)));
-    // 폭이 500에서 400으로 줄어 고른 칸(오른쪽 끝 600)이 보이는 영역 밖으로 나간다.
+    // 폭이 500에서 400으로 줄어, 보이던 고른 칸(오른쪽 끝 480)이 보이는 영역 밖으로 나간다.
     size.width = 400;
     resize();
-    expect(grid.scrollLeft).toBe(200);
+    expect(grid.scrollLeft).toBe(80);
     // 고른 칸이 이미 보이면 스크롤하지 않는다.
     grid.scrollLeft = 0;
     cellRect = { left: 100, right: 200 };
+    fireEvent.scroll(grid);
     size.width = 300;
     resize();
     expect(grid.scrollLeft).toBe(0);
@@ -166,6 +167,50 @@ it("표 폭이 줄어 고른 칸이 화면 밖으로 나가면 스크롤로 그 
     size.width = 200;
     resize();
     expect(grid.scrollLeft).toBe(80);
+  } finally {
+    if (widthDescriptor) Object.defineProperty(HTMLElement.prototype, "clientWidth", widthDescriptor);
+    if (heightDescriptor) Object.defineProperty(HTMLElement.prototype, "clientHeight", heightDescriptor);
+    vi.unstubAllGlobals();
+  }
+});
+
+it("행 머리가 없어도 첫 열의 아래쪽 칸을 고른 뒤 높이가 줄면 그 칸이 보이게 스크롤한다", async () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: ResizeObserverCallback) { callbacks.push(callback); }
+    observe() {} unobserve() {} disconnect() {}
+  });
+  const original = window.getComputedStyle.bind(window);
+  // 첫 열 칸은 테두리 폭만큼 왼쪽으로 삐져나와 붙어 있다. 행 머리가 없으니 그 왼쪽에 칸 간격은 없다.
+  vi.stubGlobal("getComputedStyle", (element: Element) => element instanceof HTMLElement && element.getAttribute("role") === "gridcell"
+    ? { getPropertyValue: (name: string) => name === "--ks-focus-width" ? "2" : "" }
+    : original(element));
+  const size = { width: 500, height: 500 };
+  const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get(this: HTMLElement) { return this.classList.contains("ks-table-scroll") ? size.width : widthDescriptor?.get?.call(this) ?? 0; },
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get(this: HTMLElement) { return this.classList.contains("ks-table-scroll") ? size.height : heightDescriptor?.get?.call(this) ?? 0; },
+  });
+  try {
+    const rows = [{ key: "a", mon: "회의" }, { key: "b", mon: "검토" }, { key: "c", mon: "공개" }];
+    const props = { rows, columns: [{ field: "mon", label: "월요일" }], selected: null, selectedCell: { row: "c", column: "mon" }, onChoose: () => {}, onChooseCell: () => {} };
+    const { container } = render(<TableGrid {...props} />);
+    const grid = container.querySelector<HTMLElement>('[role="grid"]')!;
+    const cell = container.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]')!;
+    expect(cell.getAttribute("aria-selected")).toBe("true");
+    Object.defineProperty(grid, "getBoundingClientRect", { configurable: true, value: () => ({ x: 0, y: 0, left: 0, top: 0, right: size.width, bottom: size.height, width: size.width, height: size.height, toJSON() {} }) });
+    Object.defineProperty(cell, "getBoundingClientRect", { configurable: true, value: () => ({ x: 1, y: 400, left: 1, top: 400, right: 121, bottom: 432, width: 120, height: 32, toJSON() {} }) });
+    // 높이가 줄기 전에는 고른 칸이 보인다. 첫 열이라 왼쪽에 칸 간격이 없어도 보이는 칸이다.
+    fireEvent.scroll(grid);
+    // 높이가 500에서 300으로 줄어 칸(아래 끝 432)이 보이는 영역 밖으로 나간다.
+    size.height = 300;
+    act(() => callbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+    expect(grid.scrollTop).toBe(134);
   } finally {
     if (widthDescriptor) Object.defineProperty(HTMLElement.prototype, "clientWidth", widthDescriptor);
     if (heightDescriptor) Object.defineProperty(HTMLElement.prototype, "clientHeight", heightDescriptor);
