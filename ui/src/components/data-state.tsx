@@ -1,10 +1,11 @@
-import { useState, type CSSProperties } from "react";
+import { useContext, useState, type CSSProperties } from "react";
 import type { BindingValue } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { useWindowData } from "../data/window-data";
 import { useWindowGrants } from "../data/window-state";
 import { DataIcon } from "./data-icons";
 import { FileGrant, useDefaultFolderState } from "../blocks/file-grant";
+import { ToolbarContext } from "../blocks/toolbar-context";
 import { Button, EmptyState, ErrorId, Notice } from "./primitives";
 
 export function useFolderPick() {
@@ -36,6 +37,8 @@ export function BindingFailureNotice({ value, rootProps }: { value: BindingValue
 
 export function DataState({ value, compact = false, layout, loading, loginFailure, onRetry, onLogin, rootProps }: { value: Exclude<BindingValue, { status: "ready" }>; compact?: boolean; layout?: "row"; loading?: "tree" | "table" | "table-grid" | React.ReactElement; loginFailure?: { message: string; id?: string }; onRetry?: () => void; onLogin?: () => void; rootProps?: import("../comments/block-root").BlockRootProps }) {
   const data = useWindowData();
+  const inToolbar = useContext(ToolbarContext);
+  const compactState = compact || inToolbar;
   const context = { store: data.store, window: { id: data.windowId } };
   const [loginError, setLoginError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const grants = useWindowGrants(context);
@@ -71,9 +74,14 @@ export function DataState({ value, compact = false, layout, loading, loginFailur
       <FileGrant context={{ ...context, definition: data.definition }} permission={ungranted} compact={compact} contentsOnly onGranted={() => void data.refresh(retry)} />
     </div>;
   }
-  const failureText = loginError ? <>{loginError.message}{loginError.id ? <> <ErrorId id={loginError.id} /></> : null}</> : value.status === "failed" ? <>{value.message}{value.id ? <> <ErrorId id={value.id} /></> : null}</> : loginFailure ? <>{loginFailure.message}{loginFailure.id ? <> <ErrorId id={loginFailure.id} /></> : null}</> : "로그인이 필요합니다";
-  return <div {...rootProps} className={compact ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
-    <EmptyState icon={<DataIcon name={isLogin ? "log-in" : "triangle-alert"} size={compact ? "inline" : "empty"} />}
+  const failure = loginError ?? (value.status === "failed" ? value : loginFailure);
+  const failureMessage = failure ? failure.message : "로그인이 필요합니다";
+  // 도구 막대 안에서는 긴 문구를 한 줄 말줄임하고, 전체 문구는 묶음 뿌리의 title로 남긴다.
+  const failureText = inToolbar
+    ? <><span className="ks-data-state-message">{failureMessage}</span>{failure?.id ? <> <ErrorId id={failure.id} /></> : null}</>
+    : failure ? <>{failure.message}{failure.id ? <> <ErrorId id={failure.id} /></> : null}</> : failureMessage;
+  return <div {...rootProps} title={inToolbar ? failureMessage : undefined} className={compactState ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
+    <EmptyState icon={<DataIcon name={isLogin ? "log-in" : "triangle-alert"} size={compactState ? "inline" : "empty"} />}
       text={failureText}
       action={isLogin
         ? <Button data-ks-user-consent onClick={(event) => { if (!event.nativeEvent.isTrusted) return; setLoginError(null); void data.store.call({ op: "connection.login", window_id: data.windowId, permission: value.permission }).then(() => onLogin?.()).catch((reason: unknown) => setLoginError(toCoreError(reason))); }}>로그인</Button>
