@@ -46,18 +46,20 @@ export function openPayload(payload: { mime: string; bytes: ArrayBuffer }, name:
 /* 미디어 응답은 `data:<mime>;base64,<본문>` 꼴이다. 이미지가 아닌 첨부는 칩에서 눌러 새 탭으로 연다. */
 export function openDataUrl(dataUrl: string, name: string) {
   const comma = dataUrl.indexOf(",");
-  const header = comma >= 0 ? dataUrl.slice(0, comma) : "";
-  const mime = header.startsWith("data:") ? header.slice("data:".length).split(";", 1)[0] || "application/octet-stream" : "application/octet-stream";
-  try {
-    if (comma < 0) throw new Error("data URL이 아닙니다");
-    openPayload({ mime, bytes: fromBase64(dataUrl.slice(comma + 1)) }, name);
-  } catch {
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = name;
-    link.rel = "noopener";
-    link.click();
+  if (comma >= 0 && dataUrl.startsWith("data:")) {
+    const mime = dataUrl.slice("data:".length, comma).split(";", 1)[0] || "application/octet-stream";
+    try {
+      openPayload({ mime, bytes: fromBase64(dataUrl.slice(comma + 1)) }, name);
+      return;
+    } catch {
+      /* base64 디코딩 실패 시 아래 링크 다운로드로 대체 */
+    }
   }
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = name;
+  link.rel = "noopener";
+  link.click();
 }
 
 function useFileUrl(file: File): string | null {
