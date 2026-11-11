@@ -640,13 +640,17 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       {preview ? <ImagePreview preview={preview} onClose={closePreview} /> : null}
       {pendingSwitch ? (() => {
         const host = shareRef.current?.closest<HTMLElement>(".ks-data-window") ?? shareRef.current?.parentElement;
-        return host ? <Dialog
+        if (!host) return null;
+        // 이름이 이미 무엇을 바꾸는지 밝히고 있으면(「… 모델」) 같은 낱말을 겹쳐 쓰지 않는다.
+        const switchNoun = pendingSwitch.model ? "모델" : "프로필";
+        const subject = pendingSwitch.label.endsWith(switchNoun) ? pendingSwitch.label : `${pendingSwitch.label} ${switchNoun}`;
+        return <Dialog
           host={host}
-          title={`${pendingSwitch.label} ${pendingSwitch.model ? "모델" : "프로필"}로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
+          title={`${subject}로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.`}
           ok="바꾸기"
           onCancel={() => setPendingSwitch(null)}
           onConfirm={() => { setPendingSwitch(null); void switchConversation({ ...(pendingSwitch.profile ? { profile: pendingSwitch.profile } : {}), ...(pendingSwitch.model ? { model: pendingSwitch.model } : {}) }); }}
-        /> : null;
+        />;
       })() : null}
     </section>
   );

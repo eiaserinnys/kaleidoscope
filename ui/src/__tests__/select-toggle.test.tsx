@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { Select, type SelectGroup } from "../components/select-toggle";
 
@@ -28,4 +28,13 @@ it("같은 묶음 안에서만 이름이 겹치면 묶음 이름을 보이지 �
   const button = screen.getByRole("button", { name: "장소" });
   expect(button.textContent).toContain("서울");
   expect(button.textContent).not.toContain("가까운 곳");
+});
+
+it("분할 고르기에 묶음 선택지를 주면 선택지마다 단추를 그린다", () => {
+  const onChange = vi.fn();
+  render(<Select label="장소" segmented value="busan" onChange={onChange} groups={placeGroups()} />);
+  const buttons = within(screen.getByRole("group", { name: "장소" })).getAllByRole("button");
+  expect(buttons.map((button) => button.textContent)).toEqual(["서울", "부산", "도쿄", "서울"]);
+  fireEvent.click(buttons[3]);
+  expect(onChange).toHaveBeenCalledWith("seoul-far");
 });

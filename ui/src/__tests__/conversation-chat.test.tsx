@@ -730,6 +730,28 @@ describe("공용 대화 부품", () => {
     await waitFor(() => expect(state.call).toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, model: "m2" }));
   });
 
+  it("모델 이름이 이미 모델로 끝나면 바꾸기 제목에 모델을 겹쳐 쓰지 않는다", async () => {
+    const state = setup(async (request) => {
+      if (request.op === "conversation.get") {
+        return {
+          ...get(thread),
+          models: [
+            { id: "m", label: "모델", available: true, group: { id: "node-a", label: "노드 A" } },
+            { id: "m-end", label: "오픈 모델", available: true, group: { id: "node-b", label: "노드 B" } },
+          ],
+          start: { profile: "profile-a", model: "m" },
+        };
+      }
+      throw new Error(request.op);
+    });
+    await screen.findByText("기록");
+    fireEvent.click(screen.getByRole("button", { name: "실행 위치" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "노드 B" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("노드 B의 오픈 모델로 바꾸면 새 세션으로 이어집니다. 지난 대화는 요약으로 넘어갑니다.")).toBeTruthy();
+    expect(state.call).not.toHaveBeenCalledWith({ op: "conversation.switch", window_id: state.window.id, model: "m-end" });
+  });
+
   it("다른 실행 위치 전환은 확인창을 닫고 기다린 뒤 새 위치와 모델을 보인다", async () => {
     let current = thread;
     let resolveSwitch!: (reply: CoreReply) => void;

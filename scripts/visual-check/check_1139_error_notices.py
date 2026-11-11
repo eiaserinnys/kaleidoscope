@@ -4,6 +4,7 @@
   1. 고르기 묶음에서 고른 값의 이름이 다른 묶음에도 있을 때만 값 옆에 묶음 이름이 보이는지.
      - 같은 이름이 다른 묶음에 없으면 값만 보인다(가까운 곳의 부산).
      - 다른 묶음에도 같은 이름이 있으면 어느 묶음인지 밝힌다(먼 곳의 서울).
+     - 탭 안의 고르기에서도 겹칠 때 밝힌 묶음 이름이 보인다(탭 패널은 이름표 접미사만 숨긴다).
 
   2. 파일 드롭 거절 알림에서 형식이 다섯 이상이면 넷만 나열하고 전체 개수를 밝히는지.
      - 이 하네스 미리보기에는 클라이언트 런타임과 드롭 경로가 없어 실제 드롭 알림을 띄울 수 없다.
@@ -46,10 +47,12 @@ select_groups = {
     ],
 }
 
-# (이름, 고른 값, 보여야 하는 값 이름, 보이면 안 되는 묶음, 보여야 하는 묶음)
+# (이름, 화면 정의, 고른 값, 보여야 하는 값 이름, 보이면 안 되는 묶음, 보여야 하는 묶음, 탭 안인지)
+tab_select_groups = {"type": "tabs", "tabs": [{"label": "설정", "child": select_groups}]}
 SCENES = [
-    ("select-group-unique", "busan", "부산", "가까운 곳", None),
-    ("select-group-duplicated", "seoul-far", "서울", "가까운 곳", "먼 곳"),
+    ("select-group-unique", select_groups, "busan", "부산", "가까운 곳", None, False),
+    ("select-group-duplicated", select_groups, "seoul-far", "서울", "가까운 곳", "먼 곳", False),
+    ("select-group-in-tab", tab_select_groups, "seoul-far", "서울", "가까운 곳", "먼 곳", True),
 ]
 
 SELECT_JS = """(el) => {
@@ -58,7 +61,8 @@ SELECT_JS = """(el) => {
   return {
     text: button.textContent,
     choice: button.querySelector('.ks-select-choice-label') ? button.querySelector('.ks-select-choice-label').textContent : null,
-    groupLabels: [...button.querySelectorAll('.ks-select-group-label')].map((node) => node.textContent),
+    groupLabels: [...button.querySelectorAll('.ks-select-group-label, .ks-select-context-label')].map((node) => ({ text: node.textContent, visible: node.checkVisibility() })),
+    inTabPanel: button.closest('.ks-data-tab-panel') !== null,
   };
 }"""
 
@@ -103,15 +107,20 @@ def open_scene(page, port, ui, width, height, state):
     return page.get_by_test_id(f"app-window-{APP_ID}")
 
 
-def judge(measurement, value, hidden_group, shown_group):
+def judge(measurement, value, hidden_group, shown_group, in_tab):
     if measurement.get("error"):
         return {"measured": False}
     labels = measurement["groupLabels"]
+    texts = [label["text"] for label in labels]
     checks = {
         "value_shown": measurement["choice"] == value,
-        "shown_group_only_when_duplicated": (labels == []) if shown_group is None else (labels == [shown_group]),
-        "hidden_group_absent": hidden_group not in labels,
+        "shown_group_only_when_duplicated": (texts == []) if shown_group is None else (texts == [shown_group]),
+        "hidden_group_absent": hidden_group not in texts,
     }
+    if shown_group is not None:
+        checks["shown_group_visible"] = all(label["visible"] for label in labels)
+    if in_tab:
+        checks["inside_tab_panel"] = measurement["inTabPanel"]
     return checks
 
 
@@ -141,15 +150,15 @@ def main():
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             page = browser.new_page()
-            for name, choice, value, hidden_group, shown_group in SCENES:
+            for name, layout, choice, value, hidden_group, shown_group, in_tab in SCENES:
                 for width, height in SIZES:
                     state = {"value": "", "choice": choice, "selected": None, "tab": 0}
-                    app = open_scene(page, args.port, select_groups, width, height, state)
+                    app = open_scene(page, args.port, layout, width, height, state)
                     key = f"{name}-{width}x{height}"
                     app.locator(".ks-select-button").wait_for()
                     measurement = app.evaluate(SELECT_JS)
                     page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
-                    checks = judge(measurement, value, hidden_group, shown_group)
+                    checks = judge(measurement, value, hidden_group, shown_group, in_tab)
                     scenes[key] = {"measurement": measurement, "checks": checks}
                     failed = [check for check, ok in checks.items() if not ok]
                     failures.extend(f"{key}.{check}" for check in failed)
