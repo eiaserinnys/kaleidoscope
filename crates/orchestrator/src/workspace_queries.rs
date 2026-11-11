@@ -118,14 +118,18 @@ impl AppState {
         let rendered_desktops: Vec<Value> = desktops
             .iter()
             .map(|desktop| {
+                // active_desktop_ids는 작업마다 마지막에 본 데스크톱이라 다른 작업으로 옮기거나 끊긴 뒤에도 남는다.
+                // 지금 이 작업을 띄운 연결된 기기만 센다.
                 let active_on: Vec<&str> = reports
                     .iter()
                     .filter(|report| {
-                        report
-                            .layout
-                            .active_desktop_ids
-                            .get(id)
-                            .is_some_and(|active| active == &desktop.id)
+                        report.connected
+                            && report.active
+                            && report
+                                .layout
+                                .active_desktop_ids
+                                .get(id)
+                                .is_some_and(|active| active == &desktop.id)
                     })
                     .map(|report| report.device_id.as_str())
                     .collect();

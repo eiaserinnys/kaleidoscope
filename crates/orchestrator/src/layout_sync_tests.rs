@@ -1012,6 +1012,7 @@ async fn workspace_query_shows_each_devices_window_errors_with_code_and_details(
                     root_name: "보고서".into(),
                 }],
                 active_workspace_id: Some("other".into()),
+                active_desktop_ids: BTreeMap::from([("w".into(), "d".into())]),
                 data_errors: vec![LayoutDataError {
                     window_id: "two".into(),
                     pointer: "/sources/cards".into(),
@@ -1035,7 +1036,7 @@ async fn workspace_query_shows_each_devices_window_errors_with_code_and_details(
     assert_eq!(found["devices"][1]["device_id"], "pc-b");
     assert_eq!(found["devices"][1]["connected"], true);
     assert_eq!(found["devices"][1]["active"], false);
-    assert_eq!(found["devices"][1]["active_desktop_id"], Value::Null);
+    assert_eq!(found["devices"][1]["active_desktop_id"], "d");
     let window = &found["desktops"][0]["windows"][0];
     assert_eq!(window["window_id"], "two");
     assert_eq!(window["folders"][0]["device_id"], "pc-b");
