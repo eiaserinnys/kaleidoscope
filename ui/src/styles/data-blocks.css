@@ -466,8 +466,6 @@
 /* 도구 막대 안 실패 표시는 막대 한 줄에 서고, 긴 문구는 한 줄 말줄임한다. 에러코드와 단추는 줄이지 않는다. */
 .ks-data-toolbar .ks-data-toolbar-item:has(> .ks-data-state-compact) { flex: 1 1 auto; min-width: min-content; max-width: 100%; }
 .ks-data-toolbar .ks-data-toolbar-group.is-start > .ks-data-toolbar-item.is-text:has(> .ks-data-state-compact) { width: auto; flex: 1 1 auto; min-width: min-content; max-width: 100%; }
-/* 실패 표시가 든 무리만 줄어들어 막대 폭 안에서 문구가 말줄임된다. 다른 무리는 지금처럼 최소 폭을 지킨다. */
-.ks-data-toolbar > .ks-data-toolbar-group:has(.ks-data-state-compact) { flex-shrink: 1; }
 .ks-data-toolbar .ks-data-state-compact { min-width: 0; max-width: 100%; }
 .ks-data-toolbar .ks-data-state-compact .ks-empty-state-text { display: flex; flex: 1 1 0; min-width: min-content; align-items: center; gap: var(--ks-space-1); }
 /* 문구는 자연 폭을 최소 폭에 넣지 않는다(contain). 그래야 항목이 코드와 단추 폭까지 줄어든다. */

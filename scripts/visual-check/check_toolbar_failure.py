@@ -75,6 +75,14 @@ MEASURE_JS = """() => {
   const barExpected = rect(probe).height;
   probe.remove();
   const descendants = [...toolbar.querySelectorAll('*')].map((node) => ({ cls: cls(node), bottom: rect(node).bottom, height: rect(node).height, width: rect(node).width }));
+  // 시작 무리와 종단 무리의 그려진 상자가 겹치면 좁은 폭에서 코드나 단추가 가려진다.
+  const groupRects = (selector) => {
+    const group = toolbar.querySelector(selector);
+    return group ? [rect(group), ...[...group.querySelectorAll('*')].map(rect)] : [];
+  };
+  const startRects = groupRects(':scope > .ks-data-toolbar-group.is-start');
+  const endRects = groupRects(':scope > .ks-data-toolbar-group.is-end');
+  const overlap = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
   const messages = [...toolbar.querySelectorAll('.ks-data-state-message')].map((node) => {
     const style = getComputedStyle(node);
     return { text: node.textContent, title: node.getAttribute('title'), clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
@@ -97,6 +105,7 @@ MEASURE_JS = """() => {
     compactCount: toolbar.querySelectorAll('.ks-data-state-compact').length,
     stateCount: toolbar.querySelectorAll('.ks-data-state').length,
     messages, ids, buttons,
+    groups: { start: startRects.length, end: endRects.length, overlap: startRects.some((a) => endRects.some((b) => overlap(a, b))) },
     messageSpanCount: app.querySelectorAll('.ks-data-state-message').length,
     outside: outsideInfo,
   };
@@ -195,6 +204,8 @@ def judge(measurement, viewport_width):
     checks["outside_not_compact"] = bool(outside) and outside["compact"] is False
     checks["outside_markup_unchanged"] = bool(outside) and outside["messageSpans"] == 0 and outside["ids"] == [CODE] and LONG_MESSAGE in (outside["text"] or "") and outside["iconWidth"] >= 24
     checks["message_spans_only_in_toolbar"] = measurement["messageSpanCount"] == 2
+    groups = measurement["groups"]
+    checks["groups_not_overlapping"] = groups["start"] > 0 and groups["end"] > 0 and groups["overlap"] is False
     return checks
 
 
