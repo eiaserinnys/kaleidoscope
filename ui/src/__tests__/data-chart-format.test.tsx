@@ -4,7 +4,7 @@ import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
-import { createNumberFormatter } from "../blocks/chart-geometry";
+import { buildChartGeometry, createNumberFormatter, type PlotSeries } from "../blocks/chart-geometry";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import { mockVirtualLayout } from "./virtual-layout";
 
@@ -55,6 +55,61 @@ it("stacks bar series and shows the band total", async () => {
   expect(bars[3].getAttribute("x")).toBe(bars[1].getAttribute("x"));
   expect(bars[2].getAttribute("width")).toBe(bars[0].getAttribute("width"));
   expect(Number(bars[2].getAttribute("y"))).toBeLessThan(Number(bars[0].getAttribute("y")));
+});
+
+it("rounds a bar chart's axis end up to a readable number", () => {
+  const geometry = (columns: number[][], stacked = false) => buildChartGeometry(
+    columns.map((points, index): PlotSeries => ({ key: `s${index}`, name: `계열 ${index}`, points: points.map((y, at) => ({ x: `시점 ${at}`, y })) })),
+    "bar", 600, undefined, { stacked, numberText: (value) => String(value) });
+  expect(geometry([[80000000, 40000000], [30000000, 20000000], [20000000, 10000000], [36354414, 10000000]], true))
+    .toMatchObject({ min: 0, max: 180000000 });
+  expect(geometry([[160000000]])).toMatchObject({ min: 0, max: 160000000 });
+  expect(geometry([[18]])).toMatchObject({ min: 0, max: 18 });
+});
+
+it("formats the rounded bar axis with the block's notation", async () => {
+  const compact = new Intl.NumberFormat(undefined, { notation: "compact" });
+  const { container } = setup({ type: "chart", kind: "bar", stacked: true, number_format: { notation: "compact" }, series: [
+    { key: "a", name: "계열 A", points: [{ x: "월", y: 80000000 }, { x: "화", y: 40000000 }] },
+    { key: "b", name: "계열 B", points: [{ x: "월", y: 30000000 }, { x: "화", y: 20000000 }] },
+    { key: "c", name: "계열 C", points: [{ x: "월", y: 20000000 }, { x: "화", y: 10000000 }] },
+    { key: "d", name: "계열 D", points: [{ x: "월", y: 36354414 }, { x: "화", y: 10000000 }] },
+  ] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  const ticks = [...container.querySelectorAll(".ks-chart-y-axis span")].map((element) => element.textContent);
+  expect(ticks).toEqual([compact.format(180000000), compact.format(90000000), compact.format(0)]);
+});
+
+it("marks the current bar with a band and draws no dots or guide line", async () => {
+  const { container } = setup({ type: "chart", kind: "bar", series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }] },
+  ] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  expect(container.querySelector(".ks-chart-band")).toBeTruthy();
+  expect(container.querySelector(".ks-chart-guide")).toBeNull();
+  expect(container.querySelectorAll(".ks-chart-dot")).toHaveLength(0);
+});
+
+it("keeps the guide line and value dots on a line chart", async () => {
+  const { container } = setup({ type: "chart", kind: "line", series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }] },
+  ] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  expect(container.querySelector(".ks-chart-guide")).toBeTruthy();
+  expect(container.querySelectorAll(".ks-chart-dot")).toHaveLength(1);
+  expect(container.querySelector(".ks-chart-band")).toBeNull();
+});
+
+it("returns to the selected band when the pointer leaves a focused chart", async () => {
+  const { container } = setup({ type: "chart", kind: "bar", selected: { state: "picked" }, series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }] },
+  ] }, { picked: "월" });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  chart.focus();
+  fireEvent.keyDown(chart, { key: "ArrowRight" });
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("화");
+  fireEvent.pointerLeave(chart);
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("월");
 });
 
 it("formats ticks, readout, and the data table with the block's notation", async () => {
@@ -109,7 +164,7 @@ it("returns to the selected band and starts on the last band with data", async (
   ] });
   await screen.findByRole("slider", { name: "차트 시점" });
   expect(second.container.querySelector(".ks-chart-readout-x")?.textContent).toBe("화");
-  expect(second.container.querySelector(".ks-chart-band")).toBeNull();
+  expect(second.container.querySelector(".ks-chart-band")).toBeTruthy();
 });
 
 it("sorts a table column by its sort value instead of the shown text", async () => {

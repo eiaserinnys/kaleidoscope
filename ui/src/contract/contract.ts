@@ -578,7 +578,8 @@ stacked?: boolean,
  */
 number_format?: NumberFormat, 
 /**
- * (62판) 처음 고른 칸의 시점 값. 포인터나 키보드가 떠나면 이 칸으로 돌아온다.
+ * (62판) 처음 고른 칸의 시점 값. 읽기 전용이며 칸 고르기는 `on_select`가 한다.
+ * 포인터나 키보드가 떠나면 이 칸으로 돌아온다.
  */
 selected?: Binding, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
@@ -705,6 +706,7 @@ export type Column = {
 field: string, label: string, width?: ColumnWidth, format?: CellFormat, max_lines?: number, 
 /**
  * (62판) 머리를 눌러 정렬할 때 이 열의 칸 대신 읽을 행 필드. 보이는 칸 글은 그대로 둔다.
+ * 행 표의 머리 정렬에만 쓰인다. 칸 고르기 표(selection cell)는 머리 정렬이 없다.
  */
 sort_field?: string, };
 

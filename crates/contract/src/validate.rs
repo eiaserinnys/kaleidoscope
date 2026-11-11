@@ -3039,7 +3039,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 }
             }
             if let Some(selected) = selected {
-                validate_control_binding(selected, definition, details, at);
+                validate_ui_binding(selected, definition, details, at);
             }
             if let data::Binding::Literal(value) = series {
                 match serde_json::from_value::<Vec<data::ChartSeries>>(value.clone()) {

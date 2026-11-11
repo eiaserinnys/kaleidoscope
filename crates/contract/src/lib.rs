@@ -2625,7 +2625,8 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         number_format: Option<NumberFormat>,
-        /// (62판) 처음 고른 칸의 시점 값. 포인터나 키보드가 떠나면 이 칸으로 돌아온다.
+        /// (62판) 처음 고른 칸의 시점 값. 읽기 전용이며 칸 고르기는 `on_select`가 한다.
+        /// 포인터나 키보드가 떠나면 이 칸으로 돌아온다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<Binding>,
@@ -4217,6 +4218,14 @@ impl Block {
                 selected: Some(_),
                 ..
             } => CHART_SERIES_FORMAT_BLOCK_SET_VERSION,
+            Block::Chart {
+                series: Binding::Literal(value),
+                ..
+            } if serde_json::from_value::<Vec<data::ChartSeries>>(value.clone())
+                .is_ok_and(|series| series.iter().any(|entry| entry.color.is_some())) =>
+            {
+                CHART_SERIES_FORMAT_BLOCK_SET_VERSION
+            }
             Block::Table {
                 columns: TableColumns::Static(columns),
                 ..
@@ -4500,6 +4509,7 @@ pub struct Column {
     #[ts(optional)]
     pub max_lines: Option<u8>,
     /// (62판) 머리를 눌러 정렬할 때 이 열의 칸 대신 읽을 행 필드. 보이는 칸 글은 그대로 둔다.
+    /// 행 표의 머리 정렬에만 쓰인다. 칸 고르기 표(selection cell)는 머리 정렬이 없다.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub sort_field: Option<String>,

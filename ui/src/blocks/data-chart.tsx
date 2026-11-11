@@ -57,7 +57,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   const current = Math.max(0, Math.min(labels.length - 1, regional ?? resting));
   const points = useMemo(() => series.map((entry) => entry.points.find((point) => point.x === labels[current])), [series, labels, current]);
   const { min, max } = geometry;
-  const band = block.selected != null && block.kind === "bar" ? { x: current * 1000 / Math.max(labels.length, 1), width: 1000 / Math.max(labels.length, 1) } : null;
+  const band = block.kind === "bar" ? { x: current * 1000 / Math.max(labels.length, 1), width: 1000 / Math.max(labels.length, 1) } : null;
 
   useEffect(() => {
     const element = graph.current;
@@ -113,7 +113,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           aria-valuemin={0} aria-valuemax={labels.length - 1} aria-valuenow={current}
           aria-valuetext={`${labels[current]} ${series.map((entry, index) => `${entry.name} ${accessibleValue(points[index])}`).join(", ")}`}
           onKeyDown={keyDown} onPointerMove={(event) => setRegional(pointerIndex(event))}
-          onPointerLeave={() => { if (document.activeElement !== graph.current) setRegional(null); }}
+          onPointerLeave={() => setRegional(null)}
           onBlur={() => setRegional(null)}
           onClick={(event) => { const index = pointerIndex(event); setRegional(index); select(index); }}>
           <div className="ks-chart-plot" aria-hidden="true">
@@ -123,13 +123,13 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
             {geometry.series.map((entry, seriesIndex) => <g key={entry.key} className={entry.className} style={seriesColor(entry.color)}>
               {block.kind === "area" ? <defs><linearGradient id={`${gradient}-${seriesIndex}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--ks-chart-series-color)" stopOpacity=".22" /><stop offset="100%" stopColor="var(--ks-chart-series-color)" stopOpacity="0" /></linearGradient></defs> : null}
               {block.kind === "candlestick" ? entry.candles.map((candle) => <g key={candle.index}><title>{candle.title}</title><line className={`ks-chart-wick ${candle.tone}`} x1={candle.x} x2={candle.x} y1={candle.highY} y2={candle.lowY} vectorEffect="non-scaling-stroke" /><rect className={`ks-chart-candle ${candle.tone}`} x={candle.x - candle.width / 2} y={Math.min(candle.openY, candle.closeY)} width={candle.width} height={Math.max(2, Math.abs(candle.closeY - candle.openY))} rx={1.5} /></g>) : null}
-              {block.kind === "bar" ? entry.bars.map((bar) => bar.title ? <g key={bar.index}><title>{bar.title}</title><rect className={`ks-chart-bar${bar.index === current ? " is-active" : ""}`} x={bar.x} y={bar.y} width={bar.width} height={bar.height} /></g> : <rect key={bar.index} className={`ks-chart-bar${bar.index === current ? " is-active" : ""}`} x={bar.x} y={bar.y} width={bar.width} height={bar.height} />) : null}
+              {block.kind === "bar" ? entry.bars.map((bar) => bar.title ? <g key={bar.index}><title>{bar.title}</title><rect className="ks-chart-bar" x={bar.x} y={bar.y} width={bar.width} height={bar.height} /></g> : <rect key={bar.index} className="ks-chart-bar" x={bar.x} y={bar.y} width={bar.width} height={bar.height} />) : null}
               {block.kind !== "bar" && block.kind !== "candlestick" ? entry.lines.map((line) => <g key={line.key}>{line.area && <path className="ks-chart-area" d={line.area} fill={`url(#${gradient}-${seriesIndex})`} />}<path className="ks-chart-line" d={line.path} vectorEffect="non-scaling-stroke" /></g>) : null}
             </g>)}
-            <line className="ks-chart-guide" x1={geometry.xAt(current)} x2={geometry.xAt(current)} y1="10" y2="150" vectorEffect="non-scaling-stroke" />
+            {block.kind !== "bar" && <line className="ks-chart-guide" x1={geometry.xAt(current)} x2={geometry.xAt(current)} y1="10" y2="150" vectorEffect="non-scaling-stroke" />}
           </svg>
           {geometry.isolatedDots.filter((dot) => dot.index !== current).map((dot) => <span key={dot.key} className="ks-chart-dot" style={{ left: dot.left, top: dot.top, ...seriesColor(dot.color) }} />)}
-          {block.kind !== "candlestick" && !stacked && points.map((point, index) => point && point.y !== null ? <span key={series[index].key} className="ks-chart-dot" style={{ left: `${geometry.xAt(current) / 10}%`, top: `${geometry.yAt(point.y) / 160 * 100}%`, ...seriesColor(geometry.series[index].color) }} /> : null)}
+          {block.kind !== "bar" && block.kind !== "candlestick" && points.map((point, index) => point && point.y !== null ? <span key={series[index].key} className="ks-chart-dot" style={{ left: `${geometry.xAt(current) / 10}%`, top: `${geometry.yAt(point.y) / 160 * 100}%`, ...seriesColor(geometry.series[index].color) }} /> : null)}
           </div>
           <div className="ks-chart-x-axis" aria-hidden="true">{geometry.axes.map(({ label, index, left, transform }) => <span key={`${label}-${index}`} style={{ left, transform }}>{label}</span>)}</div>
         </div>

@@ -27,6 +27,32 @@ export type ChartGeometry = {
   axes: Array<{ label: string; index: number; left: string; transform: string }>;
 };
 
+/** 막대 차트의 세로축 끝을 유효숫자 한 자리로 올린 보기 좋은 수로 만든다. */
+function niceAxisEnds(low: number, high: number): { min: number; max: number } | null {
+  const ceil1 = (value: number) => {
+    const power = 10 ** Math.floor(Math.log10(value));
+    return Math.ceil(value / power - 1e-9) * power;
+  };
+  if (low === 0 && high === 0) return null;
+  if (low >= 0) {
+    const step = ceil1(high / 2);
+    return { min: 0, max: 2 * step };
+  }
+  if (high <= 0) {
+    const step = ceil1(-low / 2);
+    return { min: -2 * step, max: 0 };
+  }
+  let step = ceil1((high - low) / 2);
+  let bottom = Math.floor(low / step) * step;
+  let top = bottom + 2 * step;
+  for (let attempt = 0; attempt < 3 && top < high; attempt++) {
+    step = ceil1((high - bottom) / 2);
+    bottom = Math.floor(low / step) * step;
+    top = bottom + 2 * step;
+  }
+  return { min: bottom, max: top };
+}
+
 /** 블록이 정한 수 형식으로 수를 글로 만든다. 형식이 없으면 이전과 같은 글을 쓴다. */
 export function createNumberFormatter(format: NumberFormat | null | undefined, kind: ChartKind): NumberFormatter {
   if (format) {
@@ -88,6 +114,10 @@ export function buildChartGeometry(
     min = numbers.length ? Math.min(...numbers) : 0;
     max = numbers.length ? Math.max(...numbers) : 1;
     if (kind === "bar") { min = Math.min(0, min); max = Math.max(0, max); }
+  }
+  if (kind === "bar") {
+    const ends = niceAxisEnds(min, max);
+    if (ends) { min = ends.min; max = ends.max; }
   }
   if (min === max) { const margin = Math.abs(min) * 0.1 || 1; min -= margin; max += margin; }
   const xAt = (index: number) => kind === "bar" ? (index + 0.5) * bandWidth : labels.length === 1 ? 500 : index * 1000 / (labels.length - 1);

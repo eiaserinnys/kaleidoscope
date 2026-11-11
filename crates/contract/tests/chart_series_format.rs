@@ -64,6 +64,31 @@ fn chart_series_format_requires_block_set_62() {
 }
 
 #[test]
+fn chart_selected_accepts_read_bindings() {
+    let expr = json!({"type": "chart", "series": [], "selected": {"expr": "$states.picked"}});
+    parse_app_definition(&definition(expr, V62).to_string()).unwrap();
+    let literal = json!({"type": "chart", "series": [], "selected": "월"});
+    parse_app_definition(&definition(literal, V62).to_string()).unwrap();
+}
+
+#[test]
+fn series_color_requires_block_set_62_but_plain_chart_stays_nine() {
+    let colored = json!({"type": "chart", "series": [{"key": "a", "name": "모델 A", "color": "#3d7cc9", "points": []}]});
+    let error = parse_app_definition(&definition(colored.clone(), V62 - 1).to_string()).unwrap_err();
+    assert!(
+        error
+            .details
+            .iter()
+            .any(|detail| detail.contains("블록 세트 62판")),
+        "{:?}",
+        error.details
+    );
+    parse_app_definition(&definition(colored, V62).to_string()).unwrap();
+    let plain = json!({"type": "chart", "series": [{"key": "a", "name": "모델 A", "points": []}]});
+    parse_app_definition(&definition(plain, 9).to_string()).unwrap();
+}
+
+#[test]
 fn basic_chart_still_starts_at_block_set_nine() {
     let ui = json!({"type": "chart", "series": []});
     parse_app_definition(&definition(ui, 9).to_string()).unwrap();
