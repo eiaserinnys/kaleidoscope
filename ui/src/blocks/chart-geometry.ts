@@ -40,7 +40,7 @@ function estimateLabelWidth(label: string): number {
   return [...label].reduce((sum, char) => sum + (char === " " ? 4 : isWideChar(char.codePointAt(0) ?? 0) ? 12 : 7), 0);
 }
 
-/** 막대 차트의 세로축 끝을 유효숫자 한 자리로 올린 보기 좋은 수로 만든다. */
+/** 막대 차트의 세로축 끝을 유효숫자 한 자리로 올린 보기 좋은 수로 만든다. 돌려준 범위는 low와 high를 늘 담는다. */
 function niceAxisEnds(low: number, high: number): { min: number; max: number } | null {
   const ceil1 = (value: number) => {
     const power = 10 ** Math.floor(Math.log10(value));
@@ -55,15 +55,9 @@ function niceAxisEnds(low: number, high: number): { min: number; max: number } |
     const step = ceil1(-low / 2);
     return { min: -2 * step, max: 0 };
   }
-  let step = ceil1((high - low) / 2);
-  let bottom = Math.floor(low / step) * step;
-  let top = bottom + 2 * step;
-  for (let attempt = 0; attempt < 3 && top < high; attempt++) {
-    step = ceil1((high - bottom) / 2);
-    bottom = Math.floor(low / step) * step;
-    top = bottom + 2 * step;
-  }
-  return { min: bottom, max: top };
+  // 양수와 음수가 섞이면 0을 가운데 눈금에 두고 큰 쪽 크기로 위아래를 같게 잡아, 두 끝을 늘 담는다.
+  const step = ceil1(Math.max(-low, high));
+  return { min: -step, max: step };
 }
 
 /** 블록이 정한 수 형식으로 수를 글로 만든다. 형식이 없으면 이전과 같은 글을 쓴다. */

@@ -67,6 +67,26 @@ it("rounds a bar chart's axis end up to a readable number", () => {
   expect(geometry([[18]])).toMatchObject({ min: 0, max: 18 });
 });
 
+it("keeps positive and negative bars inside a mixed-sign axis", () => {
+  const geometry = (columns: number[][], stacked = false) => buildChartGeometry(
+    columns.map((points, index): PlotSeries => ({ key: `s${index}`, name: `계열 ${index}`, points: points.map((y, at) => ({ x: `시점 ${at}`, y })) })),
+    "bar", 600, undefined, { stacked, numberText: (value) => String(value) });
+  const inside = (built: ReturnType<typeof geometry>) => built.series.flatMap((entry) => entry.bars).forEach((bar) => {
+    expect(bar.y).toBeGreaterThanOrEqual(10 - 0.001);
+    expect(bar.y + bar.height).toBeLessThanOrEqual(150 + 0.001);
+  });
+  const grouped = geometry([[-9, 1]]);
+  expect(grouped).toMatchObject({ min: -9, max: 9 });
+  expect(grouped.baseline).toBeCloseTo(80);
+  inside(grouped);
+  const stacked = geometry([[-6, 3], [-3, 2]], true);
+  expect(stacked).toMatchObject({ min: -9, max: 9 });
+  inside(stacked);
+  const lopsided = geometry([[-1, 230]]);
+  expect(lopsided).toMatchObject({ min: -300, max: 300 });
+  inside(lopsided);
+});
+
 it("keeps x-axis labels apart in a nine-band bar chart inside a 360px window", () => {
   // 360px 창에서 이 차트의 그리기 영역 폭은 285px이다.
   const labels = Array.from({ length: 9 }, (_, index) => `26년 ${index + 3}월`);
