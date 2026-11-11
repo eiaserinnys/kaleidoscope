@@ -2,6 +2,15 @@ import { validColor } from "../components/badge";
 import type { Block, ChartPoint, ChartSeries, NumberFormat } from "../contract/contract";
 
 export type ChartKind = Extract<Block, { type: "chart" }>["kind"];
+
+/** 계열 색을 푼다. hex는 그대로, 팔레트 이름은 테마 토큰으로, 그 밖에는 계열 차례 팔레트 색으로. */
+export function chartSeriesColor(color: unknown, seriesIndex: number): string {
+  if (validColor(color)) return color;
+  if (color === "muted") return "var(--ks-color-muted)";
+  if (typeof color === "string" && /^series-[1-8]$/.test(color)) return `var(--ks-color-${color})`;
+  return `var(--ks-color-series-${(seriesIndex % 8) + 1})`;
+}
+
 export type PlotPoint = Omit<ChartPoint, "y"> & { y: number | null };
 export type PlotSeries = Omit<ChartSeries, "points"> & { points: PlotPoint[] };
 export type NumberFormatter = (value: number) => string;
@@ -139,7 +148,7 @@ export function buildChartGeometry(
   const stackedOffsets = labels.map(() => ({ positive: 0, negative: 0 }));
   const seriesGeometry = series.map((entry, seriesIndex) => {
     const ordered = orderedSeries[seriesIndex];
-    const color = validColor(entry.color) ? entry.color : `var(--ks-color-series-${(seriesIndex % 8) + 1})`;
+    const color = chartSeriesColor(entry.color, seriesIndex);
     const candles = kind === "candlestick" ? ordered.flatMap((point, index) => {
       if (!point || point.open === undefined || point.high === undefined || point.low === undefined || point.close === undefined) return [];
       return [{ index, tone: point.close >= point.open ? "up" : "down", x: xAt(index), highY: yAt(point.high), lowY: yAt(point.low), openY: yAt(point.open), closeY: yAt(point.close), width: Math.max(4, Math.min(16, 1000 / Math.max(labels.length, 1) * .58)), title: point.label ?? `${point.x} 시가 ${point.open} / 고가 ${point.high} / 저가 ${point.low} / 종가 ${point.close}` }];

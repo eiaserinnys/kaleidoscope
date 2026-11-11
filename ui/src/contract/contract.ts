@@ -616,7 +616,7 @@ export type ChartPoint = { x: string, y?: number | null, open?: number, high?: n
 
 export type ChartSeries = { key: string, name: string, points: Array<ChartPoint>, 
 /**
- * (62판) 계열의 색. `#rgb` 또는 `#rrggbb`. 형식이 다르면 표의 팔레트 색을 쓴다.
+ * (62판) 계열의 색. `#rgb`, `#rrggbb` 또는 팔레트 이름 `series-1`~`series-8`, `muted`. 팔레트 이름은 밝은 테마와 어두운 테마를 따른다. 형식이 다르면 계열 차례대로 팔레트 색을 쓴다.
  */
 color?: string, };
 

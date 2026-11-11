@@ -14,6 +14,7 @@
 - 시점 서른 개를 쌓은 막대.
 - 계열 하나짜리 막대: 강조색 그대로이고 지금 칸은 띠로 보이는지.
 - 360px 창의 9칸 막대(「26년 3월」부터 「26년 11월」): 눈금 글이 겹치지 않는지.
+- 팔레트 이름(series-4, series-2, muted) 세 계열의 쌓은 막대: 밝은 테마와 어두운 테마에서 막대 fill이 그 테마의 토큰 색인지.
 
 재는 것: 막대마다 지금 칸 띠가 있고 그 좌우가 칸 경계와 1px 이내인지, 막대 차트에 값 점과
 안내선이 없는지(선과 면적에는 그대로인지), 막대가 계열 색 그대로인지(투명도 없이), 범례
@@ -144,6 +145,22 @@ def axis_series():
              "points": [{"x": f"26년 {month}월", "y": values[month - 3]} for month in range(3, 12)]}]
 
 
+def palette_name_series():
+    names = ["계열 가", "계열 나", "계열 다"]
+    colors = ["series-4", "series-2", "muted"]
+    labels = ["1월", "2월", "3월"]
+    return [{"key": f"n{index}", "name": names[index], "color": colors[index],
+             "points": [{"x": label, "y": 10 + index * 4 + step * 3} for step, label in enumerate(labels)]}
+            for index in range(3)]
+
+
+def palette_name_scene():
+    return {"type": "stack", "direction": "column", "gap": "none", "children": [
+        {"type": "section", "title": "팔레트 이름", "child":
+         {"type": "chart", "kind": "bar", "stacked": True, "series": palette_name_series()}},
+    ]}
+
+
 def max_series(value):
     return [{"key": "s", "name": "값", "points": [
         {"x": DAYS[index], "y": round(value * factor)}
@@ -270,6 +287,7 @@ MEASURE_JS = """(args) => {
   document.body.appendChild(probe);
   const resolve = (value) => { probe.style.color = value; return getComputedStyle(probe).color; };
   const palette = Array.from({ length: 8 }, (_, index) => resolve(`var(--ks-color-series-${index + 1})`));
+  const muted = resolve('var(--ks-color-muted)');
   const charts = [...win.querySelectorAll('.ks-chart')].map((chart) => {
     const chartBox = box(chart);
     const svgElement = chart.querySelector('.ks-chart-plot svg');
@@ -328,6 +346,7 @@ MEASURE_JS = """(args) => {
   return {
     charts,
     palette,
+    muted,
     section: section ? box(section) : null,
     headerGlyphX: glyphX(section && section.querySelector('.ks-data-section-header')),
     metrics: metrics ? box(metrics) : null,
@@ -812,6 +831,27 @@ def main():
                                 result["pixel"][pixel_key] = verdict
                                 if verdict.get("passed") is False:
                                     result["failures"].append(f"{pixel_key}: bar_pixel_vs_legend")
+
+            # 팔레트 이름(series-4, series-2, muted)이 그 테마의 토큰 색으로 칠해지는지 본다.
+            page.set_viewport_size({"width": WIDE[0], "height": WIDE[1]})
+            inject(page, palette_name_scene())
+            application.locator('.ks-chart').first.wait_for(state="visible", timeout=20000)
+            for theme in ("light", "dark"):
+                page.emulate_media(color_scheme=theme)
+                page.wait_for_timeout(500)
+                measurement = page.evaluate(MEASURE_JS, {"appId": APP_ID})
+                if measurement.get("error"):
+                    raise AssertionError(measurement["error"])
+                chart = measurement["charts"][0]
+                expected = [measurement["palette"][3], measurement["palette"][1], measurement["muted"]]
+                key = f"palette-names-{theme}"
+                record(result, key, {"bars_use_named_palette": bool(chart["bars"]) and all(
+                    bar["fill"].replace(" ", "") == expected[bar["seriesIndex"]].replace(" ", "")
+                    for bar in chart["bars"])})
+                result["scenes"][key]["measurement"] = measurement
+                capture = output / f"palette-names-{theme}.png"
+                application.locator('.ks-chart').first.screenshot(path=str(capture), animations="disabled")
+                result["captures"].append(str(capture))
 
             # 눈금 겹침: 360px 창의 9칸 막대에서 보이는 눈금 글 사이가 4px 이상이고 마지막 글이 보인다.
             page.emulate_media(color_scheme="light")

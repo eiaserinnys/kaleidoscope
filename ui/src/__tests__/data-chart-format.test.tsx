@@ -261,6 +261,23 @@ it("uses each series color and falls back to the palette for a bad value", async
   expect(legend?.textContent).toContain("모델 B");
 });
 
+it("resolves palette names for series colors", async () => {
+  const { container } = setup({ type: "chart", kind: "bar", series: [
+    { key: "a", name: "계열 A", color: "series-4", points: [{ x: "월", y: 1 }] },
+    { key: "b", name: "계열 B", color: "muted", points: [{ x: "월", y: 2 }] },
+    { key: "c", name: "계열 C", color: "#123456", points: [{ x: "월", y: 3 }] },
+    { key: "d", name: "계열 D", color: "bogus", points: [{ x: "월", y: 4 }] },
+  ] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  const expected = ["var(--ks-color-series-4)", "var(--ks-color-muted)", "#123456", "var(--ks-color-series-4)"];
+  const groups = [...container.querySelectorAll(".ks-chart-series")];
+  const legendItems = [...container.querySelectorAll(".ks-chart-legend-item")];
+  expect(groups).toHaveLength(4);
+  expect(legendItems).toHaveLength(4);
+  groups.forEach((group, index) => expect(group.getAttribute("style")).toContain(`--ks-chart-series-color: ${expected[index]}`));
+  legendItems.forEach((item, index) => expect(item.getAttribute("style")).toContain(`--ks-chart-series-color: ${expected[index]}`));
+});
+
 it("returns to the selected band and starts on the last band with data", async () => {
   const first = setup({ type: "chart", kind: "bar", selected: { state: "picked" }, series: [
     { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }] },

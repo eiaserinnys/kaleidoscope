@@ -342,10 +342,10 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 59판: 트리 확인 모드의 부모 행 확인 상자와 확인 상자가 있는 행의 본문 클릭 시 펼침 유지.
 /// - 60판: 데이터 트리의 바로 입력과 끌어 옮기기, 구역 머리의 메뉴와 바로 이름 바꾸기.
 /// - 61판: 데이터 트리의 빈 자리 글(`empty_text`).
-/// - 62판: chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`)과 table 열의 정렬 값(`sort_field`).
+/// - 62판: chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`).
 pub const BLOCK_SET_VERSION: u32 = CHART_SERIES_FORMAT_BLOCK_SET_VERSION;
-/// chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`)과
-/// table 열의 정렬 값(`sort_field`)을 처음 지원하는 블록 세트 판.
+/// chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와
+/// 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`)을 처음 지원하는 블록 세트 판.
 pub const CHART_SERIES_FORMAT_BLOCK_SET_VERSION: u32 = 62;
 /// 데이터 트리가 항목 없이 그릴 한 줄의 글(`empty_text`)을 처음 지원하는 블록 세트 판.
 pub const TREE_EMPTY_TEXT_BLOCK_SET_VERSION: u32 = 61;

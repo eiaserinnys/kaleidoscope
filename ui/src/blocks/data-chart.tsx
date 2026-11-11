@@ -1,6 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { validColor } from "../components/badge";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { DataState } from "../components/data-state";
@@ -19,7 +18,7 @@ function seriesFrom(value: unknown, candle: boolean): PlotSeries[] {
       const open = finite(point.open), high = finite(point.high), low = finite(point.low), close = finite(point.close);
       return [{ x: point.x, y: finite(point.y) ?? (candle ? close : null), ...(open === null ? {} : { open }), ...(high === null ? {} : { high }), ...(low === null ? {} : { low }), ...(close === null ? {} : { close }), ...(typeof point.label === "string" ? { label: point.label } : {}) }];
     });
-    return [{ key: series.key, name: series.name, points, ...(validColor(series.color) ? { color: series.color } : {}) }];
+    return [{ key: series.key, name: series.name, points, ...(typeof series.color === "string" ? { color: series.color } : {}) }];
   });
 }
 
