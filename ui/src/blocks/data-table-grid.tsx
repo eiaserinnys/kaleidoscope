@@ -10,7 +10,7 @@ import { contentCellError } from "./data-table-cell";
 
 type Address = { row: string; column: string };
 type GridHandlers = {
-  focus: (row: string, column: string) => void;
+  focus: (row: string, column: string, element?: HTMLElement) => void;
   choose: (row: string, column: string) => void;
   key: (event: KeyboardEvent<HTMLElement>, row: string, column: string) => void;
   settle: () => void;
@@ -34,7 +34,7 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
         event.currentTarget.closest('[role="grid"]')?.querySelectorAll("[data-keyboard-focus]").forEach((cell) => cell.removeAttribute("data-keyboard-focus"));
         event.currentTarget.setAttribute("data-keyboard-focus", "");
       }
-      handlers.current.focus(rowKey, column.field);
+      handlers.current.focus(rowKey, column.field, event.currentTarget);
     }}
     onKeyDown={(event) => handlers.current.key(event, rowKey, column.field)}
     onMouseDown={(event) => { if (event.detail >= 2) event.preventDefault(); }}
@@ -110,38 +110,51 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
     // 스프레드시트처럼 선택이 초점을 따라간다. 키 반복마다 보내지 않도록 보내기는 부르는 쪽이 합친다.
     if (address.row !== selectedCell?.row || address.column !== selectedCell?.column) onCellMove?.(address);
   };
-  const reveal = (target: HTMLElement) => {
-    const container = scroll.current; if (!container) return;
+  const cellBounds = (target: HTMLElement) => {
+    const container = scroll.current; if (!container) return null;
     const rect = target.getBoundingClientRect(), bounds = container.getBoundingClientRect();
     const ring = Number.parseFloat(getComputedStyle(target).getPropertyValue("--ks-focus-width")) || 0;
     const leftGap = Math.max(ring, Number.parseFloat(getComputedStyle(target.closest<HTMLElement>(".ks-grid-row")!).columnGap) || 0);
     const pinned = rowHeader ? container.querySelector<HTMLElement>(".ks-grid-row-header")?.getBoundingClientRect().width ?? 0 : 0;
-    if (rect.left - leftGap < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - (rect.left - leftGap);
-    const right = bounds.left + container.clientLeft + container.clientWidth;
-    if (rect.right + ring > right) container.scrollLeft += rect.right + ring - right;
     const top = bounds.top + container.clientTop + (container.querySelector<HTMLElement>(".ks-table-header")?.getBoundingClientRect().height ?? 0);
-    const bottom = bounds.top + container.clientTop + container.clientHeight;
-    if (rect.top - ring < top) container.scrollTop -= top - (rect.top - ring);
-    else if (rect.bottom + ring > bottom) container.scrollTop += rect.bottom + ring - bottom;
+    return { container, rect, ring, leftGap, left: bounds.left + pinned, right: bounds.left + container.clientLeft + container.clientWidth, top, bottom: bounds.top + container.clientTop + container.clientHeight };
+  };
+  const reveal = (target: HTMLElement) => {
+    const box = cellBounds(target); if (!box) return;
+    if (box.rect.left - box.leftGap < box.left) box.container.scrollLeft -= box.left - (box.rect.left - box.leftGap);
+    if (box.rect.right + box.ring > box.right) box.container.scrollLeft += box.rect.right + box.ring - box.right;
+    if (box.rect.top - box.ring < box.top) box.container.scrollTop -= box.top - (box.rect.top - box.ring);
+    else if (box.rect.bottom + box.ring > box.bottom) box.container.scrollTop += box.rect.bottom + box.ring - box.bottom;
+  };
+  const isVisible = (target: HTMLElement) => {
+    const box = cellBounds(target); if (!box) return false;
+    return box.rect.left - box.leftGap >= box.left && box.rect.right + box.ring <= box.right && box.rect.top - box.ring >= box.top && box.rect.bottom + box.ring <= box.bottom;
   };
   const revealRef = useRef(reveal);
   revealRef.current = reveal;
+  const visibleRef = useRef(isVisible);
+  visibleRef.current = isVisible;
+  // 고른 칸이 지금 보이는지. 크기가 줄기 전에 보이던 칸이 밀려났는지 가르는 데 쓴다.
+  const chosenVisible = useRef(true);
   useEffect(() => {
     const container = scroll.current;
     if (!container) return;
-    // 창이나 옆 칸이 줄어 고른 칸이 보이는 영역 밖으로 밀리면 그때만 가장 가까운 쪽으로 스크롤한다.
-    // 사용자가 직접 스크롤해 밖으로 보낸 것은 크기가 바뀌기 전까지 건드리지 않는다.
+    const chosen = () => container.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]');
+    const track = () => { const target = chosen(); chosenVisible.current = target ? visibleRef.current(target) : false; };
+    // 사용자가 직접 스크롤해 고른 칸을 밖으로 보낸 것은 크기가 바뀌어도 건드리지 않는다.
+    container.addEventListener("scroll", track, { passive: true });
     let previous = { width: container.clientWidth, height: container.clientHeight };
     const observer = new ResizeObserver(() => {
       const width = container.clientWidth, height = container.clientHeight;
       const shrunk = width < previous.width || height < previous.height;
       previous = { width, height };
-      if (!shrunk) return;
-      const target = container.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]');
-      if (target) revealRef.current(target);
+      const target = chosen();
+      // 창이나 옆 칸이 줄어 보이던 고른 칸이 밀려났을 때만 가장 가까운 쪽으로 스크롤한다.
+      if (shrunk && target && chosenVisible.current && !visibleRef.current(target)) revealRef.current(target);
+      chosenVisible.current = target ? visibleRef.current(target) : false;
     });
     observer.observe(container);
-    return () => observer.disconnect();
+    return () => { container.removeEventListener("scroll", track); observer.disconnect(); };
   }, [scroll]);
   useEffect(() => {
     const address = pending.current;
@@ -157,6 +170,7 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
       }
       target.focus({ preventScroll: true });
       reveal(target);
+      chosenVisible.current = isVisible(target);
     }
   });
   useEffect(() => {
@@ -166,7 +180,7 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
     }
   }, [current?.row, current?.column, focus?.row, focus?.column]);
   handlers.current = {
-    focus: (row, column) => { const r = rows.findIndex((item) => item.key === row), c = dataColumns.findIndex((item) => item.field === column); last.current = { row: r, column: c }; setFocus({ row, column }); },
+    focus: (row, column, element) => { const r = rows.findIndex((item) => item.key === row), c = dataColumns.findIndex((item) => item.field === column); last.current = { row: r, column: c }; setFocus({ row, column }); if (element) chosenVisible.current = visibleRef.current(element); },
     choose: (row, column) => { const item = rows.find((item) => item.key === row); if (item) onChooseCell?.(item, column); },
     settle: () => onCellSettle?.(),
     menu: (event, row, anchor) => { const item = rows.find((item) => item.key === row); if (item && onContextMenu && !event?.defaultPrevented) { event?.preventDefault(); onContextMenu(item, anchor, event); } },

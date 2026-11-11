@@ -122,7 +122,7 @@ it("행 고르기 표는 방향키로 on_select를 부르지 않는다", async (
   expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
 });
 
-it("표 폭이 줄어 고른 칸이 화면 밖으로 나가면 스크롤로 그 칸을 보이게 한다", async () => {
+it("표 폭이 줄어 고른 칸이 화면 밖으로 나가면 스크롤로 그 칸을 보이게 하고, 사용자가 스크롤해 보낸 칸은 그대로 둔다", async () => {
   const callbacks: ResizeObserverCallback[] = [];
   vi.stubGlobal("ResizeObserver", class {
     constructor(callback: ResizeObserverCallback) { callbacks.push(callback); }
@@ -159,6 +159,13 @@ it("표 폭이 줄어 고른 칸이 화면 밖으로 나가면 스크롤로 그 
     size.width = 300;
     resize();
     expect(grid.scrollLeft).toBe(0);
+    // 사용자가 직접 스크롤해 고른 칸을 밖으로 보낸 뒤에는 폭이 줄어도 끌어오지 않는다.
+    grid.scrollLeft = 80;
+    cellRect = { left: 600, right: 800 };
+    fireEvent.scroll(grid);
+    size.width = 200;
+    resize();
+    expect(grid.scrollLeft).toBe(80);
   } finally {
     if (widthDescriptor) Object.defineProperty(HTMLElement.prototype, "clientWidth", widthDescriptor);
     if (heightDescriptor) Object.defineProperty(HTMLElement.prototype, "clientHeight", heightDescriptor);
