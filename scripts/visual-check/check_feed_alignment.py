@@ -7,7 +7,8 @@ feed를 split 칸에 바로 두고, 장면 C는 초상이 하나도 없는 feed�
 「대사」 구역의 feed가 접는 묶음(grouped, collapsible)이고, 구역 첫 내용 위끝을 첫 가상 행의
 묶음 머리 줄(.ks-feed-group-head) 상자 위끝으로 재며, 머리 줄 안 묶음 머리 글이 세로
 가운데인지도 잰다. 장면 N은 이름 색만 담은 feed로, 테마마다 이름의 계산된 색을 canvas에서
-sRGB로 얻어 화면 바탕 픽셀과 쉘 창 바탕 기준값 모두에 4.5:1 이상인지 잰다. 장면 P는 장면
+sRGB로 얻어 화면 바탕 픽셀과 쉘 창 바탕 기준값 모두에 4.5:1 이상인지 재고, 밝기를 옮기지
+않아도 되는 색은 앱이 준 색 그대로 그려지는지도 본다. 장면 P는 장면
 A와 같은 분할에서 「대사」 구역을 뺀 꼴이고, 입력 자리 글이 --ks-color-muted인지 밝은
 테마와 어두운 테마에서 재며 그 캡처를 남긴다.
 
@@ -53,7 +54,10 @@ COLOR_NAMES = (
     ("푸른빛", "#0000ff"),
     ("남빛", "#5b6fd6"),
     ("자줏빛", "#c0507a"),
+    ("분홍빛", "#ff70ff"),
 )
+# 테마의 밝기 한계 안에 있어 밝기도 채도도 옮기지 않아야 하는 색. 그려진 sRGB가 앱 색과 채널마다 1 안이어야 한다.
+UNCHANGED_NAMES = {"light": ("푸른빛",), "dark": ("노란빛", "분홍빛")}
 REFERENCE_BACKGROUND = {"light": (0xF4, 0xF2, 0xF2), "dark": (0x2A, 0x23, 0x2F)}
 PLACEHOLDER = "댓글을 남겨 보세요"
 STATE = {"note": "", "note2": "", "comment": ""}
@@ -466,24 +470,33 @@ def judge_placeholder(measurement):
 
 
 def judge_contrast(theme, measurement, screenshot, viewport_width):
-    """이름 색과 화면 바탕 픽셀, 쉘 창 바탕 기준값의 WCAG 대비를 잰다. 둘 다 4.5 이상이어야 한다."""
+    """이름 색과 화면 바탕 픽셀, 쉘 창 바탕 기준값의 WCAG 대비를 잰다. 둘 다 4.5 이상이어야 한다.
+
+    UNCHANGED_NAMES의 색은 그려진 sRGB가 앱 색 그대로인지도 잰다."""
     by_text = {item["text"]: item for item in measurement}
     reference = REFERENCE_BACKGROUND[theme]
     checks = {}
     details = {}
-    for text, _ in COLOR_NAMES:
+    for text, source in COLOR_NAMES:
+        unchanged = text in UNCHANGED_NAMES[theme]
         item = by_text.get(text)
         if item is None or item.get("alpha") != 255:
             checks[f"contrast_{text}"] = False
+            if unchanged:
+                checks[f"unchanged_{text}"] = False
             details[text] = {"missing": True}
             continue
         drawn = tuple(item["rgb"])
+        original = tuple(int(source[index:index + 2], 16) for index in (1, 3, 5))
+        if unchanged:
+            checks[f"unchanged_{text}"] = max(abs(a - b) for a, b in zip(drawn, original)) <= 1
         background = screenshot_pixel(screenshot, item["right"] + 8, (item["top"] + item["bottom"]) / 2, viewport_width)
         scene = contrast_ratio(drawn, background)
         fixed = contrast_ratio(drawn, reference)
         checks[f"contrast_{text}"] = scene >= 4.5 and fixed >= 4.5
         details[text] = {
             "color": item["color"],
+            "app_srgb": list(original),
             "drawn_srgb": list(drawn),
             "scene_background": list(background),
             "reference_background": list(reference),
