@@ -22,7 +22,6 @@ export interface ButtonProps {
   "aria-disabled"?: boolean;
   "aria-busy"?: boolean;
   "data-ks-user-consent"?: boolean;
-  "data-server-mode"?: "embedded" | "remote" | "none";
   onPointerEnter?: React.PointerEventHandler<HTMLButtonElement>;
   onPointerLeave?: React.PointerEventHandler<HTMLButtonElement>;
   onPointerDown?: React.PointerEventHandler<HTMLButtonElement>;
@@ -49,7 +48,6 @@ export function Button({
   "aria-disabled": ariaDisabled,
   "aria-busy": ariaBusy,
   "data-ks-user-consent": userConsent,
-  "data-server-mode": serverMode,
   onPointerEnter, onPointerLeave, onPointerDown, onFocus, onBlur,
 }: ButtonProps) {
   return (
@@ -67,7 +65,6 @@ export function Button({
       aria-disabled={ariaDisabled}
       aria-busy={ariaBusy}
       data-ks-user-consent={userConsent || undefined}
-      data-server-mode={serverMode}
       onClick={onClick}
       onPointerEnter={onPointerEnter} onPointerLeave={onPointerLeave} onPointerDown={onPointerDown} onFocus={onFocus} onBlur={onBlur}
       type={type}
@@ -99,14 +96,13 @@ export interface IconButtonProps {
   "aria-disabled"?: boolean;
   "aria-busy"?: boolean;
   "data-ks-user-consent"?: boolean;
-  "data-server-mode"?: "embedded" | "remote" | "none";
   "data-window-control"?: string;
   "aria-haspopup"?: "dialog" | "listbox";
   "aria-expanded"?: boolean;
   "aria-controls"?: string;
 }
 
-export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, tabIndex, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "aria-busy": ariaBusy, "data-ks-user-consent": userConsent, "data-server-mode": serverMode, "data-window-control": windowControl, "aria-haspopup": hasPopup, "aria-expanded": expanded, "aria-controls": controls }: IconButtonProps) {
+export function IconButton({ "aria-label": label, children, disabled, onClick, title, pressed, tone, className, tooltip, tooltipEnabled, variant, tabIndex, onPointerDown, onPointerUp, onPointerCancel, onLostPointerCapture, onBlur, "aria-disabled": ariaDisabled, "aria-busy": ariaBusy, "data-ks-user-consent": userConsent, "data-window-control": windowControl, "aria-haspopup": hasPopup, "aria-expanded": expanded, "aria-controls": controls }: IconButtonProps) {
   const button = (
     <button
       aria-label={label}
@@ -117,7 +113,6 @@ export function IconButton({ "aria-label": label, children, disabled, onClick, t
       aria-expanded={expanded}
       aria-controls={controls}
       data-ks-user-consent={userConsent || undefined}
-      data-server-mode={serverMode}
       data-window-control={windowControl}
       className={`ks-icon-button${tone === "share" ? " ks-icon-button-share" : ""}${variant ? ` is-${variant}` : ""}${className ? ` ${className}` : ""}`}
       disabled={disabled}
