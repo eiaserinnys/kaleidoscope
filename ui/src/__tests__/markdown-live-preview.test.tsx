@@ -28,6 +28,7 @@ async function openEditor() {
   if (!view) throw new Error("편집기를 찾지 못했습니다");
   expect(ensureSyntaxTree(view.state, view.state.doc.length, 5000)).not.toBeNull();
   act(() => view.dispatch({ selection: { anchor: 0 } }));
+  await waitFor(() => expect(editor.querySelector("table")).not.toBeNull());
   return { editor, view, call, transport };
 }
 
@@ -60,6 +61,7 @@ describe("마크다운 실시간 보기", () => {
     const view = EditorView.findFromDOM(editor)!;
     expect(ensureSyntaxTree(view.state, view.state.doc.length, 5000)).not.toBeNull();
     act(() => { view.focus(); view.dispatch({ selection: { anchor: 0 } }); });
+    await waitFor(() => expect(editor.querySelector("table")).not.toBeNull());
     const tableStart = view.state.doc.line(3).from;
     const tableEnd = view.state.doc.line(5).to;
     const move = vi.spyOn(view, "moveVertically").mockReturnValue(EditorSelection.cursor(view.state.doc.line(7).from));
