@@ -45,6 +45,7 @@ import sys
 import time
 import urllib.request
 import chart_layout_checks
+import chart_feature_checks
 from pathlib import Path
 
 from PIL import Image
@@ -288,7 +289,7 @@ MEASURE_JS = """(args) => {
   document.body.appendChild(probe);
   const resolve = (value) => { probe.style.color = value; return getComputedStyle(probe).color; };
   const palette = Array.from({ length: 8 }, (_, index) => resolve(`var(--ks-color-series-${index + 1})`));
-  const muted = resolve('var(--ks-color-muted)');
+  const muted = resolve('var(--ks-color-series-muted)');
   const charts = [...win.querySelectorAll('.ks-chart')].map((chart) => {
     const chartBox = box(chart);
     const svgElement = chart.querySelector('.ks-chart-plot svg');
@@ -1038,6 +1039,7 @@ def main():
             })
 
             chart_layout_checks.check(page, application, output, result, sys.modules[__name__])
+            chart_feature_checks.check(page, application, output, result, sys.modules[__name__])
 
             # 정본 CSS: data-blocks.css에는 user-select를 적지 않는다(selection.css가 정본).
             data_blocks = (ROOT / "ui/src/styles/data-blocks.css").read_text(encoding="utf-8")

@@ -84,7 +84,7 @@ def check(page, application, output, result, api):
     })
 
 
-def main():
+def main(checker=check):
     import argparse
     import json
     import os
@@ -110,7 +110,7 @@ def main():
                 browser = pw.chromium.launch()
                 page = browser.new_context(locale='ko-KR', viewport={"width": 1180, "height": 720}).new_page()
                 app = api.open_page(page, args.port, api.selection_scene())
-                check(page, app, output, result, api)
+                checker(page, app, output, result, api)
                 browser.close()
         finally:
             server.stdin.close()

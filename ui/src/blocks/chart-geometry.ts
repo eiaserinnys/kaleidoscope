@@ -6,7 +6,7 @@ export type ChartKind = Extract<Block, { type: "chart" }>["kind"];
 /** 계열 색을 푼다. hex는 그대로, 팔레트 이름은 테마 토큰으로, 그 밖에는 계열 차례 팔레트 색으로. */
 export function chartSeriesColor(color: unknown, seriesIndex: number): string {
   if (validColor(color)) return color;
-  if (color === "muted") return "var(--ks-color-muted)";
+  if (color === "muted") return "var(--ks-color-series-muted)";
   if (typeof color === "string" && /^series-[1-8]$/.test(color)) return `var(--ks-color-${color})`;
   return `var(--ks-color-series-${(seriesIndex % 8) + 1})`;
 }
@@ -72,9 +72,10 @@ function niceAxisEnds(low: number, high: number): { min: number; max: number } |
 }
 
 /** 블록이 정한 수 형식으로 수를 글로 만든다. 형식이 없으면 이전과 같은 글을 쓴다. */
-export function createNumberFormatter(format: NumberFormat | null | undefined, kind: ChartKind): NumberFormatter {
+export function createNumberFormatter(format: NumberFormat | null | undefined, kind: ChartKind, axis = false): NumberFormatter {
   if (format) {
-    const options: Intl.NumberFormatOptions = {};
+    const options: Intl.NumberFormatOptions & { trailingZeroDisplay?: "stripIfInteger" } = {};
+    if (axis) options.trailingZeroDisplay = "stripIfInteger";
     if (format.notation === "compact") options.notation = "compact";
     if (format.style === "currency") {
       options.style = "currency";
@@ -154,21 +155,22 @@ export function buildChartGeometry(
       return [{ index, tone: point.close >= point.open ? "up" : "down", x: xAt(index), highY: yAt(point.high), lowY: yAt(point.low), openY: yAt(point.open), closeY: yAt(point.close), width: Math.max(4, Math.min(16, 1000 / Math.max(labels.length, 1) * .58)), title: point.label ?? `${point.x} 시가 ${point.open} / 고가 ${point.high} / 저가 ${point.low} / 종가 ${point.close}` }];
     }) : [];
     const bars: ChartGeometry["series"][number]["bars"] = kind !== "bar" ? [] : ordered.flatMap((point, index) => {
-      if (!point || point.y === null || !Number.isFinite(point.y)) return [];
+      if (!point || point.y === null || point.y === 0 || !Number.isFinite(point.y)) return [];
       if (stackedBars) {
-        if (point.y === 0) return [];
         const offsets = stackedOffsets[index];
         if (point.y > 0) {
           const from = offsets.positive;
           offsets.positive += point.y;
-          return [{ index, x: groupStart(index), y: Math.min(yAt(from), yAt(offsets.positive)), width: groupWidth, height: Math.max(1, Math.abs(yAt(offsets.positive) - yAt(from))), title: `${entry.name} ${formatValue(point.y)}` }];
+          const height = Math.max(1, Math.abs(yAt(offsets.positive) - yAt(from)));
+          return [{ index, x: groupStart(index), y: yAt(from) - height, width: groupWidth, height, title: `${entry.name} ${formatValue(point.y)}` }];
         }
         const from = offsets.negative;
         offsets.negative += point.y;
         return [{ index, x: groupStart(index), y: Math.min(yAt(from), yAt(offsets.negative)), width: groupWidth, height: Math.max(1, Math.abs(yAt(offsets.negative) - yAt(from))), title: `${entry.name} ${formatValue(point.y)}` }];
       }
       const slot = groupWidth / series.length;
-      return [{ index, x: groupStart(index) + seriesIndex * slot, y: Math.min(yAt(point.y), baseline), width: slot, height: Math.max(1, Math.abs(yAt(point.y) - baseline)) }];
+      const height = Math.max(1, Math.abs(yAt(point.y) - baseline));
+      return [{ index, x: groupStart(index) + seriesIndex * slot, y: point.y > 0 ? baseline - height : baseline, width: slot, height }];
     });
     const segments: Array<Array<{ x: number; y: number }>> = [];
     if (kind !== "bar" && kind !== "candlestick") ordered.forEach((point, index) => {

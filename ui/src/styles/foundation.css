@@ -90,6 +90,7 @@
   --ks-color-series-6: #2a9bb0;
   --ks-color-series-7: #a6912a;
   --ks-color-series-8: #8a7f96;
+  --ks-color-series-muted: #6a6764;
   --ks-color-selection: rgb(216 198 229 / 45%);
   --ks-color-selected-surface: rgb(250 247 253 / 58%);
   --ks-color-taskbar-active: var(--ks-color-selected-surface);
@@ -144,6 +145,7 @@
     --ks-color-series-6: #6ccbdc;
     --ks-color-series-7: #d8c463;
     --ks-color-series-8: #a0aab0;
+    --ks-color-series-muted: #8b8279;
     --ks-color-selection: rgb(164 125 186 / 22%);
     --ks-color-selected-surface: rgb(164 125 186 / 18%);
     --ks-color-taskbar-active: rgb(164 125 186 / 36%);

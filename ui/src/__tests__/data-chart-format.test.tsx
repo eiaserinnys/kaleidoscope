@@ -286,7 +286,7 @@ it("resolves palette names for series colors", async () => {
     { key: "d", name: "계열 D", color: "bogus", points: [{ x: "월", y: 4 }] },
   ] });
   await screen.findByRole("slider", { name: "차트 시점" });
-  const expected = ["var(--ks-color-series-4)", "var(--ks-color-muted)", "#123456", "var(--ks-color-series-4)"];
+  const expected = ["var(--ks-color-series-4)", "var(--ks-color-series-muted)", "#123456", "var(--ks-color-series-4)"];
   const groups = [...container.querySelectorAll(".ks-chart-series")];
   const legendItems = [...container.querySelectorAll(".ks-chart-legend-item")];
   expect(groups).toHaveLength(4);
@@ -314,6 +314,47 @@ it("returns to the selected band and starts on the last band with data", async (
   await screen.findByRole("slider", { name: "차트 시점" });
   expect(second.container.querySelector(".ks-chart-readout-x")?.textContent).toBe("화");
   expect(second.container.querySelector(".ks-chart-band")).toBeTruthy();
+});
+
+it.each(["bar", "line", "area"] as const)("%s 차트는 선택 바인딩이 비었으면 쉬는 동안 표시를 숨긴다", async (kind) => {
+  const { container, store } = setup({ type: "chart", kind, selected: { state: "picked" }, series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }] },
+  ] }, { picked: null });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  const marker = () => container.querySelector(".ks-chart-band, .ks-chart-guide");
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("화");
+  expect(marker()).toBeNull();
+  fireEvent.keyDown(chart, { key: "Home" });
+  expect(marker()).toBeTruthy();
+  fireEvent.blur(chart);
+  expect(marker()).toBeNull();
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { picked: "월" } }); });
+  expect(marker()).toBeTruthy();
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("월");
+});
+
+it.each([1234.07, 1.23])("통화 축의 정수 끝자리만 빼고 읽기 줄과 표는 유지한다 (%s)", async (value) => {
+  const { container } = setup({ type: "chart", kind: "bar", number_format: { style: "currency", currency: "USD", maximum_fraction_digits: 2 }, series: [
+    { key: "s", name: "값", points: [{ x: "월", y: value }] },
+  ] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  expect([...container.querySelectorAll(".ks-chart-y-axis span")].map((s) => s.textContent))
+    .toEqual(value > 2 ? ["$1,600", "$800", "$0"] : ["$1.60", "$0.80", "$0"]);
+  const expected = value > 2 ? "$1,234.07" : "$1.23";
+  expect(container.querySelector(".ks-chart-readout-values")?.textContent).toContain(expected);
+  expect(screen.getByRole("table", { name: "차트 데이터" }).textContent).toContain(expected);
+});
+
+it("0 막대는 생략하고 작은 양수와 음수의 최소 높이는 부호 쪽으로 그린다", () => {
+  for (const stacked of [false, true]) {
+    const geometry = buildChartGeometry([{ key: "s", name: "값", points: [0, .001, -.001, 100].map((y, i) => ({ x: String(i), y })) }], "bar", 600, undefined, { stacked });
+    const bars = geometry.series[0].bars;
+    expect(bars.map((bar) => bar.index)).toEqual([1, 2, 3]);
+    expect(bars[0].height).toBe(1);
+    expect(bars[0].y + bars[0].height).toBeCloseTo(geometry.baseline);
+    expect(bars[1].height).toBe(1);
+    expect(bars[1].y).toBeCloseTo(geometry.baseline);
+  }
 });
 
 it("sorts a table column by its sort value instead of the shown text", async () => {
