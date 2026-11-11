@@ -23,6 +23,45 @@ export function readUpload({ file, name }: DraftAttachment): Promise<Conversatio
   });
 }
 
+export function fromBase64(dataBase64: string): ArrayBuffer {
+  return Uint8Array.from(atob(dataBase64), (char) => char.charCodeAt(0)).buffer;
+}
+
+export function openPayload(payload: { mime: string; bytes: ArrayBuffer }, name: string) {
+  const url = URL.createObjectURL(new Blob([payload.bytes], { type: payload.mime }));
+  const tab = window.open("about:blank", "_blank");
+  if (tab) {
+    tab.opener = null;
+    tab.location.href = url;
+  } else {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.rel = "noopener";
+    link.click();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/* 미디어 응답은 `data:<mime>;base64,<본문>` 꼴이다. 이미지가 아닌 첨부는 칩에서 눌러 새 탭으로 연다. */
+export function openDataUrl(dataUrl: string, name: string) {
+  const comma = dataUrl.indexOf(",");
+  if (comma >= 0 && dataUrl.startsWith("data:")) {
+    const mime = dataUrl.slice("data:".length, comma).split(";", 1)[0] || "application/octet-stream";
+    try {
+      openPayload({ mime, bytes: fromBase64(dataUrl.slice(comma + 1)) }, name);
+      return;
+    } catch {
+      /* base64 디코딩 실패 시 아래 링크 다운로드로 대체 */
+    }
+  }
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = name;
+  link.rel = "noopener";
+  link.click();
+}
+
 function useFileUrl(file: File): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {

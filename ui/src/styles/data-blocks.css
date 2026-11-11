@@ -42,6 +42,15 @@
 .ks-data-tab-panel:has(> .ks-file-tree-ungranted),
 .ks-data-tab-panel:has(> .ks-markdown-editor),
 .ks-data-tab-panel:has(> .ks-markdown-view) { padding: 0; }
+/* 채팅과 결정 줄 꼬리는 자기 바닥 여백을 갖는다. 탭 패널이 끝에 여백을 더하면 입력창 아래에 빈 띠가 남는다. */
+.ks-data-tab-panel:has(
+  > .ks-agent-chat,
+  > .ks-data-stack.is-column.has-action-tail,
+  > .ks-data-stack.is-column > .ks-data-stack-item > .ks-agent-chat,
+  > .ks-data-stack.is-column > .ks-data-stack-item > .ks-split .ks-agent-chat
+) {
+  padding-block-end: 0;
+}
 .ks-data-toolbar, .ks-agent-chat-toolbar { display: flex; min-width: 0; height: var(--ks-bar-height); min-height: var(--ks-bar-height); max-height: var(--ks-bar-height); flex-shrink: 0; align-items: flex-start; gap: var(--ks-space-2); overflow-x: auto; overflow-y: hidden; scroll-padding-inline: var(--ks-space-3); padding: var(--ks-space-2) var(--ks-space-3) var(--ks-space-1); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
 .ks-data-toolbar::-webkit-scrollbar, .ks-agent-chat-toolbar::-webkit-scrollbar { height: var(--ks-space-1); }
 .ks-data-toolbar::-webkit-scrollbar-thumb, .ks-agent-chat-toolbar::-webkit-scrollbar-thumb { border: 0; }
@@ -81,6 +90,9 @@
   .ks-data-section,
   .ks-data-tab-header,
   .ks-data-tab-panel,
+  .ks-agent-chat-history,
+  .ks-agent-chat-footer,
+  .ks-agent-chat-input-area,
   .ks-chart,
   .ks-map,
   .ks-properties,
@@ -92,6 +104,8 @@
   .ks-data-stack-item > .ks-data-skeleton,
   .ks-timeline-labels > div
 ) { padding-inline: 0; }
+:is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-agent-chat > .ks-notice { margin-inline: 0; }
+.ks-data-stack.is-column.has-action-tail > .ks-data-stack-item:not(.ks-stack-scroll) > .ks-data-toolbar { border-top: var(--ks-line-width) solid var(--ks-color-border); border-bottom: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-data-tab-list { margin-inline-end: 0; }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-feed-entry-nested { padding-inline-end: 0; }
 :is(.ks-data-section, .ks-dialog) .ks-markdown-view:not(.ks-data-tab-panel > .ks-markdown-view) { padding-inline: 0; background: transparent; }
@@ -252,6 +266,8 @@
 .ks-data-tab-panel .ks-color-code, .ks-data-tab-panel .ks-slider-value { text-align: right; }
 /* 탭 안 단추와 가로 줄은 속성 패널처럼 폭을 채운다. 다만 스크롤 밖 결정 줄 꼬리는 창 본문의 결정 줄과 같은 폭을 쓴다. */
 .ks-data-tab-panel .ks-data-button:not(:has(.ks-icon-button)):not(:where(.ks-data-stack.has-action-tail > .ks-data-stack-item:not(.ks-stack-scroll) *)), .ks-data-tab-panel .ks-data-button:not(:has(.ks-icon-button)):not(:where(.ks-data-stack.has-action-tail > .ks-data-stack-item:not(.ks-stack-scroll) *)) > .ks-button { display: flex; width: 100%; }
+/* 가로로 줄을 바꾸는 반복 안 선택지 단추는 폭을 채우지 않고 글자만큼 쓴다. */
+.ks-data-tab-panel .ks-repeat.is-row .ks-data-button, .ks-data-tab-panel .ks-repeat.is-row .ks-data-button > .ks-button { width: auto; max-width: 100%; }
 .ks-data-tab-panel .ks-data-stack.is-row:not(.has-explicit-fill):not(:where(.ks-data-stack.has-action-tail > .ks-data-stack-item:not(.ks-stack-scroll) *)) > .ks-data-stack-item { flex: 1 1 0; }
 .ks-color-field.is-disabled { opacity: .5; cursor: default; }
 .ks-color-field.is-disabled .ks-color-input { cursor: default; }

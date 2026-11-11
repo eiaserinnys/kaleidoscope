@@ -227,8 +227,17 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const roving = useRoving(items, selected, scroll, virtual, rowOf);
   const handlers = useRef<FeedHandlers>(null!);
   if (items.length) keepRovingRow(virtual, rowOf(roving.focus));
-  const atEnd = useRef(true); const lastCount = useRef(0);
-  useLayoutEffect(() => { if (block.follow && atEnd.current && rows.length > lastCount.current && rows.length) virtual.scrollToIndex(rows.length - 1, { align: "end" }); lastCount.current = rows.length; }, [rows.length, block.follow, virtual]);
+  const atEnd = useRef(true); const lastScrollTop = useRef(0);
+  const totalSize = virtual.getTotalSize();
+  useLayoutEffect(() => {
+    if (!block.follow || !atEnd.current || !rows.length) return;
+    virtual.scrollToIndex(rows.length - 1, { align: "end" });
+    if (scroll.current) {
+      scroll.current.scrollTop = scroll.current.scrollHeight;
+      virtual.scrollOffset = scroll.current.scrollTop;
+      lastScrollTop.current = scroll.current.scrollTop;
+    }
+  }, [rows.length, totalSize, block.follow, scroll, virtual]);
   const vrows = virtual.getVirtualItems();
   const footer = useLoadMore(block.follow ? undefined : more, rows.length, vrows.at(-1)?.index ?? -1, data, useWindowVisible(context));
   if (!rows.length && (!more || block.follow)) return <NoItems rootProps={blockRoot} />;
@@ -253,7 +262,7 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   };
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const heading = block.grouped ? rows.slice(0, first + 1).reverse().find((r) => r.kind === "heading") : undefined;
-  return <><div {...blockRoot} className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight <= line; }}>
+  return <><div {...blockRoot} className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; const distance = el.scrollHeight - el.scrollTop - el.clientHeight; atEnd.current = distance <= line || (atEnd.current && el.scrollTop >= lastScrollTop.current); lastScrollTop.current = el.scrollTop; }}>
     {heading?.kind === "heading" && first > 0 && <div className="ks-view-sticky"><GroupHeading title={heading.title} meta={heading.meta} /></div>}
     <VirtualSurface virtual={virtual}>{vrows.map((v) => {
       const row = rows[v.index];

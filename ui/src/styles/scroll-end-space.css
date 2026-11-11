@@ -9,7 +9,7 @@
 .ks-data-stack-item.is-fill:is(:nth-last-child(1 of :not(:empty)), .ks-data-stack.gap-none > *) > .ks-data-stack.is-column:not(.has-action-tail, .has-action-tail *, .ks-data-section *, .ks-data-tab-panel *, .ks-dialog *):has(> .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > :is(.ks-field, .ks-data-toggle, .ks-data-text, .ks-data-button, .ks-data-stack.is-row)) { padding-block-end: var(--ks-space-3); }
 
 /* 결정 줄 없이 스크롤 영역이 쌓기의 끝이면 스크롤 내용의 끝이 곧 칸의 끝이다. gap과 상관없이 끝 여백을 둔다. 구역, 탭, 대화상자 안은 그쪽이 끝 여백을 소유한다. */
-.ks-data-stack.has-action-tail:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-stack-scroll:nth-last-child(1 of :not(:empty)) > .ks-stack-scroll-content { padding-block-end: var(--ks-space-3); }
+.ks-data-stack.has-action-tail:not(.ks-data-section *, .ks-data-tab-panel *, .ks-dialog *) > .ks-stack-scroll:nth-last-child(1 of :not(:empty)) > .ks-stack-scroll-content:not(:has(> .ks-data-stack-item:nth-last-child(1 of :not(:empty)) > :is(.ks-data-tabs, .ks-agent-chat))) { padding-block-end: var(--ks-space-3); }
 
 /* 안쪽 채움 칸이 없는 자연 높이 구역만 구역 끝 여백을 소유한다. */
 .ks-data-stack.gap-none.has-action-tail > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill:nth-last-child(1 of :not(:empty)) > .ks-data-section:not(:has(.ks-data-stack-item.is-fill > :not(.ks-data-text))),

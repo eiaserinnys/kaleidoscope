@@ -1,7 +1,7 @@
 /* 쌓기의 내용은 직접 자식 또는 결정 줄 앞 스크롤 본문에 있다.
    맥락은 바깥 쌓기가 정하고 두 위치에 같은 규칙을 적용한다. */
 :is(.ks-data-tab-panel, .ks-data-section-child) > .ks-data-stack.is-column {
-  &:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-markdown-view, .ks-timeline, .ks-chart, .ks-map)):where(:not(:has(> .ks-data-stack-item.is-fill > .ks-no-items, > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-no-items))) {
+  &:not(:has(.ks-split, .ks-canvas, .ks-data-view, .ks-data-state, .ks-markdown-view, .ks-timeline, .ks-chart, .ks-map, .ks-agent-chat)):where(:not(:has(> .ks-data-stack-item.is-fill > .ks-no-items, > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-no-items))) {
     height: auto;
     &:not(.has-fill-list, .has-textarea-fill) > .ks-stack-scroll { --ks-fill-list-basis: auto; }
     :is(&, & > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 0 0 auto; overflow: visible; }
