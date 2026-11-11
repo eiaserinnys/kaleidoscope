@@ -2,11 +2,14 @@
 """도구 막대 안 실패 표시가 막대 한 줄 안에 서는지 검수한다.
 
 카드 #1139. toolbar의 start에 실패하는 text와 select, end에 단추 하나, toolbar 아래에
-같은 원천을 쓰는 실패 블록 하나(막대 밖 불변 대조용)를 놓고 1180×720과 360×240에서 잰다.
+같은 원천을 쓰는 실패 블록 하나(막대 밖 불변 대조용)를 놓은 기존 장면(mixed)과,
+세라피엘 반려 장면 넷(short-message, login-required, end-failure, narrow-single)을 잰다.
 
+기존 장면의 판정:
   1. toolbar 높이가 --ks-bar-height 그대로이고 위아래로 넘치지 않는다.
   2. toolbar 자손의 아래 끝이 toolbar 아래 끝을 1px 넘게 넘지 않는다.
-  3. toolbar 안 실패 표시는 compact(한 줄)로 서고, 긴 문구는 한 줄 말줄임이며 title에 전체 문구가 있다.
+  3. toolbar 안 실패 표시는 compact(한 줄)로 서고, 문구는 한 줄 말줄임이며
+     전체 문구가 실패 묶음 뿌리(ks-data-state-compact)의 title에 있다.
   4. 에러코드와 「다시 받기」 단추는 잘리지 않고 보이며, 누르면 data.refresh로 다시 받는다.
   5. toolbar 밖 실패 표시는 compact가 아니고 문구 span 없이 지금 마크업 그대로다.
   6. 좁은 폭에서 toolbar가로 스크롤은 계약대로 허용하되, 세로로는 넘치지 않는다.
@@ -14,12 +17,19 @@
   8. Tab이 toolbar 안 보이는 요소로 새지 않고, Esc로 열리는 것이 없다(§0 15).
   9. 「다시 받기」를 누른 뒤 초점이 어디로 가는지 기록한다(§0 14).
 
-  python3 -P scripts/visual-check/check_toolbar_failure.py [--output 산출폴더] [--port 포트]
+모든 장면에 더하는 판정:
+  10. 실패 묶음 안 이웃 요소(아이콘, 문구, 코드, 「다시 받기」나 「로그인」) 사이 간격이
+      각각 var(--ks-space-2) 이하이고 겹치지 않는다.
+  11. 문구 span의 clientWidth가 calc(3 * var(--ks-space-6))의 계산값 이상이거나,
+      글 전체가 보인다(scrollWidth와 clientWidth 차이 1px 이하이고 한 줄).
+  12. 아이콘 가운데와 코드 가운데에서 elementFromPoint로 짚고 조상으로 올라가면
+      title이 전체 문구인 요소가 잡힌다.
+
+  python3 -P scripts/visual-check/check_toolbar_failure.py --output target/visual-check/toolbar-failure/after3 [--port 포트]
 
 중립 미리보기 ?preview=data-views-test에 장면 정의를 주입하고, 실패는 기존 E2E
 (ui/e2e/data-state-layout.spec.ts)와 같이 data.update로 실패한 바인딩 값을 넣어 만든다.
-기본 산출 폴더는 target/visual-check/toolbar-failure이고, 서버는 이 체크아웃의
-ui/harness/e2e-server.mjs를 KS_E2E_PORT로 띄운다.
+서버는 이 체크아웃의 ui/harness/e2e-server.mjs를 KS_E2E_PORT로 띄운다.
 
 판정이 하나라도 어긋나면 result.json과 캡처를 남긴 뒤 종료 코드 1로 끝난다.
 """
@@ -38,25 +48,106 @@ ROOT = Path(__file__).resolve().parents[2]
 APP_ID = "data-views-test"
 WINDOW_ID = "views-window"
 STYLE = "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }"
-SIZES = ((1180, 720), (360, 240))
 TOLERANCE = 1.0
 CODE = "SHELL_DATA_SOURCE_FAILED"
 LONG_MESSAGE = "받지 못했습니다. 서버가 응답하지 않아 작업 목록을 불러오지 못했습니다. 네트워크 연결을 확인하고 잠시 뒤 다시 시도하세요. 계속 실패하면 설정에서 연결을 다시 승인하세요."
+SHORT_MESSAGE = "작업 목록을 받지 못했습니다."
+LOGIN_MESSAGE = "로그인이 필요합니다"
 RETRY = ["sample"]
 
-# toolbar의 start에 실패하는 text와 select, end에 단추 하나. 아래에 같은 원천을 쓰는 실패 블록 하나.
-SCENE = {"type": "stack", "direction": "column", "gap": "medium", "children": [
-    {"type": "toolbar", "start": [
-        {"type": "text", "value": {"expr": "$data.sample.message"}},
-        {"type": "select", "value": {"state": "choice"}, "on_change": {"set_state": "choice"}, "options": {"expr": "$data.sample.message"}},
-    ], "end": [{"type": "button", "label": "적용", "on_click": []}]},
-    {"type": "text", "value": {"expr": "$data.sample.message"}},
-]}
-STATE = {"choice": ""}
-POINTERS = {
-    "/ui/children/0/start/0/value": {"status": "failed", "id": CODE, "message": LONG_MESSAGE, "retry": RETRY},
-    "/ui/children/0/start/1/options": {"status": "failed", "id": CODE, "message": LONG_MESSAGE, "retry": RETRY},
-    "/ui/children/1/value": {"status": "failed", "id": CODE, "message": LONG_MESSAGE, "retry": RETRY},
+
+def failed(message):
+    return {"status": "failed", "id": CODE, "message": message, "retry": RETRY}
+
+
+def toolbar(start, end):
+    return {"type": "stack", "direction": "column", "gap": "medium", "children": [
+        {"type": "toolbar", "start": start, "end": end},
+        {"type": "text", "value": "본문"},
+    ]}
+
+
+SCENES = {
+    # 기존 장면. start의 실패 text와 select, end 단추, 막대 밖 실패 블록 하나.
+    "mixed": {
+        "scene": {"type": "stack", "direction": "column", "gap": "medium", "children": [
+            {"type": "toolbar", "start": [
+                {"type": "text", "value": {"expr": "$data.sample.message"}},
+                {"type": "select", "value": {"state": "choice"}, "on_change": {"set_state": "choice"}, "options": {"expr": "$data.sample.message"}},
+            ], "end": [{"type": "button", "label": "적용", "on_click": []}]},
+            {"type": "text", "value": {"expr": "$data.sample.message"}},
+        ]},
+        "state": {"choice": ""},
+        "pointers": {
+            "/ui/children/0/start/0/value": failed(LONG_MESSAGE),
+            "/ui/children/0/start/1/options": failed(LONG_MESSAGE),
+            "/ui/children/1/value": failed(LONG_MESSAGE),
+        },
+        "messages": [LONG_MESSAGE, LONG_MESSAGE],
+        "codes": 2,
+        "retries": 2,
+        "outside": True,
+        "sizes": ((1180, 720), (360, 240)),
+    },
+    # 1. 시작 무리에 실패하는 text 하나(짧은 문구), 끝 무리에 「새로 고침」 단추, 1180×720.
+    "short-message": {
+        "scene": toolbar(
+            [{"type": "text", "value": {"expr": "$data.sample.message"}}],
+            [{"type": "button", "label": "새로 고침", "on_click": []}],
+        ),
+        "state": {},
+        "pointers": {"/ui/children/0/start/0/value": failed(SHORT_MESSAGE)},
+        "messages": [SHORT_MESSAGE],
+        "codes": 1,
+        "retries": 1,
+        "outside": False,
+        "sizes": ((1180, 720),),
+    },
+    # 2. 같은 자리에 login_required, 1180×720.
+    "login-required": {
+        "scene": toolbar(
+            [{"type": "text", "value": {"expr": "$data.sample.message"}}],
+            [{"type": "button", "label": "새로 고침", "on_click": []}],
+        ),
+        "state": {},
+        "pointers": {"/ui/children/0/start/0/value": {"status": "login_required", "permission": "remote"}},
+        "messages": [LOGIN_MESSAGE],
+        "codes": 0,
+        "retries": 0,
+        "outside": False,
+        "sizes": ((1180, 720),),
+    },
+    # 3. 시작 무리에 「목록」 단추, 끝 무리에 실패하는 text와 「새로 고침」, 1180×720.
+    "end-failure": {
+        "scene": toolbar(
+            [{"type": "button", "label": "목록", "on_click": []}],
+            [
+                {"type": "text", "value": {"expr": "$data.sample.message"}},
+                {"type": "button", "label": "새로 고침", "on_click": []},
+            ],
+        ),
+        "state": {},
+        "pointers": {"/ui/children/0/end/0/value": failed(LONG_MESSAGE)},
+        "messages": [LONG_MESSAGE],
+        "codes": 1,
+        "retries": 1,
+        "outside": False,
+        "sizes": ((1180, 720),),
+    },
+    # 4. 360 폭 단일 실패: 실패 하나와 끝 단추 하나, 360×240.
+    "narrow-single": {
+        "scene": toolbar(
+            [{"type": "text", "value": {"expr": "$data.sample.message"}}],
+            [{"type": "button", "label": "새로 고침", "on_click": []}],
+        ),
+        "state": {},
+        "pointers": {"/ui/children/0/start/0/value": failed(LONG_MESSAGE)},
+        "messages": [LONG_MESSAGE],
+        "codes": 1,
+        "retries": 1,
+        "outside": False,
+        "sizes": ((360, 240),),
+    },
 }
 
 MEASURE_JS = """() => {
@@ -68,12 +159,18 @@ MEASURE_JS = """() => {
   const cls = (node) => typeof node.className === 'string' ? node.className : (node.getAttribute('class') || '');
   const bar = rect(toolbar);
   const cs = getComputedStyle(toolbar);
-  // --ks-bar-height는 calc() 문자열이라 그대로는 수로 못 읽는다. 같은 토큰을 쓰는 숨은 상자로 계산값을 잰다.
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position: absolute; visibility: hidden; width: 0; height: var(--ks-bar-height);';
-  toolbar.appendChild(probe);
-  const barExpected = rect(probe).height;
-  probe.remove();
+  // 토큰은 calc() 문자열이라 그대로는 수로 못 읽는다. 같은 토큰을 쓰는 숨은 상자로 계산값을 잰다.
+  const probe = (value) => {
+    const node = document.createElement('div');
+    node.style.cssText = `position: absolute; visibility: hidden; width: ${value}; height: 0;`;
+    toolbar.appendChild(node);
+    const width = rect(node).width;
+    node.remove();
+    return width;
+  };
+  const barExpected = probe('var(--ks-bar-height)');
+  const space2 = probe('var(--ks-space-2)');
+  const minMessage = probe('calc(3 * var(--ks-space-6))');
   const descendants = [...toolbar.querySelectorAll('*')].map((node) => ({ cls: cls(node), bottom: rect(node).bottom, height: rect(node).height, width: rect(node).width }));
   // 시작 무리와 종단 무리의 그려진 상자가 겹치면 좁은 폭에서 코드나 단추가 가려진다.
   const groupRects = (selector) => {
@@ -83,13 +180,63 @@ MEASURE_JS = """() => {
   const startRects = groupRects(':scope > .ks-data-toolbar-group.is-start');
   const endRects = groupRects(':scope > .ks-data-toolbar-group.is-end');
   const overlap = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
-  const messages = [...toolbar.querySelectorAll('.ks-data-state-message')].map((node) => {
-    const style = getComputedStyle(node);
-    return { text: node.textContent, title: node.getAttribute('title'), clientWidth: node.clientWidth, scrollWidth: node.scrollWidth,
-      whiteSpace: style.whiteSpace, textOverflow: style.textOverflow, overflowX: style.overflowX };
+  const titleOf = (node) => {
+    let el = node;
+    while (el && el !== document.body) {
+      if (el.getAttribute && el.getAttribute('title')) return el.getAttribute('title');
+      el = el.parentElement;
+    }
+    return null;
+  };
+  const hitTitle = (node) => {
+    if (!node) return null;
+    let box = rect(node);
+    if (box.width < 1 || box.height < 1) return null;
+    // 계약대로 막대가 가로로 스크롤되면 화면 밖 요소는 짚을 수 없다. 그 요소가 보이도록 잠깐 스크롤했다가 되돌린다.
+    const originalScroll = toolbar.scrollLeft;
+    if (box.left + box.width / 2 < bar.left || box.left + box.width / 2 > bar.right) {
+      toolbar.scrollLeft += box.left + box.width / 2 - (bar.left + bar.width / 2);
+      box = rect(node);
+    }
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    const title = titleOf(hit);
+    toolbar.scrollLeft = originalScroll;
+    return title;
+  };
+  const box = (node) => ({ width: rect(node).width, height: rect(node).height, left: rect(node).left, right: rect(node).right, bottom: rect(node).bottom });
+  const states = [...toolbar.querySelectorAll('.ks-data-state-compact')].map((state) => {
+    const icon = state.querySelector('.ks-empty-state-icon');
+    const message = state.querySelector('.ks-data-state-message');
+    const code = state.querySelector('.ks-error-id');
+    const action = state.querySelector('.ks-empty-state-action');
+    const parts = [['icon', icon], ['message', message], ['code', code], ['action', action]].filter(([, node]) => node);
+    const gaps = [];
+    for (let index = 1; index < parts.length; index += 1) {
+      const [from, previous] = parts[index - 1];
+      const [to, node] = parts[index];
+      gaps.push({ from, to, gap: rect(node).left - rect(previous).right });
+    }
+    const style = message ? getComputedStyle(message) : null;
+    return {
+      title: state.getAttribute('title'),
+      width: rect(state).width,
+      gaps,
+      message: message ? {
+        text: message.textContent, clientWidth: message.clientWidth, scrollWidth: message.scrollWidth,
+        clientHeight: message.clientHeight, scrollHeight: message.scrollHeight,
+        lineClamp: style.webkitLineClamp || style.WebkitLineClamp, lineCount: message.getClientRects().length,
+        whiteSpace: style.whiteSpace, contain: style.contain,
+      } : null,
+      code: code ? { text: code.textContent.trim(), ...box(code) } : null,
+      action: action ? { text: (action.textContent || '').trim(), ...box(action) } : null,
+      iconTitle: hitTitle(icon),
+      codeTitle: hitTitle(code),
+      iconWidth: icon ? rect(icon).width : 0,
+      iconHeight: icon ? rect(icon).height : 0,
+    };
   });
-  const ids = [...toolbar.querySelectorAll('.ks-error-id')].map((node) => ({ text: node.textContent, width: rect(node).width, height: rect(node).height, left: rect(node).left, right: rect(node).right, bottom: rect(node).bottom }));
-  const buttons = [...toolbar.querySelectorAll('button')].map((node) => ({ text: node.textContent, width: rect(node).width, height: rect(node).height, left: rect(node).left, right: rect(node).right, bottom: rect(node).bottom }));
+  const ids = [...toolbar.querySelectorAll('.ks-error-id')].map((node) => ({ text: node.textContent, ...box(node) }));
+  const buttons = [...toolbar.querySelectorAll('button')].map((node) => ({ text: node.textContent.trim(), ...box(node) }));
   const outside = app.querySelector('.ks-data-stack > .ks-data-stack-item:nth-child(2) .ks-data-state');
   const outsideInfo = outside ? {
     compact: outside.classList.contains('ks-data-state-compact'),
@@ -101,10 +248,12 @@ MEASURE_JS = """() => {
   return {
     bar: { width: bar.width, height: bar.height, left: bar.left, right: bar.right, bottom: bar.bottom, scrollWidth: toolbar.scrollWidth, clientWidth: toolbar.clientWidth, scrollHeight: toolbar.scrollHeight, clientHeight: toolbar.clientHeight,
       barToken: cs.getPropertyValue('--ks-bar-height').trim(), controlToken: cs.getPropertyValue('--ks-control-height').trim(), expected: barExpected },
+    space2, minMessage,
     maxDescendantBottom: Math.max(bar.top, ...descendants.map((item) => item.bottom)),
     compactCount: toolbar.querySelectorAll('.ks-data-state-compact').length,
     stateCount: toolbar.querySelectorAll('.ks-data-state').length,
-    messages, ids, buttons,
+    messages: states.map((state) => state.message).filter(Boolean),
+    states, ids, buttons,
     groups: { start: startRects.length, end: endRects.length, overlap: startRects.some((a) => endRects.some((b) => overlap(a, b))) },
     messageSpanCount: app.querySelectorAll('.ks-data-state-message').length,
     outside: outsideInfo,
@@ -136,7 +285,7 @@ def wait_server(port):
     raise SystemExit("하네스 서버가 뜨지 않았습니다")
 
 
-def open_scene(page, port, width, height):
+def open_scene(page, port, width, height, scene, app_state):
     page.set_viewport_size({"width": width, "height": height})
     page.goto(f"http://127.0.0.1:{port}/?preview={APP_ID}")
     page.wait_for_function("(id) => window.__ksHarness && document.querySelector(`[data-testid=app-window-${id}]`)", arg=APP_ID, timeout=120000)
@@ -151,7 +300,7 @@ def open_scene(page, port, width, height):
       win.app_version = version.version;
       win.state = appState;
       harness.emit({ event: 'state.changed', snapshot });
-    }""", [APP_ID, SCENE, STATE])
+    }""", [APP_ID, scene, app_state])
     page.add_style_tag(content=STYLE)
     page.evaluate("() => document.fonts.ready.then(() => undefined)")
     # 장면 정의로 다시 붙는 동안 샘플 원천(1초 지연)의 응답이 끼어들지 않게 기다린다.
@@ -161,11 +310,11 @@ def open_scene(page, port, width, height):
     return app
 
 
-def emit_failures(page, app):
+def emit_failures(page, app, pointers):
     page.evaluate("""(payload) => {
       const harness = window.__ksHarness;
       harness.emit({ event: 'data.update', window_id: payload.windowId, view: { sources: {}, values: payload.values } });
-    }""", {"windowId": WINDOW_ID, "values": POINTERS})
+    }""", {"windowId": WINDOW_ID, "values": pointers})
     app.locator(".ks-data-toolbar .ks-data-state-compact").first.wait_for(timeout=30000)
     page.wait_for_timeout(200)
 
@@ -174,7 +323,7 @@ def measure(page):
     return page.evaluate(MEASURE_JS)
 
 
-def judge(measurement, viewport_width):
+def judge(measurement, viewport_width, expected):
     if measurement.get("error"):
         return {"measured": False}
     bar = measurement["bar"]
@@ -182,30 +331,46 @@ def judge(measurement, viewport_width):
     checks["toolbar_height"] = bar["expected"] > 0 and abs(bar["height"] - bar["expected"]) <= TOLERANCE
     checks["no_vertical_overflow"] = bar["scrollHeight"] <= bar["clientHeight"] + TOLERANCE
     checks["no_descendant_below"] = measurement["maxDescendantBottom"] <= bar["bottom"] + TOLERANCE
-    checks["toolbar_items_compact"] = measurement["compactCount"] == 2 and measurement["stateCount"] == 0
+    checks["toolbar_items_compact"] = measurement["compactCount"] == len(expected["messages"]) and measurement["stateCount"] == 0
     messages = measurement["messages"]
-    checks["message_spans"] = len(messages) == 2
-    checks["message_keeps_text"] = len(messages) == 2 and all(item["text"] == LONG_MESSAGE for item in messages)
-    checks["message_title_full"] = len(messages) == 2 and all(item["title"] == LONG_MESSAGE for item in messages)
-    checks["message_nowrap"] = len(messages) == 2 and all(item["whiteSpace"] == "nowrap" for item in messages)
-    checks["message_ellipsis"] = len(messages) == 2 and all(item["textOverflow"] == "ellipsis" and item["overflowX"] == "hidden" for item in messages)
-    if viewport_width <= 360:
-        # 좁은 폭에서는 긴 문구가 잘려야 한다(가로 스크롤이 남더라도 문구 span 자체는 폭 안에서 끊긴다).
-        checks["message_clipped_narrow"] = len(messages) == 2 and all(item["scrollWidth"] > item["clientWidth"] for item in messages)
+    checks["message_spans"] = len(messages) == len(expected["messages"])
+    checks["message_keeps_text"] = len(messages) == len(expected["messages"]) and [item["text"] for item in messages] == expected["messages"]
+    checks["message_title_on_cluster"] = len(measurement["states"]) == len(expected["messages"]) and all(
+        state["title"] == state["message"]["text"] for state in measurement["states"] if state["message"])
+    checks["message_one_line_clamp"] = len(messages) == len(expected["messages"]) and all(
+        item["lineClamp"] == "1" and item["lineCount"] <= 1 for item in messages)
     ids = measurement["ids"]
-    checks["error_codes_shown"] = len(ids) == 2 and all(item["text"] == CODE and item["width"] > 0 and item["height"] > 0 and item["bottom"] <= bar["bottom"] + TOLERANCE for item in ids)
+    checks["error_codes_shown"] = len(ids) == expected["codes"] and all(
+        item["text"] == CODE and item["width"] > 0 and item["height"] > 0 and item["bottom"] <= bar["bottom"] + TOLERANCE for item in ids)
     retries = [item for item in measurement["buttons"] if item["text"] == "다시 받기"]
-    checks["retry_buttons_shown"] = len(retries) == 2 and all(item["height"] > 0 and item["width"] > 0 and item["bottom"] <= bar["bottom"] + TOLERANCE for item in retries)
+    checks["retry_buttons_shown"] = len(retries) == expected["retries"] and all(
+        item["height"] > 0 and item["width"] > 0 and item["bottom"] <= bar["bottom"] + TOLERANCE for item in retries)
+    checks["buttons_shown"] = all(item["height"] > 0 and item["width"] > 0 and item["bottom"] <= bar["bottom"] + TOLERANCE for item in measurement["buttons"])
     if viewport_width > 360:
         # 넓은 폭에서는 가로 스크롤 없이 코드와 단추가 막대 안에 다 보여야 한다.
         checks["no_horizontal_overflow"] = bar["scrollWidth"] <= bar["clientWidth"] + TOLERANCE
-        checks["controls_within_bar"] = all(bar["left"] - TOLERANCE <= item["left"] and item["right"] <= bar["right"] + TOLERANCE for item in ids + retries)
-    outside = measurement["outside"]
-    checks["outside_not_compact"] = bool(outside) and outside["compact"] is False
-    checks["outside_markup_unchanged"] = bool(outside) and outside["messageSpans"] == 0 and outside["ids"] == [CODE] and LONG_MESSAGE in (outside["text"] or "") and outside["iconWidth"] >= 24
-    checks["message_spans_only_in_toolbar"] = measurement["messageSpanCount"] == 2
+        checks["controls_within_bar"] = all(bar["left"] - TOLERANCE <= item["left"] and item["right"] <= bar["right"] + TOLERANCE for item in ids + measurement["buttons"])
+    if expected["outside"]:
+        outside = measurement["outside"]
+        checks["outside_not_compact"] = bool(outside) and outside["compact"] is False
+        checks["outside_markup_unchanged"] = bool(outside) and outside["messageSpans"] == 0 and outside["ids"] == [CODE] and LONG_MESSAGE in (outside["text"] or "") and outside["iconWidth"] >= 24
+    checks["message_spans_only_in_toolbar"] = measurement["messageSpanCount"] == len(expected["messages"])
     groups = measurement["groups"]
     checks["groups_not_overlapping"] = groups["start"] > 0 and groups["end"] > 0 and groups["overlap"] is False
+    # 10. 실패 묶음 안 이웃 요소 사이 간격.
+    checks["cluster_gaps"] = len(measurement["states"]) == len(expected["messages"]) and all(
+        -TOLERANCE <= gap["gap"] <= measurement["space2"] + TOLERANCE
+        for state in measurement["states"] for gap in state["gaps"])
+    # 11. 문구 span의 보이는 폭이 최소 폭 이상이거나 글 전체가 한 줄로 보인다.
+    checks["message_min_width_or_full"] = len(messages) == len(expected["messages"]) and all(
+        item["clientWidth"] >= measurement["minMessage"] - TOLERANCE
+        or (item["scrollWidth"] - item["clientWidth"] <= TOLERANCE and item["lineCount"] <= 1)
+        for item in messages)
+    # 12. 아이콘과 코드 가운데에서 올라가면 title이 전체 문구인 요소가 잡힌다.
+    checks["title_on_icon_hit"] = len(measurement["states"]) == len(expected["messages"]) and all(
+        state["iconTitle"] == state["message"]["text"] for state in measurement["states"] if state["message"])
+    checks["title_on_code_hit"] = all(
+        state["codeTitle"] == state["message"]["text"] for state in measurement["states"] if state["code"] and state["message"])
     return checks
 
 
@@ -261,38 +426,40 @@ def main():
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             page = browser.new_page()
-            for width, height in SIZES:
-                app = open_scene(page, args.port, width, height)
-                emit_failures(page, app)
-                key = f"toolbar-failure-{width}x{height}"
-                measurement = measure(page)
-                page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
-                outside = app.locator(".ks-data-stack > .ks-data-stack-item").nth(1).locator(".ks-data-state")
-                outside.screenshot(path=str(output / f"outside-{width}x{height}.png"), animations="disabled")
-                checks = judge(measurement, width)
-                scene = {"measurement": measurement, "checks": checks}
-                if width == 1180:
-                    # §0 18: 실패가 떠 있는 채로 폭을 좁혀도 같은 줄이 유지되는지.
-                    page.set_viewport_size({"width": 360, "height": 240})
-                    page.wait_for_timeout(300)
-                    resized = measure(page)
-                    page.screenshot(path=str(output / f"{key}-resized-360x240.png"), animations="disabled")
-                    scene["resized"] = {"measurement": resized, "checks": judge(resized, 360)}
-                    page.set_viewport_size({"width": width, "height": height})
-                    page.wait_for_timeout(300)
-                    before = page.evaluate("() => window.__ksHarness.getCalls().length")
-                    interactions = run_interactions(page, app, before)
-                    scene["interactions"] = interactions
-                    for name, ok in (("tab_stays_visible", interactions["tab_stays_visible"]), ("escape_opens_nothing", interactions["escape_opens_nothing"]), ("retry_sends_refresh", interactions["retry_sends_refresh"])):
-                        if not ok:
-                            checks[name] = False
-                scenes[key] = scene
-                failed = [check for check, ok in checks.items() if not ok]
-                if width == 1180:
-                    failed.extend(f"resized.{check}" for check, ok in scene["resized"]["checks"].items() if not ok)
-                    failed.extend(name for name, ok in (("tab_stays_visible", interactions["tab_stays_visible"]), ("escape_opens_nothing", interactions["escape_opens_nothing"]), ("retry_sends_refresh", interactions["retry_sends_refresh"])) if not ok)
-                failures.extend(f"{key}.{check}" for check in failed)
-                print(key, "FAIL " + ",".join(failed) if failed else "ok")
+            for name, scene in SCENES.items():
+                for width, height in scene["sizes"]:
+                    app = open_scene(page, args.port, width, height, scene["scene"], scene["state"])
+                    emit_failures(page, app, scene["pointers"])
+                    key = f"{name}-{width}x{height}"
+                    measurement = measure(page)
+                    page.screenshot(path=str(output / f"{key}.png"), animations="disabled")
+                    if scene["outside"]:
+                        outside = app.locator(".ks-data-stack > .ks-data-stack-item").nth(1).locator(".ks-data-state")
+                        outside.screenshot(path=str(output / f"outside-{width}x{height}.png"), animations="disabled")
+                    checks = judge(measurement, width, scene)
+                    scene_result = {"measurement": measurement, "checks": checks}
+                    if name == "mixed" and width == 1180:
+                        # §0 18: 실패가 떠 있는 채로 폭을 좁혀도 같은 줄이 유지되는지.
+                        page.set_viewport_size({"width": 360, "height": 240})
+                        page.wait_for_timeout(300)
+                        resized = measure(page)
+                        page.screenshot(path=str(output / f"{key}-resized-360x240.png"), animations="disabled")
+                        scene_result["resized"] = {"measurement": resized, "checks": judge(resized, 360, scene)}
+                        page.set_viewport_size({"width": width, "height": height})
+                        page.wait_for_timeout(300)
+                        before = page.evaluate("() => window.__ksHarness.getCalls().length")
+                        interactions = run_interactions(page, app, before)
+                        scene_result["interactions"] = interactions
+                        for check_name, ok in (("tab_stays_visible", interactions["tab_stays_visible"]), ("escape_opens_nothing", interactions["escape_opens_nothing"]), ("retry_sends_refresh", interactions["retry_sends_refresh"])):
+                            if not ok:
+                                checks[check_name] = False
+                    scenes[key] = scene_result
+                    failed = [check for check, ok in checks.items() if not ok]
+                    if name == "mixed" and width == 1180:
+                        failed.extend(f"resized.{check}" for check, ok in scene_result["resized"]["checks"].items() if not ok)
+                        failed.extend(check_name for check_name, ok in (("tab_stays_visible", interactions["tab_stays_visible"]), ("escape_opens_nothing", interactions["escape_opens_nothing"]), ("retry_sends_refresh", interactions["retry_sends_refresh"])) if not ok)
+                    failures.extend(f"{key}.{check}" for check in failed)
+                    print(key, "FAIL " + ",".join(failed) if failed else "ok")
             browser.close()
     finally:
         server.stdin.close()

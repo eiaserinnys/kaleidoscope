@@ -75,11 +75,12 @@ export function DataState({ value, compact = false, layout, loading, loginFailur
     </div>;
   }
   const failure = loginError ?? (value.status === "failed" ? value : loginFailure);
-  // 도구 막대 안에서는 긴 문구를 한 줄 말줄임하고, 전체 문구는 title로 남긴다.
-  const failureText = failure ? (inToolbar
-    ? <><span className="ks-data-state-message" title={failure.message}>{failure.message}</span>{failure.id ? <> <ErrorId id={failure.id} /></> : null}</>
-    : <>{failure.message}{failure.id ? <> <ErrorId id={failure.id} /></> : null}</>) : "로그인이 필요합니다";
-  return <div {...rootProps} className={compactState ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
+  const failureMessage = failure ? failure.message : "로그인이 필요합니다";
+  // 도구 막대 안에서는 긴 문구를 한 줄 말줄임하고, 전체 문구는 묶음 뿌리의 title로 남긴다.
+  const failureText = inToolbar
+    ? <><span className="ks-data-state-message">{failureMessage}</span>{failure?.id ? <> <ErrorId id={failure.id} /></> : null}</>
+    : failure ? <>{failure.message}{failure.id ? <> <ErrorId id={failure.id} /></> : null}</> : failureMessage;
+  return <div {...rootProps} title={inToolbar ? failureMessage : undefined} className={compactState ? "ks-data-state-compact" : "ks-data-state"} data-layout={layout}>
     <EmptyState icon={<DataIcon name={isLogin ? "log-in" : "triangle-alert"} size={compactState ? "inline" : "empty"} />}
       text={failureText}
       action={isLogin

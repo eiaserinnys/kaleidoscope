@@ -46,11 +46,14 @@ it("도구 막대 안 실패 표시는 한 줄 compact로 서고 긴 문구를 t
   await waitFor(() => expect(toolbar.querySelectorAll(".ks-data-state-compact").length).toBe(2));
   expect(toolbar.querySelectorAll(".ks-data-state:not(.ks-data-state-compact)").length).toBe(0);
   expect(toolbar.querySelectorAll(":scope > .ks-data-toolbar-group").length).toBe(2);
+  const compactStates = Array.from(toolbar.querySelectorAll(".ks-data-state-compact")) as HTMLElement[];
+  expect(compactStates.length).toBe(2);
+  for (const state of compactStates) expect(state.getAttribute("title")).toBe(LONG);
   const messages = Array.from(toolbar.querySelectorAll(".ks-data-state-message")) as HTMLElement[];
   expect(messages.length).toBe(2);
   for (const message of messages) {
     expect(message.textContent).toBe(LONG);
-    expect(message.getAttribute("title")).toBe(LONG);
+    expect(message.getAttribute("title")).toBeNull();
     expect(message.querySelector(".ks-error-id")).toBeNull();
   }
   const text = toolbar.querySelector(".ks-data-toolbar-item.is-text");

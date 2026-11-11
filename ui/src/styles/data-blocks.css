@@ -463,13 +463,15 @@
 .ks-data-skeleton.is-compact i { height: var(--ks-type-body); }
 .ks-data-toolbar .ks-data-skeleton i, .ks-data-button-label.ks-data-skeleton i { height: calc(var(--ks-type-body) * var(--ks-line-body)); }
 .ks-data-toolbar .ks-data-skeleton i:not(:first-child) { display: none; }
-/* 도구 막대 안 실패 표시는 막대 한 줄에 서고, 긴 문구는 한 줄 말줄임한다. 에러코드와 단추는 줄이지 않는다. */
-.ks-data-toolbar .ks-data-toolbar-item:has(> .ks-data-state-compact) { flex: 1 1 auto; min-width: min-content; max-width: 100%; }
-.ks-data-toolbar .ks-data-toolbar-group.is-start > .ks-data-toolbar-item.is-text:has(> .ks-data-state-compact) { width: auto; flex: 1 1 auto; min-width: min-content; max-width: 100%; }
+/* 도구 막대 안 실패 표시는 자기 내용 폭으로 서고, 자리가 모자랄 때만 문구가 줄어 한 줄 말줄임한다. 에러코드와 단추는 줄이지 않는다. */
+.ks-data-toolbar .ks-data-toolbar-item:has(> .ks-data-state-compact) { flex: 0 1 auto; min-width: min-content; max-width: 100%; }
+.ks-data-toolbar .ks-data-toolbar-group.is-start > .ks-data-toolbar-item.is-text:has(> .ks-data-state-compact) { width: auto; flex: 0 1 auto; min-width: min-content; max-width: 100%; }
+/* 끝 무리에 실패가 있으면 끝 무리도 줄어들 수 있다(고르기가 있을 때와 같은 꼴). */
+.ks-data-toolbar:has(> .ks-data-toolbar-group.is-end .ks-data-state-compact) > .ks-data-toolbar-group.is-end { flex: 0 1 auto; min-width: 0; }
 .ks-data-toolbar .ks-data-state-compact { min-width: 0; max-width: 100%; }
-.ks-data-toolbar .ks-data-state-compact .ks-empty-state-text { display: flex; flex: 1 1 0; min-width: min-content; align-items: center; gap: var(--ks-space-1); }
-/* 문구는 자연 폭을 최소 폭에 넣지 않는다(contain). 그래야 항목이 코드와 단추 폭까지 줄어든다. */
-.ks-data-toolbar .ks-data-state-message { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; contain: inline-size; }
+.ks-data-toolbar .ks-data-state-compact .ks-empty-state-text { display: flex; flex: 0 1 auto; min-width: min-content; align-items: center; gap: var(--ks-space-1); }
+/* 문구는 줄바꿈 가능한 글로 두고 한 줄만 보인다. 그래야 최소 폭은 min-width가, 기본 폭은 글 전체가 정한다. */
+.ks-data-toolbar .ks-data-state-message { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; flex: 0 1 auto; min-width: calc(3 * var(--ks-space-6)); text-align: start; }
 .ks-data-toolbar .ks-data-state-compact .ks-empty-state-text > .ks-error-id { flex: 0 0 auto; min-width: max-content; }
 .ks-data-state-compact .ks-empty-state { width: auto; height: auto; min-width: 0; flex-direction: row; flex-wrap: nowrap; gap: var(--ks-space-1); }
 .ks-data-state-compact .ks-empty-state-icon { flex: 0 0 auto; width: var(--ks-space-4); height: var(--ks-space-4); }
