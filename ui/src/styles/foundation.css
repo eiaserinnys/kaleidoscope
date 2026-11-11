@@ -81,6 +81,15 @@
   --ks-color-accent: #6f569a;
   --ks-color-accent-soft: #a58cbb;
   --ks-color-accent-contrast: #ffffff;
+  /* 차트 계열 색. 1번은 강조색이라 한 계열 차트는 이전과 같은 색이다. */
+  --ks-color-series-1: var(--ks-color-accent);
+  --ks-color-series-2: #3d7cc9;
+  --ks-color-series-3: #2e9a74;
+  --ks-color-series-4: #d07a2a;
+  --ks-color-series-5: #c4517e;
+  --ks-color-series-6: #2a9bb0;
+  --ks-color-series-7: #a6912a;
+  --ks-color-series-8: #8a7f96;
   --ks-color-selection: rgb(216 198 229 / 45%);
   --ks-color-selected-surface: rgb(250 247 253 / 58%);
   --ks-color-taskbar-active: var(--ks-color-selected-surface);
@@ -126,6 +135,15 @@
     --ks-color-accent: #c6aee3;
     --ks-color-accent-soft: #a47dba;
     --ks-color-accent-contrast: #241b2c;
+    /* 차트 계열 색. 1번은 강조색이라 한 계열 차트는 이전과 같은 색이다. */
+    --ks-color-series-1: var(--ks-color-accent);
+    --ks-color-series-2: #7fb0ee;
+    --ks-color-series-3: #6fcfa5;
+    --ks-color-series-4: #f0a868;
+    --ks-color-series-5: #ee8db3;
+    --ks-color-series-6: #6ccbdc;
+    --ks-color-series-7: #d8c463;
+    --ks-color-series-8: #b5abc0;
     --ks-color-selection: rgb(164 125 186 / 22%);
     --ks-color-selected-surface: rgb(164 125 186 / 18%);
     --ks-color-taskbar-active: rgb(164 125 186 / 36%);
