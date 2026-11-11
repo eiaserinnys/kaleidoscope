@@ -580,6 +580,10 @@ fn server_reason_prefers_json_fields_and_limits_text() {
         (json!({"error":"첫째", "message":"둘째"}), "첫째"),
         (json!({"error":{"message":"셋째"}, "message":"둘째"}), "둘째"),
         (json!({"error":{"message":"셋째"}}), "셋째"),
+        (json!({"detail":"상세 사유"}), "상세 사유"),
+        (json!({"detail":{"error":"오류 사유"}}), "오류 사유"),
+        (json!({"detail":{"message":"메시지 사유"}}), "메시지 사유"),
+        (json!({"detail":{"error":{"code":"INVALID_CARD_REQUEST", "message":"철회된 질문에는 답할 수 없습니다"}}}), "철회된 질문에는 답할 수 없습니다"),
         (json!({"other":true}), "서버가 사유를 보내지 않았습니다"),
     ];
     for (body, expected) in cases {
