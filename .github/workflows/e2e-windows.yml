@@ -239,7 +239,9 @@ jobs:
                 $request = Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.request"
                 if ((Test-Path $request) -and -not $captured.ContainsKey($name)) {
                   $destination = Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.png"
+                  $sw = [System.Diagnostics.Stopwatch]::StartNew()
                   $capture = Start-Process powershell.exe -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:GITHUB_WORKSPACE 'app/e2e-windows/capture.ps1'), $destination) -WindowStyle Hidden -Wait -PassThru
+                  Add-Content -Encoding utf8 (Join-Path $env:KALEIDOSCOPE_E2E_OUT 'capture-times.txt') "$name $($sw.ElapsedMilliseconds)"
                   if ($capture.ExitCode -ne 0) { throw "화면 캡처 실패: $name" }
                   New-Item -ItemType File (Join-Path $env:KALEIDOSCOPE_E2E_OUT "$name.done") | Out-Null
                   $captured[$name] = $true

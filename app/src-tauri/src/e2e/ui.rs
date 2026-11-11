@@ -8,7 +8,9 @@ use driver::{
     action, editor_state, on_top, open, request_mark, require_request, snapshot, wait_place,
     wait_until, wait_web, WebEvents,
 };
-pub(super) use driver::{evaluate, wait_dom, wait_web_hidden, wait_web_live, web_place_mark};
+pub(super) use driver::{
+    eval_timeouts, evaluate, try_evaluate, wait_dom, wait_web_hidden, wait_web_live, web_place_mark,
+};
 
 pub(super) fn track_web_events(core: &Core) -> WebEvents {
     let events = Arc::new(Mutex::new(Vec::new()));

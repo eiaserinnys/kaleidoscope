@@ -1,9 +1,11 @@
 use super::*;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 static UI_REQUESTS: Mutex<Vec<CoreRequest>> = Mutex::new(Vec::new());
 static UI_PLACES_COMPLETED: Mutex<Vec<(String, bool)>> = Mutex::new(Vec::new());
 static UI_CAPTURE_DURATIONS: Mutex<Vec<(String, u128)>> = Mutex::new(Vec::new());
+static EVAL_TIMEOUTS: AtomicUsize = AtomicUsize::new(0);
 
 pub(super) type WebEvents = Arc<Mutex<Vec<(String, WebPage)>>>;
 
@@ -158,7 +160,15 @@ pub(super) fn wait_place(
     )
 }
 
-pub(crate) fn evaluate(app: &AppHandle, body: &str) -> Result<Value, String> {
+/// 웹뷰 스크립트 응답이 5초 안에 오지 않은 횟수. 시나리오 완료 기록에 남긴다.
+pub(crate) fn eval_timeouts() -> usize {
+    EVAL_TIMEOUTS.load(Ordering::Relaxed)
+}
+
+/// 스크립트를 한 번 보내고 응답을 기다린다. 5초 안에 응답이 없으면 `Ok(None)`을 돌려
+/// 부르는 쪽이 다시 볼지 정하게 한다. 다시 보내면 스크립트가 두 번 돌 수 있으므로
+/// 한 번만 실행해야 하는 동작 호출은 `evaluate`를 쓴다.
+pub(crate) fn try_evaluate(app: &AppHandle, body: &str) -> Result<Option<Value>, String> {
     let main = app.get_webview("main").ok_or("main webview not found")?;
     let script = format!(
         "(()=>{{try{{return JSON.stringify((()=>{{{body}}})());}}catch(e){{return JSON.stringify({{__error:String(e)}});}}}})()"
@@ -168,16 +178,25 @@ pub(crate) fn evaluate(app: &AppHandle, body: &str) -> Result<Value, String> {
         let _ = tx.send(result);
     })
     .map_err(|error| error.to_string())?;
-    let raw = rx
-        .recv_timeout(Duration::from_secs(5))
-        .map_err(|error| error.to_string())?;
+    let raw = match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(raw) => raw,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            EVAL_TIMEOUTS.fetch_add(1, Ordering::Relaxed);
+            return Ok(None);
+        }
+        Err(error) => return Err(error.to_string()),
+    };
     let json: String =
         serde_json::from_str(&raw).map_err(|error| format!("eval response {raw}: {error}"))?;
     let value: Value = serde_json::from_str(&json).map_err(|error| error.to_string())?;
     if let Some(error) = value.get("__error").and_then(Value::as_str) {
         return Err(format!("UI evaluation failed: {error}"));
     }
-    Ok(value)
+    Ok(Some(value))
+}
+
+pub(crate) fn evaluate(app: &AppHandle, body: &str) -> Result<Value, String> {
+    try_evaluate(app, body)?.ok_or_else(|| "웹뷰 스크립트 응답이 5초 안에 오지 않았습니다".into())
 }
 
 pub(crate) fn action(app: &AppHandle, body: &str, label: &str) -> Result<(), String> {
@@ -189,7 +208,21 @@ pub(crate) fn action(app: &AppHandle, body: &str, label: &str) -> Result<(), Str
 }
 
 pub(crate) fn wait_dom(app: &AppHandle, body: &str, label: &str) -> Result<(), String> {
-    wait_until(label, || Ok(evaluate(app, body)? == json!(true)))
+    let mut timeouts = 0_usize;
+    let waited = wait_until(label, || match try_evaluate(app, body)? {
+        Some(value) => Ok(value == json!(true)),
+        None => {
+            timeouts += 1;
+            Ok(false)
+        }
+    });
+    match waited {
+        Ok(()) => Ok(()),
+        Err(error) if timeouts > 0 => {
+            Err(format!("{error} (웹뷰 스크립트 응답 5초 초과 {timeouts}회)"))
+        }
+        Err(error) => Err(error),
+    }
 }
 
 pub(in crate::e2e) fn snapshot(
