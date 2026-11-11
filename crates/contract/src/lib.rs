@@ -342,7 +342,11 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 59판: 트리 확인 모드의 부모 행 확인 상자와 확인 상자가 있는 행의 본문 클릭 시 펼침 유지.
 /// - 60판: 데이터 트리의 바로 입력과 끌어 옮기기, 구역 머리의 메뉴와 바로 이름 바꾸기.
 /// - 61판: 데이터 트리의 빈 자리 글(`empty_text`).
-pub const BLOCK_SET_VERSION: u32 = TREE_EMPTY_TEXT_BLOCK_SET_VERSION;
+/// - 62판: chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`).
+pub const BLOCK_SET_VERSION: u32 = CHART_SERIES_FORMAT_BLOCK_SET_VERSION;
+/// chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와
+/// 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`)을 처음 지원하는 블록 세트 판.
+pub const CHART_SERIES_FORMAT_BLOCK_SET_VERSION: u32 = 62;
 /// 데이터 트리가 항목 없이 그릴 한 줄의 글(`empty_text`)을 처음 지원하는 블록 세트 판.
 pub const TREE_EMPTY_TEXT_BLOCK_SET_VERSION: u32 = 61;
 /// 데이터 트리의 바로 입력(`editing`, `on_edit`, `on_edit_cancel`)과 끌어 옮기기(`on_move`), 구역 머리의 메뉴와
@@ -2600,6 +2604,10 @@ pub enum Block {
         on_press: Actions,
     },
     /// (9판) 순서가 있는 수치 시리즈를 표시한다.
+    /// (62판) `stacked`면 막대를 계열끼리 쌓고, `number_format`이 눈금과 값의 수 표시를 정하며,
+    /// `selected`가 처음 고른 칸을 읽는다. 계열 색은 계열 값의 `color`로 정한다.
+    /// 막대와 면적의 세로축은 0을 포함하고 자료를 담는 보기 좋은 끝으로 올린다.
+    /// 면적은 각 선과 0 사이를 칠한다.
     Chart {
         #[serde(default)]
         #[ts(optional, as = "Option<ChartKind>")]
@@ -2611,6 +2619,19 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<ChartHeight>")]
         height: ChartHeight,
+        /// (62판) `kind: "bar"`일 때 계열을 한 막대에 쌓는지. 기본은 거짓이다.
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[ts(optional, as = "Option<bool>")]
+        stacked: bool,
+        /// (62판) 눈금, 값 표시, 접근 가능한 표의 수 표시 형식.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        number_format: Option<NumberFormat>,
+        /// (62판) 처음 고른 칸의 시점 값. 읽기 전용이며 칸 고르기는 `on_select`가 한다.
+        /// 포인터나 키보드가 떠나면 이 칸으로 돌아온다. 생략하면 마지막으로 누른 칸을 기억한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_select: Option<Actions>,
@@ -3342,6 +3363,12 @@ enum RawBlock {
         y_unit: Option<String>,
         #[serde(default)]
         height: ChartHeight,
+        #[serde(default)]
+        stacked: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        number_format: Option<NumberFormat>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selected: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_select: Option<Actions>,
     },
@@ -4030,12 +4057,18 @@ impl From<RawBlock> for Block {
                 series,
                 y_unit,
                 height,
+                stacked,
+                number_format,
+                selected,
                 on_select,
             } => Block::Chart {
                 kind,
                 series,
                 y_unit,
                 height,
+                stacked,
+                number_format,
+                selected,
                 on_select,
             },
             RawBlock::Map {
@@ -4178,6 +4211,29 @@ impl Block {
             } => 18,
             Block::Chat { .. } => 2,
             Block::Map { .. } => 10,
+            Block::Chart { stacked: true, .. }
+            | Block::Chart {
+                number_format: Some(_),
+                ..
+            }
+            | Block::Chart {
+                selected: Some(_),
+                ..
+            } => CHART_SERIES_FORMAT_BLOCK_SET_VERSION,
+            Block::Chart {
+                series: Binding::Literal(value),
+                ..
+            } if serde_json::from_value::<Vec<data::ChartSeries>>(value.clone())
+                .is_ok_and(|series| series.iter().any(|entry| entry.color.is_some())) =>
+            {
+                CHART_SERIES_FORMAT_BLOCK_SET_VERSION
+            }
+            Block::Table {
+                columns: TableColumns::Static(columns),
+                ..
+            } if columns.iter().any(|column| column.sort_field.is_some()) => {
+                CHART_SERIES_FORMAT_BLOCK_SET_VERSION
+            }
             Block::Metrics { .. } | Block::ButtonGrid { .. } | Block::Chart { .. } => 9,
             Block::WebView { .. } | Block::Explorer { .. } => 3,
             Block::Stack { .. }
@@ -4276,6 +4332,53 @@ pub enum ChartHeight {
     #[default]
     Medium,
     Tall,
+}
+
+/// 차트의 수 표시 형식. 눈금, 값 표시, 접근 가능한 표의 수에 함께 쓴다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct NumberFormat {
+    /// 수를 보이는 방법. `compact`는 1.6억처럼 짧게 줄인다.
+    #[serde(default)]
+    #[ts(optional, as = "Option<NumberNotation>")]
+    pub notation: NumberNotation,
+    /// 수의 갈래. `currency`면 `currency`에 통화 코드가 필요하다.
+    #[serde(default)]
+    #[ts(optional, as = "Option<NumberStyle>")]
+    pub style: NumberStyle,
+    /// `style: "currency"`일 때 쓸 ISO 4217 통화 코드 세 글자(예: `USD`, `KRW`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub currency: Option<String>,
+    /// 소수 아래 최대 자릿수(0~6). 생략하면 기기의 기본값을 쓴다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub maximum_fraction_digits: Option<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum NumberNotation {
+    /// 수를 그대로 쓴다.
+    #[default]
+    Standard,
+    /// 기기 언어의 짧은 표기(예: 한국어 기기에서 1.6억).
+    Compact,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum NumberStyle {
+    /// 보통 수.
+    #[default]
+    Decimal,
+    /// 통화. `currency`에 코드를 적는다.
+    Currency,
+    /// 백분율. 값 0.37은 37%로 보인다.
+    Percent,
 }
 
 /// `stack`의 자식 사이 간격. 쉘의 간격 토큰 가운데 하나다.
@@ -4407,6 +4510,11 @@ pub struct Column {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub max_lines: Option<u8>,
+    /// (62판) 머리를 눌러 정렬할 때 이 열의 칸 대신 읽을 행 필드. 보이는 칸 글은 그대로 둔다.
+    /// 행 표의 머리 정렬에만 쓰인다. 칸 고르기 표(selection cell)는 머리 정렬이 없다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub sort_field: Option<String>,
 }
 
 /// 쌓기에서 남은 공간을 차지할 자식 번호 또는 번호 목록.
