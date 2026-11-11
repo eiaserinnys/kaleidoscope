@@ -97,11 +97,13 @@ SEGMENTED_JS = """(el) => {
   const group = el.querySelector('.ks-data-segmented');
   if (!group) return { error: '분할 고르기를 찾지 못했습니다' };
   return {
+    docOverflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     buttons: [...group.querySelectorAll(':scope > .ks-button')].map((button) => ({
       label: button.querySelector('.ks-truncate-label') ? button.querySelector('.ks-truncate-label').textContent : null,
       aria: button.getAttribute('aria-label'),
       name: button.getAttribute('aria-label') || button.textContent,
       contexts: [...button.querySelectorAll('.ks-select-context-label')].map((node) => node.textContent),
+      contextGap: button.querySelector('.ks-truncate-label') && button.querySelector('.ks-select-context-label') ? button.querySelector('.ks-select-context-label').getBoundingClientRect().left - button.querySelector('.ks-truncate-label').getBoundingClientRect().right : null,
       pressed: button.getAttribute('aria-pressed'),
     })),
   };
@@ -168,6 +170,8 @@ def judge_segmented(measurement):
         "seoul_names_differ": len(seoul) == 2 and names[seoul[0]] != names[seoul[1]],
         "context_on_seoul_only": seoul == with_context and all(len(buttons[index]["contexts"]) == 1 for index in seoul),
         "far_seoul_selected": len(pressed) == 1 and pressed[0]["contexts"] == ["먼 곳"],
+        "no_doc_overflow": measurement["docOverflowX"] is False,
+        "context_gap_space_2": all(buttons[index]["contextGap"] is not None and abs(buttons[index]["contextGap"] - 8) < 0.5 for index in seoul),
     }
 
 

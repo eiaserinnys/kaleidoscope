@@ -295,6 +295,8 @@
 .ks-data-segmented .ks-button { border-radius: 0; }
 .ks-data-segmented > .ks-button { flex: 1 1 auto; min-width: 0; }
 .ks-data-segmented .ks-truncate-label { min-width: 1.5em; }
+/* 분할 단추에는 고르기 단추의 칸 간격이 없어, 같은 이름을 가르는 묶음 이름을 값과 같은 간격으로 띄운다. */
+.ks-data-segmented .ks-select-context-label { margin-inline-start: var(--ks-space-2); }
 .ks-data-segmented > .ks-button:has(> .ks-truncate-label) { padding-inline: var(--ks-space-1); }
 .ks-data-segmented > .ks-button:has(> .ks-truncate-label)::before, .ks-data-segmented > .ks-button:has(> .ks-truncate-label)::after { content: ""; width: calc(var(--ks-space-3) - var(--ks-space-1)); min-width: 0; flex: 0 100000 auto; }
 .ks-data-segmented .ks-button:first-child { border-radius: var(--ks-radius-small) 0 0 var(--ks-radius-small); }
