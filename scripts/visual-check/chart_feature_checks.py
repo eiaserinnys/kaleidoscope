@@ -66,16 +66,21 @@ def check(page, application, output, result, api):
                 'readout': readout == (api.DAYS[1] if mode == 'value' else api.DAYS[-1])})
             result['scenes'][key]['measurement'] = {'resting_markers': resting, 'moving_markers': moving, 'after_blur': after, 'readout': readout}
 
-    for value in (1234.07, 1.23):
-        api.inject(page, {'type': 'chart', 'kind': 'bar', 'number_format': {
+    # 한 축의 눈금 자릿수는 하나: 모두 정수면 끝자리를 떼고, 하나라도 소수면 셋 다 센트까지.
+    currency_cases = [
+        ('1234.07', [1234.07], False, ['$1,600', '$800', '$0'], '$1,234.07'),
+        ('1.23', [1.23], False, ['$1.60', '$0.80', '$0.00'], '$1.23'),
+        ('max-2.8', [1.2, 2.8, 0.4], False, ['$3.00', '$1.50', '$0.00'], '$0.40'),
+        ('stacked-2.8', [1.2, 2.8, 0.4], True, ['$3.00', '$1.50', '$0.00'], '$0.40'),
+    ]
+    for name, values, stacked, expected, text in currency_cases:
+        api.inject(page, {'type': 'chart', 'kind': 'bar', 'stacked': stacked, 'number_format': {
             'style': 'currency', 'currency': 'USD', 'maximum_fraction_digits': 2},
-            'series': [{'key': 's', 'name': '값', 'points': [{'x': '월', 'y': value}]}]})
+            'series': [{'key': 's', 'name': '값', 'points': [{'x': x, 'y': y} for x, y in zip(['월', '화', '수'], values)]}]})
         ticks = application.locator('.ks-chart-y-axis span').all_text_contents()
-        expected = ['$1,600', '$800', '$0'] if value > 2 else ['$1.60', '$0.80', '$0']
-        text = '$1,234.07' if value > 2 else '$1.23'
         readout = application.locator('.ks-chart-readout-values').text_content()
         table = application.locator('.ks-chart table').text_content()
-        key = f'currency-axis-{value}'
+        key = f'currency-axis-{name}'
         api.record(result, key, {'ticks': ticks == expected, 'readout_and_table': text in readout and text in table})
         result['scenes'][key]['measurement'] = {'ticks': ticks, 'readout': readout}
         capture(key)

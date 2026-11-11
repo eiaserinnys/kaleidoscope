@@ -333,16 +333,20 @@ it.each(["bar", "line", "area"] as const)("%s 차트는 선택 바인딩이 비�
   expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("월");
 });
 
-it.each([1234.07, 1.23])("통화 축의 정수 끝자리만 빼고 읽기 줄과 표는 유지한다 (%s)", async (value) => {
-  const { container } = setup({ type: "chart", kind: "bar", number_format: { style: "currency", currency: "USD", maximum_fraction_digits: 2 }, series: [
-    { key: "s", name: "값", points: [{ x: "월", y: value }] },
+it.each([
+  { values: [1234.07], stacked: false, ticks: ["$1,600", "$800", "$0"], text: "$1,234.07" },
+  { values: [1.23], stacked: false, ticks: ["$1.60", "$0.80", "$0.00"], text: "$1.23" },
+  { values: [1.2, 2.8, 0.4], stacked: false, ticks: ["$3.00", "$1.50", "$0.00"], text: "$2.80" },
+  { values: [1.2, 2.8, 0.4], stacked: true, ticks: ["$3.00", "$1.50", "$0.00"], text: "$2.80" },
+])("통화 축은 눈금이 모두 정수일 때만 끝자리를 떼고 읽기 줄과 표는 유지한다 ($values, 쌓기 $stacked)", async ({ values, stacked, ticks, text }) => {
+  const { container } = setup({ type: "chart", kind: "bar", stacked, number_format: { style: "currency", currency: "USD", maximum_fraction_digits: 2 }, series: [
+    { key: "s", name: "값", points: values.map((y, index) => ({ x: ["월", "화", "수"][index], y })) },
   ] });
-  await screen.findByRole("slider", { name: "차트 시점" });
-  expect([...container.querySelectorAll(".ks-chart-y-axis span")].map((s) => s.textContent))
-    .toEqual(value > 2 ? ["$1,600", "$800", "$0"] : ["$1.60", "$0.80", "$0"]);
-  const expected = value > 2 ? "$1,234.07" : "$1.23";
-  expect(container.querySelector(".ks-chart-readout-values")?.textContent).toContain(expected);
-  expect(screen.getByRole("table", { name: "차트 데이터" }).textContent).toContain(expected);
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  expect([...container.querySelectorAll(".ks-chart-y-axis span")].map((s) => s.textContent)).toEqual(ticks);
+  if (values.length > 1) fireEvent.keyDown(chart, { key: "ArrowLeft" });
+  expect(container.querySelector(".ks-chart-readout-values")?.textContent).toContain(text);
+  expect(screen.getByRole("table", { name: "차트 데이터" }).textContent).toContain(text);
 });
 
 it("0 막대는 생략하고 작은 양수와 음수의 최소 높이는 부호 쪽으로 그린다", () => {

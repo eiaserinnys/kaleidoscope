@@ -104,6 +104,9 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   };
   const valueText = (point: PlotPoint | undefined) => point?.y == null ? "없음" : `${numberText(point.y)}${block.y_unit ?? ""}`;
   const accessibleValue = (point: PlotPoint | undefined) => [valueText(point), point?.label].filter(Boolean).join(" ");
+  // 한 축의 눈금은 자릿수를 하나로 맞춘다. 눈금이 모두 정수일 때만 끝자리 0을 뗀다.
+  const ticks = [max, (max + min) / 2, min];
+  const tickText = ticks.every(Number.isInteger) ? axisText : numberText;
   return <div {...blockRoot} className={`ks-chart is-${block.height ?? "medium"}`}>
     <div className="ks-chart-frame">
       <div className="ks-chart-readout">
@@ -115,7 +118,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
         </span>)}</span>}
       </div>
       <div className="ks-chart-body">
-        <div className="ks-chart-y-axis" aria-hidden="true">{[max, (max + min) / 2, min].map((value, index) => <span key={index} style={{ top: `${geometry.yAt(value) / 160 * 100}%` }}>{axisText(value)}</span>)}</div>
+        <div className="ks-chart-y-axis" aria-hidden="true">{ticks.map((value, index) => <span key={index} style={{ top: `${geometry.yAt(value) / 160 * 100}%` }}>{tickText(value)}</span>)}</div>
         <div ref={graph} className="ks-chart-graph" role="slider" tabIndex={0} aria-label="차트 시점"
           aria-valuemin={0} aria-valuemax={labels.length - 1} aria-valuenow={current}
           aria-valuetext={`${labels[current]} ${series.map((entry, index) => `${entry.name} ${accessibleValue(points[index])}`).join(", ")}`}
