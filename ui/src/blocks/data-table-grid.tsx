@@ -10,9 +10,10 @@ import { contentCellError } from "./data-table-cell";
 
 type Address = { row: string; column: string };
 type GridHandlers = {
-  focus: (row: string, column: string) => void;
+  focus: (row: string, column: string, element?: HTMLElement) => void;
   choose: (row: string, column: string) => void;
   key: (event: KeyboardEvent<HTMLElement>, row: string, column: string) => void;
+  settle: () => void;
   menu: (event: MouseEvent<HTMLElement> | undefined, row: string, anchor: HTMLElement) => void;
 };
 
@@ -33,7 +34,7 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
         event.currentTarget.closest('[role="grid"]')?.querySelectorAll("[data-keyboard-focus]").forEach((cell) => cell.removeAttribute("data-keyboard-focus"));
         event.currentTarget.setAttribute("data-keyboard-focus", "");
       }
-      handlers.current.focus(rowKey, column.field);
+      handlers.current.focus(rowKey, column.field, event.currentTarget);
     }}
     onKeyDown={(event) => handlers.current.key(event, rowKey, column.field)}
     onMouseDown={(event) => { if (event.detail >= 2) event.preventDefault(); }}
@@ -66,9 +67,15 @@ export const GridRow = memo(function GridRow({ row, index, start, columns, rowHe
   </div>;
 });
 
-export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, onChooseCell, onContextMenu, more, data, visible = true, ariaLabel = "표" }: TableViewProps) {
+export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, onChooseCell, onCellMove, onCellSettle, onContextMenu, more, data, visible = true, ariaLabel = "표" }: TableViewProps) {
   const dataColumns = useMemo(() => columns.filter((column) => column.field !== rowHeader), [columns, rowHeader]);
-  const [focus, setFocus] = useState<Address | null>(() => rows.length && dataColumns.length ? { row: rows[0].key, column: dataColumns[0].field } : null);
+  const [focus, setFocus] = useState<Address | null>(() => {
+    if (!rows.length || !dataColumns.length) return null;
+    // 이미 고른 칸이 있으면 그 칸에서 시작한다. 탐색 전용 초점을 따로 두지 않으므로 초점 표시는 늘 고른 칸에 있다.
+    const row = Math.max(0, rows.findIndex((item) => item.key === selectedCell?.row));
+    const column = Math.max(0, dataColumns.findIndex((item) => item.field === selectedCell?.column));
+    return { row: rows[row].key, column: dataColumns[column].field };
+  });
   const last = useRef({ row: 0, column: 0 });
   const pending = useRef<(Address & { keyboard?: boolean }) | null>(null);
   const rowIndex = Math.max(0, rows.findIndex((row) => row.key === focus?.row));
@@ -100,21 +107,57 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
     const address = { row: rows[row].key, column: dataColumns[column].field };
     last.current = { row, column }; pending.current = { ...address, keyboard: true }; setFocus(address);
     virtual.scrollToIndex(row, { align: "auto" });
+    // 스프레드시트처럼 선택이 초점을 따라간다. 키 반복마다 보내지 않도록 보내기는 부르는 쪽이 합친다.
+    if (address.row !== selectedCell?.row || address.column !== selectedCell?.column) onCellMove?.(address);
   };
-  const reveal = (target: HTMLElement) => {
-    const container = scroll.current; if (!container) return;
+  const cellBounds = (target: HTMLElement) => {
+    const container = scroll.current; if (!container) return null;
     const rect = target.getBoundingClientRect(), bounds = container.getBoundingClientRect();
     const ring = Number.parseFloat(getComputedStyle(target).getPropertyValue("--ks-focus-width")) || 0;
     const leftGap = Math.max(ring, Number.parseFloat(getComputedStyle(target.closest<HTMLElement>(".ks-grid-row")!).columnGap) || 0);
     const pinned = rowHeader ? container.querySelector<HTMLElement>(".ks-grid-row-header")?.getBoundingClientRect().width ?? 0 : 0;
-    if (rect.left - leftGap < bounds.left + pinned) container.scrollLeft -= bounds.left + pinned - (rect.left - leftGap);
-    const right = bounds.left + container.clientLeft + container.clientWidth;
-    if (rect.right + ring > right) container.scrollLeft += rect.right + ring - right;
     const top = bounds.top + container.clientTop + (container.querySelector<HTMLElement>(".ks-table-header")?.getBoundingClientRect().height ?? 0);
-    const bottom = bounds.top + container.clientTop + container.clientHeight;
-    if (rect.top - ring < top) container.scrollTop -= top - (rect.top - ring);
-    else if (rect.bottom + ring > bottom) container.scrollTop += rect.bottom + ring - bottom;
+    return { container, rect, ring, leftGap, left: bounds.left + pinned, right: bounds.left + container.clientLeft + container.clientWidth, top, bottom: bounds.top + container.clientTop + container.clientHeight };
   };
+  const reveal = (target: HTMLElement) => {
+    const box = cellBounds(target); if (!box) return;
+    if (box.container.scrollLeft > 0 && box.rect.left - box.leftGap < box.left) box.container.scrollLeft -= box.left - (box.rect.left - box.leftGap);
+    if (box.rect.right + box.ring > box.right) box.container.scrollLeft += box.rect.right + box.ring - box.right;
+    if (box.rect.top - box.ring < box.top) box.container.scrollTop -= box.top - (box.rect.top - box.ring);
+    else if (box.rect.bottom + box.ring > box.bottom) box.container.scrollTop += box.rect.bottom + box.ring - box.bottom;
+  };
+  const isVisible = (target: HTMLElement) => {
+    const box = cellBounds(target); if (!box) return false;
+    // 왼쪽으로 스크롤되지 않았으면 칸을 덮는 것이 없고 더 왼쪽으로 옮길 수도 없다. 행 머리가 없는 표의 첫 열은 칸 간격 없이 표 왼쪽에 붙어 있다.
+    const left = box.container.scrollLeft <= 0 || box.rect.left - box.leftGap >= box.left;
+    return left && box.rect.right + box.ring <= box.right && box.rect.top - box.ring >= box.top && box.rect.bottom + box.ring <= box.bottom;
+  };
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  const visibleRef = useRef(isVisible);
+  visibleRef.current = isVisible;
+  // 고른 칸이 지금 보이는지. 크기가 줄기 전에 보이던 칸이 밀려났는지 가르는 데 쓴다.
+  const chosenVisible = useRef(true);
+  useEffect(() => {
+    const container = scroll.current;
+    if (!container) return;
+    const chosen = () => container.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]');
+    const track = () => { const target = chosen(); chosenVisible.current = target ? visibleRef.current(target) : false; };
+    // 사용자가 직접 스크롤해 고른 칸을 밖으로 보낸 것은 크기가 바뀌어도 건드리지 않는다.
+    container.addEventListener("scroll", track, { passive: true });
+    let previous = { width: container.clientWidth, height: container.clientHeight };
+    const observer = new ResizeObserver(() => {
+      const width = container.clientWidth, height = container.clientHeight;
+      const shrunk = width < previous.width || height < previous.height;
+      previous = { width, height };
+      const target = chosen();
+      // 창이나 옆 칸이 줄어 보이던 고른 칸이 밀려났을 때만 가장 가까운 쪽으로 스크롤한다.
+      if (shrunk && target && chosenVisible.current && !visibleRef.current(target)) revealRef.current(target);
+      chosenVisible.current = target ? visibleRef.current(target) : false;
+    });
+    observer.observe(container);
+    return () => { container.removeEventListener("scroll", track); observer.disconnect(); };
+  }, [scroll]);
   useEffect(() => {
     const address = pending.current;
     if (!address) return;
@@ -129,6 +172,7 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
       }
       target.focus({ preventScroll: true });
       reveal(target);
+      chosenVisible.current = isVisible(target);
     }
   });
   useEffect(() => {
@@ -138,8 +182,9 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
     }
   }, [current?.row, current?.column, focus?.row, focus?.column]);
   handlers.current = {
-    focus: (row, column) => { const r = rows.findIndex((item) => item.key === row), c = dataColumns.findIndex((item) => item.field === column); last.current = { row: r, column: c }; setFocus({ row, column }); },
+    focus: (row, column, element) => { const r = rows.findIndex((item) => item.key === row), c = dataColumns.findIndex((item) => item.field === column); last.current = { row: r, column: c }; setFocus({ row, column }); if (element) chosenVisible.current = visibleRef.current(element); },
     choose: (row, column) => { const item = rows.find((item) => item.key === row); if (item) onChooseCell?.(item, column); },
+    settle: () => onCellSettle?.(),
     menu: (event, row, anchor) => { const item = rows.find((item) => item.key === row); if (item && onContextMenu && !event?.defaultPrevented) { event?.preventDefault(); onContextMenu(item, anchor, event); } },
     key: (event, row, column) => {
       const r = rows.findIndex((item) => item.key === row), c = dataColumns.findIndex((item) => item.field === column);
@@ -154,7 +199,7 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
       event.preventDefault(); move(nextRow, nextColumn);
     },
   };
-  return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} onPointerDownCapture={(event) => event.currentTarget.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus")} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
+  return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} onKeyUp={() => handlers.current.settle()} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) handlers.current.settle(); }} onPointerDownCapture={(event) => event.currentTarget.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus")} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">
       <div className="ks-table-header" role="row" aria-rowindex={1}>{columns.map((column, index) => <div role="columnheader" aria-colindex={index + 1} key={column.field} className={column.field === rowHeader ? "ks-grid-corner" : undefined}>{column.label}</div>)}</div>
       {!rows.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((v) => {
