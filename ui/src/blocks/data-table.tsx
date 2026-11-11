@@ -1,12 +1,13 @@
 import { encodeCommentKey } from "../comments/key";
 import { useBlockRootProps } from "../comments/block-root";
-import { memo, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { BindingMore, Block, Column, SortSpec, TableCellAddress } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
 import { DataState } from "../components/data-state";
 import { Notice } from "../components/primitives";
+import { useLocalDraft } from "../data/use-local-draft";
 import { useBinding, useWindowData, type WindowData } from "../data/window-data";
 import { useWindowVisible } from "../data/window-state";
 import { useLoadMore } from "./load-more";
@@ -19,6 +20,12 @@ import { ContentCell } from "./data-table-cell";
 
 export type Row = Record<string, JsonValue> & { key: string };
 const validRow = (item: unknown): item is Row => isObject(item) && typeof item.key === "string";
+// 고른 칸을 지역 값으로 쥐려고 주소를 원시 값 하나로 만든다. 행 키에는 0x00이 들어오지 않는다.
+const cellKey = (cell: TableCellAddress | null) => cell ? `${cell.row}\u0000${cell.column}` : "";
+const cellAddress = (key: string): TableCellAddress | null => {
+  const at = key.indexOf("\u0000");
+  return at < 0 ? null : { row: key.slice(0, at), column: key.slice(at + 1) };
+};
 const numberFormatter = new Intl.NumberFormat();
 export function width(column: Column, rows: Row[]) {
   if (column.width === "narrow" && column.format === "number") {
@@ -105,10 +112,22 @@ function TableReady({ block, context, pointer, value, columnsValue, more }: { bl
   const visible = useWindowVisible(context);
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
   const selectedCell = isObject(selected) && typeof selected.row === "string" && typeof selected.column === "string" ? { row: selected.row, column: selected.column } : null;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  // 칸 고르기는 키 반복으로 들어온다. 고른 칸은 지역 값으로 바로 그리고 보내기는 합쳐서 하며, keyup에서 남은 값을 바로 내보낸다.
+  const cells = useLocalDraft(cellKey(selectedCell), pointer, {
+    dispatch: useCallback(async (key: string) => {
+      const address = cellAddress(key);
+      const row = address ? rowsRef.current.find((entry) => entry.key === address.row) : undefined;
+      if (!address || !row || !block.on_select) return true;
+      return data.act(`${pointer}/on_select`, { row: row.key, column: address.column }, row, undefined, undefined, { input: true });
+    }, [data, pointer, block.on_select]),
+  });
+  const chosenCell = cellAddress(cells.draft);
   if (result.error) return <DataState rootProps={blockRoot} value={{ status: "failed", message: result.error.message, id: result.error.id, retry: [] }} />;
   if (rowError && !rows.length) return <DataState rootProps={blockRoot} value={{ status: "failed", message: rowError.message, id: rowError.id, retry: [] }} />;
   if (!result.columns.length) return <NoItems rootProps={blockRoot} />;
-  const table = <><TableView rootProps={rowError ? undefined : blockRoot} columns={result.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} selection={block.selection} selectedCell={selectedCell} rowHeader={block.row_header} onChooseCell={(row, column) => { if (block.on_select) void data.act(`${pointer}/on_select`, { row: row.key, column }, row); }} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from((anchor.closest('[role="row"]') ?? anchor).querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
+  const table = <><TableView rootProps={rowError ? undefined : blockRoot} columns={result.columns} rows={rows} initialSort={block.sort} selected={typeof selected === "string" ? selected : null} selection={block.selection} selectedCell={chosenCell} rowHeader={block.row_header} onChooseCell={(row, column) => { if (block.on_select) void data.act(`${pointer}/on_select`, { row: row.key, column }, row); }} onCellMove={(cell) => { cells.holding.current = true; cells.change(cellKey(cell)); }} onCellSettle={() => cells.finish(false)} more={more} data={data} visible={visible} rowProps={!block.on_select && !block.item_menu?.length ? readOnlyRowProps : undefined} onChoose={choose} onContextMenu={(row, anchor, event) => menu.open(event, anchor, row, row.key, "행 복사", Array.from((anchor.closest('[role="row"]') ?? anchor).querySelectorAll('[role="cell"], [role="gridcell"], [role="rowheader"]'), (cell) => cell.textContent ?? "").join("\t"))} />{menu.dialog}</>;
   return rowError ? <div {...blockRoot} className="ks-table-with-notice"><div className="ks-table-row-notice"><Notice role="alert" errorId={rowError.id}>{rowError.message}</Notice></div>{table}</div> : table;
 }
 
@@ -122,6 +141,8 @@ export interface TableViewProps {
   selectedCell?: TableCellAddress | null;
   rowHeader?: string;
   onChooseCell?: (row: Row, column: string) => void;
+  onCellMove?: (cell: TableCellAddress) => void;
+  onCellSettle?: () => void;
   ariaLabel?: string;
   onChoose: (row: Row) => void;
   onActivate?: (row: Row, anchor: HTMLElement) => void;

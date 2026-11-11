@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -35,20 +35,135 @@ it("초점 행이 지워지면 같은 자리의 이웃 칸에 선택 호출 없�
   expect(choose).not.toHaveBeenCalled();
 });
 
-it("빈 칸으로 이동할 때는 초점만 바꾸고 Enter로 주소와 행을 고른다", async () => {
+it("방향키가 초점과 선택을 함께 옮기고 그 칸으로 on_select를 한 번 부른다", async () => {
   const row = { key: "a", label: "제작", mon: { title: "첫 검토", subtitle: "본문", badges: ["확인"] }, tue: null };
   const ui = { type: "table", rows: [row], columns: [
     { field: "label", label: "항목" }, { field: "mon", label: "월요일", format: "content" },
     { field: "tue", label: "화요일", format: "content" },
   ], selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" } } as unknown as Block;
   const { calls } = setup(ui, { chosen: null });
+  const acts = () => calls.mock.calls.filter(([request]) => request.op === "data.act").map(([request]) => request);
   const first = await screen.findByRole("gridcell", { name: /제작.*월요일.*첫 검토/ });
   first.focus();
   fireEvent.keyDown(first, { key: "ArrowRight" });
-  expect(document.activeElement?.getAttribute("aria-label")).toMatch(/제작.*화요일.*빈 칸/);
+  fireEvent.keyUp(document.activeElement!, { key: "ArrowRight" });
+  const moved = document.activeElement!;
+  expect(moved.getAttribute("aria-label")).toMatch(/제작.*화요일.*빈 칸/);
+  expect(moved.getAttribute("aria-selected")).toBe("true");
+  await waitFor(() => expect(acts()).toHaveLength(1));
+  expect(acts()[0]).toMatchObject({ op: "data.act", event: { row: "a", column: "tue" }, item: row });
+  fireEvent.keyDown(moved, { key: "Enter" });
+  await waitFor(() => expect(acts()).toHaveLength(2));
+  expect(acts()[1]).toMatchObject({ op: "data.act", event: { row: "a", column: "tue" }, item: row });
+});
+
+it("앱이 고른 칸에서 초점을 시작한다", async () => {
+  const rows = [{ key: "a", label: "기획", mon: "회의", tue: "초안" }, { key: "b", label: "제작", mon: "검토", tue: "완료" }];
+  const ui = { type: "table", rows, columns: [{ field: "label", label: "항목" }, { field: "mon", label: "월요일" }, { field: "tue", label: "화요일" }], selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" } } as unknown as Block;
+  setup(ui, { chosen: { row: "b", column: "tue" } });
+  const chosen = await screen.findByRole("gridcell", { selected: true });
+  expect(chosen.getAttribute("aria-label")).toBe("제작, 화요일, 완료");
+  expect(chosen.getAttribute("tabindex")).toBe("0");
+});
+
+it("방향키를 반복해도 고른 칸은 바로 바뀌고 보내기는 합쳐 마지막 칸을 보낸다", async () => {
+  const columns = [{ field: "label", label: "항목" }, ...Array.from({ length: 11 }, (_, index) => ({ field: `c${index + 1}`, label: `${index + 1}열` }))];
+  const row = { key: "a", label: "기획", ...Object.fromEntries(Array.from({ length: 11 }, (_, index) => [`c${index + 1}`, `값 ${index + 1}`])) };
+  const ui = { type: "table", rows: [row], columns, selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" } } as unknown as Block;
+  const { calls } = setup(ui, { chosen: null });
+  const acts = () => calls.mock.calls.filter(([request]) => request.op === "data.act").map(([request]) => request);
+  const first = await screen.findByRole("gridcell", { name: "기획, 1열, 값 1" });
+  first.focus();
+  for (let step = 1; step <= 10; step += 1) {
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(`기획, ${step + 1}열, 값 ${step + 1}`);
+    expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
+  }
+  fireEvent.keyUp(document.activeElement!, { key: "ArrowRight" });
+  await waitFor(() => expect(acts().at(-1)).toMatchObject({ op: "data.act", event: { row: "a", column: "c11" } }));
+  expect(acts().length).toBeLessThanOrEqual(3);
+});
+
+it("Home과 End는 열의 처음과 끝, Ctrl과 함께면 행의 처음과 끝으로 간다", async () => {
+  const rows = [{ key: "a", label: "기획", mon: "회의", tue: "초안" }, { key: "b", label: "제작", mon: "검토", tue: "완료" }];
+  const ui = { type: "table", rows, columns: [{ field: "label", label: "항목" }, { field: "mon", label: "월요일" }, { field: "tue", label: "화요일" }], selection: "cell", row_header: "label", selected: { state: "chosen" }, on_select: { set_state: "chosen" } } as unknown as Block;
+  const { calls } = setup(ui, { chosen: null });
+  const acts = () => calls.mock.calls.filter(([request]) => request.op === "data.act").map(([request]) => request);
+  const first = await screen.findByRole("gridcell", { name: "기획, 월요일, 회의" });
+  first.focus();
+  const press = (key: string, ctrlKey = false) => {
+    fireEvent.keyDown(document.activeElement!, { key, ctrlKey });
+    fireEvent.keyUp(document.activeElement!, { key, ctrlKey });
+    expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
+    return document.activeElement?.getAttribute("aria-label");
+  };
+  expect(press("End")).toBe("기획, 화요일, 초안");
+  expect(press("End", true)).toBe("제작, 화요일, 완료");
+  expect(press("Home")).toBe("제작, 월요일, 검토");
+  expect(press("Home", true)).toBe("기획, 월요일, 회의");
+  await waitFor(() => expect(acts().at(-1)).toMatchObject({ op: "data.act", event: { row: "a", column: "mon" } }));
+  const sent = acts().length;
+  expect(sent).toBeLessThanOrEqual(4);
+  press("Home", true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(acts()).toHaveLength(sent);
+});
+
+it("행 고르기 표는 방향키로 on_select를 부르지 않는다", async () => {
+  const rows = [{ key: "a", label: "기획", mon: "회의" }, { key: "b", label: "제작", mon: "검토" }];
+  const ui = { type: "table", rows, columns: [{ field: "label", label: "항목" }, { field: "mon", label: "월요일" }], selected: { state: "chosen" }, on_select: { set_state: "chosen" } } as unknown as Block;
+  const { calls } = setup(ui, { chosen: null });
+  const first = (await screen.findByText("기획")).closest<HTMLElement>('[role="row"]')!;
+  first.focus();
+  fireEvent.keyDown(first, { key: "ArrowDown" });
+  fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(document.activeElement?.getAttribute("data-row-key")).toBe("b");
   expect(calls.mock.calls.some(([request]) => request.op === "data.act")).toBe(false);
-  fireEvent.keyDown(document.activeElement!, { key: "Enter" });
-  await waitFor(() => expect(calls).toHaveBeenCalledWith(expect.objectContaining({ op: "data.act", event: { row: "a", column: "tue" }, item: row })));
+});
+
+it("표 폭이 줄어 고른 칸이 화면 밖으로 나가면 스크롤로 그 칸을 보이게 한다", async () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: ResizeObserverCallback) { callbacks.push(callback); }
+    observe() {} unobserve() {} disconnect() {}
+  });
+  const size = { width: 500 };
+  const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight");
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get(this: HTMLElement) { return this.classList.contains("ks-table-scroll") ? size.width : widthDescriptor?.get?.call(this) ?? 0; },
+  });
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get(this: HTMLElement) { return this.classList.contains("ks-table-scroll") ? 200 : heightDescriptor?.get?.call(this) ?? 0; },
+  });
+  try {
+    const rows = [{ key: "a", label: "기획", mon: "회의", tue: "초안" }, { key: "b", label: "제작", mon: "검토", tue: "완료" }];
+    const props = { rows, columns: [{ field: "label", label: "항목" }, { field: "mon", label: "월요일" }, { field: "tue", label: "화요일" }], selected: null, rowHeader: "label", onChoose: () => {}, onChooseCell: () => {} };
+    const { container } = render(<TableGrid {...props} />);
+    const grid = container.querySelector<HTMLElement>('[role="grid"]')!;
+    const cell = container.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]')!;
+    Object.defineProperty(grid, "getBoundingClientRect", { configurable: true, value: () => ({ x: 0, y: 0, left: 0, top: 0, right: size.width, bottom: 200, width: size.width, height: 200, toJSON() {} }) });
+    let cellRect = { left: 400, right: 600 };
+    Object.defineProperty(cell, "getBoundingClientRect", { configurable: true, value: () => ({ x: cellRect.left, y: 0, left: cellRect.left, top: 0, right: cellRect.right, bottom: 32, width: cellRect.right - cellRect.left, height: 32, toJSON() {} }) });
+    const resize = () => act(() => callbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+    // 폭이 500에서 400으로 줄어 고른 칸(오른쪽 끝 600)이 보이는 영역 밖으로 나간다.
+    size.width = 400;
+    resize();
+    expect(grid.scrollLeft).toBe(200);
+    // 고른 칸이 이미 보이면 스크롤하지 않는다.
+    grid.scrollLeft = 0;
+    cellRect = { left: 100, right: 200 };
+    size.width = 300;
+    resize();
+    expect(grid.scrollLeft).toBe(0);
+  } finally {
+    if (widthDescriptor) Object.defineProperty(HTMLElement.prototype, "clientWidth", widthDescriptor);
+    if (heightDescriptor) Object.defineProperty(HTMLElement.prototype, "clientHeight", heightDescriptor);
+    vi.unstubAllGlobals();
+  }
 });
 
 it("상태에 연결된 동적 열과 선택 주소를 그리고 빈 칸 클릭을 전달한다", async () => {

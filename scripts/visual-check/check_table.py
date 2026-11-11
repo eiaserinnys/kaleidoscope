@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""표의 칸 상자와 글자 시작선을 화면에서 확인한다.
+"""표의 칸 상자와 글자 시작선, 칸 고르기의 키보드 초점을 화면에서 확인한다.
 
 툴바 글자, 표 머리 글자, 첫 칸 글자가 같은 세로 시작선에서 시작하는지, 내용 칸 상자의
 위아래가 한 행에서 맞는지, 배지가 없는 행에 배지 자리가 남지 않는지, muted 칸의 제목이
-덜 띄게 보이는지를 넓은 창과 좁은 창에서 재고 캡처한다.
+덜 띄게 보이는지를 넓은 창과 좁은 창에서 재고 캡처한다. 칸 고르기 표는 방향키를 눌러
+초점 표시가 고른 칸 하나에만 있고 Tab이 그 칸에만 머무는지도 함께 잰다. 오른쪽 열이 밀리는
+넓은 표는 오른쪽 끝 칸을 고른 뒤 창 폭을 줄여, 스크롤이 그 칸을 다시 보이게 하는지 잰다.
 
   python3 scripts/visual-check/check_table.py [--output 산출폴더]
 
@@ -36,6 +38,7 @@ ROWS_APP = "visual-check-table-rows"
 TEXT_APP = "visual-check-table-text"
 GRID_APP = "visual-check-table-grid"
 GRID_EDGE_APP = "visual-check-table-grid-edges"
+GRID_WIDE_APP = "visual-check-table-grid-wide"
 
 MEASURE_JS = """(args) => {
   const win = document.querySelector(`[data-testid="app-window-${args.appId}"]`);
@@ -166,6 +169,49 @@ SELECT_MEASURE_JS = """(args) => {
 }"""
 
 
+KEYBOARD_MEASURE_JS = """(args) => {
+  const win = document.querySelector(`[data-testid="app-window-${args.appId}"]`);
+  if (!win) return { error: "창을 찾지 못했습니다" };
+  const grid = win.querySelector('[role="grid"]');
+  if (!grid) return { error: "격자를 찾지 못했습니다" };
+  const cells = [...grid.querySelectorAll('[role="gridcell"]')];
+  const indexOf = (cell) => cells.indexOf(cell);
+  const active = document.activeElement;
+  return {
+    cells: cells.length,
+    focusedIndex: cells.filter((cell) => cell.hasAttribute("data-keyboard-focus")).map(indexOf),
+    selectedIndex: cells.filter((cell) => cell.getAttribute("aria-selected") === "true").map(indexOf),
+    tabStops: cells.filter((cell) => cell.getAttribute("tabindex") === "0").map(indexOf),
+    activeIndex: active && active.getAttribute("role") === "gridcell" ? indexOf(active) : -1,
+  };
+}"""
+
+SELECTED_VISIBLE_JS = """(args) => {
+  const win = document.querySelector(`[data-testid="app-window-${args.appId}"]`);
+  if (!win) return { error: "창을 찾지 못했습니다" };
+  const grid = win.querySelector('[role="grid"]');
+  if (!grid) return { error: "격자를 찾지 못했습니다" };
+  const round = (value) => Math.round(value * 100) / 100;
+  const cells = [...grid.querySelectorAll('[role="gridcell"]')];
+  const chosen = cells.filter((cell) => cell.getAttribute("aria-selected") === "true");
+  if (chosen.length !== 1) return { error: `고른 칸이 ${chosen.length}개입니다` };
+  const rect = chosen[0].getBoundingClientRect();
+  const bounds = grid.getBoundingClientRect();
+  const viewRight = bounds.left + grid.clientLeft + grid.clientWidth;
+  return {
+    index: cells.indexOf(chosen[0]),
+    label: chosen[0].getAttribute("aria-label"),
+    scrollLeft: round(grid.scrollLeft),
+    windowWidth: round(bounds.width),
+    viewWidth: round(grid.clientWidth),
+    left: round(rect.left - bounds.left),
+    right: round(rect.right - bounds.left),
+    // 고른 칸의 양 끝이 보이는 영역 안에 있는지만 본다(가장 가까운 쪽으로만 옮기는지 판정).
+    visible: rect.left >= bounds.left - 1 && rect.right <= viewRight + 1,
+  };
+}"""
+
+
 def toolbar(label):
     return {"type": "toolbar", "start": [{"type": "text", "style": "meta", "value": label}]}
 
@@ -255,11 +301,25 @@ def scenes():
         ],
         "rows": content_rows()[:3],
     }, state={"cell": None})
+    # 오른쪽 열이 좁은 창에서 표 밖으로 밀리는 표: 창 폭이 줄 때 고른 칸이 다시 보이는지 잰다.
+    wide_grid = app_definition(GRID_WIDE_APP, "표 검수 · 넓은 표", {
+        "type": "table",
+        "selection": "cell",
+        "selected": {"state": "cell"},
+        "on_select": {"set_state": "cell"},
+        "columns": [{"field": "name", "label": "이름"}] + [
+            {"field": f"c{index}", "label": f"열 {index}", "width": "narrow"} for index in range(1, 10)],
+        "rows": [
+            {"key": "1", "name": "첫째", **{f"c{index}": f"값 {index}" for index in range(1, 10)}},
+            {"key": "2", "name": "둘째", **{f"c{index}": f"값 {index}" for index in range(1, 10)}},
+        ],
+    }, state={"cell": None})
     return [
         {"app_id": ROWS_APP, "kind": "rows", "definition": rows},
         {"app_id": TEXT_APP, "kind": "text", "definition": text},
         {"app_id": GRID_APP, "kind": "grid", "definition": grid},
         {"app_id": GRID_EDGE_APP, "kind": "grid-edge", "definition": grid_edges},
+        {"app_id": GRID_WIDE_APP, "kind": "grid-wide", "definition": wide_grid},
     ]
 
 
@@ -410,6 +470,87 @@ def measure_selection(page, application, app_id, output, name, result):
     return selection
 
 
+def press_and_wait(page, app_id, key, previous):
+    # 키를 누른 뒤 고른 칸이 바뀔 때까지 기다린다. 끝 칸에 닿아 안 바뀌면 그대로 돌려 판정에서 걸린다.
+    page.keyboard.press(key)
+    deadline = time.monotonic() + 10
+    state = {}
+    while time.monotonic() < deadline:
+        state = page.evaluate(KEYBOARD_MEASURE_JS, {"appId": app_id})
+        if state.get("error"):
+            return state
+        if state.get("selectedIndex") and state["selectedIndex"] != previous:
+            return state
+        time.sleep(0.1)
+    return state
+
+
+def measure_keyboard(page, application, app_id, output, name, result):
+    # 방향키가 초점과 선택을 함께 옮기는지, 초점 표시와 Tab 정지점이 고른 칸 하나에만 붙는지 잰다.
+    application.locator('[role="gridcell"][tabindex="0"]').first.focus()
+    start = page.evaluate(KEYBOARD_MEASURE_JS, {"appId": app_id})
+    left = press_and_wait(page, app_id, "ArrowLeft", start.get("selectedIndex"))
+    capture(page, output, f"{app_id}-{name}-arrow-selected.png", result["captures"])
+    down = press_and_wait(page, app_id, "ArrowDown", left.get("selectedIndex"))
+    return {"start": start, "left": left, "down": down}
+
+
+def keyboard_verdicts(keyboard):
+    if keyboard.get("error"):
+        return {"keyboard_state": False}
+    start = keyboard.get("start") or {}
+    left = keyboard.get("left") or {}
+    down = keyboard.get("down") or {}
+
+    def together(state, ring=True):
+        selected = state.get("selectedIndex") or []
+        return (len(selected) == 1 and state.get("activeIndex") == selected[0]
+                and (not ring or state.get("focusedIndex") == selected))
+
+    return {
+        # 누른 칸에 초점이 남고(ui-design 0절 14번), 방향키 뒤에도 초점 표시가 고른 칸 하나뿐이다.
+        # 누름 뒤에는 키보드 점선을 그리지 않으므로(마우스 :focus-visible) 고른 칸과 초점만 본다.
+        "clicked_cell_keeps_focus": together(start, ring=False),
+        "arrow_moves_focus_and_selection": together(left) and together(down)
+        and start.get("selectedIndex") != left.get("selectedIndex")
+        and left.get("selectedIndex") != down.get("selectedIndex"),
+        # Tab 정지점은 격자 안에서 고른 칸 하나다.
+        "single_tab_stop": bool(down.get("tabStops")) and down.get("tabStops") == down.get("selectedIndex"),
+    }
+
+
+def measure_resize(page, sb, application, app_id, window_id, output, result):
+    # 넓은 창에서 오른쪽 끝 칸을 고른 뒤 표 폭을 줄여, 스크롤이 그 칸을 다시 보이게 하는지 잰다.
+    set_rect(sb, window_id, *WIDE)
+    page.wait_for_timeout(600)
+    cells = application.locator(".ks-grid-row").first.locator('[role="gridcell"]')
+    index = cells.count() - 1
+    if index < 0:
+        return {"error": "격자 칸이 없습니다"}
+    cells.nth(index).click()
+    page.wait_for_function(
+        """([appId, index]) => {
+          const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
+          const row = win && win.querySelector(".ks-grid-row");
+          const cell = row && [...row.querySelectorAll('[role="gridcell"]')][index];
+          return cell ? cell.getAttribute("aria-selected") === "true" : false;
+        }""", arg=[app_id, index])
+    before = page.evaluate(SELECTED_VISIBLE_JS, {"appId": app_id})
+    set_rect(sb, window_id, *NARROW)
+    page.wait_for_timeout(1000)
+    after = page.evaluate(SELECTED_VISIBLE_JS, {"appId": app_id})
+    capture(page, output, f"{app_id}-narrow-after-shrink.png", result["captures"])
+    return {
+        "before": before,
+        "after": after,
+        "verdicts": {
+            "chosen_cell_visible_before_shrink": bool(before.get("visible")),
+            # 폭이 줄어 밖으로 밀린 뒤에는 스크롤이 움직여 그 칸이 다시 보여야 한다.
+            "chosen_cell_visible_after_shrink": bool(after.get("visible")) and (after.get("scrollLeft") or 0) > 0,
+        },
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "target/visual-check/table")
@@ -457,18 +598,29 @@ def main():
                         verdicts = scene_verdicts(scene["kind"], coordinates)
                         capture(page, output, f"{app_id}-{name}.png", result["captures"])
                         selection = {}
+                        keyboard = {}
                         if scene["kind"] in ("grid", "grid-edge"):
                             selection = measure_selection(page, application, app_id, output, name, result)
                             verdicts["selected_ring_matches_box"] = selection_ring_verdict(selection)
+                            keyboard = measure_keyboard(page, application, app_id, output, name, result)
+                            verdicts.update(keyboard_verdicts(keyboard))
                         entry["widths"][name] = {
                             "coordinates": coordinates,
                             "edgeRightGap": edge_right_gap(coordinates),
                             "selection": selection,
+                            "keyboard": keyboard,
                             "verdicts": verdicts,
                         }
                         for verdict, passed in verdicts.items():
                             if not passed:
                                 result["failures"].append(f"{app_id}/{name}: {verdict}")
+                    if scene["kind"] == "grid-wide":
+                        entry["resize"] = measure_resize(page, sb, application, app_id, window_id, output, result)
+                        for verdict, passed in entry["resize"].get("verdicts", {}).items():
+                            if not passed:
+                                result["failures"].append(f"{app_id}/resize: {verdict}")
+                        if entry["resize"].get("error"):
+                            result["failures"].append(f"{app_id}/resize: {entry['resize']['error']}")
                     result["scenes"][app_id] = entry
                     closed = sb.core({"op": "window.close", "window_id": window_id})
                     if "error" in closed:

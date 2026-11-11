@@ -13,6 +13,7 @@ type GridHandlers = {
   focus: (row: string, column: string) => void;
   choose: (row: string, column: string) => void;
   key: (event: KeyboardEvent<HTMLElement>, row: string, column: string) => void;
+  settle: () => void;
   menu: (event: MouseEvent<HTMLElement> | undefined, row: string, anchor: HTMLElement) => void;
 };
 
@@ -66,9 +67,15 @@ export const GridRow = memo(function GridRow({ row, index, start, columns, rowHe
   </div>;
 });
 
-export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, onChooseCell, onContextMenu, more, data, visible = true, ariaLabel = "표" }: TableViewProps) {
+export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, onChooseCell, onCellMove, onCellSettle, onContextMenu, more, data, visible = true, ariaLabel = "표" }: TableViewProps) {
   const dataColumns = useMemo(() => columns.filter((column) => column.field !== rowHeader), [columns, rowHeader]);
-  const [focus, setFocus] = useState<Address | null>(() => rows.length && dataColumns.length ? { row: rows[0].key, column: dataColumns[0].field } : null);
+  const [focus, setFocus] = useState<Address | null>(() => {
+    if (!rows.length || !dataColumns.length) return null;
+    // 이미 고른 칸이 있으면 그 칸에서 시작한다. 탐색 전용 초점을 따로 두지 않으므로 초점 표시는 늘 고른 칸에 있다.
+    const row = Math.max(0, rows.findIndex((item) => item.key === selectedCell?.row));
+    const column = Math.max(0, dataColumns.findIndex((item) => item.field === selectedCell?.column));
+    return { row: rows[row].key, column: dataColumns[column].field };
+  });
   const last = useRef({ row: 0, column: 0 });
   const pending = useRef<(Address & { keyboard?: boolean }) | null>(null);
   const rowIndex = Math.max(0, rows.findIndex((row) => row.key === focus?.row));
@@ -100,6 +107,8 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
     const address = { row: rows[row].key, column: dataColumns[column].field };
     last.current = { row, column }; pending.current = { ...address, keyboard: true }; setFocus(address);
     virtual.scrollToIndex(row, { align: "auto" });
+    // 스프레드시트처럼 선택이 초점을 따라간다. 키 반복마다 보내지 않도록 보내기는 부르는 쪽이 합친다.
+    if (address.row !== selectedCell?.row || address.column !== selectedCell?.column) onCellMove?.(address);
   };
   const reveal = (target: HTMLElement) => {
     const container = scroll.current; if (!container) return;
@@ -115,6 +124,25 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
     if (rect.top - ring < top) container.scrollTop -= top - (rect.top - ring);
     else if (rect.bottom + ring > bottom) container.scrollTop += rect.bottom + ring - bottom;
   };
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  useEffect(() => {
+    const container = scroll.current;
+    if (!container) return;
+    // 창이나 옆 칸이 줄어 고른 칸이 보이는 영역 밖으로 밀리면 그때만 가장 가까운 쪽으로 스크롤한다.
+    // 사용자가 직접 스크롤해 밖으로 보낸 것은 크기가 바뀌기 전까지 건드리지 않는다.
+    let previous = { width: container.clientWidth, height: container.clientHeight };
+    const observer = new ResizeObserver(() => {
+      const width = container.clientWidth, height = container.clientHeight;
+      const shrunk = width < previous.width || height < previous.height;
+      previous = { width, height };
+      if (!shrunk) return;
+      const target = container.querySelector<HTMLElement>('[role="gridcell"][tabindex="0"]');
+      if (target) revealRef.current(target);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [scroll]);
   useEffect(() => {
     const address = pending.current;
     if (!address) return;
@@ -140,6 +168,7 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
   handlers.current = {
     focus: (row, column) => { const r = rows.findIndex((item) => item.key === row), c = dataColumns.findIndex((item) => item.field === column); last.current = { row: r, column: c }; setFocus({ row, column }); },
     choose: (row, column) => { const item = rows.find((item) => item.key === row); if (item) onChooseCell?.(item, column); },
+    settle: () => onCellSettle?.(),
     menu: (event, row, anchor) => { const item = rows.find((item) => item.key === row); if (item && onContextMenu && !event?.defaultPrevented) { event?.preventDefault(); onContextMenu(item, anchor, event); } },
     key: (event, row, column) => {
       const r = rows.findIndex((item) => item.key === row), c = dataColumns.findIndex((item) => item.field === column);
@@ -154,7 +183,7 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
       event.preventDefault(); move(nextRow, nextColumn);
     },
   };
-  return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} onPointerDownCapture={(event) => event.currentTarget.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus")} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
+  return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-grid${lines ? " has-content" : ""}`} ref={scroll} role="grid" aria-label={ariaLabel} aria-rowcount={rows.length + 1} aria-colcount={columns.length} onKeyUp={() => handlers.current.settle()} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) handlers.current.settle(); }} onPointerDownCapture={(event) => event.currentTarget.querySelector("[data-keyboard-focus]")?.removeAttribute("data-keyboard-focus")} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">
       <div className="ks-table-header" role="row" aria-rowindex={1}>{columns.map((column, index) => <div role="columnheader" aria-colindex={index + 1} key={column.field} className={column.field === rowHeader ? "ks-grid-corner" : undefined}>{column.label}</div>)}</div>
       {!rows.length ? <NoItems /> : <VirtualSurface virtual={virtual}>{virtualRows.map((v) => {
