@@ -522,6 +522,9 @@
   margin-block: var(--ks-space-3);
 }
 
+/* 표 맞춤(is-tight)으로 물러선 표는 칸의 좌우 안쪽 여백을 space-1로 줄인다. 칸이 여럿 나란하면 칸마다 좌우 여백과 한 글자 폭만으로 감싼 폭을 넘기 때문이다(카드 #1170). table-fit.ts는 is-tight를 뗀 보통 여백으로 판정하므로 이 규칙이 판정을 바꾸지 않는다. 편집기 표와 보기 표에 함께 건다. */
+.ks-table-fit.is-tight :is(th, td) { padding-inline: var(--ks-space-1); }
+
 .ks-markdown-text > :first-child {
   margin-block-start: 0;
 }
