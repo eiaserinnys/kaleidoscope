@@ -40,23 +40,25 @@ function estimateLabelWidth(label: string): number {
   return [...label].reduce((sum, char) => sum + (char === " " ? 4 : isWideChar(char.codePointAt(0) ?? 0) ? 12 : 7), 0);
 }
 
-/** 막대 차트의 세로축 끝을 유효숫자 한 자리로 올린 보기 좋은 수로 만든다. 돌려준 범위는 low와 high를 늘 담는다. */
+/** 막대와 면적 차트의 세로축을 0을 포함하는 보기 좋은 수로 만든다. */
 function niceAxisEnds(low: number, high: number): { min: number; max: number } | null {
-  const ceil1 = (value: number) => {
+  const niceStep = (value: number) => {
     const power = 10 ** Math.floor(Math.log10(value));
-    return Math.ceil(value / power - 1e-9) * power;
+    const scaled = value / power;
+    const factor = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((candidate) => scaled <= candidate * (1 + Number.EPSILON * 4))!;
+    return Number((factor * power).toPrecision(2));
   };
   if (low === 0 && high === 0) return null;
   if (low >= 0) {
-    const step = ceil1(high / 2);
+    const step = niceStep(high / 2);
     return { min: 0, max: 2 * step };
   }
   if (high <= 0) {
-    const step = ceil1(-low / 2);
+    const step = niceStep(-low / 2);
     return { min: -2 * step, max: 0 };
   }
   // 양수와 음수가 섞이면 0을 가운데 눈금에 두고 큰 쪽 크기로 위아래를 같게 잡아, 두 끝을 늘 담는다.
-  const step = ceil1(Math.max(-low, high));
+  const step = niceStep(Math.max(-low, high));
   return { min: -step, max: step };
 }
 
@@ -120,9 +122,9 @@ export function buildChartGeometry(
     const numbers = series.flatMap((entry) => entry.points.flatMap((point) => kind === "candlestick" ? [point.open, point.high, point.low, point.close].filter((v): v is number => v !== undefined) : point.y === null ? [] : [point.y]));
     min = numbers.length ? Math.min(...numbers) : 0;
     max = numbers.length ? Math.max(...numbers) : 1;
-    if (kind === "bar") { min = Math.min(0, min); max = Math.max(0, max); }
+    if (kind === "bar" || kind === "area") { min = Math.min(0, min); max = Math.max(0, max); }
   }
-  if (kind === "bar") {
+  if (kind === "bar" || kind === "area") {
     const ends = niceAxisEnds(min, max);
     if (ends) { min = ends.min; max = ends.max; }
   }
@@ -167,7 +169,7 @@ export function buildChartGeometry(
     });
     const lines = segments.filter((segment) => segment.length).map((segment, index) => {
       const path = segment.map((point, n) => `${n ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
-      return { key: index, path, area: kind === "area" && segment.length > 1 ? `${path} L ${segment.at(-1)!.x} 150 L ${segment[0].x} 150 Z` : null };
+      return { key: index, path, area: kind === "area" && segment.length > 1 ? `${path} L ${segment.at(-1)!.x} ${yAt(0)} L ${segment[0].x} ${yAt(0)} Z` : null };
     });
     return { key: entry.key, className: `ks-chart-series is-series-${seriesIndex % 4}`, color, candles, bars, lines, ordered };
   });

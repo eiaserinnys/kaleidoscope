@@ -45,14 +45,19 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   const { labels } = geometry;
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const boundSelected = selectedValue.status === "ready" && typeof selectedValue.value === "string" ? selectedValue.value : null;
+  const [clicked, setClicked] = useState<string | null>(null);
+  useEffect(() => {
+    if (clicked !== null && !labels.includes(clicked)) setClicked(null);
+  }, [clicked, labels]);
   const resting = useMemo(() => {
-    if (boundSelected !== null) {
-      const chosen = labels.indexOf(boundSelected);
+    const selected = block.selected != null ? boundSelected : clicked;
+    if (selected !== null) {
+      const chosen = labels.indexOf(selected);
       if (chosen >= 0) return chosen;
     }
     const lastWithData = labels.reduce((found, label, index) => series.some((entry) => entry.points.some((point) => point.x === label && point.y !== null)) ? index : found, -1);
     return lastWithData >= 0 ? lastWithData : Math.max(0, labels.length - 1);
-  }, [boundSelected, labels, series]);
+  }, [block.selected, boundSelected, clicked, labels, series]);
   const [regional, setRegional] = useState<number | null>(null);
   const current = Math.max(0, Math.min(labels.length - 1, regional ?? resting));
   const points = useMemo(() => series.map((entry) => entry.points.find((point) => point.x === labels[current])), [series, labels, current]);
@@ -115,7 +120,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           onKeyDown={keyDown} onPointerMove={(event) => setRegional(pointerIndex(event))}
           onPointerLeave={() => setRegional(null)}
           onBlur={() => setRegional(null)}
-          onClick={(event) => { const index = pointerIndex(event); setRegional(index); select(index); }}>
+          onClick={(event) => { const index = pointerIndex(event); setRegional(index); if (block.on_select && block.selected == null) setClicked(labels[index]); select(index); }}>
           <div className="ks-chart-plot" aria-hidden="true">
           <svg viewBox="0 0 1000 160" preserveAspectRatio="none">
             {[10, 80, 150].map((y) => <line key={y} className="ks-chart-grid" x1="0" x2="1000" y1={y} y2={y} vectorEffect="non-scaling-stroke" />)}
@@ -133,11 +138,11 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           </div>
           <div className="ks-chart-x-axis" aria-hidden="true">{geometry.axes.map(({ label, index, left, transform }) => <span key={`${label}-${index}`} style={{ left, transform }}>{label}</span>)}</div>
         </div>
-        {series.length > 1 && <div className="ks-chart-legend">{series.map((entry, index) => <span key={entry.key} className="ks-chart-legend-item" style={seriesColor(geometry.series[index].color)}>
+      </div>
+      {series.length > 1 && <div className="ks-chart-legend">{series.map((entry, index) => <span key={entry.key} className="ks-chart-legend-item" style={seriesColor(geometry.series[index].color)}>
           <span className="ks-list-color" aria-hidden="true" />
           <span className="ks-chart-legend-name">{entry.name}</span>
         </span>)}</div>}
-      </div>
       <table className="ks-accessible-hidden"><caption>차트 데이터</caption><thead><tr><th>시점</th>{series.map((entry) => <th key={entry.key}>{entry.name}</th>)}{stacked && <th>합계</th>}</tr></thead><tbody>{geometry.rows.map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={series[index].key}>{value}</td>)}{stacked && <td>{row.total}</td>}</tr>)}</tbody></table>
     </div>
   </div>;

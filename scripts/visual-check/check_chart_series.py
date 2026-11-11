@@ -8,7 +8,7 @@
 마지막 시점의 값이 모두 비어 있어, 처음 값 표시가 값이 있는 마지막 칸(2월)인지 잰다.
 
 추가 장면(카드 #1229 1차 검수 반려의 세라피엘 시나리오를 옮긴 것):
-- 최대 합계 166354414인 쌓은 막대: 눈금이 1.8억, 9000만, 0인지.
+- 최대 합계 166354414인 쌓은 막대: 눈금이 2억, 1억, 0인지.
 - 긴 이름 여덟 계열의 묶음 막대(쌓지 않음): 좁은 폭에서 읽기 줄과 범례가 넘치지 않는지.
 - 420px의 통화(USD) 세 계열 선 차트: 읽기 줄이 한 줄이고 수가 잘리지 않는지.
 - 시점 서른 개를 쌓은 막대.
@@ -56,7 +56,9 @@ TIGHT = (360, 720)
 STYLE = "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }"
 LABELS = [f"2026년 {month}월" for month in range(1, 8)]
 DAYS = [f"11월 {day}일" for day in range(9, 16)]
-STATE = {"picked": LABELS[0]}
+STATE = {"picked": LABELS[0], "sel": None, "sel2": None}
+MAXES = [21, 23, 30, 41, 210000000, 166354414, 160000000]
+ENDS = [24, 24, 30, 50, 240000000, 200000000, 160000000]
 
 
 def main_series():
@@ -140,6 +142,66 @@ def axis_series():
     values = [12, 18, 15, 22, 19, 27, 24, 30, 26]
     return [{"key": "s", "name": "세션",
              "points": [{"x": f"26년 {month}월", "y": values[month - 3]} for month in range(3, 12)]}]
+
+
+def max_series(value):
+    return [{"key": "s", "name": "값", "points": [
+        {"x": DAYS[index], "y": round(value * factor)}
+        for index, factor in enumerate([0.35, 0.6, 1, 0.45, 0.8, 0.2, 0.5])]}]
+
+
+def candle_series():
+    return [{"key": "s", "name": "값", "points": [
+        {"x": DAYS[index], "open": value, "high": value + 4, "low": value - 3,
+         "close": value + (2 if index % 2 == 0 else -2)}
+        for index, value in enumerate([100, 104, 101, 108, 112, 109, 115])]}]
+
+
+def selection_scene():
+    return {"type": "stack", "direction": "column", "gap": "none", "children": [
+        {"type": "section", "title": title,
+         "meta": {"expr": f"$state.{state} ? ('고른 칸 ' & $state.{state}.x) : '고른 칸 없음'"},
+         "child": {"type": "chart", "kind": kind, "series": series,
+                   "on_select": [{"set_state": state, "value": {"expr": "$item"}}]}}
+        for title, state, kind, series in [("촛대", "sel", "candlestick", candle_series()),
+                                            ("막대", "sel2", "bar", max_series(30))]]}
+
+
+def height_scene():
+    return {"type": "stack", "direction": "column", "gap": "none", "children": [
+        {"type": "section", "title": f"{height} {name}", "child":
+         {"type": "chart", "kind": "bar", "height": height, "series": series}}
+        for height in ("small", "medium", "tall")
+        for name, series in (("한 계열", single_series()), ("여덟 계열", long_name_series()))]}
+
+
+def area_scene():
+    return {"type": "stack", "direction": "column", "gap": "none", "children": [
+        {"type": "chart", "kind": "area", "series": [{"key": "s", "name": "값", "points": [
+            {"x": "처음", "y": first}, {"x": "나중", "y": last}]}]}
+        for first, last in ((10, 21), (-9, 3))]}
+
+
+def weather_chart():
+    def find_area(value):
+        if isinstance(value, dict):
+            if value.get("type") == "chart" and value.get("kind") == "area":
+                return value
+            for child in value.values():
+                found = find_area(child)
+                if found:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = find_area(child)
+                if found:
+                    return found
+        return None
+    chart = find_area(json.loads((ROOT / "apps/weather.json").read_text(encoding="utf-8")))
+    chart["series"] = [{"key": "temp", "name": "기온", "points": [
+        {"x": f"{hour:02d}:00", "y": temperature, "label": "강수 10%"}
+        for hour, temperature in enumerate([9, 8, 8, 7, 7, 8, 9, 11, 13, 15, 17, 18, 19, 20, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11])]}]
+    return chart
 
 
 def main_scene():
@@ -478,7 +540,7 @@ def judge_extra(measurement, width):
     charts = measurement["charts"]
     stacked_166, eight, usd, thirty, single = charts
     verdicts = {
-        "ticks_166m": [tick["text"] for tick in stacked_166["ticks"]] == ["1.8억", "9000만", "0"],
+        "ticks_166m": [tick["text"] for tick in stacked_166["ticks"]] == ["2억", "1억", "0"],
         "eight_series_legend": bool(eight["legend"]) and len(eight["legend"]["items"]) == 8,
         "usd_readout": "$" in usd["readout"],
         "single_bar_no_legend": single["legend"] is None,
@@ -534,6 +596,40 @@ def record(result, key, verdicts):
             result["failures"].append(f"{key}: {verdict}")
     print(key, "ok" if all(verdicts.values()) else "FAIL " + ",".join(
         name for name, ok in verdicts.items() if not ok), flush=True)
+
+
+def axis_verdict(value, end, measurement):
+    return (measurement["ticks"] == [str(end), str(end // 2), "0"]
+            and end >= value and value / end >= .75
+            and abs(measurement["use"] - value / end) <= .02)
+
+
+def area_verdict(measurement, expected_zero):
+    return len(measurement["closingY"]) == 2 and (measurement["bottomTick"] == "0" if expected_zero == 150 else True) and all(
+        abs(value - expected_zero) < .01 for value in measurement["closingY"])
+
+
+AXIS_END_JS = """() => [...document.querySelectorAll('[data-testid="app-window-data-controls"] .ks-chart')].map(chart => {
+  const svg = chart.querySelector('svg').getBoundingClientRect();
+  const bars = [...chart.querySelectorAll('.ks-chart-bar')].map(bar => bar.getBoundingClientRect());
+  const top = svg.top + svg.height * 10 / 160, base = svg.top + svg.height * 150 / 160;
+  return { ticks: [...chart.querySelectorAll('.ks-chart-y-axis span')].map(span => span.textContent.replaceAll(',', '')),
+    use: (base - Math.min(...bars.map(bar => bar.top))) / (base - top) };
+})"""
+
+HEIGHT_JS = """() => [...document.querySelectorAll('[data-testid="app-window-data-controls"] .ks-chart')].map(chart => {
+  const body = chart.querySelector('.ks-chart-body').getBoundingClientRect();
+  const ticks = [...chart.querySelectorAll('.ks-chart-y-axis span')].map(span => span.getBoundingClientRect());
+  return { body: body.height, tickGaps: ticks.slice(1).map((tick, i) => tick.top - ticks[i].bottom),
+    frame: chart.querySelector('.ks-chart-frame').getBoundingClientRect().height };
+})"""
+
+AREA_JS = r"""() => [...document.querySelectorAll('[data-testid="app-window-data-controls"] .ks-chart')].map(chart => {
+  const path = chart.querySelector('.ks-chart-area').getAttribute('d');
+  const match = path.match(/L\s+[-.\d]+\s+([-.\d]+)\s+L\s+[-.\d]+\s+([-.\d]+)\s+Z$/);
+  return { path, closingY: match ? [Number(match[1]), Number(match[2])] : [],
+    bottomTick: chart.querySelector('.ks-chart-y-axis span:last-child').textContent };
+})"""
 
 
 def main():
@@ -732,6 +828,173 @@ def main():
             record(result, key, judge_axis(measurement, TIGHT[0]))
             result["scenes"][key]["measurement"] = measurement
             print("axis labels", [label["text"] for label in measurement["charts"][0]["axisLabels"]], flush=True)
+
+            # 2차 반려: 일곱 축 끝과 실제 막대 높이를 넓고 좁은 창에서 잰다.
+            axis_layout = {"type": "stack", "direction": "column", "gap": "none", "children": [
+                {"type": "section", "title": f"최댓값 {value}", "child":
+                 {"type": "chart", "kind": "bar", "series": max_series(value)}} for value in MAXES]}
+            inject(page, axis_layout)
+            for width in (1180, 420):
+                page.set_viewport_size({"width": width, "height": 720})
+                page.wait_for_timeout(400)
+                measured = page.evaluate(AXIS_END_JS)
+                key = f"axis-ends-{width}"
+                verdicts = {str(value): axis_verdict(value, end, measured[index])
+                            for index, (value, end) in enumerate(zip(MAXES, ENDS))}
+                record(result, key, verdicts)
+                result["scenes"][key]["measurement"] = measured
+                for index, value in enumerate(MAXES):
+                    capture = output / f"axis-{width}-max{value}.png"
+                    application.locator('.ks-chart').nth(index).screenshot(path=str(capture), animations="disabled")
+                    result["captures"].append(str(capture))
+
+            # selected 없이 누른 시점과 앱이 받은 시점이 포인터를 빼도 같다.
+            page.set_viewport_size({"width": 1180, "height": 720})
+            inject(page, selection_scene())
+            for index, name in ((0, "candle"), (1, "bar")):
+                chart = application.locator('.ks-chart').nth(index)
+                chart.scroll_into_view_if_needed()
+                plot = chart.locator('.ks-chart-plot').bounding_box()
+                x = plot["x"] + plot["width"] * (2.5 / 7 if name == "bar" else 2 / 6)
+                page.mouse.click(x, plot["y"] + plot["height"] / 2)
+                page.wait_for_timeout(300)
+                clicked = chart.locator('.ks-chart-readout-x').text_content()
+                meta = chart.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " ks-data-section ")]').first.locator('.ks-data-section-meta').text_content()
+                page.mouse.move(x, plot["y"] + plot["height"] + 60, steps=12)
+                page.wait_for_timeout(300)
+                after = chart.locator('.ks-chart-readout-x').text_content()
+                meta_after = chart.locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " ks-data-section ")]').first.locator('.ks-data-section-meta').text_content()
+                key = f"select-{name}"
+                passed = clicked == after == DAYS[2] and meta == meta_after == f"고른 칸 {DAYS[2]}"
+                result["scenes"][key] = {"clicked": clicked, "after_leave": after, "meta": meta, "meta_after_leave": meta_after, "passed": passed}
+                if not passed:
+                    result["failures"].append(f"{key}: clicked_and_meta")
+                capture = output / f"{key}-after-leave.png"
+                chart.screenshot(path=str(capture), animations="disabled")
+                result["captures"].append(str(capture))
+                print(key, "ok" if passed else "FAIL", flush=True)
+
+            # 이전 CSS를 같은 DOM에 적용해 한 계열의 높이를 직접 대조한다.
+            page.set_viewport_size({"width": 420, "height": 720})
+            inject(page, height_scene())
+            old_css = page.add_style_tag(content="""
+              .ks-chart-frame { height: 100% !important; min-height: var(--ks-pane-min-size) !important; }
+              .ks-chart.is-medium .ks-chart-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6)) !important; }
+              .ks-chart.is-tall .ks-chart-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6) * 2) !important; }
+              .ks-chart-body { min-height: 0 !important; flex: 1 1 auto !important; }
+            """)
+            page.wait_for_timeout(300)
+            before = page.evaluate(HEIGHT_JS)
+            for i, height in enumerate(("small", "medium", "tall")):
+                application.locator('.ks-chart').nth(i * 2).screenshot(path=str(output / f"height-{height}-before.png"), animations="disabled")
+            old_css.evaluate('(style) => style.remove()')
+            page.wait_for_timeout(300)
+            after = page.evaluate(HEIGHT_JS)
+            for i, height in enumerate(("small", "medium", "tall")):
+                one, many = after[i * 2], after[i * 2 + 1]
+                key = f"height-{height}"
+                verdicts = {"single_unchanged": abs(one["body"] - before[i * 2]["body"]) <= 1,
+                            "eight_at_least_single": many["body"] >= one["body"] - 1,
+                            "ticks_apart": all(gap >= 0 for gap in many["tickGaps"])}
+                record(result, key, verdicts)
+                result["scenes"][key]["measurement"] = {"before_single": before[i * 2], "after_single": one, "after_eight": many}
+                for offset, label in ((0, "single"), (1, "eight")):
+                    capture = output / f"height-{height}-{label}.png"
+                    application.locator('.ks-chart').nth(i * 2 + offset).screenshot(path=str(capture), animations="disabled")
+                    result["captures"].append(str(capture))
+
+            # 분할 칸과 탭 판의 차트에서 틀과 몸이 잘리지 않고 스크롤이 겹치지 않는지 본다.
+            chart = {"type": "chart", "kind": "bar", "series": long_name_series()}
+            fill = {"type": "split", "direction": "row", "sizes": [1, 1], "children": [
+                chart, {"type": "tabs", "tabs": [{"label": "차트", "child": chart}]}]}
+            page.set_viewport_size({"width": 1180, "height": 720})
+            inject(page, fill)
+            fill_measure = page.evaluate("""() => [...document.querySelectorAll('[data-testid="app-window-data-controls"] .ks-chart')].map(chart => {
+              const frame = chart.querySelector('.ks-chart-frame').getBoundingClientRect();
+              const body = chart.querySelector('.ks-chart-body').getBoundingClientRect();
+              let parent = chart, scrolls = 0;
+              while (parent && !parent.matches('[data-testid="app-window-data-controls"]')) {
+                const style = getComputedStyle(parent);
+                if (/(auto|scroll)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight + 1) scrolls++;
+                parent = parent.parentElement;
+              }
+              return { frame: frame.height, body: body.height, contained: body.bottom <= frame.bottom + 1, scrolls };
+            })""")
+            record(result, "fill-split-tabs", {"both_charts": len(fill_measure) == 2,
+                "contained_and_single_scroll": all(item["contained"] and item["scrolls"] <= 1 for item in fill_measure)})
+            result["scenes"]["fill-split-tabs"]["measurement"] = fill_measure
+            capture = output / "fill-split-tabs.png"
+            page.screenshot(path=str(capture), animations="disabled")
+            result["captures"].append(str(capture))
+
+            # 최소 높이에서는 각 차트가 자기 스크롤 하나로 범례 끝까지 보여야 한다.
+            page.set_viewport_size({"width": 420, "height": 240})
+            page.wait_for_timeout(400)
+            small_fill = page.evaluate("""() => [...document.querySelectorAll('[data-testid="app-window-data-controls"] .ks-chart')].map(chart => {
+              const frame = chart.querySelector('.ks-chart-frame');
+              let parent = chart, scrollers = [];
+              while (parent && !parent.matches('[data-testid="app-window-data-controls"]')) {
+                const style = getComputedStyle(parent);
+                if (/(auto|scroll)/.test(style.overflowY) && parent.scrollHeight > parent.clientHeight + 1) scrollers.push(parent);
+                parent = parent.parentElement;
+              }
+              const scroller = scrollers[0];
+              if (scroller) scroller.scrollTop = scroller.scrollHeight;
+              return { scrolls: scrollers.length, scrollOwner: scroller?.className ?? null,
+                frameBottom: frame.getBoundingClientRect().bottom,
+                visibleBottom: scroller?.getBoundingClientRect().bottom ?? null };
+            })""")
+            record(result, "fill-small-height", {"both_charts": len(small_fill) == 2,
+                "one_scroll_and_bottom_visible": all(item["scrolls"] == 1 and item["visibleBottom"] is not None
+                    and item["frameBottom"] <= item["visibleBottom"] + 1 for item in small_fill)})
+            result["scenes"]["fill-small-height"]["measurement"] = small_fill
+            capture = output / "fill-small-height.png"
+            page.screenshot(path=str(capture), animations="disabled")
+            result["captures"].append(str(capture))
+
+            stacked_fill = {"type": "split", "direction": "row", "column_below": 700,
+                            "sizes": [1, 1], "children": [chart, chart]}
+            inject(page, stacked_fill)
+            stacked_measure = page.evaluate("""() => {
+              const split = document.querySelector('[data-testid="app-window-data-controls"] .ks-split');
+              const panes = [...split.querySelectorAll(':scope > .ks-split-pane')];
+              const frames = panes.map(pane => pane.querySelector('.ks-chart-frame').getBoundingClientRect());
+              return { stacked: split.classList.contains('is-stacked'),
+                frames: frames.map(frame => ({ top: frame.top, bottom: frame.bottom })),
+                paneBottoms: panes.map(pane => pane.getBoundingClientRect().bottom) };
+            }""")
+            record(result, "fill-stacked", {"stacked": stacked_measure["stacked"] and len(stacked_measure["frames"]) == 2,
+                "frames_contained": all(frame["bottom"] <= stacked_measure["paneBottoms"][index] + 1
+                                        for index, frame in enumerate(stacked_measure["frames"])),
+                "frames_apart": stacked_measure["frames"][0]["bottom"] <= stacked_measure["frames"][1]["top"] + 1})
+            result["scenes"]["fill-stacked"]["measurement"] = stacked_measure
+            capture = output / "fill-stacked.png"
+            page.screenshot(path=str(capture), animations="disabled")
+            result["captures"].append(str(capture))
+
+            page.set_viewport_size({"width": 1180, "height": 720})
+            inject(page, area_scene())
+            areas = page.evaluate(AREA_JS)
+            record(result, "area-zero", {"positive": area_verdict(areas[0], 150), "mixed": area_verdict(areas[1], 80)})
+            result["scenes"]["area-zero"]["measurement"] = areas
+            for index, name in enumerate(("positive", "mixed")):
+                capture = output / f"area-{name}.png"
+                application.locator('.ks-chart').nth(index).screenshot(path=str(capture), animations="disabled")
+                result["captures"].append(str(capture))
+
+            # 기본 날씨 앱의 차트 정의에 시간별 예시 값을 넣어 화면을 확인한다.
+            inject(page, weather_chart())
+            capture = output / "weather-area.png"
+            application.locator('.ks-chart').first.screenshot(path=str(capture), animations="disabled")
+            result["captures"].append(str(capture))
+            weather = page.evaluate(AREA_JS)[0]
+            record(result, "weather-area", {"zero_baseline": area_verdict(weather, 150)})
+            result["scenes"]["weather-area"]["measurement"] = weather
+
+            record(result, "new-judges-self-check", {
+                "axis_rejects_wrong_end": not axis_verdict(21, 24, {"ticks": ["40", "20", "0"], "use": .525}),
+                "area_rejects_wrong_closure": not area_verdict({"bottomTick": "0", "closingY": [150, 150]}, 80),
+            })
 
             # 정본 CSS: data-blocks.css에는 user-select를 적지 않는다(selection.css가 정본).
             data_blocks = (ROOT / "ui/src/styles/data-blocks.css").read_text(encoding="utf-8")

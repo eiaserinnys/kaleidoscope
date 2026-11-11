@@ -2606,6 +2606,8 @@ pub enum Block {
     /// (9판) 순서가 있는 수치 시리즈를 표시한다.
     /// (62판) `stacked`면 막대를 계열끼리 쌓고, `number_format`이 눈금과 값의 수 표시를 정하며,
     /// `selected`가 처음 고른 칸을 읽는다. 계열 색은 계열 값의 `color`로 정한다.
+    /// 막대와 면적의 세로축은 0을 포함하고 자료를 담는 보기 좋은 끝으로 올린다.
+    /// 면적은 각 선과 0 사이를 칠한다.
     Chart {
         #[serde(default)]
         #[ts(optional, as = "Option<ChartKind>")]
@@ -2626,7 +2628,7 @@ pub enum Block {
         #[ts(optional)]
         number_format: Option<NumberFormat>,
         /// (62판) 처음 고른 칸의 시점 값. 읽기 전용이며 칸 고르기는 `on_select`가 한다.
-        /// 포인터나 키보드가 떠나면 이 칸으로 돌아온다.
+        /// 포인터나 키보드가 떠나면 이 칸으로 돌아온다. 생략하면 마지막으로 누른 칸을 기억한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<Binding>,

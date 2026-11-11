@@ -126,7 +126,7 @@
 .ks-data-tab-panel .ks-split-row > .ks-split-pane:not(:first-child) { padding-inline-start: var(--ks-space-3); }
 .ks-split.is-stacked { display: flex; flex-direction: column; overflow-y: auto; }
 .ks-split.is-stacked > .ks-split-pane { --ks-fill-list-basis: auto; --ks-fill-list-height: auto; flex: 0 0 auto; overflow: visible; }
-.ks-split.is-stacked > .ks-split-pane:not(:has(> .ks-split.is-stacked)):not(:has(> .ks-map, > .ks-data-section > .ks-data-section-child > .ks-map)):not(:has(
+.ks-split.is-stacked > .ks-split-pane:not(:has(> .ks-split.is-stacked)):not(:has(> .ks-map, > .ks-chart, > .ks-data-section > .ks-data-section-child > .ks-map)):not(:has(
   > .ks-data-stack.is-column > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) > .ks-data-stack.is-column:not(.has-explicit-fill),
   > .ks-data-stack.is-column > .ks-stack-scroll > .ks-stack-scroll-content > .ks-data-stack-item.is-fill > .ks-data-stack.is-column:not(.has-explicit-fill)
 )):has(:is(
@@ -383,10 +383,13 @@
 }
 .ks-chart { width: 100%; height: 100%; min-width: 0; min-height: 0; padding: var(--ks-space-3); }
 .ks-data-stack.gap-none > .ks-data-stack-item + .ks-data-stack-item > .ks-chart { padding-block-start: 0; }
-.ks-chart-frame { display: flex; width: 100%; height: 100%; min-height: var(--ks-pane-min-size); flex-direction: column; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
-.ks-chart.is-medium .ks-chart-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6)); }
-.ks-chart.is-tall .ks-chart-frame { min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6) * 2); }
-.ks-chart-readout { display: flex; min-width: 0; min-height: calc(var(--ks-type-body) * var(--ks-line-body)); align-items: baseline; justify-content: space-between; gap: var(--ks-space-2); }
+/* 차트가 칸보다 커지면 직접 담은 분할 칸에서 끝까지 볼 수 있게 한다. */
+.ks-split:not(.is-stacked) > .ks-split-pane:has(> .ks-chart) { overflow-y: auto; }
+.ks-split.is-stacked > .ks-split-pane > .ks-chart { height: auto; }
+.ks-chart-frame { --ks-chart-min-height: var(--ks-pane-min-size); display: flex; width: 100%; min-height: max(100%, var(--ks-chart-min-height)); flex-direction: column; gap: var(--ks-space-2); padding: var(--ks-space-2) var(--ks-space-3); border: var(--ks-line-width) solid var(--ks-color-border); border-radius: var(--ks-radius-small); background: var(--ks-color-surface-raised); }
+.ks-chart.is-medium .ks-chart-frame { --ks-chart-min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6)); }
+.ks-chart.is-tall .ks-chart-frame { --ks-chart-min-height: calc(var(--ks-pane-min-size) + var(--ks-space-6) * 2); }
+.ks-chart-readout { display: flex; min-width: 0; min-height: calc(var(--ks-type-body) * var(--ks-line-body)); flex-shrink: 0; align-items: baseline; justify-content: space-between; gap: var(--ks-space-2); }
 .ks-chart-readout-x { flex: 0 0 auto; white-space: nowrap; }
 .ks-chart-readout-x, .ks-chart-readout-label { color: var(--ks-color-muted); font-size: var(--ks-type-meta); }
 .ks-chart-readout-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -394,10 +397,10 @@
 .ks-chart-readout-values > span { display: inline-flex; min-width: 0; max-width: 100%; align-items: baseline; gap: var(--ks-space-1); white-space: nowrap; }
 .ks-chart-readout-values strong { font-size: var(--ks-type-body); font-weight: 600; white-space: nowrap; }
 .ks-chart-readout-dot { align-self: center; background: var(--ks-chart-series-color); }
-.ks-chart-body { display: grid; min-width: 0; min-height: 0; flex: 1 1 auto; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: var(--ks-space-2); }
+.ks-chart-body { display: grid; min-width: 0; min-height: calc(var(--ks-chart-min-height) - var(--ks-space-2) * 3 - var(--ks-line-width) * 2 - var(--ks-type-body) * var(--ks-line-body)); flex: 1 0 auto; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: var(--ks-space-2); }
 .ks-chart-y-axis { display: flex; grid-row: 1; grid-column: 1; flex-direction: column; justify-content: space-between; padding-bottom: calc(var(--ks-type-meta) * var(--ks-line-body)); color: var(--ks-color-muted); font-size: var(--ks-type-meta); font-variant-numeric: tabular-nums; }
 .ks-chart-graph { display: flex; position: relative; grid-row: 1; grid-column: 2; min-width: 0; min-height: 0; flex-direction: column; }
-.ks-chart-legend { display: flex; grid-row: 2; grid-column: 1 / -1; min-width: 0; flex-wrap: wrap; gap: var(--ks-space-3); }
+.ks-chart-legend { display: flex; min-width: 0; flex: 0 0 auto; flex-wrap: wrap; gap: var(--ks-space-3); }
 .ks-chart-legend-item { display: inline-flex; min-width: 0; align-items: center; gap: var(--ks-space-1); }
 .ks-chart-legend-item > .ks-list-color { background: var(--ks-chart-series-color); }
 .ks-chart-legend-name { overflow: hidden; color: var(--ks-color-muted); font-size: var(--ks-type-meta); text-overflow: ellipsis; white-space: nowrap; }

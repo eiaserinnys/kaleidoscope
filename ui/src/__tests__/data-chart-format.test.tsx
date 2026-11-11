@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition, Block } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
@@ -10,6 +10,7 @@ import { mockVirtualLayout } from "./virtual-layout";
 
 beforeEach(() => {
   mockVirtualLayout();
+  vi.stubGlobal("PointerEvent", MouseEvent);
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
@@ -20,8 +21,9 @@ function setup(ui: Block, state: AppDefinition["state"] = {}) {
   seed.snapshot.shared.windows[0].state = { ...state };
   const transport = createFakeTransport(seed);
   const calls = vi.spyOn(transport, "call");
-  const rendered = render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
-  return { calls, ...rendered };
+  const store = createShellStore(transport);
+  const rendered = render(<AppWindowContent store={store} windowId="viewer-window" />);
+  return { calls, store, ...rendered };
 }
 
 it("keeps every bar inside the plot after the axis text", async () => {
@@ -62,9 +64,39 @@ it("rounds a bar chart's axis end up to a readable number", () => {
     columns.map((points, index): PlotSeries => ({ key: `s${index}`, name: `계열 ${index}`, points: points.map((y, at) => ({ x: `시점 ${at}`, y })) })),
     "bar", 600, undefined, { stacked, numberText: (value) => String(value) });
   expect(geometry([[80000000, 40000000], [30000000, 20000000], [20000000, 10000000], [36354414, 10000000]], true))
-    .toMatchObject({ min: 0, max: 180000000 });
+    .toMatchObject({ min: 0, max: 200000000 });
   expect(geometry([[160000000]])).toMatchObject({ min: 0, max: 160000000 });
-  expect(geometry([[18]])).toMatchObject({ min: 0, max: 18 });
+  expect(geometry([[18]])).toMatchObject({ min: 0, max: 20 });
+});
+
+it.each([[21, 24], [23, 24], [30, 30], [41, 50], [210000000, 240000000], [166354414, 200000000], [160000000, 160000000]])("uses a close two-digit axis for %s", (value, end) => {
+  const build = (values: number[]) => buildChartGeometry([{ key: "s", name: "값", points: values.map((y, i) => ({ x: String(i), y })) }], "bar", 600);
+  const positive = build([value]);
+  const negative = build([-value]);
+  expect(positive.max).toBe(end);
+  expect(negative.min).toBe(-end);
+  expect(value / positive.max).toBeGreaterThanOrEqual(0.75);
+  expect(positive.max).toBeGreaterThanOrEqual(value);
+  expect(Number((positive.max / 2).toPrecision(2))).toBe(positive.max / 2);
+  expect(Number(positive.max.toPrecision(2))).toBe(positive.max);
+});
+
+it("closes positive and mixed area paths at zero", () => {
+  const build = (values: number[]) => buildChartGeometry([{ key: "s", name: "값", points: values.map((y, i) => ({ x: String(i), y })) }], "area", 600);
+  for (const values of [[10, 21], [-9, 3]]) {
+    const geometry = build(values);
+    expect(geometry.min).toBeLessThanOrEqual(0);
+    expect(geometry.max).toBeGreaterThanOrEqual(0);
+    expect(geometry.series[0].lines[0].area).toContain(`L 1000 ${geometry.yAt(0)} L 0 ${geometry.yAt(0)} Z`);
+  }
+  expect(build([10, 21]).min).toBe(0);
+});
+
+it("keeps an exact candidate at small and large decimal scales", () => {
+  for (const value of [0.24, 2.4, 240000000]) {
+    const geometry = buildChartGeometry([{ key: "s", name: "값", points: [{ x: "월", y: value }] }], "bar", 600);
+    expect(geometry.max).toBe(value);
+  }
 });
 
 it("keeps positive and negative bars inside a mixed-sign axis", () => {
@@ -76,14 +108,14 @@ it("keeps positive and negative bars inside a mixed-sign axis", () => {
     expect(bar.y + bar.height).toBeLessThanOrEqual(150 + 0.001);
   });
   const grouped = geometry([[-9, 1]]);
-  expect(grouped).toMatchObject({ min: -9, max: 9 });
+  expect(grouped).toMatchObject({ min: -10, max: 10 });
   expect(grouped.baseline).toBeCloseTo(80);
   inside(grouped);
   const stacked = geometry([[-6, 3], [-3, 2]], true);
-  expect(stacked).toMatchObject({ min: -9, max: 9 });
+  expect(stacked).toMatchObject({ min: -10, max: 10 });
   inside(stacked);
   const lopsided = geometry([[-1, 230]]);
-  expect(lopsided).toMatchObject({ min: -300, max: 300 });
+  expect(lopsided).toMatchObject({ min: -250, max: 250 });
   inside(lopsided);
 });
 
@@ -106,7 +138,7 @@ it("formats the rounded bar axis with the block's notation", async () => {
   ] });
   await screen.findByRole("slider", { name: "차트 시점" });
   const ticks = [...container.querySelectorAll(".ks-chart-y-axis span")].map((element) => element.textContent);
-  expect(ticks).toEqual([compact.format(180000000), compact.format(90000000), compact.format(0)]);
+  expect(ticks).toEqual([compact.format(200000000), compact.format(100000000), compact.format(0)]);
 });
 
 it("marks the current bar with a band and draws no dots or guide line", async () => {
@@ -139,6 +171,60 @@ it("returns to the selected band when the pointer leaves a focused chart", async
   expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("화");
   fireEvent.pointerLeave(chart);
   expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("월");
+});
+
+it.each(["pointerLeave", "blur"] as const)("remembers a clicked band without selected after %s", async (leave) => {
+  const { container } = setup({ type: "chart", kind: "bar", on_select: [], series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }] },
+  ] });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({ left: 0, width: 300 } as DOMRect);
+  fireEvent.click(chart, { clientX: 150 });
+  fireEvent.pointerMove(chart, { clientX: 250 });
+  fireEvent[leave](chart);
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("화");
+});
+
+it.each(["pointerLeave", "blur"] as const)("uses only the selected binding after %s even after a click", async (leave) => {
+  const { container } = setup({ type: "chart", kind: "bar", selected: { state: "picked" }, on_select: [], series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }] },
+  ] }, { picked: null });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({ left: 0, width: 300 } as DOMRect);
+  fireEvent.click(chart, { clientX: 150 });
+  fireEvent[leave](chart);
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("수");
+});
+
+it("tracks a clicked x across reordered data and forgets it when that x disappears", async () => {
+  const points = [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }];
+  const data = (items: typeof points) => [{ key: "s", name: "값", points: items }];
+  const { container, store } = setup({ type: "chart", kind: "bar", series: { state: "series" }, on_select: [] }, { series: data(points) });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({ left: 0, width: 300 } as DOMRect);
+  fireEvent.click(chart, { clientX: 150 });
+  fireEvent.pointerLeave(chart);
+  const change = async (items: typeof points) => act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { series: data(items) } }); });
+  const readout = () => container.querySelector(".ks-chart-readout-x")?.textContent;
+  await change([points[1], points[0], points[2]]);
+  expect(readout()).toBe("화");
+  await change([points[0], points[2]]);
+  expect(readout()).toBe("수");
+  await change(points);
+  expect(readout()).toBe("수");
+});
+
+it("returns to the last populated band when the selected binding is cleared", async () => {
+  const { container, store } = setup({ type: "chart", kind: "bar", selected: { state: "picked" }, on_select: [], series: [
+    { key: "s", name: "값", points: [{ x: "월", y: 1 }, { x: "화", y: 2 }, { x: "수", y: 3 }] },
+  ] }, { picked: "월" });
+  const chart = await screen.findByRole("slider", { name: "차트 시점" });
+  vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({ left: 0, width: 300 } as DOMRect);
+  fireEvent.click(chart, { clientX: 150 });
+  fireEvent.pointerLeave(chart);
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("월");
+  await act(async () => { await store.call({ op: "window.set_state", window_id: "viewer-window", state: { picked: null } }); });
+  expect(container.querySelector(".ks-chart-readout-x")?.textContent).toBe("수");
 });
 
 it("formats ticks, readout, and the data table with the block's notation", async () => {

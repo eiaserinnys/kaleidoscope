@@ -579,7 +579,7 @@ stacked?: boolean,
 number_format?: NumberFormat, 
 /**
  * (62판) 처음 고른 칸의 시점 값. 읽기 전용이며 칸 고르기는 `on_select`가 한다.
- * 포인터나 키보드가 떠나면 이 칸으로 돌아온다.
+ * 포인터나 키보드가 떠나면 이 칸으로 돌아온다. 생략하면 마지막으로 누른 칸을 기억한다.
  */
 selected?: Binding, on_select?: Actions, } | { "type": "map", points: Binding, selected?: StateRef, on_select?: Actions, height?: ChartHeight, };
 
