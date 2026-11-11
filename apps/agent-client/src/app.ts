@@ -419,7 +419,7 @@ export class AppClient {
     const unsupported = missing && !/Windows/i.test(navigator.userAgent);
     if (missing && program) message = unsupported
       ? agentError("AGENT_INSTALL_UNSUPPORTED_PLATFORM", this.selected!.name, program.name, program.url).message
-      : `${this.selected?.name}을(를) 시작하려면 ${program.name}이(가) 필요합니다.`;
+      : `${this.selected?.name} 에이전트를 시작하려면 ${program.name} 프로그램이 필요합니다.`;
     const controls = (this.view?.controls ?? []).map((control) => ({ ...control, is_select: control.kind === "select", is_boolean: control.kind === "boolean", checked: control.value === true }));
     const output = {
       show_start: !chat,
