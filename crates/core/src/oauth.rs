@@ -157,9 +157,10 @@ pub(crate) fn login_with_timeout(
         .unwrap_or_else(|| "알 수 없는 서버".into());
     let endpoints = endpoints(metadata, &info.name, &issuer_host)?;
     let deadline = Instant::now() + timeout;
-    let previous = logins
-        .entry(&info.name)
-        .filter(|entry| entry.issuer == issuer);
+    let previous = logins.entry(&info.name).filter(|entry| {
+        entry.issuer == issuer
+            && crate::logins::scopes_cover(entry.scopes.as_deref(), info.scopes.as_deref())
+    });
 
     for attempt in 0..2 {
         let reusable = (attempt == 0)
@@ -254,11 +255,13 @@ pub(crate) fn login_with_timeout(
                             })?
                             .port(),
                     ),
+                    scopes: None,
                     access_token: None,
                     refresh_token: None,
                     expires_at: None,
                 });
                 entry.issuer = issuer;
+                entry.scopes = info.scopes.clone();
                 entry.access_token = Some(tokens.access_token);
                 entry.refresh_token = tokens.refresh_token;
                 entry.expires_at = tokens.expires_at;
@@ -352,7 +355,13 @@ fn register(
             errors::CONN_LOGIN_CLIENT_REGISTER_RESPONSE_INVALID(&info.name, &registration_host)
         })?
         .to_string();
-    logins.update_client(&info.name, issuer, client_id.clone(), port)?;
+    logins.update_client(
+        &info.name,
+        issuer,
+        client_id.clone(),
+        port,
+        info.scopes.clone(),
+    )?;
     Ok((listener, client_id))
 }
 

@@ -185,7 +185,10 @@ async fn read_stream(
     };
     let logins = provider.logins.clone();
     let name = provider.info.name.clone();
-    let Ok(Some(token)) = tokio::task::spawn_blocking(move || logins.token(&name)).await else {
+    let scopes = provider.info.scopes.clone();
+    let Ok(Some(token)) =
+        tokio::task::spawn_blocking(move || logins.token(&name, scopes.as_deref())).await
+    else {
         return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name));
     };
     let request = |token: &str| {

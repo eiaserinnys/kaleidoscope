@@ -106,7 +106,8 @@ struct SetConnectionArgs {
     headers: Option<std::collections::BTreeMap<String, String>>,
     /// oauth 발급자 주소.
     issuer: Option<String>,
-    /// oauth scope 문자열.
+    /// oauth scope 문자열. 공백으로 나눈 목록. 늘리면 그 범위로 로그인한 적 없는 기기는
+    /// 다음 요청에서 로그인 필요가 되어 다시 로그인합니다.
     scopes: Option<String>,
     /// oauth RFC 8707 resource.
     resource: Option<String>,
