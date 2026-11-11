@@ -185,7 +185,11 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   }, [value, block.grouped, collapsedGroups, collapsedKeys]);
   const items = useMemo(() => rows.flatMap((row) => row.kind === "entry" ? [row.item.entry] : []), [rows]);
   const checkable = useMemo(() => items.some((entry) => typeof entry.checked === "boolean"), [items]);
-  const avatars = useMemo(() => items.some((entry) => isMedia(entry.image)), [items]);
+  // 접힌 묶음과 답글까지 모든 항목을 본다. 보이는 줄만 세면 초상이 든 묶음을 접을 때 다른 줄의 빈 초상 칸이 사라져 글이 옮겨진다.
+  const avatars = useMemo(() => groups(value, Boolean(block.grouped), valid).some((group) => {
+    const entries = group.items.map((entry) => asFeedEntry(entry)!).filter(Boolean);
+    return flattenFeedEntries(entries).some((item) => isMedia(item.entry.image));
+  }), [value, block.grouped]);
   const entryRows = useMemo(() => rows.flatMap((row, index) => row.kind === "entry" ? [index] : []), [rows]);
   const rowKeys = useMemo(() => rows.map((row) => row.kind === "entry" ? [row.item.entry.key] : []), [rows]);
   const { scroll, virtual } = useVirtualRows(rows.length, 72, undefined, false, undefined, undefined, rowKeys);

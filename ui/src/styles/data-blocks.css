@@ -172,7 +172,8 @@
 ) > .ks-code-view .cm-content { padding-block-start: 0; }
 /* 구역 안 feed의 첫 내용 간격은 구역 머리가 소유한다(카드 #1214). */
 .ks-data-section-child > .ks-feed { padding-block-start: 0; }
-.ks-data-section-child > .ks-feed > div:not(.ks-view-sticky) > [data-index="0"] > :is(.ks-view-group, .ks-feed-group-head > .ks-view-group) { padding-block-start: 0; }
+.ks-data-section-child > .ks-feed > div:not(.ks-view-sticky) > [data-index="0"] > .ks-view-group,
+.ks-data-section-child > .ks-feed > div:not(.ks-view-sticky) > [data-index="0"] > .ks-feed-group-head > .ks-view-group { padding-block-start: 0; }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ks-data-section-heading { display: flex; flex: 1 1 0; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
 .ks-data-section-toggle:has(> .ks-data-section-heading) { align-items: flex-start; }

@@ -283,7 +283,7 @@
 .ks-feed-name-line > .ks-view-badges { flex: none; flex-wrap: nowrap; }
 .ks-feed-ident > .ks-view-meta, .ks-feed-meta-copy > .ks-view-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-feed-name-line > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ks-feed-name-line > strong.has-color { color: oklch(from var(--ks-feed-name-color) clamp(var(--ks-name-lightness-min), l, var(--ks-name-lightness-max)) c h); }
+.ks-feed-name-line > strong.has-color { color: oklch(from var(--ks-feed-name-color) clamp(var(--ks-name-lightness-min), l, var(--ks-name-lightness-max)) min(c, var(--ks-name-chroma-max)) h); }
 .ks-feed-head-actions { display: flex; flex: none; align-items: center; gap: var(--ks-space-1); }
 .ks-feed-group-head { display: flex; align-items: center; justify-content: space-between; padding-inline-end: var(--ks-space-3); }
 .ks-feed-group-head[role="button"] { cursor: pointer; }

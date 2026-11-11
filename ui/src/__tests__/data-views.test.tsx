@@ -928,6 +928,19 @@ it("사진이 하나도 없는 feed에는 초상 자리를 만들지 않는다",
   expect(entry.querySelector(".ks-feed-avatar")).toBeNull();
 });
 
+it("사진 든 묶음을 접어도 다른 묶음 줄의 초상 자리는 남는다", async () => {
+  setup({ type: "feed", grouped: true, collapsible: true, entries: [
+    { title: "사진", items: [{ key: "with-image", name: "사진 있음", image: { permission: "media", path: "landscape.png" }, body: "사진 본문" }] },
+    { title: "글", items: [{ key: "no-image", name: "사진 없음", body: "사진 없는 본문" }] },
+  ] } as unknown as Block);
+  const noImage = () => screen.getByText("사진 없는 본문").closest("article")!;
+  expect(await screen.findByText("사진 없는 본문")).toBeTruthy();
+  expect(noImage().querySelector(".ks-feed-avatar.is-placeholder")).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "사진" }));
+  expect(screen.queryByText("사진 본문")).toBeNull();
+  expect(noImage().querySelector(".ks-feed-avatar.is-placeholder")).not.toBeNull();
+});
+
 it("feed 메타 복사는 메타 글 앞에 서고 머리 동작 칸은 접을 수 있는 줄에만 있다", async () => {
   setup({ type: "feed", copy: true, collapsible: true, entries: [
     { key: "reply-parent", name: "부모", meta: "id-1", body: "부모 본문", children: [{ key: "reply-child", name: "자식", body: "자식 본문" }] },
