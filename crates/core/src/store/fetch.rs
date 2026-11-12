@@ -163,7 +163,11 @@ impl<T: Transport> StoreClient<T> {
         if !(200..300).contains(&status) {
             let mut error = match status {
                 300..=399 => errors::STORECLIENT_FETCH_REDIRECT_REJECTED(relative),
-                401 | 403 => errors::STORECLIENT_FETCH_INVITE_REJECTED(relative),
+                401 | 403 => match self.invite {
+                    // 초대코드를 보내지 않은 경우와 보낸 코드가 거부된 경우는 원인과 고칠 곳이 다르다.
+                    None => errors::STORECLIENT_FETCH_INVITE_REQUIRED(self.server.as_str(), relative),
+                    Some(_) => errors::STORECLIENT_FETCH_INVITE_REJECTED(relative),
+                },
                 404 => errors::STORECLIENT_FETCH_NOT_FOUND(relative),
                 _ => errors::STORECLIENT_FETCH_HTTP_REJECTED()
                     .and_details(vec![format!("파일: {relative}")]),

@@ -42,6 +42,13 @@ CUSTOM = "커스텀 앱"
 STATUS_OTHER = "사설 1에서 설치한 앱입니다"
 STATUS_MODIFIED = "설치 뒤 고친 앱이라 업데이트하지 않습니다"
 ERROR_TEXT = "스토어가 요청을 거부했습니다. 잠시 뒤 다시 받으세요."
+# 앱 아이콘 미디어 요청 하나만 실패시킬 때 돌려주는 오류. 코어의 자산 내려받기 실패와 같은 모양이다.
+ICON_ERROR = {
+    "code": "server",
+    "message": "미디어 자산 다운로드 요청을 서버에 보내지 못했습니다. 서버 연결을 확인한 뒤 다시 시도하세요. 자산: broken-icon",
+    "id": "MEDIA_LOAD_ASSET_DOWNLOAD_SEND_FAILED",
+    "details": [],
+}
 # 초점이 어디에 있는지, 그 조작이 어느 칸에 있고 지금 보이는지 한 번에 잰다.
 ACTIVE_JS = """() => {
   const el = document.activeElement;
@@ -144,18 +151,31 @@ ROW_GEOMETRY_JS = """(pane) => {
 }"""
 # 아이콘 칸마다 지금 무엇이 그려졌는지 가른다. currentColor 마스크(mask), 그림(image),
 # 기본 격자(default-grid), 깨진 그림 표시(image-off), 아직 불러오는 중(loading), 그 밖(other).
+# 실패한 앱 아이콘 칸과 아이콘 없는 칸을 견주려고 그림 요소의 상자, 색, 바탕, title도 잰다.
 ICON_TILES_JS = """(pane) => [...pane.querySelectorAll('.ks-icon-tile')]
   .filter((tile) => !tile.classList.contains('ks-icon-tile-skeleton'))
   .map((tile) => {
     const icon = tile.querySelector('.ks-icon-tile-icon');
     const name = (tile.getAttribute('aria-label') || '').trim();
+    const thumb = tile.querySelector('.ks-media-thumbnail');
+    const drawn = icon && icon.querySelector('.ks-app-icon, svg, .ks-icon-skeleton-icon');
+    const box = (el) => { if (!el) return null; const rect = el.getBoundingClientRect();
+      return {x: Math.round(rect.x * 10) / 10, y: Math.round(rect.y * 10) / 10,
+              w: Math.round(rect.width * 10) / 10, h: Math.round(rect.height * 10) / 10}; };
     let kind = 'other';
     if (icon && icon.querySelector('.ks-icon-skeleton-icon')) kind = 'loading';
     else if (icon && icon.querySelector('span.ks-app-icon')) kind = 'mask';
     else if (icon && icon.querySelector('img.ks-app-icon')) kind = 'image';
     else if (icon && icon.querySelector('svg.lucide-layout-grid')) kind = 'default-grid';
     else if (icon && icon.querySelector('.lucide-image-off')) kind = 'image-off';
-    return {name, kind};
+    return {
+      name, kind,
+      thumb_class: thumb ? thumb.className : null,
+      thumb_title: thumb ? thumb.getAttribute('title') : null,
+      icon_box: box(icon), drawn: box(drawn),
+      drawn_color: drawn ? getComputedStyle(drawn).color : null,
+      drawn_bg: drawn ? getComputedStyle(drawn).backgroundColor : null,
+    };
   })"""
 
 
@@ -427,8 +447,13 @@ def main() -> int:
                                                            ("x", "y", "width", "height")}
                                 print(f"capture {name}", flush=True)
 
-                    def capture_icons(scene, expected, assertion):
+                    def capture_icons(scene, expected, assertion, extra=None):
                         def check(theme, width, height):
+                            # 좁은 창에서는 그 밖의 스토어 묶음을 화면에 들여 팀 안내서 칸이 캡처에 보이게 한다.
+                            if scene == "other-stores" and width < 640:
+                                pane1.get_by_role("option", name="팀 안내서", exact=True).first.evaluate(
+                                    "el => el.scrollIntoView({block: 'end'})")
+                                page.wait_for_timeout(200)
                             deadline = time.monotonic() + 20
                             while True:
                                 facts = pane1.evaluate(ICON_TILES_JS)
@@ -447,6 +472,8 @@ def main() -> int:
                                     f"{scene} {theme} {width}x{height}: 아이콘 칸이 기대 {expected}와 다릅니다: " \
                                     f"{wrong} / 전체 {facts}"
                                 result["assertions"][assertion] = True
+                            if extra is not None:
+                                extra(facts, kinds, theme, width, height)
                         capture(scene, pane=1, check=check)
 
                     def search(text):
@@ -1257,9 +1284,158 @@ def main() -> int:
                         result["details"]["other_stores_servers"] = \
                             sb.core({"op": "storage.get", "window_id": window_id,
                                      "entry": "servers"})["result"]["content"]
+                        def check_other_stores_visible(facts, kinds, theme, width, height):
+                            # 좁은 창에서도 팀 안내서 칸이 캡처에 들어왔는지 상자로 확인한다.
+                            if width >= 640:
+                                return
+                            tile = pane1.get_by_role("option", name="팀 안내서", exact=True).first.bounding_box()
+                            pane_box = pane1.bounding_box()
+                            assert tile is not None and pane_box is not None, \
+                                f"그 밖의 스토어 {theme} {width}x{height}: 팀 안내서 칸 상자를 재지 못했습니다"
+                            assert tile["y"] >= pane_box["y"] - 1 and \
+                                tile["y"] + tile["height"] <= pane_box["y"] + pane_box["height"] + 1, \
+                                f"그 밖의 스토어 {theme} {width}x{height}: 팀 안내서 칸이 목록 밖에 있습니다: " \
+                                f"{tile} (칸 {pane_box})"
+                            result["details"].setdefault("other_stores_narrow_tile", {})[
+                                f"{theme}-{width}x{height}"] = tile
+                            result["assertions"]["other_stores_narrow_shows_team_handbook"] = True
+
                         capture_icons("other-stores",
                                       {"회의 카드": "default-grid", "팀 안내서": "image"},
-                                      "other_stores_show_app_icons")
+                                      "other_stores_show_app_icons",
+                                      extra=check_other_stores_visible)
+
+                        # 설정에서 뺀 스토어의 앱 상세는 초대코드를 보내지 않은 것이라
+                        # 「초대코드가 필요하다」는 코드로 안내해야 한다.
+                        operate()
+                        handbook_tile = pane1.get_by_role("option", name="팀 안내서", exact=True)
+                        wait_until(lambda: handbook_tile.count() > 0, 20, "그 밖의 스토어의 팀 안내서 칸이 없습니다")
+                        handbook_tile.first.click()
+                        wait_until(lambda: "STORECLIENT_FETCH_INVITE_REQUIRED" in pane2.inner_text(), 30,
+                                   "그 밖의 스토어 앱 상세에 초대코드 필요 오류가 없습니다")
+                        detail_text = pane2.inner_text()
+                        assert "STORECLIENT_FETCH_INVITE_REJECTED" not in detail_text, detail_text
+                        result["details"]["other_stores_detail"] = detail_text
+                        result["assertions"]["other_stores_detail_invite_required"] = True
+                        for theme in THEMES:
+                            page.emulate_media(color_scheme=theme)
+                            page.set_viewport_size({"width": SIZES[0][0] + 24, "height": SIZES[0][1] + 124})
+                            page.wait_for_timeout(200)
+                            set_rect(sb, window_id, *SIZES[0])
+                            page.wait_for_timeout(250)
+                            focus_pane(2)
+                            page.mouse.move(2, 2)
+                            page.wait_for_timeout(120)
+                            name = f"other-stores-detail-invite-required-{theme}-1180x720.png"
+                            app.screenshot(path=str(output / name), animations="disabled")
+                            result["captures"].append(name)
+                            print(f"capture {name}", flush=True)
+
+                        # 섞인 커스텀 목록: currentColor SVG, 고정색 SVG, PNG, 아이콘 없음, 긴 이름,
+                        # 아이콘을 못 받는 앱을 한 목록에 두고 아이콘 칸의 상태와 상자를 견준다.
+                        operate()
+                        for asset_id, fmt, data, source in (
+                                ("png-icon", "png", fixture.PNG_ICON, "store_fixture.py#png-icon"),
+                                ("broken-icon", "svg", fixture.FIXED_COLOR_ICON,
+                                 "store_fixture.py#broken-icon")):
+                            uploaded = sb.mcp.call("upload_asset", {
+                                "id": asset_id, "version": 1, "format": fmt,
+                                "sha256": hashlib.sha256(data).hexdigest(),
+                                "source": source, "license": "MIT",
+                                "data_base64": base64.b64encode(data).decode("ascii"),
+                            })
+                            assert not uploaded["is_error"], uploaded["text"]
+                        import_file(write_definition("palette-notes", fixture.CUSTOM_PALETTE,
+                                                     "색을 골라 두는 내 판입니다.", "custom-palette",
+                                                     fixture.MEETING_ICON))
+                        import_file(write_definition("photo-notes", fixture.CUSTOM_PHOTO,
+                                                     "사진을 모아 두는 내 판입니다.", "custom-photo", "png-icon"))
+                        import_file(write_definition("broken-icon-app", fixture.CUSTOM_BROKEN,
+                                                     "아이콘을 받지 못하는 내 판입니다.", "custom-broken",
+                                                     "broken-icon"))
+                        import_file(write_definition(fixture.LONG_ID, fixture.LONG_NAME,
+                                                     "긴 이름을 가진 내 판입니다.", "custom-long-mixed",
+                                                     fixture.READING_ICON))
+                        for app_id in ("palette-notes", "photo-notes", "broken-icon-app", fixture.LONG_ID):
+                            wait_until(lambda app_id=app_id: app_entry(app_id) is not None, 30,
+                                       f"{app_id} 커스텀 앱이 등록되지 않았습니다")
+                        choose_category(CUSTOM)
+                        search("")
+                        wait_custom_count(6)
+
+                        held = []
+
+                        def handle_icon(route, request):
+                            try:
+                                body = json.loads(request.post_data or "{}")
+                            except ValueError:
+                                body = {}
+                            media = body.get("media") if isinstance(body, dict) else None
+                            if isinstance(body, dict) and body.get("op") == "data.media" \
+                                    and isinstance(media, dict) and "app_icon" in media:
+                                held.append((route, media["app_icon"]))
+                                return
+                            route.continue_()
+
+                        page.route(f"{sb.bridge}/core", handle_icon)
+                        reopen()
+                        choose_category(CUSTOM)
+                        search("")
+                        wait_until(lambda: len({app_id for _, app_id in held}) >= 5, 30,
+                                   f"아이콘 요청이 다 오지 않았습니다: {[app_id for _, app_id in held]}")
+
+                        def check_loading(theme, width, height):
+                            facts = pane1.evaluate(ICON_TILES_JS)
+                            result["details"].setdefault("icon_loading", {})[
+                                f"{theme}-{width}x{height}"] = facts
+                            assert any(fact["kind"] == "loading" for fact in facts), \
+                                f"mixed-icons-loading {theme} {width}x{height}: 불러오는 칸이 없습니다: {facts}"
+                            result["assertions"]["mixed_icons_loading_state"] = True
+
+                        capture("mixed-icons-loading", pane=1, check=check_loading)
+
+                        for route, app_id in held:
+                            if app_id == "broken-icon-app":
+                                route.fulfill(status=400, content_type="application/json",
+                                              body=json.dumps(ICON_ERROR, ensure_ascii=False))
+                            else:
+                                route.continue_()
+                        held.clear()
+
+                        def check_icon_fallback(facts, kinds, theme, width, height):
+                            by_name = {fact["name"]: fact for fact in facts}
+                            failed = by_name.get(fixture.CUSTOM_BROKEN)
+                            iconless = by_name.get(fixture.CUSTOM_DIARY)
+                            assert failed is not None and iconless is not None, \
+                                f"mixed-icons-settled {theme} {width}x{height}: 실패 칸이나 아이콘 없는 칸이 없습니다: {facts}"
+                            assert failed["kind"] == "default-grid", failed
+                            assert failed["thumb_class"] is None and failed["thumb_title"] is None, failed
+                            assert iconless["thumb_class"] is None, iconless
+                            for key in ("icon_box", "drawn"):
+                                assert failed[key] is not None and iconless[key] is not None, (failed, iconless)
+                                assert failed[key]["w"] == iconless[key]["w"] == 32 \
+                                    and failed[key]["h"] == iconless[key]["h"] == 32, \
+                                    f"mixed-icons-settled {theme} {width}x{height}: {key}가 32x32가 아닙니다: " \
+                                    f"실패 {failed[key]}, 아이콘 없음 {iconless[key]}"
+                            assert failed["drawn_color"] == iconless["drawn_color"], \
+                                f"mixed-icons-settled {theme} {width}x{height}: 그림 색이 다릅니다: " \
+                                f"실패 {failed['drawn_color']}, 아이콘 없음 {iconless['drawn_color']}"
+                            assert failed["drawn_bg"] == iconless["drawn_bg"] == "rgba(0, 0, 0, 0)", \
+                                f"mixed-icons-settled {theme} {width}x{height}: 그림 바탕이 투명하지 않습니다: " \
+                                f"실패 {failed['drawn_bg']}, 아이콘 없음 {iconless['drawn_bg']}"
+                            result["details"].setdefault("icon_fallback", {})[
+                                f"{theme}-{width}x{height}"] = {"failed": failed, "iconless": iconless}
+                            result["assertions"]["mixed_icon_fallback_matches_iconless"] = True
+
+                        capture_icons("mixed-icons-settled",
+                                      {fixture.CUSTOM_PALETTE: "mask",
+                                       fixture.CUSTOM_READING: "image",
+                                       fixture.CUSTOM_PHOTO: "image",
+                                       fixture.CUSTOM_DIARY: "default-grid",
+                                       fixture.CUSTOM_BROKEN: "default-grid",
+                                       fixture.LONG_NAME: "image"},
+                                      "mixed_icons_show_declared_icons", extra=check_icon_fallback)
+                        page.unroute(f"{sb.bridge}/core", handle_icon)
                     else:
                         assert pane0.locator('[data-row-key="__custom"]').count() == 0, \
                             "이 판에 커스텀 앱 분류가 있습니다"

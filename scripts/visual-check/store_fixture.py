@@ -12,6 +12,7 @@ manifest의 files는 `apps/{id}/{release}/app.json`과, 아이콘을 선언한 �
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import threading
@@ -45,6 +46,17 @@ STORE_ICON = (
     b'<rect width="24" height="24" rx="6" fill="#0f766e"/>'
     b'<circle cx="12" cy="9" r="3" fill="none" stroke="#ffffff" stroke-width="1.8"/>'
     b'<path d="M6 19c1-3 3-4 6-4s5 1 6 4" fill="none" stroke="#ffffff" stroke-width="1.8"/></svg>'
+)
+# 색이 고정된 PNG 아이콘. 기기 로컬 서버 자산으로 올려 목록에서 그림으로 그려지는지 본다.
+PNG_ICON = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABqUlEQVR4nO1bUXYCIQxEn4eyZ9Ab2OO1N2jPoLfSL"
+    "/bZlUBYk0wJmU9Z2JlhyIK6KQXmxm5Lp8vpepcmIoXv348uTeyL/7NoChwz9pyBRhSfEo931aFRhZdApYFMgCfxK"
+    "dF6igZ4E59R0sWqAZ7xYoDX2c9Y69vXGr3iWWcsATQBNBYDZol/RtYbCUATQCMMQBNAIwxAE0DjgLjp18+RbPs83"
+    "wyZGBtQE76+xsoIEwM4wqk+2kao14At4iX7t6BqgBR5TRPUDJAmrWUC5CmQUnlta8e9BJUEtB5zVGGrtbXG3QrTjR"
+    "C3olvuBcQN0I6x9PhmCeidVasUTH8WCAPQBNAIA6xu1Fu9rTZF4gZoV2/p8U2XAHdWLbfEKga0trOUwFpba9ytgB2"
+    "GEAefEtSWgPRsadUW1RogRVqzsKoXwXfJaz9VTGpAFtGz7l19K5zBMcL17wIZ1iJriLMAmgAaYQCaABphAJoAGosB"
+    "vW9ajI6sNxKAJoDGHwNmWQbPOl8S4N2Etb5YAqUPvaagpItMgDcTKD0skSP/lb41kawaMGoaOLynf3d4ejwAC5eVh"
+    "pyEwfYAAAAASUVORK5CYII="
 )
 
 
@@ -107,6 +119,9 @@ CUSTOM_READING = "읽기 기록 (내 판)"
 CUSTOM_SKETCH = "스케치 노트 (내 판)"
 CUSTOM_DIARY = "일기 노트 (내 판)"
 CUSTOM_MEETING_MODIFIED = "회의 카드 (고친 판)"
+CUSTOM_PALETTE = "색 팔레트 (내 판)"
+CUSTOM_PHOTO = "사진 메모 (내 판)"
+CUSTOM_BROKEN = "깨진 아이콘 (내 판)"
 
 
 def _sha256(data: bytes) -> str:

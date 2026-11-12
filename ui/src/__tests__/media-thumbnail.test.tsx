@@ -248,7 +248,10 @@ it("앱 아이콘 참조는 자산처럼 그리되 실패하면 넘긴 기본 �
   await act(async () => s.requests[1].reject({ code: "not_found", message: "아이콘을 찾을 수 없습니다", id: "MEDIA_LOAD_APP_ICON_NOT_DECLARED", details: [] }));
   expect(view.container.querySelector(".fallback-icon")).not.toBeNull();
   expect(view.container.querySelector(".lucide-image-off")).toBeNull();
-  expect(view.container.querySelector(".is-failed")?.getAttribute("title")).toContain("아이콘을 찾을 수 없습니다");
+  // 실패 span으로 감싸지 않고 넘겨받은 그림을 그대로 그린다. 아이콘 없는 칸과 같은 구조여야 한다.
+  expect(view.container.querySelector(".ks-media-thumbnail")).toBeNull();
+  expect(view.container.querySelector(".is-failed")).toBeNull();
+  expect(view.container.querySelector("[title]")).toBeNull();
   s.store.dispose();
 });
 

@@ -544,6 +544,29 @@ fn rejected_invite_is_reported_as_an_invite_error() {
 }
 
 #[test]
+fn missing_invite_is_reported_as_an_invite_required_error() {
+    let (mock, _, _) = fixture();
+    let client = client(mock.clone());
+    for status in [401, 403] {
+        mock.files.lock().unwrap().insert(
+            "/appstore/index.json".into(),
+            (status, "text/plain", Vec::new()),
+        );
+        let failure = client.index("catalog").unwrap_err();
+        assert_eq!(
+            failure.error.id.as_deref(),
+            Some("STORECLIENT_FETCH_INVITE_REQUIRED")
+        );
+        assert!(failure.error.message.contains("https://example.com/appstore"));
+        assert!(failure
+            .error
+            .details
+            .iter()
+            .any(|detail| detail.contains(&format!("HTTP {status}"))));
+    }
+}
+
+#[test]
 fn store_invites_accept_arrays_and_objects_with_normalized_keys_and_codes() {
     assert_eq!(
         super::parse_store_invites(&json!([
