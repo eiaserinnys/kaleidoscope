@@ -64,8 +64,7 @@ pnpm --dir app tauri build
 
 The app is written to `target/release/bundle/macos/kaleidoscope.app`. It is not signed or notarized, so after copying it to another Mac, clear the quarantine flag before opening it: `xattr -dr com.apple.quarantine kaleidoscope.app`. The macOS build does not yet include:
 
-- embedded web pages (the `web_view` block and the web browser app)
-- window capture and web control for shared windows
+- agents reading and operating shared web page windows (`read_window` and `act_window` on a `web_view` window)
 - automatic updates
 - an installer and code signing
 - program installation in the Agent app; install Node.js and each agent CLI yourself
