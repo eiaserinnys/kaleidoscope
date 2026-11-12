@@ -528,7 +528,7 @@ fn invite_is_normalized_and_sent_through_the_shared_transport() {
 }
 
 #[test]
-fn rejected_invite_is_reported_as_an_invite_error() {
+fn rejected_invite_is_reported_as_an_invite_invalid_error() {
     let (mock, _, _) = fixture();
     let client = client(mock.clone()).with_invite(Some("code".into()));
     for status in [401, 403] {
@@ -538,7 +538,7 @@ fn rejected_invite_is_reported_as_an_invite_error() {
         );
         assert_eq!(
             id(client.index("catalog").unwrap_err()),
-            "STORECLIENT_FETCH_INVITE_REJECTED"
+            "STORECLIENT_FETCH_INVITE_INVALID"
         );
     }
 }

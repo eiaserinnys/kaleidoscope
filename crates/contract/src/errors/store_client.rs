@@ -138,7 +138,7 @@ error_catalog! { ENTRIES;
         class: Unauthorized, place: "스토어 파일 읽기", cause: "초대코드가 필요한 스토어에 초대코드를 보내지 않았다",
         message: "스토어 {server}는 초대코드가 있어야 {target}을 줍니다. 앱스토어 설정에 이 스토어 주소와 초대코드를 더하세요.", fix: "앱스토어 설정에 스토어 주소와 초대코드를 더하세요"
     }
-    STORECLIENT_FETCH_INVITE_REJECTED(target) {
+    STORECLIENT_FETCH_INVITE_INVALID(target) {
         class: Unauthorized, place: "스토어 파일 읽기", cause: "보낸 초대코드가 맞지 않는다",
         message: "스토어가 보낸 초대코드를 받지 않아 {target} 요청을 거부했습니다. 앱스토어 설정에서 이 스토어의 초대코드를 확인하세요.", fix: "스토어 초대코드를 확인하세요"
     }

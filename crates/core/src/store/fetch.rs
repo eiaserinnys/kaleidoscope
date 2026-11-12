@@ -166,7 +166,7 @@ impl<T: Transport> StoreClient<T> {
                 401 | 403 => match self.invite {
                     // 초대코드를 보내지 않은 경우와 보낸 코드가 거부된 경우는 원인과 고칠 곳이 다르다.
                     None => errors::STORECLIENT_FETCH_INVITE_REQUIRED(self.server.as_str(), relative),
-                    Some(_) => errors::STORECLIENT_FETCH_INVITE_REJECTED(relative),
+                    Some(_) => errors::STORECLIENT_FETCH_INVITE_INVALID(relative),
                 },
                 404 => errors::STORECLIENT_FETCH_NOT_FOUND(relative),
                 _ => errors::STORECLIENT_FETCH_HTTP_REJECTED()

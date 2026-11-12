@@ -1314,7 +1314,7 @@ def main() -> int:
                         wait_until(lambda: "STORECLIENT_FETCH_INVITE_REQUIRED" in pane2.inner_text(), 30,
                                    "그 밖의 스토어 앱 상세에 초대코드 필요 오류가 없습니다")
                         detail_text = pane2.inner_text()
-                        assert "STORECLIENT_FETCH_INVITE_REJECTED" not in detail_text, detail_text
+                        assert "STORECLIENT_FETCH_INVITE_INVALID" not in detail_text, detail_text
                         result["details"]["other_stores_detail"] = detail_text
                         result["assertions"]["other_stores_detail_invite_required"] = True
                         for theme in THEMES:
