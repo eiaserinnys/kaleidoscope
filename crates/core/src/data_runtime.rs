@@ -1222,7 +1222,7 @@ pub(crate) fn apps_for(state: &crate::CoreState, definition: &AppDefinition) -> 
         }),
         installed_version: app.installed_version,
         modified: app.origin.is_some() && app.installed_version != Some(app.current_version),
-        icon: app_commands::definition_for(&state.shared, &app.id, app.current_version).and_then(|def| def.icon),
+        icon: app_commands::definition_for(&state.shared, &app.id, app.current_version).and_then(|def| def.icon).map(|_| kaleidoscope_contract::data::AppIconMediaRef { app_icon: app.id.clone(), app_version: app.current_version }),
     }).collect())
 }
 

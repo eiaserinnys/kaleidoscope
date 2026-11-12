@@ -343,7 +343,10 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 60판: 데이터 트리의 바로 입력과 끌어 옮기기, 구역 머리의 메뉴와 바로 이름 바꾸기.
 /// - 61판: 데이터 트리의 빈 자리 글(`empty_text`).
 /// - 62판: chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`).
-pub const BLOCK_SET_VERSION: u32 = CHART_SERIES_FORMAT_BLOCK_SET_VERSION;
+/// - 63판: 다른 앱의 아이콘을 그리는 미디어 참조 `app_icon`과 그 참조를 주는 `$apps[].icon`.
+pub const BLOCK_SET_VERSION: u32 = APP_ICON_MEDIA_BLOCK_SET_VERSION;
+/// 다른 앱의 아이콘을 그리는 미디어 참조 `app_icon`을 처음 지원하는 블록 세트 판.
+pub const APP_ICON_MEDIA_BLOCK_SET_VERSION: u32 = 63;
 /// chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와
 /// 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`)을 처음 지원하는 블록 세트 판.
 pub const CHART_SERIES_FORMAT_BLOCK_SET_VERSION: u32 = 62;

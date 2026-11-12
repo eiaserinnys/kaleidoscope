@@ -288,4 +288,8 @@ pub const RETIRED: &[(&str, &str)] = &[
         "SHELL_APP_IMPORT_REPLY_INVALID",
         "앱 정의 가져오기가 앱스토어의 shell.import_app으로 옮겨 가며 머리 막대 가져오기 응답 검사를 없앴다",
     ),
+    (
+        "STORECLIENT_FETCH_INVITE_REJECTED",
+        "초대코드를 보내지 않은 경우와 보낸 초대코드가 거부된 경우를 STORECLIENT_FETCH_INVITE_REQUIRED와 STORECLIENT_FETCH_INVITE_INVALID로 나눴다",
+    ),
 ];

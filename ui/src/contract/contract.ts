@@ -259,6 +259,12 @@ window_title?: WindowTitleDecl,
 ui: Block, };
 
 /**
+ * 설치된 다른 앱의 아이콘. `app_icon`은 앱 id, `app_version`은 그 앱의 판이다. `$apps` 항목의 `icon`이 이 모양이다.
+ * 이 참조를 그리는 창의 앱은 스토어 권한(`$apps`를 읽는 권한)을 선언해야 한다. 블록 세트 63판이 필요하다.
+ */
+export type AppIconMediaRef = { app_icon: string, app_version: number, };
+
+/**
  * 앱 아이콘이 가리키는 불변 자산.
  */
 export type AppIconRef = { asset: string, version: number, };
@@ -1159,7 +1165,11 @@ export type InstalledAppValue = { id: string,
 /**
  * 쉘에 포함된 기본 앱인가. 기본 앱은 지울 수 없고 스토어 판으로 바꾸지 않는다.
  */
-builtin: boolean, name: string, version: number, origin: StoreOrigin | null, latest: StoreLatest | null, installed_version: number | null, modified: boolean, icon: AppIconRef | null, };
+builtin: boolean, name: string, version: number, origin: StoreOrigin | null, latest: StoreLatest | null, installed_version: number | null, modified: boolean, 
+/**
+ * 이 앱의 아이콘을 그리는 미디어 참조. 앱 정의에 아이콘이 없으면 null
+ */
+icon: AppIconMediaRef | null, };
 
 /**
  * 항목 메뉴의 동작. `$event`는 블록의 `on_select`와 같은 항목 키(트리도 같은 값), `$item`은 항목이다.
@@ -1266,8 +1276,9 @@ export type MediaPlayback = { "kind": "inline", media: MediaData, } | { "kind": 
  * `permission`의 모듈이 `connection`이면 `path`는 연결의 주소 아래 경로(`/`로 시작)이고 `query`를 붙인다.
  * `files`면 `path`는 고른 폴더 기준 상대 경로다. `crop`은 그리는 방법이라 원본을 가르지 않는다.
  * `blob`은 이 기기의 앱 저장소(`client.device_storage`)에 든 파일의 키다. 블록 세트 52판이 필요하다.
+ * `app_icon`은 설치된 다른 앱의 아이콘이다. `$apps` 항목의 `icon`이 이 모양이다.
  */
-export type MediaRef = ResourceMediaRef | AssetMediaRef | BlobMediaRef;
+export type MediaRef = ResourceMediaRef | AssetMediaRef | BlobMediaRef | AppIconMediaRef;
 
 /**
  * 다른 창에서 받는 글. 첨부나 임의 데이터는 포함하지 않는다.

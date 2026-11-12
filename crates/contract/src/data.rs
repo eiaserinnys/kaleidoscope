@@ -841,6 +841,7 @@ impl HttpMethod {
 /// `permission`의 모듈이 `connection`이면 `path`는 연결의 주소 아래 경로(`/`로 시작)이고 `query`를 붙인다.
 /// `files`면 `path`는 고른 폴더 기준 상대 경로다. `crop`은 그리는 방법이라 원본을 가르지 않는다.
 /// `blob`은 이 기기의 앱 저장소(`client.device_storage`)에 든 파일의 키다. 블록 세트 52판이 필요하다.
+/// `app_icon`은 설치된 다른 앱의 아이콘이다. `$apps` 항목의 `icon`이 이 모양이다.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export, export_to = "contract.ts")]
@@ -848,6 +849,7 @@ pub enum MediaRef {
     Resource(ResourceMediaRef),
     Asset(AssetMediaRef),
     Blob(BlobMediaRef),
+    AppIcon(AppIconMediaRef),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -887,6 +889,16 @@ pub struct BlobMediaRef {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub crop: Option<Crop>,
+}
+
+/// 설치된 다른 앱의 아이콘. `app_icon`은 앱 id, `app_version`은 그 앱의 판이다. `$apps` 항목의 `icon`이 이 모양이다.
+/// 이 참조를 그리는 창의 앱은 스토어 권한(`$apps`를 읽는 권한)을 선언해야 한다. 블록 세트 63판이 필요하다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct AppIconMediaRef {
+    pub app_icon: String,
+    pub app_version: u32,
 }
 
 /// 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.

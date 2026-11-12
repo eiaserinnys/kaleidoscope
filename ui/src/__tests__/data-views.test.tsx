@@ -290,22 +290,48 @@ it("화면 밖에 유지된 초점 칸으로 배경 누름 뒤 돌아간다", as
   expect(document.activeElement).toBe(first);
   expect(list.scrollTop).toBe(2000);
 });
-it("그 밖의 스토어 타일은 다른 앱 자산 대신 기본 아이콘을 쓴다", async () => {
+function otherStoreItems(icon: unknown) {
   const app = JSON.parse(storeDefinitionText);
   // 분류 도구 막대가 늘어도 찾을 수 있게 자리 번호 대신 목록 식의 표지로 고른다.
   const storeList = app.ui.children[1].children
     .map((child: { child?: { items?: { expr?: string } } }) => child.child)
     .find((child: { items?: { expr?: string } } | undefined) => child?.items?.expr?.includes('"other-stores"')) as { items: { expr: string } } | undefined;
   if (storeList === undefined) throw new Error("앱스토어 정의에서 스토어 목록을 찾지 못했습니다");
-  const items = await jsonata(storeList.items.expr).evaluate({}, {
+  return jsonata(storeList.items.expr).evaluate({}, {
     state: { category: "__installed", query: "" }, data: { catalog: { stores: [] } },
-    apps: [{ id: "notes", name: "남은 앱", icon: { asset: "other-app-icon", version: 1 }, origin: { store_url: "http://removed" } }],
+    apps: [{ id: "notes", name: "남은 앱", icon, origin: { store_url: "http://removed" } }],
   });
-  expect(items[0].items[0].image).toBeUndefined();
-  setup({ type: "list", layout: "icons", grouped: true, items }, {}, 43);
+}
+it("그 밖의 스토어 타일은 앱 자신의 아이콘을 그린다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 32, 32));
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"><path d="M0 0h24"/></svg>';
+  const icon = { app_icon: "notes", app_version: 1 };
+  const items = await otherStoreItems(icon);
+  expect(items[0].items[0].image).toEqual(icon);
+  setup({ type: "list", layout: "icons", grouped: true, items }, {}, 43, { notes: `data:image/svg+xml;base64,${btoa(svg)}` });
   const tile = await screen.findByRole("option", { name: "남은 앱" });
-  expect(tile.querySelector(".is-failed")).toBeNull();
-  expect(tile.querySelector(".ks-media-thumbnail.is-asset")).toBeNull();
+  await waitFor(() => expect((tile.querySelector("span.ks-app-icon") as HTMLElement)?.style.mask).toContain("data:image/svg+xml"));
+  vi.unstubAllGlobals();
+});
+it("그 밖의 스토어 타일은 앱 아이콘을 그릴 수 없으면 기본 격자를 그린다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 32, 32));
+  const items = await otherStoreItems({ app_icon: "notes", app_version: 1 });
+  const iconless = { key: "plain", title: "아이콘 없는 앱" };
+  setup({ type: "list", layout: "icons", grouped: true,
+          items: [{ ...items[0], items: [...items[0].items, iconless] }] }, {}, 43);
+  const failed = await screen.findByRole("option", { name: "남은 앱" });
+  const plain = await screen.findByRole("option", { name: "아이콘 없는 앱" });
+  await waitFor(() => expect(failed.querySelector(".lucide-layout-grid")).not.toBeNull());
+  expect(failed.querySelector(".lucide-image-off")).toBeNull();
+  // 실패한 앱 아이콘 칸은 아이콘 없는 칸과 같은 그림 요소를 그대로 쓴다.
+  const drawn = (tile: HTMLElement) => tile.querySelector(".ks-icon-tile-icon")!.firstElementChild!;
+  expect(drawn(failed).tagName).toBe(drawn(plain).tagName);
+  expect(drawn(failed).getAttribute("class")).toBe(drawn(plain).getAttribute("class"));
+  expect(failed.querySelector(".ks-media-thumbnail")).toBeNull();
+  expect(failed.querySelector("[title]")).toBeNull();
+  vi.unstubAllGlobals();
 });
 it("여러 항목 선택은 묶음을 넘어 순서대로 선택하고 고를 수 없는 항목을 연다", async () => {
   const items = ["a", "b", "c", "d"].map((key) => ({ key, title: key }));

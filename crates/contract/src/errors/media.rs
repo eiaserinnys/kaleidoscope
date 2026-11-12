@@ -194,6 +194,20 @@ error_catalog! { ENTRIES;
         message: "미디어 자산의 요청 판이 앱 정의와 달라 불러오지 못했습니다. 앱 정의에 등록된 판을 사용하세요. 자산: {asset}",
         fix: "앱 정의와 같은 자산 판을 요청하세요"
     }
+    MEDIA_LOAD_APP_ICON_STORE_PERMISSION_MISSING(app_id) {
+        class: PermissionDenied,
+        place: "앱 창의 다른 앱 아이콘 불러오기",
+        cause: "창의 앱이 스토어 권한을 선언하지 않았다",
+        message: "이 창의 앱은 store 권한이 없어 앱 ID {app_id}의 아이콘을 그릴 수 없습니다. 앱 정의에 store 권한을 선언하세요.",
+        fix: "앱 정의에 store 권한을 선언하세요"
+    }
+    MEDIA_LOAD_APP_ICON_NOT_DECLARED(app_id, version) {
+        class: NotFound,
+        place: "앱 창의 다른 앱 아이콘 불러오기",
+        cause: "그 앱 판의 정의에 아이콘이 없다",
+        message: "앱 ID {app_id}, {version}판은 아이콘을 선언하지 않아 그릴 아이콘이 없습니다. 아이콘이 있는 판을 설치하거나 $apps의 icon이 null인 앱은 그림 없이 두세요.",
+        fix: "아이콘이 없는 앱은 그림 없이 두세요"
+    }
     MEDIA_LOAD_BUNDLED_ASSET_MISSING(asset) {
         class: NotFound,
         place: "앱 창의 번들 미디어 자산 불러오기",
