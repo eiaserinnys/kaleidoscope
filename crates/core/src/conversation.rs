@@ -437,6 +437,7 @@ mod tests {
                     issuer: format!("http://{address}"),
                     client_id: None,
                     redirect_port: None,
+                    scopes: None,
                     access_token: Some("token".into()),
                     refresh_token: None,
                     expires_at: None,

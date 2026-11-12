@@ -233,9 +233,10 @@ async fn handshake(
     let name = &info.name;
     let store = inner.login_store.clone();
     let connection = name.to_owned();
+    let scopes = info.scopes.clone();
     let (tx, rx) = tokio::sync::oneshot::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(store.token(&connection));
+        let _ = tx.send(store.token(&connection, scopes.as_deref()));
     });
     let mut token = tokio::select! {
         _ = stop.recv() => return Err(errors::CONN_REALTIME_SESSION_STALE()),

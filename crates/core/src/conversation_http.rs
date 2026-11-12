@@ -93,7 +93,7 @@ impl Client {
 
     pub fn require_login(&self) -> Result<(), CoreError> {
         self.logins
-            .token(&self.info.name)
+            .token(&self.info.name, self.info.scopes.as_deref())
             .map(|_| ())
             .ok_or_else(|| {
                 kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(&self.info.name)
@@ -343,9 +343,12 @@ impl Client {
             }
             request.send().map_err(|error| self.request_failed(error))
         };
-        let token = self.logins.token(&self.info.name).ok_or_else(|| {
-            kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(&self.info.name)
-        })?;
+        let token = self
+            .logins
+            .token(&self.info.name, self.info.scopes.as_deref())
+            .ok_or_else(|| {
+                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(&self.info.name)
+            })?;
         let reply = send(&token)?;
         if reply.status() != reqwest::StatusCode::UNAUTHORIZED {
             return Ok(reply);
@@ -493,6 +496,7 @@ mod tests {
                     issuer: format!("http://{address}"),
                     client_id: None,
                     redirect_port: None,
+                    scopes: None,
                     access_token: Some("bearer-token-secret".into()),
                     refresh_token: None,
                     expires_at: None,

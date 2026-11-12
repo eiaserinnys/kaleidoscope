@@ -17,7 +17,7 @@ use kaleidoscope_contract::{
 use crate::{app_commands, Inner};
 
 pub(crate) trait LoginStore: Send + Sync {
-    fn token(&self, connection: &str) -> Option<String>;
+    fn token(&self, connection: &str, scopes: Option<&str>) -> Option<String>;
     fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String>;
     fn invalidate(&self, connection: &str, access_token: &str);
 }
@@ -222,7 +222,7 @@ pub(crate) fn request(
                 })
         }
         ConnectionKind::Oauth => {
-            let Some(token) = inner.login_store.token(&connection) else {
+            let Some(token) = inner.login_store.token(&connection, info.scopes.as_deref()) else {
                 return Err(RequestError::Login(permission.into()));
             };
             let reply = oauth_request(&info, &token, &req)?;

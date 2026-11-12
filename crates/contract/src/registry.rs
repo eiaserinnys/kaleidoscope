@@ -530,7 +530,8 @@ pub struct ConnectionInfo {
     /// `oauth`만. 없으면 `base_url`의 origin.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
-    /// `oauth`만. 공백으로 나눈 목록.
+    /// `oauth`만. 공백으로 나눈 목록. 늘리면 그 범위로 로그인한 적 없는 기기는 다음 요청에서
+    /// 로그인 필요가 되어 다시 로그인합니다.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scopes: Option<String>,
     /// `oauth`만. RFC 8707 resource.

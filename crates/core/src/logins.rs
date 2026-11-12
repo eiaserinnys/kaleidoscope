@@ -16,12 +16,28 @@ pub(crate) struct LoginEntry {
     pub(crate) client_id: Option<String>,
     #[serde(default)]
     pub(crate) redirect_port: Option<u16>,
+    /// 저장된 client가 동적 등록될 때 쓴 범위이자 토큰을 받을 때 요청한 범위.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) scopes: Option<String>,
     #[serde(default)]
     pub(crate) access_token: Option<String>,
     #[serde(default)]
     pub(crate) refresh_token: Option<String>,
     #[serde(default)]
     pub(crate) expires_at: Option<i64>,
+}
+
+/// `recorded`가 `declared`의 낱말을 모두 담는가. `declared`가 비었으면 참이다.
+pub(crate) fn scopes_cover(recorded: Option<&str>, declared: Option<&str>) -> bool {
+    let declared: Vec<&str> = declared.unwrap_or("").split_whitespace().collect();
+    if declared.is_empty() {
+        return true;
+    }
+    let Some(recorded) = recorded else {
+        return false;
+    };
+    let recorded: std::collections::BTreeSet<&str> = recorded.split_whitespace().collect();
+    declared.iter().all(|scope| recorded.contains(scope))
 }
 
 pub(crate) struct Logins {
@@ -57,6 +73,7 @@ impl Logins {
         issuer: &str,
         client_id: String,
         redirect_port: u16,
+        scopes: Option<String>,
     ) -> Result<(), CoreError> {
         self.store(
             connection,
@@ -64,6 +81,7 @@ impl Logins {
                 issuer: issuer.to_string(),
                 client_id: Some(client_id),
                 redirect_port: Some(redirect_port),
+                scopes,
                 access_token: None,
                 refresh_token: None,
                 expires_at: None,
@@ -76,6 +94,7 @@ impl Logins {
             issuer: issuer.to_string(),
             client_id: None,
             redirect_port: None,
+            scopes: None,
             access_token: None,
             refresh_token: None,
             expires_at: None,
@@ -83,6 +102,7 @@ impl Logins {
         entry.issuer = issuer.to_string();
         entry.client_id = None;
         entry.redirect_port = None;
+        entry.scopes = None;
         entry.access_token = None;
         entry.refresh_token = None;
         entry.expires_at = None;
@@ -166,8 +186,11 @@ impl Logins {
 }
 
 impl LoginStore for Logins {
-    fn token(&self, connection: &str) -> Option<String> {
+    fn token(&self, connection: &str, scopes: Option<&str>) -> Option<String> {
         let entry = self.entry(connection)?;
+        if !scopes_cover(entry.scopes.as_deref(), scopes) {
+            return None;
+        }
         let token = entry.access_token?;
         if token_is_expired(entry.expires_at) {
             self.refresh(connection, &token)

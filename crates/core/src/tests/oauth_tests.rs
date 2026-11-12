@@ -14,6 +14,8 @@ struct BrowserHost {
     ports: Mutex<Vec<u16>>,
     urls: Mutex<Vec<String>>,
     wrong_state_first: AtomicBool,
+    /// 인가 주소에 붙기를 기대하는 scope. 없으면 `read`.
+    expected_scope: Mutex<Option<String>>,
 }
 
 impl Host for BrowserHost {
@@ -31,7 +33,16 @@ impl Host for BrowserHost {
             Some("S256")
         );
         assert_eq!(params.get("code_challenge").unwrap().len(), 43);
-        assert_eq!(params.get("scope").map(String::as_str), Some("read"));
+        let expected_scope = self
+            .expected_scope
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| "read".to_string());
+        assert_eq!(
+            params.get("scope").map(String::as_str),
+            Some(expected_scope.as_str())
+        );
         assert_eq!(
             params.get("resource").map(String::as_str),
             Some("urn:example")
@@ -118,6 +129,7 @@ struct ServerState {
     resource_requires_refreshed_token: bool,
     last_authorization: Option<String>,
     redirect_uris: Vec<String>,
+    registration_scopes: Vec<String>,
     stream_status: u16,
     stream_requests: usize,
     stream_item: bool,
@@ -263,6 +275,13 @@ fn respond(request: &HttpRequest, base: &str, state: &Arc<Mutex<ServerState>>) -
             state
                 .redirect_uris
                 .push(payload["redirect_uris"][0].as_str().unwrap().to_string());
+            state.registration_scopes.push(
+                payload
+                    .get("scope")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+            );
             (
                 200,
                 json!({"client_id":format!("client-{}",state.registrations)}).to_string(),
@@ -368,3 +387,4 @@ fn login(core: &Core, window: &str) -> Result<CoreReply, CoreError> {
 }
 
 mod flows;
+mod scopes;

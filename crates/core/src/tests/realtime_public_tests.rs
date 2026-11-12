@@ -38,6 +38,7 @@ fn fixture(declared: bool, base: String) -> (TempDir, Core, String) {
                 issuer: "http://127.0.0.1".into(),
                 client_id: None,
                 redirect_port: None,
+                scopes: None,
                 access_token: Some("fixture-secret".into()),
                 refresh_token: None,
                 expires_at: None,

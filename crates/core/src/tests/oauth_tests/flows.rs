@@ -211,6 +211,7 @@ fn expired_and_unauthorized_access_tokens_refresh_once() {
                 issuer: fixture.base.clone(),
                 client_id: Some("client".into()),
                 redirect_port: Some(40000),
+                scopes: Some("read".into()),
                 access_token: Some("expired".into()),
                 refresh_token: Some("refresh".into()),
                 expires_at: past,
@@ -259,6 +260,7 @@ fn expired_and_unauthorized_access_tokens_refresh_once() {
                 issuer: fixture.base.clone(),
                 client_id: Some("client".into()),
                 redirect_port: Some(40000),
+                scopes: Some("read".into()),
                 access_token: Some("unauthorized".into()),
                 refresh_token: Some("refresh-again".into()),
                 expires_at: None,
@@ -299,6 +301,7 @@ fn unauthorized_token_without_refresh_is_cleared_and_requests_login() {
                 issuer: fixture.base.clone(),
                 client_id: None,
                 redirect_port: None,
+                scopes: Some("read".into()),
                 access_token: Some("bad".into()),
                 refresh_token: None,
                 expires_at: None,
@@ -447,6 +450,7 @@ fn simultaneous_expired_token_reads_refresh_once_and_keep_rotated_token() {
                 issuer: fixture.base.clone(),
                 client_id: Some("client".into()),
                 redirect_port: Some(40000),
+                scopes: Some("read".into()),
                 access_token: Some("expired".into()),
                 refresh_token: Some("rotating-refresh".into()),
                 expires_at: Some(1),
@@ -461,7 +465,7 @@ fn simultaneous_expired_token_reads_refresh_once_and_keep_rotated_token() {
             let barrier = barrier.clone();
             thread::spawn(move || {
                 barrier.wait();
-                login_store.token("example")
+                login_store.token("example", Some("read"))
             })
         })
         .collect();
@@ -510,6 +514,7 @@ fn invalidation_waits_for_refresh_and_preserves_rotated_credentials() {
                 issuer: fixture.base.clone(),
                 client_id: Some("client".into()),
                 redirect_port: Some(40000),
+                scopes: Some("read".into()),
                 access_token: Some("expired".into()),
                 refresh_token: Some("rotating-refresh".into()),
                 expires_at: Some(1),
