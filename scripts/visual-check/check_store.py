@@ -447,6 +447,22 @@ def main() -> int:
                                                            ("x", "y", "width", "height")}
                                 print(f"capture {name}", flush=True)
 
+                    def hold_stores():
+                        store_a.gate.clear()
+                        store_b.gate.clear()
+
+                    def release_stores():
+                        store_a.gate.set()
+                        store_b.gate.set()
+
+                    def check_store_loading(scene):
+                        # 장마다 로딩 표시가 남아 있는지 본다. 없으면 로딩 장면이 이미 받은 목록으로 찍힌 것이다.
+                        def check(theme, width, height):
+                            assert page.locator(".ks-data-view.is-loading").count() > 0, \
+                                f"{scene} {theme} {width}x{height}: 찍는 순간 로딩 표시가 없습니다"
+                            result["assertions"][f"{scene.replace('-', '_')}_state"] = True
+                        return check
+
                     def capture_icons(scene, expected, assertion, extra=None):
                         def check(theme, width, height):
                             # 좁은 창에서는 그 밖의 스토어 묶음을 화면에 들여 팀 안내서 칸이 캡처에 보이게 한다.
@@ -849,27 +865,29 @@ def main() -> int:
                                     theme, width, height, "스토어 판으로 되돌리기"))
 
                         operate()
-                        store_a.delay = store_b.delay = 4.0
+                        hold_stores()
                         reopen()
                         wait_until(lambda: page.locator(".ks-data-view.is-loading").count() > 0, 10,
                                    "스토어 로딩 표시가 없습니다")
-                        capture("store-loading", pane=1)
+                        capture("store-loading", pane=1, check=check_store_loading("store-loading"))
+                        release_stores()
                         wait_until(lambda: page.locator(".ks-data-view.is-loading").count() == 0, 20,
                                    "스토어 로딩이 끝나지 않았습니다")
 
                         operate()
+                        hold_stores()
                         reopen()
                         choose_category(CUSTOM)
                         wait_until(lambda: page.locator(".ks-data-view.is-loading").count() > 0, 10,
                                    "스토어 로딩 표시가 없습니다")
                         assert pane1.get_by_role("option").count() == 2, "로딩 중에 커스텀 목록이 사라졌습니다"
                         result["assertions"]["custom_list_survives_store_loading"] = True
-                        capture("custom-loading", pane=1)
+                        capture("custom-loading", pane=1, check=check_store_loading("custom-loading"))
+                        release_stores()
                         wait_until(lambda: page.locator(".ks-data-view.is-loading").count() == 0, 20,
                                    "스토어 로딩이 끝나지 않았습니다")
 
                         operate()
-                        store_a.delay = store_b.delay = 0.0
                         store_a.fail = store_b.fail = True
                         reopen()
                         wait_until(lambda: pane1.inner_text().count(ERROR_TEXT) >= 2, 30,
@@ -1447,16 +1465,16 @@ def main() -> int:
                         result["assertions"]["custom_category_absent"] = True
 
                         operate()
-                        store_a.delay = store_b.delay = 4.0
+                        hold_stores()
                         reopen()
                         wait_until(lambda: page.locator(".ks-data-view.is-loading").count() > 0, 10,
                                    "스토어 로딩 표시가 없습니다")
-                        capture("store-loading", pane=1)
+                        capture("store-loading", pane=1, check=check_store_loading("store-loading"))
+                        release_stores()
                         wait_until(lambda: page.locator(".ks-data-view.is-loading").count() == 0, 20,
                                    "스토어 로딩이 끝나지 않았습니다")
 
                         operate()
-                        store_a.delay = store_b.delay = 0.0
                         store_a.fail = store_b.fail = True
                         reopen()
                         wait_until(lambda: pane1.inner_text().count(ERROR_TEXT) >= 2, 30,

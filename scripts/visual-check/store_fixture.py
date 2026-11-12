@@ -217,8 +217,8 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler 규약
         store = self.server.store
         store.requests.append((time.monotonic(), self.path, self.headers.get("x-kaleidoscope-invite")))
-        if store.delay:
-            time.sleep(store.delay)
+        # 붙잡은 동안 응답을 미룬다. 시각 검사가 풀어 주지 않아도 서버 스레드는 1분 뒤 이어 간다.
+        store.gate.wait(60)
         if self.headers.get("x-kaleidoscope-invite") != store.invite:
             self.send_response(401)
             self.send_header("Content-Length", "0")
@@ -251,7 +251,10 @@ class FakeStore:
         self.prefix = prefix
         self.invite = invite
         self.files = store_files(prefix, apps)
-        self.delay = 0.0
+        # 로딩 장면은 시간을 늦추지 않고 응답을 붙잡았다가 풀어 준다. 늦추기만 하면 바쁜 호스트에서
+        # 마지막 캡처 전에 로딩이 끝나 이미 받은 목록이 찍힌다.
+        self.gate = threading.Event()
+        self.gate.set()
         self.fail = False
         # 앱 상세(index.json)만 실패시킨다. 목록은 살아 있어야 전환 후보를 고를 수 있다.
         self.fail_apps: set[str] = set()
