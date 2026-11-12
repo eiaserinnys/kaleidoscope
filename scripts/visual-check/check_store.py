@@ -1334,6 +1334,8 @@ def main() -> int:
                         # 섞인 커스텀 목록: currentColor SVG, 고정색 SVG, PNG, 아이콘 없음, 긴 이름,
                         # 아이콘을 못 받는 앱을 한 목록에 두고 아이콘 칸의 상태와 상자를 견준다.
                         operate()
+                        choose_category(CUSTOM)
+                        search("")
                         for asset_id, fmt, data, source in (
                                 ("png-icon", "png", fixture.PNG_ICON, "store_fixture.py#png-icon"),
                                 ("broken-icon", "svg", fixture.FIXED_COLOR_ICON,
