@@ -252,6 +252,15 @@ it("앱 아이콘 참조는 자산처럼 그리되 실패하면 넘긴 기본 �
   expect(view.container.querySelector(".ks-media-thumbnail")).toBeNull();
   expect(view.container.querySelector(".is-failed")).toBeNull();
   expect(view.container.querySelector("[title]")).toBeNull();
+  // 떼어 낸 span의 0 크기 알림이 마지막 크기를 지우면 고친 새 판의 아이콘을 다시 부르지 못한다.
+  width = 0; act(() => resize());
+  width = 100;
+  view.rerender(s.wrap(<MediaThumbnail media={{ app_icon: "notes", app_version: 5 }} icon fallback={fallback} />));
+  await waitFor(() => expect(s.requests).toHaveLength(3));
+  expect(s.requests[2].size).toBe(128);
+  await s.reply(2, '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"><path d="M0 0h24"/></svg>', "image/svg+xml");
+  expect(view.container.querySelector("span.ks-app-icon")).not.toBeNull();
+  expect(view.container.querySelector(".fallback-icon")).toBeNull();
   s.store.dispose();
 });
 

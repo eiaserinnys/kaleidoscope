@@ -15,10 +15,18 @@ export function MediaThumbnail({ media, className = "", icon = false, fallback }
   const ref = useRef<HTMLSpanElement>(null);
   const assetLike = !!media && ("asset" in media || "app_icon" in media);
   const [measured, setMeasured] = useState({ size: 0, assetLike });
+  const result = useMedia(media, measured.assetLike === assetLike ? measured.size / (globalThis.devicePixelRatio || 1) : 0, { showSmaller: true });
+  // 앱 아이콘을 그릴 수 없으면 넘겨받은 그림을 그대로 돌려준다. 실패 표시 span을 감싸면
+  // 아이콘을 선언하지 않은 칸과 바탕과 크기가 달라진다.
+  const showsFallback = !!media && result.status === "failed" && "app_icon" in media && fallback !== undefined;
   useEffect(() => {
+    // 넘겨받은 그림을 그리는 동안에는 잴 span이 없으니 마지막 크기를 지닌다. 그래야 재요청과
+    // 새 판의 아이콘이 그 크기로 나가고, span이 돌아오면 그 span을 다시 잰다.
     const element = ref.current;
     if (!element) return;
     const measure = () => {
+      // 떼어 낸 span도 0 크기로 한 번 불린다. 그 값으로 마지막 크기를 지우지 않는다.
+      if (!element.isConnected) return;
       const rect = element.getBoundingClientRect();
       const dpr = globalThis.devicePixelRatio || 1;
       let pixels = Math.ceil(Math.max(rect.width, rect.height) * dpr);
@@ -30,8 +38,7 @@ export function MediaThumbnail({ media, className = "", icon = false, fallback }
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [assetLike]);
-  const result = useMedia(media, measured.assetLike === assetLike ? measured.size / (globalThis.devicePixelRatio || 1) : 0, { showSmaller: true });
+  }, [assetLike, showsFallback]);
   const url = result.status === "ready" ? result.url : null;
   const image = useMemo(() => {
     if (!icon || !url || !media) return null;
@@ -40,8 +47,6 @@ export function MediaThumbnail({ media, className = "", icon = false, fallback }
     return assetLike || mime === "image/svg+xml" ? iconImageFromData(mime, base64) : null;
   }, [icon, url, media, assetLike]);
   const style = cropStyle(media && "crop" in media ? media.crop : undefined);
-  // 앱 아이콘을 그릴 수 없으면 넘겨받은 그림을 그대로 돌려준다. 실패 표시 span을 감싸면
-  // 아이콘을 선언하지 않은 칸과 바탕과 크기가 달라진다.
-  if (media && result.status === "failed" && "app_icon" in media && fallback !== undefined) return <>{fallback}</>;
+  if (showsFallback) return <>{fallback}</>;
   return <span ref={ref} style={icon && image ? { color: "inherit" } : undefined} className={`ks-media-thumbnail${assetLike ? " is-asset" : ""}${image ? " is-icon-image" : ""}${media ? ` is-${result.status}` : ""} ${className}`} title={result.status === "failed" ? `${result.error.message} ${result.error.id ?? ""}` : undefined}>{!media ? <DataIcon name="image" size="empty" /> : result.status === "loading" ? icon ? <i aria-hidden="true" className="ks-icon-skeleton-icon" style={{ width: ICON_SIZE.tile, height: ICON_SIZE.tile }} /> : null : result.status === "failed" ? <ImageOff size="empty" /> : image ? <IconImage image={image} size="tile" /> : <img alt="" src={result.url} style={style} draggable={false} />}</span>;
 }
