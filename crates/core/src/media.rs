@@ -242,6 +242,7 @@ pub(crate) fn get(
         MediaRef::Resource(media) => media.path.clone(),
         MediaRef::Asset(media) => media.asset.clone(),
         MediaRef::Blob(media) => media.blob.clone(),
+        MediaRef::AppIcon(media) => media.app_icon.clone(),
     };
     if max_px == Some(0) {
         return Err(errors::MEDIA_LOAD_OPTIONS_INVALID(&target));
@@ -281,6 +282,37 @@ pub(crate) fn get(
                 dependency.version
             };
             return get_asset(inner, &media.asset, version, max_px);
+        }
+        MediaRef::AppIcon(media) => {
+            let definition = {
+                let state = inner.state.lock().unwrap();
+                let window = state
+                    .shared
+                    .windows
+                    .iter()
+                    .find(|item| item.id == window_id)
+                    .ok_or_else(|| {
+                        errors::MEDIA_LOAD_WINDOW_NOT_FOUND()
+                            .and_details(vec![format!("window: {}", window_id)])
+                    })?;
+                app_commands::definition_for(&state.shared, &window.app_id, window.app_version)
+                    .ok_or_else(|| {
+                        errors::MEDIA_LOAD_APP_DEFINITION_NOT_FOUND()
+                            .and_details(vec![format!("window: {}", window_id)])
+                    })?
+            };
+            if !definition
+                .permissions
+                .iter()
+                .any(|permission| matches!(permission, PermissionDecl::Store { .. }))
+            {
+                return Err(errors::MEDIA_LOAD_APP_ICON_STORE_PERMISSION_MISSING(&media.app_icon));
+            }
+            let icon = app_icon::declared(inner, &media.app_icon, media.app_version)?
+                .ok_or_else(|| {
+                    errors::MEDIA_LOAD_APP_ICON_NOT_DECLARED(&media.app_icon, media.app_version)
+                })?;
+            return get_asset(inner, &icon.asset, icon.version, max_px);
         }
     };
     let module = authorization::permission(&inner.state.lock().unwrap(), window_id, &media.permission)?;

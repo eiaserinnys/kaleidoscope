@@ -27,10 +27,10 @@ function setup() {
   const seed = makeTestSeed({ definitions: [definition] });
   const store = createShellStore(createFakeTransport(seed));
   const original = store.call.bind(store);
-  const requests: { size: number; resolve: (value: CoreReply) => void; reject: (reason: unknown) => void }[] = [];
+  const requests: { media: MediaRef; size: number; resolve: (value: CoreReply) => void; reject: (reason: unknown) => void }[] = [];
   vi.spyOn(store, "call").mockImplementation((request) => {
     if (request.op !== "data.media") return original(request);
-    return new Promise<CoreReply>((resolve, reject) => requests.push({ size: request.max_px!, resolve, reject })) as ReturnType<typeof store.call>;
+    return new Promise<CoreReply>((resolve, reject) => requests.push({ media: request.media, size: request.max_px!, resolve, reject })) as ReturnType<typeof store.call>;
   });
   const wrap = (child: React.ReactNode) => <WindowDataProvider store={store} windowId={seed.snapshot.shared.windows[0].id} definition={definition}>{child}</WindowDataProvider>;
   const reply = (index: number, text: string, mime = "image/png") => act(async () => requests[index].resolve({ op: "data.media", media: { mime, data_base64: btoa(text), width: null, height: null } }));
@@ -229,6 +229,26 @@ it("썸네일 재마운트는 측정 전 첫 렌더부터 캐시 그림을 쓴�
   });
   view.rerender(s.wrap(<MediaThumbnail key="second" media={photo} />));
   expect(observed[0]).toContain(btoa("small"));
+  s.store.dispose();
+});
+
+it("앱 아이콘 참조는 자산처럼 그리되 실패하면 넘긴 기본 그림을 그린다", async () => {
+  const s = setup();
+  const appIcon: MediaRef = { app_icon: "notes", app_version: 3 };
+  const fallback = <i className="fallback-icon" />;
+  const view = render(s.wrap(<MediaThumbnail media={appIcon} icon fallback={fallback} />));
+  await waitFor(() => expect(s.requests).toHaveLength(1));
+  expect(s.requests[0].media).toEqual(appIcon);
+  expect(s.requests[0].size).toBe(128);
+  await s.reply(0, '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"><path d="M0 0h24"/></svg>', "image/svg+xml");
+  expect((view.container.querySelector("span.ks-app-icon") as HTMLElement).style.mask).toContain("data:image/svg+xml");
+  view.rerender(s.wrap(<MediaThumbnail media={{ app_icon: "notes", app_version: 4 }} icon fallback={fallback} />));
+  await waitFor(() => expect(s.requests).toHaveLength(2));
+  expect(s.requests[1].size).toBe(128);
+  await act(async () => s.requests[1].reject({ code: "not_found", message: "아이콘을 찾을 수 없습니다", id: "MEDIA_LOAD_APP_ICON_NOT_DECLARED", details: [] }));
+  expect(view.container.querySelector(".fallback-icon")).not.toBeNull();
+  expect(view.container.querySelector(".lucide-image-off")).toBeNull();
+  expect(view.container.querySelector(".is-failed")?.getAttribute("title")).toContain("아이콘을 찾을 수 없습니다");
   s.store.dispose();
 });
 

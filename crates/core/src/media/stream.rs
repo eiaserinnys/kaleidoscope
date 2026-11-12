@@ -173,7 +173,7 @@ pub(crate) fn open(
     media: &MediaRef,
 ) -> Result<MediaPlayback, CoreError> {
     match media {
-        MediaRef::Asset(_) => Ok(MediaPlayback::Inline {
+        MediaRef::Asset(_) | MediaRef::AppIcon(_) => Ok(MediaPlayback::Inline {
             media: super::get(inner, window, media, None)?,
         }),
         MediaRef::Blob(blob) => {

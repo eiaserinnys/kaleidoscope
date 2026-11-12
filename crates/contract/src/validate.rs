@@ -3874,6 +3874,25 @@ fn validate_media_ref(
                 ));
             }
         }
+        data::MediaRef::AppIcon(icon) => {
+            let version = crate::APP_ICON_MEDIA_BLOCK_SET_VERSION;
+            if definition.requires.blocks < version {
+                details.push(format!(
+                    "{at}: 다른 앱의 아이콘(app_icon)은 블록 세트 {version}판이라 requires.blocks가 {version} 이상이어야 합니다: {}",
+                    icon.app_icon
+                ));
+            }
+            if !definition
+                .permissions
+                .iter()
+                .any(|permission| matches!(permission, crate::PermissionDecl::Store { .. }))
+            {
+                details.push(format!(
+                    "{at}: 다른 앱의 아이콘(app_icon)을 그리려면 store 권한을 선언해야 합니다: {}",
+                    icon.app_icon
+                ));
+            }
+        }
         data::MediaRef::Resource(_) => {}
     }
 }

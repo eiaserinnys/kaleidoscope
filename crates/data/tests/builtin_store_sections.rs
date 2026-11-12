@@ -91,6 +91,38 @@ fn installed_filter_uses_store_origin_and_keeps_unlisted_apps() {
 }
 
 #[test]
+fn custom_and_other_store_items_carry_the_apps_icon_reference() {
+    let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
+    let app = CompiledApp::compile(&definition);
+    let apps: Vec<InstalledAppValue> = serde_json::from_value(json!([
+        {"id":"my-tool","builtin":false,"name":"내 도구","version":3,"origin":null,"latest":null,"installed_version":null,"modified":false,"icon":{"app_icon":"my-tool","app_version":3}},
+        {"id":"plain-tool","builtin":false,"name":"그림 없는 도구","version":1,"origin":null,"latest":null,"installed_version":null,"modified":false,"icon":null},
+        {"id":"gone","builtin":false,"name":"내려간 앱","version":1,"origin":{"store_url":"https://removed.example","store_app_id":"gone","release":1,"digest":"abc"},"latest":null,"installed_version":1,"modified":false,"icon":{"app_icon":"gone","app_version":1}},
+        {"id":"gone-plain","builtin":false,"name":"그림 없는 남은 앱","version":1,"origin":{"store_url":"https://removed.example","store_app_id":"gone-plain","release":1,"digest":"def"},"latest":null,"installed_version":1,"modified":false,"icon":null}
+    ])).unwrap();
+    let empty = BTreeMap::new();
+    let mut state = definition.state.clone();
+    state.insert("category".into(), json!("__custom"));
+    let values = app.evaluate_profiled(&state, &empty, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    let rows = value(&values, "/ui/children/1/children/3/child/items");
+    assert_eq!(rows[0]["image"]["app_icon"], json!("my-tool"));
+    assert_eq!(rows[0]["image"]["app_version"].as_f64(), Some(3.0));
+    assert_eq!(rows[1]["image"], Value::Null);
+
+    state.insert("category".into(), json!("__installed"));
+    let data = map(json!({"catalog":{"stores":[{"server":"https://a.example","state":"ready","items":[]}]}}));
+    let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
+    let groups = value(&values, "/ui/children/1/children/2/child/items");
+    let other = groups.as_array().unwrap().last().unwrap();
+    assert_eq!(other["title"], "그 밖의 스토어");
+    assert_eq!(other["items"][0]["id"], "gone");
+    assert_eq!(other["items"][0]["image"]["app_icon"], json!("gone"));
+    assert_eq!(other["items"][0]["image"]["app_version"].as_f64(), Some(1.0));
+    assert_eq!(other["items"][1]["id"], "gone-plain");
+    assert_eq!(other["items"][1]["image"], Value::Null);
+}
+
+#[test]
 fn store_icon_tiles_mark_apps_with_available_updates() {
     let definition = parse_app_definition(include_str!("../../../apps/store.json")).unwrap();
     let app = CompiledApp::compile(&definition);
@@ -259,12 +291,12 @@ fn invalid_store_address_has_no_retry_and_names_the_installed_origin() {
     let empty = BTreeMap::new();
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&apps), &BTreeMap::new(), None, &mut |_, _| {});
     assert!(value(&values, "/ui/children/1/children/2/child/items")[1].get("action").is_none());
-    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "사설 1에서 설치한 앱입니다.");
+    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "사설 1에서 설치한 앱입니다");
     state.insert("selected_store".into(), json!("https://b.example"));
     let mut first_apps = apps.clone();
     first_apps[0].origin.as_mut().unwrap().store_url = "https://a.example".into();
     let values = app.evaluate_profiled(&state, &data, &empty, &empty, &empty, Some(&first_apps), &BTreeMap::new(), None, &mut |_, _| {});
-    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "기본 앱스토어에서 설치한 앱입니다.");
+    assert_eq!(value(&values, "/ui/children/2/children/2/child/children/0/fields/7/value"), "기본 앱스토어에서 설치한 앱입니다");
 }
 
 #[test]
@@ -600,6 +632,8 @@ fn custom_category_lists_origin_less_apps_while_the_store_source_fails() {
     assert_eq!(value(&values, "/ui/children/2/children/1/value"), json!(true));
     assert_eq!(value(&values, "/ui/children/2/children/4/value"), json!(true));
     assert_eq!(value(&values, "/ui/children/2/children/5/value"), json!(true));
+    // 카탈로그 원천이 실패해도 커스텀 앱의 열기 단추 강조는 오류 없이 계산된다.
+    assert_eq!(value(&values, "/ui/children/2/children/5/child/end/1/variant"), "primary");
     // 후보 스토어를 읽을 수 없으면 바꾸기 없이 지우기만 남는다.
     assert_eq!(value(&values, "/ui/children/2/children/11/value"), json!(false));
     assert_eq!(value(&values, "/ui/children/2/children/12/value"), json!(true));

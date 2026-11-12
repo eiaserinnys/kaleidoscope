@@ -1,6 +1,6 @@
 //! 스토어 설치 계약. 네트워크 접근과 설치 처리는 별도 구현이 맡는다.
 use crate::{
-    assets::{AppIconRef, AssetUpload},
+    assets::AssetUpload,
     data::ResourceMediaRef,
     registry::RegistryApp,
     PermissionDecl, Requires,
@@ -48,7 +48,8 @@ pub struct InstalledAppValue {
     pub latest: Option<StoreLatest>,
     pub installed_version: Option<u32>,
     pub modified: bool,
-    pub icon: Option<AppIconRef>,
+    /// 이 앱의 아이콘을 그리는 미디어 참조. 앱 정의에 아이콘이 없으면 null
+    pub icon: Option<crate::data::AppIconMediaRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

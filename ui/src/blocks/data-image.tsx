@@ -82,7 +82,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
     drag.current = { x: event.clientX, y: event.clientY, offsetX: offset.x, offsetY: offset.y }; capturePointer(event);
   };
   const move = (event: PointerEvent<HTMLDivElement>) => { if (drag.current) setOffset({ x: drag.current.offsetX + event.clientX - drag.current.x, y: drag.current.offsetY + event.clientY - drag.current.y }); };
-  const crop = media?.crop;
+  const crop = media && "crop" in media ? media.crop : undefined;
   const cropWidth = crop && crop.w > 0 && crop.h > 0 ? crop.w : 1;
   const cropHeight = crop && crop.w > 0 && crop.h > 0 ? crop.h : 1;
   const sourceWidth = natural.width * cropWidth, sourceHeight = natural.height * cropHeight;

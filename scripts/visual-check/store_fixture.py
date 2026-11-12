@@ -6,8 +6,9 @@
 넣고 「연결 허용」 동의를 거쳐야 읽힌다. 초대코드는 두 갈래 모두 같은 값을 쓴다.
 
 스토어 파일 꼴은 crates/core/src/store/fetch.rs의 version 1 색인, 상세, manifest와 같다.
-manifest의 files는 `apps/{id}/{release}/app.json` 하나뿐이고, 정의의 requires와
-permissions는 manifest 값과 그대로 같아야 한다.
+manifest의 files는 `apps/{id}/{release}/app.json`과, 아이콘을 선언한 앱이면
+`apps/{id}/{release}/assets/icon/1`이고, 정의의 requires와 permissions는 manifest 값과
+그대로 같아야 한다.
 """
 from __future__ import annotations
 
@@ -22,16 +23,44 @@ STORE_A_PREFIX = "appstore-eias/stores/stable"
 STORE_B_PREFIX = "appstore-nine-lives/stores/private"
 PUBLISHED_AT = "2026-11-01T09:00:00Z"
 REQUIRES = {"blocks": 19, "modules": {}}
+ICON_BLOCKS = 26
+MEETING_ICON = "meeting-icon"
+READING_ICON = "reading-icon"
+
+# 런처와 같은 currentColor 마스크로 그려지는 아이콘. 채움과 선 모두 currentColor만 쓴다.
+CURRENT_COLOR_ICON = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+    b'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    b'<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>'
+)
+# 색이 고정된 아이콘. 마스크가 아니라 그림으로 그려져야 한다.
+FIXED_COLOR_ICON = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<rect width="24" height="24" rx="6" fill="#b45309"/>'
+    b'<path d="M7 8h10M7 12h10M7 16h6" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/></svg>'
+)
+# 스토어 묶음에 실려 설치되는 앱의 아이콘.
+STORE_ICON = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    b'<rect width="24" height="24" rx="6" fill="#0f766e"/>'
+    b'<circle cx="12" cy="9" r="3" fill="none" stroke="#ffffff" stroke-width="1.8"/>'
+    b'<path d="M6 19c1-3 3-4 6-4s5 1 6 4" fill="none" stroke="#ffffff" stroke-width="1.8"/></svg>'
+)
 
 
-def definition(app_id: str, name: str, text: str) -> dict:
-    return {
+def definition(app_id: str, name: str, text: str, icon: str | None = None) -> dict:
+    app = {
         "id": app_id,
         "name": name,
         "requires": {"blocks": REQUIRES["blocks"], "modules": {}},
         "permissions": [],
         "ui": {"type": "text", "value": text},
     }
+    if icon is not None:
+        app["requires"] = {"blocks": ICON_BLOCKS, "modules": {"assets": 1}}
+        app["assets"] = [{"id": icon, "version": 1}]
+        app["icon"] = {"asset": icon, "version": 1}
+    return app
 
 
 LONG_ID = "quarterly-planning-and-decisions-archive-2026-autumn"
@@ -64,6 +93,10 @@ APPS_B = [
     {"id": "read-later", "name": "나중에 읽기", "release": 1, "category": "읽기", "publisher": "라인게임즈",
      "summary": "나중에 읽을 글을 모아 둡니다.",
      "description": "주소와 한 줄 메모를 모아 두고 시간이 날 때 하나씩 엽니다."},
+    {"id": "team-handbook", "name": "팀 안내서", "release": 1, "category": "업무", "publisher": "라인게임즈",
+     "summary": "팀 규칙과 연락처를 모아 둡니다.",
+     "description": "새로 들어온 사람이 먼저 읽는 팀 안내서입니다.",
+     "icon": STORE_ICON},
     {"id": LONG_ID, "name": LONG_NAME, "release": 1, "category": "업무", "publisher": "라인게임즈",
      "summary": "긴 이름과 긴 id로 좁은 창의 배치를 확인합니다.",
      "description": "긴 이름과 긴 id가 좁은 창에서도 넘치지 않는지 보는 표본입니다."},
@@ -86,9 +119,31 @@ def store_files(prefix: str, apps: list[dict]) -> dict[str, bytes]:
     items = []
     for app in apps:
         app_id, release = app["id"], app["release"]
-        app_json = json.dumps(definition(app_id, app["name"], f"{app['name']} 앱입니다."),
+        icon_svg = app.get("icon")
+        icon_id = "icon" if icon_svg else None
+        requires = {"blocks": ICON_BLOCKS, "modules": {"assets": 1}} if icon_svg \
+            else {"blocks": REQUIRES["blocks"], "modules": {}}
+        app_json = json.dumps(definition(app_id, app["name"], f"{app['name']} 앱입니다.", icon_id),
                               ensure_ascii=False, indent=2).encode()
         release_prefix = f"apps/{app_id}/{release}/"
+        icon_path = f"{release_prefix}assets/icon/1" if icon_svg else None
+        files_map = {
+            f"{release_prefix}app.json": {
+                "sha256": _sha256(app_json),
+                "bytes": len(app_json),
+                "format": None,
+                "source": None,
+                "license": None,
+            },
+        }
+        if icon_svg:
+            files_map[icon_path] = {
+                "sha256": _sha256(icon_svg),
+                "bytes": len(icon_svg),
+                "format": "svg",
+                "source": "자체 제작",
+                "license": "MIT",
+            }
         manifest = {
             "format": 1,
             "store_app_id": app_id,
@@ -99,20 +154,12 @@ def store_files(prefix: str, apps: list[dict]) -> dict[str, bytes]:
             "category": app["category"],
             "publisher": app["publisher"],
             "published_at": PUBLISHED_AT,
-            "icon": None,
+            "icon": icon_path,
             "screenshots": [],
-            "requires": {"blocks": REQUIRES["blocks"], "modules": {}},
+            "requires": requires,
             "permissions": [],
             "badges": [],
-            "files": {
-                f"{release_prefix}app.json": {
-                    "sha256": _sha256(app_json),
-                    "bytes": len(app_json),
-                    "format": None,
-                    "source": None,
-                    "license": None,
-                },
-            },
+            "files": files_map,
         }
         manifest_bytes = json.dumps(manifest, ensure_ascii=False).encode()
         detail = {
@@ -124,12 +171,14 @@ def store_files(prefix: str, apps: list[dict]) -> dict[str, bytes]:
             "category": app["category"],
             "publisher": app["publisher"],
             "release": release,
-            "icon": None,
+            "icon": icon_path,
             "screenshots": [],
             "releases": [{"release": release, "published_at": PUBLISHED_AT,
                           "manifest": f"{release_prefix}manifest.json"}],
         }
         files[f"/{prefix}/{release_prefix}app.json"] = app_json
+        if icon_svg:
+            files[f"/{prefix}/{icon_path}"] = icon_svg
         files[f"/{prefix}/{release_prefix}manifest.json"] = manifest_bytes
         files[f"/{prefix}/apps/{app_id}/index.json"] = json.dumps(detail, ensure_ascii=False).encode()
         items.append({
@@ -139,9 +188,9 @@ def store_files(prefix: str, apps: list[dict]) -> dict[str, bytes]:
             "category": app["category"],
             "publisher": app["publisher"],
             "release": release,
-            "icon": None,
+            "icon": icon_path,
             "badges": [],
-            "requires": {"blocks": REQUIRES["blocks"], "modules": {}},
+            "requires": requires,
             "updated_at": PUBLISHED_AT,
         })
     index = {"format": 1, "generated_at": PUBLISHED_AT, "items": items}

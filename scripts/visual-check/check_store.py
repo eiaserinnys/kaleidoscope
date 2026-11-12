@@ -2,19 +2,24 @@
 """앱스토어의 커스텀 앱 분류와 상세, 스토어 판으로 바꾸기 동의, 로딩과 실패를 캡처하고 확인한다.
 
   python3 scripts/visual-check/check_store.py --output target/visual-check/store-custom/after
-  python3 scripts/visual-check/check_store.py --root .local/tmp/ks-before-93fb333f \
-      --binaries .local/tmp/ks-before-93fb333f --custom no --label before \
+  python3 scripts/visual-check/check_store.py --root .local/tmp/ks-before-main \
+      --binaries .local/tmp/ks-before-main/target/debug --label before \
       --output target/visual-check/store-custom/before
 
 가짜 스토어는 store_fixture.py가 127.0.0.1의 임의 포트에 긴 운영 꼴 주소 두 갈래로 연다.
 실제 스토어가 아니라 루프백 HTTP라서 연결 동의 화면에 암호화 경고가 함께 보인다(운영 HTTPS와 다른 점).
 창 크기는 1180x720과 최소 360x241이고, 화면 뷰포트는 창 너비 + 24, 높이 + 124다
 (가장자리 12씩, 작업 표시줄 예약 64, 쉘 머리 막대 48). 캡처마다 창의 실제 상자를 재어 1px 안쪽인지 확인한다.
+아이콘 칸(.ks-icon-tile)마다 currentColor 마스크, 그림, 기본 격자, 깨진 그림, 불러오는 중 가운데
+무엇이 그려졌는지 가려 결과 JSON의 details.icon_tiles에 남긴다. 앱 아이콘 미디어(app_icon)를 아는
+판에서만 기대값을 단언한다(--icons auto). 커스텀 앱 분류가 없는 판은 --custom no로 찍는다.
 한 번의 시나리오 흐름이 상태를 이어 가므로 줄 수가 500을 넘는다(장면마다 브라우저를 새로 띄우지 않는다).
 """
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -34,7 +39,7 @@ THEMES = ("light", "dark")
 WIDE = (1280, 800)
 NARROW = (520, 760)
 CUSTOM = "커스텀 앱"
-STATUS_OTHER = "사설 1에서 설치한 앱입니다."
+STATUS_OTHER = "사설 1에서 설치한 앱입니다"
 STATUS_MODIFIED = "설치 뒤 고친 앱이라 업데이트하지 않습니다"
 ERROR_TEXT = "스토어가 요청을 거부했습니다. 잠시 뒤 다시 받으세요."
 # 초점이 어디에 있는지, 그 조작이 어느 칸에 있고 지금 보이는지 한 번에 잰다.
@@ -137,6 +142,21 @@ ROW_GEOMETRY_JS = """(pane) => {
   });
   return rows.sort((a, b) => a.index - b.index);
 }"""
+# 아이콘 칸마다 지금 무엇이 그려졌는지 가른다. currentColor 마스크(mask), 그림(image),
+# 기본 격자(default-grid), 깨진 그림 표시(image-off), 아직 불러오는 중(loading), 그 밖(other).
+ICON_TILES_JS = """(pane) => [...pane.querySelectorAll('.ks-icon-tile')]
+  .filter((tile) => !tile.classList.contains('ks-icon-tile-skeleton'))
+  .map((tile) => {
+    const icon = tile.querySelector('.ks-icon-tile-icon');
+    const name = (tile.getAttribute('aria-label') || '').trim();
+    let kind = 'other';
+    if (icon && icon.querySelector('.ks-icon-skeleton-icon')) kind = 'loading';
+    else if (icon && icon.querySelector('span.ks-app-icon')) kind = 'mask';
+    else if (icon && icon.querySelector('img.ks-app-icon')) kind = 'image';
+    else if (icon && icon.querySelector('svg.lucide-layout-grid')) kind = 'default-grid';
+    else if (icon && icon.querySelector('.lucide-image-off')) kind = 'image-off';
+    return {name, kind};
+  })"""
 
 
 def row_overlaps(rows, tolerance=0.5):
@@ -249,6 +269,7 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--binaries", type=Path)
     parser.add_argument("--custom", choices=("auto", "yes", "no"), default="auto")
+    parser.add_argument("--icons", choices=("auto", "yes", "no"), default="auto")
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -257,6 +278,9 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     store_json = (root / "apps/store.json").read_text(encoding="utf-8")
     custom_mode = args.custom == "yes" or (args.custom == "auto" and "'__custom'" in store_json)
+    # 다른 앱의 아이콘 미디어(AppIconMediaRef)를 아는 판인지는 생성된 계약 타입으로 가른다.
+    contract = (root / "ui/src/contract/contract.ts").read_text(encoding="utf-8")
+    icons_mode = args.icons == "yes" or (args.icons == "auto" and "AppIconMediaRef" in contract)
 
     cache = Path(os.environ.get("KALEIDOSCOPE_SANDBOX_CACHE") or root / "target/visual-check/.sandbox-cache")
     os.environ["KALEIDOSCOPE_SANDBOX_CACHE"] = str(cache)
@@ -289,6 +313,7 @@ def main() -> int:
         "store_urls": {"a": store_a.url, "b": store_b.url},
         "invite": fixture.INVITE,
         "custom_category_supported": custom_mode,
+        "app_icon_media_supported": icons_mode,
         "captures": [],
         "settings_captures": [],
         "windows": {},
@@ -319,6 +344,19 @@ def main() -> int:
             browser = None
             try:
                 sb.start()
+                if custom_mode:
+                    # 커스텀 앱이 선언한 아이콘 자산은 가져오기 전에 계정에 올려 둔다.
+                    for asset_id, svg in ((fixture.MEETING_ICON, fixture.CURRENT_COLOR_ICON),
+                                          (fixture.READING_ICON, fixture.FIXED_COLOR_ICON)):
+                        uploaded = sb.mcp.call("upload_asset", {
+                            "id": asset_id, "version": 1, "format": "svg",
+                            "sha256": hashlib.sha256(svg).hexdigest(),
+                            "source": f"store_fixture.py#{asset_id}",
+                            "license": "MIT",
+                            "data_base64": base64.b64encode(svg).decode("ascii"),
+                        })
+                        assert not uploaded["is_error"], uploaded["text"]
+                    result["details"]["uploaded_icons"] = [fixture.MEETING_ICON, fixture.READING_ICON]
                 with sync_playwright() as playwright:
                     browser = sb.open_page(playwright, (1440, 900))
                     page = sb.page
@@ -389,6 +427,28 @@ def main() -> int:
                                                            ("x", "y", "width", "height")}
                                 print(f"capture {name}", flush=True)
 
+                    def capture_icons(scene, expected, assertion):
+                        def check(theme, width, height):
+                            deadline = time.monotonic() + 20
+                            while True:
+                                facts = pane1.evaluate(ICON_TILES_JS)
+                                kinds = {fact["name"]: fact["kind"] for fact in facts}
+                                settled = not any(kind == "loading" for kind in kinds.values())
+                                matched = all(kinds.get(name) == kind for name, kind in expected.items())
+                                if (settled and matched) or time.monotonic() >= deadline:
+                                    break
+                                time.sleep(0.1)
+                            result["details"].setdefault("icon_tiles", {})[
+                                f"{scene}-{theme}-{width}x{height}"] = facts
+                            if icons_mode and expected:
+                                wrong = {name: kinds.get(name) for name, kind in expected.items()
+                                         if kinds.get(name) != kind}
+                                assert not wrong, \
+                                    f"{scene} {theme} {width}x{height}: 아이콘 칸이 기대 {expected}와 다릅니다: " \
+                                    f"{wrong} / 전체 {facts}"
+                                result["assertions"][assertion] = True
+                        capture(scene, pane=1, check=check)
+
                     def search(text):
                         field = app.get_by_placeholder("앱 이름이나 id로 찾기")
                         field.fill(text)
@@ -396,7 +456,7 @@ def main() -> int:
 
                     def choose_category(title):
                         # 분류 줄의 접근 이름에는 개수(meta)가 붙으므로 row key로 고른다.
-                        key = "" if title == "전체" else "__custom"
+                        key = {"전체": "", CUSTOM: "__custom", "설치됨": "__installed"}[title]
                         option = pane0.locator(f'[data-row-key="{key}"]')
                         wait_until(lambda: option.count() > 0, 20, f"{title} 분류가 없습니다")
                         option.first.click()
@@ -430,9 +490,9 @@ def main() -> int:
                         wait_until(lambda: dialog.count() == 0 or not dialog.first.is_visible(), 20,
                                    "연결 동의 창이 닫히지 않았습니다")
 
-                    def write_definition(app_id, name, text, slug):
+                    def write_definition(app_id, name, text, slug, icon=None):
                         path = directory / f"{slug}.json"
-                        path.write_text(json.dumps(fixture.definition(app_id, name, text),
+                        path.write_text(json.dumps(fixture.definition(app_id, name, text, icon),
                                                    ensure_ascii=False, indent=2), encoding="utf-8")
                         return path
 
@@ -584,7 +644,8 @@ def main() -> int:
 
                         operate()
                         import_file(write_definition("meeting-cards", fixture.CUSTOM_MEETING,
-                                                     "내가 고쳐 쓴 회의 카드입니다.", "custom-meeting"))
+                                                     "내가 고쳐 쓴 회의 카드입니다.", "custom-meeting",
+                                                     fixture.MEETING_ICON))
                         wait_until(lambda: (entry := app_entry("meeting-cards")) is not None
                                    and entry.get("origin") is None
                                    and entry.get("name") == fixture.CUSTOM_MEETING, 30,
@@ -594,14 +655,17 @@ def main() -> int:
                             "option", name=fixture.CUSTOM_MEETING, exact=True).count() > 0, 20,
                             "가져온 커스텀 앱이 목록에 없습니다")
                         import_file(write_definition("read-later", fixture.CUSTOM_READING,
-                                                     "내가 모은 읽기 기록입니다.", "custom-reading"))
+                                                     "내가 모은 읽기 기록입니다.", "custom-reading",
+                                                     fixture.READING_ICON))
                         wait_until(lambda: pane1.get_by_role(
                             "option", name=fixture.CUSTOM_READING, exact=True).count() > 0, 20,
                             "두 번째 커스텀 앱이 목록에 없습니다")
                         wait_custom_count(2)
                         result["assertions"]["import_does_not_open_window"] = True
                         result["assertions"]["custom_list_two_items"] = True
-                        capture("custom-list-two", pane=1)
+                        capture_icons("custom-list-two",
+                                      {fixture.CUSTOM_MEETING: "mask", fixture.CUSTOM_READING: "image"},
+                                      "custom_list_shows_app_icons")
 
                         # 커스텀 분류도 다른 분류와 같은 높이에서 목록이 시작해야 한다.
                         # 가져오기 단추를 따로 선 막대에 두면 목록이 49px 내려간다.
@@ -704,6 +768,10 @@ def main() -> int:
                             "option", name=fixture.CUSTOM_DIARY, exact=True).count() > 0, 20,
                             "세 번째 커스텀 앱이 목록에 없습니다")
                         wait_custom_count(2)
+                        capture_icons("custom-list-mixed",
+                                      {fixture.CUSTOM_READING: "image",
+                                       fixture.CUSTOM_DIARY: "default-grid"},
+                                      "iconless_custom_app_keeps_default_grid")
                         pane1.get_by_role("option", name=fixture.CUSTOM_DIARY, exact=True).click()
                         wait_until(lambda: pane2.get_by_role("button", name="지우기", exact=True).count() > 0,
                                    20, "커스텀 상세의 지우기 단추가 없습니다")
@@ -1149,6 +1217,49 @@ def main() -> int:
                         notice.locator('[aria-label="닫기"]').first.click()
                         wait_until(lambda: notice.count() == 0 or not notice.first.is_visible(), 10,
                                    "가져오기 실패 안내가 닫히지 않았습니다")
+
+                        # 설치한 뒤 스토어 주소를 설정에서 빼면 그 앱은 「그 밖의 스토어」 묶음에 남는다.
+                        # 묶음 항목도 앱 자신이 선언한 아이콘을 그려야 한다.
+                        operate()
+                        choose_category("전체")
+                        search("팀 안내서")
+                        handbook = pane1.get_by_role("option", name="팀 안내서", exact=True)
+                        wait_until(lambda: handbook.count() > 0, 30, "사설 2의 팀 안내서가 없습니다")
+                        handbook.first.click()
+                        install = pane2.get_by_role("button", name="설치", exact=True)
+                        wait_until(lambda: install.count() > 0 and install.first.is_enabled(), 30,
+                                   "팀 안내서 설치 단추가 없거나 꺼져 있습니다")
+                        install.first.click()
+                        consent = confirm_install_dialog()
+                        consent.get_by_role("button", name="허용하고 설치", exact=True).click()
+                        wait_until(lambda: consent.count() == 0 or not consent.first.is_visible(), 20,
+                                   "설치 동의 창이 닫히지 않았습니다")
+                        wait_until(lambda: (lambda entry: entry if entry and entry.get("origin")
+                                            and entry["origin"]["store_url"] == b_url else None)(
+                            app_entry("team-handbook")), 30, "팀 안내서가 사설 2에서 설치되지 않았습니다")
+                        search("")
+
+                        gear.click()
+                        wait_until(lambda: settings.is_visible(), 20, "앱 설정 패널이 열리지 않았습니다")
+                        server_row = app.locator(f'[data-row-key="{b_url}"]')
+                        wait_until(lambda: server_row.count() > 0, 20, "설정에 사설 2 주소가 없습니다")
+                        # 빼기 단추는 행 요소가 아니라 그 행을 감싼 목록 항목의 형제다.
+                        app.get_by_role("button", name=f"{b_url} 빼기").first.click()
+                        wait_until(lambda: sb.core({"op": "storage.get", "window_id": window_id,
+                                                    "entry": "servers"})["result"]["content"] == [a_url],
+                                   20, "사설 2 주소를 설정에서 빼지 못했습니다")
+                        app.get_by_role("button", name="앱으로 돌아가기").click()
+                        wait_until(lambda: not settings.is_visible(), 10, "앱 설정 패널이 닫히지 않았습니다")
+
+                        choose_category("설치됨")
+                        wait_until(lambda: "그 밖의 스토어" in pane1.inner_text(), 30,
+                                   "그 밖의 스토어 묶음이 없습니다")
+                        result["details"]["other_stores_servers"] = \
+                            sb.core({"op": "storage.get", "window_id": window_id,
+                                     "entry": "servers"})["result"]["content"]
+                        capture_icons("other-stores",
+                                      {"회의 카드": "default-grid", "팀 안내서": "image"},
+                                      "other_stores_show_app_icons")
                     else:
                         assert pane0.locator('[data-row-key="__custom"]').count() == 0, \
                             "이 판에 커스텀 앱 분류가 있습니다"
@@ -1194,7 +1305,8 @@ def main() -> int:
                     result["apps"] = [{key: entry.get(key) for key in
                                        ("id", "name", "origin", "installed_version", "current_version")}
                                       for entry in apps()
-                                      if entry["id"] in ("meeting-cards", "read-later", "diary-notes")]
+                                      if entry["id"] in ("meeting-cards", "read-later", "diary-notes",
+                                                         "team-handbook")]
             finally:
                 if browser is not None:
                     try:
