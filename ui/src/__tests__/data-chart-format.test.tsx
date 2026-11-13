@@ -322,6 +322,23 @@ it("값이 없는 계열은 범례와 읽기 줄과 표에서 빼고 남은 계�
   expect([...table.querySelectorAll("thead th")].map((cell) => cell.textContent)).toEqual(["시점", "계열 가", "계열 다"]);
 });
 
+it("쌓지 않은 묶음 막대는 빈 계열에 자리를 두지 않고 남은 계열은 원래 색과 무늬를 지킨다", () => {
+  const first: PlotSeries = { key: "a", name: "계열 가", points: [{ x: "월", y: 10 }, { x: "화", y: 20 }] };
+  const empty: PlotSeries = { key: "b", name: "빈 계열", points: [{ x: "월", y: null }, { x: "화", y: null }] };
+  const third: PlotSeries = { key: "c", name: "계열 다", points: [{ x: "월", y: 5 }, { x: "화", y: 11 }] };
+  const withEmpty = buildChartGeometry([first, empty, third], "bar", 600);
+  const withoutEmpty = buildChartGeometry([first, third], "bar", 600);
+  const slots = (geometry: ReturnType<typeof buildChartGeometry>) => geometry.series
+    .filter((entry) => entry.bars.length)
+    .map((entry) => entry.bars.map(({ index, x, width }) => ({ index, x, width })));
+  expect(slots(withEmpty)).toHaveLength(2);
+  expect(slots(withEmpty)).toEqual(slots(withoutEmpty));
+  expect(withEmpty.drawn).toEqual([0, 2]);
+  expect(withEmpty.series[0].color).toBe("var(--ks-color-series-1)");
+  expect(withEmpty.series[2].color).toBe("var(--ks-color-series-3)");
+  expect(withEmpty.series[2].className).toContain("is-series-2");
+});
+
 it("받는 중에도 다 받은 차트와 같은 틀을 그린다", async () => {
   const { transport } = setup({ type: "chart", kind: "line", height: "tall", series: { expr: "[]" } });
   await screen.findByText("없음", { exact: true });

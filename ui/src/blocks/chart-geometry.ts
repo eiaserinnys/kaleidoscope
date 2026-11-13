@@ -32,6 +32,8 @@ export type ChartGeometry = {
     ordered: Array<PlotPoint | undefined>;
   }>;
   isolatedDots: Array<{ key: string; index: number; left: string; top: string; color: string }>;
+  /** 그린 값이 하나라도 있는 계열의 원래 index. 범례, 읽기 줄, 접근성 표, 묶음 막대 자리가 이것만 쓴다. */
+  drawn: number[];
   rows: Array<{ label: string; values: string[]; total?: string }>;
   axes: Array<{ label: string; index: number; left: string; transform: string }>;
 };
@@ -110,6 +112,10 @@ export function buildChartGeometry(
   const groupStart = (index: number) => index * bandWidth + bandWidth * 0.1;
   const groupWidth = bandWidth * 0.8;
   const orderedSeries = series.map((entry) => labels.map((label) => entry.points.find((point) => point.x === label)));
+  const drawn = series.flatMap((entry, index) => entry.points.some((point) => point.y !== null) ? [index] : []);
+  // 쌓지 않은 묶음 막대의 자리는 그린 계열 수로만 나눈다. 빈 계열은 자리를 차지하지 않고, 색과 무늬는 원래 index를 지킨다.
+  const slotOf = new Map(drawn.map((seriesIndex, slot) => [seriesIndex, slot]));
+  const slotWidth = groupWidth / Math.max(drawn.length, 1);
   let min: number;
   let max: number;
   if (stackedBars) {
@@ -168,9 +174,8 @@ export function buildChartGeometry(
         offsets.negative += point.y;
         return [{ index, x: groupStart(index), y: Math.min(yAt(from), yAt(offsets.negative)), width: groupWidth, height: Math.max(1, Math.abs(yAt(offsets.negative) - yAt(from))), title: `${entry.name} ${formatValue(point.y)}` }];
       }
-      const slot = groupWidth / series.length;
       const height = Math.max(1, Math.abs(yAt(point.y) - baseline));
-      return [{ index, x: groupStart(index) + seriesIndex * slot, y: point.y > 0 ? baseline - height : baseline, width: slot, height }];
+      return [{ index, x: groupStart(index) + slotOf.get(seriesIndex)! * slotWidth, y: point.y > 0 ? baseline - height : baseline, width: slotWidth, height }];
     });
     const segments: Array<Array<{ x: number; y: number }>> = [];
     if (kind !== "bar" && kind !== "candlestick") ordered.forEach((point, index) => {
@@ -238,5 +243,5 @@ export function buildChartGeometry(
     while (axes.length && lastCandidate.leftPx < axes.at(-1)!.rightPx + 8) axes.pop();
     axes.push(lastCandidate);
   }
-  return { labels, min, max, baseline, axisStep, xAt, yAt, series: seriesGeometry, isolatedDots, rows, axes: axes.map(({ label, index, left, transform }) => ({ label, index, left, transform })) };
+  return { labels, min, max, baseline, axisStep, xAt, yAt, series: seriesGeometry, isolatedDots, drawn, rows, axes: axes.map(({ label, index, left, transform }) => ({ label, index, left, transform })) };
 }

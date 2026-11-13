@@ -71,9 +71,8 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   const [regional, setRegional] = useState<number | null>(null);
   const current = Math.max(0, Math.min(labels.length - 1, regional ?? resting));
   const points = useMemo(() => series.map((entry) => entry.points.find((point) => point.x === labels[current])), [series, labels, current]);
-  // 그린 값이 하나도 없는 계열은 읽기 줄, 범례, 접근성 표에서 뺀다. 기하와 색은 원래 index 그대로 두어 남은 계열의 색이 밀리지 않는다.
-  const drawn = series.flatMap((entry, index) => entry.points.some((point) => point.y !== null) ? [index] : []);
-  const { min, max } = geometry;
+  // 그린 값이 하나도 없는 계열은 읽기 줄, 범례, 접근성 표에서 뺀다. 색은 원래 index 그대로라 남은 계열의 색이 밀리지 않는다.
+  const { min, max, drawn } = geometry;
   const showMarker = block.selected == null || boundSelected !== null || regional !== null;
   const band = block.kind === "bar" && showMarker ? { x: current * 1000 / Math.max(labels.length, 1), width: 1000 / Math.max(labels.length, 1) } : null;
 
