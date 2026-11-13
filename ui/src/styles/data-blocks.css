@@ -81,11 +81,12 @@
 .ks-data-toolbar .ks-data-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; padding-inline: var(--ks-space-3); }
-/* 뒤에 내용이 이어지는 쌓기와 세로 분할은 창 바닥 여백을 갖지 않는다. */
+/* 뒤에 내용이 이어지는 쌓기와 세로 분할은 창 바닥 여백을 갖지 않는다. 그 안 끝의 차트는 아래 여백을 남긴다(차트 아래 여백 규칙). */
 .ks-data-stack.is-column > .ks-data-stack-item:has(~ .ks-data-stack-item:not(:empty):not(.is-dialog)),
-:is(.ks-split.is-stacked, .ks-split-column) > .ks-split-pane:not(:last-child) { --ks-pane-bottom-space: 0px; }
-/* 구역의 자식 스크롤 밖에 남긴다. 탭은 구역 안팎 어느 쪽이든 탭 패널이 맡는다. */
-:is(.ks-split-pane, .ks-data-window-body, .ks-data-stack-item.is-fill:not(.ks-data-section-child *, .ks-dialog *)) > .ks-data-section:not(.ks-data-tab-panel *):not(:has(> .ks-data-section-child > .ks-data-tabs)) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }
+:is(.ks-split.is-stacked, .ks-split-column) > .ks-split-pane:not(:last-child) { --ks-pane-bottom-space: 0px; --ks-chart-end-space: var(--ks-space-3); }
+/* 구역의 자식 스크롤 밖에 남긴다. 탭은 구역 안팎 어느 쪽이든 탭 패널이 맡는다.
+   이 여백을 받은 구역 끝의 차트는 아래 여백을 구역에 맡기고, 여백이 꺼진 구역(뒤에 내용이 이어짐)의 차트는 남긴다. */
+:is(.ks-split-pane, .ks-data-window-body, .ks-data-stack-item.is-fill:not(.ks-data-section-child *, .ks-dialog *)) > .ks-data-section:not(.ks-data-tab-panel *):not(:has(> .ks-data-section-child > .ks-data-tabs)) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); --ks-chart-end-space: calc(var(--ks-space-3) - var(--ks-pane-bottom-space, var(--ks-space-3))); }
 /* 같은 분할의 직접 콘텐츠도 구역과 끝선을 맞춘다. 중간 쌓인 칸은 기존 간격만 쓴다. */
 .ks-split:has(> .ks-split-pane > .ks-data-section) > .ks-split-pane:not(:has(> :is(.ks-data-section, .ks-data-tabs, .ks-data-stack, .ks-split))):not(.ks-split.is-stacked > .ks-split-pane:not(:last-child)):not(.ks-data-tab-panel *) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); }
 /* 별도 여백 주인이 없는 창 본문 쌓기는 마지막 글의 자연 높이에 여백을 포함한다. */
@@ -158,13 +159,14 @@
 .ks-split.is-stacked > .ks-split-handle { display: none; }
 .ks-split.is-stacked > .ks-split-pane:not(:last-child) { padding-bottom: var(--ks-space-2); }
 .ks-split.is-stacked > .ks-split-pane:not(:first-child) { border-top: var(--ks-line-width) solid var(--ks-color-border); padding-top: var(--ks-space-2); }
-/* 칸 바닥에 닿는 차트만 아래 여백을 칸에 맡긴다. 같은 칸에서 차트 아래에 블록이 이어지면 차트가 자기 아래 여백을 남긴다.
-   「아래에 이어진다」는 차트에서 칸 경계까지 올라가는 모든 세로 쌓기에서 본다. 뒤에 블록이 있는 세로 쌓기 칸이 여백을 켜고
-   칸 경계(탭 판, 구역 자식, 분할 칸)가 끈다. 변수는 상속되므로 차트에서 가장 가까운 쪽이 이겨, 중첩 깊이와 상관없이 같은
-   관계면 같은 간격이다. 가로 쌓기의 옆 칸은 아래에 이어진 블록이 아니라 켜지 않는다. 대화상자 안의 차트는 아래 규칙이 정한다. */
-.ks-data-stack.is-column > .ks-data-stack-item:has(~ .ks-data-stack-item:not(:empty):not(.is-dialog)) { --ks-chart-end-space: var(--ks-space-3); }
-:is(.ks-data-tab-panel, .ks-data-section-child, .ks-split-pane) { --ks-chart-end-space: 0px; }
-:is(.ks-data-tab-panel, .ks-data-section) .ks-chart { padding-inline: 0; padding-block-end: var(--ks-chart-end-space, 0px); }
+/* 차트 아래 여백: 바닥 여백을 가진 칸(탭 판, 바닥 여백을 받은 구역)의 바닥에 닿는 차트만 여백을 칸에 맡긴다. 그 밖에서는
+   차트가 자기 아래 여백(var(--ks-space-3))을 남겨, 틀 아래가 칸 바닥이나 다음 블록에 붙지 않는다.
+   「아래에 이어진다」는 구역을 지나 바닥 여백을 가진 칸이나 창 본문까지 올라가며 본다. 뒤에 내용이 이어지는 세로 쌓기 칸과
+   세로 분할의 앞 칸이 여백을 켜고(바닥 여백 규칙), 바닥 여백을 가진 칸이 끈다. 변수는 상속되므로 차트에서 가장 가까운 쪽이
+   이겨, 중첩 깊이와 상관없이 같은 관계면 같은 간격이다. 가로 쌓기의 옆 칸은 아래에 이어진 블록이 아니라 켜지 않는다.
+   대화상자 안의 차트는 아래 규칙이 정한다. */
+.ks-data-tab-panel { --ks-chart-end-space: 0px; }
+:is(.ks-data-tab-panel, .ks-data-section) .ks-chart { padding-inline: 0; padding-block-end: var(--ks-chart-end-space, var(--ks-space-3)); }
 /* 대화상자 본문에는 자기 아래 여백이 없으므로 차트가 칸 아래 여백 하나를 계속 맡는다. */
 .ks-dialog .ks-chart { padding-inline: 0; padding-block-end: var(--ks-space-3); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-map { padding-inline: 0; }
