@@ -416,6 +416,7 @@ test.describe("실제 스크롤바가 있는 대화 머리", () => {
     await page.getByRole("menuitem", { name: "eias-linegames" }).click();
     await chat.getByRole("button", { name: "바꾸기", exact: true }).click();
     await expect(model).toContainText("Argon");
+    await expect(place).toBeEnabled();
     await page.setViewportSize({ width: 360, height: 600 });
     const dimensions = await settings.evaluate((element) => {
       const toolbar = element as HTMLElement;
@@ -472,15 +473,26 @@ test.describe("실제 스크롤바가 있는 대화 머리", () => {
     }
     await page.evaluate(() => (window as any).conversationHarness.setBusy(false));
     await expect(profile).toBeEnabled();
+    // 전환은 짧게 끝나 toBeDisabled가 잠긴 순간을 놓칠 수 있다. 누르기 전에 관찰자를 걸어 한 번이라도 잠겼는지 본다.
+    await page.evaluate(() => {
+      const button = document.querySelector<HTMLButtonElement>('[data-testid="app-window-workspace-pas"] button[aria-label="프로필"]')!;
+      const state = { seen: false };
+      (window as any).__profileDisabledState = state;
+      new MutationObserver(() => { if (button.disabled) state.seen = true; }).observe(button, { attributes: true, attributeFilter: ["disabled", "aria-disabled"] });
+    });
     for (const [index, width] of [360, 370, 400, 510, 1100].entries()) {
       await page.setViewportSize({ width, height: 600 });
       await profile.click();
       await page.getByRole("menuitem", { name: index % 2 === 0 ? "서소영" : "키키" }).click();
+      await page.evaluate(() => { (window as any).__profileDisabledState.seen = false; });
       await chat.getByRole("button", { name: "바꾸기", exact: true }).click();
-      const hint = await settings.locator(".ks-agent-chat-change-hint").evaluate((element) => {
-        const rect = element.getBoundingClientRect();
-        const parent = element.parentElement!.getBoundingClientRect();
-        return { width: rect.width, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, visible: rect.width > 0 && rect.height > 0 && rect.top < parent.bottom && rect.bottom > parent.top, fits: rect.left >= parent.left && rect.right <= parent.right };
+      await expect.poll(() => page.evaluate(() => (window as any).__profileDisabledState.seen)).toBe(true);
+      const hint = await settings.evaluate((element) => {
+        const target = element.querySelector<HTMLElement>(".ks-agent-chat-change-hint");
+        if (!target?.isConnected) return { width: 0, scrollWidth: 0, clientWidth: 0, visible: false, fits: true };
+        const rect = target.getBoundingClientRect();
+        const parent = target.parentElement!.getBoundingClientRect();
+        return { width: rect.width, scrollWidth: target.scrollWidth, clientWidth: target.clientWidth, visible: rect.width > 0 && rect.height > 0 && rect.top < parent.bottom && rect.bottom > parent.top, fits: rect.left >= parent.left && rect.right <= parent.right };
       });
       console.log(`안내 글 switching ${width}: ${JSON.stringify(hint)}`);
       expect(!hint.visible || (hint.fits && hint.scrollWidth <= hint.clientWidth && hint.width >= hint.scrollWidth)).toBe(true);

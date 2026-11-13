@@ -42,12 +42,19 @@
 .ks-data-tab-panel:has(> .ks-file-tree-ungranted),
 .ks-data-tab-panel:has(> .ks-markdown-editor),
 .ks-data-tab-panel:has(> .ks-markdown-view) { padding: 0; }
-/* 채팅과 결정 줄 꼬리는 자기 바닥 여백을 갖는다. 탭 패널이 끝에 여백을 더하면 입력창 아래에 빈 띠가 남는다. */
+/* 꼬리 없이 채팅으로 끝나는 탭 패널은 바닥 여백을 두지 않는다. 채팅 입력창이 자기 여백을 갖고, 패널이 끝에 여백을 더하면 입력창 아래에 빈 띠가 남는다. 결정 줄 꼬리가 붙은 세로 쌓기의 채팅은 꼬리가 바닥 여백을 정하므로 여기서 잡지 않는다. */
 .ks-data-tab-panel:has(
   > .ks-agent-chat,
-  > .ks-data-stack.is-column.has-action-tail,
-  > .ks-data-stack.is-column > .ks-data-stack-item > .ks-agent-chat,
-  > .ks-data-stack.is-column > .ks-data-stack-item > .ks-split .ks-agent-chat
+  > .ks-data-stack.is-column:not(.has-action-tail) > .ks-data-stack-item > .ks-agent-chat,
+  > .ks-data-stack.is-column:not(.has-action-tail) > .ks-data-stack-item > .ks-split .ks-agent-chat
+) {
+  padding-block-end: 0;
+}
+/* 결정 줄 꼬리의 마지막 칸이 도구 막대인 탭 패널은 바닥 여백을 두지 않는다. 도구 막대는 자기 아래 여백을 갖고, 탭 안 꼬리는 패널이 끝 여백을 맡으므로(스크롤 끝 여백 규칙) 패널이 여백을 더하면 입력 아래에 빈 띠가 남는다. 마지막 칸이 단추인 탭 패널은 패널 기본 여백(--ks-space-3)을 그대로 쓴다. */
+.ks-data-tab-panel:has(
+  > .ks-data-stack.is-column.has-action-tail
+  > .ks-data-stack-item:nth-last-child(1 of :not(:empty)):not(.ks-stack-scroll)
+  .ks-data-toolbar
 ) {
   padding-block-end: 0;
 }

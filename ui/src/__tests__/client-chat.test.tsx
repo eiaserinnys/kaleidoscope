@@ -137,12 +137,17 @@ describe("채팅 블록의 탭과 쌓기 배치", () => {
   const blocks = readFileSync(resolve(cwd(), "src/styles/blocks.css"), "utf8");
   const scrollEnd = readFileSync(resolve(cwd(), "src/styles/scroll-end-space.css"), "utf8");
 
-  it("탭 패널은 채팅이나 결정 줄 꼬리를 담으면 바닥 여백을 두지 않는다", () => {
-    const rule = cssRule(dataBlocks, ".ks-data-tab-panel:has( > .ks-agent-chat,");
-    expect(rule.body).toContain("padding-block-end: 0");
-    expect(rule.selector).toContain("> .ks-data-stack.is-column.has-action-tail,");
-    expect(rule.selector).toContain("> .ks-data-stack.is-column > .ks-data-stack-item > .ks-agent-chat,");
-    expect(rule.selector).toContain("> .ks-data-stack.is-column > .ks-data-stack-item > .ks-split .ks-agent-chat");
+  it("탭 패널은 꼬리 없는 채팅과 도구 막대 꼬리에는 바닥 여백을 두지 않고, 단추 꼬리에는 패널 여백을 남긴다", () => {
+    const chat = cssRule(dataBlocks, ".ks-data-tab-panel:has( > .ks-agent-chat,");
+    expect(chat.body).toContain("padding-block-end: 0");
+    expect(chat.selector).toContain("> .ks-data-stack.is-column:not(.has-action-tail) > .ks-data-stack-item > .ks-agent-chat,");
+    expect(chat.selector).toContain("> .ks-data-stack.is-column:not(.has-action-tail) > .ks-data-stack-item > .ks-split .ks-agent-chat");
+    expect(chat.selector).not.toContain("> .ks-data-stack.is-column > .ks-data-stack-item > .ks-agent-chat");
+    const toolbar = cssRule(dataBlocks, ".ks-data-tab-panel:has( > .ks-data-stack.is-column.has-action-tail");
+    expect(toolbar.body).toContain("padding-block-end: 0");
+    expect(toolbar.selector).toContain(".ks-data-stack-item:nth-last-child(1 of :not(:empty)):not(.ks-stack-scroll)");
+    expect(toolbar.selector).toContain(".ks-data-toolbar");
+    expect(toolbar.selector).not.toContain(":has(.ks-agent-chat)");
   });
 
   it("탭·구역·대화상자 안 채팅은 좌우 여백을 다시 더하지 않는다", () => {

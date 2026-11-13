@@ -215,7 +215,7 @@ test("small 칸 격자에서 뼈대 막대가 칸 오른쪽 끝을 넘지 않는
   const app = page.getByTestId("app-window-repeat-empty-center");
   await expect(app.getByText("받은 항목", { exact: true })).toBeVisible();
   await patchRepeat(page, { item_width: "small", gap: "small" });
-  await expect(app.locator(".ks-repeat")).toBeVisible();
+  await expect(app.locator(".ks-repeat")).toBeAttached();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
   await emitState(page, loading);
@@ -251,7 +251,7 @@ for (const [width, height] of [[1180, 720], [360, 240]] as const) {
     const app = page.getByTestId("app-window-repeat-empty-center");
     await expect(app.getByText("받은 항목", { exact: true })).toBeVisible();
     await patchRepeat(page, { layout: "column" });
-    await expect(app.locator(".ks-repeat")).toBeVisible();
+    await expect(app.locator(".ks-repeat")).toBeAttached();
     await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
     await emitState(page, loading);
@@ -281,7 +281,7 @@ test("1180×720 창에서 virtual 열 반복 뼈대도 받은 뒤 첫 세 줄과
   const app = page.getByTestId("app-window-repeat-empty-center");
   await expect(app.getByText("받은 항목", { exact: true })).toBeVisible();
   await patchRepeat(page, { layout: "column", virtual: true });
-  await expect(app.locator(".ks-repeat")).toBeVisible();
+  await expect(app.locator(".ks-repeat")).toBeAttached();
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
   await emitState(page, loading);

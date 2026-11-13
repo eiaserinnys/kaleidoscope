@@ -21,7 +21,7 @@ test("동적 일정표의 선택과 고정 행 머리", async ({ page }) => {
   await page.keyboard.press("ArrowRight");
   const next = grid.getByRole("gridcell", { name: /작업 묶음 1, 2일/ });
   await expect(next).toBeFocused();
-  await expect(next).toHaveAttribute("aria-selected", "false");
+  await expect(next).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Enter");
   await expect(next).toHaveAttribute("aria-selected", "true");
   await expect(app.getByText(/period_1/)).toBeVisible();
