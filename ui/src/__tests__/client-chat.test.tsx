@@ -137,12 +137,13 @@ describe("채팅 블록의 탭과 쌓기 배치", () => {
   const blocks = readFileSync(resolve(cwd(), "src/styles/blocks.css"), "utf8");
   const scrollEnd = readFileSync(resolve(cwd(), "src/styles/scroll-end-space.css"), "utf8");
 
-  it("탭 패널은 채팅이나 결정 줄 꼬리를 담으면 바닥 여백을 두지 않는다", () => {
+  it("탭 패널은 채팅을 담으면 바닥 여백을 두지 않고, 결정 줄 꼬리만 있으면 패널이 여백을 맡는다", () => {
     const rule = cssRule(dataBlocks, ".ks-data-tab-panel:has( > .ks-agent-chat,");
     expect(rule.body).toContain("padding-block-end: 0");
-    expect(rule.selector).toContain("> .ks-data-stack.is-column.has-action-tail,");
+    expect(rule.selector).not.toContain("has-action-tail");
     expect(rule.selector).toContain("> .ks-data-stack.is-column > .ks-data-stack-item > .ks-agent-chat,");
     expect(rule.selector).toContain("> .ks-data-stack.is-column > .ks-data-stack-item > .ks-split .ks-agent-chat");
+    expect(cssRule(dataBlocks, ".ks-data-tab-panel:has(> .ks-data-stack.is-column.has-action-tail):has(.ks-agent-chat)").body).toContain("padding-block-end: 0");
   });
 
   it("탭·구역·대화상자 안 채팅은 좌우 여백을 다시 더하지 않는다", () => {

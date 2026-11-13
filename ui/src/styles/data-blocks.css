@@ -42,13 +42,16 @@
 .ks-data-tab-panel:has(> .ks-file-tree-ungranted),
 .ks-data-tab-panel:has(> .ks-markdown-editor),
 .ks-data-tab-panel:has(> .ks-markdown-view) { padding: 0; }
-/* 채팅과 결정 줄 꼬리는 자기 바닥 여백을 갖는다. 탭 패널이 끝에 여백을 더하면 입력창 아래에 빈 띠가 남는다. */
+/* 채팅을 담은 탭 패널은 바닥 여백을 두지 않는다. 채팅 입력창이 자기 여백을 갖고, 패널이 끝에 여백을 더하면 입력창 아래에 빈 띠가 남는다. */
 .ks-data-tab-panel:has(
   > .ks-agent-chat,
-  > .ks-data-stack.is-column.has-action-tail,
   > .ks-data-stack.is-column > .ks-data-stack-item > .ks-agent-chat,
   > .ks-data-stack.is-column > .ks-data-stack-item > .ks-split .ks-agent-chat
 ) {
+  padding-block-end: 0;
+}
+/* 결정 줄 꼬리만 있는 탭 패널은 패널이 바닥 여백을 맡는다. 탭 안 꼬리는 자기 바닥 여백을 두지 않으므로(스크롤 끝 여백 규칙) 패널이 여백을 주지 않으면 꼬리가 탭 바닥에 붙는다. 채팅을 담은 action-tail 탭 패널만 0을 유지한다. */
+.ks-data-tab-panel:has(> .ks-data-stack.is-column.has-action-tail):has(.ks-agent-chat) {
   padding-block-end: 0;
 }
 .ks-data-toolbar, .ks-agent-chat-toolbar { display: flex; min-width: 0; height: var(--ks-bar-height); min-height: var(--ks-bar-height); max-height: var(--ks-bar-height); flex-shrink: 0; align-items: flex-start; gap: var(--ks-space-2); overflow-x: auto; overflow-y: hidden; scroll-padding-inline: var(--ks-space-3); padding: var(--ks-space-2) var(--ks-space-3) var(--ks-space-1); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
