@@ -741,6 +741,78 @@ describe("app definition renderer", () => {
     await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
   });
 
+  it("구역 동작 단추가 사라지면 아래 표 행이 아니라 이웃이나 pane의 임시 초점으로 간다", async () => {
+    const markup = (actions: string) => `<section class="ks-data-section"><div class="ks-data-section-header"><div class="ks-data-section-actions">${actions}</div></div><div class="ks-data-section-child"><div role="table"><div role="row" tabindex="0">첫 행</div></div></div></section>`;
+    // 뒤 이웃이 있으면 그 단추로 간다.
+    let fixture = await focusFixture(markup("<button>날짜 풀기</button><button>적용</button>"));
+    let button = within(fixture).getByRole("button", { name: "날짜 풀기" });
+    button.focus();
+    button.remove();
+    await waitFor(() => expect(document.activeElement).toBe(within(fixture).getByRole("button", { name: "적용" })));
+    cleanup();
+
+    // 뒤가 없으면 앞 이웃으로 간다.
+    fixture = await focusFixture(markup("<button>적용</button><button>날짜 풀기</button>"));
+    button = within(fixture).getByRole("button", { name: "날짜 풀기" });
+    button.focus();
+    button.remove();
+    await waitFor(() => expect(document.activeElement).toBe(within(fixture).getByRole("button", { name: "적용" })));
+    cleanup();
+
+    // 이웃이 없으면 표 첫 행이 아니라 pane의 임시 초점으로 간다.
+    fixture = await focusFixture(markup("<button>날짜 풀기</button>"));
+    button = within(fixture).getByRole("button", { name: "날짜 풀기" });
+    const row = fixture.querySelector<HTMLElement>('[role="row"]')!;
+    const body = fixture.closest<HTMLElement>(".ks-data-window-body")!;
+    button.focus();
+    button.remove();
+    await waitFor(() => expect(document.activeElement).toBe(body));
+    expect(document.activeElement).not.toBe(row);
+    expect(body.classList.contains("ks-focus-rescue-empty")).toBe(true);
+  });
+
+  it("형제 칸의 모음에 새 반복 항목 단추가 생겨도 그 단추로 초점을 옮기지 않는다", async () => {
+    const fixture = await focusFixture('<div class="ks-data-stack"><div class="ks-data-stack-item"><button>해제</button></div><div class="ks-data-stack-item"><div class="ks-repeat-content"></div></div></div>');
+    const button = screen.getByRole("button", { name: "해제" });
+    button.focus();
+    button.remove();
+    const item = document.createElement("div");
+    item.className = "ks-repeat-item";
+    const answer = document.createElement("button");
+    answer.textContent = "답하기";
+    item.append(answer);
+    fixture.querySelector(".ks-repeat-content")!.append(item);
+    await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
+    expect(document.activeElement).not.toBe(answer);
+    expect(within(fixture).getByRole("button", { name: "답하기" })).toBe(answer);
+  });
+
+  it("반복 항목 깊은 곳의 단추가 사라지고 먼 칸에 새 단추가 서도 그 단추로 가지 않는다", async () => {
+    const fixture = await focusFixture('<div class="ks-data-stack"><div class="ks-data-stack-item"><div class="ks-repeat-content"><div class="ks-repeat-item"><div class="ks-data-stack"><div class="ks-data-stack-item"><button>되묻기</button></div></div></div></div></div><div class="ks-data-stack-item"></div></div>');
+    const button = screen.getByRole("button", { name: "되묻기" });
+    button.focus();
+    button.remove();
+    const far = document.createElement("button");
+    far.textContent = "실행";
+    fixture.firstElementChild!.children[1].append(far);
+    await waitFor(() => expect(document.activeElement?.classList.contains("ks-focus-rescue-empty")).toBe(true));
+    expect(document.activeElement).not.toBe(far);
+    expect(within(fixture).getByRole("button", { name: "실행" })).toBe(far);
+  });
+
+  it("대화 footer 안 단추가 사라지면 본문 첫 입력창이 아니라 그 대화의 입력창으로 초점을 옮긴다", async () => {
+    const fixture = await focusFixture('<section class="ks-agent-chat"><div class="ks-agent-chat-footer"><button>첫 대화 해제</button></div><textarea class="ks-agent-chat-input" aria-label="첫 대화 입력"></textarea></section><section class="ks-agent-chat"><div class="ks-agent-chat-footer"><div class="ks-data-stack"><div class="ks-data-stack-item"><div class="ks-repeat-content"><div class="ks-repeat-item"><button>되묻기</button></div></div></div><div class="ks-data-stack-item"></div></div></div><textarea class="ks-agent-chat-input" aria-label="둘째 대화 입력"></textarea></section>');
+    const button = within(fixture).getByRole("button", { name: "되묻기" });
+    button.focus();
+    button.closest(".ks-repeat-item")!.remove();
+    const next = document.createElement("button");
+    next.textContent = "해제";
+    fixture.querySelectorAll(".ks-agent-chat")[1].querySelectorAll(".ks-data-stack-item")[1].append(next);
+    await waitFor(() => expect(document.activeElement).toBe(within(fixture).getByRole("textbox", { name: "둘째 대화 입력" })));
+    expect(document.activeElement).not.toBe(within(fixture).getByRole("textbox", { name: "첫 대화 입력" }));
+    expect(within(fixture).getByRole("button", { name: "해제" })).toBe(next);
+  });
+
   it("shows an unknown block error while rendering its sibling block", async () => {
     const definition: AppDefinition = {
       ...mdEditorDefinition,
