@@ -60,6 +60,10 @@ export interface FakeConversationSeed {
   getError?: string;
   sendDelayMs?: number;
   sendError?: string;
+  /** 시험이 「보내는 중」 상태를 잡아 둘 관문. 있으면 지연 대기 뒤, item을 넣기 전에 기다린다. */
+  waitForSend?: () => Promise<void>;
+  /** 시험이 「연결하는 중」 상태를 잡아 둘 관문. 있으면 연결을 끝내기 전에 기다린다. */
+  waitForAttach?: () => Promise<void>;
   /** 시작과 연결이 이 오류로 실패한다. 시작 판의 오류 자리를 보려고 쓴다. */
   startError?: CoreError;
   draft?: { request_id: string; text: string; attachments: ConversationUpload[]; failed: boolean };
@@ -155,6 +159,9 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   let storageFailure: string | null = null;
   let windowNumber = 1;
   const conversation = seed.conversation ? clone(seed.conversation) : null;
+  // 관문은 함수라 clone에 남지 않는다. 원래 시드에서 따로 쥔다.
+  const waitForSend = seed.conversation?.waitForSend;
+  const waitForAttach = seed.conversation?.waitForAttach;
   const conversationOlderPages = conversation?.olderPages ?? (conversation?.older?.length ? [conversation.older] : []);
   let conversationLoggedIn = !conversation?.loginRequired;
   let conversationWatching = false;
@@ -464,6 +471,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const candidate = [conversation.own ?? null, ...(conversation.adoptable ?? [])].find((item) => item?.id === request.thread_id);
         if (!candidate) return fail("not_found", "고른 대화를 찾을 수 없습니다");
         const fallback = conversation.models.find((item) => item.available);
+        if (waitForAttach) await waitForAttach();
         conversation.thread = {
           id: candidate.id,
           external: { namespace: "fake-attached", key: candidate.id },
@@ -504,6 +512,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         if (conversation.sendError) return fail("server", conversation.sendError);
         if (conversation.delayMs) await delay(conversation.delayMs);
         if (!conversationLoggedIn) return fail("login_required", "로그인이 필요합니다");
+        if (waitForSend) await waitForSend();
         const threadId = conversation.thread.id;
         const id = `fake-${conversation.items.length + 1}`;
         request.attachments.forEach((upload, index) => conversationAttachments.set(`${id}:${index}`, upload));
