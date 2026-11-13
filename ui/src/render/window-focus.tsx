@@ -30,7 +30,9 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let focusedDialogElement: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
-    let focusPath: Array<{ ancestor: HTMLElement; childIndex: number; controlIndex: number; swapIndex: number }> = [];
+    // 사라진 조작은 연결이 끊겨 closest가 안 되므로 대화 footer 안이었는지 초점을 받을 때 기록한다.
+    let focusedFooter: HTMLElement | null = null;
+    let focusPath: Array<{ ancestor: HTMLElement; childIndex: number; controlIndex: number; swapIndex: number; prev: HTMLElement | null; next: HTMLElement | null }> = [];
     let bookmark = focusBookmark(null, body);
     // StrictMode가 효과를 다시 붙일 때처럼 이 인스턴스가 붙기 전에 초점을 받은 내용 칸을 이어받는다.
     const seeded = document.activeElement;
@@ -65,6 +67,29 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       }
       return false;
     };
+    // 새로 붙은 덩어리의 뿌리: 후보의 조상 가운데 초점을 받은 뒤 생긴 가장 바깥 노드.
+    const addedRoot = (target: HTMLElement) => {
+      let root: HTMLElement | undefined;
+      for (let node: HTMLElement | null = target; node && body.contains(node); node = node.parentElement) {
+        if (addedSinceFocus.has(node)) root = node;
+      }
+      return root;
+    };
+    // 사라진 자리와 같은 자리인가: 새 덩어리가 사라진 덩어리가 빠진 부모에 들어갔거나, 그 부모와 형제인 칸에 들어갔다.
+    // 멀리 떨어진 다른 칸의 새 조작으로 초점이 튀지 않게 후보를 좁힌다.
+    const samePlace = (root: HTMLElement, place: HTMLElement) => {
+      const parent = root.parentElement;
+      return parent !== null && (parent === place || (parent.parentElement !== null && parent.parentElement === place.parentElement));
+    };
+    const itemSelector = '.ks-repeat-item, [role="listitem"], [role="option"], [role="row"]';
+    // 새로 붙은 모음 항목 안의 조작은 받지 않는다. 새 항목의 단추는 사용자가 이어서 다루려던 조작이 아니다.
+    const insideNewItem = (target: HTMLElement, root: HTMLElement) => {
+      for (let node: HTMLElement | null = target; node; node = node.parentElement) {
+        if (node.matches(itemSelector) && addedSinceFocus.has(node)) return true;
+        if (node === root) break;
+      }
+      return false;
+    };
     const swapTarget = (): HTMLElement | undefined => {
       if (!focused || focused.isConnected || !isControl(focused)) return undefined;
       // 사라진 조작에 되돌아갈 조작 표시가 있으면, 같은 자리에 새로 생긴 덩어리 안에서 그 조작을 먼저 고른다.
@@ -82,14 +107,40 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       }
       // 사라진 조작이 속한 모음 항목까지 사라졌으면 기존 모음 복구가 맡는다.
       if (focusedItem && !focusedItem.isConnected) return undefined;
+      const place = focusPath.find(({ ancestor }) => body.contains(ancestor))?.ancestor;
+      if (!place) return undefined;
       for (const { ancestor, swapIndex } of focusPath) {
         if (!body.contains(ancestor) || swapIndex < 0) continue;
         const controls = focusableControls(ancestor);
         const target = controls[Math.max(0, swapIndex)] ?? controls[controls.length - 1];
-        if (target && !target.matches(".ks-button-emphasis") && addedAfterFocus(target)) return target;
+        if (!target || target.matches(".ks-button-emphasis") || !addedAfterFocus(target)) continue;
+        const root = addedRoot(target);
+        if (!root || !samePlace(root, place) || insideNewItem(target, root)) continue;
+        return target;
       }
       return undefined;
     };
+    // 사라진 조작이 대화 footer 안이었으면 그 대화의 입력창으로 보낸다. 본문 전체의 첫 입력창을 고르지 않는다.
+    const chatInput = (): HTMLElement | undefined => {
+      const input = focusedFooter?.closest(".ks-agent-chat")?.querySelector<HTMLElement>(".ks-agent-chat-input") ?? null;
+      return usableFocus(input) && body.contains(input) ? input : undefined;
+    };
+    const boundarySelector = '.ks-data-section, .ks-split-pane, [role="tabpanel"], .ks-data-window-body';
+    const rowSelector = '[role="row"], [role="option"], [role="treeitem"], [role="gridcell"], [role="listitem"]';
+    // 사라진 조작의 이웃: 초점을 받을 때 조상마다 기록한 바로 뒤·앞 조작을 가까운 조상부터 본다.
+    // 가장 가까운 구역이나 pane을 넘어서 찾지 않고, 새로 붙은 것과 강조 단추와 행은 뺀다.
+    const neighborTarget = (): HTMLElement | undefined => {
+      for (const { ancestor, next, prev } of focusPath) {
+        if (ancestor.matches(boundarySelector)) break;
+        for (const candidate of [next, prev]) {
+          if (!candidate || !body.contains(candidate) || candidate.tabIndex < 0) continue;
+          if (!usableFocus(candidate) || addedAfterFocus(candidate) || candidate.matches(".ks-button-emphasis") || candidate.matches(rowSelector)) continue;
+          return candidate;
+        }
+      }
+      return undefined;
+    };
+    const rescuePane = () => bookmark.pane && bookmark.pane.isConnected && body.contains(bookmark.pane) ? bookmark.pane : body;
     const stopWaiting = () => { waiting.current = null; };
     const onPointer = (event: PointerEvent) => {
       pointer = true; tabMove = false;
@@ -114,6 +165,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       focusedDialogElement = focusedDialog ? target.closest<HTMLElement>(".ks-dialog") : null;
       focusedRemove = target.classList.contains("ks-list-remove");
       inContent = body.contains(target);
+      focusedFooter = inContent ? target.closest<HTMLElement>(".ks-agent-chat-footer") : null;
       if (!inContent) return;
       if (isContentFocus(target)) lastContent = target;
       rememberWindowFocus(windowContent, target);
@@ -128,7 +180,15 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       let child: Element = target;
       for (let ancestor = target.parentElement; ancestor && body.contains(ancestor); ancestor = ancestor.parentElement) {
         const controls = focusableControls(ancestor);
-        focusPath.push({ ancestor, childIndex: Array.prototype.indexOf.call(ancestor.children, child), controlIndex: tabbableControls(controls).indexOf(target), swapIndex: controls.indexOf(target) });
+        const swapIndex = controls.indexOf(target);
+        focusPath.push({
+          ancestor,
+          childIndex: Array.prototype.indexOf.call(ancestor.children, child),
+          controlIndex: tabbableControls(controls).indexOf(target),
+          swapIndex,
+          prev: swapIndex > 0 ? controls[swapIndex - 1] : null,
+          next: swapIndex >= 0 ? controls[swapIndex + 1] ?? null : null,
+        });
         child = ancestor;
       }
     };
@@ -208,13 +268,35 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       if (onTop && focused && !focusedDialog && unavailable && !bodyUnavailable()) {
         const lost = active === document.body || active === focused || (active instanceof Element && scope.contains(active) && isUnclaimedFocus(active));
         if (lost && !preserveWindowActionFocus(windowId)) {
+          // 초점을 쥔 조작이 연결이 끊겼을 때만 새 규칙(대화 입력창, 이웃, pane 임시 초점)을 쓴다.
+          // disabled나 hidden이 된 조작은 지금 경로를 그대로 쓴다.
+          const gone = focused !== null && !focused.isConnected;
           const swap = inContent ? swapTarget() : undefined;
-          const target = swap ?? (inContent
-            ? collectionTarget(changes) ?? bookmarkTarget(bookmark, body)
-            : contentRescueTarget(lastContent, bookmark, body));
+          let target = swap;
+          let stay: boolean | undefined = swap ? true : undefined;
+          let restore = true;
+          if (!target && inContent) {
+            if (gone) {
+              const input = chatInput();
+              if (input) {
+                target = input;
+                stay = undefined;
+                restore = false;
+              } else if (focusedItem && !focusedItem.isConnected) {
+                target = collectionTarget(changes) ?? bookmarkTarget(bookmark, body);
+              } else {
+                target = neighborTarget() ?? focusContainer(rescuePane());
+                stay = true;
+                restore = false;
+              }
+            } else {
+              target = collectionTarget(changes) ?? bookmarkTarget(bookmark, body);
+            }
+          }
+          if (!target) target = contentRescueTarget(lastContent, bookmark, body);
           focused = null;
-          move(target, swap ? true : undefined);
-          if (bookmark.pane?.isConnected && !firstContentFocus(bookmark.pane)) waiting.current = { pane: bookmark.pane, kind: "restore" };
+          move(target, stay);
+          if (restore && bookmark.pane?.isConnected && !firstContentFocus(bookmark.pane)) waiting.current = { pane: bookmark.pane, kind: "restore" };
         }
       }
       // 대화상자 안의 알림 단추처럼 대화상자는 살아 있는데 초점 요소만 사라지면, 창 본문이 아니라 그 대화상자의 첫 조작으로 옮긴다.
