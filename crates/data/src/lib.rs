@@ -575,6 +575,14 @@ impl CompiledApp {
         let mut computed = BTreeSet::new();
         loop {
             let closed = self.closed_when_prefixes(state, &values, &vars);
+            // 이번 계산에서 다시 열린 갈래 아래의 조건은 의존 변화와 상관없이 다시 계산한다.
+            // 닫힌 동안 묵은 값으로 안쪽 갈래를 판정하면 그 아래 바인딩이 이번 계산에서 빠진다.
+            let just_opened = |pointer: &str| {
+                previous_closed
+                    .iter()
+                    .filter(|prefix| !closed.contains(*prefix))
+                    .any(|prefix| data::pointer_under(pointer, prefix))
+            };
             let pending: Vec<&data::WhenBranch> = self
                 .when_branches
                 .iter()
@@ -584,9 +592,11 @@ impl CompiledApp {
                             .iter()
                             .any(|prefix| data::pointer_under(&branch.condition_pointer, prefix))
                         && !computed.contains(&branch.condition_pointer)
-                        && (selected.is_none_or(|selected| {
-                            selected.contains(&branch.condition_pointer)
-                        }) || !values.contains_key(&branch.condition_pointer))
+                        && (just_opened(&branch.condition_pointer)
+                            || selected.is_none_or(|selected| {
+                                selected.contains(&branch.condition_pointer)
+                            })
+                            || !values.contains_key(&branch.condition_pointer))
                 })
                 .collect();
             // 바깥 갈래의 조건을 먼저 판정해야 그 아래 갈래의 조건을 계산할지 정할 수 있다.

@@ -2063,6 +2063,51 @@ mod freshness_tests {
     }
 
     #[test]
+    fn 바깥_when이_다시_열리면_닫힌_동안_묵은_안쪽_조건을_다시_계산해_안쪽_갈래를_연다() {
+        let mut runtime = when_runtime(
+            json!({"type":"stack","direction":"column","children":[
+                {"type":"when","value":{"state":"adv"},"child":
+                    {"type":"when","value":{"expr":"$state.mode = \"x\""},"child":
+                        {"type":"text","value":{"expr":"$state.payload"}}}}
+            ]}),
+            json!({"adv": true, "mode": "y", "payload": "안쪽"}),
+        );
+        let inner_value = "/ui/children/0/child/value";
+        let inner_child = "/ui/children/0/child/child";
+        let leaf = "/ui/children/0/child/child/value";
+        let view = runtime.view();
+        assert_eq!(view.values.get(inner_value), Some(&ready(json!(false))));
+        assert!(!view.values.contains_key(leaf));
+        runtime.last = view;
+
+        // 바깥 갈래가 닫힌다.
+        runtime.state.insert("adv".into(), json!(false));
+        let selected = runtime.selected_for(&BTreeSet::from(["adv".to_string()]), &BTreeSet::new());
+        let view = runtime.view_selected(&selected);
+        assert!(runtime.closed.contains(inner_child));
+        runtime.last = view;
+
+        // 닫힌 동안 안쪽 조건의 원천이 바뀌어도 안쪽 조건은 계산하지 않고 옛 값을 남긴다.
+        runtime.state.insert("mode".into(), json!("x"));
+        let selected = runtime.selected_for(&BTreeSet::from(["mode".to_string()]), &BTreeSet::new());
+        assert!(selected.contains(inner_value));
+        let view = runtime.view_selected(&selected);
+        assert_eq!(view.values.get(inner_value), Some(&ready(json!(false))));
+        assert!(!view.values.contains_key(leaf));
+        runtime.last = view;
+
+        // 바깥 갈래가 다시 열리면 묵은 안쪽 조건을 같은 계산에서 다시 계산해 안쪽 갈래를 연다.
+        runtime.state.insert("adv".into(), json!(true));
+        let selected = runtime.selected_for(&BTreeSet::from(["adv".to_string()]), &BTreeSet::new());
+        assert!(selected.is_empty());
+        let view = runtime.view_selected(&selected);
+
+        assert_eq!(view.values.get(inner_value), Some(&ready(json!(true))));
+        assert_eq!(view.values.get(leaf), Some(&ready(json!("안쪽"))));
+        assert!(!runtime.closed.contains(inner_child));
+    }
+
+    #[test]
     fn 판정하지_못하는_조건의_갈래는_지금처럼_계산한다() {
         let mut runtime = when_runtime(
             json!({"type":"stack","direction":"column","children":[
