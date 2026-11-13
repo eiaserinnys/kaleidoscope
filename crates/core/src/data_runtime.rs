@@ -19,8 +19,8 @@ pub(crate) fn binding_value(
     window: &str,
     pointer: &str,
 ) -> Option<kaleidoscope_contract::data::BindingValue> {
-    let windows = inner.data_runtimes.windows.lock().unwrap();
-    windows.get(window)?.view().values.get(pointer).cloned()
+    let mut windows = inner.data_runtimes.windows.lock().unwrap();
+    windows.get_mut(window)?.view().values.get(pointer).cloned()
 }
 
 use kaleidoscope_contract::{
@@ -72,6 +72,8 @@ struct Runtime {
     sources: BTreeMap<String, Source>,
     data: BTreeMap<String, Value>,
     dormant: Vec<String>,
+    /// 조건이 참이 아닌 `when` 갈래 앞부분. 이 아래 바인딩은 계산하지 않는다.
+    closed: BTreeSet<String>,
     visible: bool,
     storage: BTreeMap<String, storage::Slot>,
     storage_meta: storage::MetaSlot,
@@ -179,6 +181,7 @@ impl Runtime {
             sources,
             data: BTreeMap::new(),
             dormant: Vec::new(),
+            closed: BTreeSet::new(),
             visible: true,
             storage,
             storage_meta,
@@ -275,7 +278,7 @@ impl Runtime {
             }
         }
     }
-    fn view(&self) -> DataView {
+    fn view(&mut self) -> DataView {
         let started = Instant::now();
         let statuses: BTreeMap<_, _> = self
             .sources
@@ -283,7 +286,7 @@ impl Runtime {
             .map(|(name, source)| (name.clone(), source.status.clone()))
             .collect();
         let (storage, meta) = self.storage_values();
-        let mut values = self.compiled.evaluate_profiled(
+        let visible = self.compiled.evaluate_profiled_visible(
             &self.state,
             &self.data,
             &storage,
@@ -292,6 +295,8 @@ impl Runtime {
             self.apps.as_deref(),
             &statuses,
             None,
+            &self.last.values,
+            &self.closed,
             &mut |binding, ms| {
                 self.profiler.binding(
                     &self.definition.id,
@@ -302,6 +307,9 @@ impl Runtime {
                 )
             },
         );
+        let mut values = visible.values;
+        self.closed = visible.closed;
+        let computed = visible.computed.len();
         self.label_expression_failures(&mut values);
         self.profiler.span(
             "data.view",
@@ -309,8 +317,11 @@ impl Runtime {
             &self.definition.id,
             &self.definition.name,
             started.elapsed().as_secs_f64() * 1000.0,
-            self.compiled.binding_dependencies().len(),
-            0,
+            computed,
+            self.compiled
+                .binding_dependencies()
+                .len()
+                .saturating_sub(computed),
             "",
         );
         for binding in self.compiled.binding_dependencies() {
@@ -328,7 +339,7 @@ impl Runtime {
             source_meta: self.source_meta(),
         }
     }
-    fn view_selected(&self, selected: &std::collections::BTreeSet<String>) -> DataView {
+    fn view_selected(&mut self, selected: &std::collections::BTreeSet<String>) -> DataView {
         let started = Instant::now();
         let statuses: BTreeMap<_, _> = self
             .sources
@@ -336,8 +347,7 @@ impl Runtime {
             .map(|(name, source)| (name.clone(), source.status.clone()))
             .collect();
         let (storage, meta) = self.storage_values();
-        let mut values = self.last.values.clone();
-        values.extend(self.compiled.evaluate_profiled(
+        let visible = self.compiled.evaluate_profiled_visible(
             &self.state,
             &self.data,
             &storage,
@@ -346,6 +356,8 @@ impl Runtime {
             self.apps.as_deref(),
             &statuses,
             Some(selected),
+            &self.last.values,
+            &self.closed,
             &mut |binding, ms| {
                 self.profiler.binding(
                     &self.definition.id,
@@ -355,13 +367,16 @@ impl Runtime {
                     Some(ms),
                 )
             },
-        ));
+        );
+        let mut values = visible.values;
+        self.closed = visible.closed;
+        let computed = visible.computed;
         self.label_expression_failures(&mut values);
         for binding in self
             .compiled
             .binding_dependencies()
             .iter()
-            .filter(|binding| !selected.contains(&binding.pointer))
+            .filter(|binding| !computed.contains(&binding.pointer))
         {
             self.profiler.binding(
                 &self.definition.id,
@@ -377,11 +392,11 @@ impl Runtime {
             &self.definition.id,
             &self.definition.name,
             started.elapsed().as_secs_f64() * 1000.0,
-            selected.len(),
+            computed.len(),
             self.compiled
                 .binding_dependencies()
                 .len()
-                .saturating_sub(selected.len()),
+                .saturating_sub(computed.len()),
             "",
         );
         for binding in self
@@ -476,10 +491,20 @@ impl Runtime {
                         .chain(&binding.data_meta)
                         .any(|name| sources.contains(name))
                         || dynamic_data);
-                state_changed || source_changed || !self.last.values.contains_key(&binding.pointer)
+                state_changed
+                    || source_changed
+                    || (!self.last.values.contains_key(&binding.pointer)
+                        && !self.is_closed(&binding.pointer))
             })
             .map(|binding| binding.pointer.clone())
             .collect()
+    }
+
+    /// 포인터가 조건이 참이 아닌 `when` 갈래 아래에 있는지.
+    fn is_closed(&self, pointer: &str) -> bool {
+        self.closed
+            .iter()
+            .any(|prefix| kaleidoscope_contract::data::pointer_under(pointer, prefix))
     }
 
     fn diff(&mut self) -> Option<DataView> {
@@ -1912,5 +1937,196 @@ mod freshness_tests {
             runtime.sources["stories"].status,
             SourceStatus::Loading { has_value: true }
         ));
+    }
+
+    fn when_runtime(ui: serde_json::Value, state: serde_json::Value) -> Runtime {
+        let definition = parse_app_definition(
+            &json!({
+                "id":"when-eval", "name":"숨은 갈래 계산 시험",
+                "requires":{"blocks":19},
+                "state": state,
+                "ui": ui
+            })
+            .to_string(),
+        )
+        .unwrap();
+        Runtime::new(
+            1,
+            definition.clone(),
+            definition.state.clone(),
+            true,
+            false,
+            Default::default(),
+        )
+    }
+
+    fn ready(value: serde_json::Value) -> kaleidoscope_contract::data::BindingValue {
+        kaleidoscope_contract::data::BindingValue::Ready { value, more: None }
+    }
+
+    const WHEN_CHILD: &str = "/ui/children/0/child/value";
+
+    #[test]
+    fn 처음_붙을_때_거짓인_when_갈래는_계산하지_않는다() {
+        let mut runtime = when_runtime(
+            json!({"type":"stack","direction":"column","children":[
+                {"type":"when","value":{"expr":"$state.show"},"child":{"type":"text","value":{"expr":"$state.payload"}}}
+            ]}),
+            json!({"show": false, "payload": "숨음"}),
+        );
+
+        let view = runtime.view();
+
+        assert_eq!(
+            view.values.get("/ui/children/0/value"),
+            Some(&ready(json!(false)))
+        );
+        assert!(!view.values.contains_key(WHEN_CHILD));
+    }
+
+    #[test]
+    fn 거짓이_된_when_갈래_아래_식은_계산하지_않고_옛_값을_남긴다() {
+        let mut runtime = when_runtime(
+            json!({"type":"stack","direction":"column","children":[
+                {"type":"when","value":{"state":"show"},"child":{"type":"text","value":{"expr":"$state.payload"}}}
+            ]}),
+            json!({"show": true, "payload": "보임"}),
+        );
+        let view = runtime.view();
+        assert_eq!(view.values.get(WHEN_CHILD), Some(&ready(json!("보임"))));
+        runtime.last = view;
+
+        runtime.state.insert("show".into(), json!(false));
+        runtime.state.insert("payload".into(), json!("바뀜"));
+        let selected = runtime.selected_for(
+            &BTreeSet::from(["show".to_string(), "payload".to_string()]),
+            &BTreeSet::new(),
+        );
+        assert!(selected.contains(WHEN_CHILD));
+        let view = runtime.view_selected(&selected);
+
+        assert_eq!(view.values.get(WHEN_CHILD), Some(&ready(json!("보임"))));
+    }
+
+    #[test]
+    fn 참이_된_when_갈래_값은_같은_계산에서_나온다() {
+        let mut runtime = when_runtime(
+            json!({"type":"stack","direction":"column","children":[
+                {"type":"when","value":{"state":"show"},"child":{"type":"text","value":{"expr":"$state.payload"}}}
+            ]}),
+            json!({"show": false, "payload": "보임"}),
+        );
+        let view = runtime.view();
+        assert!(!view.values.contains_key(WHEN_CHILD));
+        runtime.last = view;
+
+        runtime.state.insert("show".into(), json!(true));
+        let selected =
+            runtime.selected_for(&BTreeSet::from(["show".to_string()]), &BTreeSet::new());
+        assert!(selected.is_empty());
+        let view = runtime.view_selected(&selected);
+
+        assert_eq!(view.values.get(WHEN_CHILD), Some(&ready(json!("보임"))));
+    }
+
+    #[test]
+    fn 겹친_when은_바깥이_열리면_안쪽_갈래까지_같은_계산에서_계산한다() {
+        let mut runtime = when_runtime(
+            json!({"type":"stack","direction":"column","children":[
+                {"type":"when","value":{"expr":"$state.outer"},"child":
+                    {"type":"when","value":{"expr":"$state.inner"},"child":{"type":"text","value":{"expr":"$state.payload"}}}}
+            ]}),
+            json!({"outer": false, "inner": true, "payload": "안쪽"}),
+        );
+        let inner_value = "/ui/children/0/child/value";
+        let leaf = "/ui/children/0/child/child/value";
+        let view = runtime.view();
+        assert_eq!(
+            view.values.get("/ui/children/0/value"),
+            Some(&ready(json!(false)))
+        );
+        assert!(!view.values.contains_key(inner_value));
+        assert!(!view.values.contains_key(leaf));
+        runtime.last = view;
+
+        runtime.state.insert("outer".into(), json!(true));
+        let selected =
+            runtime.selected_for(&BTreeSet::from(["outer".to_string()]), &BTreeSet::new());
+        assert_eq!(
+            selected,
+            BTreeSet::from(["/ui/children/0/value".to_string()])
+        );
+        let view = runtime.view_selected(&selected);
+
+        assert_eq!(view.values.get(inner_value), Some(&ready(json!(true))));
+        assert_eq!(view.values.get(leaf), Some(&ready(json!("안쪽"))));
+    }
+
+    #[test]
+    fn 바깥_when이_다시_열리면_닫힌_동안_묵은_안쪽_조건을_다시_계산해_안쪽_갈래를_연다() {
+        let mut runtime = when_runtime(
+            json!({"type":"stack","direction":"column","children":[
+                {"type":"when","value":{"state":"adv"},"child":
+                    {"type":"when","value":{"expr":"$state.mode = \"x\""},"child":
+                        {"type":"text","value":{"expr":"$state.payload"}}}}
+            ]}),
+            json!({"adv": true, "mode": "y", "payload": "안쪽"}),
+        );
+        let inner_value = "/ui/children/0/child/value";
+        let inner_child = "/ui/children/0/child/child";
+        let leaf = "/ui/children/0/child/child/value";
+        let view = runtime.view();
+        assert_eq!(view.values.get(inner_value), Some(&ready(json!(false))));
+        assert!(!view.values.contains_key(leaf));
+        runtime.last = view;
+
+        // 바깥 갈래가 닫힌다.
+        runtime.state.insert("adv".into(), json!(false));
+        let selected = runtime.selected_for(&BTreeSet::from(["adv".to_string()]), &BTreeSet::new());
+        let view = runtime.view_selected(&selected);
+        assert!(runtime.closed.contains(inner_child));
+        runtime.last = view;
+
+        // 닫힌 동안 안쪽 조건의 원천이 바뀌어도 안쪽 조건은 계산하지 않고 옛 값을 남긴다.
+        runtime.state.insert("mode".into(), json!("x"));
+        let selected = runtime.selected_for(&BTreeSet::from(["mode".to_string()]), &BTreeSet::new());
+        assert!(selected.contains(inner_value));
+        let view = runtime.view_selected(&selected);
+        assert_eq!(view.values.get(inner_value), Some(&ready(json!(false))));
+        assert!(!view.values.contains_key(leaf));
+        runtime.last = view;
+
+        // 바깥 갈래가 다시 열리면 묵은 안쪽 조건을 같은 계산에서 다시 계산해 안쪽 갈래를 연다.
+        runtime.state.insert("adv".into(), json!(true));
+        let selected = runtime.selected_for(&BTreeSet::from(["adv".to_string()]), &BTreeSet::new());
+        assert!(selected.is_empty());
+        let view = runtime.view_selected(&selected);
+
+        assert_eq!(view.values.get(inner_value), Some(&ready(json!(true))));
+        assert_eq!(view.values.get(leaf), Some(&ready(json!("안쪽"))));
+        assert!(!runtime.closed.contains(inner_child));
+    }
+
+    #[test]
+    fn 판정하지_못하는_조건의_갈래는_지금처럼_계산한다() {
+        let mut runtime = when_runtime(
+            json!({"type":"stack","direction":"column","children":[
+                {"type":"when","min_width":400,"child":{"type":"text","value":{"expr":"$state.n"}}},
+                {"type":"repeat","key":"show","items":[{"show":false}],"template":
+                    {"type":"when","value":{"item":"show"},"child":{"type":"text","value":{"expr":"$state.n"}}}}
+            ]}),
+            json!({"n": "계산됨"}),
+        );
+
+        let view = runtime.view();
+
+        assert_eq!(
+            view.values.get("/ui/children/0/child/value"),
+            Some(&ready(json!("계산됨")))
+        );
+        assert_eq!(
+            view.values.get("/ui/children/1/template/child/value"),
+            Some(&ready(json!("계산됨")))
+        );
     }
 }

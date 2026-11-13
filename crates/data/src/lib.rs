@@ -50,7 +50,18 @@ pub struct CompiledApp {
     source_deps: BTreeMap<String, Vec<String>>,
     expressions: BTreeMap<String, Result<AstNode, String>>,
     bindings: Vec<BindingDependencies>,
+    when_branches: Vec<data::WhenBranch>,
     actions: BTreeMap<String, Actions>,
+}
+
+/// 조건을 먼저 계산해 숨은 갈래를 뺀 계산 결과.
+pub struct VisibleEvaluation {
+    /// 이번에 계산한 값과 지난 값(닫힌 갈래의 옛 값은 지우지 않는다)을 합친 것.
+    pub values: BTreeMap<String, BindingValue>,
+    /// 이번 계산에서 실제로 계산한 바인딩 자리.
+    pub computed: BTreeSet<String>,
+    /// 이번 계산에서 닫힌 갈래 앞부분.
+    pub closed: BTreeSet<String>,
 }
 
 /// 식 하나가 읽는 데이터 원천과 저장 항목. Core가 준비할 의존성을 드러낸다.
@@ -196,6 +207,7 @@ impl CompiledApp {
                 .collect(),
             expressions,
             bindings,
+            when_branches: data::when_branches(definition),
             actions,
         }
     }
@@ -536,6 +548,156 @@ impl CompiledApp {
                 (binding.pointer.clone(), result)
             })
             .collect()
+    }
+
+    /// 조건을 먼저 계산해 닫힌 `when` 갈래를 정하고, 그 아래 바인딩을 빼고 계산한다.
+    /// `previous`의 값에서 시작하므로 닫힌 갈래의 옛 값은 남는다. 이번에 닫혔다가 열린 갈래가 있으면
+    /// 그 아래 바인딩은 의존 변화와 상관없이 같은 계산에서 이어 계산하고, 겹친 when은 새로 계산할
+    /// 조건이 없을 때까지 되풀이한다.
+    pub fn evaluate_profiled_visible(
+        &self,
+        state: &BTreeMap<String, Value>,
+        data: &BTreeMap<String, Value>,
+        storage: &BTreeMap<String, Value>,
+        storage_meta: &BTreeMap<String, Value>,
+        data_meta: &BTreeMap<String, Value>,
+        apps: Option<&[kaleidoscope_contract::store::InstalledAppValue]>,
+        statuses: &BTreeMap<String, SourceStatus>,
+        selected: Option<&BTreeSet<String>>,
+        previous: &BTreeMap<String, BindingValue>,
+        previous_closed: &BTreeSet<String>,
+        observe: &mut dyn FnMut(&BindingDependencies, f64),
+    ) -> VisibleEvaluation {
+        let vars = Variables::new(state, data, storage, storage_meta, None, None)
+            .with_data_meta(data_meta)
+            .with_apps(apps);
+        let mut values = previous.clone();
+        let mut computed = BTreeSet::new();
+        loop {
+            let closed = self.closed_when_prefixes(state, &values, &vars);
+            // 이번 계산에서 다시 열린 갈래 아래의 조건은 의존 변화와 상관없이 다시 계산한다.
+            // 닫힌 동안 묵은 값으로 안쪽 갈래를 판정하면 그 아래 바인딩이 이번 계산에서 빠진다.
+            let just_opened = |pointer: &str| {
+                previous_closed
+                    .iter()
+                    .filter(|prefix| !closed.contains(*prefix))
+                    .any(|prefix| data::pointer_under(pointer, prefix))
+            };
+            let pending: Vec<&data::WhenBranch> = self
+                .when_branches
+                .iter()
+                .filter(|branch| {
+                    matches!(branch.condition, Binding::Expr(_))
+                        && !closed
+                            .iter()
+                            .any(|prefix| data::pointer_under(&branch.condition_pointer, prefix))
+                        && !computed.contains(&branch.condition_pointer)
+                        && (just_opened(&branch.condition_pointer)
+                            || selected.is_none_or(|selected| {
+                                selected.contains(&branch.condition_pointer)
+                            })
+                            || !values.contains_key(&branch.condition_pointer))
+                })
+                .collect();
+            // 바깥 갈래의 조건을 먼저 판정해야 그 아래 갈래의 조건을 계산할지 정할 수 있다.
+            let Some(depth) = pending.iter().map(|branch| branch.depth).min() else {
+                break;
+            };
+            let conditions: BTreeSet<String> = pending
+                .into_iter()
+                .filter(|branch| branch.depth == depth)
+                .map(|branch| branch.condition_pointer.clone())
+                .collect();
+            let results = self.evaluate_profiled(
+                state,
+                data,
+                storage,
+                storage_meta,
+                data_meta,
+                apps,
+                statuses,
+                Some(&conditions),
+                observe,
+            );
+            computed.extend(conditions);
+            values.extend(results);
+        }
+        let closed = self.closed_when_prefixes(state, &values, &vars);
+        let mut target: BTreeSet<String> = match selected {
+            None => self
+                .bindings
+                .iter()
+                .map(|binding| binding.pointer.clone())
+                .collect(),
+            Some(selected) => selected.clone(),
+        };
+        for binding in &self.bindings {
+            if previous_closed
+                .iter()
+                .filter(|prefix| !closed.contains(*prefix))
+                .any(|prefix| data::pointer_under(&binding.pointer, prefix))
+            {
+                target.insert(binding.pointer.clone());
+            }
+        }
+        target.retain(|pointer| {
+            !computed.contains(pointer)
+                && !closed
+                    .iter()
+                    .any(|prefix| data::pointer_under(pointer, prefix))
+        });
+        if !target.is_empty() {
+            let results = self.evaluate_profiled(
+                state,
+                data,
+                storage,
+                storage_meta,
+                data_meta,
+                apps,
+                statuses,
+                Some(&target),
+                observe,
+            );
+            computed.extend(target);
+            values.extend(results);
+        }
+        VisibleEvaluation {
+            values,
+            computed,
+            closed,
+        }
+    }
+
+    /// `when` 갈래의 닫힘을 정의 순서(부모 먼저)로 정한다. 부모 갈래가 닫혔으면 그 아래 갈래도 닫는다.
+    fn closed_when_prefixes(
+        &self,
+        state: &BTreeMap<String, Value>,
+        values: &BTreeMap<String, BindingValue>,
+        vars: &Variables,
+    ) -> BTreeSet<String> {
+        let mut closed: BTreeSet<String> = BTreeSet::new();
+        for branch in &self.when_branches {
+            if closed
+                .iter()
+                .any(|prefix| data::pointer_under(&branch.condition_pointer, prefix))
+            {
+                closed.insert(branch.child_prefix.clone());
+                continue;
+            }
+            let open = match &branch.condition {
+                Binding::Expr(_) => data::when_open(values.get(&branch.condition_pointer)),
+                condition => data::when_open(
+                    self.binding(condition, &branch.condition_pointer, state, vars)
+                        .ok()
+                        .map(|value| BindingValue::Ready { value, more: None })
+                        .as_ref(),
+                ),
+            };
+            if !open {
+                closed.insert(branch.child_prefix.clone());
+            }
+        }
+        closed
     }
 
     pub fn actions_len(&self, pointer: &str) -> Option<usize> {

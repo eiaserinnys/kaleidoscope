@@ -19,3 +19,7 @@ schemars = "1"
 # 주의: 이 크레이트가 serde_json의 preserve_order를 켜서 작업 공간 전체의 JSON 객체가 넣은 순서를 지킨다.
 jsonata-core = { version = "2.2.13", default-features = false }
 trash = "5.2.9"
+
+# 시험 쉘(debug 빌드)에서 식 계산이 1000ms 제한에 걸리지 않게 엔진만 최적화한다.
+[profile.dev.package.jsonata-core]
+opt-level = 3
