@@ -1811,6 +1811,95 @@ pub fn child_blocks<'a>(block: &'a Block, pointer: &str) -> Vec<(String, &'a Blo
     }
 }
 
+/// `when` 갈래 하나의 조건 자리와 갈래 앞부분. 코어는 이 짝으로 숨은 갈래를 가른다.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WhenBranch {
+    /// 조건 바인딩의 자리(`{when}/value`).
+    pub condition_pointer: String,
+    /// 갈래 블록들이 놓이는 자리 앞부분(`{when}/child`).
+    pub child_prefix: String,
+    /// 조건 바인딩. `State`, `Literal`, `Expr`만 담는다.
+    pub condition: Binding,
+    /// 이 갈래를 감싼 when 갈래의 수. 조건을 바깥 갈래부터 차례로 계산할 때 쓴다.
+    pub depth: usize,
+}
+
+/// 포인터가 앞부분과 같거나 그 아래에 있는지.
+pub fn pointer_under(pointer: &str, prefix: &str) -> bool {
+    pointer == prefix
+        || pointer
+            .strip_prefix(prefix)
+            .is_some_and(|tail| tail.starts_with('/'))
+}
+
+/// 조건 값이 갈래를 여는지. 화면 `ui/src/blocks/conditional.tsx`의 `valueMatches`(조건 값이 ready이고
+/// JSON true일 때만 열림, loading과 failed와 그 밖의 값은 닫힘)와 같은 판정이다. 그 줄을 고치면 여기도 고친다.
+/// 값이 없으면(코어가 아직 판정하지 못했으면) 열린 것으로 둔다.
+pub fn when_open(value: Option<&BindingValue>) -> bool {
+    match value {
+        None => true,
+        Some(BindingValue::Ready { value, .. }) => value == &JsonValue::Bool(true),
+        Some(_) => false,
+    }
+}
+
+/// 코어가 판정할 수 있는 `when` 갈래를 정의 순서(부모 먼저)로 돌려준다.
+///
+/// 조건이 없는 when(폭 조건만), `Client`, `Item`, `Message` 조건, 반복 template 안의 when은
+/// 코어가 판정하지 못하므로 빼고, 그런 갈래는 열린 것으로 둔다.
+pub fn when_branches(definition: &AppDefinition) -> Vec<WhenBranch> {
+    let mut templates = Vec::new();
+    walk_definition_blocks(definition, &mut |pointer, block| {
+        if let Block::Repeat { .. } = block {
+            templates.push(format!("{pointer}/template"));
+        }
+    });
+    let mut branches = Vec::new();
+    walk_definition_blocks(definition, &mut |pointer, block| {
+        let Block::When {
+            value: Some(condition),
+            ..
+        } = block
+        else {
+            return;
+        };
+        if templates
+            .iter()
+            .any(|template| pointer_under(pointer, template))
+        {
+            return;
+        }
+        if matches!(
+            condition,
+            Binding::Client(_)
+                | Binding::Item(_)
+                | Binding::ParentItem(_)
+                | Binding::Message(_)
+        ) {
+            return;
+        }
+        branches.push(WhenBranch {
+            condition_pointer: format!("{pointer}/value"),
+            child_prefix: format!("{pointer}/child"),
+            condition: condition.clone(),
+            depth: 0,
+        });
+    });
+    let depths: Vec<usize> = branches
+        .iter()
+        .map(|branch| {
+            branches
+                .iter()
+                .filter(|outer| pointer_under(&branch.condition_pointer, &outer.child_prefix))
+                .count()
+        })
+        .collect();
+    for (branch, depth) in branches.iter_mut().zip(depths) {
+        branch.depth = depth;
+    }
+    branches
+}
+
 enum Slot<'a> {
     Binding(&'a Binding),
     Actions(&'a Actions),

@@ -463,6 +463,9 @@ fn layout_errors_of(windows: &BTreeMap<String, Runtime>) -> Vec<LayoutDataError>
             if count == LAYOUT_DATA_ERRORS_MAX {
                 break;
             }
+            if runtime.is_closed(&pointer) {
+                continue;
+            }
             if let Some(BindingValue::Failed {
                 message,
                 id: code,
@@ -580,5 +583,43 @@ mod layout_error_tests {
             errors[1].details,
             vec!["pointer: /ui/value", "reason: T0412"]
         );
+    }
+
+    #[test]
+    fn 숨은_when_갈래_식_실패는_배치_오류에_남지_않는다() {
+        let definition = parse_app_definition(
+            &json!({
+                "id":"hidden-when","name":"숨은 갈래",
+                "requires":{"blocks":14},
+                "state":{"show":false,"title":"안 보임"},
+                "ui":{"type":"stack","direction":"column","children":[
+                    {"type":"when","value":{"state":"show"},"child":{"type":"text","value":{"expr":"$state.title"}}}
+                ]}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let mut runtime = Runtime::new(
+            1,
+            definition.clone(),
+            definition.state.clone(),
+            true,
+            false,
+            Default::default(),
+        );
+        runtime.attached = 1;
+        runtime.last = runtime.view();
+        runtime.last.values.insert(
+            "/ui/children/0/child/value".into(),
+            BindingValue::Failed {
+                message: "식 실패".into(),
+                id: Some("DATA_BINDING_EXPR_FAILED".into()),
+                retry: Vec::new(),
+                details: None,
+            },
+        );
+        let windows = BTreeMap::from([("window".to_string(), runtime)]);
+
+        assert!(layout_errors_of(&windows).is_empty());
     }
 }

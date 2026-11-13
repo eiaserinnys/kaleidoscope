@@ -36,6 +36,7 @@ export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; c
     observer.observe(content);
     return () => observer.disconnect();
   }, [block.max_width, block.min_width, context.window.id, hasWidthCondition]);
+  // 코어의 갈래 판정(crates/contract/src/data.rs when_open)과 같은 규칙이다. 여기를 고치면 코어도 고친다.
   const valueMatches = block.value === undefined || (value.status === "ready" && value.value === true);
   const visible = valueMatches && widthMatches;
   const childPointer = `${pointer}/child`;
