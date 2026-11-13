@@ -1,5 +1,13 @@
 import { chromium, expect, test, type Page } from "@playwright/test";
 
+// 감속 반복 검증용. KS_CPU_THROTTLE이 없으면 아무것도 하지 않는다.
+test.beforeEach(async ({ page }) => {
+  const rate = Number(process.env.KS_CPU_THROTTLE);
+  if (!rate) return;
+  const session = await page.context().newCDPSession(page);
+  await session.send("Emulation.setCPUThrottlingRate", { rate });
+});
+
 function capturePath() { return process.env.KS_CONVERSATION_CAPTURES ?? test.info().outputPath("captures"); }
 async function open(page: Page, mode: string) {
   await page.goto(`/?preview=workspace-pas&conversation=${mode}`);
@@ -14,6 +22,14 @@ async function capture(page: Page, name: string) {
 }
 
 test("기록, 이전 페이지, 지연 발송과 진행문", async ({ page }) => {
+  // 하니스의 350ms 지연 동안만 있는 「보내는 중」 말풍선은 부하가 걸리면 단언 전에 사라진다(카드 #1320).
+  // 시험이 단언할 때까지 전송을 붙잡아 두고, 다 본 뒤 푼다.
+  await page.addInitScript(() => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const gate = { started: false, wait: () => { gate.started = true; return held; }, release: () => release() };
+    Object.assign(window, { chatSendGate: gate });
+  });
   const chat = await open(page, "ready");
   await expect(chat.getByText("기존 기록")).toBeVisible();
   await capture(page, "history");
@@ -26,9 +42,12 @@ test("기록, 이전 페이지, 지연 발송과 진행문", async ({ page }) =>
   const input = chat.getByRole("textbox", { name: "메시지" });
   await input.fill("새 요청");
   await input.press("Enter");
+  await expect.poll(() => page.evaluate(() => (window as any).chatSendGate.started)).toBe(true);
   await expect(input).toHaveValue("");
   await expect(chat.locator(".is-pending")).toHaveText("새 요청");
+  await page.evaluate(() => (window as any).chatSendGate.release());
   await expect(chat.getByText("답변을 준비했습니다.")).toBeVisible();
+  await expect(chat.locator(".is-pending")).toHaveCount(0);
   await expect(chat.getByText("답변답변을 준비했습니다.")).toHaveCount(0);
 });
 
@@ -506,17 +525,29 @@ test.describe("실제 스크롤바가 있는 대화 머리", () => {
 });
 
 test("연결하는 중에는 시작과 고른 줄을 잠근다", async ({ page }) => {
+  // 연결 지연 350ms 동안만 있는 잠금 상태도 같은 이유로 단언 전에 지나갈 수 있다(카드 #1320).
+  // 창마다 새 관문이 서도록 init 스크립트에 둔다.
+  await page.addInitScript(() => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const gate = { started: false, wait: () => { gate.started = true; return held; }, release: () => release() };
+    Object.assign(window, { chatAttachGate: gate });
+  });
   for (const [width, height, name] of [[1100, 700, "attach-loading-wide"], [400, 600, "attach-loading-narrow"]] as const) {
     const chat = await open(page, "attach-start");
     await page.setViewportSize({ width, height });
     await chat.getByRole("button", { name: "기존 대화" }).click();
     await page.getByRole("menuitem", { name: /서소영 PAS — 카드 운영과 배포 기록/ }).click();
     await chat.getByRole("button", { name: "연결", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as any).chatAttachGate.started)).toBe(true);
     await expect(chat.getByText("연결하는 중")).toBeVisible();
     await expect(chat.getByRole("button", { name: "시작" })).toBeDisabled();
     await expect(chat.getByRole("button", { name: "프로필" })).toBeDisabled();
     await expect(chat.getByRole("button", { name: "모델" })).toBeDisabled();
     await page.screenshot({ path: `${capturePath()}/${name}.png` });
+    await page.evaluate(() => (window as any).chatAttachGate.release());
+    await expect(chat.getByText("연결하는 중")).toHaveCount(0);
+    await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeVisible();
   }
 });
 

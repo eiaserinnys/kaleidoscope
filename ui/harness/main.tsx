@@ -269,6 +269,9 @@ function withRealNames(conversation: FakeConversation | undefined): FakeConversa
 }
 // 시험이 sample 원천의 「불러오는 중」을 잡아 둘 관문. 시험이 init 스크립트로 넣었을 때만 쓰고, 없으면 1초 지연으로 응답한다.
 const sampleGate = (window as unknown as { dataSampleGate?: { wait: () => Promise<void> } }).dataSampleGate;
+// 시험이 대화의 「보내는 중」과 「연결하는 중」을 잡아 둘 관문. 창에 넣었을 때만 쓰고, 없으면 지금 동작 그대로다.
+const chatSendGate = (window as unknown as { chatSendGate?: { wait: () => Promise<void> } }).chatSendGate;
+const chatAttachGate = (window as unknown as { chatAttachGate?: { wait: () => Promise<void> } }).chatAttachGate;
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
@@ -298,6 +301,8 @@ const fakeTransport = createFakeTransport({
     getError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
     sendError: pasMode === "send-error" ? "메시지를 보내지 못했습니다" : undefined,
     sendDelayMs: Number(params.get("send-delay")) || undefined,
+    waitForSend: chatSendGate?.wait,
+    waitForAttach: chatAttachGate?.wait,
     startError: params.get("start-error") ? { code: "conflict", id: "CONV_ATTACH_CONFLICT", message: "고른 대화가 이미 다른 곳에 연결되어 있습니다. 대화 목록을 다시 열고 다른 대화를 고르세요.", details: [] } : undefined,
     draft: conversationMode === "draft" ? { request_id: "draft-id", text: "복원된 초안", attachments: [{ name: "메모.txt", mime: "text/plain", data_base64: "aGVsbG8=" }], failed: false } : undefined,
     attached: conversationMode === "attach-attached",
