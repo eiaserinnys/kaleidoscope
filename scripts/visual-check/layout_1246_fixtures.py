@@ -111,9 +111,33 @@ def control_row_scene():
         small_table()]}}
 
 
-# origin/main(e9329367)의 차트 아래 여백 규칙. 그때는 구역과 탭 판 안의 차트가 늘 아래 여백 한 겹을 가졌다.
-# 조작 줄 꼴은 이 규칙을 덧씌워 잰 값과 같아야 한다(간격 있는 쌓기의 차트 간격은 main과 같게 둔다).
-MAIN_CHART_END_CSS = ":is(.ks-data-tab-panel, .ks-data-section) .ks-chart { padding-block-end: var(--ks-space-3) !important; }"
+def chart_section(title="차트 구역"):
+    return {"type": "section", "title": title, "child": {"type": "chart", "kind": "bar", "series": bar_series()}}
+
+
+def long_table(rows=30):
+    table = small_table()
+    table["rows"] = [{"key": str(index), "name": f"{index}번째 줄", "count": index} for index in range(1, rows + 1)]
+    return table
+
+
+def section_end_scene(where, order):
+    """구역 끝 차트 꼴. where는 tab(탭 판 > 쌓기) 또는 body(창 본문 > 쌓기), order는 쌓기 칸 차례다.
+    chart-table은 [구역(차트), 표], chart-section은 [구역(차트), 구역(표)], table-chart는 [표, 구역(차트)].
+    table-chart는 구역을 칸 바닥에 둔다. 기본 채움 칸(마지막 칸)인 구역은 아래가 비고, 넘치면 높이 0으로 접혀 쓰지 않는다.
+    탭 판은 표를 채움 칸으로 두어 구역이 판 바닥에 닿게 하고, 창 본문은 채움을 끈 긴 표로 본문을 넘치게 해 끝까지 내린다."""
+    gap = {"type": "stack", "direction": "column", "gap": "none"}
+    if order == "chart-table":
+        return _in(where, {**gap, "children": [chart_section(), small_table()]})
+    if order == "chart-section":
+        return _in(where, {**gap, "children": [chart_section(), {"type": "section", "title": "표 구역", "child": small_table()}]})
+    if where == "tab":
+        return _in(where, {**gap, "fill": 0, "children": [small_table(), chart_section()]})
+    return _in(where, {**gap, "fill": [], "children": [long_table(), chart_section()]})
+
+
+def _in(where, stack):
+    return {"type": "tabs", "tabs": [{"label": "차트", "child": stack}]} if where == "tab" else stack
 
 
 def two_series_scene():
@@ -312,6 +336,35 @@ STACK_GAP_JS = """(appId) => {
            chartPaddingEnd: charts.length === 1 ? getComputedStyle(charts[0]).paddingBlockEnd : null,
            below: frame && table ? round(table.top - frame.bottom) : null,
            above: frame && toolbar ? round(frame.top - toolbar.bottom) : null };
+}"""
+
+SECTION_END_JS = """([appId, target]) => {
+  // 구역 끝 차트의 틀 아래 끝에서 다음 내용 위 끝(target이 table, section) 또는 스크롤 내용 끝(panel, body)까지.
+  const round = (value) => Math.round(value * 10) / 10;
+  const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const charts = win ? [...win.querySelectorAll('.ks-chart')] : [];
+  const tables = win ? [...win.querySelectorAll('.ks-table-scroll')] : [];
+  const sections = win ? [...win.querySelectorAll('.ks-data-section')] : [];
+  const panels = win ? [...win.querySelectorAll('.ks-data-tab-panel')] : [];
+  const frame = charts.length === 1 ? charts[0].querySelector('.ks-chart-frame') : null;
+  const scrollEnd = (element) => { element.scrollTop = element.scrollHeight;
+    return element.getBoundingClientRect().top + element.clientTop + element.scrollHeight - element.scrollTop; };
+  let edge = null;
+  if (target === 'table' && tables.length === 1) edge = tables[0].getBoundingClientRect().top;
+  if (target === 'section' && sections.length === 2) {
+    // 둘째 구역의 첫 내용(머리가 있으면 머리)의 내용 위 끝. 머리 위 여백(padding)은 내용이 아니다.
+    const header = sections[1].querySelector(':scope > .ks-data-section-header:not(:empty)');
+    const first = header || sections[1].querySelector(':scope > .ks-data-section-child > *');
+    const style = first && getComputedStyle(first);
+    edge = first ? first.getBoundingClientRect().top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop) : null;
+  }
+  if (target === 'panel' && panels.length === 1) edge = scrollEnd(panels[0]);
+  if (target === 'body') { const body = win && win.querySelector('.ks-data-window-body'); edge = body ? scrollEnd(body) : null; }
+  const bottom = frame ? frame.getBoundingClientRect().bottom : null;
+  return { charts: charts.length, tables: tables.length, sections: sections.length, panels: panels.length,
+           chartPaddingEnd: charts.length === 1 ? getComputedStyle(charts[0]).paddingBlockEnd : null,
+           frameBottom: bottom === null ? null : round(bottom), edge: edge === null ? null : round(edge),
+           below: bottom !== null && edge !== null ? round(edge - bottom) : null };
 }"""
 
 BARS_JS = """(appId) => {

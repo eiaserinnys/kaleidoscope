@@ -4,7 +4,10 @@
 항목 3: 분할 칸, 탭 판, 구역, 대화상자 본문에서 차트 틀 아래 끝과 칸 아래 끝의 차이가 12px(±1).
         구역 안에서 차트 틀 아래 끝과 다음 표 위 끝의 차이: 같은 쌓기(간격 없음)와 중첩(쌓기 > [쌓기 > [차트], 표])은
         12px(±1), 중첩 간격 medium은 같은 쌓기 간격 medium과 같음(±1), 조작 줄 꼴(쌓기 medium > [고르기 줄,
-        쌓기 > [숨은 갈래, 차트], 표])은 main 규칙(layout_1246_fixtures.MAIN_CHART_END_CSS)을 덧씌워 잰 위아래 값과 같음(±1).
+        쌓기 > [숨은 갈래, 차트], 표])은 main 화면에서 잰 위아래 값(MAIN_MEASURED)과 같음(±1).
+        구역 끝 차트: 탭 판과 창 본문의 쌓기(간격 없음) > [구역(차트), 표]는 차트 틀 아래 끝과 표 위 끝이 12px(±1),
+        창 본문 > [구역(차트), 구역(표)]는 둘째 구역 첫 내용 위 끝까지가 main에서 잰 값과 같음(±1),
+        [표, 구역(차트)]는 탭 판 아래 끝, 본문 스크롤 내용 끝(끝까지 내렸을 때)까지가 12px(±1).
 항목 4: 선, 면적 차트 초점 상태에서 초점 테두리가 plot에 그려지고 x축 첫 글, 끝 글 상자와 겹치지 않음.
 항목 5: 한 축의 눈금 글 오른끝 x 차이가 1px 이하(음수 눈금이 있는 축 포함). 눈금 글은 기대한 글 그대로.
 항목 6: 값이 없는 계열이 범례와 읽기 줄과 접근성 표에 없고, 남은 계열 색이 원래 index 그대로임.
@@ -23,12 +26,15 @@
 
   python3 scripts/visual-check/check_1246_layout.py --output <산출폴더> [--port 포트]
   python3 scripts/visual-check/check_1246_layout.py --self-test
+  python3 scripts/visual-check/check_1246_layout.py --reference --output <산출폴더>   (main 화면에서 MAIN_MEASURED를 다시 잴 때)
 
 중립 미리보기 ?preview=data-controls에 장면 정의를 주입하고, 항목 8만 ?preview=notice-fixture를 쓴다.
 서버는 이 체크아웃의 ui/harness/e2e-server.mjs를 KS_E2E_PORT로 띄운다. 판정이 하나라도 어긋나면
 result.json과 캡처를 남기고 종료 코드 1로 끝난다. 산출물은 --output 폴더에만 쓴다.
 시작할 때마다 판정기 자기 확인(layout_1246_verdicts.self_test)을 돌리고, 심은 위반이 통과하면 종료 코드 2로 끝난다.
-장면과 측정 JS는 layout_1246_fixtures.py, 판정은 layout_1246_verdicts.py에 있다.
+장면과 측정 JS는 layout_1246_fixtures.py, 판정은 모두 layout_1246_verdicts.py의 함수가 한다.
+--reference는 판정 없이 main과 비교하는 장면만 재서 result.json의 reference에 남긴다. ui 소스를 main으로 둔 체크아웃에서
+돌려 MAIN_MEASURED를 갱신한다.
 """
 import argparse
 import json
@@ -43,12 +49,14 @@ from playwright.sync_api import sync_playwright
 
 import check_chart_series as api
 from layout_1246_fixtures import (
-    APP_ID, BARS_JS, CONTROL_ROW_STATE, DAYS, EMPTY_SERIES_JS, FOCUS_JS, HEIGHT_JS, ITEM3_JS, MAIN_CHART_END_CSS, NARROW,
-    NOTICE_APP, NOTICE_JS, STACK_GAP_JS, TABLE_JS, TICK_JS, WIDE, control_row_scene, dialog_scene, empty_series_scene,
-    focus_scene, loaded_scene, loading_scene, long_body_scene, section_scene, section_stack_scene, share_table_scene,
+    APP_ID, BARS_JS, CONTROL_ROW_STATE, DAYS, EMPTY_SERIES_JS, FOCUS_JS, HEIGHT_JS, ITEM3_JS, NARROW, NOTICE_APP, NOTICE_JS,
+    SECTION_END_JS, STACK_GAP_JS, TABLE_JS, TICK_JS, WIDE, control_row_scene, dialog_scene, empty_series_scene, focus_scene,
+    loaded_scene, loading_scene, long_body_scene, section_end_scene, section_scene, section_stack_scene, share_table_scene,
     split_scene, tick_scene, two_series_scene)
 from layout_1246_verdicts import (
-    bar_slot_verdicts, notice_verdict, self_test, slack, sort_verdict, stack_gap_verdicts, table_verdict)
+    bar_slot_verdicts, focus_verdict, legend_verdict, notice_closed_verdict, notice_verdict, pane_gap_verdicts,
+    section_end_verdicts, self_test, skeleton_verdict, slack, sort_verdict, stack_gap_verdicts, status_notice_verdict,
+    table_verdict, tick_verdict, widths_stable_verdict)
 
 # 표마다 (열 개수, 행 개수). 몫 표는 share_table_scene, profiler는 apps/profiler.json 첫 표와 하니스 자료,
 # gallery는 block-gallery 「표와 트리」 탭의 첫 표다. 다른 표나 빈 표를 재면 실패한다.
@@ -63,6 +71,21 @@ STACK_SCENES = (
     ("nested-medium", lambda: section_stack_scene("medium", nested=True), None),
     ("control", control_row_scene, CONTROL_ROW_STATE),
 )
+# 항목 3의 구역 끝 차트 장면들. 이름, (자리, 쌓기 칸 차례), 잴 끝(SECTION_END_JS의 target), 개수 기대값.
+SECTION_END_SCENES = (
+    ("tab-chart-table", ("tab", "chart-table"), "table", {"panels": 1}),
+    ("body-chart-table", ("body", "chart-table"), "table", {}),
+    ("body-chart-section", ("body", "chart-section"), "section", {"sections": 2}),
+    ("tab-table-chart", ("tab", "table-chart"), "panel", {"panels": 1}),
+    ("body-table-chart", ("body", "table-chart"), "body", {}),
+)
+# main 화면에서 같은 장면을 실제로 잰 값(px). ui 소스를 main(MAIN_COMMIT)으로 둔 체크아웃에서 --reference로 쟀다.
+# 조작 줄 꼴의 아래(차트 틀 → 표), 위(고르기 줄 → 차트 틀)와 [구역(차트), 구역(표)]의 차트 틀 → 둘째 구역 첫 내용.
+MAIN_COMMIT = "88910a237cec93e9a60d99bb99cc563c681a3805"
+MAIN_MEASURED = {
+    1180: {"control": {"below": 24, "above": 24}, "body-chart-section": {"below": 20}},
+    360: {"control": {"below": 24, "above": 24}, "body-chart-section": {"below": 20}},
+}
 
 
 def wait_server(port):
@@ -132,53 +155,81 @@ def check_item3(page, output, result):
             if isinstance(measured, dict) and measured.get("error"):
                 raise AssertionError(measured["error"])
             key = f"item3-{name}-{width}"
-            expected = 2 if name == "split" else 1
-            record(result, key, {
-                "charts": len(measured) == expected,
-                "one_space_3": len(measured) == expected and all(m["gap"] is not None and abs(m["gap"] - 12) <= 1 for m in measured),
-            })
+            record(result, key, pane_gap_verdicts(measured, 2 if name == "split" else 1))
             result["scenes"][key]["measurement"] = measured
             capture(output, result, page, key)
     check_item3_stacks(page, output, result)
+    check_item3_section_end(page, output, result)
 
 
-def main_rule(page, on):
-    """main(e9329367)의 차트 아래 여백 규칙을 페이지에 덧씌우거나 걷는다."""
-    page.evaluate("""([css, on]) => {
-      let style = document.getElementById('check1246-main-rule');
-      if (on && !style) { style = document.createElement('style'); style.id = 'check1246-main-rule'; document.head.append(style); }
-      if (on) style.textContent = css; else if (style) style.remove();
-    }""", [MAIN_CHART_END_CSS, on])
-    page.wait_for_timeout(300)
+def measure_item3(page, output, result, scenes, js_args):
+    """장면마다 1180, 360 폭에서 재고 캡처한다. js_args(장면 이름)는 측정 JS와 그 인자다."""
+    measured = {}
+    for name, scene, state in scenes:
+        inject(page, scene, state=state)
+        for width, height in (WIDE, NARROW):
+            page.set_viewport_size({"width": width, "height": height})
+            page.wait_for_timeout(450)
+            js, arg = js_args(name)
+            measured[(name, width)] = page.evaluate(js, arg)
+            capture(output, result, page, f"item3-{name}-{width}")
+    return measured
+
+
+def stack_scenes():
+    return [(name, scene(), state) for name, scene, state in STACK_SCENES]
+
+
+def section_end_scenes():
+    return [(name, section_end_scene(*shape), None) for name, shape, _, _ in SECTION_END_SCENES]
+
+
+def section_end_target(name):
+    return next(target for scene, _, target, _ in SECTION_END_SCENES if scene == name)
 
 
 def check_item3_stacks(page, output, result):
     """구역 안 차트 뒤에 표가 이어질 때, 쌓기의 중첩 깊이와 상관없이 차트가 아래 여백을 남기는지."""
-    measured = {}
-    for name, scene, state in STACK_SCENES:
-        inject(page, scene(), state=state)
-        for width, height in (WIDE, NARROW):
-            page.set_viewport_size({"width": width, "height": height})
-            page.wait_for_timeout(450)
-            head = page.evaluate(STACK_GAP_JS, APP_ID)
-            capture(output, result, page, f"item3-{name}-{width}")
-            main_rule(page, True)
-            main = page.evaluate(STACK_GAP_JS, APP_ID)
-            main_rule(page, False)
-            measured[(name, width)] = {"head": head, "main": main}
+    measured = measure_item3(page, output, result, stack_scenes(), lambda name: (STACK_GAP_JS, APP_ID))
     for width, _ in (WIDE, NARROW):
-        same_medium = measured[("same-medium", width)]["head"]
+        same_medium = measured[("same-medium", width)]
+        main = MAIN_MEASURED[width]["control"]
         verdicts = {
-            "same-none": stack_gap_verdicts(measured[("same-none", width)]["head"], expected_below=12),
-            "nested-none": stack_gap_verdicts(measured[("nested-none", width)]["head"], expected_below=12),
+            "same-none": stack_gap_verdicts(measured[("same-none", width)], below=12),
+            "nested-none": stack_gap_verdicts(measured[("nested-none", width)], below=12),
             "same-medium": stack_gap_verdicts(same_medium),
-            "nested-medium": stack_gap_verdicts(measured[("nested-medium", width)]["head"], compare=same_medium),
-            "control": stack_gap_verdicts(measured[("control", width)]["head"], compare=measured[("control", width)]["main"], control=True),
+            "nested-medium": stack_gap_verdicts(measured[("nested-medium", width)], below=same_medium["below"]),
+            "control": stack_gap_verdicts(measured[("control", width)], below=main["below"], above=main["above"], control=True),
         }
         for name, _, _ in STACK_SCENES:
             key = f"item3-{name}-{width}"
             record(result, key, verdicts[name])
             result["scenes"][key]["measurement"] = measured[(name, width)]
+
+
+def check_item3_section_end(page, output, result):
+    """구역 끝 차트: 구역 뒤에 블록이 이어지면 차트가 아래 여백을 남기고, 구역이 칸 바닥에 닿으면 여백은 한 겹이다."""
+    measured = measure_item3(page, output, result, section_end_scenes(),
+                             lambda name: (SECTION_END_JS, [APP_ID, section_end_target(name)]))
+    for width, _ in (WIDE, NARROW):
+        for name, _, _, counts in SECTION_END_SCENES:
+            expected = MAIN_MEASURED[width][name]["below"] if name in MAIN_MEASURED[width] else 12
+            key = f"item3-{name}-{width}"
+            record(result, key, section_end_verdicts(measured[(name, width)], expected, **counts))
+            result["scenes"][key]["measurement"] = measured[(name, width)]
+            result["scenes"][key]["expected_below"] = expected
+
+
+def measure_reference(page, output, result):
+    """판정 없이 main과 비교하는 장면을 잰다. ui 소스를 main으로 둔 체크아웃에서 MAIN_MEASURED를 다시 잴 때 쓴다."""
+    stacks = measure_item3(page, output, result, stack_scenes(), lambda name: (STACK_GAP_JS, APP_ID))
+    ends = measure_item3(page, output, result, section_end_scenes(),
+                         lambda name: (SECTION_END_JS, [APP_ID, section_end_target(name)]))
+    reference = {}
+    for (name, width), value in {**stacks, **ends}.items():
+        reference.setdefault(width, {})[name] = {"below": value["below"], **({"above": value["above"]} if "above" in value else {})}
+    result["reference"] = reference
+    print(json.dumps(reference, ensure_ascii=False), flush=True)
 
 
 def focus_chart(page, index):
@@ -206,19 +257,7 @@ def check_item4(page, output, result):
             page.wait_for_timeout(200)
             measured = page.evaluate(FOCUS_JS)
             key = f"item4-{kind}-{width}"
-            plot_style = measured.get("plotStyle") or {}
-            labels = measured.get("labels") or []
-            record(result, key, {
-                "focused": reached and measured.get("focusedIndex") == index,
-                "first_last_glyphs": len(labels) >= 2
-                and labels[0].get("text") == DAYS[0] and labels[-1].get("text") == DAYS[3]
-                and labels[0].get("glyph") is not None and labels[-1].get("glyph") is not None,
-                "outline_on_plot": plot_style.get("outlineStyle") == "solid" and plot_style.get("outlineWidth") == "2px",
-                "outline_color": plot_style.get("outlineColor") == measured.get("focusColor"),
-                "outline_offset": plot_style.get("outlineOffset") == "-2px",
-                "graph_outline_none": (measured.get("graphStyle") or {}).get("outlineStyle") == "none",
-                "no_label_overlap": measured.get("overlaps") is False,
-            })
+            record(result, key, focus_verdict(reached, measured, index, DAYS[0], DAYS[3]))
             result["scenes"][key]["measurement"] = measured
             capture(output, result, page, key)
 
@@ -230,15 +269,7 @@ def check_item5(page, output, result):
         page.wait_for_timeout(450)
         measured = page.evaluate(TICK_JS, APP_ID)
         key = f"item5-{width}"
-        record(result, key, {
-            "two_axes": len(measured) == 2,
-            "tick_texts": [[span["text"] for span in m["spans"]] for m in measured] == TICK_TEXTS,
-            "end_aligned": len(measured) == 2 and all(
-                m["spans"] and all(span["textAlign"] == "end" for span in m["spans"]) for m in measured),
-            "tabular": len(measured) == 2 and all("tabular-nums" in m["fontVariantNumeric"] for m in measured),
-            "right_spread_1px": len(measured) == 2 and all(m["spread"] is not None and m["spread"] <= 1 for m in measured),
-            "negative_tick_present": len(measured) == 2 and all(m["hasNegative"] for m in measured),
-        })
+        record(result, key, tick_verdict(measured, TICK_TEXTS))
         result["scenes"][key]["measurement"] = measured
         capture(output, result, page, key)
 
@@ -249,16 +280,8 @@ def check_item6(page, output, result):
         page.set_viewport_size({"width": width, "height": height})
         page.wait_for_timeout(450)
         measured = page.evaluate(EMPTY_SERIES_JS, APP_ID)
-        legend = measured["legend"] or []
         key = f"item6-{width}"
-        record(result, key, {
-            "legend_two": [item["text"] for item in legend] == ["계열 가", "계열 다"],
-            "readout_hides_empty": "빈 계열" not in measured["readout"] and "계열 다" in measured["readout"],
-            "table_hides_empty": "빈 계열" not in measured["tableText"] and measured["tableHeaders"] == ["시점", "계열 가", "계열 다"],
-            "colors_by_original_index": len(legend) == 2
-            and "--ks-chart-series-color: var(--ks-color-series-1)" in (legend[0]["style"] or "")
-            and "--ks-chart-series-color: var(--ks-color-series-3)" in (legend[1]["style"] or ""),
-        })
+        record(result, key, legend_verdict(measured, ["계열 가", "계열 다"], "빈 계열", [1, 3]))
         result["scenes"][key]["measurement"] = measured
         capture(output, result, page, key)
     # 쌓지 않은 묶음 막대: 빈 계열이 낀 장면과 빈 계열을 뺀 장면의 막대 자리를 같은 폭에서 비교한다.
@@ -318,8 +341,7 @@ def measure_table(page, output, result, name, app_id, width, label, slack_limit=
         sorted_key = f"{key}-{direction}"
         verdicts = table_verdict(sorted_measured, expected, slack_limit=slack_limit, overflow=overflow)
         verdicts.update(sort_verdict(clicked, sorted_measured, direction))
-        verdicts["widths_stable"] = not sorted_measured.get("error") and len(sorted_measured["columns"]) == len(base_widths) and all(
-            abs(column["columnWidth"] - base) <= 1 for column, base in zip(sorted_measured["columns"], base_widths))
+        verdicts.update(widths_stable_verdict(base_widths, sorted_measured))
         record(result, sorted_key, verdicts)
         result["scenes"][sorted_key]["measurement"] = sorted_measured
         result["scenes"][sorted_key]["clicked"] = clicked
@@ -355,12 +377,7 @@ def check_item8(page, output, result):
     page.wait_for_timeout(450)
     status = page.evaluate(NOTICE_JS, NOTICE_APP)
     status_key = "item8-status-360"
-    record(result, status_key, {
-        "status_visible": status["statusVisible"] and not status["alertVisible"],
-        "no_bottom_space_with_status": abs(status["borderBlockEnd"]) <= 0.5
-        and abs(status["clientHeight"] - before["clientHeight"]) <= 1
-        and status["noticeSpace"] in ("", "0px"),
-    })
+    record(result, status_key, status_notice_verdict(before, status))
     result["scenes"][status_key]["measurement"] = status
     capture(output, result, page, status_key)
     page.evaluate("() => window.noticeFixture.alert()")
@@ -373,10 +390,7 @@ def check_item8(page, output, result):
     page.evaluate("""() => { const button = document.querySelector('[data-testid="app-window-notice-fixture"] .ks-notice button[aria-label="닫기"]'); if (button) button.click(); }""")
     page.wait_for_timeout(500)
     closed = page.evaluate(NOTICE_JS, NOTICE_APP)
-    record(result, f"{key}-closed", {
-        "scrollport_restored": abs(closed["clientHeight"] - before["clientHeight"]) <= 1,
-        "scroll_height_restored": abs(closed["scrollHeight"] - before["scrollHeight"]) <= 1,
-    })
+    record(result, f"{key}-closed", notice_closed_verdict(before, closed))
     result["scenes"][f"{key}-closed"]["measurement"] = closed
 
 
@@ -400,13 +414,7 @@ def check_item9(page, output, result):
     for width in (WIDE[0], NARROW[0]):
         skeleton, chart = loading[width], loaded[width]
         key = f"item9-{width}"
-        frames_equal = len(skeleton) == len(chart) == 3 and all(
-            abs(left["frameHeight"] - right["frameHeight"]) <= 2 for left, right in zip(skeleton, chart))
-        charts_equal = len(skeleton) == len(chart) == 3 and all(
-            abs(left["chartHeight"] - right["chartHeight"]) <= 2 for left, right in zip(skeleton, chart))
-        record(result, key, {"skeleton_shown": len(skeleton) == 3 and all(item["loading"] for item in skeleton),
-                             "three_branches": len(skeleton) == len(chart) == 3,
-                             "frame_height": frames_equal, "chart_height": charts_equal})
+        record(result, key, skeleton_verdict(skeleton, chart))
         result["scenes"][key]["measurement"] = {"loading": skeleton, "loaded": chart}
 
 
@@ -415,6 +423,7 @@ def main(checker=None):
     parser.add_argument("--output")
     parser.add_argument("--port", type=int, default=5397)
     parser.add_argument("--self-test", action="store_true", help="판정기 자기 확인만 하고 끝낸다")
+    parser.add_argument("--reference", action="store_true", help="판정 없이 main과 비교하는 장면만 잰다")
     args = parser.parse_args()
     broken = self_test()
     if broken:
@@ -441,7 +450,9 @@ def main(checker=None):
                 page = context.new_page()
                 page.add_init_script("window.dataSampleGate = { wait: () => new Promise((resolve) => { window.__releaseSample = resolve; }) };")
                 open_page(page, args.port, APP_ID)
-                if checker:
+                if args.reference:
+                    measure_reference(page, output, result)
+                elif checker:
                     checker(page, output, result)
                 else:
                     check_item3(page, output, result)
