@@ -275,7 +275,21 @@ const chatAttachGate = (window as unknown as { chatAttachGate?: { wait: () => Pr
 const fakeTransport = createFakeTransport({
   snapshot: demoSnapshot,
   storage: [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }],
-  data: { sources: { ...pagingSeeds, chat_status: chatStateMode === "login" ? { login: "chat-connection" } : { error: "대화 상태를 받지 못했습니다" }, date_bounds: { value: { min: "2026-11-19", max: "2026-11-25" }, delayMs: Number(params.get("bounds-delay")) || 1500 }, pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000, waitForFirstPage: sampleGate?.wait }, slow_options: { value: ["첫째", "둘째"], delayMs: Number(params.get("options-delay")) || 1500 }, failed: { error: "데이터를 받지 못했습니다" } }, callError: "요청을 처리하지 못했습니다" },
+  data: { sources: { ...pagingSeeds, chat_status: chatStateMode === "login" ? { login: "chat-connection" } : { error: "대화 상태를 받지 못했습니다" }, date_bounds: { value: { min: "2026-11-19", max: "2026-11-25" }, delayMs: Number(params.get("bounds-delay")) || 1500 }, pictures: { value: [{ kind: "file", name: "landscape.png", path: "landscape.png", size: 2048, modified: timestamp }, { kind: "file", name: "shapes.png", path: "shapes.png", size: 1024, modified: timestamp }] }, sounds: { value: [{ kind: "file", name: "tone.wav", path: "tone.wav", ext: "wav", size: 128044, modified: timestamp }, { kind: "file", name: "tone-second.wav", path: "tone-second.wav", ext: "wav", size: 128044, modified: timestamp }] }, sample: { value: { message: "데이터를 불러왔습니다" }, delayMs: 1000, waitForFirstPage: sampleGate?.wait }, slow_options: { value: ["첫째", "둘째"], delayMs: Number(params.get("options-delay")) || 1500 }, failed: { error: "데이터를 받지 못했습니다" },
+      // apps/profiler.json을 실제 정의 그대로 띄울 때 표에 줄이 차도록 프로파일러 응답 모양을 채운다.
+      profile: { value: {
+        metrics: [
+          { key: "events", label: "입력 이벤트", value: 1147, unit: "회" },
+          { key: "wait", label: "대기 P95", value: 42, unit: "ms" },
+          { key: "total", label: "전체 P95", value: 70, unit: "ms" },
+        ],
+        inputs: [
+          { key: "input-textarea", event: "input", target: "textarea", state_label: "입력", wait_p95_ms: 42.4, processing_p95_ms: 18.2, paint_p95_ms: 9.6, total_p95_ms: 70.2, calls: 128 },
+          { key: "keydown-input", event: "keydown", target: "input", state_label: "입력", wait_p95_ms: 12.8, processing_p95_ms: 7.4, paint_p95_ms: 5.1, total_p95_ms: 25.3, calls: 986 },
+          { key: "compositionupdate-textarea", event: "compositionupdate", target: "textarea", state_label: "조합 중", wait_p95_ms: 85.2, processing_p95_ms: 31.7, paint_p95_ms: 14.9, total_p95_ms: 131.8, calls: 24 },
+        ],
+        chart_series: [], categories: [], targets: [], apps: [], slowest_spans: [], slowest_bindings: [], recent_spans: [],
+      } } }, callError: "요청을 처리하지 못했습니다" },
   media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne,
     ...Object.fromEntries([
       "<rect x='5' y='3' width='14' height='18' rx='2'/><path d='M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15v2M8 18h2M12 18h2'/>",

@@ -106,13 +106,15 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     onWindowData?.(data);
     return () => onWindowData?.(null);
   }, [data, onWindowData]);
-  // 창 알림이 떠 있는 동안 본문 스크롤 창 끝을 그 높이만큼 줄여 마지막 내용이 알림 위에서 멈춘다. 알림이 없으면 줄이지 않는다.
+  // 창 오류 알림이 떠 있는 동안 본문 스크롤 창 끝을 그 높이만큼 줄여 마지막 내용이 알림 위에서 멈춘다.
+  // 같은 자리에 스쳐 지나가는 상태 알림(.ks-window-status)은 본문을 밀지 않으므로 그 높이는 세지 않는다.
   useEffect(() => {
     const bodyElement = body.current;
     const noticeElement = notice.current;
     if (!bodyElement || !noticeElement) return;
     const apply = () => {
-      const height = noticeElement.getBoundingClientRect().height;
+      const alert = Array.from(noticeElement.children).find((child) => child.classList.contains("ks-notice"));
+      const height = alert ? alert.getBoundingClientRect().height : 0;
       bodyElement.style.setProperty("--ks-notice-space", height > 0 ? `calc(var(--ks-space-4) + ${Math.ceil(height)}px)` : "0px");
     };
     apply();

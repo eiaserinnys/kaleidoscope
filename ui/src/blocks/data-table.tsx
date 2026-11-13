@@ -5,6 +5,7 @@ import type { BindingMore, Block, Column, SortSpec, TableCellAddress } from "../
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
+import { ICON_SIZE } from "../components/icons";
 import { DataState } from "../components/data-state";
 import { Notice } from "../components/primitives";
 import { useLocalDraft } from "../data/use-local-draft";
@@ -60,7 +61,7 @@ export function useFontsReady() {
   return ready;
 }
 const widestTexts = (texts: string[]) => [...new Set(texts)].sort((left, right) => right.length - left.length).slice(0, 8);
-export function width(column: Column, rows: Row[], layout: { index?: number; count?: number; hasContent?: boolean } = {}) {
+export function width(column: Column, rows: Row[], layout: { index?: number; count?: number; hasContent?: boolean; sortable?: boolean } = {}) {
   if (column.width === "narrow" && column.format === "number") {
     const texts = rows.map((row) => cellValue(row[column.field], column));
     const valueLength = texts.reduce((longest, text) => Math.max(longest, Array.from(text).length), 0);
@@ -68,13 +69,15 @@ export function width(column: Column, rows: Row[], layout: { index?: number; cou
     const edge = (layout.count ?? 0) > 0 && (layout.index === 0 || layout.index === (layout.count ?? 0) - 1);
     // 첫 열과 끝 열은 창 몸통 여백(space-3)에 맞춰 한쪽만 넓어지므로 좌우 합이 space-2 둘에 space-1 하나다.
     const padding = layout.hasContent ? "2 * var(--ks-space-3)" : edge ? "2 * var(--ks-space-2) + var(--ks-space-1)" : "2 * var(--ks-space-2)";
+    // 정렬 단추가 붙는 표는 정렬표(chevron)와 그 간격만큼 머리 폭을 늘 잡는다. 정렬을 바꿀 때 열 폭이 움직이지 않는다.
+    const sortIcon = layout.sortable ? ` + ${ICON_SIZE.inline}px + var(--ks-space-1)` : "";
     const measuredValues = widestTexts(texts.filter(Boolean)).map((text) => measureText(text, "var(--ks-type-body)", true));
     const measuredLabel = measureText(column.label, "var(--ks-type-meta)", false);
     if (measuredLabel !== null && measuredValues.every((value) => value !== null)) {
       const content = Math.max(measuredLabel, ...measuredValues as number[]);
-      return `max(var(--ks-space-6), calc(${content}px + ${padding}))`;
+      return `max(var(--ks-space-6), calc(${content}px + ${padding}${sortIcon}))`;
     }
-    return `max(var(--ks-space-6), calc(${valueLength} * var(--ks-type-body) * 0.6 + ${padding}), calc(${labelLength} * var(--ks-type-meta) + ${padding}))`;
+    return `max(var(--ks-space-6), calc(${valueLength} * var(--ks-type-body) * 0.6 + ${padding}${sortIcon}), calc(${labelLength} * var(--ks-type-meta) + ${padding}${sortIcon}))`;
   }
   const base = column.width === "narrow" ? "calc(var(--ks-space-6) * 3)" : column.width === "medium" ? "calc(var(--ks-space-6) * 5)" : column.width === "wide" ? "calc(var(--ks-space-6) * 8)" : "calc(var(--ks-space-6) * 2)";
   const length = column.format === "badge" ? Math.max(0, ...rows.map((row) => {
@@ -255,7 +258,7 @@ function RowTableView({ rootProps, columns: sourceColumns, rows: sourceRows, ini
   };
   const lines = Math.max(0, ...sourceColumns.filter((column) => column.format === "content").map((column) => column.max_lines ?? 3));
   const fontsReady = useFontsReady();
-  const gridColumns = useMemo(() => sourceColumns.map((column, index) => width(column, sourceRows, { index, count: sourceColumns.length, hasContent: lines > 0 })).join(" "), [sourceRows, sourceColumns, lines, fontsReady]);
+  const gridColumns = useMemo(() => sourceColumns.map((column, index) => width(column, sourceRows, { index, count: sourceColumns.length, hasContent: lines > 0, sortable: true })).join(" "), [sourceRows, sourceColumns, lines, fontsReady]);
   const toggleSort = (field: string) => setSort((old) => old?.field !== field ? { field, desc: false } : !old.desc ? { field, desc: true } : null);
   return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-rows${lines ? " has-content" : ""}`} ref={scroll} role="table" aria-rowcount={rows.length} aria-label={ariaLabel} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">

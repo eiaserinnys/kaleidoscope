@@ -2,14 +2,18 @@
 """카드 #1246 셸 UI 다듬기의 항목 3~9를 1180과 360 폭에서 화면으로 잰다.
 
 항목 3: 분할 칸, 탭 판, 구역, 대화상자 본문에서 차트 틀 아래 끝과 칸 아래 끝의 차이가 12px(±1).
+        같은 구역에서 차트 뒤에 표가 이어지면 차트 틀 아래 끝과 표 위 끝의 차이가 12px(±1).
 항목 4: 선, 면적 차트 초점 상태에서 초점 테두리가 plot에 그려지고 x축 첫 글, 끝 글 상자와 겹치지 않음.
 항목 5: 한 축의 눈금 글 오른끝 x 차이가 1px 이하(음수 눈금이 있는 축 포함).
 항목 6: 값이 없는 계열이 범례와 읽기 줄과 접근성 표에 없고, 남은 계열 색이 원래 index 그대로임.
-항목 7: 360 폭 몫 표 꼴에서 숫자 열 폭 - (가장 긴 글 폭 + 칸 좌우 여백)이 4px 이하이고
-        머리 글과 값이 잘리지 않음. profiler 꼴 좁은 숫자 열도 잘리지 않음.
+항목 7: 360 폭 몫 표 꼴(긴 이름 fill 열 + 「44%」 몫 열 + 값 열)에서 숫자 열 폭 -
+        (가장 긴 글 폭 + 칸 좌우 여백 + 정렬표 자리 19px)이 4px 이하이고, 실제 화면의 머리 칸과
+        값 칸이 잘리지 않으며 머리가 한 줄임. 정렬 오름차순·내림차순에서도 같고 열 폭이 움직이지 않음.
+        apps/profiler.json의 좁은 숫자 열과 예제 앱(block-gallery) 표도 실제 정의 그대로 잘리지 않음.
 항목 8: 360 폭, 알림이 떠 있고 본문을 끝까지 내렸을 때 마지막 블록 아래 끝이 알림 위 끝보다 8px 이상 위.
-        알림을 닫으면 본문 아래 여백이 알림 전과 같아짐.
-항목 9: 받는 중 뼈대 높이와 다 받은 뒤 차트 높이 차이가 2px 이하(small/medium/tall 전부).
+        알림을 닫으면 본문 아래 여백이 알림 전과 같아짐. 5초짜리 상태 알림만 떴을 때는 여백이 늘지 않음.
+항목 9: 받는 중 뼈대 높이와 다 받은 뒤 차트 높이 차이가 2px 이하(compact/medium/tall 전부).
+        받는 중 측정 전에 뼈대(ks-chart-loading)가 실제로 그려졌는지 확인함.
 
   python3 scripts/visual-check/check_1246_layout.py --output <산출폴더> [--port 포트]
 
@@ -34,6 +38,8 @@ APP_ID = "data-controls"
 NOTICE_APP = "notice-fixture"
 WIDE = (1180, 720)
 NARROW = (360, 720)
+# 정렬 단추가 붙는 표(RowTableView)는 정렬표 15px와 그 간격 4px를 머리 폭에 늘 잡아 둔다.
+SORT_RESERVE = 19
 DAYS = [f"11월 {day}일" for day in range(9, 16)]
 
 
@@ -85,31 +91,32 @@ def empty_series_scene():
 
 
 def share_table_scene():
+    # 기준본 장면: 360 폭에서 긴 이름 fill 열 + 좁은 숫자 몫 열(「44%」) + 좁은 숫자 값 열.
     rows = [
-        {"key": "1", "name": "아주 긴 이름을 가진 첫 번째 작업 항목", "share": 44, "value": 1238},
-        {"key": "2", "name": "둘째", "share": 21, "value": 987},
-        {"key": "3", "name": "셋째", "share": 18, "value": 640},
-        {"key": "4", "name": "넷째", "share": 17, "value": 12},
+        {"key": "1", "name": "아주 긴 이름을 가진 첫 번째 작업 항목", "share": "44%", "value": 1238},
+        {"key": "2", "name": "둘째", "share": "21%", "value": 987},
+        {"key": "3", "name": "셋째", "share": "8%", "value": 640},
+        {"key": "4", "name": "넷째", "share": "3%", "value": 12},
     ]
     return {"type": "table", "rows": rows, "columns": [
         {"field": "name", "label": "이름", "width": "fill"},
-        {"field": "share", "label": "몫", "width": "medium", "format": "number"},
+        {"field": "share", "label": "몫", "width": "narrow", "format": "number"},
         {"field": "value", "label": "값", "width": "narrow", "format": "number"},
     ]}
 
 
-def profiler_table_scene():
-    return {"type": "table", "rows": [
-        {"key": "1", "label": "입력 처리 중 아주 긴 구간 이름", "calls": 1234, "avg_ms": 12345, "p95_ms": 23456, "max_ms": 34567, "total_ms": 1234567},
-        {"key": "2", "label": "둘째 구간", "calls": 12, "avg_ms": 123, "p95_ms": 234, "max_ms": 345, "total_ms": 1234},
-    ], "columns": [
-        {"field": "label", "label": "구간", "width": "fill"},
-        {"field": "calls", "label": "호출", "width": "narrow", "format": "number"},
-        {"field": "avg_ms", "label": "평균(ms)", "width": "narrow", "format": "number"},
-        {"field": "p95_ms", "label": "P95(ms)", "width": "narrow", "format": "number"},
-        {"field": "max_ms", "label": "최대(ms)", "width": "narrow", "format": "number"},
-        {"field": "total_ms", "label": "합계(ms)", "width": "narrow", "format": "number"},
-    ]}
+def section_stack_scene():
+    rows = [
+        {"key": "1", "name": "첫 줄", "count": 12},
+        {"key": "2", "name": "둘째 줄", "count": 7},
+    ]
+    return {"type": "section", "title": "차트와 표", "child": {"type": "stack", "direction": "column", "gap": "none", "children": [
+        {"type": "chart", "kind": "bar", "series": bar_series()},
+        {"type": "table", "rows": rows, "columns": [
+            {"field": "name", "label": "이름", "width": "fill"},
+            {"field": "count", "label": "수", "width": "narrow", "format": "number"},
+        ]},
+    ]}}
 
 
 def long_body_scene():
@@ -120,13 +127,13 @@ def long_body_scene():
 def loading_scene():
     return {"type": "stack", "direction": "column", "gap": "none", "children": [
         {"type": "chart", "kind": "bar", "height": height, "series": {"expr": "$data.sample"}}
-        for height in ("small", "medium", "tall")]}
+        for height in ("compact", "medium", "tall")]}
 
 
 def loaded_scene():
     return {"type": "stack", "direction": "column", "gap": "none", "children": [
         {"type": "chart", "kind": "bar", "height": height, "series": bar_series()}
-        for height in ("small", "medium", "tall")]}
+        for height in ("compact", "medium", "tall")]}
 
 
 def wait_server(port):
@@ -212,6 +219,7 @@ FOCUS_JS = """() => {
   const labels = [...chart.querySelectorAll('.ks-chart-x-axis span')].map((span) => {
     const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
     const node = walker.nextNode();
+    if (!node) return { text: span.textContent, glyph: null, span: box(span) };
     const range = document.createRange();
     range.selectNodeContents(node);
     const rects = [...range.getClientRects()];
@@ -276,51 +284,58 @@ EMPTY_SERIES_JS = """(appId) => {
 TABLE_JS = """(appId) => {
   const round = (value) => Math.round(value * 10) / 10;
   const box = (element) => { const r = element.getBoundingClientRect();
-    return { left: round(r.left), right: round(r.right), width: round(r.width), height: round(r.height) }; };
+    return { left: round(r.left), right: round(r.right), top: round(r.top), bottom: round(r.bottom), width: round(r.width), height: round(r.height) }; };
+  // 실제 화면에 그려진 글의 줄 상자를 읽는다. 구현의 탐침 폭 계산을 되풀이하지 않는다.
+  const textRects = (element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const rects = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      rects.push(...range.getClientRects());
+    }
+    return rects;
+  };
+  const lineCount = (rects) => new Set(rects.map((rect) => Math.round(rect.top))).size;
   const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
-  const table = win.querySelector('.ks-table-scroll');
+  const table = win && win.querySelector('.ks-table-scroll');
   if (!table) return { error: '표가 없습니다' };
-  const probe = document.createElement('span');
-  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;';
-  win.appendChild(probe);
-  const textWidth = (text, font, variant) => { probe.style.font = font; probe.style.fontVariantNumeric = variant || 'normal';
-    probe.textContent = text; return round(probe.getBoundingClientRect().width); };
   const headerCells = [...table.querySelectorAll('.ks-table-header > div')];
   const bodyRows = [...table.querySelectorAll('.ks-table-row')];
-  const headerStyle = getComputedStyle(table.querySelector('.ks-table-header'));
-  const firstCell = bodyRows[0]?.querySelector('.ks-table-cell');
-  const cellStyle = firstCell ? getComputedStyle(firstCell) : headerStyle;
-  const headerFont = `${headerStyle.fontSize} ${headerStyle.fontFamily}`;
-  const cellFont = `${cellStyle.fontSize} ${cellStyle.fontFamily}`;
   const columns = headerCells.map((header, index) => {
-    // 잘림은 overflow:hidden 상자의 내용 폭과 글 폭을 맞대어 본다. scrollWidth는 여백이 섞여 쓸 수 없다.
-    const label = header.querySelector('button') || header;
-    const labelStyle = getComputedStyle(label);
-    const headerPadding = parseFloat(labelStyle.paddingLeft) + parseFloat(labelStyle.paddingRight);
-    const headerText = textWidth(label.textContent, headerFont, 'normal');
-    const headerAvailable = box(header).width - headerPadding;
+    const button = header.querySelector('button') || header;
+    const headerRects = textRects(button);
+    const headerBox = box(header);
+    const headerOutside = headerRects.some((rect) => rect.left < headerBox.left - 0.5 || rect.right > headerBox.right + 0.5);
+    const headerOverflow = header.scrollWidth > header.clientWidth + 1 || headerOutside;
     const cells = bodyRows.map((row) => row.querySelectorAll('.ks-table-cell')[index]).filter(Boolean);
-    const texts = cells.map((cell) => cell.textContent);
-    const widths = texts.map((text) => textWidth(text, cellFont, 'tabular-nums'));
-    const paddingLeft = cells.length ? parseFloat(getComputedStyle(cells[0]).paddingLeft) : 0;
-    const paddingRight = cells.length ? parseFloat(getComputedStyle(cells[0]).paddingRight) : 0;
-    const cellFits = cells.map((cell, cellIndex) => {
-      const style = getComputedStyle(cell);
-      const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-      return widths[cellIndex] <= box(cell).width - padding + 0.5;
-    });
+    const cellOverflow = cells.some((cell) => cell.scrollWidth > cell.clientWidth + 1);
+    const cellRects = cells.flatMap((cell) => textRects(cell));
+    const style = cells.length ? getComputedStyle(cells[0]) : getComputedStyle(header);
     return {
-      label: label.textContent, columnWidth: cells.length ? box(cells[0]).width : box(header).width,
-      padding: round(paddingLeft + paddingRight), longest: Math.max(0, ...widths), texts,
-      headerTruncated: headerText > headerAvailable + 0.5,
-      cellTruncated: cellFits.some((fits) => !fits),
-      headerText, headerAvailable: round(headerAvailable), widths,
+      label: button.textContent,
+      columnWidth: cells.length ? box(cells[0]).width : headerBox.width,
+      padding: round(parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)),
+      longest: round(Math.max(0, ...cellRects.map((rect) => rect.width))),
+      headerLongest: round(Math.max(0, ...headerRects.map((rect) => rect.width))),
+      headerLines: lineCount(headerRects), headerOverflow, cellOverflow,
     };
   });
-  probe.remove();
-  return { styles: { columns: getComputedStyle(table).getPropertyValue('--ks-table-columns'), headerFontSize: headerStyle.fontSize,
-                     cellFontSize: cellStyle.fontSize }, columns,
+  return { styles: { columns: getComputedStyle(table).getPropertyValue('--ks-table-columns') }, columns,
+           rowCount: bodyRows.length,
            scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth };
+}"""
+
+SECTION_STACK_JS = """(appId) => {
+  const round = (value) => Math.round(value * 10) / 10;
+  const box = (element) => { const r = element.getBoundingClientRect();
+    return { left: round(r.left), right: round(r.right), top: round(r.top), bottom: round(r.bottom), width: round(r.width), height: round(r.height) }; };
+  const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const section = win && win.querySelector('.ks-data-section');
+  const frame = box(section && section.querySelector('.ks-chart-frame'));
+  const table = box(section && section.querySelector('.ks-table-scroll'));
+  return { frame, table, gap: frame && table ? round(table.top - frame.bottom) : null };
 }"""
 
 NOTICE_JS = """(appId) => {
@@ -330,14 +345,18 @@ NOTICE_JS = """(appId) => {
   const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
   const body = win.querySelector('.ks-data-window-body');
   const notice = win.querySelector('.ks-data-window-notice');
+  const alert = notice && [...notice.children].find((child) => child.classList.contains('ks-notice'));
   const items = [...body.querySelectorAll('.ks-data-stack > .ks-data-stack-item')];
   const last = items.at(-1);
   body.scrollTop = body.scrollHeight;
   const lastBox = last ? box(last) : null;
-  const noticeBox = box(notice);
+  const noticeBox = box(alert);
   return {
     body: box(body), borderBlockEnd: round(parseFloat(getComputedStyle(body).borderBlockEndWidth)),
+    noticeSpace: body.style.getPropertyValue('--ks-notice-space'),
     notice: noticeBox, noticeHeight: noticeBox ? noticeBox.height : 0,
+    statusVisible: Boolean(notice && notice.querySelector('.ks-window-status')),
+    alertVisible: Boolean(alert),
     windowHeight: box(win).height,
     scrollTop: body.scrollTop, scrollHeight: body.scrollHeight, clientHeight: body.clientHeight,
     lastBottom: lastBox ? lastBox.bottom : null,
@@ -354,7 +373,9 @@ HEIGHT_JS = """(appId) => {
     const chart = item.querySelector('.ks-chart');
     const frame = item.querySelector('.ks-chart-frame');
     const skeleton = item.querySelector('.ks-data-skeleton');
-    return { chartClass: chart ? chart.className : null, chart: box(chart), frame: box(frame), skeleton: box(skeleton),
+    return { chartClass: chart ? chart.className : null,
+             loading: Boolean(chart && chart.classList.contains('ks-chart-loading')),
+             chart: box(chart), frame: box(frame), skeleton: box(skeleton),
              chartHeight: chart ? box(chart).height : null, frameHeight: frame ? box(frame).height : null,
              skeletonHeight: skeleton ? box(skeleton).height : null };
   });
@@ -393,6 +414,19 @@ def check_item3(page, output, result):
             })
             result["scenes"][key]["measurement"] = measured
             capture(output, result, page, key)
+    # 같은 구역에서 차트 뒤에 표가 이어질 때 차트가 아래 여백을 남기는지.
+    inject(page, section_stack_scene())
+    for width, height in (WIDE, NARROW):
+        page.set_viewport_size({"width": width, "height": height})
+        page.wait_for_timeout(450)
+        measured = page.evaluate(SECTION_STACK_JS, APP_ID)
+        key = f"item3-section-stack-{width}"
+        record(result, key, {
+            "chart_and_table": measured["gap"] is not None,
+            "gap_12": measured["gap"] is not None and abs(measured["gap"] - 12) <= 1,
+        })
+        result["scenes"][key]["measurement"] = measured
+        capture(output, result, page, key)
 
 
 def focus_chart(page, index):
@@ -421,8 +455,11 @@ def check_item4(page, output, result):
             measured = page.evaluate(FOCUS_JS)
             key = f"item4-{kind}-{width}"
             plot_style = measured.get("plotStyle") or {}
+            labels = measured.get("labels") or []
             record(result, key, {
                 "focused": reached and measured.get("focusedIndex") == index,
+                "first_last_glyphs": len(labels) >= 2
+                and labels[0].get("glyph") is not None and labels[-1].get("glyph") is not None,
                 "outline_on_plot": plot_style.get("outlineStyle") == "solid" and plot_style.get("outlineWidth") == "2px",
                 "outline_color": plot_style.get("outlineColor") == measured.get("focusColor"),
                 "outline_offset": plot_style.get("outlineOffset") == "-2px",
@@ -472,45 +509,80 @@ def check_item6(page, output, result):
         capture(output, result, page, key)
 
 
-def share_verdict(measured):
+def table_verdict(measured, slack=False, overflow=False):
     if measured.get("error"):
         return {"columns": False}
-    value = measured["columns"][-1]
-    slack = value["columnWidth"] - (value["longest"] + value["padding"])
-    return {
-        "value_slack_4px": slack <= 4,
-        "value_not_truncated": not value["headerTruncated"] and not value["cellTruncated"],
-        "no_horizontal_overflow": measured["scrollWidth"] <= measured["clientWidth"] + 1,
-        "slack": round(slack, 1),
+    columns = measured["columns"]
+    verdicts = {
+        "rows_present": measured.get("rowCount", 0) > 0,
+        "headers_single_line": all(column["headerLines"] == 1 for column in columns),
+        "no_header_overflow": all(not column["headerOverflow"] for column in columns),
+        # 첫 fill 열은 긴 이름이 말줄임으로 잘리는 것이 정상이라 숫자·좁은 열만 본다.
+        "no_cell_overflow": all(not column["cellOverflow"] for column in columns[1:]),
     }
+    if slack:
+        verdicts["numeric_slack_4px"] = all(
+            column["columnWidth"] - (max(column["longest"], column["headerLongest"]) + column["padding"] + SORT_RESERVE) <= 4
+            for column in columns[1:])
+    if overflow:
+        verdicts["no_horizontal_overflow"] = measured["scrollWidth"] <= measured["clientWidth"] + 1
+    return verdicts
 
 
-def profiler_verdict(measured):
+def sort_table(page, app_id, label):
+    page.evaluate(
+        """([appId, label]) => {
+          const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
+          const button = win && [...win.querySelectorAll('.ks-table-header button')]
+            .find((item) => item.textContent.trim() === label);
+          if (button) button.click();
+        }""",
+        [app_id, label],
+    )
+    page.wait_for_timeout(450)
+
+
+def measure_table(page, output, result, name, app_id, width, label, slack=False, overflow=False):
+    page.set_viewport_size({"width": width, "height": 720})
+    page.wait_for_timeout(450)
+    measured = page.evaluate(TABLE_JS, app_id)
+    key = f"item7-{name}-{width}"
+    record(result, key, table_verdict(measured, slack=slack, overflow=overflow))
+    if not measured.get("error"):
+        result["scenes"][key]["slacks"] = [
+            round(column["columnWidth"] - (max(column["longest"], column["headerLongest"]) + column["padding"] + SORT_RESERVE), 1)
+            for column in measured["columns"][1:]]
+        base_widths = [column["columnWidth"] for column in measured["columns"]]
+    result["scenes"][key]["measurement"] = measured
+    capture(output, result, page, key)
     if measured.get("error"):
-        return {"columns": False}
-    narrow = measured["columns"][1:]
-    return {
-        "narrow_not_truncated": all(not column["headerTruncated"] and not column["cellTruncated"] for column in narrow),
-        "no_horizontal_overflow": measured["scrollWidth"] <= measured["clientWidth"] + 1,
-    }
+        return
+    for direction in ("asc", "desc"):
+        sort_table(page, app_id, label)
+        sorted_measured = page.evaluate(TABLE_JS, app_id)
+        sorted_key = f"{key}-{direction}"
+        verdicts = table_verdict(sorted_measured, slack=slack, overflow=overflow)
+        verdicts["widths_stable"] = not sorted_measured.get("error") and len(sorted_measured["columns"]) == len(base_widths) and all(
+            abs(column["columnWidth"] - base) <= 1 for column, base in zip(sorted_measured["columns"], base_widths))
+        record(result, sorted_key, verdicts)
+        result["scenes"][sorted_key]["measurement"] = sorted_measured
+        capture(output, result, page, sorted_key)
+    # 다음 폭의 기준 측정이 정렬 없는 상태에서 시작하도록 한 번 더 눌러 정렬을 푼다.
+    sort_table(page, app_id, label)
 
 
 def check_item7(page, output, result):
-    for name, scene, judge in (("share", share_table_scene(), share_verdict),
-                               ("profiler", profiler_table_scene(), profiler_verdict)):
-        inject(page, scene)
+    inject(page, share_table_scene())
+    for width, height in (WIDE, NARROW):
+        measure_table(page, output, result, "share", APP_ID, width, "몫", slack=True, overflow=True)
+    # 저장소의 실제 앱 정의를 그대로 띄워 좁은 숫자 열을 잰다.
+    for name, app_id, label in (("profiler", "profiler", "대기 P95(ms)"), ("gallery", "block-gallery", "크기")):
+        open_page(page, result["port"], app_id)
+        if app_id == "block-gallery":
+            page.get_by_role("tab", name="표와 트리").click()
+            page.wait_for_timeout(600)
         for width, height in (WIDE, NARROW):
-            page.set_viewport_size({"width": width, "height": height})
-            page.wait_for_timeout(500)
-            measured = page.evaluate(TABLE_JS, APP_ID)
-            key = f"item7-{name}-{width}"
-            judged = judge(measured)
-            slack = judged.pop("slack", None)
-            record(result, key, judged)
-            if slack is not None:
-                result["scenes"][key]["slack"] = slack
-            result["scenes"][key]["measurement"] = measured
-            capture(output, result, page, key)
+            measure_table(page, output, result, name, app_id, width, label)
 
 
 def check_item8(page, output, result):
@@ -519,6 +591,19 @@ def check_item8(page, output, result):
     page.evaluate("() => { const panel = document.querySelector('[data-testid=fake-files-panel]'); if (panel) panel.remove(); }")
     inject(page, long_body_scene(), app_id=NOTICE_APP)
     before = page.evaluate(NOTICE_JS, NOTICE_APP)
+    # 5초짜리 상태 알림은 본문을 밀지 않아야 한다. 알림 전과 본문 스크롤 창 높이가 같아야 한다.
+    page.evaluate("() => window.noticeFixture.show()")
+    page.wait_for_timeout(450)
+    status = page.evaluate(NOTICE_JS, NOTICE_APP)
+    status_key = "item8-status-360"
+    record(result, status_key, {
+        "status_visible": status["statusVisible"] and not status["alertVisible"],
+        "no_bottom_space_with_status": abs(status["borderBlockEnd"]) <= 0.5
+        and abs(status["clientHeight"] - before["clientHeight"]) <= 1
+        and status["noticeSpace"] in ("", "0px"),
+    })
+    result["scenes"][status_key]["measurement"] = status
+    capture(output, result, page, status_key)
     page.evaluate("() => window.noticeFixture.alert()")
     page.wait_for_timeout(500)
     opened = page.evaluate(NOTICE_JS, NOTICE_APP)
@@ -566,7 +651,8 @@ def check_item9(page, output, result):
             abs(left["frameHeight"] - right["frameHeight"]) <= 2 for left, right in zip(skeleton, chart))
         charts_equal = len(skeleton) == len(chart) == 3 and all(
             abs(left["chartHeight"] - right["chartHeight"]) <= 2 for left, right in zip(skeleton, chart))
-        record(result, key, {"three_branches": len(skeleton) == len(chart) == 3,
+        record(result, key, {"skeleton_shown": len(skeleton) == 3 and all(item["loading"] for item in skeleton),
+                             "three_branches": len(skeleton) == len(chart) == 3,
                              "frame_height": frames_equal, "chart_height": charts_equal})
         result["scenes"][key]["measurement"] = {"loading": skeleton, "loaded": chart}
 
