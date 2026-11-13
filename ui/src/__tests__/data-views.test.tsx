@@ -612,8 +612,8 @@ it("sizes narrow numeric and fill columns to their content", async () => {
   const table = await screen.findByRole("table");
   const columns = table.style.getPropertyValue("--ks-table-columns");
   const longestValue = Array.from(new Intl.NumberFormat().format(12345678)).length;
-  expect(columns).toContain(`calc(${longestValue} * var(--ks-type-body) * 0.6 + 2 * var(--ks-space-2))`);
-  expect(columns).toContain("calc(2 * var(--ks-type-body) + 2 * var(--ks-space-2))");
+  expect(columns).toContain(`calc(${longestValue} * var(--ks-type-body) * 0.6 + 2 * var(--ks-space-2) + var(--ks-space-1) + 15px + var(--ks-space-1))`);
+  expect(columns).toContain("calc(2 * var(--ks-type-meta) + 2 * var(--ks-space-2) + var(--ks-space-1) + 15px + var(--ks-space-1))");
   expect(columns).toContain("minmax(calc(var(--ks-space-6) * 2), 1fr)");
 });
 it("does not measure column widths again when the same rows are rendered", () => {

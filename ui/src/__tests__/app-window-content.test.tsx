@@ -193,8 +193,37 @@ describe("app definition renderer", () => {
     fixture.innerHTML = markup;
     body.append(fixture);
     await waitFor(() => expect(data).not.toBeNull());
-    return { container, fixture, showNotice: () => act(() => data!.setNotice("동작을 처리하지 못했습니다")) };
+    return { container, fixture, showNotice: () => act(() => data!.setNotice("동작을 처리하지 못했습니다")), showStatus: () => act(() => data!.setStatus("저장했습니다")) };
   }
+
+  it("상태 알림만 뜨면 본문 아래 자리를 주지 않고 창 오류 알림에만 준다", async () => {
+    const previous = globalThis.ResizeObserver;
+    let fire: (() => void) | null = null;
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) { fire = () => callback([], this as unknown as ResizeObserver); }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { height: this.classList.contains("ks-notice") ? 46 : 0 } as DOMRect;
+    });
+    try {
+      const { container, showStatus, showNotice } = await noticeFixture("<p>본문</p>");
+      const body = container.querySelector(".ks-data-window-body") as HTMLElement;
+      showStatus();
+      await screen.findByRole("status");
+      fire!();
+      expect(body.style.getPropertyValue("--ks-notice-space")).toBe("0px");
+      showNotice();
+      await screen.findByRole("alert");
+      fire!();
+      expect(body.style.getPropertyValue("--ks-notice-space")).toBe("calc(var(--ks-space-4) + 46px)");
+    } finally {
+      rect.mockRestore();
+      globalThis.ResizeObserver = previous;
+    }
+  });
 
   it("본문 밖 알림 단추를 닫으면 마지막 단추가 아니라 쓰던 글칸으로 돌아간다", async () => {
     const { showNotice } = await noticeFixture('<textarea aria-label="메모"></textarea><button>올리기</button>');

@@ -23,7 +23,7 @@ function setup(ui: Block, state: AppDefinition["state"] = {}) {
   const calls = vi.spyOn(transport, "call");
   const store = createShellStore(transport);
   const rendered = render(<AppWindowContent store={store} windowId="viewer-window" />);
-  return { calls, store, ...rendered };
+  return { calls, store, transport, ...rendered };
 }
 
 it("keeps every bar inside the plot after the axis text", async () => {
@@ -293,6 +293,62 @@ it("resolves palette names for series colors", async () => {
   expect(legendItems).toHaveLength(4);
   groups.forEach((group, index) => expect(group.getAttribute("style")).toContain(`--ks-chart-series-color: ${expected[index]}`));
   legendItems.forEach((item, index) => expect(item.getAttribute("style")).toContain(`--ks-chart-series-color: ${expected[index]}`));
+});
+
+it("값이 없는 계열은 범례와 읽기 줄과 표에서 빼고 남은 계열은 원래 색을 지킨다", async () => {
+  const { container } = setup({ type: "chart", kind: "bar", series: [
+    { key: "a", name: "계열 가", points: [{ x: "월", y: 10 }, { x: "화", y: 20 }] },
+    { key: "b", name: "빈 계열", points: [{ x: "월", y: null }, { x: "화", y: null }] },
+    { key: "c", name: "계열 다", points: [{ x: "월", y: 5 }, { x: "화", y: 11 }] },
+  ] });
+  await screen.findByRole("slider", { name: "차트 시점" });
+  const legend = container.querySelector(".ks-chart-legend");
+  expect(legend?.textContent).toContain("계열 가");
+  expect(legend?.textContent).toContain("계열 다");
+  expect(legend?.textContent).not.toContain("빈 계열");
+  const items = [...container.querySelectorAll(".ks-chart-legend-item")];
+  // 빈 계열을 빼도 색은 원래 index로 정해지므로 셋째 계열은 series-3을 유지한다.
+  expect(items.map((item) => item.getAttribute("style"))).toEqual([
+    expect.stringContaining("var(--ks-color-series-1)"),
+    expect.stringContaining("var(--ks-color-series-3)"),
+  ]);
+  const readout = container.querySelector(".ks-chart-readout-values");
+  expect(readout?.textContent).toContain("계열 가");
+  expect(readout?.textContent).toContain("계열 다");
+  expect(readout?.textContent).not.toContain("빈 계열");
+  const table = screen.getByRole("table", { name: "차트 데이터" });
+  expect(table.textContent).not.toContain("빈 계열");
+  expect(table.textContent).toContain("계열 다");
+  expect([...table.querySelectorAll("thead th")].map((cell) => cell.textContent)).toEqual(["시점", "계열 가", "계열 다"]);
+});
+
+it("쌓지 않은 묶음 막대는 빈 계열에 자리를 두지 않고 남은 계열은 원래 색과 무늬를 지킨다", () => {
+  const first: PlotSeries = { key: "a", name: "계열 가", points: [{ x: "월", y: 10 }, { x: "화", y: 20 }] };
+  const empty: PlotSeries = { key: "b", name: "빈 계열", points: [{ x: "월", y: null }, { x: "화", y: null }] };
+  const third: PlotSeries = { key: "c", name: "계열 다", points: [{ x: "월", y: 5 }, { x: "화", y: 11 }] };
+  const withEmpty = buildChartGeometry([first, empty, third], "bar", 600);
+  const withoutEmpty = buildChartGeometry([first, third], "bar", 600);
+  const slots = (geometry: ReturnType<typeof buildChartGeometry>) => geometry.series
+    .filter((entry) => entry.bars.length)
+    .map((entry) => entry.bars.map(({ index, x, width }) => ({ index, x, width })));
+  expect(slots(withEmpty)).toHaveLength(2);
+  expect(slots(withEmpty)).toEqual(slots(withoutEmpty));
+  expect(withEmpty.drawn).toEqual([0, 2]);
+  expect(withEmpty.series[0].color).toBe("var(--ks-color-series-1)");
+  expect(withEmpty.series[2].color).toBe("var(--ks-color-series-3)");
+  expect(withEmpty.series[2].className).toContain("is-series-2");
+});
+
+it("받는 중에도 다 받은 차트와 같은 틀을 그린다", async () => {
+  const { transport } = setup({ type: "chart", kind: "line", height: "tall", series: { expr: "[]" } });
+  await screen.findByText("없음", { exact: true });
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/series": { status: "loading" } } } }));
+  const loading = await screen.findByRole("status", { name: "불러오는 중" });
+  expect(loading.classList.contains("ks-chart")).toBe(true);
+  expect(loading.classList.contains("is-tall")).toBe(true);
+  expect(loading.querySelector(".ks-chart-frame")).not.toBeNull();
+  expect(loading.querySelector(".ks-chart-readout .ks-chart-loading-bar")).not.toBeNull();
+  expect(loading.querySelector(".ks-chart-body .ks-chart-loading-plot")).not.toBeNull();
 });
 
 it("returns to the selected band and starts on the last band with data", async () => {
