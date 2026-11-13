@@ -5,7 +5,7 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
 import { useLoadMore } from "./load-more";
 import { keepRovingRow, NoItems, useVirtualRows, VirtualSurface, isObject } from "./data-view-common";
-import { cellValue, formattedCell, numericColumn, width, type Row, type TableViewProps } from "./data-table";
+import { cellValue, formattedCell, numericColumn, useFontsReady, width, type Row, type TableViewProps } from "./data-table";
 import { contentCellError } from "./data-table-cell";
 
 type Address = { row: string; column: string };
@@ -89,7 +89,8 @@ export function TableGrid({ rootProps, columns, rows, selectedCell, rowHeader, o
   keepRovingRow(virtual, currentRow);
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, visible);
-  const gridColumns = useMemo(() => columns.map((column) => width(column.field === rowHeader && !column.width ? { ...column, width: "medium" } : column, rows)).join(" "), [columns, rows, rowHeader]);
+  const fontsReady = useFontsReady();
+  const gridColumns = useMemo(() => columns.map((column, index) => width(column.field === rowHeader && !column.width ? { ...column, width: "medium" } : column, rows, { index, count: columns.length })).join(" "), [columns, rows, rowHeader, fontsReady]);
   const lines = Math.max(0, ...columns.filter((column) => column.format === "content").map((column) => column.max_lines ?? 3));
   useLayoutEffect(() => {
     // CSS의 예약 높이와 행 간격까지 포함한 실측을 미마운트 행에도 쓴다.

@@ -22,8 +22,8 @@ def aligned(measurements):
 
 
 def padded(measurements):
-    return len(measurements) == 2 and all(abs(m["gap"] - expected) <= 1
-                                        for m, expected in zip(measurements, (12, 24)))
+    # 차트 틀 아래 여백의 주인은 칸이다. 분할 칸과 탭 판 모두 12px 하나만 남는다.
+    return len(measurements) == 2 and all(abs(m["gap"] - 12) <= 1 for m in measurements)
 
 
 def selected(readout, meta, expected):

@@ -565,8 +565,10 @@ it("반응형 분할은 자기 폭으로 방향을 바꾸면서 자식을 유지
   let callback!: ResizeObserverCallback;
   let observed: Element | undefined;
   vi.stubGlobal("ResizeObserver", class {
-    constructor(cb: ResizeObserverCallback) { callback = cb; }
-    observe(target: Element) { observed = target; }
+    callback: ResizeObserverCallback;
+    constructor(cb: ResizeObserverCallback) { this.callback = cb; }
+    // 창 알림도 ResizeObserver를 쓰므로 분할을 관찰한 쪽만 기억한다.
+    observe(target: Element) { if (target.classList.contains("ks-split")) { callback = this.callback; observed = target; } }
     disconnect() {}
   });
   const definition: AppDefinition = { id: "responsive-split", name: "분할", requires: { blocks: blockGallery.requires.blocks, modules: {} }, permissions: [], state: { value: "처음" },

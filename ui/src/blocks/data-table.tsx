@@ -1,6 +1,6 @@
 import { encodeCommentKey } from "../comments/key";
 import { useBlockRootProps } from "../comments/block-root";
-import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { BindingMore, Block, Column, SortSpec, TableCellAddress } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
@@ -27,11 +27,54 @@ const cellAddress = (key: string): TableCellAddress | null => {
   return at < 0 ? null : { row: key.slice(0, at), column: key.slice(at + 1) };
 };
 const numberFormatter = new Intl.NumberFormat();
-export function width(column: Column, rows: Row[]) {
+// 좁은 숫자 열은 실제 글 폭에 칸 여백을 더해 정한다. 글꼴이 아직 오지 않았거나 재지 못하는 환경에서는 글자 수 어림으로 돌아간다.
+const textWidths = new Map<string, number | null>();
+let textProbe: HTMLSpanElement | null = null;
+function measureText(text: string, size: string, tabular: boolean): number | null {
+  if (typeof document === "undefined" || !document.fonts || document.fonts.status !== "loaded") return null;
+  const key = `${size}|${tabular ? 1 : 0}|${text}`;
+  if (textWidths.has(key)) return textWidths.get(key)!;
+  if (!textProbe) {
+    textProbe = document.createElement("span");
+    textProbe.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;";
+    document.body.append(textProbe);
+  }
+  textProbe.style.fontSize = size;
+  textProbe.style.fontVariantNumeric = tabular ? "tabular-nums" : "normal";
+  textProbe.textContent = text;
+  const width = textProbe.getBoundingClientRect().width;
+  const result = width > 0 ? Math.ceil(width) : null;
+  if (textWidths.size > 512) textWidths.clear();
+  textWidths.set(key, result);
+  return result;
+}
+// 글꼴이 늦게 오면 한 번 더 그려 실제 폭으로 다시 잰다. 그 전에는 넉넉한 어림값을 쓴다.
+export function useFontsReady() {
+  const [ready, setReady] = useState(() => typeof document !== "undefined" && Boolean(document.fonts) && document.fonts.status === "loaded");
+  useEffect(() => {
+    if (ready || typeof document === "undefined" || !document.fonts) return;
+    let live = true;
+    void document.fonts.ready.then(() => { if (live) setReady(true); });
+    return () => { live = false; };
+  }, [ready]);
+  return ready;
+}
+const widestTexts = (texts: string[]) => [...new Set(texts)].sort((left, right) => right.length - left.length).slice(0, 8);
+export function width(column: Column, rows: Row[], layout: { index?: number; count?: number; hasContent?: boolean } = {}) {
   if (column.width === "narrow" && column.format === "number") {
-    const valueLength = rows.reduce((longest, row) => Math.max(longest, Array.from(cellValue(row[column.field], column)).length), 0);
+    const texts = rows.map((row) => cellValue(row[column.field], column));
+    const valueLength = texts.reduce((longest, text) => Math.max(longest, Array.from(text).length), 0);
     const labelLength = Array.from(column.label).length;
-    return `max(calc(var(--ks-space-6) * 2), calc(${valueLength} * var(--ks-type-body) * 0.6 + 2 * var(--ks-space-2)), calc(${labelLength} * var(--ks-type-body) + 2 * var(--ks-space-2)))`;
+    const edge = (layout.count ?? 0) > 0 && (layout.index === 0 || layout.index === (layout.count ?? 0) - 1);
+    // 첫 열과 끝 열은 창 몸통 여백(space-3)에 맞춰 한쪽만 넓어지므로 좌우 합이 space-2 둘에 space-1 하나다.
+    const padding = layout.hasContent ? "2 * var(--ks-space-3)" : edge ? "2 * var(--ks-space-2) + var(--ks-space-1)" : "2 * var(--ks-space-2)";
+    const measuredValues = widestTexts(texts.filter(Boolean)).map((text) => measureText(text, "var(--ks-type-body)", true));
+    const measuredLabel = measureText(column.label, "var(--ks-type-meta)", false);
+    if (measuredLabel !== null && measuredValues.every((value) => value !== null)) {
+      const content = Math.max(measuredLabel, ...measuredValues as number[]);
+      return `max(var(--ks-space-6), calc(${content}px + ${padding}))`;
+    }
+    return `max(var(--ks-space-6), calc(${valueLength} * var(--ks-type-body) * 0.6 + ${padding}), calc(${labelLength} * var(--ks-type-meta) + ${padding}))`;
   }
   const base = column.width === "narrow" ? "calc(var(--ks-space-6) * 3)" : column.width === "medium" ? "calc(var(--ks-space-6) * 5)" : column.width === "wide" ? "calc(var(--ks-space-6) * 8)" : "calc(var(--ks-space-6) * 2)";
   const length = column.format === "badge" ? Math.max(0, ...rows.map((row) => {
@@ -210,8 +253,9 @@ function RowTableView({ rootProps, columns: sourceColumns, rows: sourceRows, ini
     activate: (row, anchor) => onActivate?.(row, anchor),
     context: (event, row) => { if (onContextMenu && !event.defaultPrevented) { event.preventDefault(); onContextMenu(row, event.currentTarget, event); } },
   };
-  const gridColumns = useMemo(() => sourceColumns.map((column) => width(column, sourceRows)).join(" "), [sourceRows, sourceColumns]);
   const lines = Math.max(0, ...sourceColumns.filter((column) => column.format === "content").map((column) => column.max_lines ?? 3));
+  const fontsReady = useFontsReady();
+  const gridColumns = useMemo(() => sourceColumns.map((column, index) => width(column, sourceRows, { index, count: sourceColumns.length, hasContent: lines > 0 })).join(" "), [sourceRows, sourceColumns, lines, fontsReady]);
   const toggleSort = (field: string) => setSort((old) => old?.field !== field ? { field, desc: false } : !old.desc ? { field, desc: true } : null);
   return <div {...rootProps} className={`ks-data-view ks-table-scroll ks-table-rows${lines ? " has-content" : ""}`} ref={scroll} role="table" aria-rowcount={rows.length} aria-label={ariaLabel} style={{ "--ks-table-columns": gridColumns, "--ks-grid-lines": lines } as CSSProperties}>
     <div className="ks-table-inner">

@@ -94,6 +94,8 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
 }) {
   const data = useWindowData();
   const host = useRef<HTMLDivElement | null>(null);
+  const body = useRef<HTMLDivElement | null>(null);
+  const notice = useRef<HTMLDivElement | null>(null);
   const setHost = useCallback((element: HTMLDivElement | null) => {
     host.current = element;
     data.setClientHost(element);
@@ -104,6 +106,20 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     onWindowData?.(data);
     return () => onWindowData?.(null);
   }, [data, onWindowData]);
+  // 창 알림이 떠 있는 동안 본문 스크롤 창 끝을 그 높이만큼 줄여 마지막 내용이 알림 위에서 멈춘다. 알림이 없으면 줄이지 않는다.
+  useEffect(() => {
+    const bodyElement = body.current;
+    const noticeElement = notice.current;
+    if (!bodyElement || !noticeElement) return;
+    const apply = () => {
+      const height = noticeElement.getBoundingClientRect().height;
+      bodyElement.style.setProperty("--ks-notice-space", height > 0 ? `calc(var(--ks-space-4) + ${Math.ceil(height)}px)` : "0px");
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(noticeElement);
+    return () => observer.disconnect();
+  }, []);
   useDormant("/ui", settingsOpen);
   useDormant("/settings/ui", Boolean(context.definition.settings) && !settingsOpen);
   useEffect(() => { data.setClientDormant(settingsOpen); }, [data, settingsOpen]);
@@ -112,9 +128,9 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     <WindowFrameBindings context={context} onWindowHeader={onWindowHeader} onSettingsAvailable={onSettingsAvailable} />
     <ClientShareSignal />
     <AppShortcuts context={context} active={!settingsOpen} />
-    <div className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(context.definition.ui, context)}</div>
+    <div ref={body} className="ks-data-window-body" hidden={settingsOpen} inert={settingsOpen || undefined}>{renderBlock(context.definition.ui, context)}</div>
     {hasSettings && settingsVisited ? <AppSettings key={context.window.app_version} context={context} open={settingsOpen} onClose={onSettingsClose} onProblem={onSettingsProblem} /> : null}
-    <div className="ks-data-window-notice"><WindowNotice /></div>
+    <div ref={notice} className="ks-data-window-notice"><WindowNotice /></div>
   </div>;
 }
 

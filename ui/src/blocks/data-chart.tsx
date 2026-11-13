@@ -1,4 +1,4 @@
-import { useBlockRootProps } from "../comments/block-root";
+import { useBlockRootProps, type BlockRootProps } from "../comments/block-root";
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -27,9 +27,19 @@ export function ChartBlock({ block, pointer }: { block: ChartBlockType; pointer:
   const value = useBinding(`${pointer}/series`, block.series);
   const rawSeries = value.status === "ready" ? value.value : null;
   const series = useMemo(() => rawSeries === null ? [] : seriesFrom(rawSeries, block.kind === "candlestick"), [rawSeries, block.kind]);
-  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} />;
+  if (value.status !== "ready") return <DataState rootProps={blockRoot} value={value} loading={<ChartLoading block={block} rootProps={blockRoot} />} />;
   if (!series.some((entry) => entry.points.length)) return <NoItems rootProps={blockRoot} />;
   return <ChartReady block={block} pointer={pointer} series={series} />;
+}
+
+// 받는 중에도 다 받은 차트와 같은 틀과 높이를 그린다. 읽기 줄과 몸통 자리를 그대로 잡아 두어 아래 블록이 밀리지 않는다.
+function ChartLoading({ block, rootProps }: { block: ChartBlockType; rootProps: BlockRootProps }) {
+  return <div {...rootProps} className={`ks-chart is-${block.height ?? "medium"} ks-chart-loading`} role="status" aria-label="불러오는 중">
+    <div className="ks-chart-frame">
+      <div className="ks-chart-readout"><span className="ks-chart-loading-bar" /></div>
+      <div className="ks-chart-body"><span className="ks-chart-loading-plot" /></div>
+    </div>
+  </div>;
 }
 
 function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer: string; series: PlotSeries[] }) {
@@ -61,6 +71,8 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
   const [regional, setRegional] = useState<number | null>(null);
   const current = Math.max(0, Math.min(labels.length - 1, regional ?? resting));
   const points = useMemo(() => series.map((entry) => entry.points.find((point) => point.x === labels[current])), [series, labels, current]);
+  // 그린 값이 하나도 없는 계열은 읽기 줄, 범례, 접근성 표에서 뺀다. 기하와 색은 원래 index 그대로 두어 남은 계열의 색이 밀리지 않는다.
+  const drawn = series.flatMap((entry, index) => entry.points.some((point) => point.y !== null) ? [index] : []);
   const { min, max } = geometry;
   const showMarker = block.selected == null || boundSelected !== null || regional !== null;
   const band = block.kind === "bar" && showMarker ? { x: current * 1000 / Math.max(labels.length, 1), width: 1000 / Math.max(labels.length, 1) } : null;
@@ -111,9 +123,9 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
     <div className="ks-chart-frame">
       <div className="ks-chart-readout">
         <span className="ks-chart-readout-x">{labels[current]}</span>
-        {stacked ? <span className="ks-chart-readout-values"><span><strong>{geometry.rows[current]?.total ?? "없음"}</strong></span></span> : <span className="ks-chart-readout-values">{series.map((entry, index) => <span key={entry.key}>
-          {series.length > 1 && <span className="ks-list-color ks-chart-readout-dot" style={seriesColor(geometry.series[index].color)} aria-hidden="true" />}
-          {series.length > 1 && <span className="ks-chart-readout-label">{entry.name} </span>}
+        {stacked ? <span className="ks-chart-readout-values"><span><strong>{geometry.rows[current]?.total ?? "없음"}</strong></span></span> : <span className="ks-chart-readout-values">{drawn.map((index) => <span key={series[index].key}>
+          {drawn.length > 1 && <span className="ks-list-color ks-chart-readout-dot" style={seriesColor(geometry.series[index].color)} aria-hidden="true" />}
+          {drawn.length > 1 && <span className="ks-chart-readout-label">{series[index].name} </span>}
           <strong>{valueText(points[index])}</strong>{points[index]?.label && <span className="ks-chart-readout-label"> {points[index]?.label}</span>}
         </span>)}</span>}
       </div>
@@ -121,7 +133,7 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
         <div className="ks-chart-y-axis" aria-hidden="true">{ticks.map((value, index) => <span key={index} style={{ top: `${geometry.yAt(value) / 160 * 100}%` }}>{tickText(value)}</span>)}</div>
         <div ref={graph} className="ks-chart-graph" role="slider" tabIndex={0} aria-label="차트 시점"
           aria-valuemin={0} aria-valuemax={labels.length - 1} aria-valuenow={current}
-          aria-valuetext={`${labels[current]} ${series.map((entry, index) => `${entry.name} ${accessibleValue(points[index])}`).join(", ")}`}
+          aria-valuetext={`${labels[current]} ${drawn.map((index) => `${series[index].name} ${accessibleValue(points[index])}`).join(", ")}`}
           onKeyDown={keyDown} onPointerMove={(event) => setRegional(pointerIndex(event))}
           onPointerLeave={() => setRegional(null)}
           onBlur={() => setRegional(null)}
@@ -144,11 +156,11 @@ function ChartReady({ block, pointer, series }: { block: ChartBlockType; pointer
           <div className="ks-chart-x-axis" aria-hidden="true">{geometry.axes.map(({ label, index, left, transform }) => <span key={`${label}-${index}`} style={{ left, transform }}>{label}</span>)}</div>
         </div>
       </div>
-      {series.length > 1 && <div className="ks-chart-legend">{series.map((entry, index) => <span key={entry.key} className="ks-chart-legend-item" style={seriesColor(geometry.series[index].color)}>
+      {drawn.length > 1 && <div className="ks-chart-legend">{drawn.map((index) => <span key={series[index].key} className="ks-chart-legend-item" style={seriesColor(geometry.series[index].color)}>
           <span className="ks-list-color" aria-hidden="true" />
-          <span className="ks-chart-legend-name">{entry.name}</span>
+          <span className="ks-chart-legend-name">{series[index].name}</span>
         </span>)}</div>}
-      <table className="ks-accessible-hidden"><caption>차트 데이터</caption><thead><tr><th>시점</th>{series.map((entry) => <th key={entry.key}>{entry.name}</th>)}{stacked && <th>합계</th>}</tr></thead><tbody>{geometry.rows.map((row) => <tr key={row.label}><th>{row.label}</th>{row.values.map((value, index) => <td key={series[index].key}>{value}</td>)}{stacked && <td>{row.total}</td>}</tr>)}</tbody></table>
+      <table className="ks-accessible-hidden"><caption>차트 데이터</caption><thead><tr><th>시점</th>{drawn.map((index) => <th key={series[index].key}>{series[index].name}</th>)}{stacked && <th>합계</th>}</tr></thead><tbody>{geometry.rows.map((row) => <tr key={row.label}><th>{row.label}</th>{drawn.map((index) => <td key={series[index].key}>{row.values[index]}</td>)}{stacked && <td>{row.total}</td>}</tr>)}</tbody></table>
     </div>
   </div>;
 }
