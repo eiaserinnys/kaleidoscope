@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  jsonata@2.2.2:
+    hash: c3e8871b88d2a4bf09a9a79a40ece64a42fa794b7bf3ebd6f3d9cdfef688c9d0
+    path: patches/jsonata@2.2.2.patch
+
 importers:
 
   .: {}
@@ -164,7 +169,7 @@ importers:
         version: 26.1.0
       jsonata:
         specifier: 2.2.2
-        version: 2.2.2
+        version: 2.2.2(patch_hash=c3e8871b88d2a4bf09a9a79a40ece64a42fa794b7bf3ebd6f3d9cdfef688c9d0)
       react:
         specifier: ^19.1.1
         version: 19.3.1
@@ -2702,7 +2707,7 @@ snapshots:
 
   json5@2.2.3: {}
 
-  jsonata@2.2.2: {}
+  jsonata@2.2.2(patch_hash=c3e8871b88d2a4bf09a9a79a40ece64a42fa794b7bf3ebd6f3d9cdfef688c9d0): {}
 
   longest-streak@3.1.0: {}
 

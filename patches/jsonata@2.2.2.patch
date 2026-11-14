@@ -1,0 +1,132 @@
+diff --git a/jsonata-es5.js b/jsonata-es5.js
+index 6c55b6311e104d7f570424f950ef4170bd2277c1..eab7e5a115cd793d06cb7f899d0a1590485ec300 100644
+--- a/jsonata-es5.js
++++ b/jsonata-es5.js
+@@ -8024,13 +8024,12 @@ var parser = function () {
+     };
+     var scanRegex = function scanRegex() {
+       // the prefix '/' will have been previously scanned. Find the end of the regex.
+-      // search for closing '/' ignoring any that are escaped, or within brackets
++      // the pattern ends at the first unescaped '/', as in jsonata-core
+       var start = position;
+-      var depth = 0;
+       var pattern;
+       var flags;
+       var isClosingSlash = function isClosingSlash(position) {
+-        if (path.charAt(position) === '/' && depth === 0) {
++        if (path.charAt(position) === '/') {
+           var backslashCount = 0;
+           while (path.charAt(position - (backslashCount + 1)) === '\\') {
+             backslashCount++;
+@@ -8042,7 +8041,6 @@ var parser = function () {
+         return false;
+       };
+       while (position < length) {
+-        var currentChar = path.charAt(position);
+         if (isClosingSlash(position)) {
+           // end of regex found
+           pattern = path.substring(start, position);
+@@ -8054,22 +8052,15 @@ var parser = function () {
+             };
+           }
+           position++;
+-          currentChar = path.charAt(position);
+-          // flags
++          // reads every alphabetic flag; only i, m and s reach the regex, as in jsonata-core
+           start = position;
+-          while (currentChar === 'i' || currentChar === 'm') {
++          while (/[a-z]/i.test(path.charAt(position))) {
+             position++;
+-            currentChar = path.charAt(position);
+           }
+-          flags = path.substring(start, position) + 'g';
++          var modifiers = path.substring(start, position);
++          flags = (modifiers.indexOf('i') >= 0 ? 'i' : '') + (modifiers.indexOf('m') >= 0 ? 'm' : '') + (modifiers.indexOf('s') >= 0 ? 's' : '') + 'g';
+           return new RegExp(pattern, flags);
+         }
+-        if ((currentChar === '(' || currentChar === '[' || currentChar === '{') && path.charAt(position - 1) !== '\\') {
+-          depth++;
+-        }
+-        if ((currentChar === ')' || currentChar === ']' || currentChar === '}') && path.charAt(position - 1) !== '\\') {
+-          depth--;
+-        }
+         position++;
+       }
+       throw {
+@@ -8495,7 +8486,7 @@ var parser = function () {
+     symbol(")");
+     symbol("]");
+     symbol("}");
+-    symbol(".."); // range operator
++    infix(".."); // range operator - a normal binary operator, as in jsonata-core
+     infix("."); // map operator
+     infix("+"); // numeric addition
+     infix("-"); // numeric subtraction
+diff --git a/jsonata.js b/jsonata.js
+index cb7dab0b9fae4623680ba432b6945ba0571c7ab6..5d728c757aeec4425241b51691aadb139b072c0f 100644
+--- a/jsonata.js
++++ b/jsonata.js
+@@ -5805,14 +5805,13 @@ const parser = (() => {
+ 
+         var scanRegex = function () {
+             // the prefix '/' will have been previously scanned. Find the end of the regex.
+-            // search for closing '/' ignoring any that are escaped, or within brackets
++            // the pattern ends at the first unescaped '/', as in jsonata-core
+             var start = position;
+-            var depth = 0;
+             var pattern;
+             var flags;
+ 
+             var isClosingSlash = function (position) {
+-                if (path.charAt(position) === '/' && depth === 0) {
++                if (path.charAt(position) === '/') {
+                     var backslashCount = 0;
+                     while (path.charAt(position - (backslashCount + 1)) === '\\') {
+                         backslashCount++;
+@@ -5825,7 +5824,6 @@ const parser = (() => {
+             };
+ 
+             while (position < length) {
+-                var currentChar = path.charAt(position);
+                 if (isClosingSlash(position)) {
+                     // end of regex found
+                     pattern = path.substring(start, position);
+@@ -5837,22 +5835,18 @@ const parser = (() => {
+                         };
+                     }
+                     position++;
+-                    currentChar = path.charAt(position);
+-                    // flags
++                    // reads every alphabetic flag; only i, m and s reach the regex, as in jsonata-core
+                     start = position;
+-                    while (currentChar === 'i' || currentChar === 'm') {
++                    while (/[a-z]/i.test(path.charAt(position))) {
+                         position++;
+-                        currentChar = path.charAt(position);
+                     }
+-                    flags = path.substring(start, position) + 'g';
++                    var modifiers = path.substring(start, position);
++                    flags = (modifiers.indexOf('i') >= 0 ? 'i' : '')
++                        + (modifiers.indexOf('m') >= 0 ? 'm' : '')
++                        + (modifiers.indexOf('s') >= 0 ? 's' : '')
++                        + 'g';
+                     return new RegExp(pattern, flags);
+                 }
+-                if ((currentChar === '(' || currentChar === '[' || currentChar === '{') && path.charAt(position - 1) !== '\\') {
+-                    depth++;
+-                }
+-                if ((currentChar === ')' || currentChar === ']' || currentChar === '}') && path.charAt(position - 1) !== '\\') {
+-                    depth--;
+-                }
+ 
+                 position++;
+             }
+@@ -6287,7 +6281,7 @@ const parser = (() => {
+         symbol(")");
+         symbol("]");
+         symbol("}");
+-        symbol(".."); // range operator
++        infix(".."); // range operator - a normal binary operator, as in jsonata-core
+         infix("."); // map operator
+         infix("+"); // numeric addition
+         infix("-"); // numeric subtraction

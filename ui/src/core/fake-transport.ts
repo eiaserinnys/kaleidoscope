@@ -25,6 +25,7 @@ import { SHARE_TEXT_MAX_BYTES } from "../contract/limits";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { SHELL_REALTIME_NATIVE_CORE_REQUIRED } from "../contract/shell-errors";
 import { createFakeData, type FakeDataSeed } from "./fake-data";
+import { fillDefinitionDefaults } from "./app-defaults";
 
 export interface FakeTransportSeed {
   snapshot: ShellSnapshot;
@@ -141,8 +142,24 @@ function isFakeHttpAddress(value: string): boolean {
   }
 }
 
+/// 앱 정의가 가짜 코어로 들어오는 모든 길(시드와 state.changed)이 쓰는 함수다.
+/// 코어의 serde가 읽을 때 채우는 기본값을 스냅숏 안의 정의마다 채운 새 스냅숏을 돌려준다.
+function fillSnapshotDefinitions(snapshot: ShellSnapshot): ShellSnapshot {
+  const cloned = clone(snapshot);
+  return {
+    ...cloned,
+    shared: {
+      ...cloned.shared,
+      app_versions: cloned.shared.app_versions.map((version) => ({
+        ...version,
+        definition: fillDefinitionDefaults(version.definition),
+      })),
+    },
+  };
+}
+
 export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
-  let snapshot = clone(seed.snapshot);
+  let snapshot: ShellSnapshot = fillSnapshotDefinitions(seed.snapshot);
   let sequence = 0;
   const files = new Map<string, FakeFile>();
   const storage = new Map<string, { content: JsonValue; revision: string }>();
@@ -180,8 +197,8 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
 
   const emit = (event: Exclude<CoreEvent, { event: "state.changed" }> | { event: "state.changed"; snapshot: ShellSnapshot; sequence?: number }) => {
     if (event.event === "state.changed") {
-      snapshot = clone(event.snapshot);
-      const next = { ...event, sequence: ++sequence };
+      snapshot = fillSnapshotDefinitions(event.snapshot);
+      const next = { ...event, snapshot: clone(snapshot), sequence: ++sequence };
       for (const listener of eventListeners) listener(clone(next));
     } else for (const listener of eventListeners) listener(clone(event));
   };

@@ -2844,3 +2844,551 @@ pub fn valid_source_name(name: &str) -> bool {
             .iter()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'_')
 }
+
+/// 가짜 코어가 쓰는 표를 만든다.
+///
+/// 블록 종류마다의 자리와 serde 기본값의 정본은 코어의 스키마와 [`own_slots`]·[`child_blocks`]다.
+/// 이 시험은 `ui/src/contract/` 아래 TS 생성물을 다시 쓰고, CI는 생성물이 바뀌지 않았는지 본다.
+#[cfg(test)]
+mod ui_tables {
+    use super::*;
+    use serde_json::{json, Map, Value};
+
+    #[derive(Clone, Copy)]
+    enum Fill {
+        /// 필수 칸만 채운다. 기본값이 붙은 칸은 비워 두어 serde가 채우게 한다.
+        Required,
+        /// 모든 칸을 채운다. 값에 따라 생기는 자리까지 표에 들게 하려는 것이다.
+        All,
+    }
+
+    struct Filler<'a> {
+        schema: &'a Value,
+        /// 정의마다 (이 정의 아래에 serde 기본값이 있는가).
+        defaults: BTreeMap<String, bool>,
+    }
+
+    impl<'a> Filler<'a> {
+        fn new(schema: &'a Value) -> Self {
+            let defs = schema["$defs"].as_object().expect("$defs는 객체다");
+            let mut defaults: BTreeMap<String, bool> =
+                defs.keys().map(|name| (name.clone(), false)).collect();
+            loop {
+                let next: BTreeMap<String, bool> = defs
+                    .iter()
+                    .map(|(name, node)| (name.clone(), has_default(node, &defaults)))
+                    .collect();
+                if next == defaults {
+                    break;
+                }
+                defaults = next;
+            }
+            Self { schema, defaults }
+        }
+
+        fn definition(&self, name: &str) -> &'a Value {
+            &self.schema["$defs"][name]
+        }
+
+        fn resolve(&self, mut node: &'a Value) -> &'a Value {
+            while let Some(reference) = node.get("$ref").and_then(Value::as_str) {
+                node = self.definition(
+                    reference
+                        .strip_prefix("#/$defs/")
+                        .expect("$ref는 #/$defs/로 시작한다"),
+                );
+            }
+            node
+        }
+
+        fn text_block(&self) -> Value {
+            json!({ "type": "text", "value": { "expr": "1" } })
+        }
+
+        fn fill(&self, node: &'a Value, mode: Fill) -> Value {
+            if let Some(reference) = node.get("$ref").and_then(Value::as_str) {
+                return match reference {
+                    "#/$defs/Binding" => json!({ "expr": "1" }),
+                    "#/$defs/Actions" => json!({ "set_state": "sample" }),
+                    "#/$defs/TableColumns" => json!({ "expr": "1" }),
+                    "#/$defs/Block" => self.text_block(),
+                    _ => self.fill(self.resolve(node), mode),
+                };
+            }
+            if let Some(value) = node.get("const") {
+                return value.clone();
+            }
+            if let Some(values) = node.get("enum").and_then(Value::as_array) {
+                return values.first().cloned().unwrap_or(Value::Null);
+            }
+            for key in ["oneOf", "anyOf"] {
+                if let Some(variants) = node.get(key).and_then(Value::as_array) {
+                    let chosen = variants
+                        .iter()
+                        .find(|variant| !is_null(variant))
+                        .unwrap_or(&variants[0]);
+                    return self.fill(chosen, mode);
+                }
+            }
+            let kinds = kinds_of(node);
+            let primary = kinds.iter().map(String::as_str).find(|kind| *kind != "null");
+            match primary {
+                Some("object") => self.fill_object(node, mode),
+                Some("array") => {
+                    let items = node.get("items").expect("배열에는 items가 있다");
+                    json!([self.fill(items, mode)])
+                }
+                Some("integer") | Some("number") => {
+                    json!(node.get("minimum").and_then(Value::as_i64).unwrap_or(0).max(0))
+                }
+                Some("boolean") => Value::Bool(false),
+                Some("string") => json!("sample"),
+                _ if node.get("properties").is_some() => self.fill_object(node, mode),
+                _ => Value::Null,
+            }
+        }
+
+        fn fill_object(&self, node: &'a Value, mode: Fill) -> Value {
+            let Some(properties) = node.get("properties").and_then(Value::as_object) else {
+                return Value::Object(Map::new());
+            };
+            let keys: Vec<String> = match mode {
+                Fill::All => properties.keys().cloned().collect(),
+                Fill::Required => node
+                    .get("required")
+                    .and_then(Value::as_array)
+                    .map(|required| {
+                        required
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+            let mut out = Map::new();
+            for key in keys {
+                if let Some(property) = properties.get(&key) {
+                    out.insert(key, self.fill(property, mode));
+                }
+            }
+            Value::Object(out)
+        }
+
+        /// 기본값 대조 견본과, 그 견본을 코어가 읽은 결과.
+        fn parity(&self) -> (Value, Value) {
+            let variants = self.definition("Block")["oneOf"]
+                .as_array()
+                .expect("Block은 oneOf다");
+            let children: Vec<Value> = variants
+                .iter()
+                .map(|variant| self.with_required_sources(self.fill(variant, Fill::Required)))
+                .collect();
+            let mut root = self.fill(self.schema, Fill::Required);
+            root["requires"] = json!({
+                "blocks": crate::BLOCK_SET_VERSION,
+                "modules": crate::MODULE_VERSIONS
+                    .iter()
+                    .map(|(name, version)| (name.to_string(), json!(version)))
+                    .collect::<Map<String, Value>>(),
+            });
+            root["state"] = json!({ "sample": 0 });
+            let folder_source = self.definition("SourceDecl")["oneOf"]
+                .as_array()
+                .and_then(|variants| {
+                    variants.iter().find(|variant| {
+                        variant["properties"]["kind"]["const"].as_str() == Some("folder")
+                    })
+                })
+                .expect("SourceDecl에 folder 변형이 있다");
+            root["sources"] = json!({ "sample": self.fill(folder_source, Fill::Required) });
+            let mut entry = self.fill(
+                &self.definition("StorageEntryDecl"),
+                Fill::Required,
+            );
+            entry["kind"] = json!("md");
+            entry["default"] = json!("");
+            // `chat` 블록은 대화 제공자를 요구한다. 견본 루트에 제공자를 두어 블록 변형마다 하나씩 담는다.
+            // 제공자의 대화 기록 자리는 workspace_id를 키에 쓰는 json 저장 항목이어야 한다.
+            let thread_entry = json!({
+                "id": "thread",
+                "key": "thread/{workspace_id}",
+                "kind": "json",
+                "schema": { "type": "object" },
+                "default": {},
+                "label": "sample",
+                "presentation": "hidden",
+            });
+            root["storage"] = json!({ "entries": [entry, thread_entry] });
+            root["worker"] = self.fill(&self.definition("WorkerDecl"), Fill::Required);
+            root["permissions"] = json!([
+                { "module": "files", "id": "sample", "access": "read", "label": "sample" },
+                {
+                    "module": "connection",
+                    "id": "sample-agent",
+                    "connection": "sample",
+                    "access": "readwrite",
+                    "label": "sample",
+                },
+            ]);
+            root["assets"] = json!([{ "id": "sample", "version": 1 }]);
+            root["client"] = json!({
+                "runtime": "javascript",
+                "entry": { "id": "sample", "version": 1 },
+            });
+            root["agent"] = json!({
+                "protocol": "conversation-v1",
+                "permission": "sample-agent",
+                "base_path": "/conversation",
+                "namespace": "sample",
+                "profile": "sample",
+                "collection": "sample",
+                "model_order": ["sample"],
+                "selected_model": "sample",
+                "title_template": "sample",
+                "initial_instruction_template": "sample",
+                "instructions_template": "sample",
+                "thread_entry": "thread",
+            });
+            root["ui"] = json!({
+                "type": "stack",
+                "direction": "column",
+                "children": children,
+            });
+            let text = serde_json::to_string(&root).expect("견본을 문자열로 만든다");
+            let definition = crate::validate::parse_app_definition(&text).unwrap_or_else(|error| {
+                panic!("견본이 코어 검사를 통과하지 못했습니다: {error:?}")
+            });
+            let parsed = serde_json::to_value(&definition).expect("정의를 JSON으로 만든다");
+            (root, parsed)
+        }
+
+        /// 필수 칸만 채운 블록 가운데 코어 검사가 요구하는 값을 더한다.
+        fn with_required_sources(&self, value: Value) -> Value {
+            let Value::Object(mut object) = value else {
+                panic!("블록 견본은 객체다");
+            };
+            match object.get("type").and_then(Value::as_str) {
+                Some("when") => {
+                    object.insert("value".into(), json!({ "expr": "true" }));
+                }
+                Some("sandbox" | "markdown" | "code" | "html_view") => {
+                    object.insert("value".into(), json!({ "expr": "1" }));
+                }
+                Some("timeline") => {
+                    object.insert("duration".into(), json!({ "expr": "10" }));
+                    object.insert("position".into(), json!({ "expr": "0" }));
+                }
+                Some("progress") => {
+                    object.insert("max".into(), json!(100.0));
+                }
+                Some("slider") => {
+                    object.insert("value".into(), json!({ "state": "sample" }));
+                    object.insert("min".into(), json!(0.0));
+                    object.insert("max".into(), json!(100.0));
+                }
+                Some("color" | "input" | "select" | "toggle") => {
+                    object.insert("value".into(), json!({ "state": "sample" }));
+                }
+                Some("tree") => {
+                    object.insert("items".into(), json!({ "expr": "1" }));
+                }
+                Some("split") => {
+                    object.insert(
+                        "children".into(),
+                        json!([self.text_block(), self.text_block()]),
+                    );
+                }
+                Some("button_grid") => {
+                    object.insert("columns".into(), json!(2));
+                }
+                _ => {}
+            }
+            Value::Object(object)
+        }
+
+        fn block_slots(&self) -> String {
+            let variants = self.definition("Block")["oneOf"]
+                .as_array()
+                .expect("Block은 oneOf다");
+            let mut entries = Vec::new();
+            for variant in variants {
+                let name = type_name(variant);
+                let sample = self.fill(variant, Fill::All);
+                let block: Block = serde_json::from_value(sample.clone()).unwrap_or_else(|error| {
+                    panic!("{name} 견본을 블록으로 읽지 못했습니다: {error}\n{sample}")
+                });
+                let mut bindings: Vec<String> = Vec::new();
+                let mut actions: Vec<String> = Vec::new();
+                for (field, slot) in own_slots(&block) {
+                    match slot {
+                        Slot::Binding(_) => bindings.push(normalize_path(&field)),
+                        Slot::Actions(_) => actions.push(normalize_path(&field)),
+                    }
+                }
+                let mut children: Vec<String> = child_blocks(&block, "")
+                    .into_iter()
+                    .map(|(pointer, _)| normalize_path(pointer.trim_start_matches('/')))
+                    .collect();
+                for list in [&mut bindings, &mut actions, &mut children] {
+                    list.sort();
+                    list.dedup();
+                }
+                entries.push(format!(
+                    "  {name}: {{ bindings: [{}], actions: [{}], children: [{}] }},",
+                    js_strings(&bindings),
+                    js_strings(&actions),
+                    js_strings(&children)
+                ));
+            }
+            format!(
+                "// 이 파일은 crates/contract/src/data.rs의 ui_tables 시험이 만든다. 손으로 고치지 않는다.\n\
+                 //\n\
+                 // 블록 종류마다 화면 자리다. 코어의 own_slots와 child_blocks가 정본이다.\n\
+                 \n\
+                 export interface BlockSlots {{\n\
+                 \x20 /** 블록 자신의 식 바인딩 자리. 블록 자리 기준 상대 경로다. */\n\
+                 \x20 bindings: string[];\n\
+                 \x20 /** 블록 자신의 동작 자리. 블록 자리 기준 상대 경로다. */\n\
+                 \x20 actions: string[];\n\
+                 \x20 /** 바로 아래 블록의 자리. 숫자로 바뀌는 마디는 `*`다. */\n\
+                 \x20 children: string[];\n\
+                 }}\n\
+                 \n\
+                 export const BLOCK_SLOTS: Record<string, BlockSlots> = {{\n{}\n}};\n",
+                entries.join("\n")
+            )
+        }
+
+        fn definition_defaults(&self) -> String {
+            let (sample, result) = self.parity();
+            let mut definitions = Map::new();
+            for (name, has_default) in &self.defaults {
+                if !has_default {
+                    continue;
+                }
+                if let Some(node) = self.emit(self.definition(name)) {
+                    definitions.insert(name.clone(), node);
+                }
+            }
+            let root = self.emit(self.schema).expect("정의에 기본값이 있다");
+            let sample = serde_json::to_string_pretty(&sample).expect("견본을 글로 만든다");
+            let result = serde_json::to_string_pretty(&result).expect("결과를 글로 만든다");
+            let root = serde_json::to_string_pretty(&root).expect("기본값 표를 글로 만든다");
+            let definitions = serde_json::to_string_pretty(&Value::Object(definitions))
+                .expect("기본값 표를 글로 만든다");
+            format!(
+                "// 이 파일은 crates/contract/src/data.rs의 ui_tables 시험이 만든다. 손으로 고치지 않는다.\n\
+                 //\n\
+                 // 가짜 코어가 앱 정의에 serde 기본값을 채울 때 쓰는 표와, 그 표를 대조하는 견본이다.\n\
+                 \n\
+                 import type {{ JsonValue }} from \"./serde_json/JsonValue\";\n\
+                 \n\
+                 export interface DefaultVariant {{\n\
+                 \x20 /** 판별자 필드 이름. 없으면 값의 모양으로 고른다. */\n\
+                 \x20 key?: string;\n\
+                 \x20 /** 판별자 값. */\n\
+                 \x20 const?: string;\n\
+                 \x20 node: DefaultNode;\n\
+                 }}\n\
+                 \n\
+                 export interface DefaultNode {{\n\
+                 \x20 /** 이 자리의 serde 기본값. */\n\
+                 \x20 default?: JsonValue;\n\
+                 \x20 /** 다른 정의를 가리킨다. */\n\
+                 \x20 ref?: string;\n\
+                 \x20 /** 객체의 칸. */\n\
+                 \x20 properties?: Record<string, DefaultNode>;\n\
+                 \x20 /** 사전 값(additionalProperties). */\n\
+                 \x20 values?: DefaultNode;\n\
+                 \x20 /** 배열 원소. */\n\
+                 \x20 items?: DefaultNode;\n\
+                 \x20 /** null과 묶인 anyOf. */\n\
+                 \x20 option?: DefaultNode;\n\
+                 \x20 /** const로 가르는 oneOf/anyOf. */\n\
+                 \x20 variants?: DefaultVariant[];\n\
+                 }}\n\
+                 \n\
+                 export const DEFINITION_DEFAULTS: DefaultNode = {root};\n\
+                 \n\
+                 export const DEFINITION_DEFAULT_DEFS: Record<string, DefaultNode> = {definitions};\n\
+                 \n\
+                 /** serde 기본값을 채우기 전의 정의. */\n\
+                 export const DEFINITION_DEFAULTS_SAMPLE: unknown = {sample};\n\
+                 \n\
+                 /** 코어가 그 견본을 읽어 내놓은 정의. */\n\
+                 export const DEFINITION_DEFAULTS_RESULT: unknown = {result};\n"
+            )
+        }
+
+        /// 기본값을 채울 곳만 남긴다. 없으면 None.
+        fn emit(&self, node: &Value) -> Option<Value> {
+            let mut out = Map::new();
+            if let Some(default) = node.get("default") {
+                out.insert("default".into(), default.clone());
+            }
+            if let Some(reference) = node.get("$ref").and_then(Value::as_str) {
+                let name = reference
+                    .strip_prefix("#/$defs/")
+                    .expect("$ref는 #/$defs/로 시작한다");
+                if self.defaults.get(name).copied().unwrap_or(false) {
+                    out.insert("ref".into(), json!(name));
+                }
+                return (!out.is_empty()).then_some(Value::Object(out));
+            }
+            let branches: Option<&Vec<Value>> = node
+                .get("anyOf")
+                .or_else(|| node.get("oneOf"))
+                .and_then(Value::as_array);
+            if let Some(branches) = branches {
+                let branches: Vec<&Value> = branches.iter().filter(|branch| !is_null(branch)).collect();
+                if branches.len() == 1 {
+                    if let Some(inner) = self.emit(branches[0]) {
+                        out.insert("option".into(), inner);
+                    }
+                } else {
+                    let variants: Vec<Value> = branches
+                        .into_iter()
+                        .filter_map(|branch| self.emit_variant(branch))
+                        .collect();
+                    if !variants.is_empty() {
+                        out.insert("variants".into(), Value::Array(variants));
+                    }
+                }
+            }
+            if let Some(properties) = node.get("properties").and_then(Value::as_object) {
+                let mut kept = Map::new();
+                for (key, property) in properties {
+                    if let Some(inner) = self.emit(property) {
+                        kept.insert(key.clone(), inner);
+                    }
+                }
+                if !kept.is_empty() {
+                    out.insert("properties".into(), Value::Object(kept));
+                }
+            }
+            if let Some(items) = node.get("items") {
+                if let Some(inner) = self.emit(items) {
+                    out.insert("items".into(), inner);
+                }
+            }
+            if let Some(values) = node.get("additionalProperties") {
+                if values.is_object() {
+                    if let Some(inner) = self.emit(values) {
+                        out.insert("values".into(), inner);
+                    }
+                }
+            }
+            (!out.is_empty()).then_some(Value::Object(out))
+        }
+
+        fn emit_variant(&self, branch: &Value) -> Option<Value> {
+            let node = self.emit(branch)?;
+            let mut entry = Map::new();
+            if let Some(properties) = branch.get("properties").and_then(Value::as_object) {
+                for (key, property) in properties {
+                    if let Some(value) = property.get("const").and_then(Value::as_str) {
+                        entry.insert("key".into(), json!(key));
+                        entry.insert("const".into(), json!(value));
+                        break;
+                    }
+                }
+            }
+            entry.insert("node".into(), node);
+            Some(Value::Object(entry))
+        }
+    }
+
+    fn kinds_of(node: &Value) -> Vec<String> {
+        match node.get("type") {
+            Some(Value::String(kind)) => vec![kind.clone()],
+            Some(Value::Array(kinds)) => kinds
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    fn is_null(node: &Value) -> bool {
+        node.get("type").and_then(Value::as_str) == Some("null")
+    }
+
+    fn type_name(variant: &Value) -> &str {
+        variant["properties"]["type"]["const"]
+            .as_str()
+            .expect("블록 변형에는 type const가 있다")
+    }
+
+    fn has_default(node: &Value, defaults: &BTreeMap<String, bool>) -> bool {
+        if node.get("default").is_some() {
+            return true;
+        }
+        if let Some(reference) = node.get("$ref").and_then(Value::as_str) {
+            let name = reference
+                .strip_prefix("#/$defs/")
+                .expect("$ref는 #/$defs/로 시작한다");
+            return defaults.get(name).copied().unwrap_or(false);
+        }
+        for key in ["anyOf", "oneOf"] {
+            if node
+                .get(key)
+                .and_then(Value::as_array)
+                .is_some_and(|branches| branches.iter().any(|branch| has_default(branch, defaults)))
+            {
+                return true;
+            }
+        }
+        if node
+            .get("properties")
+            .and_then(Value::as_object)
+            .is_some_and(|properties| properties.values().any(|property| has_default(property, defaults)))
+        {
+            return true;
+        }
+        if node.get("items").is_some_and(|items| has_default(items, defaults)) {
+            return true;
+        }
+        node.get("additionalProperties")
+            .is_some_and(|values| values.is_object() && has_default(values, defaults))
+    }
+
+    fn normalize_path(path: &str) -> String {
+        path.split('/')
+            .map(|segment| {
+                if !segment.is_empty() && segment.chars().all(|letter| letter.is_ascii_digit()) {
+                    "*".to_string()
+                } else {
+                    segment.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("/")
+    }
+
+    fn js_strings(values: &[String]) -> String {
+        values
+            .iter()
+            .map(|value| format!("\"{value}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    fn export(file: &str, body: &str) {
+        let dir = std::env::var("TS_RS_EXPORT_DIR")
+            .expect("TS_RS_EXPORT_DIR는 .cargo/config.toml에 있다");
+        let path = std::path::Path::new(&dir).join(file);
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(body) {
+            std::fs::write(&path, body).unwrap();
+        }
+    }
+
+    #[test]
+    fn export_ui_tables() {
+        let schema = crate::app_definition_schema();
+        let filler = Filler::new(&schema);
+        export("block-slots.ts", &filler.block_slots());
+        export("definition-defaults.ts", &filler.definition_defaults());
+    }
+}

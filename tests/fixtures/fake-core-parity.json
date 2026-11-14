@@ -1,0 +1,26 @@
+{
+  "id": "fake-core-parity",
+  "name": "가짜 코어 대조 견본",
+  "description": "코어가 읽는 정의를 가짜 코어가 손대지 않고 읽는지 확인하는 견본입니다.",
+  "requires": { "blocks": 3, "modules": { "assets": 1, "client": 1 } },
+  "permissions": [],
+  "state": { "text": "a b)c" },
+  "assets": [{ "id": "fake-core-parity", "version": 1 }],
+  "client": {
+    "runtime": "javascript",
+    "entry": { "id": "fake-core-parity", "version": 1 }
+  },
+  "ui": {
+    "type": "stack",
+    "direction": "column",
+    "children": [
+      {
+        "type": "when",
+        "value": { "expr": "$count($match($state.text, /[^)\\s]+/gm)) > 0" },
+        "child": { "type": "text", "value": { "expr": "true" } }
+      },
+      { "type": "text", "value": { "expr": "$match($state.text, /[^)\\s]+/g)[0].match" } },
+      { "type": "text", "value": { "expr": "$match($state.text, /[a-z]+/gm)[0].match" } }
+    ]
+  }
+}

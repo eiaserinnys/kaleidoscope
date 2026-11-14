@@ -1,3 +1,5 @@
 packages:
   - app
   - ui
+patchedDependencies:
+  jsonata@2.2.2: patches/jsonata@2.2.2.patch
