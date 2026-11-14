@@ -61,7 +61,7 @@
 ) {
   padding-block-end: 0;
 }
-.ks-data-toolbar, .ks-agent-chat-toolbar { display: flex; min-width: 0; height: var(--ks-bar-height); min-height: var(--ks-bar-height); max-height: var(--ks-bar-height); flex-shrink: 0; align-items: flex-start; gap: var(--ks-space-2); overflow-x: auto; overflow-y: hidden; scroll-padding-inline: var(--ks-space-3); padding: var(--ks-space-2) var(--ks-space-3) var(--ks-space-1); border-bottom: var(--ks-line-width) solid var(--ks-color-border); }
+.ks-data-toolbar, .ks-agent-chat-toolbar { display: flex; min-width: 0; height: var(--ks-bar-height); min-height: var(--ks-bar-height); max-height: var(--ks-bar-height); flex-shrink: 0; align-items: flex-start; gap: var(--ks-space-2); overflow-x: auto; overflow-y: hidden; scroll-padding-inline: var(--ks-space-3); padding: var(--ks-space-2) var(--ks-space-3) var(--ks-space-1); border-bottom: var(--ks-line-width) solid var(--ks-color-border); container: ks-data-toolbar / inline-size; }
 .ks-data-toolbar::-webkit-scrollbar, .ks-agent-chat-toolbar::-webkit-scrollbar { height: var(--ks-space-1); }
 .ks-data-toolbar::-webkit-scrollbar-thumb, .ks-agent-chat-toolbar::-webkit-scrollbar-thumb { border: 0; }
 .ks-data-toolbar-group { display: flex; height: var(--ks-control-height); align-items: center; min-width: 0; gap: var(--ks-space-2); }
@@ -78,6 +78,25 @@
 /* 글은 최소 폭에 기여하지 않지만 실제 글 너비를 먼저 확보한다. 입력은 최소 폭부터 늘어난다. */
 .ks-data-toolbar-group.is-start > .ks-data-toolbar-item.is-text { width: 0; flex: 0 1 max-content; max-width: max-content; }
 .ks-data-toolbar-item.is-input { flex: 1 0 calc(var(--ks-space-6) * 3); min-width: calc(var(--ks-space-6) * 3); }
+/* 좁은 막대: 끝 조작이 가로 스크롤 뒤로 밀리지 않게 입력이 먼저 줄어 자리를 내준다. 입력 상자의 바닥은
+   좌우 여백+좌우 테두리+글 자리 var(--ks-space-6)(여백+글 두 자)다. 검색 입력은 지우기 자리를 잡은 여백으로 재
+   98px, 일반 입력은 50px다. 값이 없을 때 검색 오른쪽 여백을 8px로 줄여도 상자 폭은 이 바닥이라 값에 따라 바뀌지
+   않는다. 질의 밖 검색 상자 바닥 96px보다 2px 큰 것은 글 두 자 자리를 지키기 위해서다. 그 아래로도 모자라면
+   지금처럼 막대가 가로 스크롤한다. 경계 280px은 360폭 화면에서 붐비는 막대가 갖는 내용 폭(312px 안팎)보다 작다. */
+@container ks-data-toolbar (max-width: 280px) {
+  /* 시작 묶음도 자기 내용의 min-content 아래로 줄지 않는다. 이걸 0으로 두면 입력 칸이 묶음 밖으로 넘쳐 끝 묶음과 겹친다. */
+  .ks-data-toolbar-group.is-start:has(> .ks-data-toolbar-item.is-input) { flex: 1 1 min-content; min-width: min-content; }
+  .ks-data-toolbar-item.is-input { flex: 1 1 min-content; min-width: min-content; }
+  .ks-data-toolbar .ks-data-input.is-search .ks-text-input {
+    min-width: calc(2 * (var(--ks-icon-button-size) + var(--ks-space-1)) + 2 * var(--ks-line-width) + var(--ks-space-6));
+  }
+  .ks-data-toolbar .ks-data-input:not(.is-search) .ks-text-input {
+    min-width: calc(2 * var(--ks-space-2) + 2 * var(--ks-line-width) + var(--ks-space-6));
+  }
+}
+/* 도구 막대 입력은 칸보다 긴 안내 글과 값을 글자 중간에서 끊지 않고 말줄임으로 끝낸다. */
+.ks-data-toolbar .ks-text-input { text-overflow: ellipsis; }
+.ks-data-toolbar .ks-text-input::placeholder { text-overflow: ellipsis; }
 .ks-data-toolbar .ks-data-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ks-data-toolbar .ks-button, .ks-data-toolbar .ks-data-segmented, .ks-data-toolbar .ks-data-toggle { flex-shrink: 0; white-space: nowrap; }
 .ks-data-section { min-width: 0; min-height: 0; padding-inline: var(--ks-space-3); }
@@ -312,6 +331,12 @@
 .ks-data-input-search, .ks-data-input-clear { position: absolute; top: 50%; transform: translateY(-50%); display: flex; align-items: center; color: var(--ks-color-muted); }
 .ks-data-input-search { left: var(--ks-space-2); }
 .ks-data-input-clear { right: var(--ks-space-1); }
+/* 좁은 도구 막대의 검색 입력은 지우기 단추 자리(오른쪽 32px)를 값이 있을 때만 잡는다. 지우기 단추는 값이 있을 때만
+   그려지므로, 없을 때는 일반 입력과 같은 오른쪽 여백을 써 안내 글이 설 자리를 남긴다. 질의 밖 막대는 위 규칙 그대로다. */
+@container ks-data-toolbar (max-width: 280px) {
+  .ks-data-input.is-search .ks-text-input { padding-right: var(--ks-space-2); }
+  .ks-data-input.is-search:has(> .ks-data-input-clear) .ks-text-input { padding-right: calc(var(--ks-icon-button-size) + var(--ks-space-1)); }
+}
 .ks-data-segmented { display: inline-flex; min-width: 0; max-width: 100%; }
 .ks-data-segmented .ks-button { border-radius: 0; }
 .ks-data-segmented > .ks-button { flex: 1 1 auto; min-width: 0; }

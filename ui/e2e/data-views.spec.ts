@@ -389,8 +389,14 @@ test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
     const propertiesBox = await app.locator(".ks-properties").boundingBox();
     const labelBox = await app.locator(".ks-properties dt").first().boundingBox();
     const valueBox = await app.locator(".ks-properties dd").first().boundingBox();
-    if (width === 400) expect(valueBox!.y).toBeGreaterThan(labelBox!.y);
-    else expect(valueBox!.y).toBe(labelBox!.y);
+    // 목록 탭 분할이 예제의 column_below 700으로 400폭에서 쌓여 속성 칸이 앱 창 폭 전체가 된다. 319보다 넓어
+    // data-views.css 255줄의 세로 배치 질의가 풀리므로 400폭에서는 값이 이름 옆에 선다(변경 전에는 60% 칸이 319
+    // 이하라 값이 이름 아래로 내려왔다). 세로 배치는 아래 320폭 장면에서 속성 칸이 319 이하일 때 계속 단언한다.
+    if (width === 400) {
+      const propertiesWidth = await app.locator(".ks-properties-container").evaluate((node) => node.getBoundingClientRect().width);
+      expect(propertiesWidth).toBeGreaterThan(319);
+    }
+    expect(valueBox!.y).toBe(labelBox!.y);
     const fits = await app.locator(".ks-list-row .ks-badge").evaluateAll((elements) => elements.every((element) => {
       if (getComputedStyle(element).visibility === "hidden") return true;
       const badge = element.getBoundingClientRect();
@@ -416,6 +422,19 @@ test("견본의 다섯 보기와 다크 배지 캡처", async ({ page }) => {
     await capture(page, `gallery-feed-${width}`);
   }
   if (output) writeFileSync(join(output, "gallery-coordinates.json"), JSON.stringify(coordinates, null, 2));
+  // 속성 칸이 319 이하인 장면에서는 세로 배치가 유지된다. 320폭 화면의 앱 창은 288폭이라 목록 탭 분할이 쌓여도
+  // 속성 칸이 319 이하이고, data-views.css 255줄의 질의가 값과 이름을 세로로 놓는다(위 400폭 기대가 바뀐 까닭).
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto("/?preview=block-gallery");
+  const narrowApp = page.getByTestId("app-window-block-gallery");
+  await expect(narrowApp.getByRole("tab", { name: "목록" })).toBeVisible();
+  await expect(narrowApp.locator(".ks-properties")).toBeVisible();
+  const narrowPropertiesWidth = await narrowApp.locator(".ks-properties-container").evaluate((node) => node.getBoundingClientRect().width);
+  const narrowLabelBox = await narrowApp.locator(".ks-properties dt").first().boundingBox();
+  const narrowValueBox = await narrowApp.locator(".ks-properties dd").first().boundingBox();
+  expect(narrowPropertiesWidth).toBeLessThanOrEqual(319);
+  expect(narrowValueBox!.y).toBeGreaterThan(narrowLabelBox!.y);
+  await capture(page, "gallery-list-320");
   await page.emulateMedia({ colorScheme: "dark" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/?preview=block-gallery");
