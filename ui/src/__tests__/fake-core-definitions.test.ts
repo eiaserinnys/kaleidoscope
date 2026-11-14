@@ -108,4 +108,15 @@ describe("가짜 코어가 읽는 앱 정의", () => {
       await transport.call({ op: "data.detach", window_id: windowId });
     }
   });
+
+  it("state.changed로 들어온 정의에도 기본값을 채운다", async () => {
+    const definition = JSON.parse(readFileSync(path.join(repoRoot, "tests", "fixtures", "fake-core-parity.json"), "utf8")) as AppDefinition;
+    const seed = makeTestSeed({ definitions: [definition] });
+    const transport = createFakeTransport(seed);
+    transport.emit({ event: "state.changed", snapshot: seed.snapshot });
+    const { snapshot } = await transport.call({ op: "state.get" });
+    const client = (snapshot.shared.app_versions[0].definition as { client?: ClientFields }).client;
+    expect({ storage_entries: Array.isArray(client?.storage_entries), outputs: isRecord(client?.outputs) })
+      .toEqual({ storage_entries: true, outputs: true });
+  });
 });
