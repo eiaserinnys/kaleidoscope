@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
-import { AppClient } from "../src/app.ts";
+import { AppClient, resolveParallel } from "../src/app.ts";
 
 test("기본 에이전트 중 Antigravity만 HTTP MCP 지원을 명시한다", () => {
   const definition = JSON.parse(readFileSync(new URL("../../agent.json", import.meta.url), "utf8"));
@@ -12,11 +12,90 @@ test("기본 에이전트 중 Antigravity만 HTTP MCP 지원을 명시한다", (
   }
 });
 
-test("기본 에이전트 중 Claude Code, Codex, Gemini CLI만 동시 세션을 켜고 Antigravity는 예전처럼 잠근다", () => {
+test("기본 에이전트 네 개는 모두 동시 세션을 켠다", () => {
   const definition = JSON.parse(readFileSync(new URL("../../agent.json", import.meta.url), "utf8"));
   const agents = definition.storage.entries.find((entry: any) => entry.id === "agents").default;
-  for (const id of ["claude", "codex", "gemini"]) assert.equal(agents.find((agent: any) => agent.id === id).parallel_sessions, true);
-  assert.equal(Object.hasOwn(agents.find((agent: any) => agent.id === "antigravity"), "parallel_sessions"), false);
+  assert.deepEqual(agents.map((agent: any) => agent.id), ["claude", "codex", "gemini", "antigravity"]);
+  for (const agent of agents) assert.equal(agent.parallel_sessions, true, agent.id);
+});
+
+const DEFAULTS = [
+  { id: "claude", name: "Claude Code", command: "npx", args: [], env: {}, parallel_sessions: true },
+  { id: "antigravity", name: "Antigravity", command: "agy", args: ["acp"], env: {}, parallel_sessions: true },
+];
+
+test("저장된 기본 에이전트에 값이 없으면 기본값을 따르고, 저장한 거짓은 지키며, 추가한 에이전트는 끈다", () => {
+  assert.equal(resolveParallel({ id: "antigravity", name: "Antigravity", command: "agy", args: ["acp"], env: {} }, DEFAULTS).parallel_sessions, true);
+  assert.equal(resolveParallel({ id: "claude", name: "Claude Code", command: "npx", args: [], env: {}, parallel_sessions: false }, DEFAULTS).parallel_sessions, false);
+  assert.equal(resolveParallel({ id: "mine", name: "내 에이전트", command: "mine", args: [], env: {} }, DEFAULTS).parallel_sessions, false);
+  assert.equal(resolveParallel({ id: "mine", name: "내 에이전트", command: "mine", args: [], env: {}, parallel_sessions: true }, DEFAULTS).parallel_sessions, true);
+});
+
+/** 저장소 한 칸을 흉내 내는 가짜 다리. setStorage는 바로 변경 알림을 보낸다. */
+function storageClient(initial: any[]) {
+  const handlers = new Map<string, (context: any) => any>(), views: any[] = [], writes: any[] = [];
+  let storage: any, lifecycle: any;
+  const client = {
+    process: { onReady() {}, onServicesChanged() {}, attach: async () => null, start: async () => ({ status: "cancelled" }) },
+    files: { grant: () => null, on_grant() {}, pick_folder: async () => null }, blobs: { open: async () => null }, host: {}, context: {}, chat: { publish() {} },
+    getStorage: async () => initial, setStorage: async (_entry: string, value: any) => { writes.push(value); await storage(value); },
+    getState: () => null, setState() {}, onStorageChange: (entry: string, fn: any) => { if (entry === "agents") storage = fn; }, onLifecycle: (fn: any) => { lifecycle = fn; },
+    onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
+  };
+  return { client, handlers, views, writes, storage: (value: any) => storage(value), ready: () => lifecycle({ phase: "ready" }) };
+}
+
+test("고른 에이전트의 동시 세션 스위치는 저장값을 따르고, 바꾸면 그 에이전트 항목만 고쳐 저장한다", async () => {
+  const saved = [
+    { id: "antigravity", name: "Antigravity", command: "agy", args: ["acp"], env: {} },
+    { id: "mine", name: "내 에이전트", command: "mine", args: [], env: {} },
+  ];
+  const { client, handlers, views, writes, storage, ready } = storageClient(saved);
+  new AppClient(client as any, DEFAULTS as any);
+  await ready();
+  await storage(saved);
+  await handlers.get("choose_agent")!({ item: { id: "antigravity" } });
+  assert.equal(views.at(-1).parallel_sessions, true);
+  await handlers.get("choose_agent")!({ item: { id: "mine" } });
+  assert.equal(views.at(-1).parallel_sessions, false);
+  await handlers.get("set_parallel")!({ event: true });
+  assert.equal(writes.length, 1);
+  // 기본 에이전트 항목은 손대지 않아 기본값을 계속 따른다.
+  assert.deepEqual(writes[0], [saved[0], { ...saved[1], parallel_sessions: true }]);
+  assert.equal(views.at(-1).parallel_sessions, true);
+  await handlers.get("set_parallel")!({ event: true });
+  assert.equal(writes.length, 1);
+  await handlers.get("choose_agent")!({ item: { id: "antigravity" } });
+  await handlers.get("set_parallel")!({ event: false });
+  assert.deepEqual(writes[1][0], { ...saved[0], parallel_sessions: false });
+  assert.equal(views.at(-1).parallel_sessions, false);
+});
+
+test("대화 중에 스위치를 바꾸면 새 값으로 에이전트를 다시 시작하고, 뒤에서 응답 중이면 먼저 묻는다", async () => {
+  const saved = [{ id: "mine", name: "내 에이전트", command: "mine", args: [], env: {} }];
+  const { client, handlers, views, writes, storage, ready } = storageClient(saved);
+  const app = new AppClient(client as any, DEFAULTS as any);
+  await ready();
+  await storage(saved);
+  const replaced: any[] = [];
+  (app as any).session.replace = async (spec: any) => { replaced.push(spec); return true; };
+  const base = { phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], permissions: [], controls: [], authMethods: [], failure: null,
+    sessionId: "current", canListSessions: true, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false, parallel: true };
+  (app as any).stage = "session";
+  (app as any).receive({ ...base, live: [{ sessionId: "current", busy: false, permissions: 0 }, { sessionId: "back", busy: true, permissions: 0 }] });
+  await handlers.get("set_parallel")!({ event: true });
+  assert.equal(writes.length, 0);
+  assert.equal(views.at(-1).change_open, true);
+  assert.equal(views.at(-1).change_title, "여러 세션 동시에 바꾸기");
+  await handlers.get("cancel_change")!({});
+  assert.equal(views.at(-1).change_open, false);
+  assert.equal(views.at(-1).parallel_sessions, false);
+  await handlers.get("set_parallel")!({ event: true });
+  await handlers.get("confirm_change")!({});
+  assert.equal(writes.length, 1);
+  assert.equal(replaced.length, 1);
+  assert.equal(replaced[0].parallel_sessions, true);
+  assert.equal(views.at(-1).parallel_sessions, true);
 });
 
 test("여러 에이전트는 가운데 선택을 거쳐 폴더를 고르고, 실행 취소 뒤 다시 시도한다", async () => {
