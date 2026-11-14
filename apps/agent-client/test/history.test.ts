@@ -47,7 +47,7 @@ test("Windows 경로 접두어가 없어져도 같은 폴더의 기록을 보존
   await history.bind("spec", String.raw`C:\work`);
   const manifest = JSON.parse(new TextDecoder().decode(data.get("record/manifest.json")));
   assert.equal(manifest.cwd, String.raw`C:\work`);
-  assert.equal(manifest.pages, 1);
+  assert.equal(manifest.sessions.old.pages, 1);
   assert.equal(history.sessionId, "old");
   assert.equal(history.items[0].text, "이전");
   await history.bind("spec", String.raw`\\?\UNC\server\share`);

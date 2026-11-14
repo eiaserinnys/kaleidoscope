@@ -3,6 +3,8 @@ import { agentError } from "./errors.ts";
 import { cleanTitle } from "./guide.ts";
 
 type Agent = Spec & { id: string };
+/** 허용을 기다리는 세션 배지의 색. 목록에서 눈에 띄게 한다. */
+const ACCENT = "#315da8";
 type Program = { name: string; winget: string; url: string };
 type Action = { event?: any; item?: any; parent_item?: any };
 type MessageInput = { request_id: string; text: string };
@@ -63,6 +65,8 @@ export class AppClient {
   private lastOutputs = "";
   private historyOpen = false;
   private switchRequested: "new" | "load" | null = null;
+  /** 뒤에서 응답 중인 세션이 있을 때 확인을 기다리는 에이전트·작업 폴더 바꾸기. */
+  private pendingChange: { kind: "agent"; id: string } | { kind: "folder" } | null = null;
 
   constructor(client: Bridge, defaults: Agent[]) {
     this.client = client;
@@ -87,13 +91,15 @@ export class AppClient {
     client.onMessage((message) => this.receiveMessage(message));
     client.handle("choose_agent", ({ item }) => this.chooseAgent(String(item?.id ?? "")));
     client.handle("back_agent", () => this.backAgent());
-    client.handle("pick_folder", () => this.pickFolder());
+    client.handle("pick_folder", () => this.stage === "session" ? this.requestChange({ kind: "folder" }) : this.pickFolder());
     client.handle("retry", () => this.retryStart());
     client.handle("install", () => this.install());
     client.handle("reset_agents", () => this.resetAgents());
     client.handle("authenticate", ({ item }) => this.session.authenticate(String(item?.id ?? "")));
     client.handle("configure", ({ item, event }) => this.session.configure(String(item?.id ?? ""), event));
-    client.handle("settings_agent", ({ event }) => this.settingsAgent(String(event ?? "")));
+    client.handle("settings_agent", ({ event }) => this.requestChange({ kind: "agent", id: String(event ?? "") }));
+    client.handle("confirm_change", () => this.confirmChange());
+    client.handle("cancel_change", () => { this.pendingChange = null; this.update(); });
     client.handle("answer", ({ item, parent_item }) => this.session.answer(parent_item?.rpcId, item?.id ?? null));
     client.handle("cancel", () => this.session.cancel());
     client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
@@ -105,18 +111,54 @@ export class AppClient {
       if (event === this.view?.sessionId) { this.historyOpen = false; this.update(); return; }
       return this.switchSession(String(event));
     });
+    client.handle("open_waiting", () => {
+      const waiting = this.waitingSession();
+      return waiting ? this.switchSession(waiting) : undefined;
+    });
+  }
+
+  /** 동시 세션을 쓰는 에이전트는 응답 중에도 세션을 바꾼다. 앞 세션은 뒤에서 계속 돈다. */
+  private sessionLocked(): boolean {
+    const view = this.view;
+    return !view || (!view.parallel && view.busy) || view.switching || view.configuring || !!this.switchRequested;
   }
 
   private switchSession(id: string | null): Promise<void> {
-    if (!this.view || this.view.busy || this.view.switching || this.view.configuring || this.switchRequested) return Promise.resolve();
+    if (this.sessionLocked()) return Promise.resolve();
     this.historyOpen = false;
     this.switchRequested = id ? "load" : "new";
     this.update();
-    return (id ? this.session.loadSession(id) : this.session.newSession()).catch((error) => {
+    return (id ? this.session.loadSession(id) : this.session.newSession()).then(() => {
+      // 이미 들고 있는 세션으로 화면만 바꾸면 전환 요청 없이 끝난다.
+      if (!this.view?.switching) { this.switchRequested = null; this.update(); }
+    }, (error) => {
       this.switchRequested = null;
       this.update();
       throw error;
     });
+  }
+
+  private backgroundBusy(): number {
+    return (this.view?.live ?? []).filter((entry) => entry.busy && entry.sessionId !== this.view?.sessionId).length;
+  }
+
+  private waitingSession(): string | null {
+    return (this.view?.live ?? []).find((entry) => entry.permissions > 0 && entry.sessionId !== this.view?.sessionId)?.sessionId ?? null;
+  }
+
+  /** 뒤에서 응답 중인 세션은 에이전트나 작업 폴더를 바꾸면 멈추므로 먼저 묻는다. */
+  private requestChange(change: NonNullable<AppClient["pendingChange"]>): Promise<void> {
+    if (change.kind === "agent" && (!this.agents.some((entry) => entry.id === change.id) || change.id === this.selected?.id)) return Promise.resolve();
+    if (this.backgroundBusy() > 0) { this.pendingChange = change; this.update(); return Promise.resolve(); }
+    return change.kind === "agent" ? this.settingsAgent(change.id) : this.pickFolder();
+  }
+
+  private confirmChange(): Promise<void> {
+    const change = this.pendingChange;
+    this.pendingChange = null;
+    this.update();
+    if (!change) return Promise.resolve();
+    return change.kind === "agent" ? this.settingsAgent(change.id) : this.pickFolder();
   }
 
   private async acceptAgents(value: unknown): Promise<void> {
@@ -387,7 +429,7 @@ export class AppClient {
         id: view.failure.id, code: view.failure.code ?? "local_agent_failed", message: this.failureMessage(view.failure), details: [],
       } });
     }
-    if (view.failure && view.phase === "ready" && previous?.phase === "responding") {
+    if (view.failure && view.phase === "ready" && previous?.phase === "responding" && previous.sessionId === view.sessionId) {
       this.client.chat.publish("conversation", { kind: "error", error: {
         id: view.failure.id, code: view.failure.code ?? "local_agent_failed", message: `에이전트 응답을 받지 못했습니다. 다시 보내세요. 원인: ${view.failure.reason}`, details: [],
       } });
@@ -439,10 +481,18 @@ export class AppClient {
       selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
-      history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested),
-      history_disabled: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested || !this.view?.canListSessions),
+      history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: !!this.view && this.sessionLocked(),
+      history_disabled: this.sessionLocked() || !this.view?.canListSessions,
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
-      history_items: (this.view?.sessions ?? []).map((session) => ({ key: session.sessionId, title: cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt) })),
+      history_items: (this.view?.sessions ?? []).map((session) => {
+        const live = session.sessionId === this.view?.sessionId ? undefined : this.view?.live?.find((entry) => entry.sessionId === session.sessionId);
+        const badges = live?.permissions ? [{ text: "허용 필요", color: ACCENT }] : live?.busy ? ["응답 중"] : [];
+        return { key: session.sessionId, title: cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt), ...(badges.length ? { badges } : {}) };
+      }),
+      show_waiting: chat && !!this.waitingSession(),
+      change_open: !!this.pendingChange,
+      change_title: this.pendingChange?.kind === "folder" ? "작업 폴더 바꾸기" : "에이전트 바꾸기",
+      change_message: `응답 중인 세션 ${this.backgroundBusy()}개가 멈춥니다. 바꿀까요?`,
       history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading && !this.view.sessions.length,
       history_unsupported: !!this.view && !this.view.canListSessions,
       history_empty: !!this.view && this.view.canListSessions && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,

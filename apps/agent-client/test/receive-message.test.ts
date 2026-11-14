@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { AppClient } from "../src/app.ts";
-import { initialState } from "../src/reducer.ts";
+import { initialState, sessionState } from "../src/reducer.ts";
 
 const agent = { id: "a", name: "시험", command: "agent", args: [], env: {} };
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -15,7 +15,9 @@ function fixture(phase: "ready" | "responding" | "starting" | "login" | "failed"
   const checkpointWait = new Promise<void>((resolve) => { releaseCheckpoint = resolve; });
   const handlers = new Map<string, Function>(), stores = new Map<string, Function>();
   const views: any[] = [], checkpoints: any[] = [], chats: any[] = [];
-  const checkpoint = { ...initialState(), phase, initialized: true, sessionId: "session" };
+  const connection = phase === "responding" ? "ready" : phase;
+  const checkpoint = { ...initialState(), phase: connection, initialized: true, foreground: "session",
+    sessions: { session: { ...sessionState(), phase: phase === "responding" ? "responding" as const : "ready" as const } } };
   const client = {
     process: {
       onReady() {}, onServicesChanged() {},
@@ -62,7 +64,7 @@ test("초기 저장소와 복구를 기다리고 준비된 세션에서 접수�
   assert.equal(done, false);
   f.releaseAttach();
   assert.deepEqual(await result, { status: "accepted" });
-  assert.ok(f.checkpoints.some((state) => state.queue.some((item: any) => item.id === "one" && item.text === "받은 글" && item.attachments.length === 0)));
+  assert.ok(f.checkpoints.some((state) => state.sessions.session.queue.some((item: any) => item.id === "one" && item.text === "받은 글" && item.attachments.length === 0)));
 });
 
 for (const phase of ["ready", "responding"] as const) {
@@ -79,7 +81,7 @@ for (const phase of ["ready", "responding"] as const) {
     assert.deepEqual(await result, { status: "accepted" });
     await f.handlers.get("send")!({ event: { request_id: "typed", text: "입력한 글", attachments: [] } });
     for (const [id, text] of [["received", "받은 글"], ["typed", "입력한 글"]]) {
-      assert.ok(f.checkpoints.some((state) => state.queue.some((item: any) => item.id === id && item.text === text && item.attachments.length === 0)));
+      assert.ok(f.checkpoints.some((state) => state.sessions.session.queue.some((item: any) => item.id === id && item.text === text && item.attachments.length === 0)));
     }
   });
 }

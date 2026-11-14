@@ -12,6 +12,13 @@ test("기본 에이전트 중 Antigravity만 HTTP MCP 지원을 명시한다", (
   }
 });
 
+test("기본 에이전트 중 Claude Code, Codex, Gemini CLI만 동시 세션을 켜고 Antigravity는 예전처럼 잠근다", () => {
+  const definition = JSON.parse(readFileSync(new URL("../../agent.json", import.meta.url), "utf8"));
+  const agents = definition.storage.entries.find((entry: any) => entry.id === "agents").default;
+  for (const id of ["claude", "codex", "gemini"]) assert.equal(agents.find((agent: any) => agent.id === id).parallel_sessions, true);
+  assert.equal(Object.hasOwn(agents.find((agent: any) => agent.id === "antigravity"), "parallel_sessions"), false);
+});
+
 test("여러 에이전트는 가운데 선택을 거쳐 폴더를 고르고, 실행 취소 뒤 다시 시도한다", async () => {
   let lifecycle: any, storage: any, reads = 0;
   const handlers = new Map<string, (context: any) => Promise<void>>();
@@ -123,14 +130,14 @@ test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 
   assert.equal(views.at(-1).session_buttons_busy, true);
 });
 
-test("응답 중에는 목록 행을 눌러도 세션을 바꾸지 않는다", async () => {
+test("동시 세션을 끈 에이전트는 응답 중에 목록 행을 눌러도 세션을 바꾸지 않는다", async () => {
   const handlers = new Map<string, (context: any) => any>(), views: any[] = [];
   const client = { process: { onReady() {}, onServicesChanged() {} }, files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
     onStorageChange() {}, onLifecycle() {}, onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view) };
   const app = new AppClient(client as any, []);
   (app as any).receive({ phase: "responding", items: [], stream_id: null, text: "", busy: true, tool: null,
     queued: [], permissions: [], controls: [], authMethods: [], failure: null, sessionId: "current",
-    canListSessions: true, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false });
+    canListSessions: true, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false, live: [], parallel: false });
   let loads = 0;
   (app as any).session.loadSession = async () => { loads++; };
   await handlers.get("select_session")!({ event: "other" });
