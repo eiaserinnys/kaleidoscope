@@ -398,6 +398,74 @@ test("긴 제목은 말줄임되고 끝 조작은 막대에 남는다", async ({
   }
 });
 
+// 좁은 칸의 막대는 입력이 먼저 줄어 끝 조작을 처음 화면에 남긴다. 붐비는 막대(jizura)는 이 경계보다 넓어 지금처럼 가로 스크롤한다.
+type NarrowEnd = "text-button" | "select-icon" | "toggle";
+const narrowEnds: { end: NarrowEnd; label: string }[] = [
+  { end: "text-button", label: "글자 단추" },
+  { end: "select-icon", label: "고르기와 아이콘 단추" },
+  { end: "toggle", label: "토글" },
+];
+
+async function showNarrowToolbarScenario(page: import("@playwright/test").Page, width: number, height: number, end: NarrowEnd) {
+  await page.setViewportSize({ width, height });
+  await page.goto("/?preview=data-controls");
+  await page.evaluate(async (kind) => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const app = snapshot.shared.app_versions.find((item: any) => item.app_id === "data-controls");
+    const state = { query: "", status: "all", on: true };
+    const endBlocks = kind === "text-button" ? [{ type: "button", label: "다시 받기", on_click: [] }]
+      : kind === "select-icon" ? [
+        { type: "select", value: { state: "status" }, on_change: { set_state: "status" }, options: [{ value: "all", label: "전체" }, { value: "done", label: "완료" }] },
+        { type: "button", label: "다시 받기", icon: "refresh-cw", icon_only: true, variant: "ghost", on_click: [] },
+      ]
+      : [{ type: "toggle", label: "격자", value: { state: "on" }, on_change: { set_state: "on" } }];
+    app.definition.state = state;
+    app.definition.ui = { type: "split", direction: "row", sizes: [58, 42], children: [
+      { type: "stack", direction: "column", children: [{ type: "text", value: "왼쪽 칸", style: "body" }] },
+      { type: "stack", direction: "column", gap: "none", children: [
+        { type: "toolbar", start: [{ type: "input", value: { state: "query" }, on_change: { set_state: "query" }, placeholder: "앱 찾기" }], end: endBlocks },
+        { type: "text", value: "오른쪽 칸", style: "body" },
+      ] },
+    ] };
+    app.version += 1;
+    const appWindow = snapshot.shared.windows.find((item: any) => item.app_id === "data-controls");
+    appWindow.app_version = app.version;
+    appWindow.state = { ...state };
+    harness.emit({ event: "state.changed", snapshot });
+  }, end);
+  // 창이 화면을 채우게 해 360x600 화면에서 창도 360x600이 되게 한다(시각 검수 스크립트와 같은 꼴).
+  await page.addStyleTag({ content: "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }" });
+  const app = page.getByTestId("app-window-data-controls");
+  await expect(app.getByPlaceholder("앱 찾기")).toBeAttached();
+  return app.locator(".ks-data-toolbar").first();
+}
+
+test("좁은 칸의 도구 막대는 입력을 줄여 끝 조작을 막대와 화면 안에 남긴다", async ({ page }) => {
+  for (const { end, label } of narrowEnds) {
+    const bar = await showNarrowToolbarScenario(page, 360, 600, end);
+    const narrow = await bar.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const endGroup = node.querySelector<HTMLElement>(":scope > .ks-data-toolbar-group.is-end")!.getBoundingClientRect();
+      return {
+        scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+        inputWidth: node.querySelector("input")!.getBoundingClientRect().width,
+        barRight: rect.right, endRight: endGroup.right, screenRight: window.innerWidth,
+      };
+    });
+    expect(narrow.scrollWidth, `${label} 360: 막대가 가로로 넘치지 않는다`).toBeLessThanOrEqual(narrow.clientWidth + 1);
+    expect(narrow.endRight, `${label} 360: 끝 묶음이 막대 안에 있다`).toBeLessThanOrEqual(narrow.barRight + 1);
+    expect(narrow.endRight, `${label} 360: 끝 묶음이 화면 안에 있다`).toBeLessThanOrEqual(narrow.screenRight + 1);
+    expect(narrow.inputWidth, `${label} 360: 입력은 바닥 32px까지 줄어든다`).toBeGreaterThanOrEqual(32 - 0.5);
+    await capture(page, `narrow-toolbar-${end}-360`);
+
+    const wideBar = await showNarrowToolbarScenario(page, 1180, 720, end);
+    const wideInputWidth = await wideBar.evaluate((node) => node.querySelector("input")!.getBoundingClientRect().width);
+    expect(wideInputWidth, `${label} 1180: 넓은 막대의 입력은 96px 이상이다`).toBeGreaterThanOrEqual(96);
+    await capture(page, `narrow-toolbar-${end}-1180`);
+  }
+});
+
 test("스크롤바가 있어도 도구 막대의 조작은 같은 세로 중심이다", async ({ page }) => {
   const app = await showToolbarScenario(page, 360, "jizura");
   const bar = app.locator(".ks-data-toolbar");
