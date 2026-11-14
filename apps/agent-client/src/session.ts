@@ -2,7 +2,7 @@ import { History, type BlobStore } from "./history.ts";
 import { answerPermission, enqueue, findPermission, initialState, migrateState, reduceMessage, reserveRequest, sessionBusy, type Attachment, type Item, type SessionState, type State } from "./reducer.ts";
 import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
-import { cleanReplay, GUIDE_TAG } from "./guide.ts";
+import { cleanReplay, cleanTitle, GUIDE_TAG } from "./guide.ts";
 
 /**
  * 에이전트 실행 설정. parallel_sessions를 켜면 한 프로세스에서 세션 여러 개를 동시에 돌린다.
@@ -617,8 +617,17 @@ export class AgentSession {
     if (!this.parallel) return this.sessions;
     const missing = Object.entries(this.state.sessions)
       .filter(([id, session]) => session.phase !== "loading" && !this.sessions.some((entry) => entry.sessionId === id))
-      .map(([sessionId]) => ({ sessionId, cwd: this.cwd, title: "새 세션" }));
-    return missing.length ? [...missing.reverse(), ...this.sessions] : this.sessions;
+      .map(([sessionId]) => ({ sessionId, cwd: this.cwd, title: this.firstAsk(sessionId) }));
+    // 에이전트가 제목을 아직 정하지 않은 세션은 id 조각 대신 처음 보낸 말을 보여 준다.
+    const listed = this.sessions.map((entry) => (cleanTitle(entry.title ?? "") || !this.state.sessions[entry.sessionId]) ? entry : { ...entry, title: this.firstAsk(entry.sessionId) });
+    return missing.length ? [...missing.reverse(), ...listed] : listed;
+  }
+
+  /** 세션에 처음 보낸 말의 첫 줄. 없으면 "새 세션". */
+  private firstAsk(sessionId: string): string {
+    const first = this.history.itemsOf(sessionId).find((item) => item.kind === "user");
+    const line = cleanTitle(first?.text ?? "").split("\n")[0].trim();
+    return line ? (line.length > 40 ? `${line.slice(0, 40)}…` : line) : "새 세션";
   }
 
   private publish(): void {

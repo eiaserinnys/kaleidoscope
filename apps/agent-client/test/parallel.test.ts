@@ -349,3 +349,17 @@ test("뒤에서 응답 중인 세션이 없으면 묻지 않고 바로 바꾼다
   await handlers.get("settings_agent")!({ event: "b" });
   assert.equal(replaced, 1);
 });
+
+test("에이전트가 제목을 아직 정하지 않은 세션은 목록에 id 조각 대신 처음 보낸 말을 보여 준다", async () => {
+  const { f, session } = await started();
+  await prompt(f, session, "qa", "관리 앱 목록 정리해 줘\n자세한 조건은 이렇다");
+  await session.newSession();
+  await f.reply(f.last("session/new"), { sessionId: "b" });
+  await session.listSessions();
+  await f.reply(f.last("session/list"), { sessions: [{ sessionId: "a", cwd: "/work" }, { sessionId: "old", cwd: "/work" }] });
+  const titles = Object.fromEntries(f.snapshots.at(-1).sessions.map((entry: any) => [entry.sessionId, entry.title ?? null]));
+  assert.equal(titles.a, "관리 앱 목록 정리해 줘");
+  assert.equal(titles.b, "새 세션");
+  // 프로세스가 들고 있지 않은 지난 세션은 에이전트가 준 그대로 둔다.
+  assert.equal(titles.old, null);
+});
