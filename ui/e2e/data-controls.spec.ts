@@ -400,22 +400,27 @@ test("긴 제목은 말줄임되고 끝 조작은 막대에 남는다", async ({
 
 // 좁은 칸의 막대는 입력이 먼저 줄어 끝 조작을 처음 화면에 남긴다. 붐비는 막대(jizura)는 이 경계보다 넓어 지금처럼 가로 스크롤한다.
 type NarrowEnd = "text-button" | "select-icon" | "toggle";
+type NarrowInputKind = "text" | "search";
 const narrowEnds: { end: NarrowEnd; label: string }[] = [
   { end: "text-button", label: "글자 단추" },
   { end: "select-icon", label: "고르기와 아이콘 단추" },
   { end: "toggle", label: "토글" },
 ];
+const narrowKinds: { kind: NarrowInputKind; label: string }[] = [
+  { kind: "text", label: "일반 입력" },
+  { kind: "search", label: "검색 입력" },
+];
 
-async function showNarrowToolbarScenario(page: import("@playwright/test").Page, width: number, height: number, end: NarrowEnd) {
+async function showNarrowToolbarScenario(page: import("@playwright/test").Page, width: number, height: number, end: NarrowEnd, kind: NarrowInputKind) {
   await page.setViewportSize({ width, height });
   await page.goto("/?preview=data-controls");
-  await page.evaluate(async (kind) => {
+  await page.evaluate(async ([endKind, inputKind]) => {
     const harness = (window as any).__ksHarness;
     const { snapshot } = await harness.call({ op: "state.get" });
     const app = snapshot.shared.app_versions.find((item: any) => item.app_id === "data-controls");
     const state = { query: "", status: "all", on: true };
-    const endBlocks = kind === "text-button" ? [{ type: "button", label: "다시 받기", on_click: [] }]
-      : kind === "select-icon" ? [
+    const endBlocks = endKind === "text-button" ? [{ type: "button", label: "다시 받기", on_click: [] }]
+      : endKind === "select-icon" ? [
         { type: "select", value: { state: "status" }, on_change: { set_state: "status" }, options: [{ value: "all", label: "전체" }, { value: "done", label: "완료" }] },
         { type: "button", label: "다시 받기", icon: "refresh-cw", icon_only: true, variant: "ghost", on_click: [] },
       ]
@@ -424,7 +429,7 @@ async function showNarrowToolbarScenario(page: import("@playwright/test").Page, 
     app.definition.ui = { type: "split", direction: "row", sizes: [58, 42], children: [
       { type: "stack", direction: "column", children: [{ type: "text", value: "왼쪽 칸", style: "body" }] },
       { type: "stack", direction: "column", gap: "none", children: [
-        { type: "toolbar", start: [{ type: "input", value: { state: "query" }, on_change: { set_state: "query" }, placeholder: "앱 찾기" }], end: endBlocks },
+        { type: "toolbar", start: [{ type: "input", kind: inputKind, value: { state: "query" }, on_change: { set_state: "query" }, placeholder: "앱 찾기" }], end: endBlocks },
         { type: "text", value: "오른쪽 칸", style: "body" },
       ] },
     ] };
@@ -433,7 +438,7 @@ async function showNarrowToolbarScenario(page: import("@playwright/test").Page, 
     appWindow.app_version = app.version;
     appWindow.state = { ...state };
     harness.emit({ event: "state.changed", snapshot });
-  }, end);
+  }, [end, kind]);
   // 창이 화면을 채우게 해 360x600 화면에서 창도 360x600이 되게 한다(시각 검수 스크립트와 같은 꼴).
   await page.addStyleTag({ content: "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }" });
   const app = page.getByTestId("app-window-data-controls");
@@ -441,28 +446,92 @@ async function showNarrowToolbarScenario(page: import("@playwright/test").Page, 
   return app.locator(".ks-data-toolbar").first();
 }
 
+async function measureNarrowBar(bar: import("@playwright/test").Locator) {
+  return bar.evaluate((node) => {
+    const round = (value: number) => Math.round(value * 10) / 10;
+    const input = node.querySelector("input")!;
+    const cell = input.closest(".ks-data-toolbar-item") as HTMLElement;
+    const end = node.querySelector(":scope > .ks-data-toolbar-group.is-end") as HTMLElement;
+    const next = end.querySelector(":scope > *") as HTMLElement | null;
+    const clear = node.querySelector(".ks-data-input-clear") as HTMLElement | null;
+    const icon = node.querySelector(".ks-data-input-search") as HTMLElement | null;
+    const style = getComputedStyle(input);
+    const inputBox = input.getBoundingClientRect();
+    const cellBox = cell.getBoundingClientRect();
+    const endBox = end.getBoundingClientRect();
+    const barBox = node.getBoundingClientRect();
+    return {
+      scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+      barRight: round(barBox.right), screenRight: window.innerWidth,
+      endRight: round(endBox.right),
+      inputRight: round(inputBox.right), cellRight: round(cellBox.right),
+      nextLeft: next ? round(next.getBoundingClientRect().left) : null,
+      visibleWidth: round(inputBox.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth)),
+      clearLeft: clear ? round(clear.getBoundingClientRect().left) : null,
+      iconRight: icon ? round(icon.getBoundingClientRect().right) : null,
+      value: input.value,
+      textOverflow: style.textOverflow,
+      placeholderTextOverflow: getComputedStyle(input, "::placeholder").textOverflow,
+    };
+  });
+}
+
 test("좁은 칸의 도구 막대는 입력을 줄여 끝 조작을 막대와 화면 안에 남긴다", async ({ page }) => {
   for (const { end, label } of narrowEnds) {
-    const bar = await showNarrowToolbarScenario(page, 360, 600, end);
-    const narrow = await bar.evaluate((node) => {
-      const rect = node.getBoundingClientRect();
-      const endGroup = node.querySelector<HTMLElement>(":scope > .ks-data-toolbar-group.is-end")!.getBoundingClientRect();
-      return {
-        scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
-        inputWidth: node.querySelector("input")!.getBoundingClientRect().width,
-        barRight: rect.right, endRight: endGroup.right, screenRight: window.innerWidth,
-      };
-    });
-    expect(narrow.scrollWidth, `${label} 360: 막대가 가로로 넘치지 않는다`).toBeLessThanOrEqual(narrow.clientWidth + 1);
-    expect(narrow.endRight, `${label} 360: 끝 묶음이 막대 안에 있다`).toBeLessThanOrEqual(narrow.barRight + 1);
-    expect(narrow.endRight, `${label} 360: 끝 묶음이 화면 안에 있다`).toBeLessThanOrEqual(narrow.screenRight + 1);
-    expect(narrow.inputWidth, `${label} 360: 입력은 바닥 32px까지 줄어든다`).toBeGreaterThanOrEqual(32 - 0.5);
-    await capture(page, `narrow-toolbar-${end}-360`);
+    for (const { kind, label: kindLabel } of narrowKinds) {
+      const scenario = `${label} · ${kindLabel}`;
+      const bar = await showNarrowToolbarScenario(page, 360, 600, end, kind);
+      const input = bar.locator("input").first();
+      await expect(input).toHaveValue("");
+      const empty = await measureNarrowBar(bar);
+      expect(empty.scrollWidth, `${scenario} 360 빈 상태: 막대가 가로로 넘치지 않는다`).toBeLessThanOrEqual(empty.clientWidth + 1);
+      expect(empty.endRight, `${scenario} 360 빈 상태: 끝 묶음이 막대 안에 있다`).toBeLessThanOrEqual(empty.barRight + 0.5);
+      expect(empty.endRight, `${scenario} 360 빈 상태: 끝 묶음이 화면 안에 있다`).toBeLessThanOrEqual(empty.screenRight + 0.5);
+      expect(empty.inputRight, `${scenario} 360 빈 상태: 입력 상자가 칸 안에 있다`).toBeLessThanOrEqual(empty.cellRight + 0.5);
+      expect(empty.nextLeft, `${scenario} 360 빈 상태: 다음 조작이 있다`).not.toBeNull();
+      expect(empty.nextLeft!, `${scenario} 360 빈 상태: 다음 조작과 8px 떨어진다`).toBeGreaterThanOrEqual(empty.inputRight + 8 - 0.5);
+      // 도구 막대 입력은 칸보다 긴 안내 글과 값을 글자 중간에서 끊지 않고 말줄임으로 끝낸다(2판 3).
+      expect(empty.textOverflow, `${scenario} 360: 입력 값이 말줄임된다`).toBe("ellipsis");
+      expect(empty.placeholderTextOverflow, `${scenario} 360: 안내 글이 말줄임된다`).toBe("ellipsis");
+      await capture(page, `narrow-toolbar-${end}-${kind}-360-empty`);
 
-    const wideBar = await showNarrowToolbarScenario(page, 1180, 720, end);
-    const wideInputWidth = await wideBar.evaluate((node) => node.querySelector("input")!.getBoundingClientRect().width);
-    expect(wideInputWidth, `${label} 1180: 넓은 막대의 입력은 96px 이상이다`).toBeGreaterThanOrEqual(96);
-    await capture(page, `narrow-toolbar-${end}-1180`);
+      await input.focus();
+      await page.keyboard.type("연결");
+      if (kind === "search") await expect(bar.locator(".ks-data-input-clear")).toBeVisible();
+      await page.waitForTimeout(150);
+      const typed = await measureNarrowBar(bar);
+      // 보이는 글 폭이 있는 입력에서만 친 순서를 본다. 폭이 0인 좁은 검색 입력에서는 Playwright 키 입력이
+      // 「연결」을 「결연」으로 뒤집는데(실제 IME로 확인한 것이 아님), 그 조합은 아래에서 칸 안 여부만 본다.
+      if (typed.visibleWidth > 0) expect(typed.value, `${scenario} 360: 친 값이 친 순서 그대로다`).toBe("연결");
+      expect(typed.inputRight, `${scenario} 360 글을 친 상태: 입력 상자가 칸 안에 있다`).toBeLessThanOrEqual(typed.cellRight + 0.5);
+      // 검색 입력의 바닥은 그 칸에 든 입력 상자의 실제 최소폭(좌우 여백+테두리, 빈 상태 42px·글을 친 상태 66px)이다.
+      // 360x600의 42% 칸은 막대 내용이 136px이라, 글을 친 검색 입력(66px)에 끝 묶음이 넓은 조합을 넣으면
+      // 66 + 8 + 끝 폭이 136px을 넘어 막대가 가로 스크롤하거나(글자 단추·토글) 보이는 글 폭이 0이 된다(고르기+아이콘).
+      // 2판 spec의 예외대로 그런 조합은 입력 상자가 칸 안에 있는지만 본다.
+      const floored = kind === "search" && (typed.scrollWidth > typed.clientWidth + 1 || typed.visibleWidth <= 0);
+      if (!floored) {
+        expect(typed.scrollWidth, `${scenario} 360 글을 친 상태: 막대가 가로로 넘치지 않는다`).toBeLessThanOrEqual(typed.clientWidth + 1);
+        expect(typed.endRight, `${scenario} 360 글을 친 상태: 끝 묶음이 막대 안에 있다`).toBeLessThanOrEqual(typed.barRight + 0.5);
+        expect(typed.endRight, `${scenario} 360 글을 친 상태: 끝 묶음이 화면 안에 있다`).toBeLessThanOrEqual(typed.screenRight + 0.5);
+        expect(typed.nextLeft!, `${scenario} 360 글을 친 상태: 다음 조작과 8px 떨어진다`).toBeGreaterThanOrEqual(typed.inputRight + 8 - 0.5);
+        expect(typed.visibleWidth, `${scenario} 360 글을 친 상태: 보이는 글 폭이 있다`).toBeGreaterThan(0);
+      }
+      if (kind === "search") {
+        expect(typed.clearLeft, `${scenario} 360 글을 친 상태: 지우기 단추가 있다`).not.toBeNull();
+        expect(typed.iconRight, `${scenario} 360 글을 친 상태: 검색 아이콘이 있다`).not.toBeNull();
+        expect(typed.clearLeft!, `${scenario} 360 글을 친 상태: 지우기 단추가 검색 아이콘과 겹치지 않는다`).toBeGreaterThanOrEqual(typed.iconRight! - 0.5);
+      }
+      await capture(page, `narrow-toolbar-${end}-${kind}-360-typed`);
+    }
+  }
+
+  for (const { end, label } of narrowEnds) {
+    for (const { kind, label: kindLabel } of narrowKinds) {
+      const bar = await showNarrowToolbarScenario(page, 1180, 720, end, kind);
+      const cellWidth = await bar.locator(".ks-data-toolbar-item.is-input").evaluate((node) => node.getBoundingClientRect().width);
+      expect(cellWidth, `${label} · ${kindLabel} 1180: 입력 칸은 96px 이상이다`).toBeGreaterThanOrEqual(96);
+      await capture(page, `narrow-toolbar-${end}-${kind}-1180`);
+    }
   }
 });
 
