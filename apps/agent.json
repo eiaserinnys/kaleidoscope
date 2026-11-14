@@ -146,7 +146,8 @@
             "auth_methods": [
               "oauth-personal"
             ],
-            "assume_http_mcp": true
+            "assume_http_mcp": true,
+            "parallel_sessions": true
           }
         ]
       },
@@ -1136,6 +1137,9 @@
       "agent_label": {
         "default": ""
       },
+      "parallel_sessions": {
+        "default": false
+      },
       "folder_label": {
         "default": "폴더 선택"
       },
@@ -1263,6 +1267,7 @@
       "authenticate",
       "configure",
       "settings_agent",
+      "set_parallel",
       "answer",
       "cancel",
       "send",
@@ -1421,6 +1426,31 @@
               "on_change": {
                 "client": "settings_agent"
               }
+            },
+            {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toggle",
+                  "label": "여러 세션 동시에",
+                  "value": {
+                    "client": "parallel_sessions"
+                  },
+                  "disabled": {
+                    "client": "busy"
+                  },
+                  "on_change": {
+                    "client": "set_parallel"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "응답 중에도 다른 세션에서 대화합니다. 에이전트가 지원할 때만 켜세요.",
+                  "style": "meta"
+                }
+              ]
             },
             {
               "type": "stack",

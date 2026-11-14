@@ -6,6 +6,16 @@ type Agent = Spec & { id: string };
 /** 허용을 기다리는 세션 배지의 색. 목록에서 눈에 띄게 한다. */
 const ACCENT = "#315da8";
 type Program = { name: string; winget: string; url: string };
+
+/**
+ * 저장된 에이전트의 동시 세션 여부를 정한다. 사용자가 스위치로 저장한 값이 있으면 그 값을 따른다.
+ * 값이 없으면 같은 id의 기본 에이전트(agent.json 기본 목록) 값을 따르고, 기본 목록에 없는 에이전트는 끈다.
+ * 동시 세션을 넣기 전에 저장해 둔 목록에도 기본 에이전트만 켜지게 하려는 것이다.
+ */
+export function resolveParallel(agent: Agent, defaults: readonly Agent[]): Agent {
+  if (typeof agent.parallel_sessions === "boolean") return agent;
+  return { ...agent, parallel_sessions: defaults.find((entry) => entry.id === agent.id)?.parallel_sessions === true };
+}
 type Action = { event?: any; item?: any; parent_item?: any };
 type MessageInput = { request_id: string; text: string };
 type MessageResult = { status: "accepted" } | { status: "not_ready"; reason: string };
@@ -40,6 +50,9 @@ export class AppClient {
   private readonly client: Bridge;
   private readonly defaults: Agent[];
   private readonly session: AgentSession;
+  /** 저장소에 있는 그대로의 목록. 스위치는 이 목록에서 고른 에이전트 하나만 바꿔 저장한다. */
+  private stored: Agent[] = [];
+  /** 동시 세션 여부를 정한 목록. 화면과 실행은 이 목록을 쓴다. */
   private agents: Agent[] = [];
   private programs: Record<string, Program> = {};
   private installing = false;
@@ -65,8 +78,8 @@ export class AppClient {
   private lastOutputs = "";
   private historyOpen = false;
   private switchRequested: "new" | "load" | null = null;
-  /** 뒤에서 응답 중인 세션이 있을 때 확인을 기다리는 에이전트·작업 폴더 바꾸기. */
-  private pendingChange: { kind: "agent"; id: string } | { kind: "folder" } | null = null;
+  /** 뒤에서 응답 중인 세션이 있을 때 확인을 기다리는 에이전트·작업 폴더·동시 세션 바꾸기. */
+  private pendingChange: { kind: "agent"; id: string } | { kind: "folder" } | { kind: "parallel"; value: boolean } | null = null;
 
   constructor(client: Bridge, defaults: Agent[]) {
     this.client = client;
@@ -98,6 +111,7 @@ export class AppClient {
     client.handle("authenticate", ({ item }) => this.session.authenticate(String(item?.id ?? "")));
     client.handle("configure", ({ item, event }) => this.session.configure(String(item?.id ?? ""), event));
     client.handle("settings_agent", ({ event }) => this.requestChange({ kind: "agent", id: String(event ?? "") }));
+    client.handle("set_parallel", ({ event }) => this.requestChange({ kind: "parallel", value: event === true }));
     client.handle("confirm_change", () => this.confirmChange());
     client.handle("cancel_change", () => { this.pendingChange = null; this.update(); });
     client.handle("answer", ({ item, parent_item }) => this.session.answer(parent_item?.rpcId, item?.id ?? null));
@@ -146,11 +160,12 @@ export class AppClient {
     return (this.view?.live ?? []).find((entry) => entry.permissions > 0 && entry.sessionId !== this.view?.sessionId)?.sessionId ?? null;
   }
 
-  /** 뒤에서 응답 중인 세션은 에이전트나 작업 폴더를 바꾸면 멈추므로 먼저 묻는다. */
+  /** 뒤에서 응답 중인 세션은 에이전트, 작업 폴더, 동시 세션을 바꾸면 멈추므로 먼저 묻는다. */
   private requestChange(change: NonNullable<AppClient["pendingChange"]>): Promise<void> {
     if (change.kind === "agent" && (!this.agents.some((entry) => entry.id === change.id) || change.id === this.selected?.id)) return Promise.resolve();
+    if (change.kind === "parallel" && (!this.selected || this.selected.parallel_sessions === change.value)) return Promise.resolve();
     if (this.backgroundBusy() > 0) { this.pendingChange = change; this.update(); return Promise.resolve(); }
-    return change.kind === "agent" ? this.settingsAgent(change.id) : this.pickFolder();
+    return this.applyChange(change);
   }
 
   private confirmChange(): Promise<void> {
@@ -158,12 +173,46 @@ export class AppClient {
     this.pendingChange = null;
     this.update();
     if (!change) return Promise.resolve();
-    return change.kind === "agent" ? this.settingsAgent(change.id) : this.pickFolder();
+    return this.applyChange(change);
+  }
+
+  private applyChange(change: NonNullable<AppClient["pendingChange"]>): Promise<void> {
+    if (change.kind === "agent") return this.settingsAgent(change.id);
+    if (change.kind === "parallel") return this.setParallel(change.value);
+    return this.pickFolder();
+  }
+
+  private setAgents(value: Agent[]): void {
+    this.stored = value;
+    this.agents = value.map((agent) => resolveParallel(agent, this.defaults));
+  }
+
+  /**
+   * 고른 에이전트의 동시 세션 여부를 저장하고 에이전트를 다시 시작한다.
+   * 이미 든 세션을 그대로 두고 방식만 바꾸면 끌 때 뒤에서 도는 세션이 남으므로 새 프로세스에서 전경 세션을 다시 연다.
+   */
+  private async setParallel(value: boolean): Promise<void> {
+    const id = this.selected?.id;
+    if (!id || this.selected!.parallel_sessions === value) return;
+    try {
+      const next = this.stored.map((entry) => entry.id === id ? { ...entry, parallel_sessions: value } : entry);
+      await this.client.setStorage("agents", next);
+      this.setAgents(next);
+      const agent = this.agents.find((entry) => entry.id === id);
+      if (!agent) return;
+      this.selected = agent;
+      if (this.stage !== "session") { this.update(); return; }
+      this.view = null;
+      this.update();
+      if (!await this.session.replace(agent)) { this.stage = "folder"; this.retry = true; this.update(); }
+    } catch (error) { this.showError(error); }
   }
 
   private async acceptAgents(value: unknown): Promise<void> {
-    this.agents = value as Agent[];
+    this.setAgents(value as Agent[]);
     if (this.storageReady) {
+      // 다른 곳에서 목록을 고쳐도 고른 에이전트의 표시는 새 값을 따른다. 실행 중인 프로세스는 다시 시작할 때 반영된다.
+      if (this.selected) this.selected = this.agents.find((agent) => agent.id === this.selected!.id) ?? this.selected;
       if (this.storageFailure) {
         this.storageFailure = false;
         this.error = null;
@@ -478,7 +527,7 @@ export class AppClient {
       show_login_error: phase === "login" && !!failure,
       show_pick_folder: this.stage === "folder" && !this.retry,
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),
-      selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
+      selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "", parallel_sessions: this.selected?.parallel_sessions === true,
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
       history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: !!this.view && this.sessionLocked(),
@@ -491,7 +540,7 @@ export class AppClient {
       }),
       show_waiting: chat && !!this.waitingSession(),
       change_open: !!this.pendingChange,
-      change_title: this.pendingChange?.kind === "folder" ? "작업 폴더 바꾸기" : "에이전트 바꾸기",
+      change_title: this.pendingChange?.kind === "folder" ? "작업 폴더 바꾸기" : this.pendingChange?.kind === "parallel" ? "여러 세션 동시에 바꾸기" : "에이전트 바꾸기",
       change_message: `응답 중인 세션 ${this.backgroundBusy()}개가 멈춥니다. 바꿀까요?`,
       history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading && !this.view.sessions.length,
       history_unsupported: !!this.view && !this.view.canListSessions,

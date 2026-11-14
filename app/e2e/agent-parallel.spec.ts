@@ -16,6 +16,8 @@ const AGENTS = [
   { id: "fake-parallel", name: "병렬 가짜", command: fakeAgent, args: [], env: {}, parallel_sessions: true },
   { id: "fake-other", name: "다른 가짜", command: fakeAgent, args: [], env: {}, parallel_sessions: true },
   { id: "fake-single", name: "단일 가짜", command: fakeAgent, args: [], env: {} },
+  // 사용자가 추가한 에이전트처럼 parallel_sessions가 없다. 설정의 스위치로 켠다.
+  { id: "fake-added", name: "추가 가짜", command: fakeAgent, args: [], env: {} },
 ];
 
 type Reply = Record<string, any>;
@@ -227,4 +229,39 @@ test("동시 세션을 끈 에이전트는 응답 중에 세션 목록이 잠긴
   await shot(page, "d1-single-locked");
   await app.getByRole("button", { name: "멈춤", exact: true }).click();
   await expect(newSession).toBeEnabled({ timeout: 10_000 });
+});
+
+test("사용자가 추가한 에이전트는 동시 세션이 꺼져 있고 설정 스위치로 켜면 응답 중에도 새 세션을 연다", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { app } = await openAgent(page, "추가 가짜");
+  const newSession = app.getByRole("button", { name: "새 세션", exact: true });
+  await send(app, "slow");
+  await expect(app.getByRole("button", { name: "멈춤", exact: true })).toBeVisible();
+  await expect(newSession).toBeDisabled();
+  await app.getByRole("button", { name: "멈춤", exact: true }).click();
+  await expect(newSession).toBeEnabled({ timeout: 10_000 });
+  await app.getByRole("button", { name: "앱 설정" }).click();
+  await expect(app.getByRole("heading", { name: "앱 설정" })).toBeVisible();
+  const toggle = app.getByRole("switch", { name: "여러 세션 동시에" });
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(app.getByText("응답 중에도 다른 세션에서 대화합니다. 에이전트가 지원할 때만 켜세요.", { exact: true })).toBeVisible();
+  await shot(page, "e1-settings-parallel-off");
+  await toggle.click();
+  // 새 값으로 에이전트를 다시 시작한다. 설정 화면은 열린 채로 스위치가 켜진다.
+  await expect(app.getByRole("switch", { name: "여러 세션 동시에" })).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
+  await shot(page, "e2-settings-parallel-on");
+  await app.getByRole("button", { name: "앱으로 돌아가기" }).click();
+  await allowUntilChat(page, app);
+  const { snapshot } = await core({ op: "state.get" });
+  const windowId = snapshot.shared.windows.find((window: any) => window.app_id === "agent").id;
+  const stored = await core({ op: "storage.get", window_id: windowId, entry: "agents" });
+  const added = stored.result.content.find((agent: any) => agent.id === "fake-added");
+  expect(added.parallel_sessions).toBe(true);
+  await send(app, "slow");
+  await expect(app.getByRole("button", { name: "멈춤", exact: true })).toBeVisible();
+  const selected = await app.locator('.ks-list [aria-selected="true"]').getAttribute("data-row-key");
+  await expect(newSession).toBeEnabled();
+  await newSession.click();
+  await expect(sessionRow(app, selected!).locator(".ks-view-badges")).toContainText("응답 중");
+  await shot(page, "e3-added-agent-parallel");
 });
