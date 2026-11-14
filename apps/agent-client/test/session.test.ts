@@ -4,6 +4,8 @@ import { AgentSession } from "../src/session.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+/** 체크포인트에서 전경 세션의 상태를 꺼낸다. */
+const fg = (checkpoint: any) => checkpoint.sessions[checkpoint.foreground];
 function fixture() {
   const blobs = new Map<string, Uint8Array>();
   let checkpoint: unknown = null, after = 0, buffer = new Uint8Array(), handle = "p1", tools: string | null = "http://tools/old", exited = false;
@@ -293,7 +295,7 @@ test("긴 진행 글은 checkpoint에 파일 참조로 남기고 재접속 때 �
   await new Promise((resolve) => setTimeout(resolve, 0));
   const text = "가".repeat(70000);
   await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } } });
-  const checkpoint = f.getCheckpoint() as any;
+  const checkpoint = fg(f.getCheckpoint());
   assert.equal(checkpoint.stream.text.length, 0);
   assert.ok(checkpoint.streamKey);
   await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "나" } } } });
@@ -438,7 +440,7 @@ test("고른 세션의 리플레이를 메시지별로 모아 성공 후에 기�
   assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => [item.kind, item.text]), [["user", "안녕"], ["assistant", "응답"]]);
   assert.equal(f.snapshots.at(-1).sessionId, "chosen");
   const manifest = JSON.parse(decoder.decode((await f.host.blobs.read("record/manifest.json"))!));
-  assert.equal(manifest.sessionId, "chosen");
+  assert.equal(manifest.foreground, "chosen");
   const resumed = new AgentSession(f.host as any);
   await resumed.attach();
   assert.equal(f.snapshots.at(-1).sessionId, "chosen");
@@ -465,9 +467,9 @@ test("새 세션 성공은 기록과 세션별 설정을 비운다", async () =>
   assert.equal(f.snapshots.at(-1).sessionId, "new");
   assert.deepEqual(f.snapshots.at(-1).items, []);
   const manifest = JSON.parse(decoder.decode((await f.host.blobs.read("record/manifest.json"))!));
-  assert.equal(manifest.sessionId, "new");
-  assert.deepEqual(manifest.controls, {});
-  assert.equal((f.getCheckpoint() as any).guideSent, false);
+  assert.equal(manifest.foreground, "new");
+  assert.deepEqual(manifest.sessions.new.controls, {});
+  assert.equal(fg(f.getCheckpoint()).guideSent, false);
 });
 
 test("목록 능력이 없으면 지난 세션을 사용할 수 없다", async () => {
@@ -567,7 +569,7 @@ for (const hasGuide of [true, false]) {
     }
     await f.emit({ jsonrpc: "2.0", id, result: {} });
     assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["사용자 말"]);
-    assert.equal((f.getCheckpoint() as any).guideSent, hasGuide);
+    assert.equal(fg(f.getCheckpoint()).guideSent, hasGuide);
     await session.send({ id: "after", text: "다음", attachments: [] });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const parts = f.writes.at(-1).params.prompt;
@@ -587,7 +589,7 @@ test("Codex 꼴 리플레이에서 같이 보기와 데이터 그림만 지우�
   await f.emit(chunk("four", "이 표지를 설명해 줘: `<kaleidoscope-share>` 뒤의 내용은 무슨 뜻인가요?"));
   await f.emit({ jsonrpc: "2.0", id, result: {} });
   assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["사용자 말\n\n\n\n![링크](https://example.com/image.png)", "다른 말<kaleidoscope-share>직접 쓴 화면 글</kaleidoscope-share>", "이 표지를 설명해 줘: `<kaleidoscope-share>` 뒤의 내용은 무슨 뜻인가요?"]);
-  assert.equal((f.getCheckpoint() as any).guideSent, false);
+  assert.equal(fg(f.getCheckpoint()).guideSent, false);
 });
 
 for (const toolLine of ["MCP 도구가 연결되어 있습니다.", "현재 MCP 도구를 사용할 수 없습니다."]) {
@@ -601,7 +603,7 @@ for (const toolLine of ["MCP 도구가 연결되어 있습니다.", "현재 MCP 
     await f.emit(chunk("two", "kaleidoscope 앱 제작 지침\n지침 본문\n" + toolLine));
     await f.emit({ jsonrpc: "2.0", id, result: {} });
     assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), ["아까 기억하라던 말"]);
-    assert.equal((f.getCheckpoint() as any).guideSent, true);
+    assert.equal(fg(f.getCheckpoint()).guideSent, true);
     await session.send({ id: "after", text: "다음", attachments: [] });
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(f.writes.at(-1).params.prompt.some((part: any) => part.text?.includes("<kaleidoscope-app-guide>")), false);
@@ -616,7 +618,7 @@ test("도구 줄이 없는 옛 지침 형태의 글은 보존하고 지침을 �
   await f.emit({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "user_message_chunk", messageId: "one", content: { type: "text", text } } } });
   await f.emit({ jsonrpc: "2.0", id, result: {} });
   assert.deepEqual(f.snapshots.at(-1).items.map((item: any) => item.text), [text]);
-  assert.equal((f.getCheckpoint() as any).guideSent, true);
+  assert.equal(fg(f.getCheckpoint()).guideSent, true);
 });
 
 test("세션 준비와 전환, 새 대화의 첫 응답에 목록을 갱신하고 일반 턴에는 갱신하지 않는다", async () => {

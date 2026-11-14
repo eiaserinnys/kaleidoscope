@@ -79,6 +79,9 @@
               },
               "assume_http_mcp": {
                 "type": "boolean"
+              },
+              "parallel_sessions": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -100,7 +103,8 @@
               "-y",
               "@agentclientprotocol/claude-agent-acp"
             ],
-            "env": {}
+            "env": {},
+            "parallel_sessions": true
           },
           {
             "id": "codex",
@@ -113,7 +117,8 @@
             "env": {},
             "auth_methods": [
               "chat-gpt"
-            ]
+            ],
+            "parallel_sessions": true
           },
           {
             "id": "gemini",
@@ -127,7 +132,8 @@
             "env": {},
             "auth_methods": [
               "oauth-personal"
-            ]
+            ],
+            "parallel_sessions": true
           },
           {
             "id": "antigravity",
@@ -140,7 +146,8 @@
             "auth_methods": [
               "oauth-personal"
             ],
-            "assume_http_mcp": true
+            "assume_http_mcp": true,
+            "parallel_sessions": true
           }
         ]
       },
@@ -745,8 +752,27 @@
                     "type": "stack",
                     "direction": "column",
                     "gap": "none",
-                    "fill": 0,
+                    "fill": 1,
                     "children": [
+                      {
+                        "type": "when",
+                        "value": {
+                          "client": "show_waiting"
+                        },
+                        "child": {
+                          "type": "notice",
+                          "kind": "info",
+                          "message": "다른 세션이 허용을 기다립니다",
+                          "actions": [
+                            {
+                              "label": "이동",
+                              "on_click": {
+                                "client": "open_waiting"
+                              }
+                            }
+                          ]
+                        }
+                      },
                       {
                         "type": "chat",
                         "loading": {
@@ -846,8 +872,27 @@
                     "type": "stack",
                     "direction": "column",
                     "gap": "none",
-                    "fill": 0,
+                    "fill": 1,
                     "children": [
+                      {
+                        "type": "when",
+                        "value": {
+                          "client": "show_waiting"
+                        },
+                        "child": {
+                          "type": "notice",
+                          "kind": "info",
+                          "message": "다른 세션이 허용을 기다립니다",
+                          "actions": [
+                            {
+                              "label": "이동",
+                              "on_click": {
+                                "client": "open_waiting"
+                              }
+                            }
+                          ]
+                        }
+                      },
                       {
                         "type": "chat",
                         "loading": {
@@ -1021,14 +1066,14 @@
     { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
-      "version": 10
+      "version": 11
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 10
+      "version": 11
     },
     "inputs": {},
     "outputs": {
@@ -1091,6 +1136,9 @@
       },
       "agent_label": {
         "default": ""
+      },
+      "parallel_sessions": {
+        "default": false
       },
       "folder_label": {
         "default": "폴더 선택"
@@ -1193,6 +1241,18 @@
       },
       "history_other_error": {
         "default": false
+      },
+      "show_waiting": {
+        "default": false
+      },
+      "change_open": {
+        "default": false
+      },
+      "change_title": {
+        "default": ""
+      },
+      "change_message": {
+        "default": ""
       }
     },
     "channels": [
@@ -1207,6 +1267,7 @@
       "authenticate",
       "configure",
       "settings_agent",
+      "set_parallel",
       "answer",
       "cancel",
       "send",
@@ -1215,7 +1276,10 @@
       "new_session",
       "open_history",
       "close_history",
-      "select_session"
+      "select_session",
+      "open_waiting",
+      "confirm_change",
+      "cancel_change"
     ],
     "commands": {},
     "state_keys": [
@@ -1365,6 +1429,31 @@
             },
             {
               "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toggle",
+                  "label": "여러 세션 동시에",
+                  "value": {
+                    "client": "parallel_sessions"
+                  },
+                  "disabled": {
+                    "client": "busy"
+                  },
+                  "on_change": {
+                    "client": "set_parallel"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "응답 중에도 다른 세션에서 대화합니다. 에이전트가 지원할 때만 켜세요.",
+                  "style": "meta"
+                }
+              ]
+            },
+            {
+              "type": "stack",
               "direction": "row",
               "gap": "medium",
               "children": [
@@ -1389,6 +1478,29 @@
               ]
             }
           ]
+        },
+        {
+          "type": "dialog",
+          "open": {
+            "client": "change_open"
+          },
+          "title": {
+            "client": "change_title"
+          },
+          "close_label": "바꾸기",
+          "danger": true,
+          "child": {
+            "type": "text",
+            "value": {
+              "client": "change_message"
+            }
+          },
+          "on_close": {
+            "client": "cancel_change"
+          },
+          "on_confirm": {
+            "client": "confirm_change"
+          }
         }
       ]
     }

@@ -1,15 +1,19 @@
 import { History, type BlobStore } from "./history.ts";
-import { answerPermission, enqueue, initialState, reduceMessage, reserveRequest, type Attachment, type Item, type State } from "./reducer.ts";
+import { answerPermission, enqueue, findPermission, initialState, migrateState, reduceMessage, reserveRequest, sessionBusy, type Attachment, type Item, type SessionState, type State } from "./reducer.ts";
 import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
-import { cleanReplay, GUIDE_TAG } from "./guide.ts";
+import { cleanReplay, cleanTitle, GUIDE_TAG } from "./guide.ts";
 
-export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[]; assume_http_mcp?: boolean };
+/**
+ * 에이전트 실행 설정. parallel_sessions를 켜면 한 프로세스에서 세션 여러 개를 동시에 돌린다.
+ * 끄면 예전처럼 응답 중에는 세션을 바꾸지 않는다.
+ */
+export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[]; assume_http_mcp?: boolean; parallel_sessions?: boolean };
 type InstallerCheckpoint = { stdout: string };
 type ProcessSnapshot = { handle: string; after: number; checkpoint: State | InstallerCheckpoint | null; cwd: string; services: Record<string, string | null>; exit: unknown | null };
 type ProcessPort = {
   attach(params: { key: string }): Promise<ProcessSnapshot | null>;
-  start(params: { key: string; permission: string; cwd_permission: string; spec: Omit<Spec, "auth_methods" | "assume_http_mcp">; services?: string[] }): Promise<{ status?: string; handle?: string; cwd?: string; services?: Record<string, string | null> }>;
+  start(params: { key: string; permission: string; cwd_permission: string; spec: Omit<Spec, "auth_methods" | "assume_http_mcp" | "parallel_sessions">; services?: string[] }): Promise<{ status?: string; handle?: string; cwd?: string; services?: Record<string, string | null> }>;
   read(params: { handle: string; after: number; max_bytes: number }): Promise<{ bytes: number[]; next: number; stderr_tail: number[]; exit: { code: number | null } | null }>;
   ack(params: { handle: string; after: number; checkpoint: State | InstallerCheckpoint | null }): Promise<unknown>;
   write(params: { handle: string; bytes: Uint8Array; checkpoint: State }): Promise<unknown>;
@@ -20,7 +24,10 @@ type ProcessPort = {
 };
 type Prepared = { text: string | null; images: { name: string; mime: string; bytes: Uint8Array }[]; ticket: string };
 type SessionInfo = { sessionId: string; cwd: string; title?: string; updatedAt?: string };
-export type SessionView = { phase: State["phase"]; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: State["permissions"]; controls: State["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; configuring: boolean };
+/** 프로세스가 들고 있는 세션 하나의 요약. 목록 배지와 다른 세션의 허용 안내에 쓴다. */
+export type LiveSession = { sessionId: string; busy: boolean; permissions: number };
+type Phase = "starting" | "login" | "ready" | "responding" | "failed";
+export type SessionView = { phase: Phase; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: SessionState["permissions"]; controls: SessionState["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; configuring: boolean; live: LiveSession[]; parallel: boolean };
 export type Host = {
   process: ProcessPort;
   blobs: BlobStore;
@@ -39,6 +46,15 @@ function base64(bytes: Uint8Array): string {
   for (let index = 0; index < bytes.length; index += 32768) binary += String.fromCharCode(...bytes.subarray(index, index + 32768));
   return btoa(binary);
 }
+
+/** 세션 id를 임시 파일 이름에 쓸 짧은 글자로 바꾼다. */
+function shortHash(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193) >>> 0;
+  return hash.toString(16).padStart(8, "0");
+}
+
+const CONNECTION_KINDS = new Set(["initialize", "authenticate", "new", "load"]);
 
 /** Owns one ACP process. Every read, checkpoint, and write is serialized. */
 export class AgentSession {
@@ -72,6 +88,14 @@ export class AgentSession {
     return next;
   }
 
+  private get parallel(): boolean { return this.spec?.parallel_sessions === true; }
+  private get foreground(): SessionState | undefined { return this.state.foreground ? this.state.sessions[this.state.foreground] : undefined; }
+  private pendingOf(sessionId: string, kinds?: string[]): boolean {
+    return Object.values(this.state.pending).some((request) => request.sessionId === sessionId && request.kind !== "list" && (!kinds || kinds.includes(request.kind)));
+  }
+  private pendingKind(...kinds: string[]): boolean { return Object.values(this.state.pending).some((request) => kinds.includes(request.kind)); }
+  private anyResponding(): boolean { return Object.values(this.state.sessions).some((session) => session.phase === "responding"); }
+
   private redact(text: string): string {
     for (const address of [this.tools, this.state.servicesUsed]) if (address) text = text.split(address).join("[도구 주소]");
     return text;
@@ -99,14 +123,17 @@ export class AgentSession {
       this.after = process.after;
       this.cwd = process.cwd;
       this.tools = process.services.tools ?? null;
-      this.state = (process.checkpoint as State | null) ?? { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
-      this.sessionsLoading = Object.values(this.state.pending).some((request) => request.kind === "list");
+      this.state = process.checkpoint ? migrateState(process.checkpoint) : { ...initialState(), generation: this.host.uuid(), foreground: this.history.sessionId };
+      // 화면 전환을 기록에 적은 뒤 체크포인트 전에 끊겼어도 체크포인트의 전경 세션을 따른다.
+      if (process.checkpoint && this.state.foreground) await this.history.setForeground(this.state.foreground);
+      this.sessionsLoading = this.pendingKind("list");
       this.listWanted = !this.sessionsLoading;
-      this.checkpointKeys = [this.state.streamKey, this.state.partialKey].filter((key): key is string => !!key);
-      if (this.state.streamKey) {
-        const bytes = await this.host.blobs.read(this.state.streamKey);
+      this.checkpointKeys = this.transientKeys(this.state);
+      for (const [id, session] of Object.entries(this.state.sessions)) {
+        if (!session.streamKey) continue;
+        const bytes = await this.host.blobs.read(session.streamKey);
         if (!bytes) throw agentError("AGENT_RECONNECT_STREAM_NOT_FOUND");
-        this.state.stream.text = new TextDecoder().decode(bytes);
+        this.state.sessions[id] = { ...session, stream: { ...session.stream, text: new TextDecoder().decode(bytes) } };
       }
       if (this.state.partialKey) {
         const bytes = await this.host.blobs.read(this.state.partialKey);
@@ -173,7 +200,10 @@ export class AgentSession {
     this.tools = result.services?.tools ?? null;
     this.sessions = [];
     await this.history.bind(JSON.stringify({ name, command, args, env: Object.fromEntries(Object.entries(env).sort()) }), this.cwd);
-    this.state = { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId, queue: this.state.queue };
+    // 새 프로세스는 세션을 하나도 들고 있지 않다. 전경 세션의 남은 말만 넘겨받아 load나 new 뒤에 보낸다.
+    const carry = [...this.state.carry, ...(this.foreground?.queue ?? [])];
+    this.state = { ...initialState(), generation: this.host.uuid(), foreground: this.history.sessionId, carry };
+    await this.history.retain([]);
     this.publish();
     return true;
   }
@@ -191,7 +221,8 @@ export class AgentSession {
         total += upload.bytes.length;
       }
       if (total > 30 * 1024 * 1024) throw agentError("AGENT_PROMPT_ATTACHMENTS_TOTAL_TOO_LARGE");
-      if (!this.handle || (this.state.phase !== "ready" && this.state.phase !== "responding") || Object.values(this.state.pending).some((request) => request.kind === "switch" || request.kind === "new_user")) throw agentError("AGENT_PROMPT_SEND_NOT_READY");
+      const target = this.state.foreground;
+      if (!this.handle || this.state.phase !== "ready" || !target || !this.foreground || this.foreground.phase === "loading" || this.pendingKind("switch", "new_user")) throw agentError("AGENT_PROMPT_SEND_NOT_READY");
       const attachments: Attachment[] = [];
       for (let index = 0; index < input.attachments.length; index++) {
         const upload = input.attachments[index];
@@ -200,7 +231,7 @@ export class AgentSession {
         await this.host.blobs.put(key, upload.bytes);
         attachments.push({ id, key, name: upload.name, mime: upload.mime, size: upload.bytes.length });
       }
-      this.state = enqueue(this.state, { id: input.id, text: input.text, attachments });
+      this.state = enqueue(this.state, target, { id: input.id, text: input.text, attachments });
       await this.checkpoint();
       this.publish();
       this.background(this.serial(() => this.pump()));
@@ -212,19 +243,21 @@ export class AgentSession {
   }
 
   private async recordAnswer(id: string | number, option: string | null): Promise<void> {
-    const permission = this.state.permissions.find((entry) => entry.rpcId === id);
+    const permission = findPermission(this.state, id);
     const next = answerPermission(this.state, id, option);
     const label = permission?.options.find((entry) => entry.id === option)?.label ?? "취소됨";
-    await this.history.append([{ id: `permission-${permission!.id}`, kind: "notice", text: `${permission!.title}: ${label}`, at: this.host.now(), attachments: [] }]);
+    await this.history.append([{ id: `permission-${permission!.id}`, kind: "notice", text: `${permission!.title}: ${label}`, at: this.host.now(), attachments: [] }], permission!.sessionId ?? this.state.foreground);
     this.state = next;
   }
 
+  /** 전경 세션의 응답만 멈춘다. 뒤에서 도는 세션은 그대로 둔다. */
   cancel(): Promise<void> {
     return this.serial(async () => {
-      for (const permission of this.state.permissions) await this.recordAnswer(permission.rpcId, null);
+      const target = this.state.foreground;
+      for (const permission of this.foreground?.permissions ?? []) await this.recordAnswer(permission.rpcId, null);
       await this.checkpoint();
       await this.pump();
-      if (this.state.phase === "responding" && this.state.sessionId) await this.write({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.state.sessionId } }, this.state);
+      if (target && this.state.sessions[target]?.phase === "responding") await this.write({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: target } }, this.state);
     });
   }
 
@@ -234,21 +267,24 @@ export class AgentSession {
 
   configure(id: string, value: string | boolean): Promise<void> {
     return this.serial(async () => {
-      if (!this.state.sessionId || this.state.phase !== "ready") return;
-      await this.configureNow(id, value);
+      const target = this.state.foreground;
+      if (!target || this.state.phase !== "ready" || this.foreground?.phase !== "ready") return;
+      await this.configureNow(target, id, value);
     });
   }
 
   listSessions(): Promise<void> {
     return this.serial(async () => {
-      if (Object.values(this.state.pending).some((request) => request.kind === "list")) return;
+      if (this.pendingKind("list")) return;
       this.listWanted = true;
       await this.refreshList();
     });
   }
 
   private async refreshList(): Promise<void> {
-    if (!this.listWanted || !this.handle || !this.state.capabilities.list || this.state.phase !== "ready" || Object.values(this.state.pending).some((request) => request.kind === "list" || request.kind === "switch" || request.kind === "new_user")) return;
+    if (!this.listWanted || !this.handle || !this.state.capabilities.list || this.state.phase !== "ready" || this.pendingKind("list", "switch", "new_user")) return;
+    // 동시 세션을 쓰지 않는 에이전트는 예전처럼 응답이 끝난 뒤에 목록을 받는다.
+    if (!this.parallel && this.anyResponding()) return;
     this.listWanted = false;
     this.pendingSessions = [];
     this.listHadItems = this.sessions.length > 0;
@@ -268,21 +304,36 @@ export class AgentSession {
 
   private switchSession(sessionId: string | null): Promise<void> {
     return this.serial(async () => {
-      if (!this.handle || this.state.phase !== "ready" || this.state.queue.length || Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
+      if (!this.handle || this.state.phase !== "ready" || this.pendingKind("switch", "new_user")) return;
+      if (!this.parallel) {
+        const current = this.foreground;
+        if (current?.phase !== "ready" || current.queue.length || Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
+      }
+      const held = sessionId ? this.state.sessions[sessionId] : undefined;
+      if (sessionId && held && held.phase !== "loading") {
+        // 프로세스가 이미 들고 있는 세션에 session/load를 다시 보내면 에이전트가 그 세션을 끊거나 새로 갈아끼운다. 화면만 바꾼다.
+        if (sessionId === this.state.foreground) return;
+        this.listError = null;
+        this.state = { ...this.state, foreground: sessionId, sessionError: null };
+        await this.history.setForeground(sessionId);
+        await this.checkpoint();
+        this.publish();
+        return;
+      }
       const mcpServers = this.mcpServers();
       this.listError = null;
       await this.request(sessionId ? "switch" : "new_user", sessionId ? "session/load" : "session/new", {
         cwd: this.cwd, mcpServers, ...(sessionId ? { sessionId, _control: sessionId } : {}),
-      });
+      }, sessionId);
       this.publish();
     });
   }
 
-  private async configureNow(id: string, value: string | boolean): Promise<void> {
-    const params = id === "__legacy_model" ? { sessionId: this.state.sessionId, modelId: value }
-      : id === "__legacy_mode" ? { sessionId: this.state.sessionId, modeId: value }
-      : { sessionId: this.state.sessionId, configId: id, value };
-    await this.request("configure", id === "__legacy_model" ? "session/set_model" : id === "__legacy_mode" ? "session/set_mode" : "session/set_config_option", { ...params, _control: { id, value } });
+  private async configureNow(sessionId: string, id: string, value: string | boolean): Promise<void> {
+    const params = id === "__legacy_model" ? { sessionId, modelId: value }
+      : id === "__legacy_mode" ? { sessionId, modeId: value }
+      : { sessionId, configId: id, value };
+    await this.request("configure", id === "__legacy_model" ? "session/set_model" : id === "__legacy_mode" ? "session/set_mode" : "session/set_config_option", { ...params, _control: { id, value } }, sessionId);
     this.publish();
   }
 
@@ -307,8 +358,12 @@ export class AgentSession {
     }
   }
 
+  private transientKeys(state: State): string[] {
+    return [...Object.values(state.sessions).map((session) => session.streamKey), state.partialKey].filter((key): key is string => !!key);
+  }
+
   private async releaseCheckpointFiles(checkpoint: State): Promise<void> {
-    const current = [checkpoint.streamKey, checkpoint.partialKey].filter((key): key is string => !!key);
+    const current = this.transientKeys(checkpoint);
     const old = this.checkpointKeys.filter((key) => !current.includes(key));
     this.checkpointKeys = current;
     if (this.host.blobs.remove) for (const key of old) {
@@ -316,14 +371,18 @@ export class AgentSession {
     }
   }
 
+  /** 체크포인트는 JSON 하나라 긴 진행 글과 남은 바이트는 세션마다 파일로 덜어 낸다. */
   private async compact(state: State): Promise<State> {
-    const result = { ...state, streamKey: null as string | null, partialKey: null as string | null };
-    const streamBytes = new TextEncoder().encode(state.stream.text);
-    if (streamBytes.length > 65536) {
-      result.streamKey = `transient/stream-${this.after}`;
-      await this.host.blobs.put(result.streamKey, streamBytes);
-      result.stream = { ...state.stream, text: "" };
+    const sessions: Record<string, SessionState> = {};
+    for (const [id, session] of Object.entries(state.sessions)) {
+      const streamBytes = new TextEncoder().encode(session.stream.text);
+      if (streamBytes.length > 65536) {
+        const streamKey = `transient/stream-${shortHash(id)}-${this.after}`;
+        await this.host.blobs.put(streamKey, streamBytes);
+        sessions[id] = { ...session, streamKey, stream: { ...session.stream, text: "" } };
+      } else sessions[id] = { ...session, streamKey: null };
     }
+    const result = { ...state, sessions, partialKey: null as string | null };
     if (state.partial.length > 65536) {
       result.partialKey = `transient/partial-${this.after}`;
       await this.host.blobs.put(result.partialKey, Uint8Array.from(state.partial));
@@ -340,10 +399,15 @@ export class AgentSession {
     await this.releaseCheckpointFiles(checkpoint);
   }
 
-  private async request(kind: string, method: string, parameters: Record<string, unknown>): Promise<void> {
+  private async request(kind: string, method: string, parameters: Record<string, unknown>, sessionId: string | null = null): Promise<void> {
     const { _control, ...params } = parameters;
-    const [next, id] = reserveRequest(this.state, kind, _control ?? null);
+    const [next, id] = reserveRequest(this.state, kind, _control ?? null, sessionId);
     await this.write({ jsonrpc: "2.0", id, method, params }, next);
+  }
+
+  /** 프로세스가 들고 있는 세션 목록을 기록에 적는다. 동시 세션을 쓰지 않으면 전경 세션 하나만 남는다. */
+  private async syncHeld(): Promise<void> {
+    await this.history.retain(Object.entries(this.state.sessions).filter(([, session]) => session.phase !== "loading").map(([id]) => id));
   }
 
   private async drain(): Promise<void> {
@@ -352,11 +416,15 @@ export class AgentSession {
       const result = await this.host.process.read({ handle: this.handle, after: this.after, max_bytes: 65536 });
       if (!result.bytes.length) {
         if (result.exit) {
-          if (this.state.stream.id && this.state.stream.text) {
-            await this.history.append([{ id: this.state.stream.id, kind: "assistant", text: `${this.state.stream.text}\n\n(응답 중단됨)`, at: this.host.now(), attachments: [] }]);
+          for (const [id, session] of Object.entries(this.state.sessions)) {
+            if (session.stream.id && session.stream.text) {
+              await this.history.append([{ id: session.stream.id, kind: "assistant", text: `${session.stream.text}\n\n(응답 중단됨)`, at: this.host.now(), attachments: [] }], id);
+            }
           }
           const error = agentError("AGENT_PROCESS_EXITED", this.spec?.name ?? "프로그램");
-          this.state = { ...this.state, stream: { id: null, text: "" }, permissions: [], tools: [], phase: "failed", failure: { id: error.id, code: error.code, message: error.message, reason: error.message } };
+          const sessions = Object.fromEntries(Object.entries(this.state.sessions).map(([id, session]) => [id,
+            { ...session, stream: { id: null, text: "" }, permissions: [], tools: [], phase: session.phase === "responding" ? "ready" as const : session.phase }]));
+          this.state = { ...this.state, sessions, phase: "failed", failure: { id: error.id, code: error.code, message: error.message, reason: error.message } };
           await this.checkpoint();
           this.publish();
         }
@@ -385,35 +453,56 @@ export class AgentSession {
           this.publish();
           continue;
         }
-        const replayItems = this.state.replayItems ?? [];
+        const previousForeground = this.state.foreground;
+        const target = request?.sessionId ?? (request?.kind === "switch" ? String(request.params) : null);
+        const replayItems = request?.kind === "switch" && target ? this.state.sessions[target]?.replayItems ?? [] : [];
         this.state = reduceMessage(this.state, message, `stream-${this.state.generation}-${this.after}-${index}`);
         if (this.state.sessionError) this.state = { ...this.state, sessionError: { ...this.state.sessionError, message: this.redact(this.state.sessionError.message) } };
         if (this.state.failure) this.state = { ...this.state, failure: { ...this.state.failure, reason: this.redact(this.state.failure.reason) } };
+        if (request?.kind === "prompt" && message.error && target && this.state.sessions[target]?.failure) {
+          const failure = this.state.sessions[target].failure!;
+          const reason = this.redact(failure.reason);
+          if (target === this.state.foreground) this.state.sessions[target] = { ...this.state.sessions[target], failure: { ...failure, reason } };
+          else {
+            // 뒤에서 실패한 턴은 화면 오류로 띄울 곳이 없으니 그 세션 기록에 안내로 남긴다.
+            await this.history.append([{ id: `failure-${this.state.generation}-${this.after}-${index}`, kind: "notice", text: `에이전트 응답을 받지 못했습니다. 다시 보내세요. 원인: ${reason}`, at: this.host.now(), attachments: [] }], target);
+            this.state.sessions[target] = { ...this.state.sessions[target], failure: null };
+          }
+        }
         if (request && !message.error && request.kind === "initialize" && this.spec?.auth_methods) {
           this.state = { ...this.state, authMethods: this.state.authMethods.filter((method) => this.spec!.auth_methods!.includes(method.id)) };
         }
         if (request && !message.error && request.kind === "initialize" && this.spec?.assume_http_mcp) {
           this.state = { ...this.state, capabilities: { ...this.state.capabilities, http: true } };
         }
-        if (request && !message.error && (request.kind === "new" || request.kind === "load")) {
-          await this.history.setSession(this.state.sessionId);
+        if (request && !message.error && (request.kind === "new" || request.kind === "load") && this.state.foreground) {
+          const id = this.state.foreground;
+          if (request.kind === "new") await this.history.setSession(id);
+          else await this.history.setForeground(id);
           this.listWanted = true;
-          const restoreControls = Object.entries(this.history.controls).filter(([id, value]) => this.state.controls.some((control) => control.id === id && (control.kind === "boolean" ? typeof value === "boolean" : control.options.some((option) => option.value === value)))).map(([id, value]) => ({ id, value }));
-          this.state = { ...this.state, restoreControls };
+          const controls = this.state.sessions[id]?.controls ?? [];
+          const restoreControls = Object.entries(this.history.controlsOf(id)).filter(([control, value]) => controls.some((entry) => entry.id === control && (entry.kind === "boolean" ? typeof value === "boolean" : entry.options.some((option) => option.value === value)))).map(([control, value]) => ({ id: control, value }));
+          this.state.sessions[id] = { ...this.state.sessions[id], restoreControls };
+          await this.syncHeld();
         }
-        if (request && !message.error && (request.kind === "switch" || request.kind === "new_user") && this.state.sessionId) {
-          await this.history.replace(this.state.sessionId, request.kind === "switch" ? cleanReplay(replayItems) : []);
+        if (request && !message.error && (request.kind === "switch" || request.kind === "new_user") && this.state.foreground && this.state.foreground !== previousForeground) {
+          const id = this.state.foreground;
+          // 동시 세션을 쓰지 않는 에이전트는 예전처럼 새 세션만 들고 앞 세션은 다시 고를 때 load한다.
+          if (!this.parallel) this.state = { ...this.state, sessions: { [id]: this.state.sessions[id] } };
+          await this.history.replace(id, request.kind === "switch" ? cleanReplay(replayItems) : []);
+          await this.syncHeld();
           this.listWanted = true;
         }
         if (request?.kind === "prompt" && (request.params as { refreshList?: boolean } | null)?.refreshList) this.listWanted = true;
         if (request && !message.error && request.kind === "configure") {
           const control = request.params as { id: string; value: string | boolean };
-          await this.history.setControl(control.id, control.value);
+          await this.history.setControl(control.id, control.value, target ?? this.state.foreground);
         }
       }
-      if (this.state.completed.length) {
-        await this.history.append(this.state.completed);
-        this.state = { ...this.state, completed: [] };
+      for (const [id, session] of Object.entries(this.state.sessions)) {
+        if (!session.completed.length) continue;
+        await this.history.append(session.completed, id);
+        this.state.sessions[id] = { ...this.state.sessions[id], completed: [] };
       }
       this.after = result.next;
       await this.checkpoint();
@@ -429,46 +518,66 @@ export class AgentSession {
 
   private async pump(): Promise<void> {
     if (!this.handle) return;
-    if (this.state.contextTicket) {
-      await this.host.commit(this.state.contextTicket);
-      this.state = { ...this.state, contextTicket: null };
+    for (const [id, session] of Object.entries(this.state.sessions)) {
+      if (!session.contextTicket) continue;
+      await this.host.commit(session.contextTicket);
+      this.state.sessions[id] = { ...this.state.sessions[id], contextTicket: null };
       await this.checkpoint();
     }
     while (this.state.outbox.length) {
       const [message, ...rest] = this.state.outbox;
       await this.write(message, { ...this.state, outbox: rest });
     }
-    if (Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
+    if (Object.values(this.state.pending).some((request) => CONNECTION_KINDS.has(request.kind))) return;
     if (this.state.phase === "starting") {
+      if (Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
       if (!this.state.initialized) {
         await this.request("initialize", "initialize", { protocolVersion: 1, clientCapabilities: {} });
         return;
       }
       const mcpServers = this.mcpServers();
       this.state = { ...this.state, servicesUsed: this.state.capabilities.http ? this.tools : null };
-      if (this.state.sessionId && this.state.capabilities.loadSession && !this.state.needsNew) {
-        await this.request("load", "session/load", { sessionId: this.state.sessionId, cwd: this.cwd, mcpServers });
+      const foreground = this.state.foreground;
+      if (foreground && this.state.capabilities.loadSession && !this.state.needsNew) {
+        await this.request("load", "session/load", { sessionId: foreground, cwd: this.cwd, mcpServers }, foreground);
       } else {
-        if (this.state.sessionId) await this.history.append([{ id: `resume-${this.state.sessionId}`, kind: "notice", text: "앞 대화를 이어받지 못했습니다. 새 세션을 시작합니다.", at: this.host.now(), attachments: [] }]);
+        if (foreground) await this.history.append([{ id: `resume-${foreground}`, kind: "notice", text: "앞 대화를 이어받지 못했습니다. 새 세션을 시작합니다.", at: this.host.now(), attachments: [] }], foreground);
         await this.request("new", "session/new", { cwd: this.cwd, mcpServers });
       }
       return;
     }
     if (this.state.phase !== "ready") return;
+    const foreground = this.state.foreground;
     if (this.state.restartPending) {
-      await this.host.process.stop({ handle: this.handle });
-      this.handle = null;
-      if (await this.launch()) await this.pump();
+      // 도구 주소가 바뀌면 프로세스를 바꿔야 한다. 응답 중인 세션과 뒤 세션의 남은 말이 모두 끝날 때까지 미룬다.
+      const backgroundQueued = Object.entries(this.state.sessions).some(([id, session]) => id !== foreground && session.queue.length > 0);
+      const quiet = !this.anyResponding() && !backgroundQueued && !Object.values(this.state.pending).some((request) => request.kind !== "list");
+      if (quiet) {
+        await this.host.process.stop({ handle: this.handle });
+        this.handle = null;
+        if (await this.launch()) await this.pump();
+        return;
+      }
+    }
+    for (const id of Object.keys(this.state.sessions)) {
+      // 도구를 바꾸려고 기다리는 동안 전경 세션은 새 말을 보내지 않고 새 프로세스로 넘긴다.
+      if (this.state.restartPending && id === foreground) continue;
+      await this.pumpSession(id);
+      if (!this.handle) return;
+    }
+  }
+
+  private async pumpSession(id: string): Promise<void> {
+    const session = this.state.sessions[id];
+    if (!session || session.phase !== "ready" || this.pendingOf(id)) return;
+    if (session.restoreControls.length) {
+      const [control, ...rest] = session.restoreControls;
+      this.state.sessions[id] = { ...session, restoreControls: rest };
+      await this.configureNow(id, control.id, control.value);
       return;
     }
-    if (this.state.restoreControls.length) {
-      const [control, ...rest] = this.state.restoreControls;
-      this.state = { ...this.state, restoreControls: rest };
-      await this.configureNow(control.id, control.value);
-      return;
-    }
-    if (!this.state.queue.length || !this.state.sessionId) return;
-    const [queued, ...queue] = this.state.queue;
+    if (!session.queue.length) return;
+    const [queued] = session.queue;
     const prepared = await this.host.prepare(queued.id, queued.attachments.length, queued.attachments.reduce((sum, item) => sum + item.size, 0));
     const content: Record<string, unknown>[] = [];
     if (queued.text) content.push({ type: "text", text: queued.text });
@@ -486,30 +595,55 @@ export class AgentSession {
         content.push({ type: "resource_link", name: attachment.name, mimeType: attachment.mime, uri: await this.host.process.file_uri(key) });
       }
     }
-    if (!this.state.guideSent && !(this.state.capabilities.http && this.tools)) {
+    if (!session.guideSent && !(this.state.capabilities.http && this.tools)) {
       const guide = await this.host.instructions();
       const tools = this.state.capabilities.http && this.tools ? "MCP 도구가 연결되어 있습니다." : "현재 MCP 도구를 사용할 수 없습니다.";
       content.push({ type: "text", text: `<${GUIDE_TAG}>\n${guide}\n${tools}\n</${GUIDE_TAG}>` });
     }
     const item: Item = { id: queued.id, kind: "user", text: queued.text, at: this.host.now(), attachments: queued.attachments.map(({ id, name, mime }) => ({ id, name, mime })) };
-    await this.history.append([item]);
-    const refreshList = this.state.refreshAfterFirstPrompt === true;
-    this.state = { ...this.state, queue, guideSent: true, refreshAfterFirstPrompt: false, contextTicket: prepared.ticket };
-    await this.request("prompt", "session/prompt", { sessionId: this.state.sessionId, prompt: content, _control: { refreshList } });
+    await this.history.append([item], id);
+    const current = this.state.sessions[id] ?? session;
+    const refreshList = current.refreshAfterFirstPrompt === true;
+    this.state.sessions[id] = { ...current, queue: current.queue.filter((entry) => entry.id !== queued.id), guideSent: true, refreshAfterFirstPrompt: false, contextTicket: prepared.ticket };
+    await this.request("prompt", "session/prompt", { sessionId: id, prompt: content, _control: { refreshList } }, id);
     await this.host.commit(prepared.ticket);
-    this.state = { ...this.state, contextTicket: null };
+    if (this.state.sessions[id]) this.state.sessions[id] = { ...this.state.sessions[id], contextTicket: null };
     await this.checkpoint();
     this.publish();
   }
 
+  /** 목록 응답에 아직 없는 세션(첫 말 전의 새 세션)도 프로세스가 들고 있으면 목록 앞에 붙인다. */
+  private listed(): SessionInfo[] {
+    if (!this.parallel) return this.sessions;
+    const missing = Object.entries(this.state.sessions)
+      .filter(([id, session]) => session.phase !== "loading" && !this.sessions.some((entry) => entry.sessionId === id))
+      .map(([sessionId]) => ({ sessionId, cwd: this.cwd, title: this.firstAsk(sessionId) }));
+    // 에이전트가 제목을 아직 정하지 않은 세션은 id 조각 대신 처음 보낸 말을 보여 준다.
+    const listed = this.sessions.map((entry) => (cleanTitle(entry.title ?? "") || !this.state.sessions[entry.sessionId]) ? entry : { ...entry, title: this.firstAsk(entry.sessionId) });
+    return missing.length ? [...missing.reverse(), ...listed] : listed;
+  }
+
+  /** 세션에 처음 보낸 말의 첫 줄. 없으면 "새 세션". */
+  private firstAsk(sessionId: string): string {
+    const first = this.history.itemsOf(sessionId).find((item) => item.kind === "user");
+    const line = cleanTitle(first?.text ?? "").split("\n")[0].trim();
+    return line ? (line.length > 40 ? `${line.slice(0, 40)}…` : line) : "새 세션";
+  }
+
   private publish(): void {
-    this.host.publish({ phase: this.state.phase, items: this.history.items, stream_id: this.state.stream.id, text: this.state.stream.text,
-      busy: this.state.phase === "responding" || (this.state.phase === "ready" && this.state.queue.length > 0), tool: this.state.tools.at(-1)?.title ?? null,
-      queued: this.state.queue.map((item) => ({ ...item, attachments: item.attachments.map(({ id, name, mime }) => ({ id, name, mime })) })),
-      permissions: this.state.permissions, controls: this.state.controls, authMethods: this.state.authMethods, failure: this.state.failure,
-      sessionId: this.state.sessionId, canListSessions: !!this.state.capabilities.list, sessions: this.sessions,
+    const foreground = this.foreground;
+    const id = this.state.foreground;
+    const phase: Phase = this.state.phase !== "ready" ? this.state.phase : foreground?.phase === "responding" ? "responding" : "ready";
+    this.host.publish({ phase, items: this.history.itemsOf(id), stream_id: foreground?.stream.id ?? null, text: foreground?.stream.text ?? "",
+      busy: this.state.phase === "ready" && sessionBusy(foreground), tool: foreground?.tools.at(-1)?.title ?? null,
+      queued: (foreground?.queue ?? []).map((item) => ({ ...item, attachments: item.attachments.map(({ id, name, mime }) => ({ id, name, mime })) })),
+      permissions: foreground?.permissions ?? [], controls: foreground?.controls ?? [], authMethods: this.state.authMethods, failure: this.state.failure ?? foreground?.failure ?? null,
+      sessionId: id, canListSessions: !!this.state.capabilities.list, sessions: this.listed(),
       sessionsLoading: this.sessionsLoading, sessionError: this.listError ?? this.state.sessionError ?? null,
-      switching: Object.values(this.state.pending).some((request) => request.kind === "switch" || request.kind === "new_user"),
-      configuring: Object.values(this.state.pending).some((request) => request.kind === "configure") });
+      switching: this.pendingKind("switch", "new_user"),
+      configuring: Object.values(this.state.pending).some((request) => request.kind === "configure" && (request.sessionId ?? id) === id),
+      live: Object.entries(this.state.sessions).filter(([, session]) => session.phase !== "loading")
+        .map(([sessionId, session]) => ({ sessionId, busy: this.state.phase === "ready" && sessionBusy(session), permissions: session.permissions.length })),
+      parallel: this.parallel });
   }
 }

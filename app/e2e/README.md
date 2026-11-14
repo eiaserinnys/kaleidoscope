@@ -6,7 +6,7 @@
 
 ```sh
 pnpm install --frozen-lockfile
-cargo build --locked -p kaleidoscope-devbridge
+cargo build --locked -p kaleidoscope-devbridge -p kaleidoscope-acp-test-agent
 ```
 
 ## 실행

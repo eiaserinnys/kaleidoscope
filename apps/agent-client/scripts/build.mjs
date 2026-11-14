@@ -8,7 +8,7 @@ import { checkBundle, checkPreserved } from "./bundle-check.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const assets = resolve(root, "../assets");
-const target = resolve(assets, "agent/client-v10.js");
+const target = resolve(assets, "agent/client-v11.js");
 const manifestPath = resolve(assets, "manifest.json");
 const check = process.argv.includes("--check");
 if (!check) execFileSync("npm", ["test"], { cwd: root, stdio: "inherit" });
@@ -18,8 +18,8 @@ const bundle = await build({ entryPoints: [resolve(root, "src/index.ts")], bundl
 const bytes = bundle.outputFiles[0].contents;
 const hash = createHash("sha256").update(bytes).digest("hex");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-const entry = { id: "builtin-agent-client", version: 10, format: "javascript", sha256: hash, source: "apps/agent-client", license: "MIT", byte_size: bytes.length, created_at: "2026-11-12T00:00:00Z", path: "agent/client-v10.js" };
-const preserved = { id: "builtin-agent-client", version: 9, format: "javascript", sha256: "7176489f1265ab63b0a1f4228db0c1929c4d909c386d7e8b74ac3858f59f4d4f", source: "apps/agent-client", license: "MIT", byte_size: 48074, created_at: "2026-11-07T00:00:00Z", path: "agent/client-v9.js" };
+const entry = { id: "builtin-agent-client", version: 11, format: "javascript", sha256: hash, source: "apps/agent-client", license: "MIT", byte_size: bytes.length, created_at: "2026-11-14T00:00:00Z", path: "agent/client-v11.js" };
+const preserved = { id: "builtin-agent-client", version: 10, format: "javascript", sha256: "65ca590693a0d7c9ad1cb287ce9dafcfa9ba2afe6fe7179e186b73aed833b655", source: "apps/agent-client", license: "MIT", byte_size: 48157, created_at: "2026-11-12T00:00:00Z", path: "agent/client-v10.js" };
 const oldBytes = await readFile(resolve(assets, preserved.path));
 checkPreserved(oldBytes, manifest.find((item) => item.id === preserved.id && item.version === preserved.version), preserved);
 const index = manifest.findIndex((item) => item.id === entry.id && item.version === entry.version);
