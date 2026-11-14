@@ -1,6 +1,7 @@
 import jsonata from "jsonata";
 import type { Actions, AppDefinition, AppWindow, Binding, BindingMore, BindingValue, Block, DataView, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
+import { BLOCK_SLOTS } from "../contract/block-slots";
 
 export interface FakePageSeed { value?: JsonValue; error?: string; id?: string; delayMs?: number }
 export interface FakeSourceSeed { value?: JsonValue; error?: string; login?: string; delayMs?: number; waitForFirstPage?: () => Promise<void>; pages?: FakePageSeed[] }
@@ -16,44 +17,39 @@ function appendPage(current: JsonValue, incoming: JsonValue | undefined, path: s
   return copy;
 }
 
-function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
-  switch (block.type) {
-    case "split": case "stack": return block.children.map((child, index) => [`${pointer}/children/${index}`, child]);
-    case "tabs": return block.tabs.map((tab, index) => [`${pointer}/tabs/${index}/child`, tab.child]);
-    case "toolbar": return [...block.start.map((child, index): [string, Block] => [`${pointer}/start/${index}`, child]), ...(block.end ?? []).map((child, index): [string, Block] => [`${pointer}/end/${index}`, child])];
-    case "section": return [...(block.actions ?? []).map((child, index): [string, Block] => [`${pointer}/actions/${index}`, child]), [`${pointer}/child`, block.child]];
-    case "when": return [[`${pointer}/child`, block.child]];
-    case "dialog": return [[`${pointer}/child`, block.child]];
-    case "repeat": return [[`${pointer}/template`, block.template]];
-    default: return [];
+/// 자리 경로의 `*`를 값의 배열로 펼친다. 값이 없으면 빈 목록이다.
+function walkSlotPath(value: JsonValue | undefined, segments: string[]): Array<{ path: string[]; value: JsonValue }> {
+  const [head, ...rest] = segments;
+  if (head === undefined) return value === undefined ? [] : [{ path: [], value }];
+  if (head === "*") {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item, index) => walkSlotPath(item, rest).map((hit) => ({ path: [String(index), ...hit.path], value: hit.value })));
   }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return [];
+  return walkSlotPath(value[head], rest).map((hit) => ({ path: [head, ...hit.path], value: hit.value }));
+}
+
+function slotValues(root: JsonValue, slots: string[]): Array<[string, JsonValue]> {
+  return slots.flatMap((slot) => walkSlotPath(root, slot.split("/"))
+    .filter((hit) => hit.value !== undefined && hit.value !== null)
+    .map((hit): [string, JsonValue] => [`/${hit.path.join("/")}`, hit.value]));
+}
+
+function isBlockValue(value: JsonValue): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && typeof value["type"] === "string";
+}
+
+/// 블록 종류마다 생성 표가 정한 자식 자리를 따라 바로 아래 블록을 모은다.
+function childBlocks(block: Block, pointer: string): Array<[string, Block]> {
+  const root = block as unknown as JsonValue;
+  return (BLOCK_SLOTS[block.type]?.children ?? []).flatMap((slot) => slotValues(root, [slot])
+    .filter(([, value]) => isBlockValue(value))
+    .map(([path, value]): [string, Block] => [`${pointer}${path}`, value as unknown as Block]));
 }
 
 function actionSlots(block: Block, pointer = "/ui"): Set<string> {
   const slots = new Set<string>();
-  const add = (field: string, present = true) => { if (present) slots.add(`${pointer}/${field}`); };
-  if ("item_menu" in block) block.item_menu?.forEach((_, index) => add(`item_menu/${index}/on_select`));
-  switch (block.type) {
-    case "button_grid": add("on_press"); break;
-    case "timeline": for (const field of ["on_select", "on_edit", "on_viewport"] as const) add(field, block[field] !== undefined); break;
-    case "tree": if (block.items !== undefined) {
-      add("on_select", block.on_select !== undefined);
-      add("on_check", block.on_check !== undefined);
-      add("on_edit", block.on_edit !== undefined);
-      add("on_edit_cancel", block.on_edit_cancel !== undefined);
-      add("on_move", block.on_move !== undefined);
-    } break;
-    case "section": block.menu?.forEach((_, index) => { add(`menu/${index}/on_select`); add(`menu/${index}/confirm/body`); }); add("on_edit", block.on_edit !== undefined); add("on_edit_cancel", block.on_edit_cancel !== undefined); break;
-    case "folder": add("on_select", block.on_select !== undefined); break;
-    case "list": add("on_select", block.on_select !== undefined); add("on_activate", block.on_activate !== undefined); add("on_remove", block.on_remove !== undefined); block.group_actions?.forEach((_, index) => add(`group_actions/${index}/on_click`)); break;
-    case "map": case "chart": case "table": case "feed": add("on_select", block.on_select !== undefined); break;
-    case "input": add("on_change"); add("on_submit", block.on_submit !== undefined); add("on_cancel", block.on_cancel !== undefined); break;
-    case "text": add("on_click", block.on_click !== undefined); add("on_double_click", block.on_double_click !== undefined); break;
-    case "select": case "toggle": case "slider": case "color": add("on_change"); break;
-    case "button": add("on_click"); break;
-    case "dialog": add("on_close"); add("on_confirm", block.on_confirm !== undefined); break;
-    case "notice": (block.actions ?? []).forEach((_, index) => add(`actions/${index}/on_click`)); break;
-  }
+  for (const [path] of slotValues(block as unknown as JsonValue, BLOCK_SLOTS[block.type]?.actions ?? [])) slots.add(`${pointer}${path}`);
   for (const [childPointer, child] of childBlocks(block, pointer)) {
     for (const slot of actionSlots(child, childPointer)) slots.add(slot);
   }
@@ -61,33 +57,8 @@ function actionSlots(block: Block, pointer = "/ui"): Set<string> {
 }
 
 function expressionSlots(block: Block, pointer = "/ui"): Array<[string, Binding]> {
-  const slots: Array<[string, Binding]> = [];
-  const add = (name: string, value: Binding | undefined) => { if (value !== undefined) slots.push([`${pointer}/${name}`, value]); };
-  switch (block.type) {
-    case "section": add("title", block.title); add("meta", block.meta); add("editing", block.editing); block.menu?.forEach((entry, index) => add(`menu/${index}/confirm/body`, entry.confirm?.body)); break;
-    case "list": add("items", block.items); add("current", block.current); break;
-    case "stack": add("scroll_reset", block.scroll_reset); break;
-    case "tree": if (block.items !== undefined) add("items", block.items); break;
-    case "table": add("rows", block.rows); if (!Array.isArray(block.columns)) add("columns", block.columns); break;
-    case "properties": block.fields.forEach((field, index) => add(`fields/${index}/value`, field.value)); break;
-    case "feed": add("entries", block.entries); break;
-    case "repeat": add("items", block.items); break;
-    case "text": case "code": add("value", block.value); break;
-    case "markdown": case "html_view": case "sandbox": add("value", block.value); break;
-    case "select": add("options", block.options); break;
-    case "input": add("min", block.min); add("max", block.max); add("step", block.step); add("focus", block.focus); add("options", block.options); break;
-    case "progress": add("value", block.value); add("label", block.label); break;
-    case "button": add("disabled", block.disabled); add("confirm/body", block.confirm?.body); break;
-    case "chat": add("loading", block.loading); break;
-    case "image": case "media": add("src", block.src); break;
-    case "metrics": add("items", block.items); break;
-    case "button_grid": add("buttons", block.buttons); break;
-    case "chart": add("series", block.series); break;
-    case "timeline":
-      for (const name of ["duration", "position", "tracks", "markers", "ticks", "selection", "snap", "viewport", "off_days"] as const) add(name, block[name]);
-      break;
-    case "map": add("points", block.points); break;
-  }
+  const slots = slotValues(block as unknown as JsonValue, BLOCK_SLOTS[block.type]?.bindings ?? [])
+    .map(([path, value]): [string, Binding] => [`${pointer}${path}`, value as Binding]);
   return slots.concat(childBlocks(block, pointer).flatMap(([path, child]) => expressionSlots(child, path)));
 }
 

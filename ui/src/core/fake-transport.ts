@@ -25,6 +25,7 @@ import { SHARE_TEXT_MAX_BYTES } from "../contract/limits";
 import { toCoreError, type CoreTransport } from "./core-transport";
 import { SHELL_REALTIME_NATIVE_CORE_REQUIRED } from "../contract/shell-errors";
 import { createFakeData, type FakeDataSeed } from "./fake-data";
+import { fillDefinitionDefaults } from "./app-defaults";
 
 export interface FakeTransportSeed {
   snapshot: ShellSnapshot;
@@ -142,7 +143,19 @@ function isFakeHttpAddress(value: string): boolean {
 }
 
 export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
-  let snapshot = clone(seed.snapshot);
+  // 앱 정의가 가짜 코어로 들어오는 자리다. 코어의 serde가 읽을 때 채우는 기본값을
+  // 여기서 먼저 채워, 가짜 코어가 실제 정의를 손대지 않고 그대로 쓸 수 있게 한다.
+  const seeded = clone(seed.snapshot);
+  let snapshot: ShellSnapshot = {
+    ...seeded,
+    shared: {
+      ...seeded.shared,
+      app_versions: seeded.shared.app_versions.map((version) => ({
+        ...version,
+        definition: fillDefinitionDefaults(version.definition),
+      })),
+    },
+  };
   let sequence = 0;
   const files = new Map<string, FakeFile>();
   const storage = new Map<string, { content: JsonValue; revision: string }>();
