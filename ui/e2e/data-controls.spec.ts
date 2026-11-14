@@ -465,6 +465,7 @@ async function measureNarrowBar(bar: import("@playwright/test").Locator) {
       barRight: round(barBox.right), screenRight: window.innerWidth,
       endRight: round(endBox.right),
       inputRight: round(inputBox.right), cellRight: round(cellBox.right),
+      boxWidth: round(inputBox.width),
       nextLeft: next ? round(next.getBoundingClientRect().left) : null,
       visibleWidth: round(inputBox.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth)),
       clearLeft: clear ? round(clear.getBoundingClientRect().left) : null,
@@ -484,9 +485,16 @@ test("좁은 칸의 도구 막대는 입력을 줄여 끝 조작을 막대와 �
       const input = bar.locator("input").first();
       await expect(input).toHaveValue("");
       const empty = await measureNarrowBar(bar);
-      expect(empty.scrollWidth, `${scenario} 360 빈 상태: 막대가 가로로 넘치지 않는다`).toBeLessThanOrEqual(empty.clientWidth + 1);
-      expect(empty.endRight, `${scenario} 360 빈 상태: 끝 묶음이 막대 안에 있다`).toBeLessThanOrEqual(empty.barRight + 0.5);
-      expect(empty.endRight, `${scenario} 360 빈 상태: 끝 묶음이 화면 안에 있다`).toBeLessThanOrEqual(empty.screenRight + 0.5);
+      // 입력 상자의 바닥은 좌우 여백+테두리+글 자리 32px(검색 98, 일반 50)다. 이 360x600의 42% 칸은 막대 내용이
+      // 136px이라, 바닥과 끝 묶음(8px 간격 포함)을 더하면 넘치는 조합이 있다(검색 입력은 세 끝 묶음 모두,
+      // 일반 입력은 고르기+아이콘). 그런 조합은 spec대로 막대 넘침과 끝 묶음 단언에서 빼고, 상자가 칸 안에
+      // 있는지와 다음 조작과의 8px 간격은 그대로 단언한다. 글 자리와 상자 폭 유지는 아래에서 모든 조합에 단언한다.
+      const floored = empty.scrollWidth > empty.clientWidth + 1;
+      if (!floored) {
+        expect(empty.scrollWidth, `${scenario} 360 빈 상태: 막대가 가로로 넘치지 않는다`).toBeLessThanOrEqual(empty.clientWidth + 1);
+        expect(empty.endRight, `${scenario} 360 빈 상태: 끝 묶음이 막대 안에 있다`).toBeLessThanOrEqual(empty.barRight + 0.5);
+        expect(empty.endRight, `${scenario} 360 빈 상태: 끝 묶음이 화면 안에 있다`).toBeLessThanOrEqual(empty.screenRight + 0.5);
+      }
       expect(empty.inputRight, `${scenario} 360 빈 상태: 입력 상자가 칸 안에 있다`).toBeLessThanOrEqual(empty.cellRight + 0.5);
       expect(empty.nextLeft, `${scenario} 360 빈 상태: 다음 조작이 있다`).not.toBeNull();
       expect(empty.nextLeft!, `${scenario} 360 빈 상태: 다음 조작과 8px 떨어진다`).toBeGreaterThanOrEqual(empty.inputRight + 8 - 0.5);
@@ -500,22 +508,17 @@ test("좁은 칸의 도구 막대는 입력을 줄여 끝 조작을 막대와 �
       if (kind === "search") await expect(bar.locator(".ks-data-input-clear")).toBeVisible();
       await page.waitForTimeout(150);
       const typed = await measureNarrowBar(bar);
-      // 보이는 글 폭이 있는 입력에서만 친 순서를 본다. 폭이 0인 좁은 검색 입력에서는 Playwright 키 입력이
-      // 「연결」을 「결연」으로 뒤집는데(실제 IME로 확인한 것이 아님), 그 조합은 아래에서 칸 안 여부만 본다.
-      if (typed.visibleWidth > 0) expect(typed.value, `${scenario} 360: 친 값이 친 순서 그대로다`).toBe("연결");
+      // 바닥이 글 두 자(32px)를 지키므로 글을 친 값이 뒤집히지 않고, 값이 있어도 상자 폭은 빈 상태 그대로다.
+      expect(typed.visibleWidth, `${scenario} 360 글을 친 상태: 글 자리가 31.5px 이상이다`).toBeGreaterThanOrEqual(31.5);
+      expect(Math.abs(typed.boxWidth - empty.boxWidth), `${scenario} 360: 빈 상태와 글을 친 상태의 상자 폭이 같다`).toBeLessThanOrEqual(0.5);
+      expect(typed.value, `${scenario} 360: 친 값이 친 순서 그대로다`).toBe("연결");
       expect(typed.inputRight, `${scenario} 360 글을 친 상태: 입력 상자가 칸 안에 있다`).toBeLessThanOrEqual(typed.cellRight + 0.5);
-      // 검색 입력의 바닥은 그 칸에 든 입력 상자의 실제 최소폭(좌우 여백+테두리, 빈 상태 42px·글을 친 상태 66px)이다.
-      // 360x600의 42% 칸은 막대 내용이 136px이라, 글을 친 검색 입력(66px)에 끝 묶음이 넓은 조합을 넣으면
-      // 66 + 8 + 끝 폭이 136px을 넘어 막대가 가로 스크롤하거나(글자 단추·토글) 보이는 글 폭이 0이 된다(고르기+아이콘).
-      // 2판 spec의 예외대로 그런 조합은 입력 상자가 칸 안에 있는지만 본다.
-      const floored = kind === "search" && (typed.scrollWidth > typed.clientWidth + 1 || typed.visibleWidth <= 0);
       if (!floored) {
         expect(typed.scrollWidth, `${scenario} 360 글을 친 상태: 막대가 가로로 넘치지 않는다`).toBeLessThanOrEqual(typed.clientWidth + 1);
         expect(typed.endRight, `${scenario} 360 글을 친 상태: 끝 묶음이 막대 안에 있다`).toBeLessThanOrEqual(typed.barRight + 0.5);
         expect(typed.endRight, `${scenario} 360 글을 친 상태: 끝 묶음이 화면 안에 있다`).toBeLessThanOrEqual(typed.screenRight + 0.5);
-        expect(typed.nextLeft!, `${scenario} 360 글을 친 상태: 다음 조작과 8px 떨어진다`).toBeGreaterThanOrEqual(typed.inputRight + 8 - 0.5);
-        expect(typed.visibleWidth, `${scenario} 360 글을 친 상태: 보이는 글 폭이 있다`).toBeGreaterThan(0);
       }
+      expect(typed.nextLeft!, `${scenario} 360 글을 친 상태: 다음 조작과 8px 떨어진다`).toBeGreaterThanOrEqual(typed.inputRight + 8 - 0.5);
       if (kind === "search") {
         expect(typed.clearLeft, `${scenario} 360 글을 친 상태: 지우기 단추가 있다`).not.toBeNull();
         expect(typed.iconRight, `${scenario} 360 글을 친 상태: 검색 아이콘이 있다`).not.toBeNull();

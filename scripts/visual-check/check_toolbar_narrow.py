@@ -3,16 +3,21 @@
 
 데이터 블록의 도구 막대(.ks-data-toolbar)는 입력의 최소 폭이 96px이고 끝 묶음은 줄지 않아,
 column_below 없이 가로 분할한 좁은 칸에서는 끝 단추가 막대의 가로 스크롤 뒤로 밀렸다.
-2판은 좁은 질의(280px 이하) 안에서 입력 칸의 바닥을 그 칸에 든 입력 상자의 실제 최소폭(좌우 여백+테두리)으로
-낮추고, 검색 입력의 지우기 자리(오른쪽 32px)를 값이 있을 때만 잡는다. 이 스크립트는 막대를 쓰는 자리와
-좁은 칸을 겪는 앱을 네 폭에서 그려 다음을 남긴다.
+3판은 좁은 질의(280px 이하) 안에서 입력 상자의 바닥을 좌우 여백+좌우 테두리+글 자리 32px로 잡는다
+(검색 98px, 일반 50px). 값이 없을 때 검색 오른쪽 여백을 8px로 줄여도 상자 폭은 바닥 그대로다.
+이 스크립트는 막대를 쓰는 자리와 좁은 칸을 겪는 앱을 네 폭과 336x600(실제 쉘 앱 창 폭), 분할선을 끈
+장면에서 그려 다음을 남긴다.
 
 - card-board, block-gallery, pages(비공개 리포의 앱 정의, --pages-app): 앱 창의 모든 막대.
   막대 폭, scrollWidth, clientWidth, 묶음/칸/입력 상자 좌표, 입력의 좌우 여백과 보이는 글 폭,
-  다음 조작과의 간격, 지우기 단추와 검색 아이콘의 겹침, 친 값(「연결」)의 순서를 빈 상태와 글을 친
-  상태에서 잰다(2판). 세 앱 가운데 하나라도 어느 폭에서 끝 묶음이 막대나 화면 밖이거나, 막대가
-  가로로 넘치거나, 입력 상자가 칸 밖이거나, 다음 조작과 8px 아래로 붙거나, 글을 친 상태의 보이는
-  폭이 0 이하이거나, 친 값이 뒤집히면 0이 아닌 코드로 끝난다.
+  다음 조작과의 간격, 지우기 단추와 검색 아이콘의 겹침, 친 값(「연결」)의 순서와 빈 상태/친 상태의
+  상자 폭을 잰다(3판). 세 앱 가운데 하나라도 어느 폭에서 끝 묶음이 막대나 화면 밖이거나, 막대가
+  가로로 넘치거나, 입력 상자가 칸 밖이거나, 다음 조작과 8px 아래로 붙거나, 글을 친 상태의 글 자리가
+  31.5px 미만이거나, 빈 상태와 상자 폭이 0.5px 넘게 다르거나, 친 값이 뒤집히면 0이 아닌 코드로 끝난다.
+  336x600에서 pages는 재어 남기기만 하고 판정에는 넣지 않는다(이 단위에서 pages 정의를 고치지 않는다).
+- 분할선 끌기(card-board 1180x720·768x720, 왼쪽 칸 막대 200·160 근처): 빈 상태와 친 상태를 잰다.
+  입력 바닥+8px 간격+끝 묶음이 막대 내용 폭보다 큰 장면은 끝 묶음·막대 넘침 판정에서 빼고, 상자가 칸
+  안인지, 글 자리 31.5px, 상자 폭 유지, 친 값 순서를 판정한다. 까닭은 result.json의 drag 항목에 남긴다.
 - 붐비는 막대(jizura 장면): 360폭에서 지금처럼 가로 스크롤하는지 확인한다(경계 280px의 전제).
   입력마다 빈 상태와 글을 친 상태를 재어 result.json에 남기지만 판정에는 넣지 않는다.
 - 창 크기 바꾸기: block-gallery 창을 연 채 1180 -> 360 -> 1180으로 바꿔 같은 판정을 다시 하고,
@@ -41,6 +46,8 @@ SIZES = ((1180, 720), (768, 720), (480, 720), (360, 600))
 DEFAULT_PAGES_APP = Path("/home/eias/workspace/.projects/kaleidoscope-private-apps/apps/pages/app.json")
 TYPED_TEXT = "연결"
 GAP = 8
+# 글을 친 상태의 글 자리(상자 폭-좌우 여백-테두리) 문턱. 좁은 질의 바닥(검색 98·일반 50)이 보장하는 두 자 폭이다.
+TEXT_ROOM = 31.5
 # 미리보기 앱 창이 화면을 채우게 한다(check_tab_panel_padding.py와 같은 꼴).
 PREVIEW_STYLE = "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }"
 CHAT_STYLE = ".ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; } .ks-harness-dev-panel { display: none; }"
@@ -55,6 +62,7 @@ MEASURE_JS = """(root) => {
   };
   return [...root.querySelectorAll('.ks-data-toolbar, .ks-agent-chat-toolbar')].map((bar, index) => {
     const rect = bar.getBoundingClientRect();
+    const barStyle = getComputedStyle(bar);
     const end = bar.querySelector(':scope > .ks-data-toolbar-group.is-end');
     const endRect = end ? end.getBoundingClientRect() : null;
     const controls = [...bar.querySelectorAll("input, select, button, [role='switch']")];
@@ -81,6 +89,7 @@ MEASURE_JS = """(root) => {
       return {
         cell: box(cell), box: box(input),
         cellFlex: cell ? getComputedStyle(cell).flex : null, cellMinWidth: cell ? getComputedStyle(cell).minWidth : null,
+        minWidth: style.minWidth,
         boxInsideCell: cellRect ? inputRect.left >= cellRect.left - 0.5 && inputRect.right <= cellRect.right + 0.5 : null,
         next: box(next), gap: nextRect ? round(nextRect.left - inputRect.right) : null,
         padding: [style.paddingLeft, style.paddingRight],
@@ -97,6 +106,8 @@ MEASURE_JS = """(root) => {
     });
     return {
       index, className: bar.className, box: box(bar),
+      padding: [barStyle.paddingLeft, barStyle.paddingRight],
+      contentWidth: round(bar.clientWidth - parseFloat(barStyle.paddingLeft) - parseFloat(barStyle.paddingRight)),
       scrollWidth: bar.scrollWidth, clientWidth: bar.clientWidth,
       end: box(end), endInsideBar: endRect ? endRect.right <= rect.right + 1 : null,
       endInsideScreen: endRect ? endRect.right <= window.innerWidth + 1 : null,
@@ -225,15 +236,19 @@ def open_settings(browser, port, width, height):
     return page
 
 
+def flatten_inputs(measurements):
+    return [item for bar in measurements for item in bar["inputs"]]
+
+
 def judge_apps(measurements):
-    """세 앱의 모든 막대와 입력에서 2판 조건을 확인한다.
+    """세 앱의 모든 막대와 입력에서 3판 조건을 확인한다.
 
     - 막대가 가로로 넘치지 않고 끝 묶음이 막대와 화면 안에 있다.
     - 입력 상자가 자기 칸 안에 있고 다음 조작과 8px(-0.5) 이상 떨어진다.
-    - 글을 친 입력은 보이는 글 폭이 0보다 크고, 친 값이 「연결」 그대로다.
+    - 글을 친 입력은 글 자리가 31.5px 이상이고, 친 값이 「연결」 그대로다.
     - 글을 친 검색 입력은 지우기 단추가 있고 검색 아이콘과 겹치지 않는다.
     """
-    inputs = [item for bar in measurements for item in bar["inputs"]]
+    inputs = flatten_inputs(measurements)
     typed = [item for item in inputs if item["value"]]
     checks = {
         "bars": len(measurements),
@@ -244,11 +259,25 @@ def judge_apps(measurements):
         "end_inside_screen": all(bar["endInsideScreen"] is not False for bar in measurements),
         "input_inside_cell": all(item["boxInsideCell"] is not False for item in inputs),
         "next_gap": all(item["gap"] is None or item["gap"] >= GAP - 0.5 for item in inputs),
-        "typed_visible": all(item["visibleWidth"] > 0 for item in typed),
+        "typed_text_room": all(item["visibleWidth"] >= TEXT_ROOM for item in typed),
         "typed_value": all(item["value"] == TYPED_TEXT for item in typed),
         "clear_not_over_icon": all(item["clear"] is not None and item["clearOverlapsIcon"] is False for item in typed if item["isSearch"]),
     }
     return checks
+
+
+def judge_width(result, empty_measurements, typed_measurements, typed_key, index, judged):
+    """같은 입력의 빈 상태와 글을 친 상태 상자 폭이 0.5 이하로 같은지 본다(3판)."""
+    empties = flatten_inputs(empty_measurements)
+    typeds = flatten_inputs(typed_measurements)
+    if index >= len(empties) or index >= len(typeds):
+        return None
+    before = empties[index]["box"]["width"]
+    after = typeds[index]["box"]["width"]
+    delta = round(abs(after - before) * 10) / 10
+    if judged and delta > 0.5:
+        result["failures"].append(f"{typed_key}.width_stability")
+    return {"emptyBoxWidth": before, "typedBoxWidth": after, "widthDelta": delta}
 
 
 def record(result, output, key, page, root_selector):
@@ -281,8 +310,11 @@ def clear_input(page, locator):
     settle(page)
 
 
-def typed_pass(result, output, key, page, root_selector, judged):
-    """막대마다 입력을 하나씩 골라 「연결」을 치고 잰 뒤 지운다(세라피엘 probe_type/probe_reverse 측정)."""
+def typed_pass(result, output, key, page, root_selector, judged, empty_measurements):
+    """막대마다 입력을 하나씩 골라 「연결」을 치고 잰 뒤 지운다(세라피엘 probe_type/probe_reverse 측정).
+
+    빈 상태 measurements와 같은 입력의 상자 폭을 견줘 값에 따라 폭이 바뀌지 않는지도 남긴다(3판).
+    """
     locators = page.locator(f"{root_selector} {TOOLBAR_INPUTS}")
     count = locators.count()
     for index in range(count):
@@ -301,13 +333,146 @@ def typed_pass(result, output, key, page, root_selector, judged):
         if judged:
             judge(result, typed_key, measurements)
         focused = next((item for bar in measurements for item in bar["inputs"] if item["focused"]), None)
-        result["typed"].append({"scene": typed_key, "input": index, "value": value, "visibleWidth": focused["visibleWidth"] if focused else None})
-        # 보이는 글 폭이 0인 입력에서는 Playwright 키 입력이 순서를 뒤집을 수 있어(실제 IME 미확인) 폭이 있을 때만 판정한다.
+        width = judge_width(result, empty_measurements, measurements, typed_key, index, judged)
+        result["typed"].append({
+            "scene": typed_key, "input": index, "value": value,
+            "visibleWidth": focused["visibleWidth"] if focused else None,
+            "boxWidth": width,
+        })
+        # 글 자리 바닥(두 자)이 지켜지는 판정 장면에서는 위 typed_text_room이 실패를 잡는다. 판정 밖 장면에서
+        # 보이는 글 폭이 0이면 Playwright 키 입력이 순서를 뒤집을 수 있어(실제 IME 미확인) 그때는 값 순서를 보지 않는다.
         if focused is not None and focused["visibleWidth"] > 0 and value != TYPED_TEXT:
             result["failures"].append(f"{typed_key}.value_order")
         clear_input(page, locator)
         # 초점 테두리가 다음 장면(창 크기 복귀 등) 캡처에 남지 않게 초점을 뗀다.
         locator.evaluate("(element) => element.blur()")
+
+
+def first_toolbar_handle(page, root_selector):
+    """첫 번째 데이터 막대가 든 분할 칸의 오른쪽 분할선 중심 좌표(세라피엘 probe_r2.py에서 옮김)."""
+    return page.evaluate("""(sel) => {
+      const root = document.querySelector(sel);
+      const bar = root.querySelector('.ks-data-toolbar');
+      const pane = bar.closest('.ks-split-pane');
+      if (!pane) return null;
+      const handle = pane.nextElementSibling;
+      if (!handle || !handle.classList.contains('ks-split-handle')) return null;
+      const r = handle.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, paneLeft: pane.getBoundingClientRect().left };
+    }""", root_selector)
+
+
+def drag_to(page, root_selector, target_bar_width):
+    """막대 폭이 target이 되도록 분할선을 끈다(세라피엘 probe_r2.py에서 옮김)."""
+    handle = first_toolbar_handle(page, root_selector)
+    if handle is None:
+        return None
+    bar = page.evaluate("(sel) => { const r = document.querySelector(sel).querySelector('.ks-data-toolbar').getBoundingClientRect(); return { left: r.left, right: r.right }; }", root_selector)
+    dx = (bar["left"] + target_bar_width) - bar["right"]
+    page.mouse.move(handle["x"], handle["y"])
+    page.mouse.down()
+    steps = 8
+    for i in range(1, steps + 1):
+        page.mouse.move(handle["x"] + dx * i / steps, handle["y"])
+    page.mouse.up()
+    settle(page)
+    return page.evaluate("(sel) => document.querySelector(sel).querySelector('.ks-data-toolbar').getBoundingClientRect().width", root_selector)
+
+
+def bar_with_input(measurements):
+    return next((bar for bar in measurements if bar["inputs"]), None)
+
+
+def floor_exemption(measurements):
+    """입력 바닥+8px 간격+끝 묶음이 막대 내용 폭보다 큰지 재고 까닭을 돌려준다.
+
+    바닥은 입력 칸의 계산된 min-width(좁은 질의의 검색 98·일반 50)를 쓴다. 이 합이 내용 폭보다 크면
+    막대가 가로 스크롤하므로 끝 묶음·막대 넘침 판정에서 빼고, 상자 칸 안·글 자리·상자 폭 유지·친 값
+    순서만 판정한다(spec 5, 세라피엘 2판 반려의 분할선 끌기 장면).
+    """
+    bar = bar_with_input(measurements)
+    if bar is None:
+        return None
+    item = bar["inputs"][0]
+    # 입력 상자의 계산된 min-width가 바닥이다(좁은 질의의 검색 98px·일반 50px). 칸의 min-width는
+    # min-content로 계산돼 px가 아니므로 상자의 값을 먼저 쓴다.
+    try:
+        floor = float(str(item["minWidth"]).replace("px", ""))
+    except ValueError:
+        try:
+            floor = float(str(item["cellMinWidth"]).replace("px", ""))
+        except ValueError:
+            floor = None
+    end_width = bar["end"]["width"] if bar["end"] else 0
+    floor_sum = None if floor is None else round(floor + (GAP + end_width if bar["end"] else 0), 1)
+    exempt = floor_sum is not None and floor_sum > bar["contentWidth"] + 0.5
+    reason = None
+    if exempt:
+        reason = (
+            f"입력 바닥 {floor} + 간격 {GAP} + 끝 묶음 {end_width} = {floor_sum} > "
+            f"막대 내용 {bar['contentWidth']}이라 막대가 가로 스크롤한다. 끝 묶음·막대 넘침 판정에서 뺀다."
+        )
+    return {"barWidth": bar["box"]["width"], "contentWidth": bar["contentWidth"], "inputFloor": floor,
+            "endWidth": end_width, "floorSum": floor_sum, "exempt": exempt, "reason": reason}
+
+
+def judge_drag(result, key, empty, typed, exemption):
+    """분할선을 끈 장면: 상자 칸 안·글 자리·상자 폭 유지·친 값 순서를 늘 보고,
+    바닥 합이 막대 내용 폭 안이면 끝 묶음·막대 넘침·8px 간격까지 본다."""
+    empty_inputs = flatten_inputs(empty)
+    typed_inputs = flatten_inputs(typed)
+    focused_index = next((index for index, item in enumerate(typed_inputs) if item["focused"]), None)
+    before = empty_inputs[0] if empty_inputs else None
+    after = typed_inputs[focused_index] if focused_index is not None else None
+    bar = bar_with_input(empty)
+    checks = {
+        "bar_found": bar is not None and before is not None,
+        "input_inside_cell": bool(before and after and before["boxInsideCell"] is not False and after["boxInsideCell"] is not False),
+        "typed_text_room": bool(after and after["visibleWidth"] >= TEXT_ROOM),
+        "typed_value": bool(after and after["value"] == TYPED_TEXT),
+        "box_width_stable": bool(before and after and abs(after["box"]["width"] - before["box"]["width"]) <= 0.5),
+        "clear_not_over_icon": bool(after and after["isSearch"] and after["clear"] is not None and after["clearOverlapsIcon"] is False),
+    }
+    if not exemption["exempt"]:
+        checks.update({
+            "no_horizontal_overflow": bool(bar and not bar["overflows"]),
+            "end_inside_bar": bool(bar and bar["endInsideBar"] is not False),
+            "end_inside_screen": bool(bar and bar["endInsideScreen"] is not False),
+            "next_gap": bool(before and before["gap"] is not None and before["gap"] >= GAP - 0.5),
+        })
+    result["judged"][key] = checks
+    for check, ok in checks.items():
+        if ok is False:
+            result["failures"].append(f"{key}.{check}")
+    if after:
+        result["drag"][key].update({
+            "typedVisibleWidth": after["visibleWidth"],
+            "emptyBoxWidth": before["box"]["width"] if before else None,
+            "typedBoxWidth": after["box"]["width"],
+            "typedValue": after["value"],
+        })
+
+
+def run_drag_scene(result, output, browser, port, definition, width, height, target, root_selector):
+    page = open_data(browser, port, definition.get("ui"), definition.get("state") or {}, width, height)
+    try:
+        got = drag_to(page, root_selector, target)
+        key = f"drag-card-board-{width}x{height}-{target}"
+        result["drag"][key] = {"targetBarWidth": target, "barWidth": got}
+        if got is None:
+            result["failures"].append(f"{key}.split_handle")
+            return
+        empty = record(result, output, key, page, root_selector)
+        exemption = floor_exemption(empty)
+        result["drag"][key].update(exemption)
+        locator = page.locator(f"{root_selector} {TOOLBAR_INPUTS}").first
+        type_input(page, locator)
+        typed = record(result, output, key + "-typed", page, root_selector)
+        judge_drag(result, key, empty, typed, exemption)
+        clear_input(page, locator)
+        locator.evaluate("(element) => element.blur()")
+    finally:
+        page.close()
 
 
 def main():
@@ -324,7 +489,7 @@ def main():
         "block-gallery": json.loads((ROOT / "examples/block-gallery.json").read_text()),
         "pages": json.loads(args.pages_app.read_text()),
     }
-    result = {"port": args.port, "pages_app": str(args.pages_app), "typed_text": TYPED_TEXT, "scenes": {}, "judged": {}, "typed": [], "failures": []}
+    result = {"port": args.port, "pages_app": str(args.pages_app), "typed_text": TYPED_TEXT, "text_room": TEXT_ROOM, "scenes": {}, "judged": {}, "typed": [], "drag": {}, "failures": []}
     browser = None
     ui_server = ui_log = app_server = app_log = None
     try:
@@ -343,7 +508,7 @@ def main():
                         key = f"{name}-{size}"
                         measurements = record(result, output, key, page, '[data-testid="app-window-data-controls"]')
                         judge(result, key, measurements)
-                        typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=True)
+                        typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=True, empty_measurements=measurements)
                     finally:
                         page.close()
                 page = open_data(browser, args.port, JIZURA_TOOLBAR_SCENE, {"title": "", "artist": "", "mode": "전체", "format": "전체"}, width, height)
@@ -356,16 +521,36 @@ def main():
                         result["judged"][f"busy-toolbar-{size}.keeps_horizontal_scroll"] = keeps_scroll
                         if not keeps_scroll:
                             result["failures"].append(f"busy-toolbar-{size}.keeps_horizontal_scroll")
-                    typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=False)
+                    typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=False, empty_measurements=measurements)
                 finally:
                     page.close()
                 page = open_chat(browser, args.port, width, height)
                 try:
                     key = f"conversation-toolbar-{size}"
-                    record(result, output, key, page, '[data-testid="app-window-workspace-pas"]')
-                    typed_pass(result, output, key, page, '[data-testid="app-window-workspace-pas"]', judged=False)
+                    measurements = record(result, output, key, page, '[data-testid="app-window-workspace-pas"]')
+                    typed_pass(result, output, key, page, '[data-testid="app-window-workspace-pas"]', judged=False, empty_measurements=measurements)
                 finally:
                     page.close()
+            # 실제 쉘의 앱 창 폭(360 화면에서 336) 장면. card-board와 block-gallery는 판정하고,
+            # pages는 이 단위에서 정의를 고치지 않으므로 재어 남기기만 한다(spec 5).
+            for name in APP_SCENES:
+                definition = definitions[name]
+                page = open_data(browser, args.port, definition.get("ui"), definition.get("state") or {}, 336, 600)
+                try:
+                    key = f"{name}-336x600"
+                    measurements = record(result, output, key, page, '[data-testid="app-window-data-controls"]')
+                    if name == "pages":
+                        typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=False, empty_measurements=measurements)
+                    else:
+                        judge(result, key, measurements)
+                        typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=True, empty_measurements=measurements)
+                finally:
+                    page.close()
+            # 분할선을 끌어 왼쪽 칸 막대를 200과 160 근처로 좁힌 card-board 장면(세라피엘 probe_r2.py의 drag).
+            # 바닥 합이 막대 내용 폭보다 큰 장면은 끝 묶음·막대 넘침 판정에서 빼고 까닭을 result.json에 남긴다.
+            for width, height in ((1180, 720), (768, 720)):
+                for target in (200, 160):
+                    run_drag_scene(result, output, browser, args.port, definitions["card-board"], width, height, target, '[data-testid="app-window-data-controls"]')
             # 창을 연 채 넓은 폭과 좁은 폭을 오가도 질의가 그 폭의 모양으로 다시 선다(ui-design §0 18번).
             definition = definitions["block-gallery"]
             page = open_data(browser, args.port, definition.get("ui"), definition.get("state") or {}, 1180, 720)
@@ -380,7 +565,7 @@ def main():
                     measurements = record(result, output, key, page, '[data-testid="app-window-data-controls"]')
                     judge(result, key, measurements)
                     if typed:
-                        typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=True)
+                        typed_pass(result, output, key, page, '[data-testid="app-window-data-controls"]', judged=True, empty_measurements=measurements)
             finally:
                 page.close()
             stop_server(ui_server, ui_log)
@@ -395,8 +580,8 @@ def main():
                 page = open_settings(browser, args.port, width, height)
                 try:
                     key = f"app-settings-{size}"
-                    record(result, output, key, page, ".ks-app-settings")
-                    typed_pass(result, output, key, page, ".ks-app-settings", judged=False)
+                    measurements = record(result, output, key, page, ".ks-app-settings")
+                    typed_pass(result, output, key, page, ".ks-app-settings", judged=False, empty_measurements=measurements)
                 finally:
                     page.close()
             stop_server(app_server, app_log)

@@ -45,6 +45,7 @@
         "child": {
           "type": "split",
           "direction": "row",
+          "column_below": 700,
           "sizes": [40, 60],
           "children": [
             {
