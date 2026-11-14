@@ -8113,14 +8113,21 @@ mod tests {
     }
 
     #[test]
-    fn block_set_four_examples_validate() {
+    fn declared_block_set_examples_validate() {
         for name in ["block-gallery.json", "card-board.json"] {
             validate::parse_app_definition(&example(name))
                 .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         }
-        rejected(
-            &example("card-board.json").replace(r#""blocks": 4"#, r#""blocks": 3"#),
-            "블록 세트 4판",
+        // column_below를 쓰는 앱은 블록 세트 27판을 선언해야 한다. 이 검사는 details 없이
+        // message로 판을 알리므로(다른 requires 검사와 달리 일찍 끝난다) message를 본다.
+        let too_old = validate::parse_app_definition(
+            &example("card-board.json").replace(r#""blocks": 27"#, r#""blocks": 26"#),
+        )
+        .unwrap_err();
+        assert_eq!(too_old.code, ErrorCode::InvalidAppDefinition);
+        assert!(
+            too_old.message.contains("블록 세트 27판"),
+            "{too_old:?}"
         );
 
         rejected(
