@@ -435,7 +435,10 @@ export function TextBlock({ block, context, pointer }: Props<"text">) {
     return <DataState rootProps={blockRoot} value={value} />;
   }
   if (block.format === "time" && isClock(value.value)) return <ClockText block={block} context={context} pointer={pointer} clock={value.value} data={data} />;
-  const text = block.format === "time" && typeof value.value === "number" ? formatClockTime(value.value) : display(value.value);
+  // 값이 없으면 빈 글로 그린다(같은 파일의 탭 이름·탭 패널과 같은 꼴). display()는 확인창 본문과 속성 칸이 써서 고치지 않는다.
+  const text = value.value === null || value.value === undefined
+    ? ""
+    : block.format === "time" && typeof value.value === "number" ? formatClockTime(value.value) : display(value.value);
   return <TextValue block={block} pointer={pointer} text={text} data={data} />;
 }
 

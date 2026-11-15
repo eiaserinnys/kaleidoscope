@@ -348,30 +348,34 @@ it("uses the contract's card-board pointers for supported bindings and actions",
   const subscriptions = vi.spyOn(windowData, "useBinding");
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   const input = await screen.findByPlaceholderText("카드 찾기");
+  await waitFor(() => expect(subscriptions.mock.calls.map(([pointer]) => pointer)).toEqual(expect.arrayContaining(["/ui/children/0/children/1/items"])));
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("option", { name: "항목 A" }));
+  // 고른 카드가 없으면 상세 칸은 안내만 보이고, 고르면 도구 막대와 속성이 when 안에서 그려진다(#1364).
   await waitFor(() => expect(subscriptions.mock.calls.map(([pointer]) => pointer)).toEqual(expect.arrayContaining([
-    "/ui/children/1/children/0/start/0/value",
-    "/ui/children/1/children/0/end/0/confirm/body",
-    "/ui/children/1/children/0/end/0/disabled",
+    "/ui/children/1/children/1/child/children/0/start/0/value",
+    "/ui/children/1/children/1/child/children/0/end/0/confirm/body",
+    "/ui/children/1/children/1/child/children/0/end/0/disabled",
   ])));
   const pointers = subscriptions.mock.calls.map(([pointer]) => pointer);
-  expect(pointers).toEqual(expect.arrayContaining(["/ui/children/0/children/1/items", ...[0, 1, 2, 3].map((i) => `/ui/children/1/children/1/fields/${i}/value`)]));
+  expect(pointers).toEqual(expect.arrayContaining(["/ui/children/0/children/1/items", ...[0, 1, 2, 3].map((i) => `/ui/children/1/children/1/child/children/1/fields/${i}/value`)]));
   const expressionPointers = [...new Set(subscriptions.mock.calls.flatMap(([pointer, binding]) =>
     binding !== null && typeof binding === "object" && !Array.isArray(binding) && "expr" in binding ? [pointer] : []))].sort();
   expect(expressionPointers).toEqual([
-    "/ui/children/1/children/0/end/0/confirm/body",
-    "/ui/children/1/children/0/end/0/disabled",
-    "/ui/children/1/children/0/start/0/value",
+    "/ui/children/1/children/0/value",
+    "/ui/children/1/children/1/value",
+    "/ui/children/1/children/1/child/children/0/end/0/confirm/body",
+    "/ui/children/1/children/1/child/children/0/end/0/disabled",
+    "/ui/children/1/children/1/child/children/0/start/0/value",
     "/ui/children/0/children/1/items",
-    ...[0, 1, 2, 3].map((i) => `/ui/children/1/children/1/fields/${i}/value`),
+    ...[0, 1, 2, 3].map((i) => `/ui/children/1/children/1/child/children/1/fields/${i}/value`),
   ].sort());
   expect(screen.queryByText(/지원하지 않는 블록/)).toBeNull();
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole("option", { name: "항목 A" }));
   await user.type(input, "찾기");
   await user.click(screen.getByRole("button", { name: "전체" }));
   await user.click(screen.getByRole("menuitem", { name: "진행" }));
   await user.click(screen.getByRole("button", { name: "다시 받기" }));
-  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/children/1/children/0/end/0/disabled": { status: "ready", value: false } } } }));
+  act(() => transport.emit({ event: "data.update", window_id: "viewer-window", view: { sources: {}, values: { "/ui/children/1/children/1/child/children/0/end/0/disabled": { status: "ready", value: false } } } }));
   await user.click(screen.getByRole("button", { name: "완료로" }));
   await user.click(screen.getByRole("dialog").querySelectorAll("button")[1]);
   await waitFor(() => {
@@ -380,7 +384,7 @@ it("uses the contract's card-board pointers for supported bindings and actions",
       "/ui/children/0/children/0/start/0/on_change",
       "/ui/children/0/children/0/end/0/on_change",
       "/ui/children/0/children/0/end/1/on_click",
-      "/ui/children/1/children/0/end/0/on_click",
+      "/ui/children/1/children/1/child/children/0/end/0/on_click",
       "/ui/children/0/children/1/on_select",
     ].sort());
     expect(paths).toContain("/ui/children/0/children/1/on_select");

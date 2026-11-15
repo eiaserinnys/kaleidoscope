@@ -237,6 +237,16 @@
   padding: 0 var(--ks-space-2);
 }
 
+/* 한 줄 입력은 칸보다 긴 값과 안내 글을 글자 중간에서 끊지 않고 말줄임으로 끝낸다(도구 막대 안팎이 같은 규칙).
+   여러 줄 입력(textarea)은 줄바꿈으로 보여 주므로 뺀다. */
+.ks-text-input:not(textarea) {
+  text-overflow: ellipsis;
+}
+
+.ks-text-input:not(textarea)::placeholder {
+  text-overflow: ellipsis;
+}
+
 .ks-text-input-compact {
   height: var(--ks-icon-button-size);
   min-height: var(--ks-icon-button-size);

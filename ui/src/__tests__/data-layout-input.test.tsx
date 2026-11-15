@@ -64,6 +64,23 @@ it("도구 막대 텍스트 항목은 줄어들 수 있는 항목으로 표시�
   expect(screen.getByRole("button", { name: "실행" }).closest(".ks-data-toolbar-item")?.classList.contains("is-text")).toBe(false);
 });
 
+it("값이 없는 글 블록은 null이나 undefined 글을 그리지 않는다", async () => {
+  const definition: AppDefinition = { ...mdEditorDefinition, state: { card: null }, ui: {
+    type: "stack", direction: "column", children: [
+      { type: "text", value: { expr: "$state.card" } },
+      { type: "text", value: { expr: "$state.missing" } },
+      { type: "text", value: "값 있음" },
+    ],
+  } as unknown as Block };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = { card: null };
+  const { container } = render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="editor-window" />);
+  await screen.findByText("값 있음");
+  const texts = [...container.querySelectorAll(".ks-data-text")].map((element) => element.textContent);
+  expect(texts).toEqual(["", "", "값 있음"]);
+  expect(screen.queryByText(/^(null|undefined)$/)).toBeNull();
+});
+
 it.each(["row", "column"] as const)("%s 분할은 구분선 폭을 격자 트랙에 둔다", (direction) => {
   const view = render(<SplitPanes direction={direction} children={[<span key="a">하나</span>, <span key="b">둘</span>]} />);
   const split = view.container.querySelector(".ks-split") as HTMLElement;

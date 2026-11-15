@@ -45,32 +45,55 @@
         "direction": "column",
         "children": [
           {
-            "type": "toolbar",
-            "start": [
-              { "type": "text", "style": "title", "value": { "expr": "$data.detail.card.title" } }
-            ],
-            "end": [
-              {
-                "type": "button",
-                "label": "완료로",
-                "icon": "check",
-                "disabled": { "expr": "$not($exists($data.detail.card)) or $data.detail.card.status = 'done'" },
-                "confirm": { "title": "완료로 바꿀까요?", "body": { "expr": "$data.detail.card.title" } },
-                "on_click": [
-                  { "call": { "permission": "board", "method": "POST", "path": { "expr": "'/api/cards/' & $encodeUrlComponent($state.card) & '/status'" }, "body": { "expr": "{ \"status\": \"done\" }" } } },
-                  { "refresh": ["cards", "detail"] }
-                ]
-              }
-            ]
+            "type": "when",
+            "value": { "expr": "$state.card = null" },
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "place": "center",
+              "children": [
+                { "type": "text", "value": "카드를 고르세요", "format": "plain", "style": "meta" }
+              ]
+            }
           },
           {
-            "type": "properties",
-            "fields": [
-              { "label": "상태", "value": { "expr": "$data.detail.card.status" }, "format": "badge" },
-              { "label": "번호", "value": { "expr": "$data.detail.card.number" } },
-              { "label": "고친 때", "value": { "expr": "$data.detail.card.updatedAt" }, "format": "date" },
-              { "label": "요청", "value": { "expr": "$data.detail.card.request" }, "format": "markdown" }
-            ]
+            "type": "when",
+            "value": { "expr": "$state.card != null" },
+            "child": {
+              "type": "stack",
+              "direction": "column",
+              "children": [
+                {
+                  "type": "toolbar",
+                  "start": [
+                    { "type": "text", "style": "title", "value": { "expr": "$data.detail.card.title" } }
+                  ],
+                  "end": [
+                    {
+                      "type": "button",
+                      "label": "완료로",
+                      "icon": "check",
+                      "disabled": { "expr": "$not($exists($data.detail.card)) or $data.detail.card.status = 'done'" },
+                      "confirm": { "title": "완료로 바꿀까요?", "body": { "expr": "$data.detail.card.title" } },
+                      "on_click": [
+                        { "call": { "permission": "board", "method": "POST", "path": { "expr": "'/api/cards/' & $encodeUrlComponent($state.card) & '/status'" }, "body": { "expr": "{ \"status\": \"done\" }" } } },
+                        { "refresh": ["cards", "detail"] }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "properties",
+                  "fields": [
+                    { "label": "상태", "value": { "expr": "$data.detail.card.status" }, "format": "badge" },
+                    { "label": "번호", "value": { "expr": "$data.detail.card.number" } },
+                    { "label": "고친 때", "value": { "expr": "$data.detail.card.updatedAt" }, "format": "date" },
+                    { "label": "요청", "value": { "expr": "$data.detail.card.request" }, "format": "markdown" }
+                  ]
+                }
+              ]
+            }
           }
         ]
       }
