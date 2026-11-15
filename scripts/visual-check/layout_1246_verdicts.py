@@ -43,17 +43,19 @@ def section_end_verdicts(measured, expected_below, sections=1, panels=0):
 
 
 def focus_verdict(reached, measured, index, first, last):
-    """항목 4: 초점 테두리가 plot에 그려지고 x축 첫 글, 끝 글(실제로 있어야 함)과 겹치지 않는다."""
+    """항목 4: 초점 테두리가 그래프 상자 바깥에 그려지고(카드 #1340에서 plot 안쪽에서 옮겼다) x축 첫 글,
+    끝 글(실제로 있어야 함)과 겹치지 않는다."""
+    graph = measured.get("graphStyle") or {}
     plot = measured.get("plotStyle") or {}
     labels = measured.get("labels") or []
     return {
         "focused": reached and measured.get("focusedIndex") == index,
         "first_last_glyphs": len(labels) >= 2 and labels[0].get("text") == first and labels[-1].get("text") == last
         and labels[0].get("glyph") is not None and labels[-1].get("glyph") is not None,
-        "outline_on_plot": plot.get("outlineStyle") == "solid" and plot.get("outlineWidth") == "2px",
-        "outline_color": measured.get("focusColor") is not None and plot.get("outlineColor") == measured.get("focusColor"),
-        "outline_offset": plot.get("outlineOffset") == "-2px",
-        "graph_outline_none": (measured.get("graphStyle") or {}).get("outlineStyle") == "none",
+        "outline_on_graph": graph.get("outlineStyle") == "solid" and graph.get("outlineWidth") == "2px",
+        "outline_color": measured.get("focusColor") is not None and graph.get("outlineColor") == measured.get("focusColor"),
+        "outline_offset": graph.get("outlineOffset") == "4px",
+        "plot_outline_none": plot.get("outlineStyle") == "none",
         "no_label_overlap": measured.get("overlaps") is False,
     }
 
@@ -206,10 +208,11 @@ def _table(columns=3, rows=4, outside=0, scroll_width=334, header_lines=1, width
             "tableScrollWidth": scroll_width, "tableClientWidth": 334, "cellCount": columns * (rows + 1), "cellsOutside": outside}
 
 
-def _focus(first="1일", overlaps=False, color="rgb(1, 2, 3)", graph="none"):
+def _focus(first="1일", overlaps=False, color="rgb(1, 2, 3)", graph="solid", offset="4px", plot="none"):
     glyph = {"left": 0, "right": 10, "top": 0, "bottom": 10}
-    return {"focusedIndex": 0, "focusColor": "rgb(1, 2, 3)", "overlaps": overlaps, "graphStyle": {"outlineStyle": graph},
-            "plotStyle": {"outlineStyle": "solid", "outlineWidth": "2px", "outlineColor": color, "outlineOffset": "-2px"},
+    return {"focusedIndex": 0, "focusColor": "rgb(1, 2, 3)", "overlaps": overlaps,
+            "graphStyle": {"outlineStyle": graph, "outlineWidth": "2px", "outlineColor": color, "outlineOffset": offset},
+            "plotStyle": {"outlineStyle": plot, "outlineWidth": "0px", "outlineColor": color, "outlineOffset": "0px"},
             "labels": [{"text": first, "glyph": glyph}, {"text": "2일", "glyph": glyph}, {"text": "4일", "glyph": glyph}]}
 
 
@@ -271,7 +274,9 @@ def _cases():
              ("첫 글 다름", focus_verdict(True, _focus(first="0일"), 0, "1일", "4일")),
              ("글과 겹침", focus_verdict(True, _focus(overlaps=True), 0, "1일", "4일")),
              ("테두리 색 다름", focus_verdict(True, _focus(color="rgb(0, 0, 0)"), 0, "1일", "4일")),
-             ("그래프 테두리 남음", focus_verdict(True, _focus(graph="solid"), 0, "1일", "4일"))]),
+             ("plot에 테두리 남음", focus_verdict(True, _focus(plot="solid"), 0, "1일", "4일")),
+             ("안쪽으로 물러남", focus_verdict(True, _focus(offset="-2px"), 0, "1일", "4일")),
+             ("그래프 테두리 없음", focus_verdict(True, _focus(graph="none"), 0, "1일", "4일"))]),
         tick_verdict: (
             [("끝선 맞음", tick_verdict(_ticks(), [["3", "0", "-3"], ["$1", "$0", "-$1"]]))],
             [("끝선 어긋남", tick_verdict(_ticks(spread=6), [["3", "0", "-3"], ["$1", "$0", "-$1"]])),

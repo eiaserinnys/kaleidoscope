@@ -3,12 +3,12 @@
 
 항목 3: 분할 칸, 탭 판, 구역, 대화상자 본문에서 차트 틀 아래 끝과 칸 아래 끝의 차이가 12px(±1).
         구역 안에서 차트 틀 아래 끝과 다음 표 위 끝의 차이: 같은 쌓기(간격 없음)와 중첩(쌓기 > [쌓기 > [차트], 표])은
-        12px(±1), 중첩 간격 medium은 같은 쌓기 간격 medium과 같음(±1), 조작 줄 꼴(쌓기 medium > [고르기 줄,
-        쌓기 > [숨은 갈래, 차트], 표])은 main 화면에서 잰 위아래 값(MAIN_MEASURED)과 같음(±1).
+        12px(±1), 간격 있는 쌓기(medium, 중첩 포함)와 조작 줄 꼴(쌓기 medium > [고르기 줄, 쌓기 > [숨은 갈래, 차트], 표])은
+        쌓기 gap 하나인 12px(±1). 카드 #1340에서 차트 자기 여백과 gap이 겹쳐 24px이던 것을 gap 하나로 바꿨다.
         구역 끝 차트: 탭 판과 창 본문의 쌓기(간격 없음) > [구역(차트), 표]는 차트 틀 아래 끝과 표 위 끝이 12px(±1),
         창 본문 > [구역(차트), 구역(표)]는 둘째 구역 첫 내용 위 끝까지가 main에서 잰 값과 같음(±1),
         [표, 구역(차트)]는 탭 판 아래 끝, 본문 스크롤 내용 끝(끝까지 내렸을 때)까지가 12px(±1).
-항목 4: 선, 면적 차트 초점 상태에서 초점 테두리가 plot에 그려지고 x축 첫 글, 끝 글 상자와 겹치지 않음.
+항목 4: 선, 면적 차트 초점 상태에서 초점 테두리가 그래프 상자 바깥에 그려지고 x축 첫 글, 끝 글 상자와 겹치지 않음.
 항목 5: 한 축의 눈금 글 오른끝 x 차이가 1px 이하(음수 눈금이 있는 축 포함). 눈금 글은 기대한 글 그대로.
 항목 6: 값이 없는 계열이 범례와 읽기 줄과 접근성 표에 없고, 남은 계열 색이 원래 index 그대로임.
         쌓지 않은 막대에서 빈 계열이 낀 장면의 막대 폭과 x가 빈 계열을 뺀 장면과 같음(±1px).
@@ -79,12 +79,14 @@ SECTION_END_SCENES = (
     ("tab-table-chart", ("tab", "table-chart"), "panel", {"panels": 1}),
     ("body-table-chart", ("body", "table-chart"), "body", {}),
 )
+# 간격 있는 쌓기(medium)의 차트 앞뒤 간격. 카드 #1340에서 쌓기 gap 하나가 맡게 되어 24에서 12가 되었다.
+STACK_GAP = 12
 # main 화면에서 같은 장면을 실제로 잰 값(px). ui 소스를 main(MAIN_COMMIT)으로 둔 체크아웃에서 --reference로 쟀다.
-# 조작 줄 꼴의 아래(차트 틀 → 표), 위(고르기 줄 → 차트 틀)와 [구역(차트), 구역(표)]의 차트 틀 → 둘째 구역 첫 내용.
+# [구역(차트), 구역(표)]의 차트 틀 → 둘째 구역 첫 내용(구역이 아래 여백을 맡는 꼴이라 그대로다).
 MAIN_COMMIT = "88910a237cec93e9a60d99bb99cc563c681a3805"
 MAIN_MEASURED = {
-    1180: {"control": {"below": 24, "above": 24}, "body-chart-section": {"below": 20}},
-    360: {"control": {"below": 24, "above": 24}, "body-chart-section": {"below": 20}},
+    1180: {"body-chart-section": {"below": 20}},
+    360: {"body-chart-section": {"below": 20}},
 }
 
 
@@ -192,14 +194,12 @@ def check_item3_stacks(page, output, result):
     """구역 안 차트 뒤에 표가 이어질 때, 쌓기의 중첩 깊이와 상관없이 차트가 아래 여백을 남기는지."""
     measured = measure_item3(page, output, result, stack_scenes(), lambda name: (STACK_GAP_JS, APP_ID))
     for width, _ in (WIDE, NARROW):
-        same_medium = measured[("same-medium", width)]
-        main = MAIN_MEASURED[width]["control"]
         verdicts = {
             "same-none": stack_gap_verdicts(measured[("same-none", width)], below=12),
             "nested-none": stack_gap_verdicts(measured[("nested-none", width)], below=12),
-            "same-medium": stack_gap_verdicts(same_medium),
-            "nested-medium": stack_gap_verdicts(measured[("nested-medium", width)], below=same_medium["below"]),
-            "control": stack_gap_verdicts(measured[("control", width)], below=main["below"], above=main["above"], control=True),
+            "same-medium": stack_gap_verdicts(measured[("same-medium", width)], below=STACK_GAP),
+            "nested-medium": stack_gap_verdicts(measured[("nested-medium", width)], below=STACK_GAP),
+            "control": stack_gap_verdicts(measured[("control", width)], below=STACK_GAP, above=STACK_GAP, control=True),
         }
         for name, _, _ in STACK_SCENES:
             key = f"item3-{name}-{width}"
