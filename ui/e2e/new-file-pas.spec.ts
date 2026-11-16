@@ -59,10 +59,7 @@ test("matches the new-file input row height to a file row", async ({ page }) => 
 test("keeps the pending message and thinking indicator inside history when sending from the top", async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 420 });
   await page.goto("/?preview=workspace-pas&pas=ready&send-delay=1500");
-  await page.addStyleTag({ content: `
-    .ks-harness { height: calc(100vh - 2 * var(--ks-space-4)); min-height: 0; }
-    .ks-harness-dev-panel { display: none; }
-  ` });
+  await page.addStyleTag({ content: "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }" });
   const chat = page.getByTestId("app-window-workspace-pas");
   const history = chat.getByRole("log", { name: "대화 기록" });
   const input = chat.getByRole("textbox", { name: "메시지" });
