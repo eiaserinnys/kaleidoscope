@@ -92,12 +92,16 @@ impl Client {
     }
 
     pub fn require_login(&self) -> Result<(), CoreError> {
-        self.logins
+        match self
+            .logins
             .token(&self.info.name, self.info.scopes.as_deref())
-            .map(|_| ())
-            .ok_or_else(|| {
-                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(&self.info.name)
-            })
+        {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(
+                &self.info.name,
+            )),
+            Err(error) => Err(error),
+        }
     }
 
     pub fn path(&self, segments: &[&str]) -> Result<String, CoreError> {
@@ -343,22 +347,31 @@ impl Client {
             }
             request.send().map_err(|error| self.request_failed(error))
         };
-        let token = self
+        let token = match self
             .logins
             .token(&self.info.name, self.info.scopes.as_deref())
-            .ok_or_else(|| {
-                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(&self.info.name)
-            })?;
+        {
+            Ok(Some(token)) => token,
+            Ok(None) => {
+                return Err(kaleidoscope_contract::errors::CONV_HTTP_LOGIN_INFO_MISSING(
+                    &self.info.name,
+                ))
+            }
+            Err(error) => return Err(error),
+        };
         let reply = send(&token)?;
         if reply.status() != reqwest::StatusCode::UNAUTHORIZED {
             return Ok(reply);
         }
-        let refreshed = self
-            .logins
-            .refresh(&self.info.name, &token)
-            .ok_or_else(|| {
-                kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REFRESH_FAILED(&self.info.name)
-            })?;
+        let refreshed = match self.logins.refresh(&self.info.name, &token) {
+            Ok(Some(refreshed)) => refreshed,
+            Ok(None) => {
+                return Err(
+                    kaleidoscope_contract::errors::CONV_HTTP_LOGIN_REFRESH_FAILED(&self.info.name),
+                )
+            }
+            Err(error) => return Err(error),
+        };
         let reply = send(&refreshed)?;
         if reply.status() == reqwest::StatusCode::UNAUTHORIZED {
             self.logins.invalidate(&self.info.name, &refreshed);

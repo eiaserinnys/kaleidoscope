@@ -186,11 +186,14 @@ async fn read_stream(
     let logins = provider.logins.clone();
     let name = provider.info.name.clone();
     let scopes = provider.info.scopes.clone();
-    let Ok(Some(token)) =
-        tokio::task::spawn_blocking(move || logins.token(&name, scopes.as_deref())).await
-    else {
-        return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name));
-    };
+    let token =
+        match tokio::task::spawn_blocking(move || logins.token(&name, scopes.as_deref())).await {
+            Ok(Ok(Some(token))) => token,
+            Ok(Err(_)) => return Outcome::Retry,
+            Ok(Ok(None)) | Err(_) => {
+                return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name))
+            }
+        };
     let request = |token: &str| {
         let mut req = client
             .get(format!("{}{}", provider.info.base_url, path))
@@ -208,11 +211,14 @@ async fn read_stream(
         let logins = provider.logins.clone();
         let name = provider.info.name.clone();
         let rejected = token.clone();
-        let Ok(Some(refreshed)) =
-            tokio::task::spawn_blocking(move || logins.refresh(&name, &rejected)).await
-        else {
-            return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name));
-        };
+        let refreshed =
+            match tokio::task::spawn_blocking(move || logins.refresh(&name, &rejected)).await {
+                Ok(Ok(Some(refreshed))) => refreshed,
+                Ok(Err(_)) => return Outcome::Retry,
+                Ok(Ok(None)) | Err(_) => {
+                    return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name))
+                }
+            };
         response = match request(&refreshed).await {
             Ok(response) => response,
             Err(_) => return Outcome::Retry,

@@ -133,6 +133,11 @@ struct ServerState {
     stream_status: u16,
     stream_requests: usize,
     stream_item: bool,
+    /// 연결을 받자마자 응답 없이 닫아 네트워크가 끊긴 상태를 흉내 낸다.
+    offline: bool,
+    /// refresh 갈래의 상태 코드와 본문을 덮어쓴다.
+    refresh_status: Option<u16>,
+    refresh_body: Option<String>,
 }
 
 pub(super) struct OAuthFixture {
@@ -157,6 +162,9 @@ impl OAuthFixture {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         let request = read_request(&mut stream);
+                        if server_state.lock().unwrap().offline {
+                            continue;
+                        }
                         if let Some(request) = request {
                             let (status, body) = respond(&request, &server_base, &server_state);
                             let _ = write!(
@@ -299,8 +307,16 @@ fn respond(request: &HttpRequest, base: &str, state: &Arc<Mutex<ServerState>>) -
                 let refresh_token = params.get("refresh_token").cloned().unwrap_or_default();
                 let duplicate = !state.used_refresh_tokens.insert(refresh_token);
                 let response_delay = state.refresh_response_delay;
+                let override_status = state.refresh_status;
+                let override_body = state.refresh_body.clone();
                 drop(state);
                 thread::sleep(response_delay);
+                if let Some(status) = override_status {
+                    return (
+                        status,
+                        override_body.unwrap_or_else(|| json!({}).to_string()),
+                    );
+                }
                 if duplicate {
                     (400, json!({"error":"invalid_grant"}).to_string())
                 } else {

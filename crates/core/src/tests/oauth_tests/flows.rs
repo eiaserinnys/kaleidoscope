@@ -1,5 +1,6 @@
 use super::*;
 use crate::connections::LoginStore;
+use serde_json::json;
 
 #[test]
 fn another_windows_get_does_not_hide_unseen_stream_items() {
@@ -472,7 +473,7 @@ fn simultaneous_expired_token_reads_refresh_once_and_keep_rotated_token() {
     barrier.wait();
     let tokens: Vec<_> = workers
         .into_iter()
-        .map(|worker| worker.join().unwrap())
+        .map(|worker| worker.join().unwrap().unwrap())
         .collect();
 
     assert_eq!(
@@ -531,8 +532,204 @@ fn invalidation_waits_for_refresh_and_preserves_rotated_credentials() {
     assert_eq!(fixture.state.lock().unwrap().refreshes, 1);
 
     core.inner.login_store.invalidate("example", "expired");
-    assert_eq!(refresh_thread.join().unwrap().as_deref(), Some("refreshed"));
+    assert_eq!(
+        refresh_thread.join().unwrap().unwrap().as_deref(),
+        Some("refreshed")
+    );
     let stored = core.inner.login_store.entry("example").unwrap();
     assert_eq!(stored.access_token.as_deref(), Some("refreshed"));
     assert_eq!(stored.refresh_token.as_deref(), Some("rotated-1"));
+}
+
+fn saved_login(temp: &TempDir, connection: &str) -> Value {
+    let text = std::fs::read_to_string(temp.path().join("logins.json")).unwrap();
+    serde_json::from_str::<Value>(&text).unwrap()[connection].clone()
+}
+
+fn expired_login(fixture: &OAuthFixture, refresh_token: &str) -> LoginEntry {
+    LoginEntry {
+        issuer: fixture.base.clone(),
+        client_id: Some("client".into()),
+        redirect_port: Some(40000),
+        scopes: Some("read".into()),
+        access_token: Some("expired".into()),
+        refresh_token: Some(refresh_token.into()),
+        expires_at: Some(1),
+    }
+}
+
+#[test]
+fn refresh_network_failure_keeps_login_and_recovers_without_login() {
+    let fixture = OAuthFixture::start();
+    fixture.state.lock().unwrap().offline = true;
+    let temp = TempDir::new().unwrap();
+    let (core, window) = make_core(
+        Arc::new(NoCallbackHost),
+        &temp,
+        &fixture,
+        ConnectionKind::Oauth,
+    );
+    core.inner
+        .login_store
+        .store("example", expired_login(&fixture, "refresh"))
+        .unwrap();
+
+    let error = core
+        .inner
+        .login_store
+        .token("example", Some("read"))
+        .unwrap_err();
+    assert_eq!(
+        error.id.as_deref(),
+        Some("CONN_REFRESH_OAUTH_DISCOVERY_UNREACHABLE")
+    );
+    assert_eq!(error.code, ErrorCode::Unavailable);
+
+    let result = crate::connections::request(
+        &core.inner,
+        &window,
+        "api",
+        HttpMethod::Get,
+        "/old",
+        Default::default(),
+        None,
+        ConnectionAccept::Json,
+    );
+    assert!(matches!(
+        result,
+        Err(crate::connections::RequestError::Core(error))
+            if error.id.as_deref() == Some("CONN_REFRESH_OAUTH_DISCOVERY_UNREACHABLE")
+    ));
+
+    let saved = saved_login(&temp, "example");
+    assert_eq!(saved["access_token"], json!("expired"));
+    assert_eq!(saved["refresh_token"], json!("refresh"));
+
+    fixture.state.lock().unwrap().offline = false;
+    assert_eq!(
+        core.inner.login_store.token("example", Some("read")),
+        Ok(Some("refreshed".to_string()))
+    );
+    assert_eq!(fixture.state.lock().unwrap().refreshes, 1);
+    let saved = saved_login(&temp, "example");
+    assert_eq!(saved["access_token"], json!("refreshed"));
+    assert_eq!(saved["refresh_token"], json!("rotated-1"));
+}
+
+#[test]
+fn refresh_server_failure_keeps_login() {
+    let fixture = OAuthFixture::start();
+    fixture.state.lock().unwrap().refresh_status = Some(503);
+    let temp = TempDir::new().unwrap();
+    let (core, _) = make_core(
+        Arc::new(NoCallbackHost),
+        &temp,
+        &fixture,
+        ConnectionKind::Oauth,
+    );
+    core.inner
+        .login_store
+        .store("example", expired_login(&fixture, "refresh"))
+        .unwrap();
+
+    let error = core
+        .inner
+        .login_store
+        .token("example", Some("read"))
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("CONN_REFRESH_OAUTH_TOKEN_FAILED"));
+    assert_eq!(error.code, ErrorCode::Server);
+    assert_eq!(fixture.state.lock().unwrap().refreshes, 1);
+    let saved = saved_login(&temp, "example");
+    assert_eq!(saved["access_token"], json!("expired"));
+    assert_eq!(saved["refresh_token"], json!("refresh"));
+}
+
+#[test]
+fn refresh_rejection_clears_login_and_requests_login() {
+    let fixture = OAuthFixture::start();
+    {
+        let mut state = fixture.state.lock().unwrap();
+        state.refresh_status = Some(400);
+        state.refresh_body = Some(json!({"error":"invalid_grant"}).to_string());
+    }
+    let temp = TempDir::new().unwrap();
+    let (core, window) = make_core(
+        Arc::new(NoCallbackHost),
+        &temp,
+        &fixture,
+        ConnectionKind::Oauth,
+    );
+    core.inner
+        .login_store
+        .store("example", expired_login(&fixture, "refresh"))
+        .unwrap();
+
+    assert_eq!(
+        core.inner.login_store.token("example", Some("read")),
+        Ok(None)
+    );
+    let entry = core.inner.login_store.entry("example").unwrap();
+    assert_eq!(entry.access_token, None);
+    assert_eq!(entry.refresh_token, None);
+    assert_eq!(entry.expires_at, None);
+    let saved = saved_login(&temp, "example");
+    assert!(saved["access_token"].is_null());
+    assert!(saved["refresh_token"].is_null());
+    assert!(saved["expires_at"].is_null());
+
+    // 401과 invalid_client 본문도 같은 갈래로 지운다.
+    {
+        let mut state = fixture.state.lock().unwrap();
+        state.refresh_status = Some(401);
+        state.refresh_body = Some(json!({"error":"invalid_client"}).to_string());
+    }
+    core.inner
+        .login_store
+        .store("example", expired_login(&fixture, "refresh-2"))
+        .unwrap();
+    assert_eq!(
+        core.inner.login_store.token("example", Some("read")),
+        Ok(None)
+    );
+    assert_eq!(
+        core.inner
+            .login_store
+            .entry("example")
+            .unwrap()
+            .refresh_token,
+        None
+    );
+
+    // 서버가 거부하면 연결 요청은 로그인 필요로 이어진다.
+    {
+        let mut state = fixture.state.lock().unwrap();
+        state.refresh_status = Some(400);
+        state.refresh_body = Some(json!({"error":"invalid_grant"}).to_string());
+    }
+    core.inner
+        .login_store
+        .store("example", expired_login(&fixture, "refresh-3"))
+        .unwrap();
+    let result = crate::connections::request(
+        &core.inner,
+        &window,
+        "api",
+        HttpMethod::Get,
+        "/old",
+        Default::default(),
+        None,
+        ConnectionAccept::Json,
+    );
+    assert!(
+        matches!(result, Err(crate::connections::RequestError::Login(permission)) if permission == "api")
+    );
+    assert_eq!(
+        core.inner
+            .login_store
+            .entry("example")
+            .unwrap()
+            .refresh_token,
+        None
+    );
 }

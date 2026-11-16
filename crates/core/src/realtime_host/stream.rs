@@ -240,7 +240,11 @@ async fn handshake(
     });
     let mut token = tokio::select! {
         _ = stop.recv() => return Err(errors::CONN_REALTIME_SESSION_STALE()),
-        result = rx => result.ok().flatten().ok_or_else(|| errors::CONN_REALTIME_LOGIN_REQUIRED(name))?,
+        result = rx => match result {
+            Ok(Ok(Some(token))) => token,
+            Ok(Err(error)) => return Err(error),
+            Ok(Ok(None)) | Err(_) => return Err(errors::CONN_REALTIME_LOGIN_REQUIRED(name)),
+        },
     };
     for attempt in 0..2 {
         let base = format!("{}{}", info.base_url, path);
@@ -314,7 +318,11 @@ async fn handshake(
                     });
                     token = tokio::select! {
                         _ = stop.recv() => return Err(errors::CONN_REALTIME_SESSION_STALE()),
-                        result = rx => result.ok().flatten().ok_or_else(|| errors::CONN_REALTIME_LOGIN_REQUIRED(name))?,
+                        result = rx => match result {
+                            Ok(Ok(Some(token))) => token,
+                            Ok(Err(error)) => return Err(error),
+                            Ok(Ok(None)) | Err(_) => return Err(errors::CONN_REALTIME_LOGIN_REQUIRED(name)),
+                        },
                     };
                     continue;
                 }
