@@ -281,6 +281,7 @@ export class AgentSession {
   deleteSession(sessionId: string): Promise<void> {
     return this.serial(async () => {
       if (!this.handle || this.state.phase !== "ready" || !this.state.capabilities.delete || this.state.queue.length || Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
+      this.listError = null;
       await this.request("delete", "session/delete", { sessionId, _control: sessionId });
       this.publish();
     });

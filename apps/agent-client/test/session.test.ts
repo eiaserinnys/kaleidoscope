@@ -566,6 +566,17 @@ test("삭제가 실패하면 목록과 대화를 유지하고 삭제 오류를 �
   assert.equal(f.snapshots.at(-1).failure, null);
 });
 
+test("목록 실패 뒤 삭제가 실패하면 목록 오류가 아니라 삭제 오류를 보인다", async () => {
+  const { f, session } = await readyWithHistory({ list: {}, delete: {} });
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "목록 오류" } });
+  assert.equal(f.snapshots.at(-1).sessionError.id, "AGENT_SESSION_LIST_FAILED");
+  await session.deleteSession("a");
+  assert.equal(f.snapshots.at(-1).sessionError, null);
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "없는 세션" } });
+  assert.equal(f.snapshots.at(-1).sessionError.id, "AGENT_SESSION_DELETE_FAILED");
+});
+
 test("삭제 능력이 없으면 지우지 않는다", async () => {
   const { f, session } = await readyWithHistory();
   assert.equal(f.snapshots.at(-1).canDeleteSessions, false);
