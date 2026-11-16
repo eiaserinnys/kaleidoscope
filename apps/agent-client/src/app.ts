@@ -62,6 +62,7 @@ export class AppClient {
   private lastActivity = "";
   private lastOutputs = "";
   private historyOpen = false;
+  private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
 
   constructor(client: Bridge, defaults: Agent[]) {
@@ -100,15 +101,25 @@ export class AppClient {
     client.handle("attachment", ({ event }) => this.attachment(event));
     client.handle("new_session", () => this.switchSession(null));
     client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
-    client.handle("close_history", () => { this.historyOpen = false; this.update(); });
+    client.handle("close_history", () => { this.historyOpen = false; this.historyQuery = ""; this.update(); });
+    client.handle("search_history", ({ event }) => { this.historyQuery = String(event ?? ""); this.update(); });
+    client.handle("delete_session", ({ event }) => {
+      if (this.sessionLocked || !this.view?.canDeleteSessions) return;
+      return this.session.deleteSession(String(event));
+    });
     client.handle("select_session", ({ event }) => {
       if (event === this.view?.sessionId) { this.historyOpen = false; this.update(); return; }
       return this.switchSession(String(event));
     });
   }
 
+  // 응답, 전환, 설정, 삭제 중에는 세션을 바꾸거나 지우지 않는다
+  private get sessionLocked(): boolean {
+    return !this.view || this.view.busy || this.view.switching || this.view.configuring || this.view.deleting || !!this.switchRequested;
+  }
+
   private switchSession(id: string | null): Promise<void> {
-    if (!this.view || this.view.busy || this.view.switching || this.view.configuring || this.switchRequested) return Promise.resolve();
+    if (this.sessionLocked) return Promise.resolve();
     this.historyOpen = false;
     this.switchRequested = id ? "load" : "new";
     this.update();
@@ -421,6 +432,12 @@ export class AppClient {
       ? agentError("AGENT_INSTALL_UNSUPPORTED_PLATFORM", this.selected!.name, program.name, program.url).message
       : `${this.selected?.name} 에이전트를 시작하려면 ${program.name} 프로그램이 필요합니다.`;
     const controls = (this.view?.controls ?? []).map((control) => ({ ...control, is_select: control.kind === "select", is_boolean: control.kind === "boolean", checked: control.value === true }));
+    // 검색어는 표시 제목에 대고 대소문자 없이 거른다
+    const sessions = this.view?.sessions ?? [], query = this.historyQuery.trim().toLocaleLowerCase();
+    const historyItems = sessions.map((session) => {
+      const title = cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8);
+      return { key: session.sessionId, title, meta: sessionTime(session.updatedAt), confirm: `「${title}」 세션을 지웁니다. 되돌릴 수 없습니다.` };
+    }).filter((item) => !query || item.title.toLocaleLowerCase().includes(query));
     const output = {
       show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
@@ -439,10 +456,11 @@ export class AppClient {
       selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
-      history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested),
-      history_disabled: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested || !this.view?.canListSessions),
+      history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: this.sessionLocked,
+      history_disabled: this.sessionLocked || !this.view?.canListSessions,
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
-      history_items: (this.view?.sessions ?? []).map((session) => ({ key: session.sessionId, title: cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt) })),
+      history_items: historyItems, history_query: this.historyQuery, history_no_match: sessions.length > 0 && query !== "" && historyItems.length === 0,
+      history_can_delete: !!this.view?.canDeleteSessions, history_cannot_delete: !this.view?.canDeleteSessions,
       history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading && !this.view.sessions.length,
       history_unsupported: !!this.view && !this.view.canListSessions,
       history_empty: !!this.view && this.view.canListSessions && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,
