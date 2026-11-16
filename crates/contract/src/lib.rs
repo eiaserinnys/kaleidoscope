@@ -8151,13 +8151,15 @@ mod tests {
             bindings,
             vec![
                 "/ui/children/0/children/1/items",
-                "/ui/children/1/children/0/start/0/value",
-                "/ui/children/1/children/0/end/0/confirm/body",
-                "/ui/children/1/children/0/end/0/disabled",
-                "/ui/children/1/children/1/fields/0/value",
-                "/ui/children/1/children/1/fields/1/value",
-                "/ui/children/1/children/1/fields/2/value",
-                "/ui/children/1/children/1/fields/3/value",
+                "/ui/children/1/children/0/value",
+                "/ui/children/1/children/1/value",
+                "/ui/children/1/children/1/child/children/0/start/0/value",
+                "/ui/children/1/children/1/child/children/0/end/0/confirm/body",
+                "/ui/children/1/children/1/child/children/0/end/0/disabled",
+                "/ui/children/1/children/1/child/children/1/fields/0/value",
+                "/ui/children/1/children/1/child/children/1/fields/1/value",
+                "/ui/children/1/children/1/child/children/1/fields/2/value",
+                "/ui/children/1/children/1/child/children/1/fields/3/value",
             ]
         );
         let actions: Vec<String> = data::ui_actions(&board)
@@ -8171,7 +8173,7 @@ mod tests {
                 "/ui/children/0/children/0/end/0/on_change",
                 "/ui/children/0/children/0/end/1/on_click",
                 "/ui/children/0/children/1/on_select",
-                "/ui/children/1/children/0/end/0/on_click",
+                "/ui/children/1/children/1/child/children/0/end/0/on_click",
             ]
         );
         // 자리는 앱 정의 JSON에서 그 값을 그대로 가리킨다.
@@ -8193,7 +8195,7 @@ mod tests {
             .any(|(pointer, _)| pointer == "/sources/detail/path"));
         assert!(exprs
             .iter()
-            .any(|(pointer, _)| pointer == "/ui/children/1/children/0/end/0/on_click/0/call/path"));
+            .any(|(pointer, _)| pointer == "/ui/children/1/children/1/child/children/0/end/0/on_click/0/call/path"));
     }
 
     #[test]
