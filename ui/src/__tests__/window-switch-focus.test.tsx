@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AppDefinition } from "../contract/contract";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
 import { Shell } from "../../../app/src/shell/shell";
+import { FRAME_PRESS_EVENT } from "../render/frame-press";
 import { makeTestSeed, makeTestSnapshot } from "./fixtures";
 
 if (!globalThis.ResizeObserver) {
@@ -151,6 +152,34 @@ it("초점이 이미 그 창 안에 있으면 머리를 눌러 올려도 거두�
   expect(document.activeElement).toBe(input);
   await waitFor(() => expect(screen.getByTestId("app-window-probe-b").classList.contains("ks-window")).toBe(true));
   await waitFor(() => expect(document.activeElement).toBe(input));
+  store.dispose();
+});
+
+it("맨 위가 아닌 창 내용의 프레임 누름은 그 창을 한 번 올리고 맨 위 창에서는 올리지 않는다", async () => {
+  const { seed } = probeSeed();
+  const transport = createFakeTransport(seed);
+  const calls = vi.spyOn(transport, "call");
+  const store = createShellStore(transport);
+  render(<Shell store={store} />);
+  await store.ready;
+  const press = (testId: string) => act(() => {
+    const content = screen.getByTestId(testId).querySelector(".ks-window-content");
+    if (!(content instanceof HTMLElement)) throw new Error("창 내용을 찾지 못했습니다");
+    content.dispatchEvent(new CustomEvent(FRAME_PRESS_EVENT, { bubbles: true, detail: { trusted: true } }));
+  });
+
+  press("app-window-probe-a");
+  expect(calls).not.toHaveBeenCalledWith(expect.objectContaining({ op: "window.raise" }));
+
+  press("app-window-probe-b");
+  await waitFor(() => expect(calls).toHaveBeenCalledWith({ op: "window.raise", window_id: "probe-b-window" }));
+  await waitFor(() => {
+    const windows = store.getSnapshot()?.shared.windows ?? [];
+    return (windows.find((item) => item.id === "probe-b-window")?.z ?? 0) > (windows.find((item) => item.id === "probe-a-window")?.z ?? 0);
+  });
+
+  press("app-window-probe-b");
+  expect(calls.mock.calls.filter(([request]) => request.op === "window.raise" && request.window_id === "probe-b-window")).toHaveLength(1);
   store.dispose();
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode, type Ref } from "react";
-import { IconButton, Maximize2, Minus, Minimize2, X, openContextMenu, type MenuEntry, type Rect } from "@kaleidoscope/ui";
+import { FRAME_PRESS_EVENT, IconButton, Maximize2, Minus, Minimize2, X, openContextMenu, type FramePressDetail, type MenuEntry, type Rect } from "@kaleidoscope/ui";
 import { fitWindowRect, resizeWindowRect, usableWindowArea, RESIZE_EDGES, type WindowResizeEdge } from "./window-geometry";
 
 export interface WindowChromeProps {
@@ -8,7 +8,7 @@ export interface WindowChromeProps {
   titleActions?: ReactNode; menuEntries: MenuEntry[]; onRaise: () => void; onMinimize: () => void;
   onMaximize: () => void; onRestore: () => void; onClose: () => void;
   onRectCommit: (rect: Rect) => Promise<boolean>; testId: string; frameRef?: Ref<HTMLDivElement>;
-  contentRef?: Ref<HTMLDivElement>; pointerGuard?: (event: PointerEvent<HTMLElement>) => boolean;
+  contentRef?: Ref<HTMLDivElement>; pointerGuard?: (trusted: boolean) => boolean;
   sharing?: boolean; commenting?: boolean; children: ReactNode; overlays?: ReactNode; outerOverlays?: ReactNode;
   windowId?: string;
 }
@@ -107,20 +107,38 @@ export function WindowChrome({ area, rect, maximized, minimized, zIndex, isTop, 
     setPreview(null);
   };
 
-  return <section className={`ks-window${preview ? " ks-window-gesturing" : ""}${sharing ? " ks-window-sharing" : ""}`}
+  // 창 밖 누름(호스트 문서의 pointerdown)과 iframe 안 누름(블록이 iframe에서 띄우는
+  // FRAME_PRESS_EVENT)이 같은 판단을 지난다. iframe 안 누름은 호스트 문서의
+  // pointerdown으로 오지 않으므로, 프레임 브리지가 올린 메시지를 받은 블록이
+  // 사건으로 바꿔 이 창 틀에 알린다.
+  const section = useRef<HTMLElement>(null);
+  const raise = (trusted: boolean): void => {
+    if (pointerGuard?.(trusted)) return;
+    if (isTop) return;
+    // 사용자가 다른 창을 고르면 가려지는 창의 입력칸이 초점을 쥐고 있지 않게 한다.
+    // 초점이 없으면 맨 위가 되는 순간 window-focus가 이 창의 마지막 초점이나 첫 내용으로 옮긴다.
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && !(section.current && section.current.contains(active))) active.blur();
+    onRaise();
+  };
+  const raiseRef = useRef(raise);
+  raiseRef.current = raise;
+  useEffect(() => {
+    const element = section.current;
+    if (!element) return;
+    const receive = (event: Event) => raiseRef.current((event as CustomEvent<FramePressDetail>).detail?.trusted === true);
+    element.addEventListener(FRAME_PRESS_EVENT, receive);
+    return () => element.removeEventListener(FRAME_PRESS_EVENT, receive);
+  }, []);
+
+  return <section ref={section} className={`ks-window${preview ? " ks-window-gesturing" : ""}${sharing ? " ks-window-sharing" : ""}`}
     data-maximized={maximized ? "true" : "false"} data-minimized={minimized ? "true" : "false"} data-commenting={commenting || undefined}
     data-testid={testId} data-window-id={windowId} inert={minimized}
     onPointerDownCapture={(event) => {
-      if (pointerGuard?.(event)) return;
-      if (isTop) return;
       // 최소화와 닫기는 누르는 순간 창을 올리지 않는다. 올리기 요청이 뒤늦게 도착하면
       // 펼쳐지거나 닫으려던 창이 다시 나타난다.
       if (event.target instanceof Element && event.target.closest('[data-window-control="minimize"], [data-window-control="close"]')) return;
-      // 사용자가 다른 창을 고르면 가려지는 창의 입력칸이 초점을 쥐고 있지 않게 한다.
-      // 초점이 없으면 맨 위가 되는 순간 window-focus가 이 창의 마지막 초점이나 첫 내용으로 옮긴다.
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && !event.currentTarget.contains(active)) active.blur();
-      onRaise();
+      raise(event.nativeEvent.isTrusted);
     }}
     onPointerMove={moveGesture} onPointerUp={finishGesture} onPointerCancel={cancelGesture}
     style={{ left: displayRect.x, top: displayRect.y, width: displayRect.width, height: displayRect.height, zIndex }}>

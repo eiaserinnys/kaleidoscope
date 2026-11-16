@@ -3,6 +3,7 @@ import type { Block, CoreError, DocumentRef } from "../../contract/contract";
 import type { JsonValue } from "../../contract/serde_json/JsonValue";
 import { useShellSelector } from "../../core/shell-store";
 import { openFrameContextMenu } from "../../components/context-menu";
+import { dispatchFramePress } from "../../render/frame-press";
 import { toCoreError } from "../../core/core-transport";
 import { patchWindowState, useWindowStateValue, useWindowVisible } from "../../data/window-state";
 import type { BlockContext } from "../block-context";
@@ -315,6 +316,7 @@ export function useHtmlDocument(block: HtmlBlock, context: BlockContext) {
         send({ type: "ks-html-comments", comments: frameComments });
         send({ type: "ks-html-lock", locked: lockedRef.current });
       }
+      else if (data.type === "ks-html-press" && frame.current) dispatchFramePress(frame.current, data.trusted === true);
       else if (data.type === "ks-html-visible-text") setText(data.text);
       else if (data.type === "ks-html-context-menu" && !lockedRef.current && frame.current && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string") openFrameContextMenu(frame.current, data, (command) => send({ type: "ks-html-context-command", ...command }));
       else if (data.type === "ks-html-select") {

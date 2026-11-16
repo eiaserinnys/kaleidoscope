@@ -96,6 +96,7 @@ export { captureWindowForComment, prepareShareForSend, useShareView } from "./sh
 export { CommentLayer, CommentTitle, useCommentMeta } from "./comments/layer";
 export { commentSession, forgetCommentSession, useCommentSession } from "./comments/session";
 export { suspendWebSurfaces } from "./blocks/web-surface-layer";
+export { FRAME_PRESS_EVENT, dispatchFramePress, type FramePressDetail } from "./render/frame-press";
 export { useWindowControlHost } from "./share/window-control";
 export { describeNumbered, resolveNumbered, forgetNumbered } from "./share/numbered";
 export { windowActionActive } from "./share/action-context";

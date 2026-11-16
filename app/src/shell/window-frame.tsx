@@ -90,7 +90,7 @@ export function WindowFrame({ area, appName, fileDrop, isTop, sharing, shareable
     onRectCommit={async (rect) => Boolean(await onCall({ op: "window.set_rect", window_id: appWindow.id, rect }))}
     testId={`app-window-${appWindow.app_id}`} windowId={appWindow.id} frameRef={setFrameHost} contentRef={setContentRef} sharing={sharing} commenting={commenting}
     outerOverlays={content ? <CommentLayer store={store} window={appWindow} appName={appName} content={content} shellVersion={appConfig.version} chooseAgent={(anchor) => onChooseAgent?.(anchor)} /> : null}
-    pointerGuard={(event) => !event.nativeEvent.isTrusted && windowActionActive(appWindow.id)}
+    pointerGuard={(trusted) => !trusted && windowActionActive(appWindow.id)}
     overlays={<><ProcessConsent store={store} windowId={appWindow.id} host={frameHost} /><InstallationConsent store={store} windowId={appWindow.id} host={frameHost} /></>}>
     {typeof children === "function" ? children(settingsOpen, closeSettings, setSettingsProblem, settingsVisited, reportWindowHeader, reportSettingsAvailable) : children}
     {dropActive && contentRef.current ? createPortal(<div className="ks-window-file-drop" aria-hidden="true" />, contentRef.current) : null}
