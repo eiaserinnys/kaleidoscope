@@ -20,6 +20,7 @@ column_below 없이 가로 분할한 좁은 칸에서는 끝 단추가 막대의
   안인지, 글 자리 31.5px, 상자 폭 유지, 친 값 순서를 판정한다. 까닭은 result.json의 drag 항목에 남긴다.
   끝 묶음의 고르기 단추가 자기 칸 안인지, 옆 아이콘 단추와 상자가 겹치지 않는지, 막대를 가로로 끝까지
   밀면 마지막 단추가 막대 안에 온전히 보이는지는 빼지 않고 판정한다(카드 #1364).
+- 빈 이름 고르기(1180x720): 고르기 칸의 폭이 안의 단추 폭과 같은지(1px 이하) 잰다(카드 #1364).
 - 붐비는 막대(jizura 장면): 360폭에서 지금처럼 가로 스크롤하는지 확인한다(경계 280px의 전제).
   입력마다 빈 상태와 글을 친 상태를 재어 result.json에 남기지만 판정에는 넣지 않는다.
 - 창 크기 바꾸기: block-gallery 창을 연 채 1180 -> 360 -> 1180으로 바꿔 같은 판정을 다시 하고,
@@ -158,6 +159,25 @@ SCROLL_END_JS = """(root) => {
 RESET_SCROLL_JS = "(root) => { const bar = root.querySelector('.ks-data-toolbar'); if (bar) bar.scrollLeft = 0; }"
 
 APP_SCENES = ("card-board", "block-gallery", "pages")
+
+# 빈 이름 고르기를 둔 막대: 고르기 칸의 폭이 안의 단추 폭과 같은지 잰다(카드 #1364).
+# 칸에 따로 바닥 폭을 두면 빈 이름 단추(64px)보다 칸이 넓어져 넓은 폭에서도 뒤에 빈틈이 남는다.
+EMPTY_SELECT_SCENE = {
+    "type": "stack", "direction": "column", "gap": "none", "children": [
+        {
+            "type": "toolbar",
+            "start": [{"type": "text", "value": "빈 이름 고르기", "style": "body"}],
+            "end": [
+                {
+                    "type": "select", "style": "dropdown",
+                    "options": [{"value": "none", "label": ""}, {"value": "full", "label": "전체"}],
+                    "value": {"state": "pick"}, "on_change": {"set_state": "pick"},
+                },
+            ],
+        },
+        {"type": "text", "value": "빈 이름 고르기 장면", "style": "body"},
+    ],
+}
 
 # jizura의 붐비는 막대: 글자, 입력 둘, 고르기 둘, 단추 여섯이 한 줄에 선다.
 JIZURA_TOOLBAR_SCENE = {
@@ -331,6 +351,31 @@ def record(result, output, key, page, root_selector):
 def judge(result, key, measurements):
     checks = judge_apps(measurements)
     result["judged"][key] = checks
+    for check, ok in checks.items():
+        if ok is False:
+            result["failures"].append(f"{key}.{check}")
+    return checks
+
+
+def judge_empty_select(result, key, measurements):
+    """고르기 칸의 폭이 안의 단추 폭과 같은지 본다(1px 이하, 카드 #1364).
+
+    칸에 따로 바닥 폭을 두면 빈 이름 단추(64px)보다 칸이 넓어져 넓은 폭에서도 빈틈이 남는다.
+    바닥의 주인은 단추 하나이고 칸은 그 폭을 따라가야 한다.
+    """
+    selects = [select for bar_item in measurements for select in bar_item.get("selects", [])]
+    checks = {"empty_select_found": len(selects) == 1}
+    if len(selects) == 1:
+        select = selects[0]
+        cell_width = select["cell"]["width"] if select["cell"] else None
+        button_width = select["box"]["width"]
+        delta = round(abs(cell_width - button_width) * 10) / 10 if cell_width is not None else None
+        checks["select_cell_matches_button_width"] = delta is not None and delta <= 1
+        checks["cell_width"] = cell_width
+        checks["button_width"] = button_width
+        checks["width_delta"] = delta
+    result["judged"][key] = checks
+    print("JUDGE", key, json.dumps(checks, ensure_ascii=False), flush=True)
     for check, ok in checks.items():
         if ok is False:
             result["failures"].append(f"{key}.{check}")
@@ -589,6 +634,15 @@ def main():
                     typed_pass(result, output, key, page, '[data-testid="app-window-workspace-pas"]', judged=False, empty_measurements=measurements)
                 finally:
                     page.close()
+            # 빈 이름 고르기를 둔 넓은 폭(1180x720) 장면: 고르기 칸이 단추 폭을 따라가는지 잰다(카드 #1364).
+            page = open_data(browser, args.port, EMPTY_SELECT_SCENE, {"pick": "none"}, 1180, 720)
+            try:
+                key = "empty-select-1180x720"
+                measurements = record(result, output, key, page, '[data-testid="app-window-data-controls"]')
+                judge(result, key, measurements)
+                judge_empty_select(result, key, measurements)
+            finally:
+                page.close()
             # 실제 쉘의 앱 창 폭(360 화면에서 336) 장면. card-board와 block-gallery는 판정하고,
             # pages는 이 단위에서 정의를 고치지 않으므로 재어 남기기만 한다(spec 5).
             for name in APP_SCENES:
