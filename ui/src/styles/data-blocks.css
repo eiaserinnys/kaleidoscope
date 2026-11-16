@@ -103,6 +103,9 @@
 /* 뒤에 내용이 이어지는 쌓기와 세로 분할은 창 바닥 여백을 갖지 않는다. 그 안 끝의 차트는 아래 여백을 남긴다(차트 아래 여백 규칙). */
 .ks-data-stack.is-column > .ks-data-stack-item:has(~ .ks-data-stack-item:not(:empty):not(.is-dialog)),
 :is(.ks-split.is-stacked, .ks-split-column) > .ks-split-pane:not(:last-child) { --ks-pane-bottom-space: 0px; --ks-chart-end-space: var(--ks-space-3); }
+/* 간격 있는 쌓기에서는 차트와 이웃 블록 사이 간격을 쌓기 gap 하나가 맡는다. 차트는 자기 아래 여백을 0으로 두어,
+   gap이 더해져 두 배가 되지 않게 한다(간격 없는 쌓기는 gap이 0이라 지금처럼 차트가 12px를 남긴다). */
+.ks-data-stack.is-column:not(.gap-none) > .ks-data-stack-item:has(~ .ks-data-stack-item:not(:empty):not(.is-dialog)) { --ks-chart-end-space: 0px; }
 /* 구역의 자식 스크롤 밖에 남긴다. 탭은 구역 안팎 어느 쪽이든 탭 패널이 맡는다.
    이 여백을 받은 구역 끝의 차트는 아래 여백을 구역에 맡기고, 여백이 꺼진 구역(뒤에 내용이 이어짐)의 차트는 남긴다. */
 :is(.ks-split-pane, .ks-data-window-body, .ks-data-stack-item.is-fill:not(.ks-data-section-child *, .ks-dialog *)) > .ks-data-section:not(.ks-data-tab-panel *):not(:has(> .ks-data-section-child > .ks-data-tabs)) { padding-block-end: var(--ks-pane-bottom-space, var(--ks-space-3)); --ks-chart-end-space: calc(var(--ks-space-3) - var(--ks-pane-bottom-space, var(--ks-space-3))); }
@@ -428,8 +431,11 @@
   .ks-keypad { grid-auto-rows: minmax(0, 1fr); gap: var(--ks-space-1); padding-block-end: var(--ks-space-2); }
   .ks-keypad-cell > .ks-button { min-height: 0; height: 100%; font-size: var(--ks-type-body); }
 }
-.ks-chart { display: flex; width: 100%; height: auto; min-width: 0; min-height: 100%; flex-direction: column; padding: var(--ks-space-3); }
+.ks-chart { display: flex; width: 100%; height: auto; min-width: 0; min-height: 100%; flex-direction: column; padding: var(--ks-space-3); padding-block-end: var(--ks-chart-end-space, var(--ks-space-3)); }
 .ks-data-stack.gap-none > .ks-data-stack-item + .ks-data-stack-item > .ks-chart { padding-block-start: 0; }
+/* 세로 쌓기에서 이웃과 맞닿는 차트의 위 여백도 쌓기 gap이 맡는다. 간격 있는 쌓기에서 차트가 자기 위 여백을
+   남기면 gap과 더해져 두 배가 된다. 가로 쌓기의 옆 칸은 위아래로 이어진 블록이 아니라 그대로 둔다. */
+.ks-data-stack.is-column:not(.gap-none) > .ks-data-stack-item + .ks-data-stack-item > .ks-chart { padding-block-start: 0; }
 /* 차트가 칸보다 커지면 직접 담은 분할 칸에서 끝까지 볼 수 있게 한다. */
 .ks-split:not(.is-stacked) > .ks-split-pane:has(> .ks-chart) { overflow-y: auto; }
 .ks-split.is-stacked > .ks-split-pane > .ks-chart { min-height: 0; }
@@ -454,9 +460,12 @@
 .ks-chart-legend-item > .ks-list-color { background: var(--ks-chart-series-color); }
 .ks-chart-legend-name { overflow: hidden; color: var(--ks-color-muted); font-size: var(--ks-type-meta); text-overflow: ellipsis; white-space: nowrap; }
 .ks-chart-plot { display: flex; position: relative; min-width: 0; min-height: 0; flex: 1 1 auto; }
-/* 초점은 그래프가 받고 테두리는 plot에 그린다. x축 글자는 plot 아래에 있어 테두리와 겹치지 않는다. */
+/* 초점 테두리는 차트 틀에 그린다. 그래프 상자에 초점이 있을 때 틀의 안쪽에 focus.css의 상자형 컨트롤과
+   같은 고리(outline-offset calc(-1 * --ks-focus-width))를 그리면, 틀의 둥근 모서리를 따라가고 틀 테두리와
+   겹줄로 보이지 않는다. 고리는 틀 가장자리 2px 안쪽에만 있어 점, 축 글자, 범례, 읽기 줄과 겹치지 않는다.
+   그래프 상자 자체의 테두리는 없앤다. 테두리는 흐름 밖이라 초점이 없을 때의 차트 높이와 배치는 그대로다. */
+.ks-chart-frame:has(.ks-chart-graph:focus-visible) { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
 .ks-chart-graph:focus-visible { outline: none; }
-.ks-chart-graph:focus-visible > .ks-chart-plot { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
 /* 그림은 흐름에서 빠져 그림 영역을 채운다. 흐름에 있으면 그림의 고유 비율(1000:160)이 창 폭에 따라
    틀 높이를 밀어 올려, 데이터가 없어 비율을 알 수 없는 받는 중 뼈대가 같은 높이를 예약할 수 없다.
    높이는 높이 갈래(작음/중간/큼)가 정하고 그림은 그 상자를 채운다. */

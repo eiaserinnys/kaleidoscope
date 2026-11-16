@@ -24,6 +24,22 @@
 .ks-data-stack-item:not(.is-fill) { --ks-fill-list-basis: auto; --ks-fill-list-height: auto; --ks-fill-textarea-height: auto; --ks-fill-textarea-max: calc(var(--ks-type-body) * var(--ks-line-body) * 8 + var(--ks-control-height) - var(--ks-type-body) * var(--ks-line-body)); --ks-fill-media-max: initial; }
 .ks-data-stack-item.is-fill { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
 .ks-data-stack.has-fill-list > .ks-data-stack-item.is-fill { flex: 1 1 var(--ks-fill-list-basis, 0); }
+/* 앞 칸들의 높이 합이 쌓기 높이를 넘으면 기본 채움 칸(fill을 적지 않은 세로 쌓기의 마지막 자식)이 음수 여유 공간을
+   혼자 흡수해 높이 0으로 접혔다. 채움 칸은 넘칠 때도 내용 높이와 pane 최소 크기 가운데 작은 값만큼은 받는다.
+   내용이 작으면(글 한 줄) 내용 높이만 받아 빈 자리를 만들지 않고, 내용이 길면 pane 최소 크기에서 칸 안이 굴러간다.
+   채움을 적은 칸(fill: [...], fill: n)은 앱이 스크롤 주인으로 고른 칸이므로 지금처럼 줄어들게 둔다. 가로 쌓기도 그대로다.
+   calc-size를 모르는 브라우저는 앞 선언(min-content)을 써서 바닥이 0으로 돌아가지 않는다. */
+.ks-data-stack.is-column:where(:not(.has-explicit-fill)) > .ks-data-stack-item:where(.is-fill) {
+  min-height: min-content;
+  min-height: calc-size(min-content, min(size, var(--ks-pane-min-size)));
+}
+/* 차트를 담은 기본 채움 칸은 160 상한을 두지 않는다. 넘칠 때 바닥이 차트 내용 높이 전체라,
+   스크롤 주인을 끝까지 내리면 차트 틀이 잘리지 않고 다 보이며 칸 안은 굴러가지 않는다(굴러가는 건 바깥 주인 하나다).
+   160 상한은 목록, 채팅, 긴 글처럼 칸 안에서 굴리는 내용에만 남긴다. 넘치지 않을 때 차트가 남은 높이를
+   채우는 동작은 flex가 그대로 맡는다. */
+.ks-data-stack.is-column:where(:not(.has-explicit-fill)) > .ks-data-stack-item:where(.is-fill):has(> .ks-chart) {
+  min-height: min-content;
+}
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-data-input > textarea),
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-input-field > .ks-data-input > textarea) { min-height: min-content; }
 .ks-data-stack-item:has(> .ks-data-stack.is-center) { flex: 1 1 auto; }
