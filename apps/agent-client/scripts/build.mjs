@@ -11,8 +11,7 @@ const assets = resolve(root, "../assets");
 const target = resolve(assets, "agent/client-v11.js");
 const manifestPath = resolve(assets, "manifest.json");
 const check = process.argv.includes("--check");
-// npm run이 넘긴 npm 스크립트를 node로 직접 돌린다. Windows에서는 npm이 npm.cmd라 execFileSync("npm")이 실패한다.
-if (!check) execFileSync(process.execPath, [process.env.npm_execpath, "test"], { cwd: root, stdio: "inherit" });
+if (!check) execFileSync("npm", ["test"], { cwd: root, stdio: "inherit" });
 const agentDefinition = JSON.parse(await readFile(resolve(root, "../agent.json"), "utf8"));
 const defaults = agentDefinition.storage.entries.find((entry) => entry.id === "agents").default;
 const bundle = await build({ entryPoints: [resolve(root, "src/index.ts")], bundle: true, write: false, format: "iife", platform: "browser", target: "es2022", minify: true, charset: "utf8", legalComments: "none", define: { __DEFAULT_AGENTS__: JSON.stringify(defaults) } });
