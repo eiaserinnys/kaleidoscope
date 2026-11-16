@@ -438,6 +438,8 @@ export class AppClient {
       const title = cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8);
       return { key: session.sessionId, title, meta: sessionTime(session.updatedAt), confirm: `「${title}」 세션을 지웁니다. 되돌릴 수 없습니다.` };
     }).filter((item) => !query || item.title.toLocaleLowerCase().includes(query));
+    // 일치가 없으면 안내 문구 하나만 보이도록 삭제 가능 여부로 갈린 두 목록을 모두 숨긴다(목록 블록의 빈 상태가 겹치지 않게)
+    const noMatch = sessions.length > 0 && query !== "" && historyItems.length === 0, canDelete = !!this.view?.canDeleteSessions;
     const output = {
       show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
@@ -459,8 +461,8 @@ export class AppClient {
       history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: this.sessionLocked,
       history_disabled: this.sessionLocked || !this.view?.canListSessions,
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
-      history_items: historyItems, history_query: this.historyQuery, history_no_match: sessions.length > 0 && query !== "" && historyItems.length === 0,
-      history_can_delete: !!this.view?.canDeleteSessions, history_cannot_delete: !this.view?.canDeleteSessions,
+      history_items: historyItems, history_query: this.historyQuery, history_no_match: noMatch,
+      history_can_delete: canDelete && !noMatch, history_cannot_delete: !canDelete && !noMatch,
       history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading && !this.view.sessions.length,
       history_unsupported: !!this.view && !this.view.canListSessions,
       history_empty: !!this.view && this.view.canListSessions && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,
