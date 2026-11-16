@@ -1052,6 +1052,10 @@
                             "type": "stack",
                             "direction": "column",
                             "gap": "small",
+                            "fill": [
+                              2,
+                              3
+                            ],
                             "children": [
                               {
                                 "type": "input",
