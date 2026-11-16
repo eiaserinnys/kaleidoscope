@@ -73,6 +73,10 @@ function bridgeSource(init: SandboxInit): string {
     let state = { ...config.state }, nextRequest = 0, shareText = '', shareImage = '', shareCanvas = null, explicitText = false;
     const stateListeners = new Set(), storageListeners = new Map(), grantListeners = new Map(), pending = new Map(), pendingWrites = new Set();
     const send = (type, body = {}, transfer) => transfer ? parent.postMessage({ token, type, ...body }, '*', transfer) : parent.postMessage({ token, type, ...body }, '*');
+    // 프레임 안의 누름을 창 틀에 알린다. 창 틀은 이 메시지를 받은 블록이 iframe에서
+    // 띄우는 사건으로 그 창을 올린다. 앱 문서의 스크립트보다 먼저 붙는 자리이고,
+    // 누름은 그대로 앱 문서에 들어가도록 preventDefault와 stopPropagation을 부르지 않는다.
+    window.addEventListener('pointerdown', event => send('ks-sandbox-press', { trusted: event.isTrusted }), true);
     let menuTarget = null, menuField = null, menuRange = null, menuRequestId = 0;
     document.addEventListener('contextmenu', event => {
       event.preventDefault();

@@ -11,6 +11,7 @@ import { registerCommentEntry } from "../comments/context-entry";
 import { makeTestSeed, mdEditorDefinition } from "./fixtures";
 import { ClientRuntime } from "../runtime/client-runtime";
 import type { WindowData } from "../data/window-data";
+import { FRAME_PRESS_EVENT, type FramePressDetail } from "../render/frame-press";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -81,6 +82,24 @@ it("샌드박스의 올바른 토큰을 가진 선택 복사만 메뉴로 연다
   fireEvent.click(screen.getByRole("menuitem", { name: "커멘트 달기…" }));
   expect(pick).toHaveBeenCalledWith(frame, { x: 10, y: 20 });
   unregister();
+  store.dispose();
+});
+
+it("샌드박스 프레임의 올바른 토큰 누름만 프레임 누름 사건이 되고 틀린 토큰은 무시한다", async () => {
+  vi.spyOn(crypto, "randomUUID").mockReturnValue("00000000-0000-4000-8000-000000000001");
+  const definition: AppDefinition = { ...mdEditorDefinition, requires: { blocks: 11, modules: {} }, ui: { type: "sandbox", value: "<p>글</p>", title: "격리" } as Block };
+  const store = createShellStore(createFakeTransport(makeTestSeed({ definitions: [definition] })));
+  render(<AppWindowContent store={store} windowId="editor-window" />);
+  const frame = await screen.findByTitle("격리") as HTMLIFrameElement;
+  const heard: boolean[] = [];
+  frame.addEventListener(FRAME_PRESS_EVENT, (event) => heard.push((event as CustomEvent<FramePressDetail>).detail.trusted));
+  const send = (data: object, origin = "null") => act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin, data })));
+  send({ token: "틀린 토큰", type: "ks-sandbox-press", trusted: true });
+  send({ token: "00000000-0000-4000-8000-000000000001", type: "ks-sandbox-press", trusted: true }, "https://outside.test");
+  expect(heard).toEqual([]);
+  send({ token: "00000000-0000-4000-8000-000000000001", type: "ks-sandbox-press", trusted: true });
+  send({ token: "00000000-0000-4000-8000-000000000001", type: "ks-sandbox-press", trusted: false });
+  expect(heard).toEqual([true, false]);
   store.dispose();
 });
 

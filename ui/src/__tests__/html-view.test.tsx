@@ -14,6 +14,7 @@ import { readThread, writeThreadChange } from "../blocks/html-document/storage";
 import type { ShellStore } from "../core/shell-store";
 import { ContextMenuHost } from "../components/context-menu";
 import { registerCommentEntry } from "../comments/context-entry";
+import { FRAME_PRESS_EVENT, type FramePressDetail } from "../render/frame-press";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const testAnchor: HtmlAnchor = { kind: "element", selector: "h1", selector_stable: false, path: "body > h1", tag: "h1", text: "제목", attrs: { id: null, role: null, aria_label: null, alt: null, href: null, src_hash: null }, quote: null, label: "h1", heading: "", rect: { x: 0, y: 0, w: 10, h: 10, vw: 300 } };
@@ -137,6 +138,19 @@ it("값 HTML의 같이 보기는 숨긴 글과 스크립트를 빼고 프레임�
   expect(describeVisible(root).text).not.toContain("비표시 코드");
   act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-visible-text", text: "프레임에 보이는 글" } })));
   await waitFor(() => expect(describeVisible(root).text).toContain("프레임에 보이는 글"));
+});
+
+it("값 HTML 프레임의 누름은 그 iframe에서 프레임 누름 사건이 되고 다른 출처의 메시지는 무시한다", async () => {
+  const app: AppDefinition = { id: "html-value", name: "미리보기", requires: { blocks: 6, modules: {} }, permissions: [], state: {}, ui: { type: "html_view", value: "<p>글</p>" } };
+  render(<AppWindowContent store={createShellStore(createFakeTransport(makeTestSeed({ definitions: [app] })))} windowId="viewer-window" />);
+  const frame = await screen.findByTitle("미리보기") as HTMLIFrameElement;
+  const heard: boolean[] = [];
+  frame.addEventListener(FRAME_PRESS_EVENT, (event) => heard.push((event as CustomEvent<FramePressDetail>).detail.trusted));
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: window, data: { type: "ks-html-press", trusted: true } })));
+  expect(heard).toEqual([]);
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-press", trusted: true } })));
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, data: { type: "ks-html-press", trusted: false } })));
+  expect(heard).toEqual([true, false]);
 });
 
 it("파일 HTML을 읽기 전용 격리 프레임으로 표시한다", async () => {

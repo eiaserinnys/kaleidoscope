@@ -4,6 +4,11 @@ import { applyEdit, findNumber } from "./edit";
 import type { FrameComment, FrameSelection, FrameToParent, ParentToFrame } from "./frame-protocol";
 
 const send = (message: FrameToParent) => parent.postMessage(message, "*");
+// 프레임 안의 누름을 창 틀에 알린다. 창 틀은 이 메시지를 받은 블록이 iframe에서
+// 띄우는 사건으로 그 창을 올린다. 잠금 여부와 상관없이 매번 보내고, 누름은
+// 그대로 앱 문서에 들어가도록 preventDefault와 stopPropagation을 부르지 않는다.
+// 이 리스너는 앱 문서의 스크립트보다 먼저 붙는다.
+window.addEventListener("pointerdown", (event) => { send({ type: "ks-html-press", trusted: event.isTrusted }); }, true);
 let mode: "select" | "view" | "readonly" = "readonly";
 let locked = false;
 let colors: string[] = [];

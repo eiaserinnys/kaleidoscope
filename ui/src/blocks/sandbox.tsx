@@ -1,4 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
+import { dispatchFramePress } from "../render/frame-press";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
@@ -202,7 +203,8 @@ function SandboxFrame({ block, context, rawHtml }: { block: SandboxData; context
     const receive = (event: MessageEvent) => {
       if (!active.current || event.source !== frame.current?.contentWindow || !["null", ""].includes(event.origin) || !event.data || event.data.token !== source.token) return;
       const data = event.data;
-      if (data.type === "ks-sandbox-point-done" && typeof data.requestId === "string") {
+      if (data.type === "ks-sandbox-press" && frame.current) dispatchFramePress(frame.current, data.trusted === true);
+      else if (data.type === "ks-sandbox-point-done" && typeof data.requestId === "string") {
         points.current.get(data.requestId)?.();
         points.current.delete(data.requestId);
       } else if (data.type === "ks-sandbox-context-menu" && typeof data.x === "number" && typeof data.y === "number" && typeof data.text === "string" && frame.current) {
