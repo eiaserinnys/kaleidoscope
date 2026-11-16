@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """카드 #1340 셸 화면 결함 넷을 1180과 360 폭에서 화면으로 잰다.
 
-항목 1: 기본 채움 칸(마지막 자식)이 넘칠 때 높이 0으로 접히지 않는지. 채움 칸 높이가
-        「내용 높이와 --ks-pane-min-size(160px) 가운데 작은 값」 이상이고, 내용이 작으면 그 내용 높이만 받아
-        빈 자리를 만들지 않으며, 글자가 칸 안에 있고, 스크롤 주인(창 본문, 탭 판)을 내리면 칸이 보인다.
+항목 1: 기본 채움 칸(마지막 자식)이 넘칠 때 높이 0으로 접히지 않는지. 글·목록 채움 칸은
+        「내용 높이와 --ks-pane-min-size(160px) 가운데 작은 값」 이상을 받고, 차트를 담은 채움 칸은
+        160 상한 없이 차트 내용 높이 전체를 받는다(스크롤 주인을 끝까지 내리면 차트가 다 보이고
+        채움 칸 안은 굴러가지 않는다). 차트 장면은 1180×720, 360×720, 쉘 최소 창 384×317에서 잰다.
 항목 2: 간격 있는 쌓기 안에서 차트와 이웃 블록 사이 간격이 그 쌓기의 gap 한 값인지(아래와 위).
         gap none은 지금처럼 12px다.
-항목 3: 선, 면적 차트에 초점을 주고 첫 시점과 마지막 시점을 고른 상태에서 초점 테두리 띠가
-        점 상자(.ks-chart-dot), x축 글자, 범례, 읽기 줄과 겹치지 않는지.
+항목 3: 선, 면적, 막대 차트(한 계열과 두 계열)에 초점을 주고 첫 시점과 마지막 시점을 고른 상태에서
+        초점 고리가 차트 틀(.ks-chart-frame)에 안쪽으로 그려지고, 그래프 상자에는 테두리가 없으며,
+        고리 띠가 점·막대, x축 글자, 범례, 읽기 줄과 겹치지 않는지.
 항목 4: 오른쪽 맞춤 숫자 열 머리 글자의 오른끝이 정렬 없음, 오름, 내림 세 상태에서 같고(1px 이내),
         아래 숫자 칸 글자의 오른끝과 같은지. 정렬 표시는 정렬한 상태에만 있고 열 폭은 그대로다.
 
@@ -34,11 +36,14 @@ from playwright.sync_api import sync_playwright
 import check_chart_series as api
 from check_1246_layout import focus_chart, open_page, sort_table
 from layout_1246_fixtures import (
-    APP_ID, NARROW, STACK_GAP_JS, WIDE, control_row_scene, section_stack_scene, share_table_scene)
+    APP_ID, CONTROL_ROW_STATE, NARROW, STACK_GAP_JS, WIDE, control_row_scene, section_stack_scene, share_table_scene)
 from layout_1246_verdicts import UNCHECKED, self_test as self_test_1246
 from layout_1246_verdicts import stack_gap_verdicts, widths_stable_verdict
-from layout_1340_fixtures import ARIA_JS, DOT_JS, FILL_JS, FILL_SCENES, GAP_PX, HEADER_JS, focus_two_series_scene
-from layout_1340_verdicts import dot_outline_verdicts, fill_floor_verdicts, header_alignment_verdicts
+from layout_1340_fixtures import (
+    ARIA_JS, CHART_FILL_SCENES, DOT_JS, FILL_JS, FILL_SCENES, GAP_PX, HEADER_JS, focus_bar_single_section_scene,
+    focus_bar_single_stack_scene, focus_line_single_scene, focus_two_series_scene)
+from layout_1340_verdicts import chart_fill_verdicts, dot_outline_verdicts, fill_floor_verdicts
+from layout_1340_verdicts import header_alignment_verdicts
 from layout_1340_verdicts import self_test as self_test_1340
 
 # 항목 2의 장면들. 이름, 장면, 기대 아래 간격, 기대 위 간격(None이면 재지 않음).
@@ -50,9 +55,14 @@ GAP_SCENES = (
     ("same-large", lambda: section_stack_scene("large"), GAP_PX["large"], None),
     ("control", control_row_scene, GAP_PX["medium"], GAP_PX["medium"]),
 )
-# 항목 3: focus_scene의 차트 둘(선, 면적)과 그 시점 넷(11월 9일부터 12일).
-FOCUS_CHARTS = ((0, "line"), (1, "area"))
-FOCUS_POINTS = ((0, "first"), (3, "last"))
+# 항목 3: 장면마다 (차트 index, 이름)과 그 시점들. 두 계열 장면(선, 면적)은 그대로 두고,
+# 범례 없는 한 계열(선, 막대 둘)을 더한다. 막대는 시점 일곱 개라 끝 시점 index가 6이다.
+FOCUS_SCENES = (
+    ("two-series", focus_two_series_scene, ((0, "line", 3), (1, "area", 3))),
+    ("single-line", focus_line_single_scene, ((0, "single-line", 3),)),
+    ("single-bar-stack", focus_bar_single_stack_scene, ((0, "single-bar-stack", 6),)),
+    ("single-bar-section", focus_bar_single_section_scene, ((0, "single-bar-section", 6),)),
+)
 NUMERIC_LABELS = ["몫", "값"]
 
 
@@ -103,23 +113,25 @@ def capture(output, result, page, name):
 
 
 def check_fill(page, output, result):
-    """항목 1: 기본 채움 칸이 넘칠 때 0으로 접히는지."""
-    for name, scene, owner in FILL_SCENES:
-        inject(page, scene())
-        for width, height in (WIDE, NARROW):
-            page.set_viewport_size({"width": width, "height": height})
-            page.wait_for_timeout(450)
-            measured = page.evaluate(FILL_JS, [APP_ID, owner])
-            key = f"item1-{name}-{width}"
-            record(result, key, fill_floor_verdicts(measured))
-            result["scenes"][key]["measurement"] = measured
-            capture(output, result, page, key)
+    """항목 1: 기본 채움 칸이 넘칠 때 0으로 접히거나 차트를 잘라 내는지."""
+    for scenes, verdict in ((FILL_SCENES, fill_floor_verdicts), (CHART_FILL_SCENES, chart_fill_verdicts)):
+        for name, scene, owner, sizes in scenes:
+            inject(page, scene())
+            for width, height in sizes:
+                page.set_viewport_size({"width": width, "height": height})
+                page.wait_for_timeout(450)
+                measured = page.evaluate(FILL_JS, [APP_ID, owner])
+                key = f"item1-{name}-{width}"
+                record(result, key, verdict(measured))
+                result["scenes"][key]["measurement"] = measured
+                capture(output, result, page, key)
 
 
 def check_gap(page, output, result):
     """항목 2: 간격 있는 쌓기의 차트 앞뒤 간격이 쌓기 gap 하나인지."""
     for name, scene, below, above in GAP_SCENES:
-        inject(page, scene())
+        # 조작 줄 꼴은 고르기 칸이 빈 글로 찍히지 않도록 상태를 준다. 다른 장면은 상태가 필요 없다.
+        inject(page, scene(), state=CONTROL_ROW_STATE if name == "control" else None)
         for width, height in (WIDE, NARROW):
             page.set_viewport_size({"width": width, "height": height})
             page.wait_for_timeout(450)
@@ -134,27 +146,29 @@ def check_gap(page, output, result):
 
 
 def check_dots(page, output, result):
-    """항목 3: 초점 테두리 띠가 첫 점과 끝 점, 축 글자, 범례, 읽기 줄을 지나지 않는지."""
-    inject(page, focus_two_series_scene())
-    for width, height in (WIDE, NARROW):
-        page.set_viewport_size({"width": width, "height": height})
-        page.wait_for_timeout(400)
-        for index, kind in FOCUS_CHARTS:
-            for point, point_name in FOCUS_POINTS:
-                if not focus_chart(page, index):
+    """항목 3: 초점 고리가 차트 틀에 그려지고 점·막대, 축 글자, 범례, 읽기 줄을 지나지 않는지."""
+    for scene_name, scene, charts in FOCUS_SCENES:
+        inject(page, scene())
+        for width, height in (WIDE, NARROW):
+            page.set_viewport_size({"width": width, "height": height})
+            page.wait_for_timeout(400)
+            for index, kind, last in charts:
+                for point, point_name in ((0, "first"), (last, "last")):
+                    if not focus_chart(page, index):
+                        key = f"item3-{kind}-{point_name}-{width}"
+                        record(result, key, {"focused": False})
+                        result["scenes"][key]["measurement"] = {"focusedIndex": None, "scene": scene_name}
+                        continue
+                    page.keyboard.press("Home" if point == 0 else "End")
+                    page.wait_for_timeout(250)
+                    measured = page.evaluate(DOT_JS)
+                    measured["scene"] = scene_name
                     key = f"item3-{kind}-{point_name}-{width}"
-                    record(result, key, {"focused": False})
-                    result["scenes"][key]["measurement"] = {"focusedIndex": None}
-                    continue
-                page.keyboard.press("Home" if point == 0 else "End")
-                page.wait_for_timeout(250)
-                measured = page.evaluate(DOT_JS)
-                key = f"item3-{kind}-{point_name}-{width}"
-                record(result, key, dot_outline_verdicts(measured, index, point))
-                result["scenes"][key]["measurement"] = measured
-                capture(output, result, page, key)
-                # 다음 재기가 같은 차트에서 시작하도록 초점을 놓는다.
-                page.evaluate("() => document.activeElement instanceof HTMLElement && document.activeElement.blur()")
+                    record(result, key, dot_outline_verdicts(measured, index, point))
+                    result["scenes"][key]["measurement"] = measured
+                    capture(output, result, page, key)
+                    # 다음 재기가 같은 차트에서 시작하도록 초점을 놓는다.
+                    page.evaluate("() => document.activeElement instanceof HTMLElement && document.activeElement.blur()")
 
 
 def check_header(page, output, result):

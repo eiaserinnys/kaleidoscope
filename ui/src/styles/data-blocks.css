@@ -460,10 +460,12 @@
 .ks-chart-legend-item > .ks-list-color { background: var(--ks-chart-series-color); }
 .ks-chart-legend-name { overflow: hidden; color: var(--ks-color-muted); font-size: var(--ks-type-meta); text-overflow: ellipsis; white-space: nowrap; }
 .ks-chart-plot { display: flex; position: relative; min-width: 0; min-height: 0; flex: 1 1 auto; }
-/* 초점 테두리는 그래프 상자 바깥으로 점 반지름(--ks-space-1)만큼 물려 그린다. 그래프 상자는 plot과 그 아래
-   x축 글자를 함께 감싸므로, 테두리가 plot 경계에 중심을 둔 첫 점과 끝 점(지름 8px)을 지나지 않고 x축 글자,
-   범례, 읽기 줄과도 겹치지 않는다. 테두리는 흐름 밖이라 초점이 없을 때의 차트 높이와 배치는 그대로다. */
-.ks-chart-graph:focus-visible { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: var(--ks-space-1); }
+/* 초점 테두리는 차트 틀에 그린다. 그래프 상자에 초점이 있을 때 틀의 안쪽에 focus.css의 상자형 컨트롤과
+   같은 고리(outline-offset calc(-1 * --ks-focus-width))를 그리면, 틀의 둥근 모서리를 따라가고 틀 테두리와
+   겹줄로 보이지 않는다. 고리는 틀 가장자리 2px 안쪽에만 있어 점, 축 글자, 범례, 읽기 줄과 겹치지 않는다.
+   그래프 상자 자체의 테두리는 없앤다. 테두리는 흐름 밖이라 초점이 없을 때의 차트 높이와 배치는 그대로다. */
+.ks-chart-frame:has(.ks-chart-graph:focus-visible) { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); }
+.ks-chart-graph:focus-visible { outline: none; }
 /* 그림은 흐름에서 빠져 그림 영역을 채운다. 흐름에 있으면 그림의 고유 비율(1000:160)이 창 폭에 따라
    틀 높이를 밀어 올려, 데이터가 없어 비율을 알 수 없는 받는 중 뼈대가 같은 높이를 예약할 수 없다.
    높이는 높이 갈래(작음/중간/큼)가 정하고 그림은 그 상자를 채운다. */

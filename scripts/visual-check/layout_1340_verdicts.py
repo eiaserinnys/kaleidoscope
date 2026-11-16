@@ -38,26 +38,53 @@ def fill_floor_verdicts(measured, pane_min=PANE_MIN, tolerance=1):
     }
 
 
+def chart_fill_verdicts(measured, tolerance=1):
+    """반려 1: 차트를 담은 기본 채움 칸은 넘칠 때 바닥이 차트 내용 높이다. 스크롤 주인을 끝까지 내리면
+    차트 상자가 채움 칸 안에 있고, 채움 칸 안은 굴러가지 않으며(scrollHeight - clientHeight ≤ 1),
+    차트가 스크롤 주인 안에 다 보인다."""
+    if measured.get("error"):
+        return {"fill_found": False}
+    fill = measured["fill"]
+    chart = measured.get("chart")
+    inside = (chart is not None
+              and chart["left"] >= fill["left"] - tolerance and chart["right"] <= fill["right"] + tolerance
+              and chart["top"] >= fill["top"] - tolerance and chart["bottom"] <= fill["bottom"] + tolerance)
+    return {
+        "fill_found": measured["fillCount"] == 1 and measured["itemCount"] > 1,
+        "owner_scrolls": measured["ownerScrolls"] is True,
+        "chart_drawn": chart is not None and chart["height"] > 0,
+        "chart_inside_fill": inside,
+        "fill_not_scrolling": measured.get("fillScrollDiff") is not None
+        and measured["fillScrollDiff"] <= tolerance,
+        "chart_visible_after_scroll": measured.get("chartVisibleAfterScroll") is True,
+    }
+
+
 def dot_outline_verdicts(measured, expected_index, expected_point, tolerance=1):
-    """결함 3: 초점 테두리가 그래프 상자 바깥으로 물러나 점 상자와 겹치지 않고, x축 글자, 범례,
-    읽기 줄과도 겹치지 않는다. 초점은 기대한 차트에, 시점은 기대한 자리에 있다."""
+    """반려 2: 초점 고리를 차트 틀에 그린다. 고리는 틀 안쪽에 있고(offset -2px) 틀의 둥근 모서리를 따라가며,
+    그래프 상자에는 테두리가 없다. 점(막대), x축 글자, 범례, 읽기 줄과 겹치지 않는다."""
     if measured.get("error"):
         return {"focused": False}
-    outline = measured.get("outline") or {}
+    frame_outline = measured.get("frameOutline") or {}
+    graph_outline = measured.get("graphOutline") or {}
     graph = measured.get("graph")
     band = {rect["name"]: rect for rect in measured.get("band") or []}
     return {
         "focused": measured.get("focusedIndex") == expected_index,
         "at_expected_point": measured.get("current") == str(expected_point),
-        "outline_on_graph": outline.get("style") == "solid" and outline.get("width") == "2px",
-        "outline_color": measured.get("focusColor") is not None and outline.get("color") == measured.get("focusColor"),
-        "outline_offset_outward": outline.get("offset") == "4px",
-        "dots_drawn": measured.get("dotCount", 0) > 0,
-        "no_dot_overlap": measured.get("dotsInBand") == 0,
+        "outline_on_frame": frame_outline.get("style") == "solid" and frame_outline.get("width") == "2px",
+        "outline_color": measured.get("focusColor") is not None and frame_outline.get("color") == measured.get("focusColor"),
+        "outline_offset_inside": frame_outline.get("offset") == "-2px",
+        "graph_outline_none": graph_outline.get("style") in (None, "none") or graph_outline.get("width") in (None, "0px"),
+        "rounded_frame": measured.get("frameRadius") not in (None, "0px"),
+        "band_inside_frame": measured.get("bandInsideFrame") is True,
+        "marks_drawn": measured.get("markCount", 0) > 0,
+        "no_mark_overlap": measured.get("marksInBand") == 0,
         "no_axis_overlap": measured.get("labelsInBand") == 0,
-        "no_legend_overlap": measured.get("legendInBand") is False,
+        # 범례가 없는 한 계열 차트는 겹칠 범례가 없다(null). 있는데 겹치면 실패다.
+        "no_legend_overlap": measured.get("legendInBand") in (None, False),
         "no_readout_overlap": measured.get("readoutInBand") is False,
-        # 띠는 그래프 상자 바깥에 있어야 한다. 안쪽으로 물린 테두리(plot 안쪽 0~2px)는 이 조건에 걸린다.
+        # 고리는 그래프 상자 바깥에 있어야 한다. 안쪽으로 물린 테두리(plot 안쪽 0~2px)는 이 조건에 걸린다.
         "ring_outside_graph": graph is not None and set(band) == {"top", "bottom", "left", "right"}
         and band["top"]["bottom"] <= graph["top"] + 0.01 and band["bottom"]["top"] >= graph["bottom"] - 0.01
         and band["left"]["right"] <= graph["left"] + 0.01 and band["right"]["left"] >= graph["right"] - 0.01,
@@ -110,24 +137,38 @@ def _fill(height=160.0, content=160.0, glyph_top=10.0, glyph_bottom=30.0, errors
     return measured
 
 
+def _chart_fill(height=192.0, chart_height=192.0, scroll_diff=0.0, visible=True, chart=True, errors=None):
+    """반려 1의 차트 채움 칸 측정. 채움 칸은 0~height, 차트는 그 안 12~height-12에 있다."""
+    measured = {"itemCount": 8, "fillCount": 1, "ownerScrolls": True,
+                "fill": {"left": 0.0, "right": 300.0, "top": 0.0, "bottom": height, "height": height},
+                "chart": ({"left": 12.0, "right": 288.0, "top": 0.0, "bottom": chart_height,
+                           "height": chart_height} if chart else None),
+                "fillScrollDiff": scroll_diff, "chartVisibleAfterScroll": visible}
+    measured.update(errors or {})
+    return measured
+
+
 def _dot(**changes):
-    measured = {"focusedIndex": 0, "current": "0", "focusColor": "rgb(1, 2, 3)", "dotCount": 1, "dotsInBand": 0,
-                "labelsInBand": 0, "legendInBand": False, "readoutInBand": False,
-                "outline": {"style": "solid", "width": "2px", "offset": "4px", "color": "rgb(1, 2, 3)"},
-                "graph": {"left": 0.0, "right": 100.0, "top": 0.0, "bottom": 100.0},
-                "band": [{"name": "top", "left": -6.0, "right": 106.0, "top": -6.0, "bottom": -4.0},
-                         {"name": "bottom", "left": -6.0, "right": 106.0, "top": 104.0, "bottom": 106.0},
-                         {"name": "left", "left": -6.0, "right": -4.0, "top": -4.0, "bottom": 104.0},
-                         {"name": "right", "left": 104.0, "right": 106.0, "top": -4.0, "bottom": 104.0}]}
+    measured = {"focusedIndex": 0, "current": "0", "focusColor": "rgb(1, 2, 3)", "markCount": 1, "marksInBand": 0,
+                "labelsInBand": 0, "legendInBand": False, "readoutInBand": False, "frameRadius": "4px",
+                "bandInsideFrame": True,
+                "frameOutline": {"style": "solid", "width": "2px", "offset": "-2px", "color": "rgb(1, 2, 3)"},
+                "graphOutline": {"style": "none", "width": "0px", "offset": "0px", "color": "rgb(1, 2, 3)"},
+                "graph": {"left": 12.0, "right": 88.0, "top": 12.0, "bottom": 88.0},
+                "band": [{"name": "top", "left": 0.0, "right": 100.0, "top": 0.0, "bottom": 2.0},
+                         {"name": "bottom", "left": 0.0, "right": 100.0, "top": 98.0, "bottom": 100.0},
+                         {"name": "left", "left": 0.0, "right": 2.0, "top": 2.0, "bottom": 98.0},
+                         {"name": "right", "left": 98.0, "right": 100.0, "top": 2.0, "bottom": 98.0}]}
     measured.update(changes)
     return measured
 
 
-def _inner_band():
-    return [{"name": "top", "left": 0.0, "right": 100.0, "top": 0.0, "bottom": 2.0},
-            {"name": "bottom", "left": 0.0, "right": 100.0, "top": 98.0, "bottom": 100.0},
-            {"name": "left", "left": 0.0, "right": 2.0, "top": 0.0, "bottom": 100.0},
-            {"name": "right", "left": 98.0, "right": 100.0, "top": 0.0, "bottom": 100.0}]
+def _outer_band():
+    """그래프 상자 바깥에 그린 띠(79affd09 꼴). 틀 상자 밖이라 반려 2의 판정에 걸린다."""
+    return [{"name": "top", "left": -6.0, "right": 106.0, "top": -6.0, "bottom": -4.0},
+            {"name": "bottom", "left": -6.0, "right": 106.0, "top": 104.0, "bottom": 106.0},
+            {"name": "left", "left": -6.0, "right": -4.0, "top": -4.0, "bottom": 104.0},
+            {"name": "right", "left": 104.0, "right": 106.0, "top": -4.0, "bottom": 104.0}]
 
 
 def _header_state(state, aria=None, right=200.0, cell=200.0, icon=True, width=60.0):
@@ -176,21 +217,41 @@ def _cases():
              ("스크롤 주인 안 굴러감", fill_floor_verdicts(_fill(errors={"ownerScrolls": False}))),
              ("스크롤해도 안 보임", fill_floor_verdicts(_fill(errors={"visibleAfterScroll": False}))),
              ("채움 칸 없음", fill_floor_verdicts({"error": "기본 채움 칸이 없습니다"}))]),
+        chart_fill_verdicts: (
+            [("차트 192를 다 받음", chart_fill_verdicts(_chart_fill()))],
+            [("160에서 잘림", chart_fill_verdicts(_chart_fill(height=160.0, chart_height=192.0, scroll_diff=32.0))),
+             ("높이 0", chart_fill_verdicts(_chart_fill(height=0.0, chart_height=0.0))),
+             ("칸 안에서 굴러감", chart_fill_verdicts(_chart_fill(scroll_diff=32.0))),
+             ("스크롤 뒤 안 보임", chart_fill_verdicts(_chart_fill(visible=False))),
+             ("차트 없음", chart_fill_verdicts(_chart_fill(chart=None))),
+             ("스크롤 주인 안 굴러감", chart_fill_verdicts(_chart_fill(errors={"ownerScrolls": False}))),
+             ("채움 칸 없음", chart_fill_verdicts({"error": "기본 채움 칸이 없습니다"}))]),
         dot_outline_verdicts: (
-            [("첫 점", dot_outline_verdicts(_dot(), 0, 0))],
-            [("점과 겹침", dot_outline_verdicts(_dot(dotsInBand=1), 0, 0)),
+            [("첫 점", dot_outline_verdicts(_dot(), 0, 0)),
+             ("막대", dot_outline_verdicts(_dot(current="3", frameRadius="10px"), 0, 3)),
+             ("범례 없음", dot_outline_verdicts(_dot(legendInBand=None), 0, 0))],
+            [("점과 겹침", dot_outline_verdicts(_dot(marksInBand=1), 0, 0)),
              ("축 글자와 겹침", dot_outline_verdicts(_dot(labelsInBand=1), 0, 0)),
              ("범례와 겹침", dot_outline_verdicts(_dot(legendInBand=True), 0, 0)),
              ("읽기 줄과 겹침", dot_outline_verdicts(_dot(readoutInBand=True), 0, 0)),
              ("초점 아님", dot_outline_verdicts(_dot(), 1, 0)),
              ("다른 시점", dot_outline_verdicts(_dot(), 0, 3)),
-             ("안쪽으로 물러남", dot_outline_verdicts(_dot(outline={"style": "solid", "width": "2px", "offset": "-2px",
-                                                                  "color": "rgb(1, 2, 3)"}), 0, 0)),
-             ("plot에 그림", dot_outline_verdicts(_dot(outline={"style": "none", "width": "0px", "offset": "4px",
-                                                                "color": "rgb(1, 2, 3)"}), 0, 0)),
-             ("점 없음", dot_outline_verdicts(_dot(dotCount=0), 0, 0)),
-             ("띠 없음", dot_outline_verdicts(_dot(band=[]), 0, 0)),
-             ("테두리가 안쪽", dot_outline_verdicts(_dot(band=_inner_band()), 0, 0))]),
+             ("틀에 고리 없음", dot_outline_verdicts(_dot(frameOutline={"style": "none", "width": "0px",
+                                                                    "offset": "-2px", "color": "rgb(1, 2, 3)"}), 0, 0)),
+             ("그래프 상자에 고리", dot_outline_verdicts(_dot(graphOutline={"style": "solid", "width": "2px",
+                                                                      "offset": "4px", "color": "rgb(1, 2, 3)"}), 0, 0)),
+             ("바깥으로 물러남", dot_outline_verdicts(_dot(
+                 frameOutline={"style": "solid", "width": "2px", "offset": "4px", "color": "rgb(1, 2, 3)"},
+                 band=_outer_band(), bandInsideFrame=False), 0, 0)),
+             ("각진 틀", dot_outline_verdicts(_dot(frameRadius="0px"), 0, 0)),
+             ("막대 없음", dot_outline_verdicts(_dot(markCount=0), 0, 0)),
+             ("띠 없음", dot_outline_verdicts(_dot(band=[], bandInsideFrame=False), 0, 0)),
+             ("틀 밖 띠", dot_outline_verdicts(_dot(band=_outer_band(), bandInsideFrame=False), 0, 0)),
+             ("그래프 안쪽 띠", dot_outline_verdicts(_dot(band=[
+                 {"name": "top", "left": 0.0, "right": 100.0, "top": 12.0, "bottom": 14.0},
+                 {"name": "bottom", "left": 0.0, "right": 100.0, "top": 86.0, "bottom": 88.0},
+                 {"name": "left", "left": 12.0, "right": 14.0, "top": 14.0, "bottom": 86.0},
+                 {"name": "right", "left": 86.0, "right": 88.0, "top": 14.0, "bottom": 86.0}]), 0, 0))]),
         header_alignment_verdicts: (
             [("세 상태 같음", header_alignment_verdicts(_header_states(), ["몫", "값"], widths=HEADER_WIDTHS))],
             [("정렬 때 19px 밀림", header_alignment_verdicts(_header_states(rights=(200.0, 181.0, 181.0)), ["몫", "값"])),

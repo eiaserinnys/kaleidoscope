@@ -195,6 +195,7 @@ FOCUS_JS = """() => {
   const focusedIndex = [...win.querySelectorAll('.ks-chart')].findIndex((chart) => chart.contains(active));
   const chart = [...win.querySelectorAll('.ks-chart')][focusedIndex];
   if (!chart) return { focusedIndex, error: '초점이 차트에 없습니다' };
+  const frame = chart.querySelector('.ks-chart-frame');
   const graph = chart.querySelector('.ks-chart-graph');
   const plot = chart.querySelector('.ks-chart-plot');
   const probe = document.createElement('span');
@@ -220,7 +221,7 @@ FOCUS_JS = """() => {
     && label.glyph.bottom > plotBox.top && label.glyph.top < plotBox.bottom
     && label.glyph.right > plotBox.left && label.glyph.left < plotBox.right);
   return { focusedIndex, focusColor, plot: plotBox, labels,
-           graphStyle: style(graph), plotStyle: style(plot), overlaps };
+           frameStyle: style(frame), graphStyle: style(graph), plotStyle: style(plot), overlaps };
 }"""
 
 TICK_JS = """(appId) => {

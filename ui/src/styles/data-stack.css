@@ -33,6 +33,13 @@
   min-height: min-content;
   min-height: calc-size(min-content, min(size, var(--ks-pane-min-size)));
 }
+/* 차트를 담은 기본 채움 칸은 160 상한을 두지 않는다. 넘칠 때 바닥이 차트 내용 높이 전체라,
+   스크롤 주인을 끝까지 내리면 차트 틀이 잘리지 않고 다 보이며 칸 안은 굴러가지 않는다(굴러가는 건 바깥 주인 하나다).
+   160 상한은 목록, 채팅, 긴 글처럼 칸 안에서 굴리는 내용에만 남긴다. 넘치지 않을 때 차트가 남은 높이를
+   채우는 동작은 flex가 그대로 맡는다. */
+.ks-data-stack.is-column:where(:not(.has-explicit-fill)) > .ks-data-stack-item:where(.is-fill):has(> .ks-chart) {
+  min-height: min-content;
+}
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-data-input > textarea),
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-input-field > .ks-data-input > textarea) { min-height: min-content; }
 .ks-data-stack-item:has(> .ks-data-stack.is-center) { flex: 1 1 auto; }

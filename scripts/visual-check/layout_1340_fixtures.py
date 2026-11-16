@@ -7,6 +7,8 @@
 APP_ID = "data-controls"
 WIDE = (1180, 720)
 NARROW = (360, 720)
+# 쉘 최소 창(브라우저 384×317). 차트를 담은 채움 칸은 여기서도 같은 판정을 받는다.
+SHELL_MIN = (384, 317)
 # --ks-pane-min-size(foundation.css:34). 기본 채움 칸이 넘칠 때 받는 바닥의 상한이다.
 PANE_MIN = 160
 # 쌓기 gap 토큰 값(px). 결함 2의 기대 간격이다.
@@ -49,6 +51,11 @@ def focus_two_series_scene():
     ]}
 
 
+def _single_series(values=(12, 18, 15, 22)):
+    return {"key": "s", "name": "값", "points": [{"x": f"11월 {day}일", "y": value}
+                                                 for day, value in zip(range(9, 9 + len(values)), values)]}
+
+
 def fill_tab_scene():
     """같은 결함을 탭 판에서 재는 장면. 차트가 든 쌓기는 탭 판 안 예외(data-stack-context.css:3-8)를 받지 않는다."""
     chart = {"type": "chart", "kind": "bar", "series": [{"key": "s", "name": "값", "points": [
@@ -57,12 +64,41 @@ def fill_tab_scene():
                                                               "children": [*_long_head(), chart]}}]}
 
 
-# 항목 1의 장면들. 이름, 장면, 스크롤 주인(tab이면 탭 판, 아니면 창 본문).
+def fill_body_chart_scene():
+    """창 본문 [글 40줄, 선 차트]. 넘칠 때 기본 채움 칸이 차트를 잘라 내지 않는지 재는 장면이다."""
+    return {"type": "stack", "direction": "column", "children": [
+        *_long_head(), {"type": "chart", "kind": "line", "series": [_single_series()]}]}
+
+
+# 항목 1의 글 장면들. 이름, 장면, 스크롤 주인(tab이면 탭 판, 아니면 창 본문), 크기 목록.
 FILL_SCENES = (
-    ("fill-text", fill_text_scene, "body"),
-    ("fill-long", fill_long_scene, "body"),
-    ("fill-tab", fill_tab_scene, "tab"),
+    ("fill-text", fill_text_scene, "body", (WIDE, NARROW)),
+    ("fill-long", fill_long_scene, "body", (WIDE, NARROW)),
 )
+# 반려 1의 차트 장면들. 세 크기(1180, 360, 쉘 최소 창)에서 잰다.
+CHART_FILL_SCENES = (
+    ("fill-tab", fill_tab_scene, "tab", (WIDE, NARROW, SHELL_MIN)),
+    ("fill-body-chart", fill_body_chart_scene, "body", (WIDE, NARROW, SHELL_MIN)),
+)
+
+
+def focus_line_single_scene():
+    """범례가 없는 한 계열 선 차트. 범례가 없어 그래프 상자 고리가 틀 아래 테두리와 겹줄로 보이던 꼴을 잰다."""
+    return {"type": "stack", "direction": "column", "gap": "none", "children": [
+        {"type": "chart", "kind": "line", "series": [_single_series()]}]}
+
+
+def focus_bar_single_stack_scene():
+    """한 계열 막대 차트를 gap medium 쌓기의 첫 칸에 둔 꼴."""
+    return {"type": "stack", "direction": "column", "gap": "medium", "children": [
+        {"type": "chart", "kind": "bar", "series": [_single_series((12, 18, 15, 22, 19, 27, 24))]},
+        {"type": "text", "value": "차트 아래 글입니다."}]}
+
+
+def focus_bar_single_section_scene():
+    """한 계열 막대 차트를 구역 안에 둔 꼴."""
+    return {"type": "section", "title": "차트 구역", "child": {
+        "type": "chart", "kind": "bar", "series": [_single_series((12, 18, 15, 22, 19, 27, 24))]}}
 
 FILL_JS = """([appId, owner]) => {
   const round = (value) => Math.round(value * 10) / 10;
@@ -93,19 +129,31 @@ FILL_JS = """([appId, owner]) => {
   const rects = textRects(fill);
   const glyphTop = rects.length ? round(Math.min(...rects.map((rect) => rect.top))) : null;
   const glyphBottom = rects.length ? round(Math.max(...rects.map((rect) => rect.bottom))) : null;
+  const chart = fill.querySelector(':scope > .ks-chart');
+  const chartBox = box(chart);
+  const frame = chart ? chart.querySelector('.ks-chart-frame') : null;
+  const frameBox = box(frame);
   const ownerBox = box(scrollOwner);
   const before = { ownerScrollTop: scrollOwner.scrollTop, fillTop: fillBox.top, fillBottom: fillBox.bottom };
   scrollOwner.scrollTop = scrollOwner.scrollHeight;
   const scrolledBox = box(fill);
+  const scrolledChart = box(chart);
+  const inside = (inner, outer) => inner !== null && outer !== null
+    && inner.left >= outer.left - 1 && inner.right <= outer.right + 1
+    && inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1;
   return {
     itemCount: items.length, fillCount: items.filter((item) => item.classList.contains('is-fill')).length,
     fill: fillBox, fillClientHeight: round(fill.clientHeight), fillScrollHeight: round(fill.scrollHeight),
     glyphCount: rects.length, glyphTop, glyphBottom,
+    chart: chartBox, chartFrame: frameBox,
+    chartInsideFill: inside(chartBox, fillBox),
+    fillScrollDiff: round(fill.scrollHeight - fill.clientHeight),
     owner: ownerBox, ownerClientHeight: round(scrollOwner.clientHeight), ownerScrollHeight: round(scrollOwner.scrollHeight),
     ownerScrolls: scrollOwner.scrollHeight > scrollOwner.clientHeight + 1,
     ownerScrolledTo: round(scrollOwner.scrollTop), before,
     after: { fillTop: scrolledBox.top, fillBottom: scrolledBox.bottom },
     visibleAfterScroll: scrolledBox.top >= ownerBox.top - 1 && scrolledBox.bottom <= ownerBox.bottom + 1,
+    chartVisibleAfterScroll: inside(scrolledChart, ownerBox),
   };
 }"""
 
@@ -122,6 +170,7 @@ DOT_JS = """() => {
   const focusedIndex = charts.findIndex((chart) => chart.contains(active));
   const chart = charts[focusedIndex];
   if (!chart) return { focusedIndex, error: '초점이 차트에 없습니다' };
+  const frame = chart.querySelector('.ks-chart-frame');
   const graph = chart.querySelector('.ks-chart-graph');
   const plot = chart.querySelector('.ks-chart-plot');
   const probe = document.createElement('span');
@@ -129,24 +178,33 @@ DOT_JS = """() => {
   document.body.appendChild(probe);
   const focusColor = getComputedStyle(probe).color;
   probe.remove();
-  const graphRaw = raw(graph);
-  const style = getComputedStyle(graph);
-  const width = parseFloat(style.outlineWidth) || 0;
-  const offset = parseFloat(style.outlineOffset) || 0;
-  // 테두리 띠: 그래프 상자 바깥 offset에서 두께 width만큼. 안쪽은 띠가 아니다.
-  const outer = { left: graphRaw.left - offset - width, right: graphRaw.right + offset + width,
-                  top: graphRaw.top - offset - width, bottom: graphRaw.bottom + offset + width };
-  const inner = { left: graphRaw.left - offset, right: graphRaw.right + offset,
-                  top: graphRaw.top - offset, bottom: graphRaw.bottom + offset };
-  const band = width > 0 ? [
-    { name: 'top', left: outer.left, right: outer.right, top: outer.top, bottom: inner.top },
-    { name: 'bottom', left: outer.left, right: outer.right, top: inner.bottom, bottom: outer.bottom },
-    { name: 'left', left: outer.left, right: inner.left, top: inner.top, bottom: inner.bottom },
-    { name: 'right', left: inner.right, right: outer.right, top: inner.top, bottom: inner.bottom },
-  ] : [];
+  const frameRaw = raw(frame);
+  const frameStyle = getComputedStyle(frame);
+  // outline-style이 none이면 그려지는 테두리가 없다. 너비 값(브라우저 기본 3px)을 띠로 오해하지 않는다.
+  const width = frameStyle.outlineStyle === 'none' ? 0 : parseFloat(frameStyle.outlineWidth) || 0;
+  const offset = parseFloat(frameStyle.outlineOffset) || 0;
+  const bandFrom = (rect, offset, width) => {
+    const outer = { left: rect.left - offset - width, right: rect.right + offset + width,
+                    top: rect.top - offset - width, bottom: rect.bottom + offset + width };
+    const inner = { left: rect.left - offset, right: rect.right + offset,
+                    top: rect.top - offset, bottom: rect.bottom + offset };
+    return width > 0 ? [
+      { name: 'top', left: outer.left, right: outer.right, top: outer.top, bottom: inner.top },
+      { name: 'bottom', left: outer.left, right: outer.right, top: inner.bottom, bottom: outer.bottom },
+      { name: 'left', left: outer.left, right: inner.left, top: inner.top, bottom: inner.bottom },
+      { name: 'right', left: inner.right, right: outer.right, top: inner.top, bottom: inner.bottom },
+    ] : [];
+  };
+  // 테두리 띠: 틀 상자에서 offset만큼(음수면 안쪽) 들어간 자리에서 두께 width만큼 그린다.
+  const band = bandFrom(frameRaw, offset, width);
+  // 고치기 전 꼴(79affd09 이전 main)은 plot에 고리를 그렸다. 전후 측정을 위해 plot 띠도 함께 잰다.
+  const plotStyle = getComputedStyle(plot);
+  const plotWidth = plotStyle.outlineStyle === 'none' ? 0 : parseFloat(plotStyle.outlineWidth) || 0;
+  const plotBand = bandFrom(raw(plot), parseFloat(plotStyle.outlineOffset) || 0, plotWidth);
   const overlap = (a, b) => a.left < b.right - 0.01 && a.right > b.left + 0.01
     && a.top < b.bottom - 0.01 && a.bottom > b.top + 0.01;
-  const dots = [...chart.querySelectorAll('.ks-chart-dot')].map(raw);
+  // 막대 차트는 점 대신 막대가 시점 표시다. 둘 다 띠와 겹치지 않아야 한다.
+  const marks = [...chart.querySelectorAll('.ks-chart-dot, .ks-chart-bar')].map(raw);
   const roundRect = (rect) => ({ left: round(rect.left), right: round(rect.right),
                                  top: round(rect.top), bottom: round(rect.bottom) });
   const labels = [...chart.querySelectorAll('.ks-chart-x-axis span')].flatMap((span) => {
@@ -162,20 +220,34 @@ DOT_JS = """() => {
   });
   const legend = chart.querySelector('.ks-chart-legend');
   const readout = chart.querySelector('.ks-chart-readout');
+  const styleOf = (element) => { const s = getComputedStyle(element);
+    return { style: s.outlineStyle, width: s.outlineWidth, offset: s.outlineOffset, color: s.outlineColor }; };
+  const bandInsideFrame = band.length === 4 && band.every((rect) =>
+    rect.left >= frameRaw.left - 0.01 && rect.right <= frameRaw.right + 0.01
+    && rect.top >= frameRaw.top - 0.01 && rect.bottom <= frameRaw.bottom + 0.01);
   return {
     focusedIndex, current: graph.getAttribute('aria-valuenow'), focusColor,
-    outline: { style: style.outlineStyle, width: style.outlineWidth, offset: style.outlineOffset, color: style.outlineColor },
-    graph: box(graph), plot: box(plot),
+    frameOutline: styleOf(frame), graphOutline: styleOf(graph), frameRadius: frameStyle.borderTopLeftRadius,
+    plotOutline: { style: plotStyle.outlineStyle, width: plotStyle.outlineWidth,
+                   offset: plotStyle.outlineOffset, color: plotStyle.outlineColor },
+    frame: box(frame), graph: box(graph), plot: box(plot),
     band: band.map((rect) => ({ name: rect.name, left: round(rect.left), right: round(rect.right),
                                 top: round(rect.top), bottom: round(rect.bottom) })),
-    dots: dots.map(roundRect),
-    dotCount: dots.length,
-    dotsInBand: dots.filter((dot) => band.some((rect) => overlap(dot, rect))).length,
+    plotBand: plotBand.map((rect) => ({ name: rect.name, left: round(rect.left), right: round(rect.right),
+                                        top: round(rect.top), bottom: round(rect.bottom) })),
+    bandInsideFrame,
+    marks: marks.map(roundRect), markCount: marks.length,
+    marksInBand: marks.filter((mark) => band.some((rect) => overlap(mark, rect))).length,
     labelsInBand: labels.filter((label) => band.some((rect) => overlap(label, rect))).length,
     legend: box(legend),
     legendInBand: legend ? band.some((rect) => overlap(raw(legend), rect)) : null,
     readout: box(readout),
     readoutInBand: readout ? band.some((rect) => overlap(raw(readout), rect)) : null,
+    ringOutsideGraph: band.length === 4
+      && band[0].bottom <= graph.getBoundingClientRect().top + 0.01
+      && band[1].top >= graph.getBoundingClientRect().bottom - 0.01
+      && band[2].right <= graph.getBoundingClientRect().left + 0.01
+      && band[3].left >= graph.getBoundingClientRect().right - 0.01,
   };
 }"""
 
