@@ -47,10 +47,10 @@ fn records_without_scopes_do_not_serve_scoped_connections_and_stay() {
     .unwrap();
 
     let logins = Logins::open(dir.path()).unwrap();
-    assert_eq!(logins.token("scoped", Some("read")), None);
+    assert_eq!(logins.token("scoped", Some("read")), Ok(None));
     assert_eq!(
         logins.token("plain", None),
-        Some("plain-access".to_string())
+        Ok(Some("plain-access".to_string()))
     );
 
     let reopened = Logins::open(dir.path()).unwrap();

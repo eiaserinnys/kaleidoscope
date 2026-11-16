@@ -131,75 +131,102 @@ impl Logins {
         let _ = crate::storage::save_atomic(&self.path, &*entries);
     }
 
-    fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String> {
+    fn refresh(&self, connection: &str, rejected_token: &str) -> Result<Option<String>, CoreError> {
         let refresh_lock = self.refresh_lock(connection);
         let _refresh_guard = refresh_lock.lock().unwrap();
-        let entry = self.entry(connection)?;
+        let Some(entry) = self.entry(connection) else {
+            return Ok(None);
+        };
         if entry
             .access_token
             .as_deref()
             .is_some_and(|token| token != rejected_token)
             && !token_is_expired(entry.expires_at)
         {
-            return entry.access_token;
+            return Ok(entry.access_token);
         }
         let Some(refresh_token) = entry.refresh_token.clone() else {
             self.clear_tokens_if(connection, |current| {
                 current.access_token.as_deref() == Some(rejected_token)
             });
-            return None;
+            return Ok(None);
         };
-        match oauth::refresh_access_token(&entry) {
-            Some(tokens) => {
+        match oauth::refresh_access_token(connection, &entry) {
+            Ok(tokens) => {
                 let mut entries = self.entries.lock().unwrap();
-                let current = entries.get_mut(connection)?;
+                let Some(current) = entries.get_mut(connection) else {
+                    return Ok(None);
+                };
                 if current != &entry {
                     let expired = token_is_expired(current.expires_at);
-                    return current.access_token.clone().filter(|_| !expired);
+                    return Ok(current.access_token.clone().filter(|_| !expired));
                 }
                 let access_token = tokens.access_token;
                 current.access_token = Some(access_token.clone());
                 current.refresh_token = tokens.refresh_token.or(Some(refresh_token));
                 current.expires_at = tokens.expires_at;
-                crate::storage::save_atomic(&self.path, &*entries).ok()?;
-                Some(access_token)
+                crate::storage::save_atomic(&self.path, &*entries)?;
+                Ok(Some(access_token))
             }
-            None => {
+            Err(oauth::RefreshError::Rejected) => {
                 let mut entries = self.entries.lock().unwrap();
-                let current = entries.get_mut(connection)?;
+                let Some(current) = entries.get_mut(connection) else {
+                    return Ok(None);
+                };
                 if current.refresh_token.as_deref() == Some(refresh_token.as_str()) {
                     current.access_token = None;
                     current.refresh_token = None;
                     current.expires_at = None;
                     let _ = crate::storage::save_atomic(&self.path, &*entries);
-                    None
+                    Ok(None)
                 } else {
                     let expired = token_is_expired(current.expires_at);
-                    current
+                    Ok(current
+                        .access_token
+                        .clone()
+                        .filter(|token| token != rejected_token && !expired))
+                }
+            }
+            Err(oauth::RefreshError::Unavailable(error)) => {
+                let mut entries = self.entries.lock().unwrap();
+                let Some(current) = entries.get_mut(connection) else {
+                    return Err(error);
+                };
+                if current != &entry {
+                    let expired = token_is_expired(current.expires_at);
+                    if let Some(token) = current
                         .access_token
                         .clone()
                         .filter(|token| token != rejected_token && !expired)
+                    {
+                        return Ok(Some(token));
+                    }
                 }
+                Err(error)
             }
         }
     }
 }
 
 impl LoginStore for Logins {
-    fn token(&self, connection: &str, scopes: Option<&str>) -> Option<String> {
-        let entry = self.entry(connection)?;
+    fn token(&self, connection: &str, scopes: Option<&str>) -> Result<Option<String>, CoreError> {
+        let Some(entry) = self.entry(connection) else {
+            return Ok(None);
+        };
         if !scopes_cover(entry.scopes.as_deref(), scopes) {
-            return None;
+            return Ok(None);
         }
-        let token = entry.access_token?;
+        let Some(token) = entry.access_token else {
+            return Ok(None);
+        };
         if token_is_expired(entry.expires_at) {
             self.refresh(connection, &token)
         } else {
-            Some(token)
+            Ok(Some(token))
         }
     }
 
-    fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String> {
+    fn refresh(&self, connection: &str, rejected_token: &str) -> Result<Option<String>, CoreError> {
         Logins::refresh(self, connection, rejected_token)
     }
 

@@ -17,8 +17,10 @@ use kaleidoscope_contract::{
 use crate::{app_commands, Inner};
 
 pub(crate) trait LoginStore: Send + Sync {
-    fn token(&self, connection: &str, scopes: Option<&str>) -> Option<String>;
-    fn refresh(&self, connection: &str, rejected_token: &str) -> Option<String>;
+    /// `Ok(Some(token))`은 지금 쓸 수 있는 토큰, `Ok(None)`은 로그인 필요,
+    /// `Err`는 갱신의 일시 실패다. 일시 실패는 저장된 로그인을 지우지 않는다.
+    fn token(&self, connection: &str, scopes: Option<&str>) -> Result<Option<String>, CoreError>;
+    fn refresh(&self, connection: &str, rejected_token: &str) -> Result<Option<String>, CoreError>;
     fn invalidate(&self, connection: &str, access_token: &str);
 }
 
@@ -200,7 +202,9 @@ pub(crate) fn request(
                             error.details = vec![format!("HTTP 404; host={host}")];
                             RequestError::Core(error)
                         }
-                        crate::registry_client::RegistryError::Failure { stage, detail, .. } => {
+                        crate::registry_client::RegistryError::Failure {
+                            stage, detail, ..
+                        } => {
                             let mut error = match stage {
                                 crate::registry_client::FailureStage::Send => {
                                     errors::CONN_REQUEST_RELAY_UNREACHABLE(&connection, &host)
@@ -222,15 +226,19 @@ pub(crate) fn request(
                 })
         }
         ConnectionKind::Oauth => {
-            let Some(token) = inner.login_store.token(&connection, info.scopes.as_deref()) else {
-                return Err(RequestError::Login(permission.into()));
+            let token = match inner.login_store.token(&connection, info.scopes.as_deref()) {
+                Ok(Some(token)) => token,
+                Ok(None) => return Err(RequestError::Login(permission.into())),
+                Err(error) => return Err(RequestError::Core(error)),
             };
             let reply = oauth_request(&info, &token, &req)?;
             if reply.status != 401 {
                 return Ok(reply);
             }
-            let Some(refreshed) = inner.login_store.refresh(&connection, &token) else {
-                return Err(RequestError::Login(permission.into()));
+            let refreshed = match inner.login_store.refresh(&connection, &token) {
+                Ok(Some(token)) => token,
+                Ok(None) => return Err(RequestError::Login(permission.into())),
+                Err(error) => return Err(RequestError::Core(error)),
             };
             let reply = oauth_request(&info, &refreshed, &req)?;
             if reply.status == 401 {

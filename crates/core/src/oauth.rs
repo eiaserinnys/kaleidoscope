@@ -26,6 +26,16 @@ pub(crate) struct RefreshedTokens {
     pub(crate) expires_at: Option<i64>,
 }
 
+/// 토큰 갱신 실패의 갈래.
+#[derive(Debug)]
+pub(crate) enum RefreshError {
+    /// 토큰 엔드포인트가 OAuth error 본문과 함께 400 또는 401로 분명히 거부했다.
+    /// 저장된 자격으로는 다시 갱신할 수 없어 로그인을 지운다.
+    Rejected,
+    /// 서버에 닿지 못했거나 서버가 일시적으로 실패했다. 저장된 로그인은 그대로 둔다.
+    Unavailable(CoreError),
+}
+
 #[derive(Deserialize)]
 struct Metadata {
     authorization_endpoint: String,
@@ -58,16 +68,26 @@ pub(crate) enum FlowError {
     Server,
 }
 
-fn client(connection: &str) -> Result<Client, CoreError> {
+/// HTTP 클라이언트를 준비하지 못한 원인. 부르는 쪽이 로그인과 갱신의 오류 코드로 바꾼다.
+enum ClientFailure {
+    Build(String),
+}
+
+fn client() -> Result<Client, ClientFailure> {
     Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(data::CONNECTION_TIMEOUT_SECS))
         .build()
-        .map_err(|detail| {
-            let mut error = errors::CONN_LOGIN_OAUTH_CLIENT_FAILED(connection);
-            error.details.push(detail.to_string());
-            error
-        })
+        .map_err(|detail| ClientFailure::Build(detail.to_string()))
+}
+
+fn login_client(connection: &str) -> Result<Client, CoreError> {
+    client().map_err(|failure| {
+        let ClientFailure::Build(detail) = failure;
+        let mut error = errors::CONN_LOGIN_OAUTH_CLIENT_FAILED(connection);
+        error.details.push(detail);
+        error
+    })
 }
 
 fn issuer_for(info: &ConnectionInfo) -> Result<String, CoreError> {
@@ -79,28 +99,69 @@ fn issuer_for(info: &ConnectionInfo) -> Result<String, CoreError> {
     Ok(base.origin().ascii_serialization())
 }
 
-fn discover(http: &Client, connection: &str, issuer: &str) -> Result<Metadata, CoreError> {
+/// discovery 응답을 받지 못한 원인. 부르는 쪽이 로그인과 갱신의 오류 코드로 바꾼다.
+enum DiscoveryFailure {
+    UrlInvalid,
+    Unreachable {
+        host: String,
+        detail: String,
+    },
+    Rejected {
+        host: String,
+        status: reqwest::StatusCode,
+    },
+    MetadataInvalid {
+        host: String,
+        detail: String,
+    },
+}
+
+fn discover(http: &Client, issuer: &str) -> Result<Metadata, DiscoveryFailure> {
     let url = Url::parse(&format!(
         "{}/.well-known/oauth-authorization-server",
         issuer.trim_end_matches('/')
     ))
-    .map_err(|_| errors::CONN_LOGIN_OAUTH_URL_INVALID(connection))?;
+    .map_err(|_| DiscoveryFailure::UrlInvalid)?;
     let host = url.host_str().unwrap_or("알 수 없는 서버").to_owned();
-    let response = http.get(url).send().map_err(|detail| {
-        let mut error = errors::CONN_LOGIN_OAUTH_DISCOVERY_UNREACHABLE(connection, &host);
-        error.details = vec![format!("{}; host={host}", detail.without_url())];
-        error
-    })?;
+    let response = http
+        .get(url)
+        .send()
+        .map_err(|detail| DiscoveryFailure::Unreachable {
+            host: host.clone(),
+            detail: detail.without_url().to_string(),
+        })?;
     if !response.status().is_success() {
-        let status = response.status();
-        let mut error = errors::CONN_LOGIN_OAUTH_DISCOVERY_REJECTED(connection, &host);
-        error.details = vec![format!("HTTP {status}; host={host}")];
-        return Err(error);
+        return Err(DiscoveryFailure::Rejected {
+            host,
+            status: response.status(),
+        });
     }
-    response.json().map_err(|detail| {
-        let mut error = errors::CONN_LOGIN_OAUTH_METADATA_INVALID(connection, &host);
-        error.details = vec![format!("{}; host={host}", detail.without_url())];
-        error
+    response
+        .json()
+        .map_err(|detail| DiscoveryFailure::MetadataInvalid {
+            host,
+            detail: detail.without_url().to_string(),
+        })
+}
+
+fn login_discover(http: &Client, connection: &str, issuer: &str) -> Result<Metadata, CoreError> {
+    discover(http, issuer).map_err(|failure| match failure {
+        DiscoveryFailure::UrlInvalid => errors::CONN_LOGIN_OAUTH_URL_INVALID(connection),
+        DiscoveryFailure::Unreachable { host, detail } => {
+            let mut error = errors::CONN_LOGIN_OAUTH_DISCOVERY_UNREACHABLE(connection, &host);
+            error.details = vec![format!("{detail}; host={host}")];
+            error
+        }
+        DiscoveryFailure::Rejected { host, status } => {
+            let mut error = errors::CONN_LOGIN_OAUTH_DISCOVERY_REJECTED(connection, &host);
+            error.details = vec![format!("HTTP {status}; host={host}")];
+            error
+        }
+        DiscoveryFailure::MetadataInvalid { host, detail } => {
+            let mut error = errors::CONN_LOGIN_OAUTH_METADATA_INVALID(connection, &host);
+            error.details = vec![format!("{detail}; host={host}")];
+            error
+        }
     })
 }
 
@@ -149,8 +210,8 @@ pub(crate) fn login_with_timeout(
     timeout: Duration,
 ) -> Result<(), CoreError> {
     let issuer = issuer_for(info)?;
-    let http = client(&info.name)?;
-    let metadata = discover(&http, &info.name, &issuer)?;
+    let http = login_client(&info.name)?;
+    let metadata = login_discover(&http, &info.name, &issuer)?;
     let issuer_host = Url::parse(&issuer)
         .ok()
         .and_then(|url| url.host_str().map(str::to_owned))
@@ -473,12 +534,65 @@ fn exchange_error_to_core(error: ExchangeError, connection: &str) -> CoreError {
     }
 }
 
-pub(crate) fn refresh_access_token(entry: &LoginEntry) -> Option<RefreshedTokens> {
-    let http = client("OAuth").ok()?;
-    let metadata = discover(&http, "OAuth", &entry.issuer).ok()?;
-    let token_endpoint = Url::parse(&metadata.token_endpoint).ok()?;
-    let refresh_token = entry.refresh_token.as_deref()?;
-    let client_id = entry.client_id.as_deref()?;
+fn refresh_discovery_error(connection: &str, failure: DiscoveryFailure) -> CoreError {
+    match failure {
+        DiscoveryFailure::UrlInvalid => {
+            let mut error =
+                errors::CONN_REFRESH_OAUTH_METADATA_INVALID(connection, "알 수 없는 서버");
+            error.details = vec!["저장된 OAuth 서버 주소가 올바르지 않음".into()];
+            error
+        }
+        DiscoveryFailure::Unreachable { host, detail } => {
+            let mut error = errors::CONN_REFRESH_OAUTH_DISCOVERY_UNREACHABLE(connection, &host);
+            error.details = vec![format!("{detail}; host={host}")];
+            error
+        }
+        DiscoveryFailure::Rejected { host, status } => {
+            let mut error = errors::CONN_REFRESH_OAUTH_DISCOVERY_REJECTED(connection, &host);
+            error.details = vec![format!("HTTP {status}; host={host}")];
+            error
+        }
+        DiscoveryFailure::MetadataInvalid { host, detail } => {
+            let mut error = errors::CONN_REFRESH_OAUTH_METADATA_INVALID(connection, &host);
+            error.details = vec![format!("{detail}; host={host}")];
+            error
+        }
+    }
+}
+
+pub(crate) fn refresh_access_token(
+    connection: &str,
+    entry: &LoginEntry,
+) -> Result<RefreshedTokens, RefreshError> {
+    let http = client().map_err(|failure| {
+        let ClientFailure::Build(detail) = failure;
+        let mut error = errors::CONN_REFRESH_OAUTH_CLIENT_FAILED(connection);
+        error.details.push(detail);
+        RefreshError::Unavailable(error)
+    })?;
+    let metadata = discover(&http, &entry.issuer).map_err(|failure| {
+        RefreshError::Unavailable(refresh_discovery_error(connection, failure))
+    })?;
+    let issuer_host = Url::parse(&entry.issuer)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_else(|| "알 수 없는 서버".into());
+    let token_endpoint = Url::parse(&metadata.token_endpoint).map_err(|_| {
+        let mut error = errors::CONN_REFRESH_OAUTH_METADATA_INVALID(connection, &issuer_host);
+        error.details = vec![format!(
+            "token_endpoint URL이 올바르지 않음; host={issuer_host}"
+        )];
+        RefreshError::Unavailable(error)
+    })?;
+    let refresh_token = entry
+        .refresh_token
+        .as_deref()
+        .ok_or(RefreshError::Rejected)?;
+    let client_id = entry.client_id.as_deref().ok_or(RefreshError::Rejected)?;
+    let host = token_endpoint
+        .host_str()
+        .unwrap_or("알 수 없는 서버")
+        .to_owned();
     let response = http
         .post(token_endpoint)
         .form(&[
@@ -487,12 +601,37 @@ pub(crate) fn refresh_access_token(entry: &LoginEntry) -> Option<RefreshedTokens
             ("client_id", client_id),
         ])
         .send()
-        .ok()?
-        .error_for_status()
-        .ok()?
-        .json::<TokenResponse>()
-        .ok()?;
-    (!response.access_token.is_empty()).then(|| RefreshedTokens {
+        .map_err(|detail| {
+            let mut error = errors::CONN_REFRESH_OAUTH_TOKEN_UNREACHABLE(connection, &host);
+            error.details = vec![format!("{}; host={host}", detail.without_url())];
+            RefreshError::Unavailable(error)
+        })?;
+    let status = response.status();
+    if !status.is_success() {
+        let rejected = matches!(status.as_u16(), 400 | 401)
+            && response
+                .json::<Value>()
+                .ok()
+                .and_then(|body| body.get("error").and_then(Value::as_str).map(str::to_owned))
+                .is_some_and(|error| !error.is_empty());
+        if rejected {
+            return Err(RefreshError::Rejected);
+        }
+        let mut error = errors::CONN_REFRESH_OAUTH_TOKEN_FAILED(connection, &host);
+        error.details = vec![format!("HTTP {status}; host={host}")];
+        return Err(RefreshError::Unavailable(error));
+    }
+    let response = response.json::<TokenResponse>().map_err(|detail| {
+        let mut error = errors::CONN_REFRESH_OAUTH_TOKEN_INVALID(connection, &host);
+        error.details = vec![format!("{}; host={host}", detail.without_url())];
+        RefreshError::Unavailable(error)
+    })?;
+    if response.access_token.is_empty() {
+        let mut error = errors::CONN_REFRESH_OAUTH_TOKEN_INVALID(connection, &host);
+        error.details = vec![format!("빈 access_token; host={host}")];
+        return Err(RefreshError::Unavailable(error));
+    }
+    Ok(RefreshedTokens {
         access_token: response.access_token,
         refresh_token: response.refresh_token,
         expires_at: response.expires_in.map(expiry),

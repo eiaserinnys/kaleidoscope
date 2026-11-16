@@ -447,6 +447,55 @@ error_catalog! { ENTRIES;
         message: "연결({connection})은 이미 로그인 중입니다. 진행 중인 로그인이 끝난 뒤 다시 시도하세요.",
         fix: "진행 중인 로그인 창에서 인증을 마치세요"
     }
+    CONN_REFRESH_OAUTH_CLIENT_FAILED(connection) {
+        class: Server,
+        place: "연결 토큰 갱신 준비",
+        cause: "OAuth 갱신 요청용 HTTP 클라이언트를 만들지 못했다",
+        message: "연결 {connection}의 토큰 갱신 요청을 준비하지 못했습니다. 저장된 로그인은 지워지지 않았습니다. 쉘을 다시 시작하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "쉘을 다시 시작하세요"
+    }
+    CONN_REFRESH_OAUTH_DISCOVERY_UNREACHABLE(connection, host) {
+        class: Unavailable,
+        place: "연결 토큰 갱신 서버 확인",
+        cause: "OAuth 서버 확인 요청을 보내지 못했다",
+        message: "연결 {connection}의 OAuth 서버 {host}에 닿지 못해 토큰을 갱신하지 못했습니다. 저장된 로그인은 지워지지 않았습니다. 네트워크를 확인하고 다시 시도하세요.",
+        fix: "네트워크를 확인한 뒤 다시 시도하세요"
+    }
+    CONN_REFRESH_OAUTH_DISCOVERY_REJECTED(connection, host) {
+        class: Server,
+        place: "연결 토큰 갱신 서버 확인",
+        cause: "OAuth 서버 확인 요청이 실패로 응답했다",
+        message: "연결 {connection}의 OAuth 서버({host})가 서버 정보를 주지 않아 토큰을 갱신하지 못했습니다. 저장된 로그인은 지워지지 않았습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "OAuth 서버 상태를 확인하세요"
+    }
+    CONN_REFRESH_OAUTH_METADATA_INVALID(connection, host) {
+        class: Server,
+        place: "연결 토큰 갱신 서버 확인",
+        cause: "OAuth 서버 정보 응답을 읽지 못했다",
+        message: "연결 {connection}의 OAuth 서버 {host} 정보를 읽지 못해 토큰을 갱신하지 못했습니다. 저장된 로그인은 지워지지 않았습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "OAuth 서버의 discovery 응답을 확인하세요"
+    }
+    CONN_REFRESH_OAUTH_TOKEN_UNREACHABLE(connection, host) {
+        class: Unavailable,
+        place: "연결 토큰 갱신",
+        cause: "토큰 갱신 요청을 OAuth 서버에 보내지 못했다",
+        message: "연결 {connection}의 OAuth 서버 {host}에 토큰 갱신 요청을 보내지 못했습니다. 저장된 로그인은 지워지지 않았습니다. 네트워크를 확인하고 다시 시도하세요.",
+        fix: "네트워크를 확인한 뒤 다시 시도하세요"
+    }
+    CONN_REFRESH_OAUTH_TOKEN_FAILED(connection, host) {
+        class: Server,
+        place: "연결 토큰 갱신",
+        cause: "OAuth 서버가 토큰 갱신 요청을 실패로 응답했다",
+        message: "연결 {connection}의 OAuth 서버({host})가 토큰 갱신 요청을 실패로 응답했습니다. 저장된 로그인은 지워지지 않았습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "OAuth 서버 상태를 확인하세요"
+    }
+    CONN_REFRESH_OAUTH_TOKEN_INVALID(connection, host) {
+        class: Server,
+        place: "연결 토큰 갱신 응답 읽기",
+        cause: "OAuth 서버가 올바른 토큰 응답을 보내지 않았다",
+        message: "연결 {connection}의 OAuth 서버 {host}에서 토큰 갱신 응답을 읽지 못했습니다. 저장된 로그인은 지워지지 않았습니다. 잠시 뒤 다시 시도하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
+        fix: "OAuth 서버의 토큰 응답을 확인하세요"
+    }
     CONN_AUTHORIZE_WINDOW_NOT_FOUND() {
         class: NotFound,
         place: "연결 권한 확인",
