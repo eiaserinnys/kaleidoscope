@@ -63,8 +63,13 @@ fn builtin_agent_locks_both_session_lists_while_busy() {
         let branch = branches.iter().find(|branch| branch["type"] == "when" && branch[width].is_number()).unwrap();
         let mut lists = Vec::new();
         find_session_lists(&branch["child"], &mut lists);
-        assert_eq!(lists.len(), 1, "{width} 갈래에는 세션 목록이 하나 있어야 한다");
-        assert_eq!(lists[0]["disabled"]["client"], "session_buttons_busy");
+        // 지울 수 있는 제공자와 없는 제공자를 위한 두 갈래이며, 어느 쪽이든 바쁜 동안 잠긴다.
+        assert_eq!(lists.len(), 2, "{width} 갈래에는 삭제 가능, 불가 세션 목록이 하나씩 있어야 한다");
+        for list in &lists {
+            assert_eq!(list["disabled"]["client"], "session_buttons_busy");
+        }
+        let deletable: Vec<_> = lists.iter().filter(|list| list["item_menu"][0]["on_select"]["client"] == "delete_session").collect();
+        assert_eq!(deletable.len(), 1, "{width} 갈래에서 삭제 메뉴는 한 목록에만 있어야 한다");
     }
 }
 
