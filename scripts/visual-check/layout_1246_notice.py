@@ -3,6 +3,62 @@
 from layout_1246_fixtures import FILL_PROGRESS_JS, NARROW, NOTICE_APP, WIDE, fill_progress_scene
 
 
+def check_detail_wrap(page, output, result, open_page, inject, record, capture):
+    """공용 알림 상세에 본문 클래스로 감싸지 않은 긴 경로가 들어간 장면."""
+    page.set_viewport_size({"width": 384, "height": 797})
+    open_page(page, result["port"], NOTICE_APP)
+    page.evaluate("() => { const panel = document.querySelector('[data-testid=fake-files-panel]'); if (panel) panel.remove(); }")
+    inject(page, {"type": "notice", "kind": "error", "message": "2개 실패", "actions": []}, app_id=NOTICE_APP)
+    app = page.locator('[data-testid="app-window-notice-fixture"]')
+    notice = app.locator('.ks-data-window-body .ks-notice')
+    notice.wait_for()
+    # 파일 작업 알림처럼 공용 Notice 상세에 추가 래퍼 없는 경로 행을 둔다.
+    notice.evaluate("""el => {
+      const detail = document.createElement('div'); detail.className = 'ks-notice-expansion';
+      const row = document.createElement('div');
+      row.textContent = '/files/' + 'abcdefghijklmnopqrstuvwxyz0123456789'.repeat(6) + '.txt';
+      detail.append(row); el.append(detail);
+    }""")
+    measure = """el => {
+      const detail = el.querySelector('.ks-notice-expansion'), row = detail.firstElementChild;
+      const win = el.closest('[data-testid="app-window-notice-fixture"]');
+      const rect = node => { const r = node.getBoundingClientRect(); return {left:r.left, right:r.right, top:r.top, bottom:r.bottom}; };
+      const range = document.createRange(); range.selectNodeContents(row);
+      return {window:rect(win), notice:{...rect(el), scrollWidth:el.scrollWidth, clientWidth:el.clientWidth},
+        detail:{...rect(detail), scrollWidth:detail.scrollWidth, clientWidth:detail.clientWidth,
+          overflowWrap:getComputedStyle(detail).overflowWrap},
+        text:[...range.getClientRects()].map(r => ({left:r.left, right:r.right})),
+        textLength:row.textContent.length, wrappedInMessage:!!row.closest('.ks-notice-message')};
+    }"""
+
+    def fits(value):
+        window, outer, detail = value["window"], value["notice"], value["detail"]
+        return (outer["scrollWidth"] <= outer["clientWidth"] + 1 and
+                detail["scrollWidth"] <= detail["clientWidth"] + 1 and
+                outer["left"] >= window["left"] - 1 and outer["right"] <= window["right"] + 1 and
+                detail["left"] >= outer["left"] - 1 and detail["right"] <= outer["right"] + 1 and
+                all(r["left"] >= detail["left"] - 1 and r["right"] <= detail["right"] + 1 for r in value["text"]))
+
+    for height in (240, 360, 720):
+        page.set_viewport_size({"width": 384, "height": height + 77})
+        app.evaluate("(el, height) => { el.style.width = '360px'; el.style.height = `${height}px`; }", height)
+        page.wait_for_timeout(250)
+        actual = notice.evaluate(measure)
+        key = f"notice-detail-wrap-360x{height}"
+        capture(output, result, page, key)
+        # 정본 규칙만 끈 같은 장면이 실패해야 판정기가 넘침을 감지한다.
+        notice.locator('.ks-notice-expansion').evaluate("el => { el.style.overflowWrap = 'normal'; }")
+        page.wait_for_timeout(100)
+        without_wrap = notice.evaluate(measure)
+        capture(output, result, page, f"{key}-without-wrap")
+        notice.locator('.ks-notice-expansion').evaluate("el => { el.style.removeProperty('overflow-wrap'); }")
+        record(result, key, {"긴 경로가 상세 상자와 알림 안에 듦": fits(actual),
+                             "본문 클래스 없이 상세에 표시": actual["textLength"] > 200 and bool(actual["text"]) and not actual["wrappedInMessage"],
+                             "줄바꿈 제거 시 넘침 감지": not fits(without_wrap)})
+        result["scenes"][key]["measurement"] = {"actual": actual, "without_wrap": without_wrap,
+                                                   "without_wrap_passes": fits(without_wrap)}
+
+
 def check_fill_progress_notice(page, output, result, open_page, inject, record, capture):
     for width, height in (WIDE, NARROW):
         page.set_viewport_size({"width": width, "height": height})
@@ -118,5 +174,7 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
             record(result, "fill-progress-controls-360", {"단추 누른 뒤 초점": focus_retry, "Tab 순서": tab_close, "가로 넘침 없음": not geometry["horizontalOverflow"],
                                                           "실패와 다시 받기": geometry["retry"]})
             result["scenes"]["fill-progress-controls-360"]["measurement"] = geometry
+
+    check_detail_wrap(page, output, result, open_page, inject, record, capture)
 
 
