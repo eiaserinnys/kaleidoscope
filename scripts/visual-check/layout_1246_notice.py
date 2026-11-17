@@ -36,6 +36,44 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
             result["scenes"][key]["measurement"] = measurement
             capture(output, result, page, key)
         if width == NARROW[0]:
+            collapsed = page.evaluate(FILL_PROGRESS_JS, NOTICE_APP)
+            details = page.get_by_role("button", name="자세히")
+            details.focus()
+            page.keyboard.press("Shift+Tab")
+            page.keyboard.press("Tab")
+            tab_focus = details.evaluate("el => document.activeElement === el && el.matches(':focus-visible')")
+            focus_visible = details.evaluate("el => { const s = getComputedStyle(el); return (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || s.boxShadow !== 'none'; }")
+            details.press("Enter")
+            page.wait_for_timeout(250)
+            expanded = page.evaluate(FILL_PROGRESS_JS, NOTICE_APP)
+            focus_kept = details.evaluate("el => document.activeElement === el")
+            detail_id = details.get_attribute("aria-controls")
+            detail_visible = page.locator(f"[id='{detail_id}']").is_visible()
+            detail_text = page.locator(f"[id='{detail_id}']").inner_text()
+            key = "fill-progress-details-360"
+            record(result, key, {"접힌 높이가 창의 20% 이하": (collapsed["notice"]["bottom"] - collapsed["notice"]["top"]) <= (collapsed["window"]["bottom"] - collapsed["window"]["top"]) * .2,
+                                 "펼친 원인과 코드": detail_visible and "자료를 받지 못했습니다" in detail_text and "SOURCE_READ_FAILED" in detail_text,
+                                 "펼쳐도 본문과 겹치지 않음": expanded["body"]["bottom"] <= expanded["notice"]["top"] and not any(row["overlap"] for row in expanded["rows"]),
+                                 "Tab과 누른 뒤 초점": tab_focus and focus_kept and focus_visible})
+            result["scenes"][key]["measurement"] = {"collapsed": collapsed, "expanded": expanded}
+            capture(output, result, page, key)
+            page.set_viewport_size({"width": 384, "height": 317})
+            page.locator('[data-testid="app-window-notice-fixture"]').evaluate("el => { el.style.width = '360px'; el.style.height = '240px'; }")
+            page.wait_for_timeout(250)
+            minimum = page.locator(f"[id='{detail_id}']").evaluate("""el => {
+              const r = el.getBoundingClientRect(), text = el.querySelector('.ks-notice-message');
+              const notice = el.closest('.ks-notice').getBoundingClientRect(), win = el.closest('.ks-data-window').getBoundingClientRect();
+              return {height:r.height, lineHeight:parseFloat(getComputedStyle(text).lineHeight), noticeHeight:notice.height, windowHeight:win.height,
+                selectable:getComputedStyle(text).userSelect, scrollHeight:el.scrollHeight, clientHeight:el.clientHeight};
+            }""")
+            record(result, "fill-progress-details-minimum", {"원인 한 줄을 읽고 복사할 수 있음": minimum["height"] >= minimum["lineHeight"] and minimum["selectable"] == "text",
+                   "펼친 알림이 창 내용의 절반 이하": minimum["noticeHeight"] * 2 <= minimum["windowHeight"] + 1})
+            result["scenes"]["fill-progress-details-minimum"]["measurement"] = minimum
+            capture(output, result, page, "fill-progress-details-minimum")
+            page.locator('[data-testid="app-window-notice-fixture"]').evaluate("el => { el.style.width = ''; el.style.height = ''; }")
+            page.set_viewport_size({"width": NARROW[0], "height": NARROW[1]})
+            page.wait_for_timeout(250)
+            details.press("Enter")
             # 검사기가 실제 겹침을 놓치지 않는지 알림을 보이는 행 위로 옮겼다가 원위치한다.
             page.evaluate("""() => {
               const notice = document.querySelector('[data-testid="app-window-notice-fixture"] .ks-data-window-notice > .ks-notice');
