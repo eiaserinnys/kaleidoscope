@@ -105,7 +105,7 @@ it("오류와 다시 시작은 자동으로 사라지지 않는다", () => {
 
 it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () => {
   cleanup();
-  vi.spyOn(data, "getNoticeSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
+  vi.spyOn(data, "getNoticeSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "연결 예시의 서버에 오류가 났습니다.", id: "SOURCE_READ_FAILED", details: ["원인: 서버 사유", "HTTP 상태: 500"] } } as never);
   const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
   render(<WindowNotice />);
   tick(10000);
@@ -118,11 +118,15 @@ it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () 
   fireEvent.click(details);
   expect(document.activeElement).toBe(details);
   expect(details.getAttribute("aria-expanded")).toBe("true");
-  expect(screen.getByRole("alert").textContent).toContain("이전에 받은 내용을 보이고 있습니다.");
-  expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
+  const text = screen.getByRole("alert").textContent ?? "";
+  // 접힌 줄은 등록부 문구 하나다. 요약 문구를 다시 붙이지 않는다.
+  expect(text).toContain("연결 예시의 서버에 오류가 났습니다.");
+  expect(text).not.toContain("이전에 받은 내용을 보이고 있습니다.");
+  // 펼치면 원인과 HTTP 상태, 코드를 보인다.
+  expect(text).toContain("원인: 서버 사유");
+  expect(text).toContain("HTTP 상태: 500");
+  expect(text).toContain("SOURCE_READ_FAILED");
   expect(screen.getByRole("alert").hasAttribute("data-ks-flow")).toBe(true);
-  expect(screen.getByRole("alert").textContent).not.toContain("feed");
-  expect(screen.getByRole("alert").textContent).toContain("SOURCE_READ_FAILED");
   fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
   expect(refresh).toHaveBeenCalledWith(["feed"]);
   fireEvent.click(screen.getByRole("button", { name: "닫기" }));
@@ -130,7 +134,7 @@ it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () 
 });
 
 it("같은 원천 실패의 갱신은 자세히를 유지하고 다른 실패는 접는다", () => {
-  const failure = { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" };
+  const failure = { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED", details: ["원인: 서버 사유"] };
   const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
   merge(failure);
   fireEvent.click(screen.getByRole("button", { name: "자세히" }));
@@ -139,12 +143,29 @@ it("같은 원천 실패의 갱신은 자세히를 유지하고 다른 실패는
   expect(screen.getByRole("button", { name: "자세히" }).getAttribute("aria-expanded")).toBe("true");
   merge({ ...failure, message: "다른 실패" });
   expect(screen.getByRole("button", { name: "자세히" }).getAttribute("aria-expanded")).toBe("false");
+  // 문구가 그대로여도 원인이 바뀐 재실패는 펼침을 접는다.
+  const other = { ...failure, message: "다른 실패", details: ["원인: 다른 사유"] };
+  merge(other);
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
+  expect(screen.getByRole("button", { name: "자세히" }).getAttribute("aria-expanded")).toBe("true");
+  merge({ ...other, details: ["원인: 또 다른 사유"] });
+  expect(screen.getByRole("button", { name: "자세히" }).getAttribute("aria-expanded")).toBe("false");
+});
+
+it("원인만 바뀐 재실패는 닫은 알림을 다시 연다", () => {
+  const failure = { state: "failed", has_value: true, message: "연결 예시의 서버에 오류가 났습니다.", id: "SOURCE_READ_FAILED", details: ["원인: 첫 사유"] };
+  const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
+  merge(failure);
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  expect(screen.queryByRole("alert")).toBeNull();
+  merge({ ...failure, details: ["원인: 둘째 사유"] });
+  expect(screen.getByRole("alert").textContent).toContain("연결 예시의 서버에 오류가 났습니다.");
 });
 
 it("원천이 여러 곳에서 실패하면 첫 오류와 나머지 수만 보인다", () => {
   cleanup();
   vi.spyOn(data, "getNoticeSources").mockReturnValue({
-    first: { state: "failed", has_value: true, message: "첫 오류", id: "FIRST_ERROR" },
+    first: { state: "failed", has_value: true, message: "첫 오류", id: "FIRST_ERROR", details: ["원인: 첫 사유"] },
     second: { state: "failed", has_value: true, message: "둘째 오류", id: "SECOND_ERROR" },
     third: { state: "failed", has_value: true, message: "셋째 오류", id: "THIRD_ERROR" },
   } as never);
@@ -152,8 +173,8 @@ it("원천이 여러 곳에서 실패하면 첫 오류와 나머지 수만 보�
   render(<WindowNotice />);
   fireEvent.click(screen.getByRole("button", { name: "자세히" }));
   const text = screen.getByRole("alert").textContent ?? "";
-  expect(text).toContain("화면 3곳이 이전에 받은 내용을 보이고 있습니다.");
-  expect(text).toContain("첫 오류");
+  expect(text).toContain("화면 3곳: 첫 오류");
+  expect(text).not.toContain("이전에 받은 내용을 보이고 있습니다.");
   expect(text).not.toContain("(외");
   expect(text).not.toContain("first");
   expect(text).toContain("FIRST_ERROR");

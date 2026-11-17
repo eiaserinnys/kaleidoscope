@@ -30,7 +30,7 @@ export function WindowNotice() {
   const failed = Object.entries(sources).filter(([, value]) => value.state === "failed" && value.has_value).map(([name]) => name);
   const failureKey = JSON.stringify([...failed].sort().map((name) => {
     const source = sources[name];
-    return source.state === "failed" ? [name, source.id, source.message] : [];
+    return source.state === "failed" ? [name, source.id, source.message, source.details] : [];
   }));
   useEffect(() => { setDismissed(false); }, [failureKey, retrySequence]);
   useEffect(() => { setDetails({ key: failureKey, expanded: false }); }, [failureKey]);
@@ -45,6 +45,11 @@ export function WindowNotice() {
   const sourceMessage = firstFailed?.state === "failed"
     ? `${sourceSummary} ${firstFailed.message}`
     : "";
+  // 흐름 알림의 접힌 줄은 첫 실패 원천의 등록부 문구 하나다. 실패와 시각은 앱 머리가 말하므로
+  // 셸은 까닭과 할 일만 남긴다. 원천이 여럿이면 앞에 몇 곳인지만 붙인다.
+  const collapsedMessage = firstFailed?.state === "failed"
+    ? failed.length > 1 ? `화면 ${failed.length}곳: ${firstFailed.message}` : firstFailed.message
+    : "";
   if (!message && (!failed.length || dismissed)) return null;
   const close = () => {
     if (message) data.setNotice(null); else setDismissed(true);
@@ -57,11 +62,14 @@ export function WindowNotice() {
     : [...(collapsible ? [<Button key="details" aria-expanded={expanded} aria-controls={detailsId} onClick={() => setDetails({ key: failureKey, expanded: !expanded })}>자세히</Button>] : []), <Button key="retry" aria-label="다시 받기" aria-disabled={retrying || undefined} aria-busy={retrying || undefined} className={retrying ? "is-progress" : undefined} onClick={() => { if (!retrying) void data.refresh(failed); }}><span>다시 받기</span>{retrying && <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>}</Button>, closeButton];
   if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} slot={slot} />;
   // 같은 문구로 다시 실패하면 실패 알림 요소를 새로 그려 화면 읽기 도구가 다시 읽게 한다.
-  const detailContent = firstFailed?.state === "failed" ? <span className="ks-notice-message"><LinkedText text={firstFailed.message} />{sourceErrorId ? <> <ErrorId id={sourceErrorId} /></> : null}</span> : null;
+  const detailContent = firstFailed?.state === "failed" ? <>
+    {(firstFailed.details ?? []).map((detail, index) => <div key={index}><LinkedText text={detail} /></div>)}
+    {sourceErrorId ? <div><ErrorId id={sourceErrorId} /></div> : null}
+  </> : null;
   const notice = <Notice key={message ? revision : undefined} role="alert" data-ks-overlay data-ks-flow={!message}
     errorId={collapsible ? null : message ? noticeId : sourceErrorId} actions={actions}
     details={collapsible ? detailContent : undefined} detailsId={detailsId} detailsHidden={!expanded}>
-    {message ?? (collapsible ? sourceSummary : sourceMessage)}
+    {message ?? (collapsible ? collapsedMessage : sourceMessage)}
   </Notice>;
   return slot ? createPortal(notice, slot) : notice;
 }

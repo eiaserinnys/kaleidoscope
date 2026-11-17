@@ -252,7 +252,8 @@ button {
 /* 화면이 열릴 때 자리를 잡으려고 포커스를 받는 제목에는 테두리를 그리지 않는다. */
 :is(h1, h2, h3)[tabindex="-1"]:focus-visible { outline: none; }
 
-.ks-focus-rescue-empty:focus-visible { outline: none; }
+/* 구조용으로 받은 초점도 프로젝트 고리를 쓴다. 바깥 여백에 그리면 창 가장자리에서 잘리므로 본문 안쪽에 그린다. */
+.ks-focus-rescue-empty:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
 
 .ks-app-window-content { isolation: isolate; }
 

@@ -2,6 +2,19 @@ import { expect, test } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
+// 하네스는 미리보기 창을 겹쳐 두고 창 하나만 맨 위에 둔다. 창 초점 복구는 맨 위 창에서만 돌므로,
+// 검사 대상 창을 맨 위로 올려야 알림을 닫은 뒤의 구조용 초점을 볼 수 있다.
+async function raisePreviewWindow(page: import("@playwright/test").Page) {
+  await page.evaluate(async () => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const target = snapshot.shared.windows.find((window: any) => window.app_id === "notice-fixture");
+    target.z = Math.max(...snapshot.shared.windows.map((window: any) => window.z)) + 1;
+    harness.emit({ event: "state.changed", snapshot });
+  });
+  await page.waitForTimeout(200);
+}
+
 for (const width of [360, 880]) test(`${width} 폭에서 수동 재시도만 진행 표시를 보인다`, async ({ page }) => {
   await page.setViewportSize({ width, height: 600 });
   await page.goto("/?preview=paging-test");
@@ -107,27 +120,41 @@ test("360 폭의 원천 실패 알림은 글과 다시 받기, 닫기를 함께 
   const app = page.getByTestId("app-window-paging-test");
   await expect(app.getByRole("tab", { name: "목록", exact: true })).toBeVisible();
   const failSource = () => page.evaluate(() => (window as any).conversationHarness.emit({ event: "data.update", window_id: "paging-test-window", view: {
-    sources: { list_items: { state: "failed", has_value: true, message: "원인: 서버 오류", id: "SOURCE_ERROR" } }, values: {},
+    sources: { list_items: { state: "failed", has_value: true, message: "연결 예시의 서버에 오류가 났습니다.", id: "SOURCE_ERROR",
+      details: ["원인: 서버 오류", "HTTP 상태: 500", "원천: list_items", "경로: /api/items"] } }, values: {},
   } }));
   await failSource();
   const notice = app.getByRole("alert");
-  await expect(notice).toContainText("이전에 받은 내용을 보이고 있습니다.");
+  // 접힌 줄은 요약 없이 등록부 문구 하나다.
+  await expect(notice).toContainText("연결 예시의 서버에 오류가 났습니다.");
+  await expect(notice).not.toContainText("이전에 받은 내용을 보이고 있습니다.");
   const positions = await notice.evaluate((element) => {
-    const rect = element.getBoundingClientRect(), text = element.querySelector(".ks-notice-message")!.getBoundingClientRect();
+    const rect = element.getBoundingClientRect(), message = element.querySelector(".ks-notice-message")!;
+    const text = message.getBoundingClientRect();
+    const range = document.createRange(); range.selectNodeContents(message);
+    // Range 사각형은 노드와 글상자마다 겹쳐 오므로 같은 줄은 위 좌표로 묶어 센다.
+    const lines = new Set(Array.from(range.getClientRects()).filter((box) => box.width > 0 && box.height > 0).map((box) => Math.round(box.top))).size;
     const buttons = Array.from(element.querySelectorAll("button"), (button) => button.getBoundingClientRect().toJSON());
-    return { notice: rect.toJSON(), text: text.toJSON(), buttons };
+    return { notice: rect.toJSON(), text: text.toJSON(), lines, buttons, overflow: element.scrollWidth - element.clientWidth };
   });
   const output = process.env.KS_NOTICE_CAPTURE_DIR;
   if (output) { mkdirSync(output, { recursive: true }); await app.screenshot({ path: join(output, "source-error-360.png") }); }
   console.log(JSON.stringify(positions));
+  // 글 한 줄과 그 아래 단추 셋이 한 줄이다.
+  expect(positions.lines).toBe(1);
   expect(positions.buttons).toHaveLength(3);
   expect(positions.text.bottom).toBeLessThanOrEqual(positions.buttons[0].top);
+  // 높이가 다른 단추 셋이 한 줄을 이룬다: 세로 구간이 겹치고 아래로 쌓이지 않는다.
+  expect(Math.max(...positions.buttons.map((box) => box.top))).toBeLessThan(Math.min(...positions.buttons.map((box) => box.bottom)));
   expect(positions.buttons[2].right).toBeLessThanOrEqual(positions.notice.right);
+  expect(positions.overflow).toBeLessThanOrEqual(0);
   const details = notice.getByRole("button", { name: "자세히" });
   await expect(details).toHaveAttribute("aria-expanded", "false");
+  await expect(notice.getByText("원인: 서버 오류")).toBeHidden();
   await details.click();
   await expect(details).toHaveAttribute("aria-expanded", "true");
   await expect(notice.getByText("원인: 서버 오류")).toBeVisible();
+  await expect(notice.getByText("HTTP 상태: 500")).toBeVisible();
   await expect(notice.getByText("SOURCE_ERROR")).toBeVisible();
   await notice.getByRole("button", { name: "다시 받기" }).click();
   await expect(notice).toHaveCount(0);
@@ -257,6 +284,8 @@ for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아�
 
  test("키보드로 알림을 닫고 Enter를 다시 눌러도 본문 동작이 실행되지 않는다", async ({ page }) => {
   await page.goto("/?preview=notice-fixture");
+  await page.getByTestId("fake-files-panel").evaluate(e => e.remove());
+  await raisePreviewWindow(page);
   const app = page.getByTestId("app-window-notice-fixture");
   await expect(app.getByRole("button", { name: "시작 단추" })).toBeVisible();
   await page.evaluate(() => (window as any).noticeFixture.alert());
@@ -265,8 +294,41 @@ for (const width of [1000, 360]) test(`${width} 폭에서 떠 있는 알림 아�
   await expect(app.getByRole("alert")).toHaveCount(0);
   // 초점 복구는 창 초점 코드가 맡는다. 알림 자리에 초점이 남거나 몸통 동작 단추로 가지 않는다.
   await expect(app.getByRole("button", { name: "시작 단추" })).not.toBeFocused();
+  const ring = await app.evaluate((element) => {
+    const active = document.activeElement as HTMLElement;
+    const style = getComputedStyle(active);
+    return { className: String(active.className), inWindow: element.contains(active), focusVisible: active.matches(":focus-visible"),
+      outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth, outlineOffset: style.outlineOffset };
+  });
+  // 키보드로 닫으면 창 본문에 프로젝트 초점 고리가 안쪽으로 보인다.
+  expect(ring.inWindow).toBe(true);
+  expect(ring.className).toContain("ks-focus-rescue-empty");
+  expect(ring.focusVisible).toBe(true);
+  expect(ring.outlineStyle).toBe("solid");
+  expect(ring.outlineWidth).not.toBe("0px");
+  expect(parseFloat(ring.outlineOffset)).toBeLessThan(0);
   await page.keyboard.press("Enter");
   await expect(app.getByText("시작 누름", { exact: true })).toHaveCount(0);
+ });
+
+ test("마우스로 알림을 닫으면 창 본문에 초점 고리를 그리지 않는다", async ({ page }) => {
+  await page.goto("/?preview=notice-fixture");
+  await page.getByTestId("fake-files-panel").evaluate(e => e.remove());
+  await raisePreviewWindow(page);
+  const app = page.getByTestId("app-window-notice-fixture");
+  await expect(app.getByRole("button", { name: "시작 단추" })).toBeVisible();
+  await page.evaluate(() => (window as any).noticeFixture.alert());
+  await app.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(app.getByRole("alert")).toHaveCount(0);
+  const ring = await app.evaluate((element) => {
+    const active = document.activeElement as HTMLElement;
+    const style = getComputedStyle(active);
+    return { inWindow: element.contains(active), className: String(active.className), focusVisible: active.matches(":focus-visible"), outlineStyle: style.outlineStyle };
+  });
+  expect(ring.inWindow).toBe(true);
+  expect(ring.className).toContain("ks-focus-rescue-empty");
+  expect(ring.focusVisible).toBe(false);
+  expect(ring.outlineStyle).toBe("none");
  });
 
  test("행 오류가 있는 표는 낮은 채움 칸에도 정상 행을 남기고 부모를 넘치지 않는다", async ({ page }) => {

@@ -233,18 +233,18 @@ error_catalog! { ENTRIES;
         message: "{target}의 서버가 자료를 읽을 권한이 없다고 응답했습니다. 연결 설정이나 로그인을 확인하세요.",
         fix: "연결 설정이나 로그인을 확인하세요"
     }
-    DATA_SOURCE_RESPONSE_SERVER_ERROR(target, reason) {
+    DATA_SOURCE_RESPONSE_SERVER_ERROR(target) {
         class: Server,
         place: "데이터 원천 응답 확인",
         cause: "원천 서버에 오류가 발생했다",
-        message: "{target}의 서버에 오류가 나서 자료를 받지 못했습니다. 잠시 뒤 다시 받기를 누르세요. 원인: {reason}",
+        message: "{target}의 서버에 오류가 났습니다.",
         fix: "잠시 뒤 다시 받기를 누르세요"
     }
-    DATA_SOURCE_RESPONSE_STATUS_FAILED(target, reason) {
+    DATA_SOURCE_RESPONSE_STATUS_FAILED(target) {
         class: Server,
         place: "데이터 원천 응답 확인",
         cause: "원천 서버가 성공이 아닌 HTTP 상태를 응답했다",
-        message: "{target}의 서버가 성공 응답을 보내지 않아 자료를 받지 못했습니다. 다시 받기를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요. 원인: {reason}",
+        message: "{target}의 서버가 성공 응답을 보내지 않았습니다.",
         fix: "다시 받기를 누르고, 계속되면 에이전트에게 이 오류 코드를 전하세요"
     }
     DATA_BINDING_EXPR_FAILED() {

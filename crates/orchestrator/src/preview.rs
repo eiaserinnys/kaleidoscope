@@ -442,7 +442,7 @@ impl McpServer {
             let value = match status {
                 SourceStatus::Ready { updated_at } => json!({"state":"ready", "updated_at":updated_at,
                     "updated_time":chrono::DateTime::parse_from_rfc3339(updated_at).ok().map(|at| at.with_timezone(&chrono::Local).format("%H:%M").to_string()), "stale":false,"message":null}),
-                SourceStatus::Failed { message, id, .. } => json!({"state":"failed","updated_at":null,"updated_time":null,"stale":false,"message":message,"id":id}),
+                SourceStatus::Failed { message, id, details, .. } => json!({"state":"failed","updated_at":null,"updated_time":null,"stale":false,"message":message,"id":id,"details":details}),
                 SourceStatus::Loading { .. } => json!({"state":"loading","updated_at":null,"updated_time":null,"stale":false,"message":null}),
                 SourceStatus::LoginRequired { .. } => json!({"state":"login_required","updated_at":null,"updated_time":null,"stale":false,"message":null}),
                 SourceStatus::Idle {} => json!({"state":"idle","updated_at":null,"updated_time":null,"stale":false,"message":null}),
@@ -610,7 +610,7 @@ fn preview_failure(
             message: error.message.clone(),
             has_value: false,
             id: error.id.clone(),
-            details: Vec::new(),
+            details: error.details.clone(),
         },
     );
     let mut result =
