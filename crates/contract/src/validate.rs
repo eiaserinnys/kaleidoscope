@@ -2771,9 +2771,12 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
                 details.push(format!("{at}: repeat grid.columns는 양수여야 합니다"));
             }
         }
-        Block::Progress { max, .. } => {
+        Block::Progress { max, segments, .. } => {
             if !max.is_finite() || *max <= 0.0 {
                 details.push(format!("{at}: progress max는 양수여야 합니다"));
+            }
+            if segments.is_some_and(|segments| segments < 2) {
+                details.push(format!("{at}: progress segments는 2 이상이어야 합니다"));
             }
         }
         Block::When { .. } | Block::Dialog { .. } | Block::Tour { .. } | Block::Anchor { .. } => {}

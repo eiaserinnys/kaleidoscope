@@ -17,7 +17,7 @@ export const BLOCK_SLOTS: Record<string, BlockSlots> = {
   dialog: { bindings: ["cancel_label", "close_label", "open", "title"], actions: ["on_close", "on_confirm"], children: ["child"] },
   tour: { bindings: ["labels/done", "labels/next", "labels/previous", "labels/skip", "open", "step", "steps/*/body", "steps/*/title"], actions: ["on_close", "on_step"], children: [] },
   anchor: { bindings: [], actions: [], children: ["child"] },
-  progress: { bindings: ["label", "value"], actions: [], children: [] },
+  progress: { bindings: ["label", "marker", "value"], actions: [], children: [] },
   canvas: { bindings: ["aspect_ratio", "description", "loading", "surface"], actions: ["on_pointer"], children: [] },
   timeline: { bindings: ["duration", "markers", "off_days", "position", "selection", "snap", "ticks", "tracks", "viewport"], actions: ["on_edit", "on_seek", "on_select", "on_viewport"], children: [] },
   sandbox: { bindings: ["value"], actions: [], children: [] },

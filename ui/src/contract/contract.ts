@@ -386,7 +386,15 @@ min_width?: number,
 /**
  * (19판) 창 본문 너비가 CSS px 기준으로 이 값 이하일 때 자식을 그린다.
  */
-max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, } | { "type": "canvas", surface: Binding, 
+max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, 
+/**
+ * (64판) 바를 같은 폭의 이 수만큼 나누는 칸막이를 그린다. 2 이상이어야 한다.
+ */
+segments?: number, 
+/**
+ * (64판) `value`와 같은 0..`max` 눈금에서 한 지점을 가리키는 세로 커서의 값.
+ */
+marker?: Binding, } | { "type": "canvas", surface: Binding, 
 /**
  * (19판) 참이면 표준 로딩 표현을 보인다.
  */

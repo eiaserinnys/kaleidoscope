@@ -1999,10 +1999,18 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             act!("on_step", on_step);
             act!("on_close", on_close);
         }
-        Block::Progress { value, label, .. } => {
+        Block::Progress {
+            value,
+            label,
+            marker,
+            ..
+        } => {
             bind!("value", value);
             if let Some(label) = label {
                 bind!("label", label);
+            }
+            if let Some(marker) = marker {
+                bind!("marker", marker);
             }
         }
         Block::Anchor { .. } => {}
