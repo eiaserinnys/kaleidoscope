@@ -36,7 +36,8 @@ fn app_icon_media_reference_round_trips_and_rejects_other_fields() {
 
 #[test]
 fn app_icon_media_schema_and_versions_are_registered() {
-    assert_eq!(BLOCK_SET_VERSION, APP_ICON_MEDIA_BLOCK_SET_VERSION);
+    assert_eq!(APP_ICON_MEDIA_BLOCK_SET_VERSION, 63);
+    assert!(BLOCK_SET_VERSION >= APP_ICON_MEDIA_BLOCK_SET_VERSION);
     let text = serde_json::to_string(&schemars::schema_for!(kaleidoscope_contract::data::MediaRef))
         .expect("schema serializes");
     assert!(text.contains("AppIconMediaRef"), "missing AppIconMediaRef");

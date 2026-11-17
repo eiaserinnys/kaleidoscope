@@ -327,6 +327,11 @@
 .ks-data-progress-label { color: var(--ks-color-text); font-size: var(--ks-type-body); }
 .ks-data-progress { position: relative; width: 100%; height: var(--ks-space-2); overflow: hidden; border-radius: var(--ks-radius-small); background: var(--ks-color-border); }
 .ks-data-progress-value { display: block; width: 100%; height: 100%; transform-origin: left center; border-radius: inherit; background: var(--ks-color-accent); }
+/* 칸막이는 트랙과 채움을 함께 투명하게 오려 낸다. 칸 자리는 마스크 문자열이 정한다. */
+.ks-data-progress-pace { position: relative; min-width: 0; }
+.ks-data-progress.is-segmented { -webkit-mask-image: var(--ks-progress-mask); mask-image: var(--ks-progress-mask); }
+/* 커서는 장식이라 읽기 순서에 끼지 않는다. 바 위아래로 고르게 내민다. */
+.ks-data-progress-marker { position: absolute; top: 50%; width: calc(var(--ks-line-width) * 2); height: var(--ks-space-4); transform: translate(-50%, -50%); border-radius: var(--ks-radius-small); background: var(--ks-color-text); pointer-events: none; }
 .ks-data-progress.is-indeterminate .ks-data-progress-value { width: 35%; transform: translateX(-100%); animation: ks-progress-indeterminate 1.2s ease-in-out infinite alternate; }
 @keyframes ks-progress-indeterminate { to { transform: translateX(285%); } }
 @media (prefers-reduced-motion: reduce) { .ks-data-progress.is-indeterminate .ks-data-progress-value { animation: none; transform: translateX(185%); } }

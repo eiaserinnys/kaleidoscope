@@ -344,7 +344,10 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 61판: 데이터 트리의 빈 자리 글(`empty_text`).
 /// - 62판: chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`).
 /// - 63판: 다른 앱의 아이콘을 그리는 미디어 참조 `app_icon`과 그 참조를 주는 `$apps[].icon`.
-pub const BLOCK_SET_VERSION: u32 = APP_ICON_MEDIA_BLOCK_SET_VERSION;
+/// - 64판: progress의 칸막이(`segments`)와 세로 커서(`marker`).
+pub const BLOCK_SET_VERSION: u32 = PROGRESS_SEGMENTS_MARKER_BLOCK_SET_VERSION;
+/// progress의 칸막이(`segments`)와 세로 커서(`marker`)를 처음 지원하는 블록 세트 판.
+pub const PROGRESS_SEGMENTS_MARKER_BLOCK_SET_VERSION: u32 = 64;
 /// 다른 앱의 아이콘을 그리는 미디어 참조 `app_icon`을 처음 지원하는 블록 세트 판.
 pub const APP_ICON_MEDIA_BLOCK_SET_VERSION: u32 = 63;
 /// chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와
@@ -1761,6 +1764,14 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<Binding>,
+        /// (64판) 바를 같은 폭의 이 수만큼 나누는 칸막이를 그린다. 2 이상이어야 한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        segments: Option<u32>,
+        /// (64판) `value`와 같은 0..`max` 눈금에서 한 지점을 가리키는 세로 커서의 값.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        marker: Option<Binding>,
     },
     /// (12판) 클라이언트가 그리는 픽셀 표면.
     Canvas {
@@ -2731,6 +2742,10 @@ enum RawBlock {
         max: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        segments: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        marker: Option<Binding>,
     },
     Canvas {
         surface: Binding,
@@ -3511,7 +3526,19 @@ impl From<RawBlock> for Block {
                 on_close,
             },
             RawBlock::Anchor { id, child } => Block::Anchor { id, child },
-            RawBlock::Progress { value, max, label } => Block::Progress { value, max, label },
+            RawBlock::Progress {
+                value,
+                max,
+                label,
+                segments,
+                marker,
+            } => Block::Progress {
+                value,
+                max,
+                label,
+                segments,
+                marker,
+            },
             RawBlock::Canvas {
                 surface,
                 loading,
@@ -4179,6 +4206,8 @@ impl Block {
     pub fn introduced_in(&self) -> u32 {
         match self {
             Block::Notice { .. } => 18,
+            Block::Progress { segments: Some(_), .. }
+            | Block::Progress { marker: Some(_), .. } => PROGRESS_SEGMENTS_MARKER_BLOCK_SET_VERSION,
             Block::Repeat { .. }
             | Block::When { .. }
             | Block::Dialog { .. }
