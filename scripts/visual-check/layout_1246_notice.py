@@ -3,6 +3,84 @@
 from layout_1246_fixtures import FILL_PROGRESS_JS, NARROW, NOTICE_APP, WIDE, fill_progress_scene
 
 
+NOTICE_LAYOUT_JS = """
+(appId) => {
+  const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const rd = (v) => Math.round(v * 10) / 10;
+  const r = (el) => { const b = el.getBoundingClientRect(); return {l:rd(b.left), t:rd(b.top), r:rd(b.right), b:rd(b.bottom), w:rd(b.width), h:rd(b.height)}; };
+  const textBounds = (el) => {
+    if (!el) return null;
+    const range = document.createRange(); range.selectNodeContents(el);
+    const rects = [...range.getClientRects()].filter((x) => x.width > 0 && x.height > 0);
+    if (!rects.length) return null;
+    return {l:rd(Math.min(...rects.map((x) => x.left))), t:rd(Math.min(...rects.map((x) => x.top))),
+      r:rd(Math.max(...rects.map((x) => x.right))), b:rd(Math.max(...rects.map((x) => x.bottom))), lines:rects.length};
+  };
+  const n = win.querySelector('.ks-data-window-notice > .ks-notice');
+  const msg = n.querySelector(':scope > .ks-notice-message');
+  const exp = n.querySelector(':scope > .ks-notice-expansion');
+  const cs = getComputedStyle(n), nb = n.getBoundingClientRect();
+  const buttons = [...n.querySelectorAll(':scope > .ks-notice-actions > *')].map((b) => ({
+    label:b.getAttribute('aria-label') || (b.innerText || '').trim(), box:r(b), expanded:b.getAttribute('aria-expanded'),
+    controls:b.getAttribute('aria-controls'), text:textBounds(b)}));
+  return {window:r(win), notice:r(n), notice_ratio_of_window:rd(nb.height / win.getBoundingClientRect().height * 100),
+    style:{padding:cs.padding, padding_top:parseFloat(cs.paddingTop), padding_bottom:parseFloat(cs.paddingBottom),
+      border_top:parseFloat(cs.borderTopWidth), border_bottom:parseFloat(cs.borderBottomWidth), gap:cs.gap},
+    flow:n.hasAttribute('data-ks-flow'), message:{box:r(msg), text:(msg.innerText || '').trim(), glyphs:textBounds(msg)},
+    expansion:exp ? {hidden:exp.hidden, box:r(exp), text:(exp.innerText || '').trim(), glyphs:exp.hidden ? null : textBounds(exp),
+      scroll_h:exp.scrollHeight, client_h:exp.clientHeight} : null,
+    buttons, insets:{top_glyph:textBounds(msg) ? rd(textBounds(msg).t - nb.top) : null,
+      bottom_button:buttons.length ? rd(nb.bottom - Math.max(...buttons.map((b) => b.box.b))) : null,
+      msg_to_buttons:textBounds(msg) && buttons.length ? rd(Math.min(...buttons.map((b) => b.box.t)) - textBounds(msg).b) : null}};
+}
+"""
+
+
+def check_notice_layout(page, output, result, width, record, capture):
+    """같은 창의 흐름 실패와 동작 오류 알림을 셀라피엘과 같은 좌표로 비교한다."""
+    app = page.locator('[data-testid="app-window-notice-fixture"]')
+    notice = app.locator('.ks-data-window-notice > .ks-notice')
+    details = notice.get_by_role('button', name='자세히')
+    collapsed = page.evaluate(NOTICE_LAYOUT_JS, NOTICE_APP)
+    capture(output, result, page, f'notice-layout-{width}-collapsed')
+    details.click()
+    page.wait_for_timeout(200)
+    expanded = page.evaluate(NOTICE_LAYOUT_JS, NOTICE_APP)
+    capture(output, result, page, f'notice-layout-{width}-expanded')
+    details.click()
+    page.evaluate("() => window.noticeFixture.alert()")
+    page.wait_for_timeout(200)
+    action = page.evaluate(NOTICE_LAYOUT_JS, NOTICE_APP)
+    capture(output, result, page, f'notice-layout-{width}-action')
+    notice.get_by_role('button', name='닫기').click()
+    page.wait_for_timeout(200)
+
+    message, buttons, style = collapsed['message']['box'], collapsed['buttons'], collapsed['style']
+    button_boxes = [button['box'] for button in buttons]
+    button_centers = [(box['t'] + box['b']) / 2 for box in button_boxes]
+    summary_center = (message['t'] + message['b']) / 2
+    row_height = max(message['h'], *(box['h'] for box in button_boxes))
+    one_row_height = row_height + style['padding_top'] + style['padding_bottom'] + style['border_top'] + style['border_bottom']
+    top_and_bottom_match = (style['padding_top'] == action['style']['padding_top'] and style['padding_bottom'] == action['style']['padding_bottom'])
+    bottom_inset_match = abs(collapsed['insets']['bottom_button'] - action['insets']['bottom_button']) <= 1
+    expanded_top = expanded['expansion']['box']['t'] if expanded['expansion'] and not expanded['expansion']['hidden'] else -1
+    last_row_bottom = max(expanded['message']['box']['b'], *(b['box']['b'] for b in expanded['buttons']))
+    verdicts = {'동작 오류와 위아래 여백 같음':top_and_bottom_match,
+                '단추 아래와 테두리 사이가 동작 오류와 같음':bottom_inset_match,
+                '펼친 원인과 코드가 요약 줄 아래':expanded_top >= last_row_bottom - 1 and 'SOURCE_READ_FAILED' in expanded['expansion']['text']}
+    if width == WIDE[0]:
+        verdicts.update({'요약과 단추의 세로 가운데 차이 2px 이하':all(abs(summary_center - center) <= 2 for center in button_centers),
+                         '접힌 알림이 한 줄 높이':abs(collapsed['notice']['h'] - one_row_height) <= 1})
+    else:
+        verdicts.update({'요약 아래 단추 셋이 한 줄':len(button_boxes) == 3 and message['b'] <= min(box['t'] for box in button_boxes) + 1 and max(button_centers) - min(button_centers) <= 2,
+                         '접힌 높이가 창의 20% 이하':collapsed['notice_ratio_of_window'] <= 20})
+    key = f'notice-layout-{width}'
+    record(result, key, verdicts)
+    result['scenes'][key]['measurement'] = {'collapsed':collapsed, 'expanded':expanded, 'action':action,
+                                             'summary_center':summary_center, 'button_centers':button_centers,
+                                             'expected_one_row_height':one_row_height}
+
+
 def check_detail_wrap(page, output, result, open_page, inject, record, capture):
     """공용 알림 상세에 본문 클래스로 감싸지 않은 긴 경로가 들어간 장면."""
     page.set_viewport_size({"width": 384, "height": 797})
@@ -59,6 +137,42 @@ def check_detail_wrap(page, output, result, open_page, inject, record, capture):
                                                    "without_wrap_passes": fits(without_wrap)}
 
 
+def check_repeat_end_space(page, output, result, open_page, inject, record, capture):
+    """채움 칸의 반복 격자를 끝까지 내리고 내용 끝과 스크롤 창 끝을 잰다."""
+    for width, height in (WIDE, NARROW):
+        page.set_viewport_size({"width": width, "height": height})
+        open_page(page, result["port"], NOTICE_APP)
+        page.evaluate("() => { const panel = document.querySelector('[data-testid=fake-files-panel]'); if (panel) panel.remove(); }")
+        groups = [{"key": str(i), "label": f"항목 {i}", "rows": [
+            {"key": str(j), "value": value, "label": f"기간 {j} {value}% 사용량"}
+            for j, value in enumerate((79, 80, 94, 95), 1)]} for i in range(1, 25)]
+        inject(page, fill_progress_scene(), app_id=NOTICE_APP, state={"groups": groups})
+        grid = page.locator('[data-testid="app-window-notice-fixture"] .ks-data-stack-item.is-fill > .ks-repeat.is-grid')
+        grid.wait_for()
+        measure = """el => {
+          const items = el.querySelectorAll(':scope > .ks-repeat-content > .ks-repeat-item');
+          const box = node => { const r = node.getBoundingClientRect(); return {top:r.top, bottom:r.bottom, height:r.height}; };
+          const viewport = box(el), first = box(items[0]), last = box(items[items.length - 1]);
+          return {viewport, first, last, gap:viewport.bottom - last.bottom,
+            token:parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3')),
+            scrollTop:el.scrollTop, scrollMax:el.scrollHeight - el.clientHeight, clientHeight:el.clientHeight,
+            contentPadding:parseFloat(getComputedStyle(el.querySelector(':scope > .ks-repeat-content')).paddingBlockEnd),
+            count:items.length, notice:!!el.closest('.ks-data-window').querySelector('.ks-data-window-notice > .ks-notice')};
+        }"""
+        grid.evaluate("el => { el.scrollTop = 0; }")
+        start = grid.evaluate(measure)
+        grid.evaluate("el => { el.querySelector(':scope > .ks-repeat-content').style.paddingBlockEnd = '0px'; }")
+        without_padding_start = grid.evaluate(measure)
+        grid.evaluate("el => { el.querySelector(':scope > .ks-repeat-content').style.removeProperty('padding-block-end'); el.scrollTop = el.scrollHeight; }")
+        bottom = grid.evaluate(measure)
+        key = f"repeat-fill-end-space-{width}"
+        record(result, key, {"정상 상태의 격자 항목과 스크롤 확인": bottom["count"] == 24 and not bottom["notice"] and bottom["scrollTop"] > 0 and bottom["scrollTop"] == bottom["scrollMax"],
+                             "마지막 항목 아래 끝 여백이 토큰 이상": bottom["gap"] >= bottom["token"] - 0.01,
+                             "평소 스크롤 창 높이와 첫 항목 위치 유지": start["clientHeight"] == without_padding_start["clientHeight"] and start["first"] == without_padding_start["first"]})
+        result["scenes"][key]["measurement"] = {"start": start, "without_padding_start": without_padding_start, "bottom": bottom}
+        capture(output, result, page, key)
+
+
 def check_fill_progress_notice(page, output, result, open_page, inject, record, capture):
     for width, height in (WIDE, NARROW):
         page.set_viewport_size({"width": width, "height": height})
@@ -77,6 +191,7 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
         }""")
         page.wait_for_selector('[data-testid="app-window-notice-fixture"] .ks-data-window-notice > .ks-notice')
         page.wait_for_timeout(500)
+        check_notice_layout(page, output, result, width, record, capture)
         for position in ("top", "bottom"):
             page.evaluate("""(position) => {
               const body = document.querySelector('[data-testid="app-window-notice-fixture"] .ks-data-window-body');
@@ -176,5 +291,6 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
             result["scenes"]["fill-progress-controls-360"]["measurement"] = geometry
 
     check_detail_wrap(page, output, result, open_page, inject, record, capture)
+    check_repeat_end_space(page, output, result, open_page, inject, record, capture)
 
 

@@ -113,6 +113,24 @@ async function openBottom(page: Page, ui: object, width = 880, height = 600) {
 
 const bottomRows = Array.from({length:80},(_,i)=>({key:String(i),title:`항목 ${i+1}`}));
 const bottomList = (layout='rows', grouped=false, count=80) => ({type:'list',layout,grouped,items:grouped?[{title:'도구',items:bottomRows.slice(0,count)}]:bottomRows.slice(0,count)});
+for (const layout of ['column', 'grid']) test(`가상 ${layout} 반복도 스크롤 안쪽 끝에 여백을 남긴다`, async ({ page }) => {
+  const repeat = { type: 'repeat', layout, virtual: true, key: 'key', items: bottomRows,
+    grid: { columns: 'auto', item_width: 'large' }, template: { type: 'text', value: { item: 'title' } } };
+  const app = await openBottom(page, { type: 'stack', direction: 'column', fill: 0, children: [repeat] });
+  const scroll = app.locator('.ks-data-stack-item.is-fill > .ks-repeat.is-virtual');
+  await expect(scroll).toBeVisible();
+  const height = await scroll.evaluate(el => el.clientHeight);
+  await scroll.evaluate(el => { el.scrollTop = el.scrollHeight; });
+  await expect(scroll.getByText('항목 80', { exact: true })).toBeVisible();
+  await scroll.evaluate(el => { el.scrollTop = el.scrollHeight; });
+  const measured = await scroll.evaluate(el => {
+    const last = el.querySelector('.ks-repeat-virtual-row.is-last')!;
+    return { gap: el.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom,
+      space: parseFloat(getComputedStyle(el).getPropertyValue('--ks-space-3')), height: el.clientHeight };
+  });
+  expect(measured.gap).toBeCloseTo(measured.space, 0);
+  expect(measured.height).toBe(height);
+});
 for(const layout of ['rows','grouped','grid','icons']) test(`칸 직속 ${layout} 목록의 스크롤 안쪽 끝 여백`,async({page})=>{
  const app=await openBottom(page,{type:'split',direction:'row',children:[bottomList(layout==='grouped'?'rows':layout,layout==='grouped'),{type:'text',value:'그림'}]});
  const list=app.locator('.ks-list');await expect(list).toBeVisible();

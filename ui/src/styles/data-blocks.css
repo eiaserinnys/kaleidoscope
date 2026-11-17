@@ -16,9 +16,10 @@
 .ks-data-window:has(> .ks-data-window-notice > .ks-notice[data-ks-flow]) > .ks-data-window-body { border-block-end: 0; }
 :is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice { flex-wrap: nowrap; background: linear-gradient(var(--ks-color-notice), var(--ks-color-notice)), var(--ks-color-surface-solid); box-shadow: var(--ks-shadow-popover); }
 .ks-data-window-notice > .ks-notice[data-ks-flow] { box-shadow: none; }
-.ks-data-window-notice > .ks-notice[data-ks-flow]:has(> .ks-notice-expansion) { flex-wrap: wrap; gap: var(--ks-space-1); padding-block: var(--ks-space-1); }
-.ks-data-window-notice > .ks-notice[data-ks-flow]:has(> .ks-notice-expansion) > .ks-notice-message { flex: 1 0 100%; }
-.ks-data-window-notice > .ks-notice[data-ks-flow] > .ks-notice-expansion { max-height: calc(50cqh - var(--ks-control-height) - 4 * var(--ks-space-1) - 2 * var(--ks-line-width) - var(--ks-type-body) * var(--ks-line-body)); }
+.ks-data-window-notice > .ks-notice[data-ks-flow]:has(> .ks-notice-expansion) { flex-wrap: wrap; gap: var(--ks-space-1); }
+.ks-data-window-notice > .ks-notice[data-ks-flow]:has(> .ks-notice-expansion:not([hidden])) { row-gap: calc(var(--ks-space-1) - var(--ks-line-width)); }
+.ks-data-window-notice > .ks-notice[data-ks-flow]:has(> .ks-notice-expansion) > .ks-notice-message { flex: 1 1 auto; }
+.ks-data-window-notice > .ks-notice[data-ks-flow] > .ks-notice-expansion { max-height: calc(50cqh - var(--ks-control-height) - 2 * var(--ks-space-2) - 2 * (var(--ks-space-1) - var(--ks-line-width)) - 2 * var(--ks-line-width) - var(--ks-type-body) * var(--ks-line-body)); }
 :is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice > .ks-notice-message,
 :is(.ks-data-window-notice, .ks-dialog-notice-slot) > .ks-notice.has-multiple-actions > .ks-notice-message { min-width: 0; flex: 1 1 0; overflow-y: auto; }
 /* 창 자리 알림은 창 내용(.ks-data-window) 높이의 절반까지만 차지한다. 글만 그 안에서 스크롤하고 단추 둘은 늘 다 보인다. */
