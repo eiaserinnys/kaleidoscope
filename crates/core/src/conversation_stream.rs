@@ -116,7 +116,7 @@ fn spawn(inner: Weak<Inner>, key: String) {
             Ok(runtime) => runtime,
             Err(_) => return,
         };
-        let mut delay = 2;
+        let mut delay = INITIAL_RETRY_DELAY_SECS;
         loop {
             let Some(inner) = inner.upgrade() else { return };
             let (client, thread, cursor) = {
@@ -148,19 +148,33 @@ fn spawn(inner: Weak<Inner>, key: String) {
                     }
                     return;
                 }
-                Outcome::Retry => {
+                Outcome::Retry { connected } => {
+                    delay = next_delay(delay, connected);
                     thread::sleep(Duration::from_secs(delay));
-                    delay = (delay * 2).min(30);
                 }
             }
         }
     });
 }
 
+const INITIAL_RETRY_DELAY_SECS: u64 = 2;
+const MAX_RETRY_DELAY_SECS: u64 = 30;
+
+/// 다음 재시도까지 기다릴 초. 연결에 성공해 스트림을 받기 시작한 뒤 끊기면 처음 값으로 돌아가고,
+/// 연결에 실패만 이어지면 두 배씩 늘려 상한에서 멈춘다.
+fn next_delay(prev: u64, connected: bool) -> u64 {
+    if connected {
+        INITIAL_RETRY_DELAY_SECS
+    } else {
+        (prev * 2).min(MAX_RETRY_DELAY_SECS)
+    }
+}
+
 enum Outcome {
     Gone,
     Auth(CoreError),
-    Retry,
+    /// 연결이 끊겼거나 실패했다. `connected`는 이번 시도가 스트림 응답을 받아 읽기 시작했는지다.
+    Retry { connected: bool },
 }
 
 async fn read_stream(
@@ -177,11 +191,11 @@ async fn read_stream(
     let client = match reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(10))
-        .read_timeout(Duration::from_secs(30))
+        .read_timeout(Duration::from_secs(90))
         .build()
     {
         Ok(client) => client,
-        Err(_) => return Outcome::Retry,
+        Err(_) => return Outcome::Retry { connected: false },
     };
     let logins = provider.logins.clone();
     let name = provider.info.name.clone();
@@ -189,7 +203,7 @@ async fn read_stream(
     let token =
         match tokio::task::spawn_blocking(move || logins.token(&name, scopes.as_deref())).await {
             Ok(Ok(Some(token))) => token,
-            Ok(Err(_)) => return Outcome::Retry,
+            Ok(Err(_)) => return Outcome::Retry { connected: false },
             Ok(Ok(None)) | Err(_) => {
                 return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name))
             }
@@ -205,7 +219,7 @@ async fn read_stream(
     };
     let mut response = match request(&token).await {
         Ok(response) => response,
-        Err(_) => return Outcome::Retry,
+        Err(_) => return Outcome::Retry { connected: false },
     };
     if response.status() == reqwest::StatusCode::UNAUTHORIZED {
         let logins = provider.logins.clone();
@@ -214,14 +228,14 @@ async fn read_stream(
         let refreshed =
             match tokio::task::spawn_blocking(move || logins.refresh(&name, &rejected)).await {
                 Ok(Ok(Some(refreshed))) => refreshed,
-                Ok(Err(_)) => return Outcome::Retry,
+                Ok(Err(_)) => return Outcome::Retry { connected: false },
                 Ok(Ok(None)) | Err(_) => {
                     return Outcome::Auth(errors::CONV_STREAM_LOGIN_REQUIRED(&provider.info.name))
                 }
             };
         response = match request(&refreshed).await {
             Ok(response) => response,
-            Err(_) => return Outcome::Retry,
+            Err(_) => return Outcome::Retry { connected: false },
         };
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             provider.logins.invalidate(&provider.info.name, &refreshed);
@@ -232,7 +246,7 @@ async fn read_stream(
         return Outcome::Auth(errors::CONV_STREAM_PERMISSION_DENIED(&provider.info.name));
     }
     if !response.status().is_success() {
-        return Outcome::Retry;
+        return Outcome::Retry { connected: false };
     }
     let mut bytes = Vec::<u8>::new();
     let mut data = Vec::<Vec<u8>>::new();
@@ -240,11 +254,11 @@ async fn read_stream(
     loop {
         let chunk = match response.chunk().await {
             Ok(Some(chunk)) => chunk,
-            _ => return Outcome::Retry,
+            _ => return Outcome::Retry { connected: true },
         };
         bytes.extend_from_slice(&chunk);
         if bytes.len() > 4 * 1024 * 1024 {
-            return Outcome::Retry;
+            return Outcome::Retry { connected: true };
         }
         while let Some(newline) = bytes.iter().position(|b| *b == b'\n') {
             let mut line: Vec<u8> = bytes.drain(..=newline).collect();
@@ -256,7 +270,7 @@ async fn read_stream(
                 if !data.is_empty() {
                     let joined = data.join(&b'\n');
                     let Ok(event) = serde_json::from_slice::<ConversationEvent>(&joined) else {
-                        return Outcome::Retry;
+                        return Outcome::Retry { connected: true };
                     };
                     let Some(inner) = inner.upgrade() else {
                         return Outcome::Gone;
@@ -287,9 +301,27 @@ async fn read_stream(
                     String::from_utf8(value.strip_prefix(b" ").unwrap_or(value).to_vec()).ok();
             }
             if data.iter().map(Vec::len).sum::<usize>() > 4 * 1024 * 1024 {
-                return Outcome::Retry;
+                return Outcome::Retry { connected: true };
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_delay;
+
+    #[test]
+    fn retry_delay_doubles_while_failing_and_resets_after_connect() {
+        let mut delay = 2;
+        let mut seen = vec![delay];
+        for _ in 0..5 {
+            delay = next_delay(delay, false);
+            seen.push(delay);
+        }
+        assert_eq!(seen, [2, 4, 8, 16, 30, 30]);
+        assert_eq!(next_delay(30, true), 2);
+        assert_eq!(next_delay(2, true), 2);
     }
 }
 
