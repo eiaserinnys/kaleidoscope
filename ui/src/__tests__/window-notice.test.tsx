@@ -98,6 +98,7 @@ it("오류와 다시 시작은 자동으로 사라지지 않는다", () => {
   act(() => data.failClient({ id: "SHELL_CLIENT_FAILED", code: "server", message: "실행 오류", details: [] }));
   tick(10000);
   expect(screen.getByRole("alert").textContent).toContain("실행 오류");
+  expect(screen.getByRole("alert").hasAttribute("data-ks-flow")).toBe(false);
   expect(screen.getByRole("button", { name: "다시 시작" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "닫기" })).toBeTruthy();
 });
@@ -108,13 +109,36 @@ it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () 
   const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
   render(<WindowNotice />);
   tick(10000);
-  expect(screen.getByRole("alert").textContent).toContain("이전에 받은 내용을 보이고 있습니다. 읽기 실패");
+  const details = screen.getByRole("button", { name: "자세히" });
+  expect(details.getAttribute("aria-expanded")).toBe("false");
+  const detailsId = details.getAttribute("aria-controls")!;
+  expect(document.getElementById(detailsId)?.hasAttribute("hidden")).toBe(true);
+  expect(screen.getByRole("button", { name: "다시 받기" })).toBeTruthy();
+  details.focus();
+  fireEvent.click(details);
+  expect(document.activeElement).toBe(details);
+  expect(details.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("alert").textContent).toContain("이전에 받은 내용을 보이고 있습니다.");
+  expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
+  expect(screen.getByRole("alert").hasAttribute("data-ks-flow")).toBe(true);
   expect(screen.getByRole("alert").textContent).not.toContain("feed");
   expect(screen.getByRole("alert").textContent).toContain("SOURCE_READ_FAILED");
   fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));
   expect(refresh).toHaveBeenCalledWith(["feed"]);
   fireEvent.click(screen.getByRole("button", { name: "닫기" }));
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("같은 원천 실패의 갱신은 자세히를 유지하고 다른 실패는 접는다", () => {
+  const failure = { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" };
+  const merge = (source: unknown) => act(() => (data as any).merge({ sources: { feed: source }, values: {} }));
+  merge(failure);
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
+  merge({ state: "loading", has_value: true });
+  merge(failure);
+  expect(screen.getByRole("button", { name: "자세히" }).getAttribute("aria-expanded")).toBe("true");
+  merge({ ...failure, message: "다른 실패" });
+  expect(screen.getByRole("button", { name: "자세히" }).getAttribute("aria-expanded")).toBe("false");
 });
 
 it("원천이 여러 곳에서 실패하면 첫 오류와 나머지 수만 보인다", () => {
@@ -126,8 +150,10 @@ it("원천이 여러 곳에서 실패하면 첫 오류와 나머지 수만 보�
   } as never);
   const refresh = vi.spyOn(data, "refresh").mockResolvedValue(undefined);
   render(<WindowNotice />);
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
   const text = screen.getByRole("alert").textContent ?? "";
-  expect(text).toContain("화면 3곳이 이전에 받은 내용을 보이고 있습니다. 첫 오류");
+  expect(text).toContain("화면 3곳이 이전에 받은 내용을 보이고 있습니다.");
+  expect(text).toContain("첫 오류");
   expect(text).not.toContain("(외");
   expect(text).not.toContain("first");
   expect(text).toContain("FIRST_ERROR");
@@ -155,6 +181,7 @@ it("정보 알림이 사라진 뒤 원천 실패와 다시 받기는 남는다",
   cleanup();
   vi.spyOn(data, "getNoticeSources").mockReturnValue({ feed: { state: "failed", has_value: true, message: "읽기 실패", id: "SOURCE_READ_FAILED" } } as never);
   render(<WindowNotice />);
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
   expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
   act(() => data.setStatus("처리했습니다"));
   expect(screen.getByRole("status").textContent).toContain("처리했습니다");
@@ -174,10 +201,12 @@ it("다른 원천 갱신은 닫힌 실패를 다시 열지 않고 해소 뒤 재
   merge({ feed: { ...fail } });
   expect(screen.queryByRole("alert")).toBeNull();
   merge({ feed: { ...fail, message: "새 실패" } });
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
   expect(screen.getByRole("alert").textContent).toContain("새 실패");
   fireEvent.click(screen.getByRole("button", { name: "닫기" }));
   merge({ feed: { state: "ready", has_value: true } });
   merge({ feed: { ...fail, message: "새 실패" } });
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
   expect(screen.getByRole("alert").textContent).toContain("새 실패");
 });
 
@@ -205,6 +234,7 @@ it("자기 원천의 자동 갱신 중에도 실패 DOM과 닫힘을 유지한�
   merge(failure);
   expect(screen.queryByRole("alert")).toBeNull();
   merge({ ...failure, message: "다른 오류" });
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
   expect(screen.getByRole("alert").textContent).toContain("다른 오류");
 });
 
@@ -236,6 +266,7 @@ it("직접 다시 받으면 닫은 같은 실패도 다시 보인다", async () 
   await act(async () => { await data.refresh(["other"]); });
   expect(screen.queryByRole("alert")).toBeNull();
   await act(async () => { await data.refresh(["feed"]); });
+  fireEvent.click(screen.getByRole("button", { name: "자세히" }));
   expect(screen.getByRole("alert").textContent).toContain("읽기 실패");
 });
 
@@ -359,6 +390,7 @@ it('직접 다시 받은 갱신이 아직 도는 동안은 300ms가 지나도 �
   act(() => (data as any).merge({ sources: { feed: { state: 'failed', has_value: true, message: '다시 실패' } }, values: {} }));
   const settled = screen.getByRole('button', { name: '다시 받기' });
   expect(settled.getAttribute('aria-busy')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '자세히' }));
   expect(screen.getByRole('alert').textContent).toContain('다시 실패');
 });
 

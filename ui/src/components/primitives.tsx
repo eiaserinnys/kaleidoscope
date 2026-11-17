@@ -15,6 +15,7 @@ export interface ButtonProps {
   title?: string;
   "aria-pressed"?: boolean;
   "aria-expanded"?: boolean;
+  "aria-controls"?: string;
   "aria-haspopup"?: "dialog" | "listbox";
   "aria-label"?: string;
   "aria-invalid"?: boolean;
@@ -41,6 +42,7 @@ export function Button({
   title,
   "aria-pressed": pressed,
   "aria-expanded": expanded,
+  "aria-controls": controls,
   "aria-haspopup": hasPopup,
   "aria-label": label,
   "aria-invalid": invalid,
@@ -58,6 +60,7 @@ export function Button({
       disabled={disabled}
       aria-pressed={pressed}
       aria-expanded={expanded}
+      aria-controls={controls}
       aria-haspopup={hasPopup}
       aria-label={label}
       aria-invalid={invalid}
@@ -154,25 +157,31 @@ export function Notice({
   children,
   actions,
   details,
+  detailsId,
+  detailsHidden,
   errorId,
   onDismiss,
   role = "status",
   "data-ks-overlay": overlay,
+  "data-ks-flow": flow,
   rootProps,
   commentKey,
 }: {
   children: ReactNode;
   actions?: ReactNode[];
   details?: ReactNode;
+  detailsId?: string;
+  detailsHidden?: boolean;
   errorId?: string | null;
   onDismiss?: () => void;
   role?: "alert" | "status";
   "data-ks-overlay"?: boolean;
+  "data-ks-flow"?: boolean;
   rootProps?: import("../comments/block-root").BlockRootProps;
   commentKey?: string;
 }) {
   return (
-    <div {...rootProps} data-ks-comment-key={commentKey} className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
+    <div {...rootProps} data-ks-comment-key={commentKey} className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} data-ks-flow={flow || undefined} role={role} onKeyDown={onDismiss ? (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
@@ -180,7 +189,7 @@ export function Notice({
     } : undefined}>
       <span className="ks-notice-message">{typeof children === "string" ? <LinkedText text={children} /> : children}{errorId ? <> <ErrorId id={errorId} /></> : null}</span>
       {actions ? <span className="ks-notice-actions">{actions}</span> : null}
-      {details ? <div className="ks-notice-details">{details}</div> : null}
+      {details ? <div className="ks-notice-expansion" id={detailsId} hidden={detailsHidden}>{details}</div> : null}
     </div>
   );
 }

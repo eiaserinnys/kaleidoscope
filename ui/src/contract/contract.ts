@@ -394,7 +394,15 @@ segments?: number,
 /**
  * (64판) `value`와 같은 0..`max` 눈금에서 한 지점을 가리키는 세로 커서의 값.
  */
-marker?: Binding, } | { "type": "canvas", surface: Binding, 
+marker?: Binding, 
+/**
+ * (65판) `value`와 같은 눈금의 경고 색 기준.
+ */
+warning_at?: number, 
+/**
+ * (65판) `value`와 같은 눈금의 위험 색 기준.
+ */
+danger_at?: number, } | { "type": "canvas", surface: Binding, 
 /**
  * (19판) 참이면 표준 로딩 표현을 보인다.
  */

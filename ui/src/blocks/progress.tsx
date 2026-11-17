@@ -6,7 +6,7 @@ import { useBinding } from "../data/window-data";
 
 interface Props { block: Extract<Block, { type: "progress" }>; pointer: string }
 
-interface PaceOptions { segments?: number | null; marker?: number | null }
+interface PaceOptions { segments?: number | null; marker?: number | null; color?: string }
 
 /**
  * 바를 같은 폭의 `segments`칸으로 나누는 칸막이의 마스크. 칸막이마다 트랙과 채움을 함께
@@ -31,7 +31,7 @@ export function progressIndicator(current: number | null, max: number, text: str
     aria-label={text ?? "진행률"} aria-valuemin={0} aria-valuemax={max}
     aria-valuenow={current ?? undefined} aria-valuetext={current === null ? "미정" : undefined}
     style={mask ? { "--ks-progress-mask": mask } as CSSProperties : undefined}>
-    <span className="ks-data-progress-value" style={current === null ? undefined : { transform: `scaleX(${ratio})` }} />
+    <span className="ks-data-progress-value" style={current === null ? undefined : { transform: `scaleX(${ratio})`, backgroundColor: pace?.color }} />
   </div>;
   if (!mask && marker === null) return bar;
   return <div className="ks-data-progress-pace">
@@ -52,6 +52,9 @@ export function ProgressBlock({ block, pointer }: Props) {
   const current = typeof value.value === "number" && Number.isFinite(value.value)
     ? Math.max(0, Math.min(block.max, value.value))
     : null;
+  const raw = typeof value.value === "number" && Number.isFinite(value.value) ? value.value : null;
+  const color = raw !== null && block.danger_at != null && raw >= block.danger_at ? "var(--ks-color-danger)"
+    : raw !== null && block.warning_at != null && raw >= block.warning_at ? "var(--ks-color-warning)" : undefined;
   // 커서는 0..max 밖이면 끝으로 붙이고, 수가 아니면 그리지 않는다.
   const markerValue = block.max > 0 && marker.status === "ready"
     && typeof marker.value === "number" && Number.isFinite(marker.value)
@@ -59,7 +62,7 @@ export function ProgressBlock({ block, pointer }: Props) {
     : null;
   return <div {...blockRoot} className="ks-data-progress-field">
     {text ? <span className="ks-data-progress-label">{text}</span> : null}
-    {progressIndicator(current, block.max, text, { segments: block.segments ?? null, marker: markerValue })}
+    {progressIndicator(current, block.max, text, { segments: block.segments ?? null, marker: markerValue, color })}
     <BindingFailureNotice value={label} />
     <BindingFailureNotice value={marker} />
   </div>;

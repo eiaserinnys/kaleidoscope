@@ -120,9 +120,15 @@ test("360 폭의 원천 실패 알림은 글과 다시 받기, 닫기를 함께 
   const output = process.env.KS_NOTICE_CAPTURE_DIR;
   if (output) { mkdirSync(output, { recursive: true }); await app.screenshot({ path: join(output, "source-error-360.png") }); }
   console.log(JSON.stringify(positions));
-  expect(positions.buttons).toHaveLength(2);
-  expect(positions.text.right).toBeLessThanOrEqual(positions.buttons[0].left);
-  expect(positions.buttons[1].right).toBeLessThanOrEqual(positions.notice.right);
+  expect(positions.buttons).toHaveLength(3);
+  expect(positions.text.bottom).toBeLessThanOrEqual(positions.buttons[0].top);
+  expect(positions.buttons[2].right).toBeLessThanOrEqual(positions.notice.right);
+  const details = notice.getByRole("button", { name: "자세히" });
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await details.click();
+  await expect(details).toHaveAttribute("aria-expanded", "true");
+  await expect(notice.getByText("원인: 서버 오류")).toBeVisible();
+  await expect(notice.getByText("SOURCE_ERROR")).toBeVisible();
   await notice.getByRole("button", { name: "다시 받기" }).click();
   await expect(notice).toHaveCount(0);
   await failSource();

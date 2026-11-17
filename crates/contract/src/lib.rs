@@ -345,7 +345,10 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 62판: chart의 쌓은 막대(`stacked`), 수 형식(`number_format`), 고른 칸(`selected`), 계열 색(`color`, `#rgb`, `#rrggbb`와 팔레트 이름 `series-1`~`series-8`, `muted`)과 table 열의 정렬 값(`sort_field`).
 /// - 63판: 다른 앱의 아이콘을 그리는 미디어 참조 `app_icon`과 그 참조를 주는 `$apps[].icon`.
 /// - 64판: progress의 칸막이(`segments`)와 세로 커서(`marker`).
-pub const BLOCK_SET_VERSION: u32 = PROGRESS_SEGMENTS_MARKER_BLOCK_SET_VERSION;
+/// - 65판: progress의 경고와 위험 색 기준(`warning_at`, `danger_at`).
+pub const BLOCK_SET_VERSION: u32 = PROGRESS_THRESHOLDS_BLOCK_SET_VERSION;
+/// progress의 색 기준을 처음 지원하는 블록 세트 판.
+pub const PROGRESS_THRESHOLDS_BLOCK_SET_VERSION: u32 = 65;
 /// progress의 칸막이(`segments`)와 세로 커서(`marker`)를 처음 지원하는 블록 세트 판.
 pub const PROGRESS_SEGMENTS_MARKER_BLOCK_SET_VERSION: u32 = 64;
 /// 다른 앱의 아이콘을 그리는 미디어 참조 `app_icon`을 처음 지원하는 블록 세트 판.
@@ -1772,6 +1775,14 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         marker: Option<Binding>,
+        /// (65판) `value`와 같은 눈금의 경고 색 기준.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        warning_at: Option<f64>,
+        /// (65판) `value`와 같은 눈금의 위험 색 기준.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        danger_at: Option<f64>,
     },
     /// (12판) 클라이언트가 그리는 픽셀 표면.
     Canvas {
@@ -2746,6 +2757,10 @@ enum RawBlock {
         segments: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         marker: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        warning_at: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        danger_at: Option<f64>,
     },
     Canvas {
         surface: Binding,
@@ -3532,12 +3547,16 @@ impl From<RawBlock> for Block {
                 label,
                 segments,
                 marker,
+                warning_at,
+                danger_at,
             } => Block::Progress {
                 value,
                 max,
                 label,
                 segments,
                 marker,
+                warning_at,
+                danger_at,
             },
             RawBlock::Canvas {
                 surface,
@@ -4206,6 +4225,8 @@ impl Block {
     pub fn introduced_in(&self) -> u32 {
         match self {
             Block::Notice { .. } => 18,
+            Block::Progress { warning_at: Some(_), .. }
+            | Block::Progress { danger_at: Some(_), .. } => PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,
             Block::Progress { segments: Some(_), .. }
             | Block::Progress { marker: Some(_), .. } => PROGRESS_SEGMENTS_MARKER_BLOCK_SET_VERSION,
             Block::Repeat { .. }

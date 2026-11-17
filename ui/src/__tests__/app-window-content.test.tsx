@@ -193,7 +193,8 @@ describe("app definition renderer", () => {
     fixture.innerHTML = markup;
     body.append(fixture);
     await waitFor(() => expect(data).not.toBeNull());
-    return { container, fixture, showNotice: () => act(() => data!.setNotice("동작을 처리하지 못했습니다")), showStatus: () => act(() => data!.setStatus("저장했습니다")) };
+    return { container, fixture, showNotice: () => act(() => data!.setNotice("동작을 처리하지 못했습니다")), showStatus: () => act(() => data!.setStatus("저장했습니다")),
+      showSource: () => act(() => { data!.setNotice(null); (data as any).merge({ sources: { feed: { state: "failed", has_value: true, message: "읽기 실패" } }, values: {} }); }) };
   }
 
   it("상태 알림만 뜨면 본문 아래 자리를 주지 않고 창 오류 알림에만 준다", async () => {
@@ -209,7 +210,7 @@ describe("app definition renderer", () => {
       return { height: this.classList.contains("ks-notice") ? 46 : 0 } as DOMRect;
     });
     try {
-      const { container, showStatus, showNotice } = await noticeFixture("<p>본문</p>");
+      const { container, showStatus, showNotice, showSource } = await noticeFixture("<p>본문</p>");
       const body = container.querySelector(".ks-data-window-body") as HTMLElement;
       showStatus();
       await screen.findByRole("status");
@@ -219,6 +220,10 @@ describe("app definition renderer", () => {
       await screen.findByRole("alert");
       fire!();
       expect(body.style.getPropertyValue("--ks-notice-space")).toBe("calc(var(--ks-space-4) + 46px)");
+      showSource();
+      await waitFor(() => expect(body.style.getPropertyValue("--ks-notice-space")).toBe("0px"));
+      showNotice();
+      await waitFor(() => expect(body.style.getPropertyValue("--ks-notice-space")).toBe("calc(var(--ks-space-4) + 46px)"));
     } finally {
       rect.mockRestore();
       globalThis.ResizeObserver = previous;
