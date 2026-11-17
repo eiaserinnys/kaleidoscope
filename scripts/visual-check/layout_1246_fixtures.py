@@ -155,6 +155,43 @@ def long_body_scene():
         {"type": "text", "value": f"{index}번째 줄입니다. 본문이 길어 아래로 굴려야 알림과 만납니다."} for index in range(1, LONG_BODY_LINES + 1)]}
 
 
+def fill_progress_scene():
+    """원천 실패 뒤에도 남은 반복 진행 행을 명시적 채움 칸에서 굴리는 장면."""
+    return {"type": "stack", "direction": "column", "gap": "small", "fill": 2, "children": [
+        {"type": "toolbar", "start": [{"type": "text", "value": "최근 받은 값"}], "end": []},
+        {"type": "when", "value": False, "child": {"type": "text", "value": "자료 없음"}},
+        {"type": "repeat", "items": {"state": "groups"}, "key": "key", "layout": "grid", "gap": "large",
+         "grid": {"columns": "auto", "item_width": "large"},
+         "template": {"type": "section", "title": {"item": "label"}, "child": {
+             "type": "stack", "direction": "column", "gap": "medium", "children": [
+                 {"type": "when", "value": True, "child": {
+                     "type": "repeat", "items": {"item": "rows"}, "key": "key", "layout": "column", "gap": "medium",
+                     "template": {"type": "stack", "direction": "column", "gap": "small", "children": [
+                         {"type": "when", "value": True, "child": {"type": "progress", "value": {"item": "value"},
+                             "max": 100, "label": {"item": "label"}, "warning_at": 80, "danger_at": 95}}]}}}]}}},
+    ]}
+
+
+FILL_PROGRESS_JS = """(appId) => {
+  const box = (e) => { const r = e.getBoundingClientRect(); return {left:r.left, right:r.right, top:r.top, bottom:r.bottom}; };
+  const win = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const body = win.querySelector('.ks-data-window-body');
+  const fill = body.querySelector(':scope > .ks-data-stack > .ks-data-stack-item.is-fill');
+  const scroll = fill.querySelector(':scope > .ks-repeat');
+  const notice = win.querySelector('.ks-data-window-notice > .ks-notice');
+  const n = box(notice), b = box(body), f = box(fill), s = box(scroll);
+  const rows = [...fill.querySelectorAll('.ks-data-progress-field')].map((row) => {
+    const r = box(row);
+    const visible = {left:Math.max(r.left, f.left, b.left, s.left), right:Math.min(r.right, f.right, b.right, s.right),
+      top:Math.max(r.top, f.top, b.top, s.top), bottom:Math.min(r.bottom, f.bottom, b.bottom, s.bottom)};
+    const overlap = visible.left < visible.right && visible.top < visible.bottom &&
+      visible.left < n.right && visible.right > n.left && visible.top < n.bottom && visible.bottom > n.top;
+    return {row:r, visible, overlap};
+  });
+  return {body:b, fill:f, scroll:s, notice:n, scrollTop:scroll.scrollTop, scrollMax:scroll.scrollHeight-scroll.clientHeight, rows};
+}"""
+
+
 def loading_scene():
     return {"type": "stack", "direction": "column", "gap": "none", "children": [
         {"type": "chart", "kind": "bar", "height": height, "series": {"expr": "$data.sample"}}

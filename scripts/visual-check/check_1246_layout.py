@@ -54,6 +54,7 @@ from layout_1246_fixtures import (
     SECTION_END_JS, STACK_GAP_JS, TABLE_JS, TICK_JS, WIDE, control_row_scene, dialog_scene, empty_series_scene, focus_scene,
     loaded_scene, loading_scene, long_body_scene, section_end_scene, section_scene, section_stack_scene, share_table_scene,
     split_scene, tick_scene, two_series_scene)
+from layout_1246_notice import check_fill_progress_notice
 from layout_1246_verdicts import (
     bar_slot_verdicts, focus_verdict, legend_verdict, notice_closed_verdict, notice_verdict, pane_gap_verdicts,
     section_end_verdicts, self_test, skeleton_verdict, slack, sort_verdict, stack_gap_verdicts, status_notice_verdict,
@@ -109,7 +110,7 @@ def inject(page, layout, app_id=APP_ID, state=None):
           const { snapshot } = await harness.call({ op: 'state.get' });
           const version = snapshot.shared.app_versions.find((v) => v.app_id === appId);
           version.definition.state = state ?? {};
-          version.definition.requires = { ...(version.definition.requires ?? {}), blocks: 62 };
+          version.definition.requires = { ...(version.definition.requires ?? {}), blocks: 65 };
           version.definition.ui = layout;
           version.version += 1;
           const win = snapshot.shared.windows.find((w) => w.app_id === appId);
@@ -462,6 +463,7 @@ def main(checker=None):
                     check_item6(page, output, result)
                     check_item7(page, output, result)
                     check_item8(page, output, result)
+                    check_fill_progress_notice(page, output, result, open_page, inject, record, capture)
                     check_item9(page, output, result)
                 browser.close()
         finally:

@@ -31,6 +31,19 @@ function setup(ui: Block, state: Record<string, JsonValue>) {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("진행 막대 칸막이와 커서", () => {
+  it.each([[79, ""], [80, "var(--ks-color-warning)"], [94, "var(--ks-color-warning)"], [95, "var(--ks-color-danger)"]] as const)(
+    "값 %i의 기준 색을 표시한다", async (value, color) => {
+      setup({ type: "progress", value, max: 100, label: "사용량", warning_at: 80, danger_at: 95 }, {});
+      const bar = await screen.findByRole("progressbar", { name: "사용량" });
+      expect((bar.querySelector(".ks-data-progress-value") as HTMLElement).style.backgroundColor).toBe(color);
+    },
+  );
+
+  it("색 기준을 생략하면 높은 값도 기존 색을 쓴다", async () => {
+    setup({ type: "progress", value: 95, max: 100, label: "기존" }, {});
+    const bar = await screen.findByRole("progressbar", { name: "기존" });
+    expect((bar.querySelector(".ks-data-progress-value") as HTMLElement).style.backgroundColor).toBe("");
+  });
   it("segments 7이면 칸막이 여섯 개를 k/7 자리에 오리고 커서를 marker/max 자리에 그린다", async () => {
     setup(
       { type: "progress", value: 72, max: 100, label: "7일 72% 남음", segments: 7, marker: { state: "elapsed" } },
