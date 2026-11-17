@@ -189,7 +189,7 @@ export function Notice({
     } : undefined}>
       <span className="ks-notice-message">{typeof children === "string" ? <LinkedText text={children} /> : children}{errorId ? <> <ErrorId id={errorId} /></> : null}</span>
       {actions ? <span className="ks-notice-actions">{actions}</span> : null}
-      {details ? <div className="ks-notice-details" id={detailsId} hidden={detailsHidden}>{details}</div> : null}
+      {details ? <div className="ks-notice-expansion" id={detailsId} hidden={detailsHidden}>{details}</div> : null}
     </div>
   );
 }

@@ -7,6 +7,8 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
     for width, height in (WIDE, NARROW):
         page.set_viewport_size({"width": width, "height": height})
         open_page(page, result["port"], NOTICE_APP)
+        # 실제 앱 셸이 기존 알림 상세에 쓰는 스타일과 충돌해도 접힘이 유지돼야 한다.
+        page.add_style_tag(content=".ks-notice-details { display: block; }")
         page.evaluate("() => { const panel = document.querySelector('[data-testid=fake-files-panel]'); if (panel) panel.remove(); }")
         groups = [{"key": str(i), "label": f"항목 {i}", "rows": [
             {"key": str(j), "value": value, "label": f"기간 {j} {value}% 사용량"}
@@ -38,6 +40,8 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
         if width == NARROW[0]:
             collapsed = page.evaluate(FILL_PROGRESS_JS, NOTICE_APP)
             details = page.get_by_role("button", name="자세히")
+            detail_id = details.get_attribute("aria-controls")
+            collapsed_hidden = not page.locator(f"[id='{detail_id}']").is_visible()
             details.focus()
             page.keyboard.press("Shift+Tab")
             page.keyboard.press("Tab")
@@ -52,6 +56,7 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
             detail_text = page.locator(f"[id='{detail_id}']").inner_text()
             key = "fill-progress-details-360"
             record(result, key, {"접힌 높이가 창의 20% 이하": (collapsed["notice"]["bottom"] - collapsed["notice"]["top"]) <= (collapsed["window"]["bottom"] - collapsed["window"]["top"]) * .2,
+                                 "접힌 원인과 코드를 화면에서 숨김": collapsed_hidden,
                                  "펼친 원인과 코드": detail_visible and "자료를 받지 못했습니다" in detail_text and "SOURCE_READ_FAILED" in detail_text,
                                  "펼쳐도 본문과 겹치지 않음": expanded["body"]["bottom"] <= expanded["notice"]["top"] and not any(row["overlap"] for row in expanded["rows"]),
                                  "Tab과 누른 뒤 초점": tab_focus and focus_kept and focus_visible})
