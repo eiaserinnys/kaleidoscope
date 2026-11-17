@@ -106,21 +106,23 @@ function WindowBody({ context, settingsOpen, settingsVisited, onSettingsClose, o
     onWindowData?.(data);
     return () => onWindowData?.(null);
   }, [data, onWindowData]);
-  // 창 오류 알림이 떠 있는 동안 본문 스크롤 창 끝을 그 높이만큼 줄여 마지막 내용이 알림 위에서 멈춘다.
-  // 같은 자리에 스쳐 지나가는 상태 알림(.ks-window-status)은 본문을 밀지 않으므로 그 높이는 세지 않는다.
+  // 떠 있는 동작 오류만 본문 끝을 예약한다. 원천 실패는 본문 아래 흐름에 놓이고 상태 알림은 자리를 차지하지 않는다.
   useEffect(() => {
     const bodyElement = body.current;
     const noticeElement = notice.current;
     if (!bodyElement || !noticeElement) return;
     const apply = () => {
-      const alert = Array.from(noticeElement.children).find((child) => child.classList.contains("ks-notice"));
+      const alert = Array.from(noticeElement.children).find((child) => child.classList.contains("ks-notice") && !child.hasAttribute("data-ks-flow"));
       const height = alert ? alert.getBoundingClientRect().height : 0;
       bodyElement.style.setProperty("--ks-notice-space", height > 0 ? `calc(var(--ks-space-4) + ${Math.ceil(height)}px)` : "0px");
     };
     apply();
     const observer = new ResizeObserver(apply);
     observer.observe(noticeElement);
-    return () => observer.disconnect();
+    // 같은 크기의 알림끼리 바뀌어도 흐름 알림과 떠 있는 알림의 예약을 다시 맞춘다.
+    const changes = new MutationObserver(apply);
+    changes.observe(noticeElement, { childList: true, attributes: true, subtree: true, attributeFilter: ["data-ks-flow"] });
+    return () => { observer.disconnect(); changes.disconnect(); };
   }, []);
   useDormant("/ui", settingsOpen);
   useDormant("/settings/ui", Boolean(context.definition.settings) && !settingsOpen);

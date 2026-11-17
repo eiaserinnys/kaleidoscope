@@ -188,7 +188,8 @@ FILL_PROGRESS_JS = """(appId) => {
       visible.left < n.right && visible.right > n.left && visible.top < n.bottom && visible.bottom > n.top;
     return {row:r, visible, overlap};
   });
-  return {body:b, fill:f, scroll:s, notice:n, scrollTop:scroll.scrollTop, scrollMax:scroll.scrollHeight-scroll.clientHeight, rows};
+  return {body:b, fill:f, scroll:s, notice:n, noticePosition:getComputedStyle(notice.parentElement).position,
+    noticeShadow:getComputedStyle(notice).boxShadow, scrollTop:scroll.scrollTop, scrollMax:scroll.scrollHeight-scroll.clientHeight, rows};
 }"""
 
 

@@ -30,6 +30,8 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
             key = f"fill-progress-notice-{width}-{position}"
             record(result, key, {"알림과 반복 행 확인": bool(measurement["notice"] and len(measurement["rows"]) == 24),
                                  "행과 알림이 겹치지 않음": not any(row["overlap"] for row in measurement["rows"]),
+                                 "알림이 본문 아래 흐름에 있음": measurement["body"]["bottom"] <= measurement["notice"]["top"] and measurement["noticePosition"] == "static",
+                                 "알림에 그림자 없음": measurement["noticeShadow"] == "none",
                                  "채움 칸 스크롤": width != NARROW[0] or (measurement["scrollMax"] > 0 and (position == "top" or measurement["scrollTop"] > 0))})
             result["scenes"][key]["measurement"] = measurement
             capture(output, result, page, key)

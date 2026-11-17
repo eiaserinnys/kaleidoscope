@@ -98,6 +98,7 @@ it("오류와 다시 시작은 자동으로 사라지지 않는다", () => {
   act(() => data.failClient({ id: "SHELL_CLIENT_FAILED", code: "server", message: "실행 오류", details: [] }));
   tick(10000);
   expect(screen.getByRole("alert").textContent).toContain("실행 오류");
+  expect(screen.getByRole("alert").hasAttribute("data-ks-flow")).toBe(false);
   expect(screen.getByRole("button", { name: "다시 시작" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "닫기" })).toBeTruthy();
 });
@@ -109,6 +110,7 @@ it("원천 실패 알림은 남고 다시 받기와 닫기를 제공한다", () 
   render(<WindowNotice />);
   tick(10000);
   expect(screen.getByRole("alert").textContent).toContain("이전에 받은 내용을 보이고 있습니다. 읽기 실패");
+  expect(screen.getByRole("alert").hasAttribute("data-ks-flow")).toBe(true);
   expect(screen.getByRole("alert").textContent).not.toContain("feed");
   expect(screen.getByRole("alert").textContent).toContain("SOURCE_READ_FAILED");
   fireEvent.click(screen.getByRole("button", { name: "다시 받기" }));

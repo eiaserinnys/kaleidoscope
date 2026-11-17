@@ -158,6 +158,7 @@ export function Notice({
   onDismiss,
   role = "status",
   "data-ks-overlay": overlay,
+  "data-ks-flow": flow,
   rootProps,
   commentKey,
 }: {
@@ -168,11 +169,12 @@ export function Notice({
   onDismiss?: () => void;
   role?: "alert" | "status";
   "data-ks-overlay"?: boolean;
+  "data-ks-flow"?: boolean;
   rootProps?: import("../comments/block-root").BlockRootProps;
   commentKey?: string;
 }) {
   return (
-    <div {...rootProps} data-ks-comment-key={commentKey} className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} role={role} onKeyDown={onDismiss ? (event) => {
+    <div {...rootProps} data-ks-comment-key={commentKey} className={`ks-notice${actions && actions.length > 1 ? " has-multiple-actions" : ""}`} data-ks-overlay={overlay || undefined} data-ks-flow={flow || undefined} role={role} onKeyDown={onDismiss ? (event) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();

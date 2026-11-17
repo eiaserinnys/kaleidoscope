@@ -50,7 +50,7 @@ export function WindowNotice() {
     : [<Button key="retry" aria-label="다시 받기" aria-disabled={retrying || undefined} aria-busy={retrying || undefined} className={retrying ? "is-progress" : undefined} onClick={() => { if (!retrying) void data.refresh(failed); }}><span>다시 받기</span>{retrying && <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span>}</Button>, closeButton];
   if (message && role === "status") return <TransientStatus data={data} message={message} sequence={statusSequence} slot={slot} />;
   // 같은 문구로 다시 실패하면 실패 알림 요소를 새로 그려 화면 읽기 도구가 다시 읽게 한다.
-  const notice = <Notice key={message ? revision : undefined} role="alert" data-ks-overlay errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
+  const notice = <Notice key={message ? revision : undefined} role="alert" data-ks-overlay data-ks-flow={!message} errorId={message ? noticeId : sourceErrorId} actions={actions}>{message ?? sourceMessage}</Notice>;
   return slot ? createPortal(notice, slot) : notice;
 }
 
