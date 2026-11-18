@@ -193,6 +193,48 @@ function assertSameCenter(label: string, loading: Box, failed: Box) {
   expect(dy, `${label} 실패 안내가 로딩 글자 세로 가운데에서 ${dy.toFixed(1)}px`).toBeLessThanOrEqual(1);
 }
 
+// 오류 문구가 낱말 중간이 아니라 낱말 경계(공백)에서 끊기는지 본다. 글자마다 범위 사각형을 재어 같은 줄에 놓인
+// 글자를 모으고, 줄과 줄 사이가 공백인지 확인한다. text-wrap.css의 읽는 글 묶음(word-break: keep-all)이 기준이고,
+// 오류 id는 같은 파일 뒤쪽 규칙(overflow-wrap: normal)이 이겨야 한다.
+async function assertWordBreaks(app: Locator, selector: string, label: string) {
+  const result = await app.evaluate((root, alertSelector) => {
+    const alert = root.querySelector<HTMLElement>(alertSelector);
+    const message = alert?.firstChild;
+    if (!alert || !message || message.nodeType !== Node.TEXT_NODE) {
+      return { ok: false, breaks: [] as string[], lines: [] as string[], wordBreak: "", idWrap: null as string | null, reason: "메시지 글자 노드 없음" };
+    }
+    const value = message.nodeValue ?? "";
+    const lines: Array<{ top: number; chars: string[] }> = [];
+    for (let i = 0; i < value.length; i += 1) {
+      const range = document.createRange();
+      range.setStart(message, i);
+      range.setEnd(message, i + 1);
+      const rect = range.getBoundingClientRect();
+      const line = lines.at(-1);
+      if (!line || Math.abs(rect.top - line.top) > 1) lines.push({ top: rect.top, chars: [value[i]] });
+      else line.chars.push(value[i]);
+    }
+    const breaks: string[] = [];
+    for (let i = 0; i < lines.length - 1; i += 1) {
+      const left = lines[i].chars.at(-1) ?? "";
+      const right = lines[i + 1].chars[0] ?? "";
+      if (left !== " " && right !== " ") breaks.push(`${left}|${right}`);
+    }
+    const errorId = alert.querySelector<HTMLElement>(".ks-error-id");
+    return {
+      ok: breaks.length === 0,
+      breaks,
+      lines: lines.map((line) => line.chars.join("")),
+      wordBreak: getComputedStyle(alert).wordBreak,
+      idWrap: errorId ? getComputedStyle(errorId).overflowWrap : null,
+      reason: "",
+    };
+  }, selector);
+  expect(result.wordBreak, `${label} word-break`).toBe("keep-all");
+  if (result.idWrap !== null) expect(result.idWrap, `${label} 오류 id overflow-wrap`).toBe("normal");
+  expect(result.ok, `${label} 낱말 중간 끊김 ${JSON.stringify({ breaks: result.breaks, lines: result.lines, reason: result.reason })}`).toBe(true);
+}
+
 function boundsRow(target: string, width: number, state: string, measured: Measured) {
   const center = (value: Box) => ({ x: (value.left + value.right) / 2, y: (value.top + value.bottom) / 2 });
   return { target, width, state, frame: measured.frame, loading: measured.loading, text: measured.text, textCenter: center(measured.text), frameCenter: center(measured.frame) };
@@ -305,6 +347,7 @@ test("탐색기 본문의 첫 읽기 실패 안내가 로딩 글자 자리에 �
     rows.push(boundsRow("explorer-body", width, "failed", failed!));
     await writeFile(`${captureDir()}/20261118-${phase}-explorer-body.json`, JSON.stringify(rows, null, 2));
     measuredRows.push({ width, loading, failed });
+    if (width === 360) await assertWordBreaks(app, ".ks-explorer-content > .ks-inline-error", "탐색기 본문 실패 360");
   }
   for (const { width, loading, failed } of measuredRows) {
     assertCenter(`탐색기 본문 ${width}`, loading);
@@ -315,7 +358,42 @@ test("탐색기 본문의 첫 읽기 실패 안내가 로딩 글자 자리에 �
   }
 });
 
-test("항목이 보이는 채로 새로고침이 실패하면 안내가 가운데로 가지 않는다", async ({ page }) => {
+test("새로고침 실패도 첫 읽기 실패와 같은 자리에 선다", async ({ page }) => {
+  await mkdir(captureDir(), { recursive: true });
+  const rows: Array<Record<string, unknown>> = [];
+  const measuredRows: Array<{ width: number; loading: Measured | null; failed: Measured | null }> = [];
+  await installGate(page, ["files.list"]);
+  for (const width of [1100, 360]) {
+    await page.setViewportSize({ width, height: 820 });
+    await page.goto("/?preview=storage-document");
+    await page.addStyleTag({ content: STYLE });
+    await mountFixture(page, explorerLoadingApp);
+    const app = page.getByTestId("app-window-storage-document");
+    await expect(app.locator(".ks-explorer-content > .ks-status-text")).toBeVisible();
+    await waitGateStarted(page);
+    const loading = await measureExplorer(app);
+    await releaseGate(page);
+    await expect(app.getByRole("option", { name: "settings.json" })).toBeVisible();
+    // 다음 읽기만 실패로 돌려, 항목을 이미 읽은 뒤의 새로고침 실패를 만든다. 탐색기는 창 초점에서 다시 읽는다.
+    await page.evaluate(() => { (window as any).loadingCenterGate.fail = true; });
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(app.locator(".ks-explorer-content > .ks-inline-error")).toBeVisible();
+    const failed = await measureExplorer(app, ":scope > .ks-inline-error");
+    await app.screenshot({ path: `${captureDir()}/20261118-${phase}-${width}-explorer-refresh-failed.png` });
+    rows.push(boundsRow("explorer-refresh", width, "failed", failed!));
+    await writeFile(`${captureDir()}/20261118-${phase}-explorer-refresh.json`, JSON.stringify(rows, null, 2));
+    measuredRows.push({ width, loading, failed });
+    if (width === 360) await assertWordBreaks(app, ".ks-explorer-content > .ks-inline-error", "탐색기 새로고침 실패 360");
+  }
+  for (const { width, loading, failed } of measuredRows) {
+    expect(failed, `탐색기 새로고침 실패 ${width} 측정`).not.toBeNull();
+    assertSameCenter(`탐색기 새로고침 실패 ${width}`, loading!.text, failed!.text);
+    assertCenter(`탐색기 새로고침 실패 ${width}`, failed);
+    assertWithin(`탐색기 새로고침 실패 ${width}`, failed);
+  }
+});
+
+test("하위 폴더를 펼치다 실패한 트리 행 오류가 낱말 경계에서 끊긴다", async ({ page }) => {
   await mkdir(captureDir(), { recursive: true });
   const rows: Array<Record<string, unknown>> = [];
   await installGate(page, ["files.list"]);
@@ -328,20 +406,24 @@ test("항목이 보이는 채로 새로고침이 실패하면 안내가 가운�
     await waitGateStarted(page);
     await releaseGate(page);
     await expect(app.getByRole("option", { name: "settings.json" })).toBeVisible();
-    // 다음 읽기만 실패로 돌려, 항목을 이미 읽은 뒤의 새로고침 실패를 만든다. 탐색기는 창 초점에서 다시 읽는다.
+    // 루트를 읽은 뒤 다음 읽기만 실패로 돌리고 하위 폴더(notes)를 펼친다. 트리 행 안의 실패는 행 자리에 남는다.
     await page.evaluate(() => { (window as any).loadingCenterGate.fail = true; });
-    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-    const failedState = app.locator(".ks-explorer-content > .ks-inline-error");
-    await expect(failedState).toBeVisible();
-    const failed = await measureExplorer(app, ":scope > .ks-inline-error");
-    await app.screenshot({ path: `${captureDir()}/20261118-${phase}-${width}-explorer-refresh-failed.png` });
-    rows.push(boundsRow("explorer-refresh", width, "failed", failed!));
-    await writeFile(`${captureDir()}/20261118-${phase}-explorer-refresh.json`, JSON.stringify(rows, null, 2));
-    expect(failed, `탐색기 새로고침 실패 ${width} 측정`).not.toBeNull();
-    expect(await failedState.getAttribute("data-ks-first-read"), `탐색기 새로고침 실패 ${width} 상태 속성`).toBeNull();
-    const frameCenter = (failed!.frame.top + failed!.frame.bottom) / 2;
-    const textCenter = (failed!.text.top + failed!.text.bottom) / 2;
-    expect(frameCenter - textCenter, `탐색기 새로고침 실패 ${width}가 가운데에서 ${(frameCenter - textCenter).toFixed(1)}px 위`).toBeGreaterThan(1);
+    const notes = app.locator(".ks-file-tree [role=treeitem]").filter({ hasText: "notes" }).first();
+    await notes.click();
+    await page.keyboard.press("ArrowRight");
+    const rowError = app.locator(".ks-file-tree .ks-file-tree-entry .ks-inline-error").first();
+    await expect(rowError).toBeVisible();
+    const measured = await rowError.evaluate((element) => {
+      const box = (rect: DOMRect) => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return { text: box(range.getBoundingClientRect()), entry: box((element.parentElement ?? element).getBoundingClientRect()) };
+    });
+    const tree = app.locator(".ks-file-tree:visible").first();
+    await tree.screenshot({ path: `${captureDir()}/20261118-${phase}-${width}-tree-row-failed.png` });
+    rows.push({ target: "tree-row", width, state: "failed", text: measured.text, entry: measured.entry });
+    await writeFile(`${captureDir()}/20261118-${phase}-tree-row.json`, JSON.stringify(rows, null, 2));
+    if (width === 360) await assertWordBreaks(app, ".ks-file-tree .ks-file-tree-entry .ks-inline-error", "트리 행 실패 360");
   }
 });
 
@@ -396,6 +478,7 @@ test("md-editor 서버 탭 폴더 트리의 첫 읽기 표시가 트리 칸 가�
     rows.push(boundsRow("md-tree", width, "failed", failed!));
     await writeFile(`${captureDir()}/20261118-${phase}-md-tree.json`, JSON.stringify(rows, null, 2));
     measuredRows.push({ width, loading, failed });
+    if (width === 360) await assertWordBreaks(app, ".ks-file-tree > .ks-inline-error", "md-editor 트리 실패 360");
   }
   for (const { width, loading, failed } of measuredRows) {
     assertCenter(`md-editor 트리 ${width}`, loading);

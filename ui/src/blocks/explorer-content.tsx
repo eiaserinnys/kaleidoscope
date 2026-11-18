@@ -255,9 +255,9 @@ export function ExplorerContent({
     </div>
     {actionError ? <div className="ks-inline-error" role="alert">{actionError.message}{actionError.id ? <> <ErrorId id={actionError.id} /></> : null}</div> : null}
     {pcRootsError ? <div className="ks-inline-error" role="alert">{pcRootsError.message}{pcRootsError.id ? <> <ErrorId id={pcRootsError.id} /></> : null}</div> : null}
-    {/* 보이는 항목이 없는 동안의 읽기 실패(첫 읽기와 폴더 이동)는 로딩 글자와 같은 자리에 선다.
-        항목이 보이는 채로 새로고침하다 실패한 안내는 지금처럼 도구 줄 아래에 행으로 남긴다. */}
-    {error ? <div className="ks-inline-error" role="alert" data-ks-first-read={!visible || undefined}>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</div>
+    {/* 본문 읽기는 실패하면 목록을 남기지 않고 이 안내 하나가 목록 자리를 차지한다. 그래서 첫 읽기든
+        새로고침이든 로딩 글자와 같은 자리에 선다(가운데 묶음은 data-ks-fills-body로 고른다). */}
+    {error ? <div className="ks-inline-error" role="alert" data-ks-fills-body>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</div>
       : !visible && loading ? <StatusText>불러오는 중</StatusText>
       : visible && sortedEntries.length === 0 ? <div className="ks-explorer-empty"><EmptyState icon={<FolderOpen size="empty" />} text="빈 폴더" /></div>
           : view === "icons" ? <div aria-label="폴더 내용" className="ks-data-view ks-icon-grid ks-explorer-icons" ref={grid} role="listbox">
