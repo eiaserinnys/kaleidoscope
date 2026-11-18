@@ -118,24 +118,24 @@ async function measureAlert(app: Locator, selector: string): Promise<Measured | 
   }, selector);
 }
 
-// 탐색기의 프레임은 본문 칸에서 도구 줄을 뺀 나머지다. 로딩 글자는 그 칸의 직접 자식이다.
-async function measureExplorer(app: Locator): Promise<Measured | null> {
-  return app.evaluate((root) => {
+// 탐색기의 프레임은 본문 칸에서 도구 줄을 뺀 나머지다. 첫 읽기 글자나 첫 읽기 실패 안내는 그 칸의 직접 자식이다.
+async function measureExplorer(app: Locator, selector = ":scope > .ks-status-text"): Promise<Measured | null> {
+  return app.evaluate((root, childSelector) => {
     const content = root.querySelector<HTMLElement>(".ks-explorer-content");
-    const loading = content?.querySelector<HTMLElement>(":scope > .ks-status-text");
+    const state = content?.querySelector<HTMLElement>(childSelector);
     const toolbar = content?.querySelector<HTMLElement>(".ks-explorer-toolbar");
-    if (!content || !loading || !toolbar) return null;
+    if (!content || !state || !toolbar) return null;
     const box = (rect: DOMRect): Box => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
     const contentBox = box(content.getBoundingClientRect());
     const toolbarBox = box(toolbar.getBoundingClientRect());
     const range = document.createRange();
-    range.selectNodeContents(loading);
+    range.selectNodeContents(state);
     return {
       frame: { left: contentBox.left, top: toolbarBox.bottom, right: contentBox.right, bottom: contentBox.bottom },
-      loading: box(loading.getBoundingClientRect()),
+      loading: box(state.getBoundingClientRect()),
       text: box(range.getBoundingClientRect()),
     };
-  });
+  }, selector);
 }
 
 // 트리 칸의 첫 읽기 글자(로딩 또는 루트 실패)를 잰다. 트리 칸의 머리(폴더 바꾸기 줄)는 프레임에서 뺀다.
@@ -278,6 +278,70 @@ test("탐색기의 첫 읽기 표시가 본문 프레임 가운데에서 본문�
   for (const { width, measured } of measuredRows) {
     assertFills(`탐색기 ${width}`, measured);
     assertCenter(`탐색기 ${width}`, measured);
+  }
+});
+
+test("탐색기 본문의 첫 읽기 실패 안내가 로딩 글자 자리에 선다", async ({ page }) => {
+  await mkdir(captureDir(), { recursive: true });
+  const rows: Array<Record<string, unknown>> = [];
+  const measuredRows: Array<{ width: number; loading: Measured | null; failed: Measured | null }> = [];
+  await installGate(page, ["files.list"]);
+  for (const width of [1100, 360]) {
+    await page.setViewportSize({ width, height: 820 });
+    await page.goto("/?preview=storage-document");
+    await page.addStyleTag({ content: STYLE });
+    await mountFixture(page, explorerLoadingApp);
+    const app = page.getByTestId("app-window-storage-document");
+    const loadingState = app.locator(".ks-explorer-content > .ks-status-text");
+    await expect(loadingState).toBeVisible();
+    await waitGateStarted(page);
+    const loading = await measureExplorer(app);
+    await app.screenshot({ path: `${captureDir()}/20261118-${phase}-${width}-explorer-body-loading.png` });
+    rows.push(boundsRow("explorer-body", width, "loading", loading!));
+    await releaseGate(page, true);
+    await expect(app.locator(".ks-explorer-content > .ks-inline-error")).toBeVisible();
+    const failed = await measureExplorer(app, ":scope > .ks-inline-error");
+    await app.screenshot({ path: `${captureDir()}/20261118-${phase}-${width}-explorer-body-failed.png` });
+    rows.push(boundsRow("explorer-body", width, "failed", failed!));
+    await writeFile(`${captureDir()}/20261118-${phase}-explorer-body.json`, JSON.stringify(rows, null, 2));
+    measuredRows.push({ width, loading, failed });
+  }
+  for (const { width, loading, failed } of measuredRows) {
+    assertCenter(`탐색기 본문 ${width}`, loading);
+    assertWithin(`탐색기 본문 ${width}`, loading);
+    expect(failed, `탐색기 본문 실패 ${width} 측정`).not.toBeNull();
+    assertSameCenter(`탐색기 본문 ${width}`, loading!.text, failed!.text);
+    assertWithin(`탐색기 본문 실패 ${width}`, failed);
+  }
+});
+
+test("항목이 보이는 채로 새로고침이 실패하면 안내가 가운데로 가지 않는다", async ({ page }) => {
+  await mkdir(captureDir(), { recursive: true });
+  const rows: Array<Record<string, unknown>> = [];
+  await installGate(page, ["files.list"]);
+  for (const width of [1100, 360]) {
+    await page.setViewportSize({ width, height: 820 });
+    await page.goto("/?preview=storage-document");
+    await page.addStyleTag({ content: STYLE });
+    await mountFixture(page, explorerLoadingApp);
+    const app = page.getByTestId("app-window-storage-document");
+    await waitGateStarted(page);
+    await releaseGate(page);
+    await expect(app.getByRole("option", { name: "settings.json" })).toBeVisible();
+    // 다음 읽기만 실패로 돌려, 항목을 이미 읽은 뒤의 새로고침 실패를 만든다. 탐색기는 창 초점에서 다시 읽는다.
+    await page.evaluate(() => { (window as any).loadingCenterGate.fail = true; });
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    const failedState = app.locator(".ks-explorer-content > .ks-inline-error");
+    await expect(failedState).toBeVisible();
+    const failed = await measureExplorer(app, ":scope > .ks-inline-error");
+    await app.screenshot({ path: `${captureDir()}/20261118-${phase}-${width}-explorer-refresh-failed.png` });
+    rows.push(boundsRow("explorer-refresh", width, "failed", failed!));
+    await writeFile(`${captureDir()}/20261118-${phase}-explorer-refresh.json`, JSON.stringify(rows, null, 2));
+    expect(failed, `탐색기 새로고침 실패 ${width} 측정`).not.toBeNull();
+    expect(await failedState.getAttribute("data-ks-first-read"), `탐색기 새로고침 실패 ${width} 상태 속성`).toBeNull();
+    const frameCenter = (failed!.frame.top + failed!.frame.bottom) / 2;
+    const textCenter = (failed!.text.top + failed!.text.bottom) / 2;
+    expect(frameCenter - textCenter, `탐색기 새로고침 실패 ${width}가 가운데에서 ${(frameCenter - textCenter).toFixed(1)}px 위`).toBeGreaterThan(1);
   }
 });
 

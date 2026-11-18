@@ -289,6 +289,7 @@ button {
 .ks-markdown-error,
 .ks-agent-chat-state,
 .ks-explorer-content > .ks-status-text,
+.ks-explorer-content > .ks-inline-error[data-ks-first-read],
 .ks-file-tree > .ks-status-text,
 .ks-file-tree > .ks-inline-error:first-child,
 .ks-file-tree > .ks-file-tree-header + .ks-inline-error {
@@ -298,6 +299,7 @@ button {
 }
 
 .ks-explorer-content > .ks-status-text,
+.ks-explorer-content > .ks-inline-error[data-ks-first-read],
 .ks-file-tree > .ks-status-text,
 .ks-file-tree > .ks-inline-error:first-child,
 .ks-file-tree > .ks-file-tree-header + .ks-inline-error {
@@ -305,8 +307,9 @@ button {
   min-height: 0;
 }
 
-/* 루트를 읽지 못한 안내는 글과 오류 id가 한 덩어리다. 좁은 폭에서는 글을 줄바꿈해 칸 폭에 맞추고,
+/* 첫 읽기를 못한 안내는 글과 오류 id가 한 덩어리다. 좁은 폭에서는 글을 줄바꿈해 칸 폭에 맞추고,
    덩어리 전체를 칸 가운데에 모은다(그리드 행을 늘리지 않는다). */
+.ks-explorer-content > .ks-inline-error[data-ks-first-read],
 .ks-file-tree > .ks-inline-error:first-child,
 .ks-file-tree > .ks-file-tree-header + .ks-inline-error {
   align-content: center;
