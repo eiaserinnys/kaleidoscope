@@ -1,7 +1,7 @@
 import { useBlockRootProps } from "../comments/block-root";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Binding, Block, DocumentRef, FileRef } from "../contract/contract";
-import { ErrorNotice, Notice, StatusText } from "../components/primitives";
+import { Button, ErrorNotice, Notice, StatusText } from "../components/primitives";
 import { DataState } from "../components/data-state";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
@@ -49,7 +49,7 @@ function DocumentMarkdownViewBlock({ document, context }: { document: DocumentRe
   useEffect(() => { void session.open(path); }, [path, session]);
   if (path === null) return <article {...blockRoot} className="ks-markdown-view" ref={shareRef} />;
   if (!state.loaded) return <div {...blockRoot} className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (state.error) return <div {...blockRoot} className="ks-markdown-error"><ErrorNotice error={state.error} /></div>;
+  if (state.error) return <div {...blockRoot} className="ks-markdown-error"><ErrorNotice error={state.error} actions={[<Button key="retry" onClick={() => void session.open(path)}>다시 시도</Button>]} /></div>;
   return <article {...blockRoot} className="ks-markdown-view" ref={shareRef}><MarkdownText>{state.text}</MarkdownText></article>;
 }
 
@@ -110,7 +110,7 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   if (!grant) return null;
   if (path === null) return <article {...blockRoot} className="ks-markdown-view" ref={shareRef} />;
   if (loading) return <div {...blockRoot} className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
+  if (error) return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id} actions={[<Button key="retry" onClick={() => void readFile()}>다시 시도</Button>]}>{error.message}</Notice></div>;
 
   return (
     <article {...blockRoot} className="ks-markdown-view" ref={shareRef}>

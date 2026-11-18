@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { CoreError, FolderEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
-import { ErrorId, IconButton, StatusText } from "../components/primitives";
+import { Button, ErrorId, ErrorNotice, IconButton, StatusText } from "../components/primitives";
 import { FilePlus, FileText, FolderOpen, PanelLeftClose, PanelLeftOpen } from "../components/icons";
 import { TextInput } from "../components/text-input";
 import { END_ACTION_ID, TreeView } from "../components/tree/tree-view";
@@ -486,13 +486,15 @@ export function FileBrowserTree({
   const rootError = rootEmpty ? errors[""] : undefined;
 
   const nodes = useMemo(() => {
-    const buildDirectory = (directory: string): TreeNode[] => {
+    let noticePlaced = false;
+    const noticeRow: TreeNode = { id: "folder-operation-notice", label: "", content: actions.noticeNode };
+    const buildDirectory = (directory: string, shown: boolean): TreeNode[] => {
       const rows: TreeNode[] = [];
       if (directory && loadingDirectories.has(directory) && !Object.hasOwn(entriesByDirectory, directory)) rows.push({
         id: `loading:${directory}`, label: "불러오는 중", selectable: false, content: <StatusText>불러오는 중</StatusText>,
       });
       if (directory && errors[directory]) rows.push({
-        id: `error:${directory}`, label: errors[directory].message, selectable: false, content: <FolderTreeError error={errors[directory]} />,
+        id: `error:${directory}`, label: errors[directory].message, selectable: false, content: <ErrorNotice error={errors[directory]} actions={[<Button key="retry" onClick={() => void loadDirectory(directory)}>다시 시도</Button>]} />,
       });
       if (creating?.directory === directory) rows.push({
         id: `creating:${directory}`,
@@ -522,12 +524,14 @@ export function FileBrowserTree({
             selectable: false,
             interactiveContent: true,
             content: actions.inlineRow(directory, entry.path),
-            children: !collection && entry.kind === "dir" ? buildDirectory(entry.path) : [],
+            children: !collection && entry.kind === "dir" ? buildDirectory(entry.path, shown && expanded.has(entry.path)) : [],
           });
           continue;
         }
         const isDirectory = entry.kind === "dir";
         const nodeId = collection ? `doc:${entry.path}` : entry.path;
+        const after = actionsEnabled && shown && actions.noticeNode && actions.noticeTarget === nodeId ? noticeRow : undefined;
+        if (after) noticePlaced = true;
         rows.push({
           id: nodeId,
           label: entry.name,
@@ -538,7 +542,8 @@ export function FileBrowserTree({
           leading: isDirectory ? undefined : fileIcon(entry),
           data: { entry, filePath: isDirectory ? undefined : entry.path, folderPath: mode === "folders" && isDirectory ? entry.path : undefined },
           rowClassName: actionsEnabled && actions.isCutPath(entry.path) ? "is-cut" : undefined,
-          children: !collection && isDirectory ? buildDirectory(entry.path) : [],
+          after,
+          children: !collection && isDirectory ? buildDirectory(entry.path, shown && expanded.has(entry.path)) : [],
         });
       }
       if (actionsEnabled && actions.inlineEdit?.kind !== "rename" && actions.inlineEdit?.directory === directory) {
@@ -564,9 +569,11 @@ export function FileBrowserTree({
       return rows;
     };
     const root: TreeNode[] = [];
-    if (!rootEmpty && errors[""]) root.push({ id: "error:", label: errors[""].message, selectable: false, content: <FolderTreeError error={errors[""]} /> });
-    return [...root, ...buildDirectory("")];
-  }, [actions, actionsEnabled, collection, commitCreate, creating, entriesByDirectory, errors, expanded, fileIcon, loadingDirectories, mode, rootEmpty, visible]);
+    if (!rootEmpty && errors[""]) root.push({ id: "error:", label: errors[""].message, selectable: false, content: <ErrorNotice error={errors[""]} actions={[<Button key="retry" onClick={() => void loadDirectory("")}>다시 시도</Button>]} /> });
+    const children = buildDirectory("", true);
+    if (actionsEnabled && actions.noticeNode && !noticePlaced) root.unshift(noticeRow);
+    return [...root, ...children];
+  }, [actions, actionsEnabled, collection, commitCreate, creating, entriesByDirectory, errors, expanded, fileIcon, loadDirectory, loadingDirectories, mode, rootEmpty, visible]);
 
   const activate = useCallback((row: TreeRowModel, action: TreeActivation) => {
     const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry;
@@ -618,7 +625,7 @@ export function FileBrowserTree({
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader> : null}
           {rootLoading ? <StatusText>불러오는 중</StatusText>
-            : rootError ? <FolderTreeError error={rootError} />
+            : rootError ? <div data-ks-fills-body><ErrorNotice error={rootError} actions={[<Button key="retry" onClick={() => void loadDirectory("")}>다시 시도</Button>]} /></div>
             : <TreeView
               commentKey={(row) => { const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry; return entry ? { permission, path: entry.path } : undefined; }}
               className="ks-file-tree-list"
@@ -641,7 +648,6 @@ export function FileBrowserTree({
               selectedId={collection && selectedPath ? `doc:${selectedPath}` : selectedPath}
             />}
           {actionError ? <FolderTreeError error={actionError} /> : null}
-          {actionsEnabled ? actions.noticeNode : null}
         </>
       )}
       {actionsEnabled ? actions.menuElement : null}

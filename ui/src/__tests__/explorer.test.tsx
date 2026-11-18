@@ -70,6 +70,40 @@ function setup({ legacy = false, folder = "", view = "icons", files, scope = "fo
 }
 
 describe("explorer block", () => {
+  it("새로고침 실패에도 목록을 유지하고 다시 읽는다", async () => {
+    const { calls, originalCall, container } = setup();
+    await screen.findByRole("option", { name: "readme.txt" });
+    let fail = true;
+    calls.mockImplementation((request) => request.op === "files.list" && fail
+      ? Promise.reject({ code: "io", message: "읽기 실패", details: [] }) : originalCall(request));
+    act(() => globalThis.window.dispatchEvent(new Event("focus")));
+    const content = container.querySelector<HTMLElement>(".ks-explorer-content")!;
+    const alert = await within(content).findByRole("alert");
+    expect(within(content).getByRole("option", { name: "readme.txt" })).toBeTruthy();
+    fail = false;
+    fireEvent.click(within(alert).getByRole("button", { name: "다시 시도" }));
+    await waitFor(() => expect(within(content).queryByRole("alert")).toBeNull());
+  });
+  it("첫 읽기 실패 뒤 다시 시도하는 동안 로더를 표시한다", async () => {
+    const { calls, originalCall, container } = setup();
+    const notes = await screen.findByRole("option", { name: "notes" });
+    let release: (() => void) | undefined;
+    let attempt = 0;
+    calls.mockImplementation(async (request) => {
+      if (request.op === "files.list" && request.dir === "notes") {
+        if (++attempt === 1) throw { code: "io", message: "읽기 실패", details: [] };
+        await new Promise<void>((resolve) => { release = resolve; });
+      }
+      return originalCall(request);
+    });
+    fireEvent.doubleClick(notes);
+    const content = container.querySelector<HTMLElement>(".ks-explorer-content")!;
+    const alert = await within(content).findByRole("alert");
+    fireEvent.click(within(alert).getByRole("button", { name: "다시 시도" }));
+    expect(within(content).getByRole("status").textContent).toContain("불러오는 중");
+    await act(async () => { release?.(); });
+    expect(await within(content).findByRole("option", { name: "a.md" })).toBeTruthy();
+  });
   it("PC 접근 동의 단추는 자동 초점과 복구에서 건너뛰고 Tab으로 고를 수 있다", async () => {
     vi.spyOn(document, "hasFocus").mockReturnValue(true);
     const { container } = setup({ scope: "pc" });
