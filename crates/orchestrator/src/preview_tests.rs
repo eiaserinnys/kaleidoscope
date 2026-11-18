@@ -615,6 +615,10 @@ async fn preview_reports_failed_source_and_binding_retry_for_non_2xx() {
     assert!(value["sources"]["cards"]["details"]
         .to_string()
         .contains("500"));
+    // 에이전트가 원인을 계속 보도록 원천 메타에도 details를 싣는다.
+    assert!(value["source_meta"]["cards"]["details"]
+        .to_string()
+        .contains("500"));
     assert_eq!(value["values"][0]["status"], "failed");
     assert_eq!(value["values"][0]["retry"], json!(["cards"]));
     server_task.abort();

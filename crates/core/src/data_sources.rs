@@ -172,10 +172,10 @@ pub(crate) fn fetch_named(
                 let mut error = match response.status {
                     404 => errors::DATA_SOURCE_RESPONSE_NOT_FOUND(&target),
                     401 | 403 => errors::DATA_SOURCE_RESPONSE_DENIED(&target),
-                    500..=599 => errors::DATA_SOURCE_RESPONSE_SERVER_ERROR(&target, &reason),
-                    _ => errors::DATA_SOURCE_RESPONSE_STATUS_FAILED(&target, &reason),
+                    500..=599 => errors::DATA_SOURCE_RESPONSE_SERVER_ERROR(&target),
+                    _ => errors::DATA_SOURCE_RESPONSE_STATUS_FAILED(&target),
                 };
-                let mut details = vec![format!("HTTP 상태: {}", response.status), format!("원천: {source}"), format!("경로: {path}")];
+                let mut details = vec![format!("원인: {reason}"), format!("HTTP 상태: {}", response.status), format!("원천: {source}"), format!("경로: {path}")];
                 if let Some(host) = host {
                     details.push(format!("호스트: {host}"));
                 }

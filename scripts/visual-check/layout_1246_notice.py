@@ -1,6 +1,11 @@
 """명시적 채움 반복 행과 창 알림의 배치·조작 검증."""
 
+from PIL import Image
+
 from layout_1246_fixtures import FILL_PROGRESS_JS, NARROW, NOTICE_APP, WIDE, fill_progress_scene
+
+# --ks-color-focus(#8c6aaf)의 실제 값. 캡처 픽셀을 이 색과 견준다.
+FOCUS_COLOR = (140, 106, 175)
 
 
 NOTICE_LAYOUT_JS = """
@@ -67,7 +72,10 @@ def check_notice_layout(page, output, result, width, record, capture):
     last_row_bottom = max(expanded['message']['box']['b'], *(b['box']['b'] for b in expanded['buttons']))
     verdicts = {'동작 오류와 위아래 여백 같음':top_and_bottom_match,
                 '단추 아래와 테두리 사이가 동작 오류와 같음':bottom_inset_match,
-                '펼친 원인과 코드가 요약 줄 아래':expanded_top >= last_row_bottom - 1 and 'SOURCE_READ_FAILED' in expanded['expansion']['text']}
+                '접힌 줄은 요약 없이 등록부 문구 하나':collapsed['message']['text'].startswith('연결 예시의 서버에 오류가 났습니다.')
+                    and '이전에 받은 내용을 보이고 있습니다.' not in collapsed['message']['text'],
+                '펼친 원인과 코드가 요약 줄 아래':expanded_top >= last_row_bottom - 1 and 'SOURCE_READ_FAILED' in expanded['expansion']['text']
+                    and '원인: 서버 사유' in expanded['expansion']['text']}
     if width == WIDE[0]:
         verdicts.update({'요약과 단추의 세로 가운데 차이 2px 이하':all(abs(summary_center - center) <= 2 for center in button_centers),
                          '접힌 알림이 한 줄 높이':abs(collapsed['notice']['h'] - one_row_height) <= 1})
@@ -187,7 +195,9 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
         page.evaluate("""async () => {
           const { snapshot } = await window.__ksHarness.call({op:'state.get'});
           const win = snapshot.shared.windows.find((w) => w.app_id === 'notice-fixture');
-          window.__ksHarness.emit({event:'data.update', window_id:win.id, view:{values:{}, sources:{feed:{state:'failed', has_value:true, message:'자료를 받지 못했습니다', id:'SOURCE_READ_FAILED'}}}});
+          window.__ksHarness.emit({event:'data.update', window_id:win.id, view:{values:{}, sources:{feed:{state:'failed', has_value:true,
+            message:'연결 예시의 서버에 오류가 났습니다.', id:'SOURCE_READ_FAILED',
+            details:['원인: 서버 사유', 'HTTP 상태: 500', '원천: feed', '경로: /api/feed']}}}});
         }""")
         page.wait_for_selector('[data-testid="app-window-notice-fixture"] .ks-data-window-notice > .ks-notice')
         page.wait_for_timeout(500)
@@ -228,7 +238,7 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
             key = "fill-progress-details-360"
             record(result, key, {"접힌 높이가 창의 20% 이하": (collapsed["notice"]["bottom"] - collapsed["notice"]["top"]) <= (collapsed["window"]["bottom"] - collapsed["window"]["top"]) * .2,
                                  "접힌 원인과 코드를 화면에서 숨김": collapsed_hidden,
-                                 "펼친 원인과 코드": detail_visible and "자료를 받지 못했습니다" in detail_text and "SOURCE_READ_FAILED" in detail_text,
+                                 "펼친 원인과 코드": detail_visible and "원인: 서버 사유" in detail_text and "SOURCE_READ_FAILED" in detail_text,
                                  "펼쳐도 본문과 겹치지 않음": expanded["body"]["bottom"] <= expanded["notice"]["top"] and not any(row["overlap"] for row in expanded["rows"]),
                                  "Tab과 누른 뒤 초점": tab_focus and focus_kept and focus_visible})
             result["scenes"][key]["measurement"] = {"collapsed": collapsed, "expanded": expanded}
@@ -237,7 +247,7 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
             page.locator('[data-testid="app-window-notice-fixture"]').evaluate("el => { el.style.width = '360px'; el.style.height = '240px'; }")
             page.wait_for_timeout(250)
             minimum = page.locator(f"[id='{detail_id}']").evaluate("""el => {
-              const r = el.getBoundingClientRect(), text = el.querySelector('.ks-notice-message');
+              const r = el.getBoundingClientRect(), text = el.firstElementChild;
               const notice = el.closest('.ks-notice').getBoundingClientRect(), win = el.closest('.ks-data-window').getBoundingClientRect();
               return {height:r.height, lineHeight:parseFloat(getComputedStyle(text).lineHeight), noticeHeight:notice.height, windowHeight:win.height,
                 selectable:getComputedStyle(text).userSelect, scrollHeight:el.scrollHeight, clientHeight:el.clientHeight};
@@ -292,5 +302,92 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
 
     check_detail_wrap(page, output, result, open_page, inject, record, capture)
     check_repeat_end_space(page, output, result, open_page, inject, record, capture)
+    check_close_focus(page, output, result, open_page, record, capture)
+
+
+def focus_corner_pixels(path, window, viewport):
+    """캡처에서 창 왼쪽 아래 (6, H-6)과 오른쪽 아래 (W-7, H-6)의 픽셀을 읽는다."""
+    image = Image.open(path).convert("RGB")
+    scale_x, scale_y = image.width / viewport["width"], image.height / viewport["height"]
+
+    def at(x, y):
+        return image.getpixel((min(int(round(x * scale_x)), image.width - 1),
+                                min(int(round(y * scale_y)), image.height - 1)))
+
+    return {"left": at(window["left"] + 6, window["bottom"] - 6),
+            "right": at(window["right"] - 7, window["bottom"] - 6)}
+
+
+def near_focus_color(pixel, tolerance=8):
+    """안티에일리어싱 여유를 두고 초점 색인지 본다. 바탕색과는 채널 차가 8을 훨씬 넘는다."""
+    return all(abs(channel - want) <= tolerance for channel, want in zip(pixel, FOCUS_COLOR))
+
+
+def check_close_focus(page, output, result, open_page, record, capture):
+    """알림을 닫은 뒤 초점: 키보드로 닫으면 본문 안쪽에 고리가 보이고, 마우스로 닫으면 보이지 않는다."""
+    measure = """() => {
+      const active = document.activeElement;
+      const style = getComputedStyle(active);
+      const box = active.getBoundingClientRect();
+      const win = active.closest('[data-testid="app-window-notice-fixture"]');
+      const winBox = win.getBoundingClientRect();
+      const winStyle = getComputedStyle(win);
+      return { tag:active.tagName, className:String(active.className ?? ''),
+        inWindow:!!win,
+        outlineStyle:style.outlineStyle, outlineWidth:style.outlineWidth, outlineOffset:style.outlineOffset,
+        focusVisible:active.matches(':focus-visible'),
+        radiusLeft:parseFloat(style.borderBottomLeftRadius), radiusRight:parseFloat(style.borderBottomRightRadius),
+        box:{left:box.left, top:box.top, right:box.right, bottom:box.bottom, width:box.width, height:box.height},
+        window:{left:winBox.left, top:winBox.top, right:winBox.right, bottom:winBox.bottom, width:winBox.width, height:winBox.height},
+        windowRadiusLeft:parseFloat(winStyle.borderBottomLeftRadius), windowRadiusRight:parseFloat(winStyle.borderBottomRightRadius),
+        windowBorder:parseFloat(winStyle.borderBottomWidth) };
+    }"""
+    for width, height in (WIDE, NARROW):
+        page.set_viewport_size({"width": width, "height": height})
+        open_page(page, result["port"], NOTICE_APP)
+        page.evaluate("() => { const panel = document.querySelector('[data-testid=fake-files-panel]'); if (panel) panel.remove(); }")
+        # 창 초점 복구는 맨 위 창에서만 돈다. 하네스가 다른 창을 위에 두므로 검사 대상 창을 올린다.
+        page.evaluate("""async () => {
+          const harness = window.__ksHarness;
+          const { snapshot } = await harness.call({ op: 'state.get' });
+          const target = snapshot.shared.windows.find((window) => window.app_id === 'notice-fixture');
+          target.z = Math.max(...snapshot.shared.windows.map((window) => window.z)) + 1;
+          harness.emit({ event: 'state.changed', snapshot });
+        }""")
+        page.wait_for_timeout(200)
+        for how in ("keyboard", "pointer"):
+            page.evaluate("() => window.noticeFixture.alert()")
+            page.wait_for_selector('[data-testid="app-window-notice-fixture"] .ks-notice button[aria-label="닫기"]')
+            page.wait_for_timeout(150)
+            close = page.get_by_role('button', name='닫기')
+            if how == 'keyboard':
+                close.focus()
+                page.keyboard.press('Enter')
+            else:
+                close.click()
+            page.wait_for_timeout(250)
+            measured = page.evaluate(measure)
+            verdicts = {'닫은 뒤 초점이 창 본문에 있음': measured['inWindow'] and 'ks-data-window-body' in measured['className'],
+                        '구조용 초점으로 옮김': 'ks-focus-rescue-empty' in measured['className']}
+            if how == 'keyboard':
+                verdicts['키보드로 닫으면 고리가 보임'] = bool(measured['focusVisible']) and measured['outlineStyle'] == 'solid' and measured['outlineWidth'] != '0px'
+                verdicts['고리는 본문 안쪽에 그려짐'] = measured['outlineOffset'].startswith('-') and measured['outlineOffset'] != '-0px'
+                # 창틀의 둥근 자르기 안에서 고리가 끊기지 않게 아래 두 모서리를 창과 같은 동심 곡률로 돌린다.
+                expected_left = round(measured['windowRadiusLeft'] - measured['windowBorder'], 2)
+                expected_right = round(measured['windowRadiusRight'] - measured['windowBorder'], 2)
+                measured['expectedRadiusLeft'], measured['expectedRadiusRight'] = expected_left, expected_right
+                verdicts['아래 두 모서리 곡률이 창 곡률 - 선 두께'] = (abs(measured['radiusLeft'] - expected_left) <= .01
+                                                                      and abs(measured['radiusRight'] - expected_right) <= .01)
+            else:
+                verdicts['마우스로 닫으면 고리가 없음'] = measured['outlineStyle'] == 'none'
+            key = f"notice-close-focus-{how}-{width}"
+            capture(output, result, page, key)
+            if how == 'keyboard':
+                pixels = focus_corner_pixels(output / f"check1246-{key}.png", measured['window'], page.viewport_size)
+                measured['cornerPixels'] = {'left': list(pixels['left']), 'right': list(pixels['right']), 'focus': list(FOCUS_COLOR)}
+                verdicts['왼쪽 아래 픽셀이 초점 색'] = near_focus_color(pixels['left'])
+                verdicts['오른쪽 아래 픽셀이 초점 색'] = near_focus_color(pixels['right'])
+            record(result, key, verdicts)
+            result["scenes"][key]["measurement"] = measured
 
 
