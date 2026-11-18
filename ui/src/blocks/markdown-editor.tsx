@@ -4,7 +4,7 @@ import { useShareDescriber } from "../share/visible";
 import { describeEditor } from "../share/editor";
 import { EditorView } from "@codemirror/view";
 import type { Block, DocumentRef, FileRef } from "../contract/contract";
-import { ErrorNotice, StatusText } from "../components/primitives";
+import { Button, ErrorNotice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { FileEditorSession, type FileEditorSnapshot } from "./file-editor-session";
@@ -13,6 +13,7 @@ import { EditorConflict } from "./editor-conflict";
 import { createMarkdownEditorState } from "./markdown-editor-state";
 import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 import { useFileEditorEvents } from "./file-editor-events";
+import { focusRetryContainer } from "../components/focus-rescue";
 
 type MarkdownEditorBlockData = Extract<Block, { type: "markdown" }>;
 type FileMarkdownEditorBlockData = MarkdownEditorBlockData & { file: FileRef };
@@ -89,7 +90,7 @@ function EditorContent({ path, session, state }: { path: string; session: FileEd
     return <div {...blockRoot} className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
   }
   if (state.error && state.revision === null && !state.dirty) {
-    return <div {...blockRoot} className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
+    return <div {...blockRoot} className="ks-editor-error"><ErrorNotice error={state.error} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-split-pane, [role=tabpanel], .ks-data-window-body, .ks-app-window-content"); void session.open(path); }}>다시 시도</Button>]} /></div>;
   }
 
   return (
