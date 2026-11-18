@@ -10,6 +10,13 @@ export const codeViewLoadingApp: AppDefinition = {
   ui: { type: "code", file: { permission: "documents", path: "Kaleidoscope.md" }, read_only: true },
 };
 
+// 코드 편집기는 read_only가 없는 같은 블록이다. 읽기 실패가 로딩 글자와 같은 자리에 서는지 잰다.
+export const codeEditorLoadingApp: AppDefinition = {
+  id: "storage-document", name: "코드 편집기 불러오기 시험", requires: { blocks: 6, modules: { files: 1 } },
+  permissions: [{ module: "files", id: "documents", access: "read", label: "문서 폴더" }], state: {},
+  ui: { type: "code", file: { permission: "documents", path: "Kaleidoscope.md" } },
+};
+
 export const explorerLoadingApp: AppDefinition = {
   id: "storage-document", name: "탐색기 불러오기 시험", requires: { blocks: 6, modules: { files: 1 } },
   permissions: [{ module: "files", id: "documents", access: "read", label: "문서 폴더" }], state: {},
@@ -20,4 +27,16 @@ export const sandboxLoadingApp: AppDefinition = {
   id: "storage-document", name: "샌드박스 불러오기 시험", requires: { blocks: 6, modules: { files: 1 } },
   permissions: [{ module: "files", id: "documents", access: "read", label: "문서 폴더" }], state: {},
   ui: { type: "sandbox", file: { permission: "documents", path: "settings.json" }, title: "샌드박스 불러오기 시험" },
+};
+
+// 탭 칸 안에 놓인 마크다운 보기·편집기. 탭 판의 기본 안쪽 여백이 로딩·실패 상자를 12px 들여
+// 글자가 판 가운데에서 6px 위로 뜨는 것을 잰다(세라피엘 검수 장면, 카드 #1621).
+export const markdownTabsLoadingApp: AppDefinition = {
+  id: "storage-document", name: "탭 안 마크다운 시험", requires: { blocks: 6, modules: { storage: 1 } },
+  permissions: [], state: {},
+  storage: { entries: [{ id: "memo", key: "memo", kind: "md", default: "# 기본 문서", label: "문서", presentation: "hidden" }] },
+  ui: { type: "split", direction: "row", sizes: [28, 72], children: [
+    { type: "tabs", keep_mounted: true, tabs: [{ label: "보기", child: { type: "markdown", document: { entry: "memo" }, read_only: true } }] },
+    { type: "tabs", header: false, keep_mounted: true, tabs: [{ label: "편집", child: { type: "markdown", document: { entry: "memo" } } }] },
+  ] },
 };

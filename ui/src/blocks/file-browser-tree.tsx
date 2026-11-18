@@ -479,6 +479,12 @@ export function FileBrowserTree({
     || extensions.length === 0
     || extensions.some((extension) => extensionOf(entry.name) === extension.toLowerCase()), [extensions, mode]);
 
+  // 루트를 아직 읽지 못한 동안에는 트리 행 대신 칸 전체에 글 하나만 선다. 탐색기 본문 첫 읽기와 같은 경우라
+  // 같은 가운데 묶음(.ks-file-tree > .ks-status-text)으로 센다. 루트를 읽은 뒤의 실패는 행으로 남긴다.
+  const rootEmpty = !Object.hasOwn(entriesByDirectory, "");
+  const rootLoading = rootEmpty && loadingDirectories.has("");
+  const rootError = rootEmpty ? errors[""] : undefined;
+
   const nodes = useMemo(() => {
     const buildDirectory = (directory: string): TreeNode[] => {
       const rows: TreeNode[] = [];
@@ -558,12 +564,9 @@ export function FileBrowserTree({
       return rows;
     };
     const root: TreeNode[] = [];
-    if (loadingDirectories.has("") && !Object.hasOwn(entriesByDirectory, "")) root.push({
-      id: "loading:", label: "불러오는 중", selectable: false, content: <StatusText>불러오는 중</StatusText>,
-    });
-    if (errors[""]) root.push({ id: "error:", label: errors[""].message, selectable: false, content: <FolderTreeError error={errors[""]} /> });
+    if (!rootEmpty && errors[""]) root.push({ id: "error:", label: errors[""].message, selectable: false, content: <FolderTreeError error={errors[""]} /> });
     return [...root, ...buildDirectory("")];
-  }, [actions, actionsEnabled, collection, commitCreate, creating, entriesByDirectory, errors, expanded, fileIcon, loadingDirectories, mode, visible]);
+  }, [actions, actionsEnabled, collection, commitCreate, creating, entriesByDirectory, errors, expanded, fileIcon, loadingDirectories, mode, rootEmpty, visible]);
 
   const activate = useCallback((row: TreeRowModel, action: TreeActivation) => {
     const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry;
@@ -614,27 +617,29 @@ export function FileBrowserTree({
             {!collection && scope === "folder" ? <IconButton data-ks-user-consent aria-label="폴더 바꾸기" onClick={(event) => { if (event.nativeEvent.isTrusted) void pickFolder(); }}><FolderOpen /></IconButton> : null}
             {pane ? <span className="ks-file-tree-collapse"><IconButton aria-label="목록 접기" onClick={togglePane}><PanelLeftClose /></IconButton></span> : null}
           </FolderTreeHeader> : null}
-          <TreeView
-            commentKey={(row) => { const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry; return entry ? { permission, path: entry.path } : undefined; }}
-            className="ks-file-tree-list"
-            expanded={expanded}
-            label={mode === "folders" ? "폴더 목록" : "파일 목록"}
-            nodes={nodes}
-            endAction={createCancelFocusId && !actions.inlineEdit
-              ? { label: createLabel, leading: <FilePlus size="inline" />, onActivate: () => void actions.beginCreateFile("", focusController.current, END_ACTION_ID) }
-              : undefined}
-            onActivate={activate}
-            onContextMenu={actionsEnabled || onFileContextMenu ? contextMenu : undefined}
-            onCommandKeyDown={actionsEnabled ? commandKeyDown : undefined}
-            onDoubleClick={onFileDoubleClick ? doubleClick : undefined}
-            onExpandedChange={setDirectoryExpanded}
-            onFocusController={(controller) => { focusController.current = controller; }}
-            selection={multiSelect ? actions.selection : undefined}
-            onSelectionChange={multiSelect ? actions.setSelection : undefined}
-            drag={actionsEnabled ? drag : undefined}
-            menuTargetId={actions.menuTargetId}
-            selectedId={collection && selectedPath ? `doc:${selectedPath}` : selectedPath}
-          />
+          {rootLoading ? <StatusText>불러오는 중</StatusText>
+            : rootError ? <FolderTreeError error={rootError} />
+            : <TreeView
+              commentKey={(row) => { const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry; return entry ? { permission, path: entry.path } : undefined; }}
+              className="ks-file-tree-list"
+              expanded={expanded}
+              label={mode === "folders" ? "폴더 목록" : "파일 목록"}
+              nodes={nodes}
+              endAction={createCancelFocusId && !actions.inlineEdit
+                ? { label: createLabel, leading: <FilePlus size="inline" />, onActivate: () => void actions.beginCreateFile("", focusController.current, END_ACTION_ID) }
+                : undefined}
+              onActivate={activate}
+              onContextMenu={actionsEnabled || onFileContextMenu ? contextMenu : undefined}
+              onCommandKeyDown={actionsEnabled ? commandKeyDown : undefined}
+              onDoubleClick={onFileDoubleClick ? doubleClick : undefined}
+              onExpandedChange={setDirectoryExpanded}
+              onFocusController={(controller) => { focusController.current = controller; }}
+              selection={multiSelect ? actions.selection : undefined}
+              onSelectionChange={multiSelect ? actions.setSelection : undefined}
+              drag={actionsEnabled ? drag : undefined}
+              menuTargetId={actions.menuTargetId}
+              selectedId={collection && selectedPath ? `doc:${selectedPath}` : selectedPath}
+            />}
           {actionError ? <FolderTreeError error={actionError} /> : null}
           {actionsEnabled ? actions.noticeNode : null}
         </>
