@@ -1,13 +1,14 @@
 import { encodeCommentKey } from "../comments/key";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Column, CoreError, ExplorerView, FileEntry, SortSpec } from "../contract/contract";
-import { EmptyState, ErrorId, IconButton, StatusText } from "../components/primitives";
+import { Button, EmptyState, ErrorId, ErrorNotice, IconButton, StatusText } from "../components/primitives";
 import { ArrowUp, ChevronRight, Download, File, FileCode, FileImage, FileText, Folder, FolderOpen, HardDrive, Image, LayoutGrid, List, Monitor, Music, Video } from "../components/icons";
 import { toCoreError } from "../core/core-transport";
 import { TableView, type Row } from "./data-table";
 import { useRoving } from "./data-view-common";
 import { IconTile, useIconGridColumns } from "../components/icon-tile";
 import type { BlockContext } from "./block-context";
+import { focusRetryContainer } from "../components/focus-rescue";
 
 type ExplorerRow = Row & { kind: "dir" | "file" };
 const columns: Column[] = [
@@ -140,7 +141,7 @@ export function ExplorerContent({
   const readFolder = async (directory: string, showLoading = false) => {
     const request = ++requestId.current;
     const requestedRoot = rootPath;
-    if (showLoading) setLoading(true);
+    if (showLoading || entries === null) setLoading(true);
     setError(null);
     try {
       const reply = await store.call({ op: "files.list", window_id: window.id, permission, dir: directory });
@@ -255,9 +256,8 @@ export function ExplorerContent({
     </div>
     {actionError ? <div className="ks-inline-error" role="alert">{actionError.message}{actionError.id ? <> <ErrorId id={actionError.id} /></> : null}</div> : null}
     {pcRootsError ? <div className="ks-inline-error" role="alert">{pcRootsError.message}{pcRootsError.id ? <> <ErrorId id={pcRootsError.id} /></> : null}</div> : null}
-    {/* 본문 읽기는 실패하면 목록을 남기지 않고 이 안내 하나가 목록 자리를 차지한다. 그래서 첫 읽기든
-        새로고침이든 로딩 글자와 같은 자리에 선다(가운데 묶음은 data-ks-fills-body로 고른다). */}
-    {error ? <div className="ks-inline-error" role="alert" data-ks-fills-body>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</div>
+    {error ? <div className={visible ? "ks-explorer-refresh-error" : undefined} data-ks-fills-body={!visible || undefined}><ErrorNotice error={error} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-explorer-content"); void readFolder(folder); }}>다시 시도</Button>]} /></div> : null}
+    {!visible && error ? null
       : !visible && loading ? <StatusText>불러오는 중</StatusText>
       : visible && sortedEntries.length === 0 ? <div className="ks-explorer-empty"><EmptyState icon={<FolderOpen size="empty" />} text="빈 폴더" /></div>
           : view === "icons" ? <div aria-label="폴더 내용" className="ks-data-view ks-icon-grid ks-explorer-icons" ref={grid} role="listbox">

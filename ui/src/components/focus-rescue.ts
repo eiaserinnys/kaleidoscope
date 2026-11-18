@@ -88,6 +88,13 @@ export function focusContainer(element: HTMLElement): HTMLElement {
   return element;
 }
 
+/** 다시 읽는 동안 사라질 단추 대신 계속 남는 칸에 초점을 둔다. */
+export function focusRetryContainer(button: HTMLElement, selector: string): HTMLElement | null {
+  const container = button.closest<HTMLElement>(selector);
+  if (container) focusRescued(focusContainer(container), { preventScroll: true });
+  return container;
+}
+
 export type FocusBookmark = { element: HTMLElement | null; pane: HTMLElement | null };
 
 export function focusBookmark(element: HTMLElement | null, content: HTMLElement): FocusBookmark {

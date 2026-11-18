@@ -127,7 +127,7 @@ export function useFolderActions({
   const [inlineEdit, setInlineEdit] = useState<FolderInlineEdit | null>(null);
   const [menuState, setMenuState] = useState<{ anchor: HTMLElement; point: { x: number; y: number }; item: FolderItem | null; row: TreeRowModel | null; parent: string; focus: TreeFocusController; targetId: string | null } | null>(null);
   const [dialog, setDialog] = useState<{ action: "trash" | "permanent" | "properties"; item: FolderItem; paths: string[]; row: TreeRowModel; focus: TreeFocusController; focusTargets: Array<string | null> } | null>(null);
-  const [notice, setNotice] = useState<{ message: string; errorId?: string; failures?: Array<{ path: string; message: string; errorId?: string }>; allowPermanent?: FolderItem; row?: TreeRowModel; focus?: TreeFocusController; focusTargets?: Array<string | null> } | null>(null);
+  const [notice, setNotice] = useState<{ target: string; message: string; errorId?: string; failures?: Array<{ path: string; message: string; errorId?: string }>; allowPermanent?: FolderItem; row?: TreeRowModel; focus?: TreeFocusController; focusTargets?: Array<string | null> } | null>(null);
   const [noticeExpanded, setNoticeExpanded] = useState(false);
   const operationRunning = useRef(false);
 
@@ -192,10 +192,11 @@ export function useFolderActions({
     else current.focus.row(current.cancelId, current.cancelId !== null);
   }, [editFocus]);
 
-  const operationFailed = useCallback((error: CoreError | string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>, errorId?: string) => {
+  const operationFailed = useCallback((error: CoreError | string, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>, errorId?: string, target = row?.id ?? "") => {
     setNoticeExpanded(false);
     const resolvedErrorId = typeof error === "string" ? errorId : error.id;
     setNotice({
+      target,
       message: typeof error === "string" ? error : error.message,
       ...(resolvedErrorId ? { errorId: resolvedErrorId } : {}),
       ...(item ? { allowPermanent: item } : {}),
@@ -205,7 +206,7 @@ export function useFolderActions({
     });
   }, []);
 
-  const reportResults = useCallback((results: Array<{ path: string; error?: CoreError }>, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>) => {
+  const reportResults = useCallback((results: Array<{ path: string; error?: CoreError }>, item?: FolderItem, row?: TreeRowModel, focus?: TreeFocusController, focusTargets?: Array<string | null>, target = row?.id ?? "") => {
     const failures = results.filter((result) => result.error);
     if (!failures.length) return true;
     const trashUnavailable = failures.find((result) => result.error?.code === "trash_unavailable");
@@ -219,26 +220,26 @@ export function useFolderActions({
     });
     const errorId = failures.every((failure) => failure.error?.id === failures[0].error?.id) ? failures[0].error?.id : undefined;
     if (results.length === 1) {
-      operationFailed(failures[0].error!, undefined, undefined, undefined, undefined, errorId);
+      operationFailed(failures[0].error!, undefined, undefined, undefined, undefined, errorId, target);
       return false;
     }
     if (details.length === 1) {
-      operationFailed(`1개 실패: ${failureMessage(details[0].path, details[0].message)}`, undefined, undefined, undefined, undefined, errorId);
+      operationFailed(`1개 실패: ${failureMessage(details[0].path, details[0].message)}`, undefined, undefined, undefined, undefined, errorId, target);
       return false;
     }
     const sameMessage = details.every((failure) => failure.message === details[0].message);
     setNoticeExpanded(false);
-    setNotice({ message: `${details.length}개 실패${sameMessage ? `: ${details[0].message}` : ""}`, failures: details, ...(errorId ? { errorId } : {}) });
+    setNotice({ target, message: `${details.length}개 실패${sameMessage ? `: ${details[0].message}` : ""}`, failures: details, ...(errorId ? { errorId } : {}) });
     return false;
   }, [operationFailed]);
 
-  const flushPaths = useCallback(async (paths: string[]) => {
+  const flushPaths = useCallback(async (paths: string[], target = "") => {
     const results = await Promise.all(paths.map((path) => flushEditors(backend.editorAddress(path))));
     if (results.every(Boolean)) return true;
-    operationFailed(SHELL_FILE_EDITOR_SAVE_FAILED());
+    operationFailed(SHELL_FILE_EDITOR_SAVE_FAILED(), undefined, undefined, undefined, undefined, undefined, target);
     return false;
   }, [backend, operationFailed]);
-  const flushBefore = useCallback((item: FolderItem) => flushPaths([item.path]), [flushPaths]);
+  const flushBefore = useCallback((item: FolderItem) => flushPaths([item.path], rowId(item.path, backend.kind === "collection")), [backend.kind, flushPaths]);
 
   const runTrash = useCallback(async (item: FolderItem, paths: string[], permanent: boolean, row: TreeRowModel, focus: TreeFocusController, focusTargets: Array<string | null>) => {
     if (operationRunning.current) return;
@@ -247,7 +248,7 @@ export function useFolderActions({
     setNotice(null);
     operationRunning.current = true;
     try {
-      if (!(await flushPaths(paths))) {
+      if (!(await flushPaths(paths, row.id))) {
         focus.row(row.id);
         return;
       }
@@ -329,9 +330,9 @@ export function useFolderActions({
       if (value === undefined) return;
       await navigator.clipboard.writeText(value);
     } catch (cause) {
-      operationFailed(toCoreError(cause));
+      operationFailed(toCoreError(cause), undefined, undefined, undefined, undefined, undefined, rowId(item.path, backend.kind === "collection"));
     }
-  }, [backend.actions.absolutePath, backend.actions.relativePath, operationFailed]);
+  }, [backend.actions.absolutePath, backend.actions.relativePath, backend.kind, operationFailed]);
 
   const transferPaths = useCallback(async (paths: string[], destination: string, mode: "copy" | "cut") => {
     if (operationRunning.current) return;
@@ -340,7 +341,7 @@ export function useFolderActions({
     setNotice(null);
     operationRunning.current = true;
     try {
-      if (!(await flushPaths(paths))) return;
+      if (!(await flushPaths(paths, destination))) return;
       const results = await action(paths, destination);
       const succeeded = results.filter((result) => !result.error).map((result) => result.path);
       const currentClipboard = getClipboard(store);
@@ -348,9 +349,9 @@ export function useFolderActions({
         const remaining = currentClipboard.paths.filter((path) => !succeeded.some((success) => path === success || path.startsWith(`${success}/`)));
         setClipboard(store, remaining.length ? { ...currentClipboard, paths: remaining } : null);
       }
-      reportResults(results);
+      reportResults(results, undefined, undefined, undefined, undefined, destination);
     } catch (cause) {
-      operationFailed(toCoreError(cause));
+      operationFailed(toCoreError(cause), undefined, undefined, undefined, undefined, undefined, destination);
     } finally {
       operationRunning.current = false;
     }
@@ -364,13 +365,13 @@ export function useFolderActions({
     setNotice(null);
     operationRunning.current = true;
     try {
-      if (await flushBefore(item)) reportResults(await backend.actions.copy([item.path], destination));
+      if (await flushBefore(item)) reportResults(await backend.actions.copy([item.path], destination), undefined, undefined, undefined, undefined, rowId(item.path, backend.kind === "collection"));
     } catch (cause) {
-      operationFailed(toCoreError(cause));
+      operationFailed(toCoreError(cause), undefined, undefined, undefined, undefined, undefined, rowId(item.path, backend.kind === "collection"));
     } finally {
       operationRunning.current = false;
     }
-  }, [backend.actions.copy, flushBefore, operationFailed, reportResults]);
+  }, [backend.actions.copy, backend.kind, flushBefore, operationFailed, reportResults]);
 
   const beginCreateFile = useCallback((directory = "", focus?: TreeFocusController | null, cancelFocusId?: string | HTMLElement | null) => {
     const controller = focus ?? getFocusController();
@@ -407,7 +408,7 @@ export function useFolderActions({
     if (item && single && (capabilities.absolutePath || capabilities.relativePath || capabilities.reveal)) items.push({ id: "separator-path", type: "separator" });
     if (item && single && capabilities.absolutePath) items.push({ id: "absolute-path", label: "경로 복사", onSelect: () => void copyPath(item, true) });
     if (item && single && capabilities.relativePath) items.push({ id: "relative-path", label: "상대 경로 복사", onSelect: () => void copyPath(item, false) });
-    if (item && single && capabilities.reveal) items.push({ id: "reveal", label: "파일 관리자에서 보기", onSelect: () => void backend.actions.reveal?.(item.path).catch((cause) => operationFailed(toCoreError(cause))) });
+    if (item && single && capabilities.reveal) items.push({ id: "reveal", label: "파일 관리자에서 보기", onSelect: () => void backend.actions.reveal?.(item.path).catch((cause) => operationFailed(toCoreError(cause), undefined, undefined, undefined, undefined, undefined, rowId(item.path, backend.kind === "collection"))) });
     if (items.length) items.push({ id: "refresh-separator", type: "separator" });
     items.push({ id: "refresh", label: "새로 고침", shortcut: "F5", onSelect: () => refreshDirectory(parent) });
     if (item && single && capabilities.properties) items.push({ id: "properties", label: "속성", onSelect: () => setDialog({ action: "properties", item, paths, row: row!, focus, focusTargets: focus.deletionTargets(row!) }) });
@@ -533,6 +534,7 @@ export function useFolderActions({
     onContextMenu: openMenu,
     dialogElement,
     noticeNode,
+    noticeTarget: notice?.target ?? null,
     isCutPath,
     selection,
     setSelection,

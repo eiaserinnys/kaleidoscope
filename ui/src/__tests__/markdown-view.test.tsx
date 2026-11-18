@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFakeTransport } from "../core/fake-transport";
 import { createShellStore } from "../core/shell-store";
@@ -8,6 +8,20 @@ import { grantFor, makeTestSeed } from "./fixtures";
 afterEach(() => vi.restoreAllMocks());
 
 describe("markdown_view block", () => {
+  it("파일 읽기에 실패한 뒤 다시 시도하면 문서를 읽는다", async () => {
+    const transport = createFakeTransport(makeTestSeed({ viewerPath: "README.md", grants: [grantFor("viewer-window", "docs")], files: { "README.md": "# 다시 읽음" } }));
+    const original = transport.call.bind(transport);
+    let fail = true;
+    vi.spyOn(transport, "call").mockImplementation(async (request) => {
+      if (request.op === "files.read" && fail) throw { code: "io", message: "읽기 실패", details: [] };
+      return original(request);
+    });
+    render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+    const alert = await screen.findByRole("alert");
+    fail = false;
+    fireEvent.click(within(alert).getByRole("button", { name: "다시 시도" }));
+    expect(await screen.findByRole("heading", { name: "다시 읽음" })).toBeTruthy();
+  });
   it("does not render raw HTML or images and prevents link navigation", async () => {
     const open = vi.spyOn(window, "open").mockImplementation(() => null);
     const transport = createFakeTransport(makeTestSeed({

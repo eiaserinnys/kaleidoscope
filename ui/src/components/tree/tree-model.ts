@@ -4,6 +4,7 @@ export interface TreeNode {
   id: string;
   label: string;
   children?: TreeNode[];
+  after?: TreeNode;
   expandable?: boolean;
   selectable?: boolean;
   ariaSelectable?: boolean;
@@ -13,6 +14,7 @@ export interface TreeNode {
   trailing?: ReactNode;
   content?: ReactNode;
   interactiveContent?: boolean;
+  revealOnInsert?: boolean;
   data?: unknown;
   currentOnSelection?: boolean;
   rowClassName?: string;
@@ -52,6 +54,7 @@ export function flattenTreeModel(nodes: TreeNode[], expanded: ReadonlySet<string
         setSize: treeSiblings.length,
         indent: depth ? `calc(${Array.from({ length: depth }, () => "var(--ks-space-4)").join(" + ")})` : undefined,
       });
+      if (node.after) visit([node.after], parentId, depth);
       if (isExpanded && children.length) visit(children, node.id, depth + 1);
     });
   };

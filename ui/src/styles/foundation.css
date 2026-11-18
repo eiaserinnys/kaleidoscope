@@ -279,10 +279,10 @@ button {
 /* 첫 읽기 표시는 창 본문(프레임)을 채워야 글자가 프레임 가운데에 선다.
    읽다 실패한 안내도 같은 자리에 서야 하므로 로딩과 같은 묶음에 둔다.
    탐색기 본문과 트리 칸의 상태 글자는 본문 칸의 직접 자식이라 채움을 따로 받는다.
-   탐색기 본문 읽기는 실패하면 목록 없이 안내 하나가 본문 자리를 차지하므로(data-ks-fills-body)
-   첫 읽기든 새로고침이든 같은 자리에 선다.
+   탐색기 본문은 목록이 없을 때만 안내가 본문 자리를 차지한다(data-ks-fills-body).
    트리 칸의 실패는 첫 읽기(머리줄 다음 또는 머리줄이 없으면 첫 자식)일 때만 잡는다.
-   폴더 작업이 실패한 안내와 하위 폴더 행의 실패는 지금처럼 트리 아래·행 안에 남는다. */
+   폴더 작업 실패 안내는 대상 행 바로 아래에, 대상이 보이지 않으면 머리줄 아래에 선다.
+   하위 폴더 읽기 실패는 해당 폴더의 행 안에 남는다. */
 .ks-app-content-loading,
 .ks-app-content-error,
 .ks-editor-loading,
@@ -291,31 +291,29 @@ button {
 .ks-markdown-error,
 .ks-agent-chat-state,
 .ks-explorer-content > .ks-status-text,
-.ks-explorer-content > .ks-inline-error[data-ks-fills-body],
+.ks-explorer-content > [data-ks-fills-body],
 .ks-file-tree > .ks-status-text,
-.ks-file-tree > .ks-inline-error:first-child,
-.ks-file-tree > .ks-file-tree-header + .ks-inline-error {
+.ks-file-tree > [data-ks-fills-body] {
   display: grid;
   place-items: center;
   padding: var(--ks-space-4);
 }
 
 .ks-explorer-content > .ks-status-text,
-.ks-explorer-content > .ks-inline-error[data-ks-fills-body],
+.ks-explorer-content > [data-ks-fills-body],
 .ks-file-tree > .ks-status-text,
-.ks-file-tree > .ks-inline-error:first-child,
-.ks-file-tree > .ks-file-tree-header + .ks-inline-error {
+.ks-file-tree > [data-ks-fills-body] {
   flex: 1 1 auto;
   min-height: 0;
 }
 
 /* 칸 자리를 차지한 실패 안내는 글과 오류 id가 한 덩어리다. 좁은 폭에서는 글을 줄바꿈해 칸 폭에 맞추고,
    덩어리 전체를 칸 가운데에 모은다(그리드 행을 늘리지 않는다). */
-.ks-explorer-content > .ks-inline-error[data-ks-fills-body],
-.ks-file-tree > .ks-inline-error:first-child,
-.ks-file-tree > .ks-file-tree-header + .ks-inline-error {
+.ks-explorer-content > [data-ks-fills-body],
+.ks-file-tree > [data-ks-fills-body] {
   align-content: center;
-  justify-items: stretch;
   gap: var(--ks-space-1);
-  text-align: center;
 }
+
+.ks-explorer-content > [data-ks-fills-body] > .ks-notice,
+.ks-file-tree > [data-ks-fills-body] > .ks-notice { max-width: 100%; }

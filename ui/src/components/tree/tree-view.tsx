@@ -1,3 +1,4 @@
+// 가상 행의 측정, 스크롤, 초점 복구는 같은 가상화 수명주기를 공유하므로 이 파일에 둔다.
 import { encodeCommentKey } from "../../comments/key";
 import { selectionRange, toggleSelection } from "../collection-selection";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
@@ -353,6 +354,29 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
   });
 
   const virtualRows = virtual.getVirtualItems();
+  const seenRevealedRows = useRef(new Set<string>());
+  const [revealingRow, setRevealingRow] = useState<string | null>(null);
+  useEffect(() => {
+    const rows = flat.filter((row) => row.node.revealOnInsert);
+    const added = rows.find((row) => !seenRevealedRows.current.has(row.id));
+    seenRevealedRows.current = new Set(rows.map((row) => row.id));
+    if (!added) return;
+    setRevealingRow(added.id);
+    virtual.scrollToIndex(flat.indexOf(added), { align: "auto" });
+  }, [flat, virtual]);
+  useLayoutEffect(() => {
+    if (!revealingRow || !scrollRef.current) return;
+    const scroll = scrollRef.current;
+    const row = Array.from(scroll.querySelectorAll<HTMLElement>("[data-tree-row]"))
+      .find((element) => element.dataset.treeRow === revealingRow);
+    if (!row) return;
+    const bounds = row.getBoundingClientRect();
+    const viewport = scroll.getBoundingClientRect();
+    const padding = Number.parseFloat(getComputedStyle(scroll).paddingBottom) || 0;
+    if (bounds.bottom + padding > viewport.bottom) scroll.scrollTop += bounds.bottom + padding - viewport.bottom;
+    else if (bounds.top < viewport.top) scroll.scrollTop -= viewport.top - bounds.top;
+    setRevealingRow(null);
+  }, [revealingRow, virtualRows]);
   const destinationVisible = isRowVisible(drag?.targetId);
   const dropTargetId = drag?.targetId === "" || destinationVisible ? drag?.targetId : drag?.hoveredId ?? drag?.targetId;
 

@@ -331,6 +331,8 @@ describe("folder block", () => {
     const drop = () => { fireEvent.dragStart(a, { dataTransfer }); fireEvent.dragOver(target, { dataTransfer }); fireEvent.drop(target, { dataTransfer }); };
     drop();
     const alert = await screen.findByRole("alert");
+    const rows = Array.from(screen.getByRole("tree").querySelectorAll("[data-tree-row]"));
+    expect(rows.findIndex((row) => row.contains(alert))).toBe(rows.findIndex((row) => row.contains(target)) + 1);
     await waitFor(() => expect(screen.getByRole("tree").contains(document.activeElement)).toBe(true));
     if (dismiss === "재시도") { failed = false; drop(); }
     else if (dismiss === "Escape") fireEvent.keyDown(target, { key: "Escape" });

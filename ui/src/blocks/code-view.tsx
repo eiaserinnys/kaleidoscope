@@ -7,7 +7,7 @@ import { describeEditor } from "../share/editor";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { search, searchKeymap } from "@codemirror/search";
 import type { Block, CodeLanguage, FileRef } from "../contract/contract";
-import { Notice, StatusText } from "../components/primitives";
+import { Button, Notice, StatusText } from "../components/primitives";
 import { DataState } from "../components/data-state";
 import { toCoreError } from "../core/core-transport";
 import { useBinding } from "../data/window-data";
@@ -17,6 +17,7 @@ import { codeHighlighting, codeLanguageForPath, codeViewText, languageExtension 
 import { FileGrant } from "./file-grant";
 import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
+import { focusRetryContainer } from "../components/focus-rescue";
 
 export type CodeViewBlockData = Extract<Block, { type: "code" }>;
 export function CodeViewBlock({ block, context, pointer }: { block: CodeViewBlockData; context: BlockContext; pointer: string }) {
@@ -55,7 +56,7 @@ function FileCodeView({ block, file, context }: { block: CodeViewBlockData; file
   if (!root) return <FileGrant rootProps={blockRoot} context={context} permission={file.permission} />;
   if (path === null) return <div {...blockRoot} className="ks-code-view" ref={emptyShareRef} />;
   if (loading) return <div {...blockRoot} className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div {...blockRoot} className="ks-editor-error"><Notice role="alert" errorId={error.id}>{error.message}</Notice></div>;
+  if (error) return <div {...blockRoot} className="ks-editor-error"><Notice role="alert" errorId={error.id} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-split-pane, .ks-data-window-body, .ks-app-window-content"); void read(true); }}>다시 시도</Button>]}>{error.message}</Notice></div>;
   return <ReadOnlyCode path={path} text={text} language={codeLanguageForPath(path, block.language)} follow={!!block.follow} wrap={block.wrap !== false} />;
 }
 function ReadOnlyCode({ text, language, follow, wrap, path = null }: { text: string; language: CodeLanguage; follow: boolean; wrap: boolean; path?: string | null }) {

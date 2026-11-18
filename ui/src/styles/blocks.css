@@ -249,6 +249,8 @@
   flex: 1 1 0;
 }
 
+.ks-explorer-refresh-error { padding: var(--ks-space-2); }
+
 .ks-explorer-empty {
   display: flex;
   min-width: 0;
