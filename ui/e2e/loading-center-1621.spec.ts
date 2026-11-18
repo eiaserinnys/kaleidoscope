@@ -193,8 +193,9 @@ function assertSameCenter(label: string, loading: Box, failed: Box) {
 }
 
 // 오류 문구가 낱말 중간이 아니라 낱말 경계(공백)에서 끊기는지 본다. 글자마다 범위 사각형을 재어 같은 줄에 놓인
-// 글자를 모으고, 줄과 줄 사이가 공백인지 확인한다. text-wrap.css의 읽는 글 묶음(word-break: keep-all)이 기준이고,
-// 오류 id는 같은 파일 뒤쪽 규칙(overflow-wrap: normal)이 이겨야 한다.
+// 글자를 모으고, 줄과 줄 사이가 공백인지 확인한다. text-wrap.css의 읽는 글 묶음(word-break: keep-all)이 기준이다.
+// 오류 id는 카드 #1667에서 `_` 뒤 <wbr>로 먼저 나누고, 조각이 칸보다 넓을 때만 조각 안에서 끊도록
+// overflow-wrap:anywhere를 마지막 수단으로 둔다.
 async function assertWordBreaks(app: Locator, selector: string, label: string) {
   const result = await app.evaluate((root, alertSelector) => {
     const alert = root.querySelector<HTMLElement>(alertSelector);
@@ -231,7 +232,7 @@ async function assertWordBreaks(app: Locator, selector: string, label: string) {
     };
   }, selector);
   expect(result.wordBreak, `${label} word-break`).toBe("keep-all");
-  if (result.idWrap !== null) expect(result.idWrap, `${label} 오류 id overflow-wrap`).toBe("normal");
+  if (result.idWrap !== null) expect(result.idWrap, `${label} 오류 id overflow-wrap`).toBe("anywhere");
   expect(result.ok, `${label} 낱말 중간 끊김 ${JSON.stringify({ breaks: result.breaks, lines: result.lines, reason: result.reason })}`).toBe(true);
 }
 

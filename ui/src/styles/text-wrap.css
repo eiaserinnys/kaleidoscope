@@ -53,10 +53,12 @@
 /* 한 덩어리로 읽고 옮겨 적는 짧은 값은 값 안에서 끊지 않는다. */
 .ks-pairing-code { white-space: nowrap; }
 
+/* `_` 뒤의 <wbr>가 먼저 줄을 나누고, 한 조각이 칸보다 넓을 때만 마지막 수단으로 조각 안에서 끊는다.
+   깊은 트리 행처럼 칸이 한 조각보다 좁아도 코드가 알림 상자 밖으로 넘치지 않는다. */
 .ks-error-id {
   display: inline-block;
   max-width: 100%;
-  overflow-wrap: normal;
+  overflow-wrap: anywhere;
 }
 
 /* 표 칸은 낱말 단위로 줄바꿈한다. 칸의 최소 폭이 가장 긴 낱말이 되어, 긴 글이나 주소가 든 칸이 남는 폭을 가져가도 짧은 낱말을 한 글자씩 끊지 않는다. 공백 없는 주소와 링크와 코드는 아무 곳에서나 끊는다. 낱말 단위로는 감싼 폭을 넘는 표는 table-fit.ts가 is-tight를 붙여 모든 칸을 아무 곳에서나 끊는다. */

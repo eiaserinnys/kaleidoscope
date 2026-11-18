@@ -286,6 +286,19 @@
   pointer-events: none;
 }
 
+/* 조상을 접었을 때 경로 맨 앞에 그리는 「…」와 꺾쇠. 누르지 않는 틀 글이다. */
+.ks-explorer-collapsed {
+  display: none;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--ks-space-1);
+  color: var(--ks-color-muted);
+}
+
+.ks-explorer-breadcrumb.has-collapsed > .ks-explorer-collapsed { display: inline-flex; }
+
+.ks-explorer-crumb.is-collapsed { display: none; }
+
 .ks-explorer-ancestors {
   display: flex;
   min-width: 0;

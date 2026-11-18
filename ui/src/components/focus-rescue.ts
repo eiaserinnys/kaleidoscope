@@ -81,10 +81,45 @@ export function dialogFirstFocus(root: HTMLElement): HTMLElement | null {
   return input ?? dialogActionFocus(root);
 }
 
+const windowContentSelector = ".ks-window-content, .ks-harness-window-content";
+// 창 아래 모서리에 실제로 닿는 모서리만 표시한다. 창 폭과 분할 방향에 따라 닿는 모서리가 달라지므로
+// 칸 이름을 나열하지 않고 사각형을 창 본문 상자와 견준다. 반경 값은 foundation.css가 이 표시에만 준다.
+function markWindowCorners(element: HTMLElement) {
+  element.removeAttribute("data-ks-corner-bl");
+  element.removeAttribute("data-ks-corner-br");
+  const content = element.closest<HTMLElement>(windowContentSelector);
+  if (!content || content === element) return;
+  const rect = element.getBoundingClientRect();
+  const box = content.getBoundingClientRect();
+  // 1px 안에서 같은 바닥에 닿을 때만 창 모서리다. 위쪽 모서리와 안쪽 모서리는 곧게 둔다.
+  if (Math.abs(rect.bottom - box.bottom) > 1) return;
+  if (Math.abs(rect.left - box.left) <= 1) element.setAttribute("data-ks-corner-bl", "");
+  if (Math.abs(rect.right - box.right) <= 1) element.setAttribute("data-ks-corner-br", "");
+}
+
+// 창 크기가 바뀌면 지금 초점을 가진 구조용 칸의 표시를 다시 정한다. 칸 크기가 바뀌는 경우
+// (분할 방향이 바뀌거나 알림이 빠지는 경우)까지 잡으려고 칸 자체를 관찰한다.
+const cornerObserver = typeof ResizeObserver === "function" ? new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const element = entry.target;
+    if (element instanceof HTMLElement && element === document.activeElement) markWindowCorners(element);
+  }
+}) : null;
+
+globalThis.addEventListener("resize", () => {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active.classList.contains("ks-focus-rescue-empty")) markWindowCorners(active);
+});
+
 export function focusContainer(element: HTMLElement): HTMLElement {
   if (!element.hasAttribute("tabindex")) element.tabIndex = -1;
   element.classList.add("ks-focus-rescue-empty");
-  element.addEventListener("blur", () => element.classList.remove("ks-focus-rescue-empty"), { once: true });
+  markWindowCorners(element);
+  cornerObserver?.observe(element);
+  element.addEventListener("blur", () => {
+    element.classList.remove("ks-focus-rescue-empty");
+    cornerObserver?.unobserve(element);
+  }, { once: true });
   return element;
 }
 

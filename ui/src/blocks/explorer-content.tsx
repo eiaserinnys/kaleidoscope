@@ -205,24 +205,33 @@ export function ExplorerContent({
     const ellipsis = ellipsisRef.current;
     if (!nav || !ellipsis) return;
     const crumbs = Array.from(nav.querySelectorAll<HTMLElement>(".ks-explorer-crumb"));
+    const fits = (crumb: HTMLElement) => {
+      const button = crumb.querySelector<HTMLButtonElement>("button");
+      if (!button) return true;
+      const style = getComputedStyle(button);
+      ellipsis.style.font = style.font;
+      const textWidth = button.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      return button.scrollWidth <= button.clientWidth
+        ? textWidth > 0
+        : textWidth >= ellipsis.getBoundingClientRect().width;
+    };
     const update = () => {
-      for (const crumb of crumbs) {
-        const button = crumb.querySelector<HTMLButtonElement>("button")!;
-        const style = getComputedStyle(button);
-        ellipsis.style.font = style.font;
-        const textWidth = button.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-        const enough = button.scrollWidth <= button.clientWidth
-          ? textWidth > 0
-          : textWidth >= ellipsis.getBoundingClientRect().width;
-        crumb.style.visibility = enough ? "" : "hidden";
+      // 판정 전에 접힘을 풀고 잰다. 접힌 칸은 display:none이라 폭이 0으로만 재어진다.
+      for (const crumb of crumbs) crumb.classList.remove("is-collapsed");
+      nav.classList.remove("has-collapsed");
+      // 뿌리 쪽부터 접어 가까운 조상과 현재 폴더를 남긴다. 하나라도 접으면 앞에 「…」를 그린다.
+      for (let guard = 0; guard <= crumbs.length; guard++) {
+        if (crumbs.every((crumb) => crumb.classList.contains("is-collapsed") || fits(crumb))) break;
+        const rootMost = crumbs.find((crumb) => !crumb.classList.contains("is-collapsed"));
+        if (!rootMost) break;
+        rootMost.classList.add("is-collapsed");
+        nav.classList.add("has-collapsed");
       }
     };
     update();
+    // 접힌 칸은 display:none이라 크기가 0으로만 보이므로 경로 줄 폭의 변화를 관찰해 다시 판정한다.
     const observer = new ResizeObserver(update);
-    crumbs.forEach((crumb) => {
-      observer.observe(crumb);
-      observer.observe(crumb.querySelector("button")!);
-    });
+    observer.observe(nav);
     return () => observer.disconnect();
   }, [folder, permissionLabel, rootName, scope]);
   const parent = folder.includes("/") ? folder.slice(0, folder.lastIndexOf("/")) : "";
@@ -238,6 +247,7 @@ export function ExplorerContent({
     <div className="ks-file-tree-header ks-explorer-toolbar">
       <IconButton aria-label="위 폴더" disabled={!folder} onClick={() => onNavigate(parent)}><ArrowUp /></IconButton>
       <nav aria-label="경로" className="ks-explorer-breadcrumb" ref={breadcrumbRef}>
+        <span aria-hidden="true" className="ks-explorer-collapsed">…<ChevronRight className="ks-explorer-chevron" size="inline" /></span>
         {breadcrumb.slice(0, -1).reduce<ReactNode>((ancestors, crumb) =>
           <span className="ks-explorer-ancestors" key={crumb.path}>
             {ancestors}
