@@ -1,6 +1,6 @@
 /* 시안과 리포트 2판의 머리 줄과 레일. ui/src/styles/html-view.css의 .ks-html-* 규칙을 이 파일로 바꾼다(.ks-sandbox 두 줄은 남긴다). */
 .ks-html-view { position: relative; display: flex; flex-direction: column; container-type: inline-size; width: 100%; height: 100%; min-width: 0; min-height: 0; }
-.ks-html-state { display: grid; place-items: center; flex: 1 1 auto; padding: var(--ks-space-4); }
+.ks-html-state { display: grid; width: 100%; height: 100%; min-width: 0; min-height: 0; place-items: center; flex: 1 1 auto; padding: var(--ks-space-4); }
 .ks-html-notice { flex: 0 0 auto; padding: var(--ks-space-2) var(--ks-space-3); border-block-end: var(--ks-line-width) solid var(--ks-color-border); }
 
 /* 머리 줄: 무엇을(문서, 리비전), 어떻게(고르기, 되돌리기), 저장, 레일 면 */

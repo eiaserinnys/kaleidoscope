@@ -265,21 +265,31 @@ button {
 
 .ks-app-window-content,
 .ks-app-content-loading,
-.ks-app-content-error {
+.ks-app-content-error,
+.ks-editor-loading,
+.ks-markdown-loading {
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
 }
 
+/* 첫 읽기 표시는 창 본문(프레임)을 채워야 글자가 프레임 가운데에 선다.
+   탐색기의 첫 읽기 글자는 본문 칸의 직접 자식이라 채움을 따로 받는다. */
 .ks-app-content-loading,
 .ks-app-content-error,
 .ks-editor-loading,
 .ks-editor-error,
 .ks-markdown-loading,
 .ks-markdown-error,
-.ks-agent-chat-state {
+.ks-agent-chat-state,
+.ks-explorer-content > .ks-status-text {
   display: grid;
   place-items: center;
   padding: var(--ks-space-4);
+}
+
+.ks-explorer-content > .ks-status-text {
+  flex: 1 1 auto;
+  min-height: 0;
 }
