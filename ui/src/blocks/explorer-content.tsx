@@ -8,6 +8,7 @@ import { TableView, type Row } from "./data-table";
 import { useRoving } from "./data-view-common";
 import { IconTile, useIconGridColumns } from "../components/icon-tile";
 import type { BlockContext } from "./block-context";
+import { focusRetryContainer } from "../components/focus-rescue";
 
 type ExplorerRow = Row & { kind: "dir" | "file" };
 const columns: Column[] = [
@@ -255,7 +256,7 @@ export function ExplorerContent({
     </div>
     {actionError ? <div className="ks-inline-error" role="alert">{actionError.message}{actionError.id ? <> <ErrorId id={actionError.id} /></> : null}</div> : null}
     {pcRootsError ? <div className="ks-inline-error" role="alert">{pcRootsError.message}{pcRootsError.id ? <> <ErrorId id={pcRootsError.id} /></> : null}</div> : null}
-    {error ? <div data-ks-fills-body={!visible || undefined}><ErrorNotice error={error} actions={[<Button key="retry" onClick={() => void readFolder(folder)}>다시 시도</Button>]} /></div> : null}
+    {error ? <div className={visible ? "ks-explorer-refresh-error" : undefined} data-ks-fills-body={!visible || undefined}><ErrorNotice error={error} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-explorer-content"); void readFolder(folder); }}>다시 시도</Button>]} /></div> : null}
     {!visible && error ? null
       : !visible && loading ? <StatusText>불러오는 중</StatusText>
       : visible && sortedEntries.length === 0 ? <div className="ks-explorer-empty"><EmptyState icon={<FolderOpen size="empty" />} text="빈 폴더" /></div>

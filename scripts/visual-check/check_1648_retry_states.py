@@ -29,8 +29,9 @@ def main():
     command = ["corepack", "pnpm@10.32.1", "--dir", "ui", "e2e:netns", "retry-states-1648", "--workers=1"]
     result = subprocess.run(command, cwd=ROOT, env=env, timeout=840, check=False)
     names = [f"{width}-{state}.png" for width in (1100, 360) for state in (
-        "retry", "loading", "refresh", "operation", "code-error", "markdown-error",
+        "retry", "retry-focus", "loading", "refresh", "operation", "code-error", "markdown-error",
         "markdown-file-error", "tree-root-error", "tree-child-error")]
+    names += ["1100-paste-root.png", "1100-multiple-expanded.png"]
     missing = [name for name in names if not (output / name).is_file()]
     summary = {"시험_종료코드": result.returncode, "누락_캡처": missing,
                "검사": ["누른 뒤 초점", "Tab과 Esc", "최소 폭 넘침", "오류와 다시 시도", "창 크기 변경"]}

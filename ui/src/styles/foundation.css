@@ -312,7 +312,8 @@ button {
 .ks-explorer-content > [data-ks-fills-body],
 .ks-file-tree > [data-ks-fills-body] {
   align-content: center;
-  justify-items: stretch;
   gap: var(--ks-space-1);
-  text-align: center;
 }
+
+.ks-explorer-content > [data-ks-fills-body] > .ks-notice,
+.ks-file-tree > [data-ks-fills-body] > .ks-notice { max-width: 100%; }

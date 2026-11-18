@@ -12,6 +12,7 @@ import { MarkdownText } from "./markdown-text";
 import { documentEditorSession } from "./document-editor-session";
 import { useBinding } from "../data/window-data";
 import { useWindowGrant, useWindowStateValue } from "../data/window-state";
+import { focusRetryContainer } from "../components/focus-rescue";
 
 type MarkdownViewBlockData = Extract<Block, { type: "markdown" }>;
 type FileMarkdownViewBlockData = MarkdownViewBlockData & { file: FileRef };
@@ -49,7 +50,7 @@ function DocumentMarkdownViewBlock({ document, context }: { document: DocumentRe
   useEffect(() => { void session.open(path); }, [path, session]);
   if (path === null) return <article {...blockRoot} className="ks-markdown-view" ref={shareRef} />;
   if (!state.loaded) return <div {...blockRoot} className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (state.error) return <div {...blockRoot} className="ks-markdown-error"><ErrorNotice error={state.error} actions={[<Button key="retry" onClick={() => void session.open(path)}>다시 시도</Button>]} /></div>;
+  if (state.error) return <div {...blockRoot} className="ks-markdown-error"><ErrorNotice error={state.error} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-split-pane, [role=tabpanel], .ks-data-window-body, .ks-app-window-content"); void session.open(path); }}>다시 시도</Button>]} /></div>;
   return <article {...blockRoot} className="ks-markdown-view" ref={shareRef}><MarkdownText>{state.text}</MarkdownText></article>;
 }
 
@@ -110,7 +111,7 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   if (!grant) return null;
   if (path === null) return <article {...blockRoot} className="ks-markdown-view" ref={shareRef} />;
   if (loading) return <div {...blockRoot} className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id} actions={[<Button key="retry" onClick={() => void readFile()}>다시 시도</Button>]}>{error.message}</Notice></div>;
+  if (error) return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-split-pane, [role=tabpanel], .ks-data-window-body, .ks-app-window-content"); void readFile(); }}>다시 시도</Button>]}>{error.message}</Notice></div>;
 
   return (
     <article {...blockRoot} className="ks-markdown-view" ref={shareRef}>

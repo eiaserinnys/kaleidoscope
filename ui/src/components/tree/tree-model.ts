@@ -14,6 +14,7 @@ export interface TreeNode {
   trailing?: ReactNode;
   content?: ReactNode;
   interactiveContent?: boolean;
+  revealOnInsert?: boolean;
   data?: unknown;
   currentOnSelection?: boolean;
   rowClassName?: string;
