@@ -61,13 +61,15 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   const grantRoot = useWindowGrant(context, block.file.permission)?.root_path ?? null;
   const grant = grantRoot !== null;
   const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ReturnType<typeof toCoreError> | null>(null);
   const readVersion = useRef(0);
   const shareRef = useRef<HTMLElement>(null);
   useShareDescriber(shareRef, () => ({ text: path ? `[파일 ${path}]` : "[마크다운 보기]", visual: false, continue: true }));
 
-  const readFile = useCallback(async () => {
+  // 첫 진입과 실패 뒤 다시 시도(initial)에만 로더를 세운다. 창 초점 새로고침은
+  // 읽어 둔 내용을 그대로 보이며 조용히 다시 읽고, 실패하면 code-view처럼 실패 안내로 바꾼다.
+  const readFile = useCallback(async (initial = false) => {
     const version = ++readVersion.current;
     if (path === null) {
       setText("");
@@ -81,8 +83,7 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
       setLoading(false);
       return;
     }
-    setLoading(true);
-    setError(null);
+    if (initial) setLoading(true);
     try {
       const reply = await context.store.call({
         op: "files.read",
@@ -90,7 +91,10 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
         permission: block.file.permission,
         path,
       });
-      if (reply.op === "files.read" && version === readVersion.current) setText(reply.text);
+      if (reply.op === "files.read" && version === readVersion.current) {
+        setText(reply.text);
+        setError(null);
+      }
     } catch (reason) {
       if (version === readVersion.current) setError(toCoreError(reason));
     } finally {
@@ -99,7 +103,8 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   }, [block.file.permission, context.store, context.window.id, grant, grantRoot, path]);
 
   useEffect(() => {
-    void readFile();
+    void readFile(true);
+    return () => { readVersion.current++; };
   }, [readFile]);
 
   useEffect(() => {
@@ -111,7 +116,7 @@ function FileMarkdownViewBlock({ block, context }: { block: FileMarkdownViewBloc
   if (!grant) return null;
   if (path === null) return <article {...blockRoot} className="ks-markdown-view" ref={shareRef} />;
   if (loading) return <div {...blockRoot} className="ks-markdown-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (error) return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-split-pane, [role=tabpanel], .ks-data-window-body, .ks-app-window-content"); void readFile(); }}>다시 시도</Button>]}>{error.message}</Notice></div>;
+  if (error) return <div {...blockRoot} className="ks-markdown-error"><Notice role="alert" errorId={error.id} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-split-pane, [role=tabpanel], .ks-data-window-body, .ks-app-window-content"); void readFile(true); }}>다시 시도</Button>]}>{error.message}</Notice></div>;
 
   return (
     <article {...blockRoot} className="ks-markdown-view" ref={shareRef}>

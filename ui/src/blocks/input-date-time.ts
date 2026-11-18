@@ -70,6 +70,10 @@ export function createDateTimeFormat(locale?: string) {
     const token = timeFormatter.formatToParts(utcDate(2026, 1, 1).setUTCHours(hour)).find((part) => part.type === "dayPeriod")?.value;
     if (token) periods.set(token.toLocaleLowerCase(resolved), hour < 12 ? "am" : "pm");
   }
+  if (new Intl.Locale(resolved).language === "ko") {
+    periods.set("오전", "am");
+    periods.set("오후", "pm");
+  }
   const parseDate = (text: string): Parsed => {
     const raw = ascii(text).trim();
     if (!raw) return { valid: true, value: null };

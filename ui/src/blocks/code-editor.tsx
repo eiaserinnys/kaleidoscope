@@ -7,7 +7,7 @@ import { describeEditor } from "../share/editor";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { search, searchKeymap } from "@codemirror/search";
 import type { Block } from "../contract/contract";
-import { ErrorNotice, StatusText } from "../components/primitives";
+import { Button, ErrorNotice, StatusText } from "../components/primitives";
 import type { BlockContext } from "./block-context";
 import { resolveFilePath } from "./file-path";
 import { FileEditorSession } from "./file-editor-session";
@@ -16,6 +16,7 @@ import { codeHighlighting, codeLanguageForPath, languageExtension } from "./code
 import { FileGrant } from "./file-grant";
 import { useWindowGrant, useWindowStateValue } from "../data/window-state";
 import { useFileEditorEvents } from "./file-editor-events";
+import { focusRetryContainer } from "../components/focus-rescue";
 
 export type CodeEditorBlockData = Extract<Block, { type: "code" }> & { file: NonNullable<Extract<Block, { type: "code" }>["file"]> };
 export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData; context: BlockContext }) {
@@ -41,7 +42,7 @@ export function CodeEditorBlock({ block, context }: { block: CodeEditorBlockData
   if (!root) return <FileGrant rootProps={blockRoot} context={context} permission={block.file.permission} />;
   if (path === null) return <div {...blockRoot} className="ks-markdown-editor" ref={emptyShareRef} />;
   if (!state.loaded) return <div {...blockRoot} className="ks-editor-loading"><StatusText>불러오는 중</StatusText></div>;
-  if (state.error && state.revision === null) return <div {...blockRoot} className="ks-editor-error"><ErrorNotice error={state.error} /></div>;
+  if (state.error && state.revision === null) return <div {...blockRoot} className="ks-editor-error"><ErrorNotice error={state.error} actions={[<Button key="retry" onClick={(event) => { focusRetryContainer(event.currentTarget, ".ks-split-pane, [role=tabpanel], .ks-data-window-body, .ks-app-window-content"); void session.open(path); }}>다시 시도</Button>]} /></div>;
   return <div {...blockRoot} className="ks-markdown-editor">
     {state.error ? <ErrorNotice error={state.error} /> : null}
     {state.conflict ? <EditorConflict session={session} /> : null}

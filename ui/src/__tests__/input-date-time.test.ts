@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { addMonths, addYears, createDateTimeFormat, parseISODate, timeOptions, weekStart } from "../blocks/input-date-time";
 
 describe("날짜와 시간 입력", () => {
@@ -30,6 +30,23 @@ describe("날짜와 시간 입력", () => {
     expect(en.parseTime("12:00 PM")).toEqual({ valid: true, value: "12:00" });
     expect(en.parseTime("9:17")).toEqual({ valid: true, value: "09:17" });
     expect(en.parseTime("24:00").valid).toBe(false);
+  });
+  it("한국어 시각은 Intl이 AM과 PM을 반환해도 오전과 오후를 읽는다", () => {
+    const formatToParts = Intl.DateTimeFormat.prototype.formatToParts;
+    const spy = vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockImplementation(function (this: Intl.DateTimeFormat, date?: Date | number) {
+      return formatToParts.call(this, date).map((part) => part.type === "dayPeriod"
+        ? { ...part, value: new Date(Number(date)).getUTCHours() < 12 ? "AM" : "PM" }
+        : part);
+    });
+    try {
+      const ko = createDateTimeFormat("ko-KR");
+      expect(ko.parseTime("오후 3:30")).toEqual({ valid: true, value: "15:30" });
+      expect(ko.parseTime("오전 12:00")).toEqual({ valid: true, value: "00:00" });
+      expect(ko.parseTime("오후 12:00")).toEqual({ valid: true, value: "12:00" });
+      expect(ko.parseTime("PM 3:30")).toEqual({ valid: true, value: "15:30" });
+    } finally {
+      spy.mockRestore();
+    }
   });
   it("시간 선택지는 자정 기준 간격과 범위를 따른다", () => {
     expect(timeOptions(30, "09:10", "10:00")).toEqual(["09:30", "10:00"]);
