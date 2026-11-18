@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { codeViewLoadingApp, explorerLoadingApp, markdownTabsLoadingApp } from "./fixtures/loading-center-1621";
+import { codeEditorLoadingApp, codeViewLoadingApp, explorerLoadingApp, markdownTabsLoadingApp } from "./fixtures/loading-center-1621";
 
 const STYLE = "body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }";
 const folderApp = {
@@ -9,6 +9,13 @@ const folderApp = {
   ui: { type: "folder", root: { permission: "documents" }, extensions: [], read_only: false },
 };
 const markdownFileApp = { ...codeViewLoadingApp, ui: { type: "markdown", file: { permission: "documents", path: "README.md" }, read_only: true } };
+const markdownEditorApp = { ...codeViewLoadingApp, name: "마크다운 편집기 시험", ui: { type: "markdown", file: { permission: "documents", path: "Kaleidoscope.md" } } };
+// 보기 창의 창 초점 새로고침을 재려면 시험이 파일 내용을 바꿔야 해서 쓰기 권한을 선언한다.
+const markdownFocusViewApp = {
+  ...codeViewLoadingApp, name: "마크다운 보기 초점 시험",
+  permissions: [{ module: "files", id: "documents", access: "readwrite", label: "문서" }],
+  ui: { type: "markdown", file: { permission: "documents", path: "Kaleidoscope.md" }, read_only: true },
+};
 
 async function gate(page: Page, ops: string[]) {
   await page.addInitScript((gatedOps) => {
@@ -162,6 +169,30 @@ for (const width of [1100, 360]) {
     await expect.poll(() => page.evaluate(() => document.activeElement?.matches('.ks-focus-rescue-empty') === true)).toBe(true);
   });
 
+  for (const editor of [
+    { kind: "code-editor", definition: codeEditorLoadingApp },
+    { kind: "markdown-editor", definition: markdownEditorApp },
+  ] as const) {
+    test(`${editor.kind === "code-editor" ? "코드" : "마크다운"} 편집기 읽기 실패와 다시 시도 ${width}`, async ({ page }) => {
+      await gate(page, ["files.read"]);
+      const app = await mount(page, editor.definition, width);
+      await started(page); await release(page, true);
+      const notice = app.locator(".ks-editor-error [role=alert]");
+      await expect(notice).toBeVisible();
+      await capture(app, `1668-${width}-${editor.kind}-retry`);
+      await page.evaluate(() => { const g = (window as any).retryGate; g.hold = true; g.fail = false; });
+      await notice.getByRole("button", { name: "다시 시도" }).click();
+      await expect(app.locator(".ks-editor-loading")).toBeVisible();
+      await expect(app.locator(".ks-editor-loading")).toContainText("불러오는 중");
+      await capture(app, `1668-${width}-${editor.kind}-loading`);
+      await release(page);
+      await expect(app.locator(".cm-content")).toBeVisible();
+      await expect(notice).toHaveCount(0);
+      await expect.poll(() => page.evaluate(() => document.activeElement?.matches('.ks-focus-rescue-empty') === true)).toBe(true);
+      await noOverflow(page);
+    });
+  }
+
   test(`트리 루트와 하위 폴더를 각각 다시 읽는다 ${width}`, async ({ page }) => {
     await gate(page, ["files.list"]);
     const app = await mount(page, explorerLoadingApp, width);
@@ -224,6 +255,34 @@ for (const width of [1100, 360]) {
   });
 }
 
+test("마크다운 보기 창 초점 새로고침은 로더 없이 읽은 내용을 지키고 새 내용으로 바꾼다", async ({ page }) => {
+  await gate(page, ["files.read"]);
+  const app = await mount(page, markdownFocusViewApp, 1100);
+  await started(page);
+  await release(page);
+  const view = app.locator(".ks-markdown-view");
+  await expect(view.getByRole("heading", { name: "kaleidoscope 작업 메모" })).toBeVisible();
+
+  // 파일을 바꿔 두고, 창 초점이 올 때의 다시 읽기를 관문으로 잡아 둔다.
+  await page.evaluate(async () => {
+    const harness = (window as any).__ksHarness;
+    const first = await harness.call({ op: "files.read", window_id: "storage-window", permission: "documents", path: "Kaleidoscope.md" });
+    await harness.call({ op: "files.write", window_id: "storage-window", permission: "documents", path: "Kaleidoscope.md", text: "# 새로 고친 문서\n\n창으로 돌아와도 그대로 보입니다.\n", expected_revision: first.revision });
+    const readGate = (window as any).retryGate;
+    readGate.hold = true;
+    readGate.fail = false;
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect.poll(() => page.evaluate(() => (window as any).retryGate.started)).toBeGreaterThan(1);
+  await expect(app.locator(".ks-markdown-loading")).toHaveCount(0);
+  await expect(view.getByRole("heading", { name: "kaleidoscope 작업 메모" })).toBeVisible();
+  await capture(app, "1668-markdown-view-focus-refresh");
+  await release(page);
+  await expect(view.getByRole("heading", { name: "새로 고친 문서" })).toBeVisible();
+  await expect(app.locator(".ks-markdown-loading")).toHaveCount(0);
+  await noOverflow(page);
+});
+
 test("루트 붙여넣기와 여러 항목 삭제 실패 안내를 조작한다", async ({ page }) => {
   await gate(page, ["files.copy", "files.remove"]);
   const app = await mount(page, folderApp, 1100);
@@ -278,11 +337,14 @@ test("읽기 오류 문구는 선택하고 다시 시도 단추 글은 선택하
 });
 
 for (const method of ["click", "Enter", "Space"] as const) {
-  for (const kind of ["explorer", "tree-root", "tree-refresh", "tree-child", "code", "markdown-file", "markdown-document"] as const) {
+  for (const kind of ["explorer", "tree-root", "tree-refresh", "tree-child", "code", "code-editor", "markdown-editor", "markdown-file", "markdown-document"] as const) {
     test(`${kind} 다시 시도 ${method} 뒤 해당 칸에 초점을 둔다`, async ({ page }) => {
       const isTree = kind.startsWith("tree-");
       const definition = isTree || kind === "explorer" ? explorerLoadingApp
-        : kind === "code" ? codeViewLoadingApp : kind === "markdown-file" ? markdownFileApp : markdownTabsLoadingApp;
+        : kind === "code" ? codeViewLoadingApp
+          : kind === "code-editor" ? codeEditorLoadingApp
+            : kind === "markdown-editor" ? markdownEditorApp
+              : kind === "markdown-file" ? markdownFileApp : markdownTabsLoadingApp;
       const operation = isTree || kind === "explorer" ? "files.list" : kind === "markdown-document" ? "storage.get" : "files.read";
       await gate(page, [operation]);
       const app = await mount(page, definition, 1100);
@@ -302,7 +364,7 @@ for (const method of ["click", "Enter", "Space"] as const) {
         await release(page, true);
         notice = kind === "explorer" ? content.locator('.ks-notice[role=alert]')
           : kind === "tree-root" ? tree.locator(':scope > [data-ks-fills-body] .ks-notice')
-            : app.locator(kind === "code" ? '.ks-editor-error [role=alert]' : '.ks-markdown-error [role=alert]');
+            : app.locator(kind === "code" || kind === "code-editor" || kind === "markdown-editor" ? '.ks-editor-error [role=alert]' : '.ks-markdown-error [role=alert]');
       }
       await expect(notice).toBeVisible();
       await page.evaluate(() => { (window as any).retryGate.fail = false; });
@@ -310,6 +372,7 @@ for (const method of ["click", "Enter", "Space"] as const) {
       if (method === 'click') await button.click();
       else { await button.focus(); await page.keyboard.press(method); }
       await expect(notice).toHaveCount(0);
+      if (kind === "code-editor" || kind === "markdown-editor") await expect(app.locator(".cm-content")).toBeVisible();
       if (kind === "explorer") await expect(content).toBeFocused();
       else if (kind === "tree-child") await expect(tree.getByRole('treeitem', { name: 'notes' })).toBeFocused();
       else if (isTree) await expect(tree.locator('.ks-file-tree-list')).toBeFocused();
