@@ -205,8 +205,7 @@
 .ks-data-state-compact .ks-empty-state-action .ks-button { height: var(--ks-control-height); white-space: nowrap; }
 .ks-data-state-compact .ks-empty-state:has(> .ks-empty-state-action > .ks-file-grant-actions) { flex-wrap: nowrap; }
 .ks-data-state-compact .ks-empty-state-action:has(> .ks-file-grant-actions) { flex: 0 1 auto; min-width: 0; white-space: normal; }
-/* 펼친 상세의 원인·상태·경로는 에이전트에게 전할 수 있게 읽고 복사한다. */
-.ks-notice-expansion { flex: 1 0 100%; max-height: calc(var(--ks-control-height) * 6); overflow-y: auto; user-select: text; }
+.ks-notice-expansion { flex: 1 0 100%; max-height: calc(var(--ks-control-height) * 6); overflow-y: auto; }
 .ks-notice-expansion > div + div { margin-block-start: var(--ks-space-1); }
 
 .ks-status-text {

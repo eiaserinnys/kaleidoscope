@@ -1,6 +1,11 @@
 """명시적 채움 반복 행과 창 알림의 배치·조작 검증."""
 
+from PIL import Image
+
 from layout_1246_fixtures import FILL_PROGRESS_JS, NARROW, NOTICE_APP, WIDE, fill_progress_scene
+
+# --ks-color-focus(#8c6aaf)의 실제 값. 캡처 픽셀을 이 색과 견준다.
+FOCUS_COLOR = (140, 106, 175)
 
 
 NOTICE_LAYOUT_JS = """
@@ -300,15 +305,42 @@ def check_fill_progress_notice(page, output, result, open_page, inject, record, 
     check_close_focus(page, output, result, open_page, record, capture)
 
 
+def focus_corner_pixels(path, window, viewport):
+    """캡처에서 창 왼쪽 아래 (6, H-6)과 오른쪽 아래 (W-7, H-6)의 픽셀을 읽는다."""
+    image = Image.open(path).convert("RGB")
+    scale_x, scale_y = image.width / viewport["width"], image.height / viewport["height"]
+
+    def at(x, y):
+        return image.getpixel((min(int(round(x * scale_x)), image.width - 1),
+                                min(int(round(y * scale_y)), image.height - 1)))
+
+    return {"left": at(window["left"] + 6, window["bottom"] - 6),
+            "right": at(window["right"] - 7, window["bottom"] - 6)}
+
+
+def near_focus_color(pixel, tolerance=8):
+    """안티에일리어싱 여유를 두고 초점 색인지 본다. 바탕색과는 채널 차가 8을 훨씬 넘는다."""
+    return all(abs(channel - want) <= tolerance for channel, want in zip(pixel, FOCUS_COLOR))
+
+
 def check_close_focus(page, output, result, open_page, record, capture):
     """알림을 닫은 뒤 초점: 키보드로 닫으면 본문 안쪽에 고리가 보이고, 마우스로 닫으면 보이지 않는다."""
     measure = """() => {
       const active = document.activeElement;
       const style = getComputedStyle(active);
+      const box = active.getBoundingClientRect();
+      const win = active.closest('[data-testid="app-window-notice-fixture"]');
+      const winBox = win.getBoundingClientRect();
+      const winStyle = getComputedStyle(win);
       return { tag:active.tagName, className:String(active.className ?? ''),
-        inWindow:!!active.closest('[data-testid="app-window-notice-fixture"]'),
+        inWindow:!!win,
         outlineStyle:style.outlineStyle, outlineWidth:style.outlineWidth, outlineOffset:style.outlineOffset,
-        focusVisible:active.matches(':focus-visible') };
+        focusVisible:active.matches(':focus-visible'),
+        radiusLeft:parseFloat(style.borderBottomLeftRadius), radiusRight:parseFloat(style.borderBottomRightRadius),
+        box:{left:box.left, top:box.top, right:box.right, bottom:box.bottom, width:box.width, height:box.height},
+        window:{left:winBox.left, top:winBox.top, right:winBox.right, bottom:winBox.bottom, width:winBox.width, height:winBox.height},
+        windowRadiusLeft:parseFloat(winStyle.borderBottomLeftRadius), windowRadiusRight:parseFloat(winStyle.borderBottomRightRadius),
+        windowBorder:parseFloat(winStyle.borderBottomWidth) };
     }"""
     for width, height in (WIDE, NARROW):
         page.set_viewport_size({"width": width, "height": height})
@@ -340,11 +372,22 @@ def check_close_focus(page, output, result, open_page, record, capture):
             if how == 'keyboard':
                 verdicts['키보드로 닫으면 고리가 보임'] = bool(measured['focusVisible']) and measured['outlineStyle'] == 'solid' and measured['outlineWidth'] != '0px'
                 verdicts['고리는 본문 안쪽에 그려짐'] = measured['outlineOffset'].startswith('-') and measured['outlineOffset'] != '-0px'
+                # 창틀의 둥근 자르기 안에서 고리가 끊기지 않게 아래 두 모서리를 창과 같은 동심 곡률로 돌린다.
+                expected_left = round(measured['windowRadiusLeft'] - measured['windowBorder'], 2)
+                expected_right = round(measured['windowRadiusRight'] - measured['windowBorder'], 2)
+                measured['expectedRadiusLeft'], measured['expectedRadiusRight'] = expected_left, expected_right
+                verdicts['아래 두 모서리 곡률이 창 곡률 - 선 두께'] = (abs(measured['radiusLeft'] - expected_left) <= .01
+                                                                      and abs(measured['radiusRight'] - expected_right) <= .01)
             else:
                 verdicts['마우스로 닫으면 고리가 없음'] = measured['outlineStyle'] == 'none'
             key = f"notice-close-focus-{how}-{width}"
+            capture(output, result, page, key)
+            if how == 'keyboard':
+                pixels = focus_corner_pixels(output / f"check1246-{key}.png", measured['window'], page.viewport_size)
+                measured['cornerPixels'] = {'left': list(pixels['left']), 'right': list(pixels['right']), 'focus': list(FOCUS_COLOR)}
+                verdicts['왼쪽 아래 픽셀이 초점 색'] = near_focus_color(pixels['left'])
+                verdicts['오른쪽 아래 픽셀이 초점 색'] = near_focus_color(pixels['right'])
             record(result, key, verdicts)
             result["scenes"][key]["measurement"] = measured
-            capture(output, result, page, key)
 
 
