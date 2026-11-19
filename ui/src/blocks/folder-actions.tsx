@@ -13,6 +13,7 @@ import { Menu, type MenuEntry } from "../components/menu";
 import { Button, ErrorId, Notice } from "../components/primitives";
 import type { TextInputCancelReason } from "../components/text-input";
 import { TreeEditRow } from "../components/tree/tree-edit-row";
+import { treeRowColumns } from "../components/tree/tree-row";
 import type { FolderBackend, FolderItem } from "./folder-backend";
 import { editorRevision, flushEditors } from "./file-editor-session";
 import { clipboardListeners, getClipboard, setClipboard, type ShellClipboard } from "./folder-clipboard";
@@ -87,7 +88,7 @@ export function FolderInlineRow({ edit, onCommit, onCancel }: {
     cancelOnBlur
     cancelOnEscape
     commitOnBlur={false}
-    columns={[directory ? <FolderOpen size="inline" /> : <FileText size="inline" />]}
+    columns={treeRowColumns({ marker: directory ? <FolderOpen size="inline" /> : <FileText size="inline" /> })}
     error={edit.error}
     inputKey={`${edit.path ?? edit.directory}:${edit.attempt}`}
     onCancel={onCancel}

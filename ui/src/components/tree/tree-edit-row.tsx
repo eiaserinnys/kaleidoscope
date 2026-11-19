@@ -31,11 +31,15 @@ export function TreeEditInput({ inputKey, ariaLabel, value, focusReturn, cancelO
   />;
 }
 
-/** 바로 입력 행의 틀. 표식 열(들) 다음에 글칸을 두고, 실패가 있으면 행 아래에 알림 줄을 둔다. */
-export function TreeEditRow({ ariaLabel, value, columns, error, inputKey, cancelOnBlur, cancelOnEscape, commitOnBlur, selectBeforeExtension, onCommit, onCancel }: {
+/** 바로 입력 행의 틀. 표식 열 다음에 글칸을 두고, 실패가 있으면 행 아래에 알림 줄을 둔다. */
+export function TreeEditRow({ ariaLabel, value, columns, rowClassName, sizer, error, inputKey, cancelOnBlur, cancelOnEscape, commitOnBlur, selectBeforeExtension, onCommit, onCancel }: {
   ariaLabel: string;
   value: string;
-  columns: ReactNode[];
+  /** treeRowColumns가 그린 표식 열. 보통 줄과 같은 함수로 그려 열 차례와 크기가 같다. */
+  columns: ReactNode;
+  rowClassName?: string;
+  /** 글칸 뒤에 보이지 않게 까는 내용. 바로 입력 줄의 높이를 편집 전 줄과 같게 하려고 그 줄의 제목 묶음을 준다. */
+  sizer?: ReactNode;
   error?: CoreError | null;
   inputKey?: string;
   cancelOnBlur?: boolean;
@@ -45,20 +49,21 @@ export function TreeEditRow({ ariaLabel, value, columns, error, inputKey, cancel
   onCommit: (value: string) => void;
   onCancel: (reason?: TextInputCancelReason) => void;
 }) {
+  const input = <TreeEditInput
+    inputKey={inputKey}
+    ariaLabel={ariaLabel}
+    value={value}
+    cancelOnBlur={cancelOnBlur}
+    cancelOnEscape={cancelOnEscape}
+    commitOnBlur={commitOnBlur}
+    selectBeforeExtension={selectBeforeExtension}
+    onCommit={onCommit}
+    onCancel={onCancel}
+  />;
   return <div className="ks-file-tree-entry">
-    <div className="ks-row ks-file-tree-row ks-file-tree-create-row">
-      {columns.map((column, index) => <span aria-hidden="true" className="ks-file-tree-icon" key={index}>{column}</span>)}
-      <TreeEditInput
-        inputKey={inputKey}
-        ariaLabel={ariaLabel}
-        value={value}
-        cancelOnBlur={cancelOnBlur}
-        cancelOnEscape={cancelOnEscape}
-        commitOnBlur={commitOnBlur}
-        selectBeforeExtension={selectBeforeExtension}
-        onCommit={onCommit}
-        onCancel={onCancel}
-      />
+    <div className={`ks-row ks-file-tree-row ks-file-tree-create-row${rowClassName ? ` ${rowClassName}` : ""}`}>
+      {columns}
+      {sizer === undefined ? input : <span className="ks-tree-edit-title">{sizer}{input}</span>}
     </div>
     {error ? <span className="ks-inline-error" role="alert">{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</span> : null}
   </div>;

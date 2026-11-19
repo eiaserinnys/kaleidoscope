@@ -1,13 +1,14 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Binding, Block, TreeItem } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { isBadge } from "../components/badge";
 import { Check, ChevronRight, FileText } from "../components/icons";
 import { DataState } from "../components/data-state";
 import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
-import { TreeView, type TreeFocusController } from "../components/tree/tree-view";
+import { TreeLayoutContext, TreeView, type TreeFocusController, type TreeLayout } from "../components/tree/tree-view";
 import { TreeEditRow } from "../components/tree/tree-edit-row";
+import { treeRowColumns } from "../components/tree/tree-row";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
@@ -56,32 +57,45 @@ function editingInputActive(key: string): boolean {
   return active.closest<HTMLElement>("[data-tree-row]")?.dataset.treeRow === `item:${key}`;
 }
 
-/** 바로 입력 행의 표식 열. 트리 행과 같은 두 열 규칙을 쓴다. 상자는 눌러도 확인 동작을 하지 않는다. */
-function editColumns(checked: boolean | undefined, hasChildren: boolean, checkEnabled: boolean, expanded: boolean) {
+/** 바로 입력 행의 표식 열. 보통 줄과 같은 함수로 그려 열 차례와 크기, 그 항목의 그림이 같다. 상자는 눌러도 확인 동작을 하지 않는다. */
+function editColumns(checked: boolean | undefined, hasChildren: boolean, checkEnabled: boolean, expanded: boolean, image: ReactNode, layout: TreeLayout) {
   const check = checked !== undefined
     ? <span className={`ks-tree-check${checked ? " is-checked" : ""}`} data-tree-check="">{checked ? <Check size="chrome" /> : null}</span>
     : undefined;
   const marker = check ?? (hasChildren ? undefined : <FileText size="inline" />);
   const chevron = hasChildren ? <ChevronRight className={`ks-chevron${expanded ? " is-expanded" : ""}`} size="inline" /> : undefined;
-  return checkEnabled && !(check === undefined && hasChildren) ? [chevron, marker] : [chevron ?? marker];
+  return treeRowColumns({ chevron, check, marker, image, hasChildren, checkEnabled, ...layout });
 }
 
 /** 편집 행이 그 행의 펼침 상태를 그리게 하는 조회 함수. 펼침 상태는 행 모형을 다시 만들지 않으므로 문맥으로 건넨다. */
 const TreeEditExpansion = createContext<((id: string) => boolean) | null>(null);
 
-function DataTreeEditRow({ id, checked, hasChildren, checkEnabled, value, onCommit, onCancel }: {
+function DataTreeEditRow({ id, checked, hasChildren, checkEnabled, image, subtitle, value, onCommit, onCancel }: {
   id: string;
   checked: boolean | undefined;
   hasChildren: boolean;
   checkEnabled: boolean;
+  image: ReactNode;
+  subtitle: string | undefined;
   value: string;
   onCommit: (draft: string) => void;
   onCancel: () => void;
 }) {
   const isExpanded = useContext(TreeEditExpansion);
+  const layout = useContext(TreeLayoutContext);
+  // 큰 그림 트리의 줄은 그림 열보다 제목 묶음(제목과 둘째 줄)이 높을 수 있다. 편집 전 줄의 제목 묶음을 보이지 않게 깔아
+  // 바로 입력 줄의 높이를 그 줄과 같게 하면 편집을 열고 닫을 때 아래 줄이 움직이지 않는다(카드 #1729 S9).
+  const sizer = layout.largeImage
+    ? <span aria-hidden="true" className="ks-tree-title-block">
+      <span className="ks-file-tree-name ks-tree-name">{value}</span>
+      {subtitle === undefined ? null : <span className="ks-view-meta ks-tree-subtitle">{subtitle}</span>}
+    </span>
+    : undefined;
   return <TreeEditRow
     ariaLabel="항목 이름"
-    columns={editColumns(checked, hasChildren, checkEnabled, hasChildren && (isExpanded?.(id) ?? false))}
+    columns={editColumns(checked, hasChildren, checkEnabled, hasChildren && (isExpanded?.(id) ?? false), image, layout)}
+    rowClassName={layout.largeImage ? "is-large-image" : undefined}
+    sizer={sizer}
     onCancel={onCancel}
     onCommit={onCommit}
     value={value}
@@ -105,6 +119,7 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
     if (typeof title !== "string" && editingState === undefined) return [];
     const children = tree(item.children, false, [...parent, item.key], pending, editing, circle);
     const checked = pending.get(item.key) ?? item.checked;
+    const leadingImage = image(item);
     return [{
       id: `item:${item.key}`,
       label: title ?? "",
@@ -115,7 +130,7 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
       selectable: true,
       checked,
       leading: <FileText size="inline" />,
-      leadingImage: image(item),
+      leadingImage,
       subtitle: item.subtitle ?? undefined,
       meta: item.meta,
       trailing: <Badges values={item.badges} />,
@@ -124,6 +139,8 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
         checked={checked}
         hasChildren={children.length > 0}
         checkEnabled={editingState.checkEnabled}
+        image={leadingImage}
+        subtitle={item.subtitle ?? undefined}
         onCancel={() => editingState.cancel(item)}
         onCommit={(draft) => editingState.commit(item, draft)}
         value={item.title ?? ""}

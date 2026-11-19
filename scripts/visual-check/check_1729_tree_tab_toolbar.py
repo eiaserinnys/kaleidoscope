@@ -109,6 +109,25 @@ def dialog_scene(child):
     ]}
 
 
+EDIT_KEY = "child-a"
+EDIT_BUTTON = "이름 바꾸기"
+EDIT_SCENES = ("tree-image-edit", "tree-no-image-edit")
+
+
+def with_editing(items, key):
+    """key 항목에 editing: true를 둔 사본."""
+    return [{**item, **({"editing": True} if item["key"] == key else {}), **({"children": with_editing(item["children"], key)} if "children" in item else {})} for item in items]
+
+
+def edit_scene(images, subtitles):
+    """단추를 누르면 깊이 2 줄(child-a)이 바로 입력 줄로 바뀌는 트리. 누르기 전과 뒤를 같은 장면에서 잰다."""
+    items = tree_items(images, subtitles)
+    expr = f"$state.editing ? {json.dumps(with_editing(items, EDIT_KEY), ensure_ascii=False)} : {json.dumps(items, ensure_ascii=False)}"
+    tree = {"type": "tree", "by": "children", "image_shape": "circle", "default_expanded": True, "items": {"expr": expr},
+            "on_edit": [{"set_state": "editing", "value": False}], "on_edit_cancel": [{"set_state": "editing", "value": False}]}
+    return col([{"type": "button", "label": EDIT_BUTTON, "on_click": [{"set_state": "editing", "value": True}]}, tree], fill=1)
+
+
 def col(children, **extra):
     return {"type": "stack", "direction": "column", "gap": "none", **extra, "children": children}
 
@@ -121,6 +140,8 @@ SCENES = {
     "tree-image-subtitle": tree_ui(True, True),
     "tree-image-plain": tree_ui(True, False),
     "tree-no-image": tree_ui(False, False),
+    "tree-image-edit": edit_scene(True, True),
+    "tree-no-image-edit": edit_scene(False, False),
     "tab-list": {"type": "split", "direction": "row", "children": [
         {"type": "text", "value": "왼쪽 칸"},
         tabs("목록", {"type": "stack", "direction": "column", "gap": "small", "fill": [1, 2], "children": [
@@ -151,7 +172,7 @@ SCENES = {
     "dialog-input-select-focus": dialog_scene({"type": "stack", "direction": "column", "gap": "medium", "children": [NAME_FIELD, SELECT_FIELD]}),
 }
 
-STATE = {"title": "", "body": "", "node": None, "query": "", "picked": None, "dialog_open": False}
+STATE = {"title": "", "body": "", "node": None, "query": "", "picked": None, "dialog_open": False, "editing": False}
 
 MEASURE_JS = """(root) => {
   const r = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
@@ -159,9 +180,13 @@ MEASURE_JS = """(root) => {
     const name = row.querySelector('.ks-tree-name');
     const image = row.querySelector('.ks-tree-image');
     const columns = [...row.querySelectorAll(':scope > .ks-file-tree-icon')];
+    const wrapper = row.closest('[data-tree-row]');
     return {
+      key: row.getAttribute('data-tree-id'),
       title: name ? name.textContent : null,
       level: Number(row.getAttribute('aria-level')),
+      wrapperTop: wrapper ? r(wrapper).top : null,
+      wrapperHeight: wrapper ? r(wrapper).height : null,
       titleX: name ? r(name).left : null,
       imageX: image ? r(image).left : null,
       rowHeight: r(row).height,
@@ -170,6 +195,10 @@ MEASURE_JS = """(root) => {
       imageHeight: image ? r(image).height : null,
     };
   });
+  const editRow = root.querySelector('.ks-file-tree-create-row');
+  const editInput = editRow ? editRow.querySelector('.ks-text-input') : null;
+  const editImage = editRow ? editRow.querySelector('.ks-tree-image') : null;
+  const editWrapper = editRow ? editRow.closest('[data-tree-row]') : null;
   const tokens = getComputedStyle(root);
   const px = (name) => parseFloat(tokens.getPropertyValue(name));
   const tab = root.querySelector('[role="tab"]');
@@ -195,6 +224,18 @@ MEASURE_JS = """(root) => {
     menuOpen: Boolean(document.querySelector('[role="menu"]')),
     tokens: { space4: px('--ks-space-4'), space2: px('--ks-space-2'), controlHeight: px('--ks-control-height') },
     rows,
+    editRow: editRow ? {
+      key: editWrapper ? editWrapper.getAttribute('data-tree-row') : null,
+      inputX: editInput ? r(editInput).left : null,
+      inputHeight: editInput ? r(editInput).height : null,
+      rowHeight: r(editRow).height,
+      wrapperTop: editWrapper ? r(editWrapper).top : null,
+      wrapperHeight: editWrapper ? r(editWrapper).height : null,
+      imageX: editImage ? r(editImage).left : null,
+      imageWidth: editImage ? r(editImage).width : null,
+      largeImage: editRow.classList.contains('is-large-image'),
+      columns: [...editRow.querySelectorAll(':scope > .ks-file-tree-icon')].map((c) => ({ classes: c.className, width: r(c).width, empty: c.childElementCount === 0 })),
+    } : null,
     tabButtonX: tab ? r(tab).left : null,
     tabButtonBottom: tab ? r(tab).bottom : null,
     panelLeft: panel ? r(panel).left : null,
@@ -227,6 +268,32 @@ def judge(name, m):
     by_level = {}
     for row in rows:
         by_level.setdefault(row["level"], []).append(row)
+    if name in EDIT_SCENES:
+        # 편집 전(rowsBefore)과 뒤(rows, editRow)를 비교한다. 입력 칸은 편집 전 그 줄의 제목 x에서 시작하고, 다른 줄은 움직이지 않는다.
+        edited_id = f"item:{EDIT_KEY}"
+        before = {row["key"]: row for row in m.get("rowsBefore", [])}
+        after = {row["key"]: row for row in rows}
+        edit = m.get("editRow")
+        edited = before.get(edited_id)
+        checks["edit_row_found"] = edit is not None and edited is not None and edit["key"] == edited_id
+        if not checks["edit_row_found"]:
+            return checks
+        others = [key for key in before if key != edited_id]
+        m["editInputX"] = edit["inputX"]
+        m["editedTitleX"] = edited["titleX"]
+        m["editRowHeight"] = edit["wrapperHeight"]
+        m["editedRowHeight"] = edited["wrapperHeight"]
+        m["otherRowsYShift"] = sorted({round(after[key]["wrapperTop"] - before[key]["wrapperTop"], 1) for key in others if key in after})
+        checks["input_x_matches_title_x"] = close(edit["inputX"], edited["titleX"])
+        checks["other_rows_keep_y"] = all(key in after and close(after[key]["wrapperTop"], before[key]["wrapperTop"]) for key in others)
+        checks["edit_row_height_matches"] = close(edit["wrapperHeight"], edited["wrapperHeight"])
+        checks["input_not_taller_than_row"] = edit["inputHeight"] is not None and edit["inputHeight"] <= edited["wrapperHeight"] + TOLERANCE
+        if name == "tree-image-edit":
+            checks["edit_columns_like_row"] = [c["classes"] for c in edit["columns"]] == [c["classes"] for c in edited["columns"]]
+            checks["edit_shows_large_image"] = edit["imageX"] is not None and close(edit["imageWidth"], m["tokens"]["controlHeight"]) and close(edit["imageX"], edited["imageX"])
+        else:
+            checks["edit_one_column_no_image"] = len(edit["columns"]) == 1 and edit["imageX"] is None
+        return checks
     if name.startswith("tree-"):
         # 부모 줄은 바로 앞에 나온 한 단계 얕은 줄이다.
         last_at_level = {}
@@ -300,6 +367,17 @@ def open_dialog_by_keyboard(name, page, app):
     page.keyboard.press("Enter")
     app.locator(".ks-dialog").wait_for(state="attached", timeout=10000)
     page.wait_for_timeout(300)
+
+
+def open_edit(name, page, app):
+    """편집 장면: 편집 전 줄을 잰 뒤 단추로 깊이 2 줄의 바로 입력을 연다."""
+    if name not in EDIT_SCENES:
+        return {}
+    before = app.evaluate(MEASURE_JS)
+    app.get_by_role("button", name=EDIT_BUTTON).click()
+    app.locator(".ks-file-tree-create-row").wait_for(state="attached", timeout=10000)
+    page.wait_for_timeout(300)
+    return {"rowsBefore": before["rows"]}
 
 
 def interact(name, page, app):
@@ -398,14 +476,16 @@ def main():
                 page, app = open_scene(browser, args.port, ui)
                 try:
                     open_dialog_by_keyboard(name, page, app)
+                    pre = open_edit(name, page, app)
                     measurement = app.evaluate(MEASURE_JS)
+                    measurement.update(pre)
                     page.screenshot(path=str(output / f"{name}.png"), animations="disabled")
                     measurement.update(interact(name, page, app))
                     checks = judge(name, measurement)
                     results[name] = {"measurement": measurement, "checks": checks}
                     failed = [check for check, ok in checks.items() if not ok]
                     failures.extend(f"{name}.{check}" for check in failed)
-                    summary = {k: v for k, v in measurement.items() if k != "rows"}
+                    summary = {k: v for k, v in measurement.items() if k not in ("rows", "rowsBefore")}
                     print(name, json.dumps(summary, ensure_ascii=False), "FAIL " + ",".join(failed) if failed else "ok", flush=True)
                     for row in measurement["rows"]:
                         print("  ", row["level"], round(row["titleX"] or -1, 1), round(row["imageX"] or -1, 1), round(row["rowHeight"], 1), row["imageWidth"], [c["width"] for c in row["columns"]], (row["title"] or "")[:12], flush=True)

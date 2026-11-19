@@ -1,7 +1,7 @@
 // 가상 행의 측정, 스크롤, 초점 복구는 같은 가상화 수명주기를 공유하므로 이 파일에 둔다.
 import { encodeCommentKey } from "../../comments/key";
 import { selectionRange, toggleSelection } from "../collection-selection";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { isValidElement } from "react";
 import { keepRovingRow, useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
 import type { TreeNode, TreeRowModel } from "./tree-model";
@@ -10,6 +10,15 @@ import { TreeRow } from "./tree-row";
 import type { ReactNode } from "react";
 import { SHELL_TREE_CONTROL_HEIGHT_MISSING } from "../../contract/shell-errors";
 import { isUnclaimedFocus } from "../focus-rescue";
+
+/** 트리의 열 배치. 그림 트리인지, 그림 열이 큰 크기인지를 트리가 정하고 줄이 따른다. */
+export interface TreeLayout {
+  imageColumn: boolean;
+  largeImage: boolean;
+}
+
+/** 트리 안에서 그려지는 내용(바로 입력 줄)이 보통 줄과 같은 열을 그릴 때 읽는 열 배치. */
+export const TreeLayoutContext = createContext<TreeLayout>({ imageColumn: false, largeImage: false });
 
 function sameValue(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
@@ -434,7 +443,8 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     const overflow = row.getBoundingClientRect().bottom + padding - scroll.getBoundingClientRect().bottom;
     if (overflow > 0) scroll.scrollTop += overflow;
   }, [flat, interactiveIndex, pendingInteractiveFocus, virtual, virtualRows]);
-  return <div
+  const layout = useMemo<TreeLayout>(() => ({ imageColumn, largeImage }), [imageColumn, largeImage]);
+  return <TreeLayoutContext.Provider value={layout}><div
     {...rootProps}
     aria-label={label}
     aria-rowcount={treeRows.length}
@@ -518,5 +528,5 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
         />;
       })}
     </VirtualSurface>
-  </div>;
+  </div></TreeLayoutContext.Provider>;
 }

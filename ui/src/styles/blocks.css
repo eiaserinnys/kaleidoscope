@@ -150,7 +150,9 @@
   background-image: linear-gradient(var(--ks-color-hover), var(--ks-color-hover));
 }
 
-.ks-file-tree-create-row {
+/* 바로 입력 줄은 글칸(--ks-control-height)이 줄 높이를 넘지 않게 세로 여백과 테두리를 뺀다.
+   큰 그림 트리의 바로 입력 줄은 보통 줄과 같은 여백과 테두리를 두어 높이가 편집 전 줄과 같다(data-views.css). */
+.ks-file-tree-create-row:not(.is-large-image) {
   padding-block: 0;
   border-block-width: 0;
 }
