@@ -98,7 +98,7 @@ test("이전 값 알림의 문구는 끌어 선택하고 단추는 선택하지 
   await notice.getByRole("button", { name: "자세히" }).click();
   expect(await selectText(page, notice.locator(":scope > .ks-notice-message"))).not.toBe("");
   await page.evaluate(() => window.getSelection()?.removeAllRanges());
-  expect(await selectText(page, notice.locator(".ks-notice-expansion .ks-notice-message"))).not.toBe("");
+  expect(await selectText(page, notice.locator(".ks-notice-expansion"))).not.toBe("");
   await page.evaluate(() => window.getSelection()?.removeAllRanges());
   expect(await selectText(page, notice.getByRole("button", { name: "다시 받기" }))).toBe("");
 });
