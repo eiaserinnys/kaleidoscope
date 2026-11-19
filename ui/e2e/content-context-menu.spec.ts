@@ -50,7 +50,7 @@ test("실제 이미지 블록과 읽기 전용 코드 블록의 메뉴", async (
   await expect(image).toBeVisible();
   await image.click({ button: "right" });
   await page.getByRole("menuitem", { name: "이미지 복사" }).click();
-  expect(await page.evaluate(async () => (await navigator.clipboard.read()).flatMap((item) => item.types))).toContain("image/png");
+  await expect.poll(() => page.evaluate(async () => (await navigator.clipboard.read()).flatMap((item) => item.types))).toContain("image/png");
 });
 
 for (const [label, width] of [["wide", 1100], ["narrow", 520]] as const) {
