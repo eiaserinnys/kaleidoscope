@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { END_ACTION_ID, TreeView } from "../components/tree/tree-view";
 import type { TreeFocusController } from "../components/tree/tree-view";
+import { flattenTreeModel } from "../components/tree/tree-model";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
 
 const renderedRows = vi.hoisted(() => new Map<string, number>());
@@ -423,6 +424,22 @@ describe("공용 가상 트리", () => {
     await waitFor(() => expect(screen.getByRole("treeitem", { name: "item-0-0" })).toBeTruthy());
     expect(document.activeElement).toBe(first);
     expect(first.tabIndex).toBe(0);
+  });
+
+  it("전체 폭 안내 행은 깊이와 상관없이 들여쓰기를 받지 않는다", () => {
+    const rows = flattenTreeModel([
+      { id: "notes", label: "notes", expandable: true, children: [
+        { id: "deep", label: "deep", expandable: true, children: [
+          { id: "error:notes/deep", label: "", selectable: false, fullWidth: true, content: <span>실패</span> },
+          { id: "readme", label: "README.md" },
+        ] },
+      ] },
+    ], new Set(["notes", "deep"]));
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get("notes")?.indent).toBeUndefined();
+    expect(byId.get("deep")?.indent).toBe("calc(var(--ks-space-4))");
+    expect(byId.get("error:notes/deep")?.indent).toBeUndefined();
+    expect(byId.get("readme")?.indent).toBe("calc(var(--ks-space-4) + var(--ks-space-4))");
   });
 
   it("보조 행을 트리 항목과 키보드 이동에서 제외하고 안의 입력은 유지한다", async () => {
