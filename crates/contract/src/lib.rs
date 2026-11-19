@@ -360,10 +360,11 @@ pub const CONTRACT_VERSION: u32 = 49;
 /// - 64판: progress의 칸막이(`segments`)와 세로 커서(`marker`).
 /// - 65판: progress의 경고와 위험 색 기준(`warning_at`, `danger_at`).
 /// - 66판: section의 끌어 옮기기(`on_move`).
-/// - 67판: 목록과 데이터 트리의 줄 앞 그림 모양(`image_shape`)과 데이터 트리 항목의 그림(`TreeItem.image`).
+/// - 67판: 목록과 데이터 트리의 줄 앞 그림 모양(`image_shape`), 데이터 트리 항목의 그림(`TreeItem.image`)과 둘째 줄(`TreeItem.subtitle`),
+///   dialog의 확정 단추 잠금(`confirm_disabled`).
 pub const BLOCK_SET_VERSION: u32 = ITEM_IMAGE_BLOCK_SET_VERSION;
-/// 목록과 데이터 트리 줄 앞 그림의 모양(`image_shape`)과 데이터 트리 항목의 그림(`TreeItem.image`)을 처음
-/// 지원하는 블록 세트 판.
+/// 목록과 데이터 트리 줄 앞 그림의 모양(`image_shape`), 데이터 트리 항목의 그림(`TreeItem.image`)과 둘째 줄(`TreeItem.subtitle`),
+/// dialog의 확정 단추 잠금(`confirm_disabled`)을 처음 지원하는 블록 세트 판.
 pub const ITEM_IMAGE_BLOCK_SET_VERSION: u32 = 67;
 /// 구역 머리를 끌어 순서를 바꾸는 동작.
 pub const SECTION_MOVE_BLOCK_SET_VERSION: u32 = 66;
@@ -1774,6 +1775,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_confirm: Option<Actions>,
+        /// (67판) 참이면 확정 단추가 잠기고 Enter로도 확정되지 않는다. 취소, 닫기, Esc는 그대로다. `button.disabled`와 같은 바인딩이다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        confirm_disabled: Option<Binding>,
         #[serde(default, skip_serializing_if = "is_false")]
         #[ts(optional, as = "Option<bool>")]
         danger: bool,
@@ -2778,6 +2783,8 @@ enum RawBlock {
         cancel_label: Option<Binding>,
         #[serde(default)]
         on_confirm: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        confirm_disabled: Option<Binding>,
         #[serde(default, skip_serializing_if = "is_false")]
         danger: bool,
         child: Box<Block>,
@@ -3566,6 +3573,7 @@ impl From<RawBlock> for Block {
                 close_label,
                 cancel_label,
                 on_confirm,
+                confirm_disabled,
                 danger,
                 child,
                 on_close,
@@ -3575,6 +3583,7 @@ impl From<RawBlock> for Block {
                 close_label,
                 cancel_label,
                 on_confirm,
+                confirm_disabled,
                 danger,
                 child,
                 on_close,
@@ -4306,9 +4315,9 @@ impl Block {
     pub fn introduced_in(&self) -> u32 {
         match self {
             Block::Section { on_move: Some(_), .. } => SECTION_MOVE_BLOCK_SET_VERSION,
-            Block::List { image_shape: Some(_), .. } | Block::Tree { image_shape: Some(_), .. } => {
-                ITEM_IMAGE_BLOCK_SET_VERSION
-            }
+            Block::List { image_shape: Some(_), .. }
+            | Block::Tree { image_shape: Some(_), .. }
+            | Block::Dialog { confirm_disabled: Some(_), .. } => ITEM_IMAGE_BLOCK_SET_VERSION,
             Block::Tree {
                 items: Some(Binding::Literal(value)),
                 ..

@@ -45,7 +45,10 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   const title = useBinding(`${pointer}/title`, block.title);
   const closeLabel = useBinding(`${pointer}/close_label`, block.close_label ?? null);
   const cancelLabel = useBinding(`${pointer}/cancel_label`, block.cancel_label ?? null);
+  const confirmDisabled = useBinding(`${pointer}/confirm_disabled`, block.confirm_disabled ?? false);
   const isOpen = open.status === "ready" && open.value === true;
+  // button.disabled와 같은 판정이다. 참일 때만 잠그고, 아직 계산 중이거나 실패한 값은 잠그지 않는다.
+  const confirmLocked = confirmDisabled.status === "ready" && confirmDisabled.value === true;
   const titleText = title.status === "ready" && title.value !== null ? display(title.value) : "";
   const closeText = boundLabel(closeLabel, "닫기");
   const cancelText = boundLabel(cancelLabel, "취소");
@@ -120,13 +123,14 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
       host={host}
       overlayClassName={hasPicker(block.child) ? "is-picker" : ""}
       title={titleText}
-      body={<>{renderBlock(block.child, context, childPointer)}<BindingFailureNotice value={title} /><BindingFailureNotice value={closeLabel} /><BindingFailureNotice value={cancelLabel} /></>}
+      body={<>{renderBlock(block.child, context, childPointer)}<BindingFailureNotice value={title} /><BindingFailureNotice value={closeLabel} /><BindingFailureNotice value={cancelLabel} /><BindingFailureNotice value={confirmDisabled} /></>}
       ok={closeText}
       danger={block.danger}
       showCancel={hasConfirm}
       cancelLabel={cancelText}
       onCancel={close}
       onConfirm={hasConfirm ? confirm : close}
+      confirmDisabled={hasConfirm && confirmLocked}
       busy={busy}
     /> : null}
   </div>;

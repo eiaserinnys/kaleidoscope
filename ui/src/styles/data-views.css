@@ -95,6 +95,11 @@
 }
 .ks-list:not(.is-grid):not(.is-icons) { padding-inline: var(--ks-space-1); }
 :is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-list:not(.is-grid):not(.is-icons) { padding-inline: 0; }
+/* 탭 패널은 list와 tree의 바깥 여백을 0으로 두지만 줄마다 안쪽 여백(--ks-row-text-inset)이 남아 행 내용이 같은 패널의 글과 막대보다
+   그만큼 안쪽에서 시작했다(카드 #1729 S3). 패널 안 피드 항목처럼 list 줄과 tree 줄도 안쪽 가로 여백을 두지 않고, 초점과 선택 표시를 위한
+   테두리(--ks-line-width)만 남긴다. 묶음 머리도 같은 선에 맞춘다. 줄 상자는 패널 내용 안에 있어 고른 행 배경이 패널 밖으로 나가지 않는다. */
+.ks-data-tab-panel :is(.ks-list:not(.is-grid):not(.is-icons) .ks-list-row, .ks-data-tree .ks-file-tree-row) { padding-inline: 0; }
+.ks-data-tab-panel .ks-list:not(.is-grid):not(.is-icons) .ks-view-group { padding-inline: var(--ks-line-width); }
 .ks-list-row .ks-list-content { flex: 1 1 0; min-width: min(100%, 6.5em); }
 .ks-list-row > .ks-view-meta, .ks-list-row > .ks-view-badges { flex: none; }
 .ks-list-item { position: relative; display: flex; align-items: center; min-width: 0; }
@@ -158,6 +163,10 @@
 .ks-list-card .ks-media-thumbnail.is-circle { border-radius: 50%; aspect-ratio: 1; }
 .ks-data-tree .ks-media-thumbnail.ks-tree-image { flex: none; width: var(--ks-space-4); height: var(--ks-space-4); border-radius: var(--ks-radius-small); }
 .ks-data-tree .ks-media-thumbnail.ks-tree-image.is-circle { border-radius: 50%; }
+/* 그림 트리(항목 가운데 image가 하나라도 있는 트리)는 모든 줄이 화살표 열 다음에 그림 열을 둔다. subtitle이 있는 항목이 하나라도 있으면
+   그림 열과 그림은 목록 줄 그림과 같은 크기(--ks-control-height)다. 한 트리 안의 그림 크기는 하나라 열 맞춤이 지켜진다(카드 #1729 S1, S2). */
+.ks-file-tree-icon.is-image.is-large { width: var(--ks-control-height); height: var(--ks-control-height); flex-basis: var(--ks-control-height); }
+.ks-data-tree .ks-file-tree-icon.is-image.is-large > .ks-media-thumbnail.ks-tree-image { width: var(--ks-control-height); height: var(--ks-control-height); }
 .ks-list-card .ks-list-grid-icon { color: inherit; }
 .ks-list-row > svg { flex: none; }
 .ks-list-card > :is(.ks-list-content, .ks-view-badges, .ks-view-meta) { padding-inline: var(--ks-space-1); }

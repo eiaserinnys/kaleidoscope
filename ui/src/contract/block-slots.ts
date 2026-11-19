@@ -14,7 +14,7 @@ export interface BlockSlots {
 export const BLOCK_SLOTS: Record<string, BlockSlots> = {
   repeat: { bindings: ["follow_key", "items"], actions: [], children: ["template"] },
   when: { bindings: ["value"], actions: [], children: ["child"] },
-  dialog: { bindings: ["cancel_label", "close_label", "open", "title"], actions: ["on_close", "on_confirm"], children: ["child"] },
+  dialog: { bindings: ["cancel_label", "close_label", "confirm_disabled", "open", "title"], actions: ["on_close", "on_confirm"], children: ["child"] },
   tour: { bindings: ["labels/done", "labels/next", "labels/previous", "labels/skip", "open", "step", "steps/*/body", "steps/*/title"], actions: ["on_close", "on_step"], children: [] },
   anchor: { bindings: [], actions: [], children: ["child"] },
   progress: { bindings: ["label", "marker", "value"], actions: [], children: [] },
