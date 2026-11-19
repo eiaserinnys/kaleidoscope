@@ -271,7 +271,11 @@ jobs:
 
 
           def read_bmp(path):
-              """BMP의 머리와 화소 줄을 읽는다. 24/32비트, 위/아래 어느 쪽부터 저장해도 읽는다."""
+              """BMP의 머리와 화소 줄, 색 차례를 읽는다.
+
+              24/32비트, 위/아래 어느 쪽부터 저장해도 읽는다. sips는 32비트에
+              BI_BITFIELDS(압축 3)를 쓰므로 그때는 머리의 색 가림값에서 차례를 구한다.
+              """
               data = path.read_bytes()
               if data[:2] != b"BM":
                   sys.exit(f"{path}: BMP가 아닙니다")
@@ -280,12 +284,25 @@ jobs:
               width, raw_height = struct.unpack_from("<ii", data, 18)
               planes, bits = struct.unpack_from("<HH", data, 26)
               compression = struct.unpack_from("<I", data, 30)[0]
-              if header_size < 40 or planes != 1 or bits not in (24, 32) or compression != 0:
+              if header_size < 40 or planes != 1 or bits not in (24, 32) or compression not in (0, 3):
                   sys.exit(f"{path}: 다루지 않는 BMP입니다(머리 {header_size}, 비트 {bits}, 압축 {compression})")
+              if compression == 3 and (bits != 32 or len(data) < 66):
+                  sys.exit(f"{path}: 다루지 않는 BMP입니다(비트 {bits}, 압축 {compression})")
               top_down = raw_height < 0
               height = abs(raw_height)
               step = bits // 8
               stride = ((width * step + 3) // 4) * 4
+              channels = (0, 1, 2)
+              if compression == 3:
+                  red, green, blue = struct.unpack_from("<III", data, 54)
+                  indexes = []
+                  for mask in (blue, green, red):
+                      if mask == 0:
+                          sys.exit(f"{path}: 색 가림값이 비어 있습니다")
+                      indexes.append(((mask & -mask).bit_length() - 1) // 8)
+                  if sorted(indexes) != [0, 1, 2]:
+                      sys.exit(f"{path}: 이해하지 못하는 색 차례입니다 {tuple(indexes)}")
+                  channels = tuple(indexes)
 
               def line(y):
                   start = offset + (y if top_down else height - 1 - y) * stride
@@ -293,7 +310,7 @@ jobs:
                       sys.exit(f"{path}: BMP 화소가 모자랍니다")
                   return data[start:start + width * step]
 
-              return width, height, step, line
+              return width, height, step, channels, line
 
 
           def scene_rect(path):
@@ -302,12 +319,12 @@ jobs:
               simctl에는 기기를 돌리는 명령이 없어 세로로 든 시뮬레이터 화면을 찍게 된다.
               iPadOS 26은 그 화면의 가로 장면을 줄여 가운데에 그리므로 바탕을 걷어 내야 한다.
               """
-              width, height, step, line = read_bmp(path)
+              width, height, step, channels, line = read_bmp(path)
               bright = bytes(1 if value > 8 else 0 for value in range(256))
               rows = []
               for y in range(height):
                   pixels = line(y)
-                  if any(1 in pixels[channel::step].translate(bright) for channel in range(3)):
+                  if any(1 in pixels[channel::step].translate(bright) for channel in channels):
                       rows.append(y)
               if not rows:
                   sys.exit(f"{path}: 앱 장면을 찾지 못했습니다")
@@ -315,7 +332,7 @@ jobs:
               left, right = width, -1
               for y in range(top, bottom + 1):
                   pixels = line(y)
-                  for channel in range(3):
+                  for channel in channels:
                       marked = pixels[channel::step].translate(bright)
                       first, last = marked.find(1), marked.rfind(1)
                       if first != -1:
@@ -328,11 +345,17 @@ jobs:
 
           def write_crop(path, source, left, top, width, height):
               """장면 경계만큼 잘라 BMP로 다시 쓴다. 아래 줄부터 저장하는 보통 BMP다."""
-              source_width, source_height, step, line = read_bmp(source)
+              _, _, step, channels, line = read_bmp(source)
               stride = ((width * step + 3) // 4) * 4
               rows = []
               for y in range(top, top + height):
-                  pixels = bytearray(line(y)[left * step:(left + width) * step])
+                  source_row = line(y)[left * step:(left + width) * step]
+                  if channels != (0, 1, 2):
+                      ordered = bytearray(width * step)
+                      for position, channel in enumerate(channels):
+                          ordered[position::step] = source_row[channel::step]
+                      source_row = bytes(ordered)
+                  pixels = bytearray(source_row)
                   if step == 4:
                       # 알파가 0으로 저장돼 있어도 PNG에서 투명해지지 않게 채운다.
                       pixels[3::4] = b"\xff" * width
