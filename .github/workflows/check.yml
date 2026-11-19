@@ -68,6 +68,12 @@ jobs:
       - name: Test workspace packages
         run: pnpm -r --if-present test
 
+      - name: Install Playwright WebKit
+        run: pnpm --dir ui exec playwright install --with-deps webkit
+
+      - name: Test iPad touch on WebKit
+        run: pnpm --dir ui exec playwright test --project=webkit-ipad
+
   windows-app:
     runs-on: windows-latest
     steps:

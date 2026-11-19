@@ -264,6 +264,9 @@ def open_media_page(page, port):
     page.get_by_text("tone.wav").click()
     seek = page.get_by_role("slider", name="재생 위치")
     seek.wait_for(state="visible", timeout=120000)
+    # 재생 시각이 흐르면 위치 막대와 시각 글자가 캡처마다 달라진다. 처음 자리에 멈춰 둔다.
+    page.evaluate("() => { const audio = document.querySelector('audio'); if (audio) { audio.pause(); audio.currentTime = 0; } }")
+    page.wait_for_timeout(250)
     settle(page)
     return seek
 

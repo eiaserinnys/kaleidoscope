@@ -23,7 +23,8 @@
         "minWidth": 960,
         "minHeight": 600,
         "resizable": true,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "allowLinkPreview": false
       }
     ]
   },
