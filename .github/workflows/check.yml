@@ -184,3 +184,68 @@ jobs:
           name: kaleidoscope-macos-arm64
           path: ${{ runner.temp }}/kaleidoscope-macos-arm64.zip
           retention-days: 7
+
+  # iPad 앱이 장치용으로 컴파일되는지, 시뮬레이터에서 실행되는지 확인한다.
+  # 서명, 인증서, Apple 계정 시크릿은 쓰지 않는다. TestFlight 업로드는 다음 단위다.
+  ios-app:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      # 시뮬레이터 빌드도 매번 처음부터 하지 않도록 캐시한다. 저장은 main push에서만 한다.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir app build
+      - name: Xcode 프로젝트 만들기
+        run: pnpm --dir app tauri ios init --ci
+      - name: 장치용 앱 크레이트 컴파일 확인
+        run: cargo check -p kaleidoscope-app --target aarch64-apple-ios
+      - name: iPad 시뮬레이터용 앱 빌드
+        run: pnpm --dir app tauri ios build --target aarch64-sim --debug --no-sign --ci
+      - name: 시뮬레이터에서 실행하고 화면 찍기
+        run: |
+          set -euo pipefail
+          app=$(ls -d app/src-tauri/gen/apple/build/arm64-sim/*.app | head -n 1)
+          test -d "$app"
+          echo "앱 번들: $app"
+          udid=$(xcrun simctl list devices available | sed -n 's/^ *iPad.*(\([0-9A-F-]\{36\}\)) (.*$/\1/p' | head -n 1)
+          if [ -z "$udid" ]; then
+            echo "iPad 시뮬레이터를 찾지 못했습니다" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "iPad 시뮬레이터: $udid"
+          xcrun simctl boot "$udid" 2>/dev/null || true
+          xcrun simctl bootstatus "$udid" -b
+          open -a Simulator --args -CurrentDeviceUDID "$udid" || true
+          xcrun simctl install "$udid" "$app"
+          xcrun simctl launch "$udid" me.eiaserinnys.kaleidoscope
+          sleep 25
+          if ! xcrun simctl spawn "$udid" launchctl list | grep -q "me.eiaserinnys.kaleidoscope"; then
+            echo "앱이 실행 중에 종료되었습니다" >&2
+            xcrun simctl spawn "$udid" log show --last 3m --style compact --predicate 'processImagePath CONTAINS "kaleidoscope"' | tail -n 80 || true
+            exit 1
+          fi
+          mkdir -p ios-sim
+          xcrun simctl io booted screenshot ios-sim/ipad.png
+          ls -l ios-sim/ipad.png
+      - name: 시뮬레이터 화면 올리기
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: kaleidoscope-ios-simulator
+          path: ios-sim/*.png
+          retention-days: 7

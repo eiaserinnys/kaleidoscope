@@ -73,8 +73,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
 use kaleidoscope_contract::{
-    errors, CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, LinkStatus,
-    PcRootKind, Rect, SharedState, ShellSnapshot, UpdateStatus, WebHistoryAction, WebPage,
+    errors, CoreError, CoreEvent, CoreReply, CoreRequest, DeviceState, Grant, HostFeatures,
+    LinkStatus, PcRootKind, Rect, SharedState, ShellSnapshot, UpdateStatus, WebHistoryAction,
+    WebPage,
 };
 use registry_client::{HttpRegistryClient, RegistryClient};
 
@@ -122,6 +123,15 @@ pub trait Host: Send + Sync + 'static {
     /// 고른 화면 테마를 네이티브 창에 적용한다. 창 안의 웹 내용은 `prefers-color-scheme`로 따른다.
     /// 창이 없는 호스트(개발용 다리, 시험)는 아무 일도 하지 않는다.
     fn apply_theme(&self, _theme: kaleidoscope_contract::ThemePreference) {}
+    /// 이 호스트가 화면에 할 수 있는 일. 플랫폼 이름 대신 기능으로 알린다.
+    /// 웹 보기는 [`Host::web`]이 있을 때만 참이고, 내 PC 파일은 뿌리가 있을 때만 참이다.
+    fn features(&self) -> HostFeatures {
+        HostFeatures {
+            pick_folder: true,
+            pc_files: !self.pc_roots().is_empty(),
+            web_view: self.web().is_some(),
+        }
+    }
 }
 
 /// 절대 경로는 코어 내부에서만 쓴다.
@@ -207,6 +217,8 @@ pub(crate) struct CoreState {
     pub(crate) last_transfer: Option<kaleidoscope_contract::transfer::TransferResult>,
     pub(crate) transfer_error: Option<String>,
     pub(crate) embedded_available: bool,
+    /// 이 호스트가 화면에 할 수 있는 일. 코어를 열 때 호스트에 묻는다.
+    pub(crate) host_features: HostFeatures,
     pub(crate) shared: SharedState,
     pub(crate) device: DeviceState,
     pub(crate) link: LinkStatus,
@@ -431,6 +443,7 @@ impl Core {
             last_transfer: None,
             transfer_error: None,
             embedded_available: config.embedded_server.is_some(),
+            host_features: host.features(),
             shared: storage::load_shared(&config.data_dir)?,
             device: storage::load_device(&config.data_dir)?,
             sync: sync_state::load(&config.data_dir, link_file.as_ref())?,
@@ -1365,6 +1378,7 @@ pub(crate) fn snapshot(state: &CoreState) -> ShellSnapshot {
         last_transfer: state.last_transfer.clone(),
         transfer_error: state.transfer_error.clone(),
         embedded_available: state.embedded_available,
+        host_features: state.host_features,
         shared: state.shared.clone(),
         device: state.device.clone(),
         supported: supported(),

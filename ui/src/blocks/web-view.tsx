@@ -10,6 +10,7 @@ import { isHttpAddress, normalizeWebAddress } from "./web-address";
 import { useShareDescriber } from "../share/visible";
 import { registerWebSurface, type WebSurfaceRegistration, type WebSurfaceState } from "./web-surface-layer";
 import { useWindowStateValue, useWindowVisible } from "../data/window-state";
+import { useWebViewAvailable } from "../data/host-features";
 
 type WebViewBlockData = Extract<Block, { type: "web_view" }>;
 
@@ -30,6 +31,7 @@ function pageHeading(page: WebPage | null): string {
 
 export function WebViewBlock({ block, context }: { block: WebViewBlockData; context: BlockContext }) {
   const blockRoot = useBlockRootProps();
+  const webViewAvailable = useWebViewAvailable();
   const visible = useWindowVisible(context);
   const stateUrl = useWindowStateValue(context, typeof block.url === "string" ? null : block.url.state);
   const address = resolveAddress(block, stateUrl);
@@ -65,7 +67,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
   };
 
   openAddressRef.current = async (url) => {
-    if (!isHttpAddress(url)) return;
+    if (!webViewAvailable || !isHttpAddress(url)) return;
     desiredAddress.current = url;
     setUnavailable(false);
     setError(null);
@@ -128,7 +130,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
 
   useEffect(() => {
     desiredAddress.current = validAddress;
-    if (!validAddress) {
+    if (!webViewAvailable || !validAddress) {
       setPage(null);
       pageRef.current = null;
       setWebReady(false);
@@ -146,7 +148,7 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
       if (active) void openAddressRef.current?.(validAddress);
     });
     return () => { active = false; };
-  }, [store, validAddress, windowId]);
+  }, [store, validAddress, webViewAvailable, windowId]);
 
   useEffect(() => {
     const element = surfaceRef.current;
@@ -206,8 +208,10 @@ export function WebViewBlock({ block, context }: { block: WebViewBlockData; cont
         )}
       </div>
       <div className="ks-web-surface" data-ks-web-surface ref={surfaceRef}>
-        {error && !unavailable ? <div className="ks-web-error" data-ks-overlay><Notice role="alert" errorId={error.id}>{error.message}</Notice></div> : null}
-        {!webReady && unavailable ? (
+        {error && !unavailable && webViewAvailable ? <div className="ks-web-error" data-ks-overlay><Notice role="alert" errorId={error.id}>{error.message}</Notice></div> : null}
+        {!webViewAvailable ? (
+          <EmptyState icon={<Globe size="empty" />} text="이 기기에서는 웹 보기를 쓸 수 없습니다" />
+        ) : !webReady && unavailable ? (
           <EmptyState icon={<Globe size="empty" />} text={error ? <>{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</> : "이 쉘에서는 웹 화면을 열 수 없습니다"} />
         ) : !page ? (
           <EmptyState icon={<Globe size="empty" />} />

@@ -725,6 +725,25 @@ describe("shell core events", () => {
 });
 
 describe("shell server link control", () => {
+  it("내장 서버가 없으면 시작할 때 설정의 원격 서버 행을 연다", async () => {
+    const seed = makeTestSeed();
+    seed.snapshot.embedded_available = false;
+    const store = createShellStore(createFakeTransport(seed));
+    render(<Shell store={store} />);
+    await store.ready;
+    expect(await screen.findByRole("textbox", { name: "원격 서버 주소" })).toBeTruthy();
+    expect(screen.getByTestId("system-window-settings")).toBeTruthy();
+    store.dispose();
+  });
+
+  it("내장 서버가 있으면 시작할 때 설정을 열지 않는다", async () => {
+    const store = createShellStore(createFakeTransport(makeTestSeed()));
+    render(<Shell store={store} />);
+    await store.ready;
+    expect(screen.queryByTestId("system-window-settings")).toBeNull();
+    store.dispose();
+  });
+
   it("설정이 맨 위일 때 앱 창을 누르면 앱을 올린다", async () => {
     const seed = makeTestSeed();
     const transport = createFakeTransport(seed); const spy = vi.spyOn(transport, "call");
@@ -909,7 +928,9 @@ describe("shell server link control", () => {
     expect(screen.queryByText("내 PC 내장 서버")).toBeNull(); store.dispose();
   });
   it("copies a pairing code and updates the open panel on approval", async () => {
-    const transport = createFakeTransport(makeTestSeed());
+    const seed = makeTestSeed();
+    seed.snapshot.embedded_available = false;
+    const transport = createFakeTransport(seed);
     transport.setLink({ state: "pairing", server_url: "https://remote.example", user_code: "123456", expires_at: "2099-01-01T00:00:00Z" });
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });

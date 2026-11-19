@@ -190,6 +190,15 @@ export function Shell({ store }: { store: ShellStore }) {
       ? { ...current, minimized: false, z, entry: { kind, sequence: current.entry.sequence + 1 } }
       : { anchor, entry: { kind, sequence: 0 }, minimized: false, maximized: false, z });
   };
+  // 내장 서버가 없고 아직 연결 전인 기기(iPad)는 시작할 때 설정 창의 서버 행을 열어 원격 서버를 고르게 한다.
+  const openedStartupSettings = useRef(false);
+  useEffect(() => {
+    if (!snapshot || openedStartupSettings.current) return;
+    if (snapshot.embedded_available || snapshot.link.state !== "unlinked") return;
+    openedStartupSettings.current = true;
+    const anchor = document.querySelector<HTMLElement>('.ks-shell-bar button[aria-label="설정"]') ?? document.body;
+    openSettings(anchor, "gear");
+  }, [snapshot, openSettings]);
   const settingsAnchor = settings?.anchor;
   const closeSettings = useCallback(() => {
     if (settingsAnchor) {

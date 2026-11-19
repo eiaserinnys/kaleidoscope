@@ -1197,6 +1197,23 @@ export type Group<T> = { title: string, meta?: string, items: Array<T>, };
  */
 export type GroupAction = { key: string, label: string, on_click: Actions, };
 
+/**
+ * (계약 50판) 이 쉘의 호스트가 할 수 있는 일. 화면은 플랫폼 이름 대신 이 값으로 분기한다.
+ */
+export type HostFeatures = { 
+/**
+ * 기기 폴더를 골라 파일 권한을 줄 수 있다.
+ */
+pick_folder: boolean, 
+/**
+ * 「내 PC」 범위의 파일을 읽을 수 있다.
+ */
+pc_files: boolean, 
+/**
+ * 창 안에 웹 화면을 열 수 있다.
+ */
+web_view: boolean, };
+
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ImageFit = "contain" | "cover";
@@ -1671,7 +1688,11 @@ export type ShellOpenAction = { "shell.open": ShellAppSpec, };
 /**
  * 화면이 보는 상태 전체.
  */
-export type ShellSnapshot = { app_badges: { [key in string]: number }, last_transfer?: TransferResult, transfer_error?: string, embedded_available: boolean, shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
+export type ShellSnapshot = { app_badges: { [key in string]: number }, last_transfer?: TransferResult, transfer_error?: string, embedded_available: boolean, 
+/**
+ * (계약 50판) 이 호스트가 할 수 있는 일.
+ */
+host_features: HostFeatures, shared: SharedState, device: DeviceState, supported: Supported, link: LinkStatus, 
 /**
  * 이 기기 코어 메모리에서 같이 보기를 켠 살아 있는 창 id. 켠 순서다.
  */

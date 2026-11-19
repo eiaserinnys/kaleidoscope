@@ -4,6 +4,7 @@ import type { Block, MediaRef } from "../contract/contract";
 import { useBinding } from "../data/window-data";
 import { useMedia } from "../data/use-media";
 import { DataState, useFolderPick } from "../components/data-state";
+import { usePickFolderAvailable } from "../data/host-features";
 import { DataIcon } from "../components/data-icons";
 import { cropStyle, isMedia } from "../components/media-thumbnail";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
@@ -37,6 +38,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   const blockRoot = useBlockRootProps();
   const preview = useContext(PreviewContext);
   const folder = useFolderPick();
+  const pickFolder = usePickFolderAvailable();
   const host = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -93,7 +95,7 @@ function ImageView({ media, fit, zoomable }: { media: MediaRef | null; fit: "con
   useEffect(() => { preview?.(previewError); }, [preview, previewError]);
   const layoutKey = JSON.stringify([key, size.width, size.height, failure?.id, failure?.message]);
   const short = size.width < 258 || (size.width < 300 && size.height < 200) || overflowKey === layoutKey;
-  const chooseFolder = result.status === "failed" && result.error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && media && "permission" in media;
+  const chooseFolder = pickFolder && result.status === "failed" && result.error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && media && "permission" in media;
   const action = chooseFolder ? <Button data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(media.permission, result.retry); }}>폴더 선택</Button> : <Button onClick={result.retry}>다시 받기</Button>;
   useLayoutEffect(() => {
     if (!failure || short || !host.current) return;
