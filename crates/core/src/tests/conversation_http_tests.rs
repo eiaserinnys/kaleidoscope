@@ -981,6 +981,7 @@ fn reconcile_keeps_going_when_one_thread_cannot_move() {
                 Some("collection-1"),
             ),
         ),
+        (200, "{}".into()),
         (
             200,
             thread_info_with_collection(
@@ -1016,6 +1017,12 @@ fn reconcile_keeps_going_when_one_thread_cannot_move() {
         &mut applied,
     )
     .unwrap();
+    assert_eq!(
+        serde_json::to_value(&applied).unwrap()["threads"]["bucket\nthread-1"]["collection"]
+            ["revisions"]["collection"],
+        json!("entry"),
+        "옮기지 못한 대화는 이전 모음 기록을 남겨 다음에 다시 옮긴다"
+    );
     crate::conversation_reconcile::reconcile_app(
         &core.inner,
         &definition,
@@ -1025,14 +1032,82 @@ fn reconcile_keeps_going_when_one_thread_cannot_move() {
     )
     .unwrap();
     let requests = server.join().unwrap();
-    assert_eq!(requests.len(), 13);
+    assert_eq!(requests.len(), 14);
     let moves: Vec<Value> = requests
         .iter()
         .filter(|(line, body)| line.starts_with("PATCH ") && body.contains("collection"))
         .map(|(_, body)| serde_json::from_str(body).unwrap())
         .collect();
-    assert_eq!(moves.len(), 2, "{moves:?}");
+    assert_eq!(moves.len(), 3, "{moves:?}");
     assert!(moves.iter().all(|body| body["collection"] == json!("collection-2")));
+    assert_eq!(
+        serde_json::to_value(&applied).unwrap()["threads"]["bucket\nthread-1"]["collection"]
+            ["revisions"]["collection"],
+        json!("r2"),
+        "다시 옮긴 뒤에는 새 모음 기록을 남긴다"
+    );
+}
+
+#[test]
+fn reconcile_does_not_move_threads_when_another_setting_changes() {
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas("http://127.0.0.1:1", &temp, None);
+    let workspace = ctx.workspace.clone();
+    let title = format!("작업 PAS · {}", workspace.name);
+    *registry.storage_value.lock().unwrap() =
+        Some((owned_entry(&workspace.id, "thread-1"), "r0".into()));
+    *registry.storage_entries.lock().unwrap() = settings_entries();
+    let list = thread_list(&[("thread-1", &title)]);
+    let info = || {
+        thread_info_with_collection("thread-1", &workspace.id, &title, Some("collection-1"))
+    };
+    let (base, server) = server_with_requests(vec![
+        (200, list.clone()),
+        (200, info()),
+        (200, "{}".into()),
+        (200, list),
+        (200, info()),
+        (200, "{}".into()),
+    ]);
+    core.inner.connections.lock().unwrap()[0].base_url = base;
+    let definition: AppDefinition = serde_json::from_str(&pas_definition(None)).unwrap();
+    let mut applied = crate::conversation_reconcile::Applied::default();
+    let mut reconcile = |applied: &mut crate::conversation_reconcile::Applied| {
+        crate::conversation_reconcile::reconcile_app(
+            &core.inner,
+            &definition,
+            &[workspace.clone()],
+            1,
+            applied,
+        )
+        .unwrap();
+    };
+    reconcile(&mut applied);
+    registry.storage_entries.lock().unwrap().insert(
+        "role".into(),
+        (
+            json!("이 작업의 목적과 제약을 먼저 확인합니다. 고친 지침."),
+            Some("r2".into()),
+        ),
+    );
+    reconcile(&mut applied);
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 6);
+    let patches: Vec<Value> = requests
+        .iter()
+        .filter(|(line, _)| line.starts_with("PATCH "))
+        .map(|(_, body)| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(patches.len(), 2, "{patches:?}");
+    assert!(
+        patches.iter().all(|body| body.get("collection").is_none()),
+        "{patches:?}"
+    );
+    assert_eq!(
+        serde_json::to_value(&applied).unwrap()["threads"]["bucket\nthread-1"]["collection"]
+            ["revisions"]["collection"],
+        json!("entry")
+    );
 }
 
 #[test]

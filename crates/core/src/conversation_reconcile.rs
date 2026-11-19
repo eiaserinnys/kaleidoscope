@@ -53,7 +53,7 @@ struct AppliedThread {
     collection: Option<AppliedCollection>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct AppliedCollection {
     revisions: BTreeMap<String, Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -535,6 +535,7 @@ fn apply_thread(
         }
     }
     let mut moved_to = None;
+    let mut move_failed = false;
     let target = collection_changed.then(|| {
         collection_record.as_ref().and_then(|record| {
             record
@@ -565,19 +566,31 @@ fn apply_thread(
             );
             match result {
                 Ok(Some(_)) => moved_to = Some(target),
-                Ok(None) => log_collection_move_failure(&info.thread.id, &target, "대화를 찾지 못했습니다"),
-                Err(error) => log_collection_move_failure(&info.thread.id, &target, &error.message),
+                Ok(None) => {
+                    log_collection_move_failure(&info.thread.id, &target, "대화를 찾지 못했습니다");
+                    move_failed = true;
+                }
+                Err(error) => {
+                    log_collection_move_failure(&info.thread.id, &target, &error.message);
+                    move_failed = true;
+                }
             }
         }
     }
     collections.push(moved_to.or_else(|| info.thread.collection.clone()));
     if changed || title_changed || collection_state_changed {
+        // 옮기지 못했으면 새 값을 기록하지 않는다. 다음 reconcile에서 같은 변경을 다시 보고 옮긴다.
+        let collection = if move_failed {
+            previous_collection.cloned()
+        } else {
+            collection_record
+        };
         applied.threads.insert(
             key,
             AppliedThread {
                 fingerprint,
                 revisions,
-                collection: collection_record,
+                collection,
             },
         );
     }
