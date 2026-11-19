@@ -313,3 +313,17 @@ test("토글 쓰기: toggle_status_bar는 저장소 status_bar에 쓴다", async
   await handlers.get("toggle_status_bar")!({ event: true });
   assert.deepEqual(writes, [["status_bar", true]]);
 });
+
+test("한도 상태 줄: 전부 모르면 숨기고 설정 행은 모름, 막히면 막힘 문구", () => {
+  const unknown = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", null)] });
+  const view = unknown.views.at(-1);
+  assert.equal(view.status_limit_value, null);
+  assert.equal(view.status_limit_text, null);
+  assert.equal(view.status_limit_more, null);
+  assert.equal(view.status_limits.length, 1);
+  assert.equal(view.status_limits[0].known, false);
+  const resetsAt = new Date(2031, 10, 17, 5, 0).toISOString();
+  const blocked = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 1, { blocked: true, resetsAt })] });
+  assert.equal(blocked.views.at(-1).status_limit_text, "5시간 막힘, 11/17 05:00까지");
+  assert.equal(blocked.views.at(-1).status_limit_value, 1);
+});
