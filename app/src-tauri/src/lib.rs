@@ -11,10 +11,15 @@ mod login_path;
 mod native_webview;
 #[cfg(windows)]
 mod shell_shortcuts;
+#[cfg(target_os = "macos")]
+mod mac_capture;
 mod updater;
 #[cfg(windows)]
 mod web_control;
 #[cfg(windows)]
+mod web_host;
+#[cfg(target_os = "macos")]
+#[path = "web_host_mac.rs"]
 mod web_host;
 
 use std::env;
@@ -37,7 +42,7 @@ const SERVER_URL: &str = match option_env!("KALEIDOSCOPE_SERVER_URL") {
 struct DialogHost {
     app: AppHandle,
     updater: Arc<updater::TauriUpdateHost>,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     web: Arc<web_host::TauriWebHost>,
 }
 
@@ -120,7 +125,7 @@ impl Host for DialogHost {
     fn pc_roots(&self) -> Vec<PcRoot> {
         pc_roots()
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     fn web(&self) -> Option<&dyn kaleidoscope_core::WebHost> {
         Some(self.web.as_ref())
     }
@@ -368,7 +373,7 @@ pub fn run() {
             };
             app.manage(embedded);
             let updater = Arc::new(updater::TauriUpdateHost::default());
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             let web = Arc::new(web_host::TauriWebHost::new(app.handle().clone()));
             #[cfg(all(windows, feature = "e2e"))]
             app.manage(Arc::clone(&web));
@@ -398,7 +403,7 @@ pub fn run() {
                 Arc::new(DialogHost {
                     app: app.handle().clone(),
                     updater: Arc::clone(&updater),
-                    #[cfg(windows)]
+                    #[cfg(any(windows, target_os = "macos"))]
                     web,
                 }),
             ) {
