@@ -254,10 +254,13 @@ button {
 
 /* 구조용으로 받은 초점도 프로젝트 고리를 쓴다. 바깥 여백에 그리면 창 가장자리에서 잘리므로 본문 안쪽에 그린다. */
 .ks-focus-rescue-empty:focus-visible { outline-offset: calc(-1 * var(--ks-focus-width)); }
-/* 창 바닥에 닿는 본문 초점은 창틀과 같은 동심 곡률로 아래 두 모서리를 돌려, 둥근 자르기에서 고리가 끊기지 않게 한다.
-   창 모서리에 닿지 않는 안쪽 칸(분할 칸, 탭 판)은 곧은 모서리를 그대로 둔다. */
-.ks-data-window-body.ks-focus-rescue-empty:focus-visible {
+/* 창 바닥 모서리에 실제로 닿는 구조용 초점 칸은 창틀과 같은 동심 곡률로 그 모서리를 돌려, 둥근 자르기에서
+   고리가 끊기지 않게 한다. 어느 모서리에 닿았는지는 focusContainer가 잰다. 닿지 않는 안쪽 모서리와
+   위쪽 모서리는 곧게 둔다. */
+.ks-focus-rescue-empty[data-ks-corner-bl]:focus-visible {
   border-bottom-left-radius: calc(var(--ks-radius-window) - var(--ks-line-width));
+}
+.ks-focus-rescue-empty[data-ks-corner-br]:focus-visible {
   border-bottom-right-radius: calc(var(--ks-radius-window) - var(--ks-line-width));
 }
 
