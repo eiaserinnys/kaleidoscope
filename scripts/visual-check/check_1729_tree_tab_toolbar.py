@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""셸 배치 검수 S1~S5의 장면을 찍고 잰다(카드 #1729, 단위 card1729-shell-2).
+"""셸 배치 검수 S1~S7의 장면을 찍고 잰다(카드 #1729, 단위 card1729-shell-2와 card1729-shell-3).
 
-- tree-image-subtitle: 그림과 subtitle이 있는 트리. 같은 깊이 제목 x가 같고(±1px), 자식 제목은 한 단(--ks-space-4)
-  오른쪽이며, 그림 열은 목록 줄 그림과 같은 크기(--ks-control-height)다.
-- tree-image-plain: 그림만 있는 트리. 제목 x가 같고 그림은 --ks-space-4(16px)다.
-- tree-no-image: 그림 없는 트리. 제목 x와 행 높이를 기록한다(고치기 전후 같아야 한다).
+- tree-image-subtitle: 그림과 subtitle이 있는 트리(깊이 3까지). 같은 깊이 제목 x가 같고(±1px), 들여쓰기 한 단은
+  그림 열 폭과 열 사이 간격의 합(--ks-control-height + --ks-space-2)이어서 자식 줄 그림의 왼쪽 x가 부모 줄 제목 x와
+  같다(±1px). 그림 열은 목록 줄 그림과 같은 크기(--ks-control-height)다.
+- tree-image-plain: 그림만 있는 트리. 제목 x가 같고 그림은 --ks-space-4(16px)이며 들여쓰기 한 단은 --ks-space-4다.
+- tree-no-image: 그림 없는 트리. 제목 x와 행 높이를 기록하고 들여쓰기 한 단은 --ks-space-4다(고치기 전후 같아야 한다).
 - tab-list: 탭 패널 안의 글 줄, list, tree. 탭 첫 단추 x, 글 x, list 행 내용 x, tree 행 내용 x가 같다(±1px).
   고른 행 배경은 패널 밖으로 나가지 않는다.
 - pane-list: 칸에 바로 놓인 찾기 막대와 list. 찾기 칸 x와 list 행 내용 x를 기록한다(전후 같아야 한다).
@@ -13,6 +14,11 @@
 - toolbar-form-when: 같은 장면에 막대와 입력 묶음 사이에 그리지 않은 when 칸 둘을 끼운 것. 판정은 toolbar-form과 같다.
 - toolbar-list: 막대 다음 list. 막대 아래 선에서 첫 줄까지의 거리를 기록한다(전후 같아야 한다).
 - dialog-confirm-locked: confirm_disabled가 참인 대화상자. 확정 단추가 disabled다.
+- dialog-select-focus: select 하나와 확정·취소 단추만 있는 대화상자를 「옮기기」 단추에서 Enter로 연 직후. 첫 초점이
+  select 단추이고 키보드로 열었으니 초점 고리가 보인다. Enter는 목록을 열고, Esc는 열린 목록만 닫고(대화상자는 남고),
+  다시 Esc는 대화상자를 닫는다.
+- dialog-input-select-focus: 입력 칸 다음에 select가 있는 대화상자를 같은 방법으로 연 직후. 첫 초점은 입력 칸이고,
+  그 입력 칸에서 Enter를 누르면 확정 단추를 누른 것과 같아 대화상자가 닫힌다(S8).
 
   python3 scripts/visual-check/check_1729_tree_tab_toolbar.py [--output 산출폴더] [--port 포트]
 
@@ -56,7 +62,7 @@ def tree_items(images, subtitles):
             value["children"] = children
         return value
     return [
-        item("root-a", "자식 있는 뿌리", 0, [item("child-a", "자식 줄", 1), item("child-b", LONG_TITLE, 2)]),
+        item("root-a", "자식 있는 뿌리", 0, [item("child-a", "자식 줄", 1, [item("grandchild-a", "깊이 3 줄", 5)]), item("child-b", LONG_TITLE, 2)]),
         item("root-b", "자식 없는 뿌리", 3),
         item("root-c", LONG_TITLE, 4),
         {"key": "root-d", "title": "그림 없는 뿌리", **({"subtitle": "둘째 줄 5"} if subtitles else {})},
@@ -85,6 +91,22 @@ HIDDEN = {"type": "when", "value": False, "child": {"type": "text", "value": "�
 SEARCH_TOOLBAR = {"type": "toolbar", "start": [
     {"type": "input", "value": {"state": "query"}, "on_change": {"set_state": "query"}, "kind": "search", "placeholder": "제목으로 찾기"},
 ], "end": [{"type": "button", "label": "새로", "icon": "plus", "icon_only": True, "on_click": []}]}
+
+
+SELECT_FIELD = FORM_FIELDS[2]
+NAME_FIELD = {"type": "input", "value": {"state": "title"}, "on_change": {"set_state": "title"}, "label": "이름", "kind": "text", "placeholder": "이름"}
+
+
+OPEN_DIALOG_BUTTON = "옮기기"
+
+
+def dialog_scene(child):
+    return {"type": "stack", "direction": "column", "children": [
+        {"type": "text", "value": "대화상자 뒤 본문"},
+        {"type": "button", "label": OPEN_DIALOG_BUTTON, "on_click": [{"set_state": "dialog_open", "value": True}]},
+        {"type": "dialog", "open": {"state": "dialog_open"}, "title": "옮길 곳", "close_label": "확정",
+         "on_confirm": [{"set_state": "dialog_open", "value": False}], "on_close": [{"set_state": "dialog_open", "value": False}], "child": child},
+    ]}
 
 
 def col(children, **extra):
@@ -125,9 +147,11 @@ SCENES = {
          "on_confirm": [], "on_close": [],
          "child": {"type": "input", "value": {"state": "title"}, "on_change": {"set_state": "title"}, "label": "이름", "kind": "text", "placeholder": "폴더 이름"}},
     ]},
+    "dialog-select-focus": dialog_scene(SELECT_FIELD),
+    "dialog-input-select-focus": dialog_scene({"type": "stack", "direction": "column", "gap": "medium", "children": [NAME_FIELD, SELECT_FIELD]}),
 }
 
-STATE = {"title": "", "body": "", "node": None, "query": "", "picked": None}
+STATE = {"title": "", "body": "", "node": None, "query": "", "picked": None, "dialog_open": False}
 
 MEASURE_JS = """(root) => {
   const r = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
@@ -139,6 +163,7 @@ MEASURE_JS = """(root) => {
       title: name ? name.textContent : null,
       level: Number(row.getAttribute('aria-level')),
       titleX: name ? r(name).left : null,
+      imageX: image ? r(image).left : null,
       rowHeight: r(row).height,
       columns: columns.map((c) => ({ classes: c.className, width: r(c).width, empty: c.childElementCount === 0 })),
       imageWidth: image ? r(image).width : null,
@@ -162,7 +187,12 @@ MEASURE_JS = """(root) => {
   const dialog = root.querySelector('.ks-dialog');
   const confirm = dialog ? dialog.querySelector('.ks-dialog-confirm button') : null;
   const cancel = dialog ? [...dialog.querySelectorAll('.ks-dialog-actions button')].find((b) => !b.closest('.ks-dialog-confirm')) : null;
+  const active = document.activeElement;
   return {
+    documentHasFocus: document.hasFocus(),
+    active: active && active !== document.body ? { tag: active.tagName.toLowerCase(), className: active.className, label: active.getAttribute('aria-label'), inDialogBody: Boolean(active.closest('.ks-dialog-body')), focused: active.matches(':focus'), focusVisible: active.matches(':focus-visible') } : null,
+    dialogOpen: Boolean(dialog),
+    menuOpen: Boolean(document.querySelector('[role="menu"]')),
     tokens: { space4: px('--ks-space-4'), space2: px('--ks-space-2'), controlHeight: px('--ks-control-height') },
     rows,
     tabButtonX: tab ? r(tab).left : null,
@@ -198,15 +228,28 @@ def judge(name, m):
     for row in rows:
         by_level.setdefault(row["level"], []).append(row)
     if name.startswith("tree-"):
+        # 부모 줄은 바로 앞에 나온 한 단계 얕은 줄이다.
+        last_at_level = {}
+        for row in rows:
+            last_at_level[row["level"]] = row
+            row["parentTitleX"] = last_at_level[row["level"] - 1]["titleX"] if row["level"] > 1 else None
         roots = by_level.get(1, [])
         children = by_level.get(2, [])
-        checks["has_rows"] = len(roots) >= 3 and len(children) >= 2
-        checks["same_depth_title_x"] = checks["has_rows"] and all(close(row["titleX"], roots[0]["titleX"]) for row in roots) and all(close(row["titleX"], children[0]["titleX"]) for row in children)
+        nested = [row for row in rows if row["parentTitleX"] is not None]
+        checks["has_rows"] = len(roots) >= 3 and len(children) >= 2 and len(by_level.get(3, [])) >= 1
+        checks["same_depth_title_x"] = checks["has_rows"] and all(close(row["titleX"], level_rows[0]["titleX"]) for level_rows in by_level.values() for row in level_rows)
+        # 들여쓰기 한 단: 큰 그림 트리(subtitle 있음)는 그림 열 폭 + 열 사이 간격, 그 밖은 --ks-space-4다.
+        step = m["tokens"]["controlHeight"] + m["tokens"]["space2"] if name == "tree-image-subtitle" else m["tokens"]["space4"]
+        m["indentStep"] = step
+        m["indentMeasured"] = sorted({round(row["titleX"] - row["parentTitleX"], 1) for row in nested})
+        checks["child_indent_one_step"] = checks["has_rows"] and all(close(row["titleX"] - row["parentTitleX"], step) for row in nested)
         if name == "tree-no-image":
             checks["one_column_rows"] = all(len(row["columns"]) == 1 for row in rows)
             checks["no_image"] = all(row["imageWidth"] is None for row in rows)
         else:
-            checks["child_indent_one_step"] = checks["has_rows"] and close(children[0]["titleX"] - roots[0]["titleX"], m["tokens"]["space4"])
+            if name == "tree-image-subtitle":
+                m["childImageMinusParentTitle"] = sorted({round(row["imageX"] - row["parentTitleX"], 1) for row in nested if row["imageX"] is not None})
+                checks["child_image_under_parent_title"] = checks["has_rows"] and all(close(row["imageX"], row["parentTitleX"]) for row in nested if row["imageX"] is not None)
             checks["two_columns_every_row"] = all(len(row["columns"]) == 2 for row in rows)
             widths = {round(row["imageWidth"]) for row in rows if row["imageWidth"] is not None}
             checks["one_image_size"] = len(widths) == 1
@@ -235,7 +278,54 @@ def judge(name, m):
     elif name == "dialog-confirm-locked":
         checks["confirm_disabled"] = m["confirmDisabled"] is True
         checks["cancel_enabled"] = m["cancelDisabled"] is False
+    elif name == "dialog-select-focus":
+        active = m["active"] or {}
+        checks["first_focus_is_select"] = active.get("tag") == "button" and "ks-select-button" in (active.get("className") or "") and active.get("inDialogBody") is True
+        checks["focus_ring_visible"] = active.get("focusVisible") is True
+        checks["enter_opens_menu"] = m.get("menuAfterEnter") is True and m.get("dialogAfterEnter") is True
+        checks["escape_closes_menu_only"] = m.get("menuAfterEscape") is False and m.get("dialogAfterEscape") is True
+        checks["escape_closes_dialog"] = m.get("dialogAfterSecondEscape") is False
+    elif name == "dialog-input-select-focus":
+        active = m["active"] or {}
+        checks["first_focus_is_input"] = active.get("tag") == "input" and active.get("inDialogBody") is True
+        checks["enter_in_input_confirms"] = m.get("dialogAfterEnter") is False
     return checks
+
+
+def open_dialog_by_keyboard(name, page, app):
+    """select 첫 초점 장면은 실제 키보드 사용자처럼 단추에서 Enter로 대화상자를 연다."""
+    if name not in ("dialog-select-focus", "dialog-input-select-focus"):
+        return
+    app.get_by_role("button", name=OPEN_DIALOG_BUTTON).focus()
+    page.keyboard.press("Enter")
+    app.locator(".ks-dialog").wait_for(state="attached", timeout=10000)
+    page.wait_for_timeout(300)
+
+
+def interact(name, page, app):
+    """그림을 찍은 뒤 키보드로 조작해 본 결과. 측정값에 합친다."""
+    probe = "() => ({ menu: Boolean(document.querySelector('[role=\"menu\"]')), dialog: Boolean(document.querySelector('.ks-dialog')) })"
+    result = {}
+    if name == "dialog-input-select-focus":
+        # 입력 칸에 초점이 있는 채로 Enter: 확정 단추를 누른 것과 같아 대화상자가 닫힌다.
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(300)
+        result["dialogAfterEnter"] = page.evaluate(probe)["dialog"]
+        return result
+    if name != "dialog-select-focus":
+        return {}
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(300)
+    state = page.evaluate(probe)
+    result["menuAfterEnter"], result["dialogAfterEnter"] = state["menu"], state["dialog"]
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    state = page.evaluate(probe)
+    result["menuAfterEscape"], result["dialogAfterEscape"] = state["menu"], state["dialog"]
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(300)
+    result["dialogAfterSecondEscape"] = page.evaluate(probe)["dialog"]
+    return result
 
 
 def wait_server(port):
@@ -307,8 +397,10 @@ def main():
                     continue
                 page, app = open_scene(browser, args.port, ui)
                 try:
+                    open_dialog_by_keyboard(name, page, app)
                     measurement = app.evaluate(MEASURE_JS)
                     page.screenshot(path=str(output / f"{name}.png"), animations="disabled")
+                    measurement.update(interact(name, page, app))
                     checks = judge(name, measurement)
                     results[name] = {"measurement": measurement, "checks": checks}
                     failed = [check for check, ok in checks.items() if not ok]
@@ -316,7 +408,7 @@ def main():
                     summary = {k: v for k, v in measurement.items() if k != "rows"}
                     print(name, json.dumps(summary, ensure_ascii=False), "FAIL " + ",".join(failed) if failed else "ok", flush=True)
                     for row in measurement["rows"]:
-                        print("  ", row["level"], round(row["titleX"] or -1, 1), round(row["rowHeight"], 1), row["imageWidth"], [c["width"] for c in row["columns"]], (row["title"] or "")[:12], flush=True)
+                        print("  ", row["level"], round(row["titleX"] or -1, 1), round(row["imageX"] or -1, 1), round(row["rowHeight"], 1), row["imageWidth"], [c["width"] for c in row["columns"]], (row["title"] or "")[:12], flush=True)
                 finally:
                     page.close()
             browser.close()

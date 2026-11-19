@@ -1,11 +1,11 @@
 // 가상 행의 측정, 스크롤, 초점 복구는 같은 가상화 수명주기를 공유하므로 이 파일에 둔다.
 import { encodeCommentKey } from "../../comments/key";
 import { selectionRange, toggleSelection } from "../collection-selection";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { isValidElement } from "react";
 import { keepRovingRow, useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
 import type { TreeNode, TreeRowModel } from "./tree-model";
-import { flattenTreeModel, treeHasNode } from "./tree-model";
+import { LARGE_IMAGE_TREE_INDENT_STEP, flattenTreeModel, treeHasNode } from "./tree-model";
 import { TreeRow } from "./tree-row";
 import type { ReactNode } from "react";
 import { SHELL_TREE_CONTROL_HEIGHT_MISSING } from "../../contract/shell-errors";
@@ -441,6 +441,7 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     className={className}
     ref={scrollRef}
     role="tree"
+    style={largeImage ? { "--ks-tree-indent": LARGE_IMAGE_TREE_INDENT_STEP } as CSSProperties : undefined}
     aria-multiselectable={selection ? true : undefined}
     data-drop-state={drag?.targetId === "" && !emptyContentDropTarget ? drag.valid ? "valid" : "invalid" : undefined}
     onDragStart={drag?.enabled ? (event) => { const row = dragRow(event.target); if (row) drag.onStart(row, event); } : undefined}

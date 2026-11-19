@@ -1427,3 +1427,27 @@ it("이미지가 아닌 피드 첨부는 파일 칩으로 보이고 누르면 �
     URL.revokeObjectURL = previous.revoke;
   }
 });
+it("subtitle이 있는 큰 그림 트리는 들여쓰기 한 단을 그림 열 폭과 열 사이 간격의 합으로 두고, 작은 그림 트리와 그림 없는 트리는 그대로다", async () => {
+  const nested = (image: boolean, subtitle: boolean) => [{
+    key: "root", title: "뿌리", ...(image ? { image: { asset: "photo" } } : {}), ...(subtitle ? { subtitle: "둘째 줄" } : {}),
+    children: [{ key: "child", title: "자식", ...(image ? { image: { asset: "other" } } : {}), children: [{ key: "grandchild", title: "손자" }] }],
+  }];
+  const wrapperOf = (name: RegExp) => screen.getByRole("treeitem", { name }).closest<HTMLElement>("[data-tree-row]")!;
+  const step = "var(--ks-tree-indent, var(--ks-space-4))";
+  setup({ type: "tree", by: "children", default_expanded: true, items: nested(true, true) } as unknown as Block, {});
+  await screen.findByRole("treeitem", { name: /손자/ });
+  expect(screen.getByRole("tree").style.getPropertyValue("--ks-tree-indent")).toBe("calc(var(--ks-control-height) + var(--ks-space-2))");
+  expect(wrapperOf(/뿌리/).style.paddingInlineStart).toBe("");
+  expect(wrapperOf(/자식/).style.paddingInlineStart).toBe(`calc(1 * ${step})`);
+  expect(wrapperOf(/손자/).style.paddingInlineStart).toBe(`calc(2 * ${step})`);
+  cleanup();
+  for (const [image, subtitle] of [[true, false], [false, false]] as const) {
+    setup({ type: "tree", by: "children", default_expanded: true, items: nested(image, subtitle) } as unknown as Block, {});
+    await screen.findByRole("treeitem", { name: /손자/ });
+    expect(screen.getByRole("tree").style.getPropertyValue("--ks-tree-indent")).toBe("");
+    expect(wrapperOf(/뿌리/).style.paddingInlineStart).toBe("");
+    expect(wrapperOf(/자식/).style.paddingInlineStart).toBe(`calc(1 * ${step})`);
+    expect(wrapperOf(/손자/).style.paddingInlineStart).toBe(`calc(2 * ${step})`);
+    cleanup();
+  }
+});
