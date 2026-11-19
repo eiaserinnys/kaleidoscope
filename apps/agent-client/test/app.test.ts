@@ -314,7 +314,8 @@ test("토글 쓰기: toggle_status_bar는 저장소 status_bar에 쓴다", async
   assert.deepEqual(writes, [["status_bar", true]]);
 });
 
-test("한도 상태 줄: 전부 모르면 숨기고 설정 행은 모름, 막히면 막힘 문구", () => {
+test("한도 상태 줄: 전부 모르면 숨기고 설정 행은 모름, 막히면 막힘 문구", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const unknown = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", null)] });
   const view = unknown.views.at(-1);
   assert.equal(view.status_limit_value, null);
@@ -351,4 +352,31 @@ test("좁은 창 칩은 model 하나만, 한도를 전부 모르면 상태 줄 �
   assert.equal(view.status_has_limit_more, false);
   assert.deepEqual(view.status_limits.map((row: any) => row.unknown), [true, true]);
   assert.equal(view.status_no_context, true);
+});
+
+test("다시 차는 시각이 지나면 그 창을 상태 줄 후보에서 빼고 설정 행은 아직 모름으로 다시 그린다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 4, 59, 30) });
+  const soon = new Date(2031, 10, 17, 5, 0).toISOString(), later = new Date(2031, 10, 17, 18, 0).toISOString();
+  const { views } = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 1, { blocked: true, resetsAt: soon }), limit("seven_day", "7일", 0.3, { resetsAt: later })] });
+  assert.equal(views.at(-1).status_limit_text, "5시간 막힘, 05:00까지");
+  t.mock.timers.tick(29_999);
+  assert.equal(views.at(-1).status_limit_text, "5시간 막힘, 05:00까지");
+  t.mock.timers.tick(1);
+  const view = views.at(-1);
+  assert.equal(view.status_limit_text, "7일 70% 남음 (18:00)");
+  assert.equal(view.status_limit_value, 0.3);
+  assert.deepEqual(view.status_limits.map((row: any) => [row.text, row.unknown]), [["아직 모름", true], ["70% 남음 (18:00)", false]]);
+});
+
+test("먼 다시 차는 시각은 1시간마다 다시 재서 그 시각에 다시 그린다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 3, 0) });
+  const resetsAt = new Date(2031, 10, 17, 5, 30).toISOString();
+  const { views } = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 0.5, { resetsAt })] });
+  const published = views.length;
+  t.mock.timers.tick(2 * 3_600_000);
+  assert.equal(views.length, published);
+  assert.equal(views.at(-1).status_has_limit, true);
+  t.mock.timers.tick(30 * 60_000);
+  assert.equal(views.at(-1).status_has_limit, false);
+  assert.equal(views.at(-1).status_limits[0].text, "아직 모름");
 });

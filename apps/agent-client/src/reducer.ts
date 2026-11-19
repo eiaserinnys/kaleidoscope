@@ -1,7 +1,7 @@
 import type { InitializeResponse, NewSessionResponse, RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { agentError } from "./errors.ts";
 import { hadGuide } from "./guide.ts";
-import { isSubagentTool, mergeLimit, readAuthStatus, readClaudeRateLimit, type Account, type Limit } from "./status.ts";
+import { isSubagentTool, mergeLimit, readAuthStatus, readClaudeRateLimits, type Account, type Limit } from "./status.ts";
 
 export type Attachment = { id: string; name: string; mime: string; key: string; size: number };
 export type Queued = { id: string; text: string; attachments: Attachment[] };
@@ -136,11 +136,10 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     }
     if (update?.sessionUpdate === "usage_update") {
       if (state.replay) return state;
-      const limit = readClaudeRateLimit(update._meta?.["_claude/rateLimit"]);
       const size = update.size;
       return { ...state,
         context: typeof update.used === "number" && typeof size === "number" && size > 0 ? { used: update.used, size } : null,
-        limits: limit ? mergeLimit(state.limits, limit) : state.limits };
+        limits: readClaudeRateLimits(update._meta?.["_claude/rateLimit"]).reduce(mergeLimit, state.limits) };
     }
     if (update?.sessionUpdate === "tool_call") {
       if (state.replay) return state;
@@ -181,8 +180,8 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     if (request.kind === "load") return { ...next, phase: "starting", replay: false, needsNew: true };
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
     const finished = request.kind === "prompt" ? finishText(next) : next;
-    const limit = request.kind === "prompt" && message.error.data?.errorKind === "rate_limit" ? readClaudeRateLimit(message.error.data.rateLimit) : null;
-    return { ...finished, limits: limit ? mergeLimit(finished.limits, limit) : finished.limits, phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, permissions: [], tools: [] };
+    const limits = request.kind === "prompt" && message.error.data?.errorKind === "rate_limit" ? readClaudeRateLimits(message.error.data.rateLimit) : [];
+    return { ...finished, limits: limits.reduce(mergeLimit, finished.limits), phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, permissions: [], tools: [] };
   }
   if (!message.result) return next;
   if (request.kind === "initialize") {

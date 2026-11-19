@@ -128,6 +128,19 @@ test("거절된 턴의 오류가 한도를 막힘으로 기록한다", () => {
   assert.equal(state.limits[0].blocked, true);
 });
 
+test("usage_update와 거절된 턴의 오류는 unifiedWindows의 창을 모두 합친다", () => {
+  // 2026-11-19 실제 이벤트 모양
+  const live = { status: "allowed", resetsAt: 1795062600, rateLimitType: "five_hour", unifiedWindows: {
+    five_hour: { utilization: 0.39, resetsAt: 1795062600, status: "allowed" }, seven_day: { utilization: 0.47, resetsAt: 1795219200, status: "allowed" } } };
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 48019, size: 1000000, _meta: { "_claude/rateLimit": live } }), "x");
+  assert.deepEqual(state.limits.map((l) => [l.id, l.label, l.usedRatio]), [["five_hour", "5시간", 0.39], ["seven_day", "7일", 0.47]]);
+  let id: number;
+  [state, id] = reserveRequest(state, "prompt", { sessionId: "s", prompt: [] });
+  const rejected = { ...live, status: "rejected", rateLimitType: "seven_day", unifiedWindows: { ...live.unifiedWindows, seven_day: { utilization: 1, resetsAt: 1795219200, status: "rejected" } } };
+  state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32000, message: "limit", data: { errorKind: "rate_limit", rateLimit: rejected } } }, "x");
+  assert.deepEqual(state.limits.map((l) => [l.id, l.usedRatio, l.blocked]), [["five_hour", 0.39, false], ["seven_day", 1, true]]);
+});
+
 test("계정 알림은 auth/status_update만 읽고 응답을 만들지 않는다", () => {
   let state = reduceMessage(initialState(), { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "Claude Team", email: "a@b.c", active: true }] } }, "x");
   assert.deepEqual(state.account, { label: "Claude Team", email: "a@b.c" });

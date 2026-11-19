@@ -1,9 +1,11 @@
 import { AgentSession, type Host, type SendInput, type SessionView, type Spec } from "./session.ts";
 import { agentError } from "./errors.ts";
 import { cleanTitle } from "./guide.ts";
-import { controlLabel, limitRow, tightestLimit } from "./status-view.ts";
+import { controlLabel, limitRow, limitsAt, nextReset, tightestLimit } from "./status-view.ts";
 
 const CHIP_CATEGORIES = ["model", "thought_level", "mode"];
+// 다시 차는 시각을 기다리는 타이머의 최소, 최대 대기(ms). 먼 시각은 시계가 어긋나도 맞도록 한 시간마다 다시 잰다.
+const RESET_WAIT = { min: 1_000, max: 3_600_000 };
 
 type Agent = Spec & { id: string };
 type Program = { name: string; winget: string; url: string };
@@ -68,6 +70,7 @@ export class AppClient {
   private historyOpen = false;
   private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
+  private resetTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(client: Bridge, defaults: Agent[]) {
     this.client = client;
@@ -425,6 +428,13 @@ export class AppClient {
     this.update();
   }
 
+  private scheduleReset(limits: SessionView["limits"], now: Date): void {
+    clearTimeout(this.resetTimer);
+    const next = nextReset(limits, now);
+    this.resetTimer = next === null ? undefined
+      : setTimeout(() => this.update(), Math.min(RESET_WAIT.max, Math.max(RESET_WAIT.min, next - now.getTime())));
+  }
+
   private update(): void {
     const phase = this.view?.phase;
     const chat = this.stage === "session" && (phase === "ready" || phase === "responding");
@@ -456,8 +466,10 @@ export class AppClient {
         return text ? [{ key: category, text }] : [];
       }),
     ];
-    const limits = view?.limits ?? [], tightest = tightestLimit(limits), row = tightest && limitRow(tightest, now);
-    // 가장 빠듯한 창조차 모르면(전부 모름) 상태 줄에서는 숨긴다. 설정 목록은 「모름」으로 보인다.
+    // 다시 차는 시각이 지난 창은 모름으로 보고, 가장 가까운 다시 차는 시각에 한 번 더 그린다.
+    this.scheduleReset(view?.limits ?? [], now);
+    const limits = limitsAt(view?.limits ?? [], now), tightest = tightestLimit(limits), row = tightest && limitRow(tightest, now);
+    // 가장 빠듯한 창조차 모르면(전부 모름) 상태 줄에서는 숨긴다. 설정 목록은 「아직 모름」으로 보인다.
     const tightestRow = row?.known ? row : null;
     const context = view?.context && view.context.size > 0 ? Math.min(1, view.context.used / view.context.size) : null;
     const subagents = view?.subagents ?? 0;
