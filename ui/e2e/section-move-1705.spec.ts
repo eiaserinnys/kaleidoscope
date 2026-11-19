@@ -7,6 +7,41 @@ const section = (key: string) => `[data-repeat-key="${key}"] .ks-data-section-he
 const sectionRoot = (key: string) => `[data-repeat-key="${key}"] > .ks-data-section`;
 const hideChrome = `body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }`;
 
+for (const [appId, width] of [
+  ["pane-long-heading-1015", 800],
+  ["section-move-heading-1705", 1000],
+  ["section-move-heading-1705", 1280],
+] as const) test(`접기 없는 머리: ${appId} ${width}`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 700 });
+  await page.goto(`/?preview=${appId}`);
+  await page.addStyleTag({ content: hideChrome });
+  const header = page.getByTestId(`app-window-${appId}`).locator(".ks-data-section-header");
+  await expect(header.locator(".ks-data-section-title")).toBeVisible();
+  await expect(header.locator(".ks-data-section-meta")).toBeVisible();
+  await expect(header.locator(".ks-data-section-toggle")).toHaveCount(0);
+  if (appId === "section-move-heading-1705") await expect(header.getByRole("button")).toHaveCount(3);
+  if (process.env.KS_1705_VISUAL_OUTPUT) {
+    await page.screenshot({ path: path.join(process.env.KS_1705_VISUAL_OUTPUT, `${width}-non-collapsible-heading.png`) });
+  }
+
+  const metrics = await header.evaluate((element) => {
+    const title = element.querySelector<HTMLElement>(".ks-data-section-title")!;
+    const meta = element.querySelector<HTMLElement>(".ks-data-section-meta")!;
+    const sizes = (node: HTMLElement) => ({ scroll: node.scrollWidth, client: node.clientWidth });
+    const titleBounds = title.getBoundingClientRect();
+    return {
+      title: sizes(title), meta: sizes(meta),
+      headerOverflow: element.scrollWidth - element.clientWidth,
+      metaBelowTitle: meta.getBoundingClientRect().top >= titleBounds.bottom,
+    };
+  });
+  console.log(`접기 없는 머리 ${appId} ${width}:`, metrics);
+  expect(metrics.title.scroll).toBeLessThanOrEqual(metrics.title.client);
+  expect(metrics.meta.scroll).toBeLessThanOrEqual(metrics.meta.client);
+  expect(metrics.headerOverflow).toBe(0);
+  expect(metrics.metaBelowTitle).toBe(true);
+});
+
 async function open(page: Page, width: number, appId = app) {
   await page.setViewportSize({ width, height: 800 });
   await page.goto(`/?preview=${appId}`);
