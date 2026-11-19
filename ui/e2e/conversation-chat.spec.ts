@@ -339,8 +339,8 @@ test.describe("디렉터 창 크기의 시작 판", () => {
     }
   });
 
-  test("오류 뒤 다시 누르면 진행 글은 판 안에 보이고 옛 알림은 결과가 올 때 바뀐다", async () => {
-    for (const [width, height] of [[636, 226], [360, 226], [360, 200]] as const) {
+  for (const [width, height] of [[636, 226], [360, 226], [360, 200]] as const) {
+    test(`오류 뒤 다시 누르면 진행 글은 판 안에 보이고 옛 알림은 결과가 올 때 바뀐다 (${width}x${height})`, async () => {
       // 연결이 실패한 뒤 새 대화로 바꿔 시작한다. 알림을 보이려고 판이 내려가 새 대화 제목 줄이 판 위로 빠진 상태다.
       const first = await openBody(width, height, "&start-error=1");
       try {
@@ -391,8 +391,8 @@ test.describe("디렉터 창 크기의 시작 판", () => {
       } finally {
         await second.browser.close();
       }
-    }
-  });
+    });
+  }
 
   test("시작과 연결의 오류 알림은 판 안에 다 보인다", async () => {
     for (const [width, height] of [[636, 226], [360, 226]] as const) {
@@ -552,13 +552,26 @@ test("연결하는 중에는 시작과 고른 줄을 잠근다", async ({ page }
 });
 
 test("답변 중에는 두 머리 모두 대화 바꾸기를 잠근다", async ({ page }) => {
+  // 가짜 전송의 최초 스냅샷이 busy를 false로 덮은 뒤 답변 중 상태를 보낸다.
+  await page.addInitScript(() => {
+    const original = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
+      const source = typeof handler === "function" ? handler.toString() : "";
+      if (typeof handler === "function" && source.includes("conversation.update") && source.includes("snapshot")) {
+        return original(() => { handler(...args); (window as any).conversationSnapshotReceived = true; }, timeout);
+      }
+      return original(handler, timeout, ...args);
+    }) as typeof window.setTimeout;
+  });
   let chat = await open(page, "ready");
   await expect(chat.getByText("기존 기록")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).conversationSnapshotReceived)).toBe(true);
   await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: true, tool: null } }));
   await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeDisabled();
   await capture(page, "attach-owned-busy");
   chat = await open(page, "attach-attached");
   await expect(chat.getByText("서소영 PAS — 카드 운영 기록 2026년 11월 · Sol")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as any).conversationSnapshotReceived)).toBe(true);
   await page.evaluate(() => (window as any).conversationHarness.emit({ event: "conversation.update", thread_id: "fake-thread", update: { kind: "activity", busy: true, tool: null } }));
   await expect(chat.getByRole("button", { name: "대화 바꾸기" })).toBeDisabled();
   await capture(page, "attach-attached-busy");
