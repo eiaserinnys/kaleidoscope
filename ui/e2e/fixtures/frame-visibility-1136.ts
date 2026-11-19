@@ -48,4 +48,5 @@ export const canvasLoadingApp: AppDefinition = {
   ui: { type: "canvas", surface: "stage", description: "준비된 색상 무대" },
 };
 
-export const canvasLoadingMedia = { "canvas-loading-1136-client": "/__slow-client.js" };
+import { sectionMoveMedia } from "./section-move-1705";
+export const canvasLoadingMedia = { "canvas-loading-1136-client": "/__slow-client.js", ...sectionMoveMedia };

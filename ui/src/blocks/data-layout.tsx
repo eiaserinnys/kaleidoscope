@@ -18,6 +18,7 @@ import { eventModifiers } from "../runtime/shortcuts";
 import { formatClockTime, isClock, useClockPosition } from "../data/clock";
 import { SplitPaneContext } from "./split-pane-context";
 import { ToolbarContext } from "./toolbar-context";
+import { useSectionDrag } from "./section-drag";
 
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
 
@@ -329,6 +330,8 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
     if (JSON.stringify(titleValue) !== JSON.stringify(pending.base)) setPending(null);
   }, [pending, titleValue]);
   const editing = block.on_edit !== undefined && editingFlag && !ended;
+  const drag = useSectionDrag(block.on_move !== undefined && !editing, data.windowId, scope,
+    (event) => { void data.act(`${pointer}/on_move`, event); });
   // 글칸이 사라진 뒤 초점이 갈 곳이 없으면 머리의 접기 단추로 돌린다.
   const wasEditing = useRef(false);
   useLayoutEffect(() => {
@@ -366,7 +369,10 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
     menu.open(event, toggleRef.current ?? event.currentTarget, scope?.item, scope === null ? pointer : String(scope.key), "제목 복사", initialName);
   } : undefined;
   return <section {...blockRoot} className="ks-data-section">
-    <div className={`ks-data-section-header${editing ? " is-editing" : ""}`} onContextMenu={openMenu}>
+    <div className={`ks-data-section-header${editing ? " is-editing" : ""}`} onContextMenu={openMenu}
+      draggable={block.on_move !== undefined && !editing && scope !== null || undefined}
+      data-drop-position={drag.position} onDragStart={drag.onDragStart} onDragOver={drag.onDragOver}
+      onDrop={drag.onDrop} onDragLeave={drag.onDragLeave} onDragEnd={drag.onDragEnd}>
       {editing ? <>
         {block.collapsible
           ? <button className="ks-data-section-toggle" data-focus-return=".ks-data-section-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "펼치기" : "접기"} onClick={() => setCollapsed(!collapsed)} ref={toggleRef} type="button">

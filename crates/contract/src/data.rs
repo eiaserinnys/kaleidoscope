@@ -2154,6 +2154,7 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             editing,
             on_edit,
             on_edit_cancel,
+            on_move,
             ..
         } => {
             bind!("title", title);
@@ -2176,6 +2177,9 @@ fn own_slots(block: &Block) -> Vec<(String, Slot<'_>)> {
             }
             if let Some(on_edit_cancel) = on_edit_cancel {
                 act!("on_edit_cancel", on_edit_cancel);
+            }
+            if let Some(on_move) = on_move {
+                act!("on_move", on_move);
             }
         }
         Block::List {

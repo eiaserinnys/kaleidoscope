@@ -346,7 +346,10 @@ pub const CONTRACT_VERSION: u32 = 47;
 /// - 63판: 다른 앱의 아이콘을 그리는 미디어 참조 `app_icon`과 그 참조를 주는 `$apps[].icon`.
 /// - 64판: progress의 칸막이(`segments`)와 세로 커서(`marker`).
 /// - 65판: progress의 경고와 위험 색 기준(`warning_at`, `danger_at`).
-pub const BLOCK_SET_VERSION: u32 = PROGRESS_THRESHOLDS_BLOCK_SET_VERSION;
+/// - 66판: section의 끌어 옮기기(`on_move`).
+pub const BLOCK_SET_VERSION: u32 = SECTION_MOVE_BLOCK_SET_VERSION;
+/// 구역 머리를 끌어 순서를 바꾸는 동작.
+pub const SECTION_MOVE_BLOCK_SET_VERSION: u32 = 66;
 /// progress의 색 기준을 처음 지원하는 블록 세트 판.
 pub const PROGRESS_THRESHOLDS_BLOCK_SET_VERSION: u32 = 65;
 /// progress의 칸막이(`segments`)와 세로 커서(`marker`)를 처음 지원하는 블록 세트 판.
@@ -2259,6 +2262,11 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         on_edit_cancel: Option<Actions>,
+        /// (66판) 구역을 끌어 놓으면 실행한다. `$event`는 {key, target, position}이고 position은 before 또는 after다.
+        /// `$item`은 놓은 자리의 반복 항목이다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        on_move: Option<Actions>,
         child: Box<Block>,
     },
 
@@ -3106,6 +3114,8 @@ enum RawBlock {
         on_edit: Option<Actions>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         on_edit_cancel: Option<Actions>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        on_move: Option<Actions>,
         child: Box<Block>,
     },
 
@@ -3818,6 +3828,7 @@ impl From<RawBlock> for Block {
                 editing,
                 on_edit,
                 on_edit_cancel,
+                on_move,
                 child,
             } => Block::Section {
                 title,
@@ -3829,6 +3840,7 @@ impl From<RawBlock> for Block {
                 editing,
                 on_edit,
                 on_edit_cancel,
+                on_move,
                 child,
             },
             RawBlock::List {
@@ -4224,6 +4236,7 @@ impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
+            Block::Section { on_move: Some(_), .. } => SECTION_MOVE_BLOCK_SET_VERSION,
             Block::Notice { .. } => 18,
             Block::Progress { warning_at: Some(_), .. }
             | Block::Progress { danger_at: Some(_), .. } => PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,

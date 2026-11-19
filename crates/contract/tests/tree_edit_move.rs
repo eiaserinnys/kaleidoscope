@@ -137,6 +137,15 @@ fn section(extra: Value) -> Value {
 }
 
 #[test]
+fn section_move_requires_66_and_registers_action() {
+    let ui = section(json!({"on_move": [{"set_state": "picked", "value": {"expr": "$event"}}]}));
+    let parsed = parse_app_definition(&definition(ui.clone(), 66).to_string()).unwrap();
+    assert_eq!(serde_json::to_value(&parsed).unwrap()["ui"], ui);
+    assert!(data::all_ui_actions(&parsed).iter().any(|(pointer, _)| pointer == "/ui/on_move"));
+    assert!(parse_app_definition(&definition(ui, 65).to_string()).is_err());
+}
+
+#[test]
 fn section_menu_and_edit_fields_round_trip_and_expose_slots() {
     let ui = section(json!({
         "menu": [
