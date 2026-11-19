@@ -1,0 +1,18 @@
+{
+  "cssRoots": ["ui/src", "ui/harness", "app/src"],
+  "tsxRoots": ["ui/src", "app/src"],
+  "tsxExclude": [".test.", ".spec.", "/__tests__/", "/tests/", "/test/", "/e2e/", "/qa/", ".qa.", ".stories."],
+  "tokenFiles": ["ui/src/styles/foundation.css"],
+  "selectionPolicyFiles": ["ui/src/styles/selection.css"],
+  "baseline": "scripts/ui-css-baseline.json",
+  "rules": {
+    "color-literal": {"enabled": true, "hint": "--ks-color-text, --ks-color-surface 같은 색 토큰을 쓴다."},
+    "font-literal": {"enabled": true, "hint": "--ks-type-body, --ks-font-family 같은 글자 토큰을 쓴다."},
+    "radius-literal": {"enabled": true, "hint": "--ks-radius-window, --ks-radius-small, --ks-radius-large, --ks-radius-bar 같은 곡률 토큰을 쓴다."},
+    "spacing-literal": {"enabled": true, "hint": "--ks-space-1, --ks-space-2 같은 간격 토큰을 쓴다."},
+    "selection-outside-policy": {"enabled": true, "hint": "selection.css의 허용 목록에 더한다."},
+    "outline-none": {"enabled": true, "hint": "--ks-focus-* 초점 스타일을 :focus-visible에 함께 둔다."},
+    "tw-text-arbitrary": {"enabled": false, "hint": "--ks-type-body 같은 글자 토큰을 쓴다."},
+    "tw-rounded-arbitrary": {"enabled": false, "hint": "--ks-radius-small 같은 곡률 토큰을 쓴다."}
+  }
+}
