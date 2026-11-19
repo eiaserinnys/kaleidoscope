@@ -375,11 +375,11 @@ test("프로세스 교체 뒤에도 이전 응답과 새 응답을 서로 다른
   assert.deepEqual(f.snapshots.at(-1).items.filter((item: any) => item.kind === "assistant").map((item: any) => item.text), ["이전", "새 응답"]);
 });
 
-async function readyWithHistory() {
+async function readyWithHistory(sessionCapabilities: Record<string, unknown> = { list: {} }) {
   const f = fixture();
   const session = new AgentSession(f.host as any);
   await session.attach();
-  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
+  await f.emit({ jsonrpc: "2.0", id: 1, result: { agentCapabilities: { loadSession: true, sessionCapabilities } } });
   await f.emit({ jsonrpc: "2.0", id: 2, result: { sessionId: "current" } });
   await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [] } });
   await session.send({ id: "old", text: "기존 대화", attachments: [] });
@@ -522,6 +522,77 @@ test("목록 능력이 없는 이전 판 체크포인트는 같은 프로세스�
   assert.equal(f.snapshots.at(-1).canListSessions, false);
   assert.equal(f.snapshots.at(-1).sessionId, "current");
   assert.equal(f.writes.filter((write: any) => write.method === "initialize").length, before);
+});
+
+test("지난 세션을 지우면 목록과 이어 받는 쪽에서 빼고 지금 세션은 유지한다", async () => {
+  const { f, session } = await readyWithHistory({ list: {}, delete: {} });
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "a", cwd: "/work" }, { sessionId: "b", cwd: "/work" }], nextCursor: "next" } });
+  const listId = f.writes.at(-1).id;
+  assert.equal(f.snapshots.at(-1).canDeleteSessions, true);
+  await session.deleteSession("a");
+  assert.equal(f.writes.at(-1).method, "session/delete");
+  assert.deepEqual(f.writes.at(-1).params, { sessionId: "a" });
+  assert.equal(f.snapshots.at(-1).deleting, true);
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: {} });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((s: any) => s.sessionId), ["b"]);
+  assert.equal(f.snapshots.at(-1).deleting, false);
+  await f.emit({ jsonrpc: "2.0", id: listId, result: { sessions: [{ sessionId: "c", cwd: "/work" }] } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((s: any) => s.sessionId).sort(), ["b", "c"]);
+  assert.equal(f.snapshots.at(-1).sessionId, "current");
+});
+
+test("지금 세션을 지우면 새 세션을 연다", async () => {
+  const { f, session } = await readyWithHistory({ list: {}, delete: {} });
+  await session.deleteSession("current");
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: {} });
+  assert.equal(f.writes.at(-1).method, "session/new");
+  assert.equal(f.writes.at(-1).params.cwd, "/work");
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessionId: "fresh" } });
+  assert.equal(f.snapshots.at(-1).sessionId, "fresh");
+  assert.deepEqual(f.snapshots.at(-1).items, []);
+});
+
+test("삭제가 실패하면 목록과 대화를 유지하고 삭제 오류를 보인다", async () => {
+  const { f, session } = await readyWithHistory({ list: {}, delete: {} });
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, result: { sessions: [{ sessionId: "a", cwd: "/work" }] } });
+  await session.deleteSession("a");
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "없는 세션" } });
+  assert.deepEqual(f.snapshots.at(-1).sessions.map((s: any) => s.sessionId), ["a"]);
+  assert.equal(f.snapshots.at(-1).sessionError.id, "AGENT_SESSION_DELETE_FAILED");
+  assert.match(f.snapshots.at(-1).sessionError.message, /없는 세션/);
+  assert.equal(f.snapshots.at(-1).phase, "ready");
+  assert.equal(f.snapshots.at(-1).failure, null);
+});
+
+test("목록 실패 뒤 삭제가 실패하면 목록 오류가 아니라 삭제 오류를 보인다", async () => {
+  const { f, session } = await readyWithHistory({ list: {}, delete: {} });
+  await session.listSessions();
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "목록 오류" } });
+  assert.equal(f.snapshots.at(-1).sessionError.id, "AGENT_SESSION_LIST_FAILED");
+  await session.deleteSession("a");
+  assert.equal(f.snapshots.at(-1).sessionError, null);
+  await f.emit({ jsonrpc: "2.0", id: f.writes.at(-1).id, error: { code: -32603, message: "없는 세션" } });
+  assert.equal(f.snapshots.at(-1).sessionError.id, "AGENT_SESSION_DELETE_FAILED");
+});
+
+test("삭제 능력이 없으면 지우지 않는다", async () => {
+  const { f, session } = await readyWithHistory();
+  assert.equal(f.snapshots.at(-1).canDeleteSessions, false);
+  await session.deleteSession("current");
+  assert.equal(f.writes.some((write: any) => write.method === "session/delete"), false);
+});
+
+test("삭제 능력이 없는 이전 판 체크포인트는 같은 프로세스에 붙고 삭제만 잠근다", async () => {
+  const { f } = await readyWithHistory({ list: {}, delete: {} });
+  delete (f.getCheckpoint() as any).capabilities.delete;
+  const resumed = new AgentSession(f.host as any);
+  assert.equal(await resumed.attach(), true);
+  assert.equal(f.snapshots.at(-1).canDeleteSessions, false);
+  assert.equal(f.snapshots.at(-1).sessionId, "current");
+  await resumed.deleteSession("current");
+  assert.equal(f.writes.some((write: any) => write.method === "session/delete"), false);
 });
 
 test("첫 지침은 사용자 글과 같이 보기 뒤에 표지로 감싸 보낸다", async () => {
@@ -704,4 +775,48 @@ test("목록을 기다리는 동안 대화를 보내고 첫 응답 뒤에 목록
   assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, 1);
   await f.emit({ jsonrpc: "2.0", id: listing.id, result: { sessions: [] } });
   assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, 2);
+});
+
+const statusUpdates = [
+  { jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "usage_update", used: 42000, size: 100000, _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "five_hour", utilization: 0.5, resetsAt: 1763400600 } } } } },
+  { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "Claude Team", email: "a@b.c", active: true }] } },
+  ...["one", "two"].map((id) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: id, title: "하위 작업", status: "in_progress", _meta: { claudeCode: { toolName: "Agent" } } } } })),
+];
+
+test("컨텍스트, 한도, 계정, 서브에이전트 수를 화면에 내보낸다", async () => {
+  const { f } = await readyWithHistory();
+  for (const message of statusUpdates) await f.emit(message);
+  const view = f.snapshots.at(-1);
+  assert.deepEqual(view.context, { used: 42000, size: 100000 });
+  assert.equal(view.limits.length, 1);
+  assert.equal(view.limits[0].id, "five_hour");
+  assert.deepEqual(view.account, { label: "Claude Team", email: "a@b.c" });
+  assert.equal(view.subagents, 2);
+});
+
+test("상태 값이 없는 이전 판 체크포인트를 이어받아도 빈 값으로 채운다", async () => {
+  const { f } = await readyWithHistory();
+  const old: any = structuredClone(f.getCheckpoint());
+  delete old.context; delete old.limits; delete old.account;
+  old.tools = [{ id: "legacy", title: "예전 도구" }];
+  await f.host.process.ack({ handle: "p1", after: 0, checkpoint: old });
+  const session = new AgentSession(f.host as any);
+  assert.equal(await session.attach(), true);
+  const view = f.snapshots.at(-1);
+  assert.equal(view.context, null);
+  assert.deepEqual(view.limits, []);
+  assert.equal(view.account, null);
+  assert.equal(view.subagents, 0);
+});
+
+test("새 프로세스를 시작하면 한도와 계정이 비워진다", async () => {
+  const { f, session } = await readyWithHistory();
+  for (const message of statusUpdates) await f.emit(message);
+  assert.equal(f.snapshots.at(-1).limits.length, 1);
+  await session.replace({ name: "시험", command: "agent", args: [], env: {} });
+  const view = f.snapshots.at(-1);
+  assert.deepEqual(view.limits, []);
+  assert.equal(view.account, null);
+  assert.equal(view.context, null);
+  assert.equal(view.subagents, 0);
 });

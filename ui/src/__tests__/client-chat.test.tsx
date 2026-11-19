@@ -123,6 +123,33 @@ it("scope가 바뀌어도 초안은 카드별로 남고 돌아오면 되살아�
   }
 });
 
+it("input_header는 기록 밖 입력창 바로 위에 그리고 footer는 기록 안에 남긴다", async () => {
+  vi.spyOn(ClientRuntime.prototype, "start").mockResolvedValue(undefined);
+  const headed: ClientChatBlockData = { ...block, footer: { type: "text", value: "바닥글" }, input_header: { type: "text", value: "고정 상태" } };
+  const headedApp: AppDefinition = { ...app, ui: headed };
+  const shellSnapshot = makeTestSnapshot({ definitions: [headedApp] });
+  const transport = createFakeTransport({ snapshot: shellSnapshot, folder: null, files: {} });
+  const store = createShellStore(transport);
+  const window = shellSnapshot.shared.windows[0];
+  function Chat() {
+    const data = useWindowData();
+    useEffect(() => { data.publishClientChat("thread", snapshot([item("a")])); }, [data]);
+    return <ClientChatBlock block={headed} context={{ store, window, definition: headedApp }} pointer="/ui" />;
+  }
+  const view = render(<WindowDataProvider store={store} windowId={window.id} definition={headedApp}><Chat /></WindowDataProvider>);
+  try {
+    const header = (await screen.findByText("고정 상태")).closest(".ks-agent-chat-input-header");
+    expect(header).not.toBeNull();
+    expect(header!.closest(".ks-agent-chat-history")).toBeNull();
+    expect(header!.nextElementSibling?.classList.contains("ks-agent-chat-input-area")).toBe(true);
+    const footer = (await screen.findByText("바닥글")).closest(".ks-agent-chat-footer");
+    expect(footer?.closest(".ks-agent-chat-history")).not.toBeNull();
+  } finally {
+    view.unmount();
+    store.dispose();
+  }
+});
+
 /* CSS 원문은 여러 줄로 접혀 있다. 공백을 하나로 눌러 선택자와 본문을 함께 찾는다. */
 function cssRule(css: string, marker: string) {
   const text = css.replace(/\s+/g, " ");
@@ -154,9 +181,17 @@ describe("채팅 블록의 탭과 쌓기 배치", () => {
     const rule = cssRule(dataBlocks, ":is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) :is(");
     expect(rule.selector).toContain(".ks-agent-chat-history");
     expect(rule.selector).toContain(".ks-agent-chat-footer");
+    expect(rule.selector).toContain(".ks-agent-chat-input-header");
     expect(rule.selector).toContain(".ks-agent-chat-input-area");
     expect(rule.body).toContain("padding-inline: 0");
     expect(cssRule(dataBlocks, ":is(.ks-data-tab-panel, .ks-data-section, .ks-dialog) .ks-agent-chat > .ks-notice").body).toContain("margin-inline: 0");
+  });
+
+  it("입력창 위 고정 자리는 입력 칸과 같은 좌우 여백을 쓰고 비면 자리를 차지하지 않는다", () => {
+    const header = cssRule(blocks, ".ks-agent-chat-input-header {");
+    expect(header.body).toContain("flex: 0 0 auto");
+    expect(header.body).toContain("var(--ks-space-3)");
+    expect(cssRule(blocks, ".ks-agent-chat-input-header:empty").body).toContain("display: none");
   });
 
   it("결정 줄 꼬리 위의 도구 막대는 위쪽 선만 남긴다", () => {

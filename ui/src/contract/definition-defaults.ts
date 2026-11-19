@@ -316,6 +316,11 @@ export const DEFINITION_DEFAULT_DEFS: Record<string, DefaultNode> = {
               "option": {
                 "ref": "Block"
               }
+            },
+            "input_header": {
+              "option": {
+                "ref": "Block"
+              }
             }
           }
         }
@@ -931,7 +936,7 @@ export const DEFINITION_DEFAULTS_SAMPLE: unknown = {
   "id": "sample",
   "name": "sample",
   "requires": {
-    "blocks": 66,
+    "blocks": 67,
     "modules": {
       "files": 4,
       "agent": 4,
@@ -1414,7 +1419,7 @@ export const DEFINITION_DEFAULTS_RESULT: unknown = {
   "id": "sample",
   "name": "sample",
   "requires": {
-    "blocks": 66,
+    "blocks": 67,
     "modules": {
       "agent": 4,
       "assets": 1,

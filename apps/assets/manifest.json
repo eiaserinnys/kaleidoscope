@@ -394,5 +394,27 @@
     "byte_size": 48157,
     "created_at": "2026-11-12T00:00:00Z",
     "path": "agent/client-v10.js"
+  },
+  {
+    "id": "builtin-agent-client",
+    "version": 11,
+    "format": "javascript",
+    "sha256": "19150db10dfb56e34f84d24c0786429472ac8a4f42e61cc98ba7a0850a51e393",
+    "source": "apps/agent-client",
+    "license": "MIT",
+    "byte_size": 49767,
+    "created_at": "2026-11-16T00:00:00Z",
+    "path": "agent/client-v11.js"
+  },
+  {
+    "id": "builtin-agent-client",
+    "version": 12,
+    "format": "javascript",
+    "sha256": "7c0d08f3048dcb13958a0635414a5ce00a1a782cf475d1e92c09e0a0c8b69d02",
+    "source": "apps/agent-client",
+    "license": "MIT",
+    "byte_size": 54638,
+    "created_at": "2026-11-19T00:00:00Z",
+    "path": "agent/client-v12.js"
   }
 ]

@@ -42,6 +42,8 @@ pub const BUNDLED_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-agent-client", 8),
     ("builtin-agent-client", 9),
     ("builtin-agent-client", 10),
+    ("builtin-agent-client", 11),
+    ("builtin-agent-client", 12),
     ("builtin-icon-profiler", 2),
     ("builtin-icon-agent", 2),
     ("builtin-icon-explorer", 2),
@@ -82,6 +84,8 @@ const BUNDLED_ASSET_FORMATS: &[AssetFormat] = &[
     AssetFormat::Javascript,
     AssetFormat::Javascript,
     AssetFormat::Javascript,
+    AssetFormat::Javascript,
+    AssetFormat::Javascript,
     AssetFormat::Svg,
     AssetFormat::Svg,
     AssetFormat::Svg,
@@ -112,7 +116,7 @@ pub const WEATHER_ASSET_KEYS: &[(&str, u32)] = &[
     ("builtin-icon-weather", 2),
 ];
 pub const AGENT_ASSET_KEYS: &[(&str, u32)] = &[
-    ("builtin-agent-client", 10),
+    ("builtin-agent-client", 12),
     ("builtin-icon-agent", 2),
 ];
 
@@ -134,9 +138,9 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         default_message_receiver: true,
         id: "agent",
         name: "에이전트",
-        version: 17,
-        updated_at: "2026-11-12T00:00:00Z",
-        blocks: crate::LIST_DISABLED_BLOCK_SET_VERSION,
+        version: 19,
+        updated_at: "2026-11-19T00:00:00Z",
+        blocks: crate::CHAT_INPUT_HEADER_BLOCK_SET_VERSION,
         modules: &[("assets", 1), ("client", crate::RECEIVE_MESSAGE_CLIENT_VERSION), ("files", 1), ("process", 1), ("storage", 1), ("worker", 1)],
         assets: AGENT_ASSET_KEYS,
     },

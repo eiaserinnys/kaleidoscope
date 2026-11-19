@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{validate::parse_app_definition, LIST_DISABLED_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
+use kaleidoscope_contract::{validate::parse_app_definition, CHAT_INPUT_HEADER_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
 use serde_json::Value;
 
 #[test]
@@ -23,7 +23,7 @@ fn builtin_agent_assumes_http_mcp_for_one_default() {
 fn builtin_agent_declares_client_process_and_settings() {
     let json = include_str!("../../../apps/agent.json");
     let value: Value = serde_json::from_str(json).unwrap();
-    assert_eq!(value["requires"]["blocks"], LIST_DISABLED_BLOCK_SET_VERSION);
+    assert_eq!(value["requires"]["blocks"], CHAT_INPUT_HEADER_BLOCK_SET_VERSION);
     assert_eq!(value["requires"]["modules"]["process"], 1);
     assert_eq!(value["requires"]["modules"]["client"], RECEIVE_MESSAGE_CLIENT_VERSION);
     assert_eq!(value["client"]["device_storage"]["scope"], "window");
@@ -63,8 +63,13 @@ fn builtin_agent_locks_both_session_lists_while_busy() {
         let branch = branches.iter().find(|branch| branch["type"] == "when" && branch[width].is_number()).unwrap();
         let mut lists = Vec::new();
         find_session_lists(&branch["child"], &mut lists);
-        assert_eq!(lists.len(), 1, "{width} 갈래에는 세션 목록이 하나 있어야 한다");
-        assert_eq!(lists[0]["disabled"]["client"], "session_buttons_busy");
+        // 지울 수 있는 제공자와 없는 제공자를 위한 두 갈래이며, 어느 쪽이든 바쁜 동안 잠긴다.
+        assert_eq!(lists.len(), 2, "{width} 갈래에는 삭제 가능, 불가 세션 목록이 하나씩 있어야 한다");
+        for list in &lists {
+            assert_eq!(list["disabled"]["client"], "session_buttons_busy");
+        }
+        let deletable: Vec<_> = lists.iter().filter(|list| list["item_menu"][0]["on_select"]["client"] == "delete_session").collect();
+        assert_eq!(deletable.len(), 1, "{width} 갈래에서 삭제 메뉴는 한 목록에만 있어야 한다");
     }
 }
 
@@ -119,4 +124,129 @@ fn builtin_agent_shows_indeterminate_progress_while_starting() {
     assert_eq!(group["children"][0]["type"], "progress");
     assert!(group["children"][0]["value"].is_null());
     assert_eq!(group["children"][1]["value"]["client"], "show_install_label");
+}
+
+#[test]
+fn builtin_agent_declares_status_bar_storage() {
+    let json = include_str!("../../../apps/agent.json");
+    let value: Value = serde_json::from_str(json).unwrap();
+    let declared = value["storage"]["entries"].as_array().unwrap().iter().find(|entry| entry["id"] == "status_bar").unwrap();
+    assert_eq!(declared["key"], "settings/status_bar");
+    assert_eq!(declared["default"], false);
+    assert!(value["client"]["storage_entries"].as_array().unwrap().iter().any(|id| id == "status_bar"));
+    let app = parse_app_definition(json).unwrap();
+    let entry = app.storage.unwrap().entries.into_iter().find(|entry| entry.id == "status_bar").unwrap();
+    kaleidoscope_contract::app_storage::validate_storage_content(&entry, &declared["default"]).unwrap();
+    kaleidoscope_contract::app_storage::validate_storage_content(&entry, &Value::Bool(true)).unwrap();
+    assert!(kaleidoscope_contract::app_storage::validate_storage_content(&entry, &Value::String("true".into())).is_err());
+}
+
+fn collect<'a>(node: &'a Value, matches: &dyn Fn(&Value) -> bool, found: &mut Vec<&'a Value>) {
+    match node {
+        Value::Object(fields) => {
+            if matches(node) {
+                found.push(node);
+            }
+            for child in fields.values() {
+                collect(child, matches, found);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect(item, matches, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let mut chats = Vec::new();
+    collect(&value["ui"], &|node| node["type"] == "chat", &mut chats);
+    assert_eq!(chats.len(), 2);
+    let mut chip_lists = Vec::new();
+    for chat in chats {
+        // footer는 기록 흐름 안의 권한 요청 반복만 남는다.
+        let footer = &chat["footer"];
+        assert_eq!(footer["type"], "repeat");
+        assert_eq!(footer["items"]["client"], "permissions");
+        let mut gates = Vec::new();
+        collect(footer, &|node| node["type"] == "when" && node["value"]["client"] == "show_status_bar", &mut gates);
+        assert!(gates.is_empty());
+        // 상태 줄은 입력창 위 고정 자리에 둔다.
+        let header = &chat["input_header"];
+        assert_eq!(header["type"], "when");
+        assert_eq!(header["value"]["client"], "show_status_bar");
+        // 한 줄을 지키고, 칩 묶음이 남은 폭을 채워 막대들을 오른쪽 끝으로 민다.
+        let strip = &header["child"];
+        assert!(strip.get("wrap").is_none());
+        assert_eq!(strip["direction"], "row");
+        assert_eq!(strip["fill"], 0);
+        let children = strip["children"].as_array().unwrap();
+        assert_eq!(children.len(), 3);
+        let left = &children[0];
+        assert_eq!(left["type"], "stack");
+        assert_eq!(left["direction"], "row");
+        // repeat의 기본 배치는 세로라 칩을 한 줄로 두려면 row를 밝힌다.
+        assert_eq!(left["children"][0]["layout"], "row");
+        let chips = left["children"][0]["items"]["client"].as_str().unwrap().to_string();
+        let subagents: Vec<_> = left["children"].as_array().unwrap()[1..].iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
+        // 넓은 창만 서브에이전트 칩을 두고, 좁은 창은 model 칩 하나만 남긴다.
+        assert_eq!(subagents, if chips == "status_chips" { vec!["status_has_subagents"] } else { Vec::<&str>::new() });
+        chip_lists.push(chips);
+        // context 막대(사용률, 0.7과 0.9)와 session, weekly 막대 반복(0.8과 0.95).
+        let context = &children[1];
+        assert_eq!(context["value"]["client"], "status_has_context");
+        let mut bars = Vec::new();
+        collect(context, &|node| node["type"] == "progress", &mut bars);
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0]["label"], "context");
+        assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.7), Some(0.9)));
+        let limits = &children[2];
+        assert_eq!(limits["type"], "repeat");
+        assert_eq!(limits["items"]["client"], "status_limit_bars");
+        assert_eq!(limits["layout"], "row");
+        let mut bars = Vec::new();
+        collect(limits, &|node| node["type"] == "progress", &mut bars);
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0]["label"]["item"], "label");
+        assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.8), Some(0.95)));
+    }
+    chip_lists.sort();
+    assert_eq!(chip_lists, ["status_chips", "status_chips_narrow"]);
+    let screen = value["ui"]["children"].as_array().unwrap().iter().find(|state| state["value"]["client"] == "show_chat").unwrap();
+    let mut narrow = Vec::new();
+    collect(&screen["child"], &|node| node["type"] == "when" && node["max_width"].is_number(), &mut narrow);
+    let mut inside = Vec::new();
+    collect(narrow[0], &|node| node["type"] == "repeat" && node["items"]["client"] == "status_chips_narrow", &mut inside);
+    assert_eq!(inside.len(), 1);
+}
+
+#[test]
+fn builtin_agent_settings_has_status_toggle() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let mut toggles = Vec::new();
+    collect(&value["settings"]["ui"], &|node| node["type"] == "toggle" && node["on_change"]["client"] == "toggle_status_bar", &mut toggles);
+    assert_eq!(toggles.len(), 1);
+    assert_eq!(toggles[0]["value"]["client"], "status_bar_on");
+    assert_eq!(toggles[0]["label"], "창에 상태 항상 보기");
+    assert!(value["client"]["actions"].as_array().unwrap().iter().any(|id| id == "toggle_status_bar"));
+    let mut limits = Vec::new();
+    collect(&value["settings"]["ui"], &|node| node["type"] == "repeat" && node["items"]["client"] == "status_limits", &mut limits);
+    assert_eq!(limits.len(), 1);
+}
+
+#[test]
+fn builtin_agent_declares_every_status_output() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let outputs = value["client"]["outputs"].as_object().unwrap();
+    for name in [
+        "status_bar_on", "show_status_bar", "status_chips", "status_chips_narrow", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
+        "status_limit_bars", "status_limits", "status_no_limits", "status_account",
+        "status_has_context", "status_has_subagents", "status_has_account",
+    ] {
+        assert!(outputs.contains_key(name), "{name} 출력이 선언되지 않았다");
+    }
 }

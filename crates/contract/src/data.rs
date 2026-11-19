@@ -1804,9 +1804,18 @@ pub fn child_blocks<'a>(block: &'a Block, pointer: &str) -> Vec<(String, &'a Blo
             )))
             .collect(),
         Block::Chat {
-            footer: Some(footer),
+            footer,
+            input_header,
             ..
-        } => vec![(format!("{pointer}/footer"), footer.as_ref())],
+        } => footer
+            .iter()
+            .map(|footer| (format!("{pointer}/footer"), footer.as_ref()))
+            .chain(
+                input_header
+                    .iter()
+                    .map(|header| (format!("{pointer}/input_header"), header.as_ref())),
+            )
+            .collect(),
         _ => Vec::new(),
     }
 }

@@ -32,7 +32,7 @@ function hasPicker(block: Block): boolean {
     case "section": return hasPicker(block.child) || (block.actions ?? []).some(hasPicker);
     case "when": case "anchor": return hasPicker(block.child);
     case "repeat": return hasPicker(block.template);
-    case "chat": return block.footer ? hasPicker(block.footer) : false;
+    case "chat": return [block.footer, block.input_header].some((child) => child ? hasPicker(child) : false);
     case "button": return block.preview ? hasPicker(block.preview) : false;
     default: return false;
   }
