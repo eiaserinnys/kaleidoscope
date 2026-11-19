@@ -182,7 +182,19 @@ fn builtin_agent_shows_status_bar_in_both_chat_footers() {
         // 한 줄을 지키고, 값 없는 칸은 짝 불리언으로 감춘다.
         let strip = &gates[0]["child"];
         assert!(strip.get("wrap").is_none());
-        let chips = strip["children"][0]["items"]["client"].as_str().unwrap();
+        // 칩과 서브에이전트 칩을 담은 안쪽 줄이 남은 폭을 채워 컨텍스트와 한도를 오른쪽 끝으로 민다.
+        assert_eq!(strip["direction"], "row");
+        assert_eq!(strip["fill"], 0);
+        let left = &strip["children"][0];
+        assert_eq!(left["type"], "stack");
+        assert_eq!(left["direction"], "row");
+        assert_eq!(left["children"].as_array().unwrap().len(), 2);
+        assert_eq!(left["children"][1]["value"]["client"], "status_has_subagents");
+        let right: Vec<_> = strip["children"].as_array().unwrap()[1..].iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
+        assert_eq!(right, ["status_has_context", "status_has_limit", "status_has_limit_more"]);
+        // repeat의 기본 배치는 세로라 칩을 한 줄로 두려면 row를 밝힌다.
+        assert_eq!(left["children"][0]["layout"], "row");
+        let chips = left["children"][0]["items"]["client"].as_str().unwrap();
         narrow_chips.push(chips.to_string());
         let mut hidden = Vec::new();
         collect(strip, &|node| node["type"] == "when", &mut hidden);

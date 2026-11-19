@@ -889,33 +889,44 @@
                                 "direction": "row",
                                 "gap": "small",
                                 "align": "center",
+                                "fill": 0,
                                 "children": [
                                   {
-                                    "type": "repeat",
-                                    "items": {
-                                      "client": "status_chips"
-                                    },
-                                    "key": "key",
-                                    "template": {
-                                      "type": "text",
-                                      "value": {
-                                        "item": "text"
+                                    "type": "stack",
+                                    "direction": "row",
+                                    "gap": "small",
+                                    "align": "center",
+                                    "children": [
+                                      {
+                                        "type": "repeat",
+                                        "items": {
+                                          "client": "status_chips"
+                                        },
+                                        "key": "key",
+                                        "gap": "small",
+                                        "layout": "row",
+                                        "template": {
+                                          "type": "text",
+                                          "value": {
+                                            "item": "text"
+                                          },
+                                          "style": "meta"
+                                        }
                                       },
-                                      "style": "meta"
-                                    }
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_subagents"
-                                    },
-                                    "child": {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_subagents"
-                                      },
-                                      "style": "meta"
-                                    }
+                                      {
+                                        "type": "when",
+                                        "value": {
+                                          "client": "status_has_subagents"
+                                        },
+                                        "child": {
+                                          "type": "text",
+                                          "value": {
+                                            "client": "status_subagents"
+                                          },
+                                          "style": "meta"
+                                        }
+                                      }
+                                    ]
                                   },
                                   {
                                     "type": "when",
@@ -1100,33 +1111,44 @@
                                 "direction": "row",
                                 "gap": "small",
                                 "align": "center",
+                                "fill": 0,
                                 "children": [
                                   {
-                                    "type": "repeat",
-                                    "items": {
-                                      "client": "status_chips_narrow"
-                                    },
-                                    "key": "key",
-                                    "template": {
-                                      "type": "text",
-                                      "value": {
-                                        "item": "text"
+                                    "type": "stack",
+                                    "direction": "row",
+                                    "gap": "small",
+                                    "align": "center",
+                                    "children": [
+                                      {
+                                        "type": "repeat",
+                                        "items": {
+                                          "client": "status_chips_narrow"
+                                        },
+                                        "key": "key",
+                                        "gap": "small",
+                                        "layout": "row",
+                                        "template": {
+                                          "type": "text",
+                                          "value": {
+                                            "item": "text"
+                                          },
+                                          "style": "meta"
+                                        }
                                       },
-                                      "style": "meta"
-                                    }
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_subagents"
-                                    },
-                                    "child": {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_subagents"
-                                      },
-                                      "style": "meta"
-                                    }
+                                      {
+                                        "type": "when",
+                                        "value": {
+                                          "client": "status_has_subagents"
+                                        },
+                                        "child": {
+                                          "type": "text",
+                                          "value": {
+                                            "client": "status_subagents"
+                                          },
+                                          "style": "meta"
+                                        }
+                                      }
+                                    ]
                                   },
                                   {
                                     "type": "when",
