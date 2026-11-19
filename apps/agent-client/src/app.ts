@@ -456,7 +456,9 @@ export class AppClient {
         return text ? [{ key: category, text }] : [];
       }),
     ];
-    const limits = view?.limits ?? [], tightest = tightestLimit(limits), tightestRow = tightest && limitRow(tightest, now);
+    const limits = view?.limits ?? [], tightest = tightestLimit(limits), row = tightest && limitRow(tightest, now);
+    // 가장 빠듯한 창조차 모르면(전부 모름) 상태 줄에서는 숨긴다. 설정 목록은 「모름」으로 보인다.
+    const tightestRow = row?.known ? row : null;
     const context = view?.context && view.context.size > 0 ? Math.min(1, view.context.used / view.context.size) : null;
     const subagents = view?.subagents ?? 0;
     const output = {
@@ -481,7 +483,7 @@ export class AppClient {
       status_chips: chips, status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
       status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,
       status_limit_value: tightestRow?.value ?? null, status_limit_text: tightest && tightestRow ? `${tightest.label} ${tightestRow.text}` : null,
-      status_limit_more: limits.length > 1 ? `외 ${limits.length - 1}` : null,
+      status_limit_more: tightestRow && limits.length > 1 ? `외 ${limits.length - 1}` : null,
       status_limits: limits.map((limit) => limitRow(limit, now)), status_no_limits: limits.length === 0,
       status_account: account, status_subagents_text: subagents > 0 ? `${subagents}개 실행 중` : "없음",
       history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: this.sessionLocked,
