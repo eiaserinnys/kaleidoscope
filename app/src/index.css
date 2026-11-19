@@ -2,6 +2,8 @@ html,
 body {
   overflow: hidden;
   overscroll-behavior: none;
+  /* 손가락 두 번 누르기로 확대하지 않는다. 창 제목줄처럼 touch-action을 따로 정한 곳은 그대로다. */
+  touch-action: manipulation;
 }
 
 .app-root {
