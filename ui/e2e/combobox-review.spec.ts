@@ -52,7 +52,9 @@ for (const method of ["이름", "행", "방향키"]) test(method + " 선택 직�
   await expect(f).toHaveValue("배");
   await f.press("Enter");
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await f.press("Escape"); await f.click(); await page.keyboard.type("포");
+  await f.press("Escape"); await f.click();
+  await expect.poll(() => selection(f)).toEqual([0, 1]);
+  await page.keyboard.type("포");
   await expect(f).toHaveValue("포");
 });
 
