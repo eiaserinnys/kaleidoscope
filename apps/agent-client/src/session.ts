@@ -2,6 +2,7 @@ import { History, type BlobStore } from "./history.ts";
 import { answerPermission, enqueue, initialState, reduceMessage, reserveRequest, type Attachment, type Item, type State } from "./reducer.ts";
 import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
+import type { Account, Limit } from "./status.ts";
 import { cleanReplay, GUIDE_TAG } from "./guide.ts";
 
 export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[]; assume_http_mcp?: boolean };
@@ -20,7 +21,7 @@ type ProcessPort = {
 };
 type Prepared = { text: string | null; images: { name: string; mime: string; bytes: Uint8Array }[]; ticket: string };
 type SessionInfo = { sessionId: string; cwd: string; title?: string; updatedAt?: string };
-export type SessionView = { phase: State["phase"]; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: State["permissions"]; controls: State["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; canDeleteSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; deleting: boolean; configuring: boolean };
+export type SessionView = { phase: State["phase"]; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: State["permissions"]; controls: State["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; canDeleteSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; deleting: boolean; configuring: boolean; context: State["context"]; limits: Limit[]; account: Account | null; subagents: number };
 export type Host = {
   process: ProcessPort;
   blobs: BlobStore;
@@ -99,7 +100,8 @@ export class AgentSession {
       this.after = process.after;
       this.cwd = process.cwd;
       this.tools = process.services.tools ?? null;
-      this.state = (process.checkpoint as State | null) ?? { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
+      // 이전 판 체크포인트에 없는 필드는 초기값으로 채운다
+      this.state = process.checkpoint ? { ...initialState(), ...(process.checkpoint as State) } : { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
       this.sessionsLoading = Object.values(this.state.pending).some((request) => request.kind === "list");
       this.listWanted = !this.sessionsLoading;
       this.checkpointKeys = [this.state.streamKey, this.state.partialKey].filter((key): key is string => !!key);
@@ -527,6 +529,7 @@ export class AgentSession {
       sessionsLoading: this.sessionsLoading, sessionError: this.listError ?? this.state.sessionError ?? null,
       switching: Object.values(this.state.pending).some((request) => request.kind === "switch" || request.kind === "new_user"),
       deleting: Object.values(this.state.pending).some((request) => request.kind === "delete"),
-      configuring: Object.values(this.state.pending).some((request) => request.kind === "configure") });
+      configuring: Object.values(this.state.pending).some((request) => request.kind === "configure"),
+      context: this.state.context, limits: this.state.limits, account: this.state.account, subagents: this.state.tools.filter((tool) => tool.subagent).length });
   }
 }

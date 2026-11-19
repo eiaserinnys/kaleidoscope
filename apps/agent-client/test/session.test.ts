@@ -776,3 +776,47 @@ test("목록을 기다리는 동안 대화를 보내고 첫 응답 뒤에 목록
   await f.emit({ jsonrpc: "2.0", id: listing.id, result: { sessions: [] } });
   assert.equal(f.writes.filter((entry) => entry.method === "session/list").length, 2);
 });
+
+const statusUpdates = [
+  { jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "usage_update", used: 42000, size: 100000, _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "five_hour", utilization: 0.5, resetsAt: 1763400600 } } } } },
+  { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "Claude Team", email: "a@b.c", active: true }] } },
+  ...["one", "two"].map((id) => ({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: id, title: "하위 작업", status: "in_progress", _meta: { claudeCode: { toolName: "Agent" } } } } })),
+];
+
+test("컨텍스트, 한도, 계정, 서브에이전트 수를 화면에 내보낸다", async () => {
+  const { f } = await readyWithHistory();
+  for (const message of statusUpdates) await f.emit(message);
+  const view = f.snapshots.at(-1);
+  assert.deepEqual(view.context, { used: 42000, size: 100000 });
+  assert.equal(view.limits.length, 1);
+  assert.equal(view.limits[0].id, "five_hour");
+  assert.deepEqual(view.account, { label: "Claude Team", email: "a@b.c" });
+  assert.equal(view.subagents, 2);
+});
+
+test("상태 값이 없는 이전 판 체크포인트를 이어받아도 빈 값으로 채운다", async () => {
+  const { f } = await readyWithHistory();
+  const old: any = structuredClone(f.getCheckpoint());
+  delete old.context; delete old.limits; delete old.account;
+  old.tools = [{ id: "legacy", title: "예전 도구" }];
+  await f.host.process.ack({ handle: "p1", after: 0, checkpoint: old });
+  const session = new AgentSession(f.host as any);
+  assert.equal(await session.attach(), true);
+  const view = f.snapshots.at(-1);
+  assert.equal(view.context, null);
+  assert.deepEqual(view.limits, []);
+  assert.equal(view.account, null);
+  assert.equal(view.subagents, 0);
+});
+
+test("새 프로세스를 시작하면 한도와 계정이 비워진다", async () => {
+  const { f, session } = await readyWithHistory();
+  for (const message of statusUpdates) await f.emit(message);
+  assert.equal(f.snapshots.at(-1).limits.length, 1);
+  await session.replace({ name: "시험", command: "agent", args: [], env: {} });
+  const view = f.snapshots.at(-1);
+  assert.deepEqual(view.limits, []);
+  assert.equal(view.account, null);
+  assert.equal(view.context, null);
+  assert.equal(view.subagents, 0);
+});
