@@ -308,6 +308,7 @@ pub(crate) fn login(
     crate::data_runtime::connection_changed(inner, permission);
     crate::data_runtime::refresh_login_required(inner, &connection_name);
     crate::conversation_stream::login_succeeded(inner, &connection_name);
+    crate::source_streams::login_succeeded(inner, &connection_name);
     crate::conversation_send::recover(inner);
     crate::conversation_reconcile::schedule(inner);
     Ok(kaleidoscope_contract::CoreReply::ConnectionLogin {})

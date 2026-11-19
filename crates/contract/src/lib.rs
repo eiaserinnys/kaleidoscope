@@ -135,6 +135,12 @@
 //! 서버를 바꿔도 그대로이고 다른 기기로 가지 않는다. 호스트가 이 값을 네이티브 창 테마로 적용하면 창 안의 웹 내용
 //! (쉘, 블록, HTML 보기, sandbox, client 프레임)은 `prefers-color-scheme`로 그 테마를 따른다.
 //!
+//! # 계약 48판: 변경 알림으로 다시 받기
+//! 앱 정의에 `streams`(상류 SSE 스트림)와 `request` 원천의 `watch`를 더한다. 코어가 기기 로그인 연결로 스트림을
+//! 열어 두고, 알림이 오면 그 알림을 기다리는 원천을 다시 받는다. 알림 내용은 값으로 쓰지 않고 값은 다시 받은
+//! 응답으로만 바뀐다. 스트림은 보이는 창이 쓰는 동안만 열고, 호출 예산(`refresh_secs`)은 그대로다.
+//! 새 필드는 모듈 `connection` 4판을 요구한다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -267,7 +273,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 47;
+pub const CONTRACT_VERSION: u32 = 48;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -446,6 +452,8 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 ///   이미지와 소리 받기. 연결은 서버가 헤더를 쥐고 대신 부르는 `relay`와 이 기기가 로그인해 직접 부르는
 ///   `oauth` 두 가지다([`registry`]의 「연결」 절).
 /// - `connection` 2판: 계정마다 연결 이름을 등록한다.
+/// - `connection` 4판: 앱 정의 `streams`의 상류 SSE 스트림과 `request` 원천의 `watch`. 코어가 기기 로그인으로
+///   스트림을 열어 두고 알림이 오면 원천을 다시 받는다([`data`]).
 /// - `client` 1판: 창별 격리 프레임의 로직과 로컬 출력.
 /// - `client` 2판: HTTP 권한, 기기 저장소와 기본 런타임 기능.
 /// - `client` 3판: 로컬 process 실행 권한.
@@ -461,7 +469,7 @@ pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 4),
     ("agent", 4),
     ("web", 1),
-    ("connection", realtime::REALTIME_CONNECTION_VERSION),
+    ("connection", data::STREAM_CONNECTION_VERSION),
     ("storage", 3),
     ("assets", 1),
     ("http", 3),
@@ -1040,6 +1048,10 @@ pub enum LinkStatus {
 ///      `request` 원천의 권한은 `connection` 모듈, `file`과 `folder`의 권한은 `files` 모듈이다.
 ///      `refresh_secs`는 [`data::SOURCE_REFRESH_MIN_SECS`] 이상이다. 원천의 값 자리 식은 `$data`, `$event`, `$item`을
 ///      쓰지 않는다. 정의에 직접 적은 `request` 경로는 `/`로 시작하고, `file` 경로는 [`FileRef`]의 경로 규칙을 지킨다.
+///    - (48판) `streams`와 `watch`를 쓰면 `requires.modules.connection`이 [`data::STREAM_CONNECTION_VERSION`] 이상이다.
+///      스트림 이름은 원천 이름과 같은 규칙을 지키고, 스트림 `permission`은 `connection` 권한이며 `path`는 `/`로
+///      시작한다. `watch.stream`은 선언한 스트림을 가리키고, `on`은 비어 있지 않고 규칙마다 `event`가 비어 있지 않으며
+///      `coalesce_secs`는 [`data::WATCH_COALESCE_MIN_SECS`] 이상이다. 선언한 스트림은 `watch` 하나 이상이 쓴다.
 ///    - (4판) 모든 식(`expr`)은 JSONata로 읽혀야 하고, 식이 `$data.이름`으로 읽는 원천은 `sources`에 있다.
 ///      `state`나 `expr` 하나만 가진 객체를 리터럴 바인딩으로 쓰지 않는다(모양이 틀린 바인딩).
 ///    - (4판) 동작의 상태 키는 선언되어 있고, `refresh`의 원천은 있다. `call`의 권한은 `connection` 모듈이고,
@@ -1103,6 +1115,11 @@ pub struct AppDefinition {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[ts(optional, as = "Option<BTreeMap<String, SourceDecl>>")]
     pub sources: BTreeMap<String, SourceDecl>,
+    /// (계약 48판, 모듈 `connection` 4판) 이름 붙인 상류 SSE 스트림. `request` 원천의 `watch`가 이름으로 가리키면
+    /// 코어가 그 스트림을 기기에서 열어 두고, 알림이 오면 가리킨 원천을 다시 받는다.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(optional, as = "Option<BTreeMap<String, data::StreamDecl>>")]
+    pub streams: BTreeMap<String, data::StreamDecl>,
     /// (계약 11판, 모듈 `storage` 1판) 계정 × 앱 저장소에 둘 항목과 기본값.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -7129,6 +7146,7 @@ mod tests {
             "explorer.json",
             "block-gallery.json",
             "card-board.json",
+            "live-feed.json",
         ] {
             let def: AppDefinition =
                 serde_json::from_str(&example(name)).unwrap_or_else(|e| panic!("{name}: {e}"));

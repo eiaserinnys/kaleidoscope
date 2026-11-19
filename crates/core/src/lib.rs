@@ -38,6 +38,8 @@ mod registry_events;
 mod share;
 mod shell_import;
 mod shell_preferences;
+mod source_streams;
+mod sse;
 mod state_commands;
 mod state_commit;
 mod state_events;
@@ -252,6 +254,7 @@ pub(crate) struct Inner {
     pub(crate) realtime: realtime_host::RealtimeConnections,
     pub(crate) client_services: client_services::ClientServices,
     pub(crate) conversation_streams: conversation_stream::Streams,
+    pub(crate) source_streams: source_streams::Streams,
     pub(crate) conversation_sends: Mutex<HashSet<String>>,
     pub(crate) isolated_captures: Mutex<HashMap<String, share::IsolatedCapture>>,
     pub(crate) window_control: window_control::WindowControlRuntime,
@@ -515,6 +518,7 @@ impl Core {
             realtime: realtime_host::RealtimeConnections::default(),
             client_services: client_services::ClientServices::default(),
             conversation_streams: conversation_stream::Streams::default(),
+            source_streams: source_streams::Streams::default(),
             conversation_sends: Mutex::new(HashSet::new()),
             isolated_captures: Mutex::new(HashMap::new()),
             window_control: window_control::WindowControlRuntime::default(),

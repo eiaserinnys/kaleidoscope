@@ -109,3 +109,23 @@ fn dynamic_store_indexes_have_no_automatic_host_budget() {
     }));
     assert!(call_budget(&definition).is_empty());
 }
+
+#[test]
+fn watch_does_not_increase_automatic_call_budget() {
+    let mut definition = json!({
+        "id":"watch-budget", "name":"알림 호출 예산", "requires":{"blocks":4,"modules":{"connection":4}},
+        "permissions":[{"module":"connection","id":"feed","label":"피드","connection":"example","access":"read"}],
+        "streams":{"changes":{"permission":"feed","path":"/events"}},
+        "state":{},
+        "sources":{"items":{"kind":"request","permission":"feed","path":"/items","refresh_secs":30,
+            "watch":{"stream":"changes","on":[{"event":"message"},{"event":"update","where":{"kind":"card"}}]}}},
+        "ui":{"type":"text","value":{"expr":"$data.items"}}
+    });
+    let with_watch = parse(definition.clone());
+    definition.as_object_mut().unwrap().remove("streams");
+    definition["sources"]["items"]
+        .as_object_mut()
+        .unwrap()
+        .remove("watch");
+    assert_eq!(call_budget(&with_watch), call_budget(&parse(definition)));
+}

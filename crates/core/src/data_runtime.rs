@@ -5,6 +5,7 @@ pub(crate) mod gates;
 mod liveness;
 mod paging;
 mod storage;
+pub(crate) mod watch;
 pub(crate) use actions::{act, layout_errors};
 pub(crate) use paging::more;
 use std::collections::{BTreeMap, BTreeSet};
@@ -102,6 +103,8 @@ struct Source {
     generation: u64,
     in_flight: bool,
     startup_wait: Option<crate::startup_readiness::WaitFor>,
+    /// 변경 알림으로 다시 받을 때. 이 시각이 지나면 run_due가 요청 캐시를 건너뛰고 한 번 받는다.
+    watch_due: Option<Instant>,
     last_fetched: Option<Instant>,
     last_success_at: Option<chrono::DateTime<chrono::Utc>>,
     last_success_instant: Option<Instant>,
@@ -156,6 +159,7 @@ impl Runtime {
                         generation: 0,
                         in_flight: false,
                         startup_wait: None,
+                        watch_due: None,
                         last_fetched: None,
                         last_success_at: None,
                         last_success_instant: None,
@@ -763,6 +767,8 @@ fn prepare(
         source.status,
         SourceStatus::Failed { .. } | SourceStatus::LoginRequired { .. }
     );
+    // 알림으로 받을 때가 된 원천은 이번 받기가 그 다시 받기다. 요청 캐시를 건너뛴다.
+    let force = force || source.watch_due.take().is_some();
     source.generation = manager.next_generation.fetch_add(1, Ordering::SeqCst) + 1;
     source.in_flight = true;
     source.last_fetched = Some(Instant::now());
@@ -1111,6 +1117,7 @@ pub(crate) fn attach(
         storage::load(inner, window_id, None);
     }
     jobs(inner, pending);
+    crate::source_streams::reconcile(inner);
     inner.layout_signal.notify();
     Ok(CoreReply::DataAttach { view })
 }
@@ -1131,6 +1138,7 @@ pub(crate) fn dormant(
             .dormant = dormant;
     }
     run_due(inner, Some(window_id));
+    crate::source_streams::reconcile(inner);
     Ok(CoreReply::DataDormant {})
 }
 
@@ -1150,6 +1158,7 @@ pub(crate) fn detach(inner: &Arc<Inner>, window_id: &str) -> Result<CoreReply, C
         runtime.attached = runtime.attached.saturating_sub(1);
     }
     drop(windows);
+    crate::source_streams::reconcile(inner);
     inner.layout_signal.notify();
     Ok(CoreReply::DataDetach {})
 }
@@ -1441,6 +1450,7 @@ pub(crate) fn state_changed(inner: &Arc<Inner>) {
         storage::load(inner, &id, None);
     }
     run_due(inner, None);
+    crate::source_streams::reconcile(inner);
     inner.layout_signal.notify();
 }
 
@@ -1488,6 +1498,9 @@ pub(crate) fn grant_changed(inner: &Arc<Inner>, window: &str, permission: &str) 
 }
 
 pub(crate) fn connections_changed(inner: &Arc<Inner>, changed: &[String]) {
+    for connection in changed {
+        crate::source_streams::connection_changed(inner, connection);
+    }
     let retries: Vec<_> = {
         let mut windows = inner.data_runtimes.windows.lock().unwrap();
         for runtime in windows.values_mut() {
@@ -1600,15 +1613,19 @@ fn run_due(inner: &Arc<Inner>, only_window: Option<&str>) -> Vec<JoinHandle<()>>
                     && source
                         .waiting
                         .is_none_or(|until| until <= chrono::Utc::now())
-                    && match (
-                        source.last_fetched,
-                        runtime.definition.sources[&name].refresh_secs(),
-                    ) {
-                        (None, _) => true,
-                        (_, _) if source.waiting.is_some() => true,
-                        (Some(at), Some(secs)) => source.paging.pages < 2 && at.elapsed() >= Duration::from_secs(secs.into()),
-                        (Some(_), None) => false,
-                    };
+                    && (source.watch_due.is_some_and(|at| at <= Instant::now())
+                        || match (
+                            source.last_fetched,
+                            runtime.definition.sources[&name].refresh_secs(),
+                        ) {
+                            (None, _) => true,
+                            (_, _) if source.waiting.is_some() => true,
+                            (Some(at), Some(secs)) => {
+                                source.paging.pages < 2
+                                    && at.elapsed() >= Duration::from_secs(secs.into())
+                            }
+                            (Some(_), None) => false,
+                        });
                 if due {
                     if let Some(job) = prepare(&inner.data_runtimes, runtime, window, &name, false)
                     {

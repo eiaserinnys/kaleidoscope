@@ -44,6 +44,7 @@ mod realtime_public_tests;
 mod realtime_tests;
 mod server_switch_tests;
 mod share_capture_tests;
+mod source_stream_tests;
 mod shared_state_recovery_tests;
 mod startup_readiness_tests;
 mod shell_actions_tests;
