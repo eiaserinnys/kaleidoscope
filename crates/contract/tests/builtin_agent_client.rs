@@ -166,6 +166,8 @@ fn builtin_agent_shows_status_bar_in_both_chat_footers() {
     let mut chats = Vec::new();
     collect(&value["ui"], &|node| node["type"] == "chat", &mut chats);
     assert_eq!(chats.len(), 2);
+    // 좁은 창(max_width 갈래)은 낮은 우선순위 칩을 접어 model 칩만 보인다.
+    let mut narrow_chips = Vec::new();
     for chat in chats {
         let footer = &chat["footer"];
         assert_eq!(footer["type"], "stack");
@@ -177,14 +179,24 @@ fn builtin_agent_shows_status_bar_in_both_chat_footers() {
         collect(footer, &|node| node["type"] == "when" && node["value"]["client"] == "show_status_bar", &mut gates);
         assert_eq!(gates.len(), 1);
         assert_eq!(&children[1], gates[0]);
-        // 좁은 창에서는 칩 줄이 접히고 값 없는 칸은 짝 불리언으로 감춘다.
+        // 한 줄을 지키고, 값 없는 칸은 짝 불리언으로 감춘다.
         let strip = &gates[0]["child"];
-        assert_eq!(strip["wrap"], true);
+        assert!(strip.get("wrap").is_none());
+        let chips = strip["children"][0]["items"]["client"].as_str().unwrap();
+        narrow_chips.push(chips.to_string());
         let mut hidden = Vec::new();
         collect(strip, &|node| node["type"] == "when", &mut hidden);
         let conditions: Vec<_> = hidden.iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
         assert_eq!(conditions, ["status_has_subagents", "status_has_context", "status_has_limit", "status_has_limit_more"]);
     }
+    narrow_chips.sort();
+    assert_eq!(narrow_chips, ["status_chips", "status_chips_narrow"]);
+    let screen = value["ui"]["children"].as_array().unwrap().iter().find(|state| state["value"]["client"] == "show_chat").unwrap();
+    let mut narrow = Vec::new();
+    collect(&screen["child"], &|node| node["type"] == "when" && node["max_width"].is_number(), &mut narrow);
+    let mut inside = Vec::new();
+    collect(narrow[0], &|node| node["type"] == "repeat" && node["items"]["client"] == "status_chips_narrow", &mut inside);
+    assert_eq!(inside.len(), 1);
 }
 
 #[test]
@@ -206,7 +218,7 @@ fn builtin_agent_declares_every_status_output() {
     let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     let outputs = value["client"]["outputs"].as_object().unwrap();
     for name in [
-        "status_bar_on", "show_status_bar", "status_chips", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
+        "status_bar_on", "show_status_bar", "status_chips", "status_chips_narrow", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
         "status_limit_value", "status_limit_text", "status_limit_more", "status_limits", "status_no_limits", "status_account",
         "status_has_context", "status_has_subagents", "status_has_limit", "status_has_limit_more", "status_has_account",
     ] {
