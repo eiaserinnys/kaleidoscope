@@ -1,11 +1,11 @@
 import { AgentSession, type Host, type SendInput, type SessionView, type Spec } from "./session.ts";
 import { agentError } from "./errors.ts";
 import { cleanTitle } from "./guide.ts";
-import { controlLabel, limitRow, limitsAt, nextReset, tightestLimit } from "./status-view.ts";
+import { controlLabel, limitBars, limitRow, limitsAt, nextRedraw } from "./status-view.ts";
 
 const CHIP_CATEGORIES = ["model", "thought_level", "mode"];
-// 다시 차는 시각을 기다리는 타이머의 최소, 최대 대기(ms). 먼 시각은 시계가 어긋나도 맞도록 한 시간마다 다시 잰다.
-const RESET_WAIT = { min: 1_000, max: 3_600_000 };
+// 남은 시간 글이 바뀌는 때를 기다리는 타이머의 최소, 최대 대기(ms). 먼 시각은 시계가 어긋나도 맞도록 한 시간마다 다시 잰다.
+const REDRAW_WAIT = { min: 1_000, max: 3_600_000 };
 
 type Agent = Spec & { id: string };
 type Program = { name: string; winget: string; url: string };
@@ -70,7 +70,7 @@ export class AppClient {
   private historyOpen = false;
   private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
-  private resetTimer: ReturnType<typeof setTimeout> | undefined;
+  private redrawTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(client: Bridge, defaults: Agent[]) {
     this.client = client;
@@ -428,11 +428,11 @@ export class AppClient {
     this.update();
   }
 
-  private scheduleReset(limits: SessionView["limits"], now: Date): void {
-    clearTimeout(this.resetTimer);
-    const next = nextReset(limits, now);
-    this.resetTimer = next === null ? undefined
-      : setTimeout(() => this.update(), Math.min(RESET_WAIT.max, Math.max(RESET_WAIT.min, next - now.getTime())));
+  private scheduleRedraw(limits: SessionView["limits"], now: Date): void {
+    clearTimeout(this.redrawTimer);
+    const next = nextRedraw(limits, now);
+    this.redrawTimer = next === null ? undefined
+      : setTimeout(() => this.update(), Math.min(REDRAW_WAIT.max, Math.max(REDRAW_WAIT.min, next - now.getTime())));
   }
 
   private update(): void {
@@ -459,18 +459,16 @@ export class AppClient {
     const now = new Date(), view = this.view;
     const account = view?.account ? (view.account.email ? `${view.account.label}, ${view.account.email}` : view.account.label) : null;
     const chips = [
-      ...(account ? [{ key: "account", text: account }] : []),
+      ...(view?.account ? [{ key: "account", text: view.account.label }] : []),
       ...CHIP_CATEGORIES.flatMap((category) => {
         const control = view?.controls.find((candidate) => candidate.category === category);
         const text = control && controlLabel(control);
         return text ? [{ key: category, text }] : [];
       }),
     ];
-    // 다시 차는 시각이 지난 창은 모름으로 보고, 가장 가까운 다시 차는 시각에 한 번 더 그린다.
-    this.scheduleReset(view?.limits ?? [], now);
-    const limits = limitsAt(view?.limits ?? [], now), tightest = tightestLimit(limits), row = tightest && limitRow(tightest, now);
-    // 가장 빠듯한 창조차 모르면(전부 모름) 상태 줄에서는 숨긴다. 설정 목록은 「아직 모름」으로 보인다.
-    const tightestRow = row?.known ? row : null;
+    // 다시 차는 시각이 지난 창은 모름으로 보고, 남은 시간 글이 바뀌는 다음 때에 한 번 더 그린다.
+    const limits = limitsAt(view?.limits ?? [], now);
+    this.scheduleRedraw(limits, now);
     const context = view?.context && view.context.size > 0 ? Math.min(1, view.context.used / view.context.size) : null;
     const subagents = view?.subagents ?? 0;
     const output = {
@@ -494,13 +492,11 @@ export class AppClient {
       status_bar_on: this.statusBar, show_status_bar: this.statusBar && chat,
       status_chips: chips, status_chips_narrow: chips.filter((chip) => chip.key === "model"), status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
       status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,
-      status_limit_value: tightestRow?.value ?? null, status_limit_text: tightest && tightestRow ? `${tightest.label} ${tightestRow.text}` : null,
-      status_limit_more: tightestRow && limits.length > 1 ? `외 ${limits.length - 1}` : null,
+      status_limit_bars: limitBars(limits, now),
       status_limits: limits.map((limit) => { const row = limitRow(limit, now); return { ...row, unknown: !row.known }; }), status_no_limits: limits.length === 0,
       status_account: account, status_subagents_text: subagents > 0 ? `${subagents}개 실행 중` : "없음",
       // when 블록은 true만 열린 것으로 보므로 값이 비는 칸마다 짝 불리언을 둔다. 설정의 컨텍스트 막대는 모르면 0으로 비워 둔다.
-      status_has_context: context !== null, status_no_context: context === null, status_has_subagents: subagents > 0, status_has_limit: tightestRow !== null,
-      status_has_limit_more: tightestRow !== null && limits.length > 1, status_has_account: account !== null, status_context_bar: context ?? 0,
+      status_has_context: context !== null, status_no_context: context === null, status_has_subagents: subagents > 0, status_has_account: account !== null, status_context_bar: context ?? 0,
       history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: this.sessionLocked,
       history_disabled: this.sessionLocked || !this.view?.canListSessions,
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",

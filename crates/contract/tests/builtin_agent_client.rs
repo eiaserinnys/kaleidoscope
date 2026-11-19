@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{validate::parse_app_definition, PROGRESS_THRESHOLDS_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
+use kaleidoscope_contract::{validate::parse_app_definition, CHAT_INPUT_HEADER_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
 use serde_json::Value;
 
 #[test]
@@ -23,7 +23,7 @@ fn builtin_agent_assumes_http_mcp_for_one_default() {
 fn builtin_agent_declares_client_process_and_settings() {
     let json = include_str!("../../../apps/agent.json");
     let value: Value = serde_json::from_str(json).unwrap();
-    assert_eq!(value["requires"]["blocks"], PROGRESS_THRESHOLDS_BLOCK_SET_VERSION);
+    assert_eq!(value["requires"]["blocks"], CHAT_INPUT_HEADER_BLOCK_SET_VERSION);
     assert_eq!(value["requires"]["modules"]["process"], 1);
     assert_eq!(value["requires"]["modules"]["client"], RECEIVE_MESSAGE_CLIENT_VERSION);
     assert_eq!(value["client"]["device_storage"]["scope"], "window");
@@ -161,48 +161,61 @@ fn collect<'a>(node: &'a Value, matches: &dyn Fn(&Value) -> bool, found: &mut Ve
 }
 
 #[test]
-fn builtin_agent_shows_status_bar_in_both_chat_footers() {
+fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
     let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     let mut chats = Vec::new();
     collect(&value["ui"], &|node| node["type"] == "chat", &mut chats);
     assert_eq!(chats.len(), 2);
-    // 좁은 창(max_width 갈래)은 낮은 우선순위 칩을 접어 model 칩만 보인다.
-    let mut narrow_chips = Vec::new();
+    let mut chip_lists = Vec::new();
     for chat in chats {
+        // footer는 기록 흐름 안의 권한 요청 반복만 남는다.
         let footer = &chat["footer"];
-        assert_eq!(footer["type"], "stack");
-        assert_eq!(footer["direction"], "column");
-        let children = footer["children"].as_array().unwrap();
-        assert_eq!(children[0]["type"], "repeat");
-        assert_eq!(children[0]["items"]["client"], "permissions");
+        assert_eq!(footer["type"], "repeat");
+        assert_eq!(footer["items"]["client"], "permissions");
         let mut gates = Vec::new();
         collect(footer, &|node| node["type"] == "when" && node["value"]["client"] == "show_status_bar", &mut gates);
-        assert_eq!(gates.len(), 1);
-        assert_eq!(&children[1], gates[0]);
-        // 한 줄을 지키고, 값 없는 칸은 짝 불리언으로 감춘다.
-        let strip = &gates[0]["child"];
+        assert!(gates.is_empty());
+        // 상태 줄은 입력창 위 고정 자리에 둔다.
+        let header = &chat["input_header"];
+        assert_eq!(header["type"], "when");
+        assert_eq!(header["value"]["client"], "show_status_bar");
+        // 한 줄을 지키고, 칩 묶음이 남은 폭을 채워 막대들을 오른쪽 끝으로 민다.
+        let strip = &header["child"];
         assert!(strip.get("wrap").is_none());
-        // 칩과 서브에이전트 칩을 담은 안쪽 줄이 남은 폭을 채워 컨텍스트와 한도를 오른쪽 끝으로 민다.
         assert_eq!(strip["direction"], "row");
         assert_eq!(strip["fill"], 0);
-        let left = &strip["children"][0];
+        let children = strip["children"].as_array().unwrap();
+        assert_eq!(children.len(), 3);
+        let left = &children[0];
         assert_eq!(left["type"], "stack");
         assert_eq!(left["direction"], "row");
-        assert_eq!(left["children"].as_array().unwrap().len(), 2);
-        assert_eq!(left["children"][1]["value"]["client"], "status_has_subagents");
-        let right: Vec<_> = strip["children"].as_array().unwrap()[1..].iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
-        assert_eq!(right, ["status_has_context", "status_has_limit", "status_has_limit_more"]);
         // repeat의 기본 배치는 세로라 칩을 한 줄로 두려면 row를 밝힌다.
         assert_eq!(left["children"][0]["layout"], "row");
-        let chips = left["children"][0]["items"]["client"].as_str().unwrap();
-        narrow_chips.push(chips.to_string());
-        let mut hidden = Vec::new();
-        collect(strip, &|node| node["type"] == "when", &mut hidden);
-        let conditions: Vec<_> = hidden.iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
-        assert_eq!(conditions, ["status_has_subagents", "status_has_context", "status_has_limit", "status_has_limit_more"]);
+        let chips = left["children"][0]["items"]["client"].as_str().unwrap().to_string();
+        let subagents: Vec<_> = left["children"].as_array().unwrap()[1..].iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
+        // 넓은 창만 서브에이전트 칩을 두고, 좁은 창은 model 칩 하나만 남긴다.
+        assert_eq!(subagents, if chips == "status_chips" { vec!["status_has_subagents"] } else { Vec::<&str>::new() });
+        chip_lists.push(chips);
+        // context 막대(사용률, 0.7과 0.9)와 session, weekly 막대 반복(0.8과 0.95).
+        let context = &children[1];
+        assert_eq!(context["value"]["client"], "status_has_context");
+        let mut bars = Vec::new();
+        collect(context, &|node| node["type"] == "progress", &mut bars);
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0]["label"], "context");
+        assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.7), Some(0.9)));
+        let limits = &children[2];
+        assert_eq!(limits["type"], "repeat");
+        assert_eq!(limits["items"]["client"], "status_limit_bars");
+        assert_eq!(limits["layout"], "row");
+        let mut bars = Vec::new();
+        collect(limits, &|node| node["type"] == "progress", &mut bars);
+        assert_eq!(bars.len(), 1);
+        assert_eq!(bars[0]["label"]["item"], "label");
+        assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.8), Some(0.95)));
     }
-    narrow_chips.sort();
-    assert_eq!(narrow_chips, ["status_chips", "status_chips_narrow"]);
+    chip_lists.sort();
+    assert_eq!(chip_lists, ["status_chips", "status_chips_narrow"]);
     let screen = value["ui"]["children"].as_array().unwrap().iter().find(|state| state["value"]["client"] == "show_chat").unwrap();
     let mut narrow = Vec::new();
     collect(&screen["child"], &|node| node["type"] == "when" && node["max_width"].is_number(), &mut narrow);
@@ -231,8 +244,8 @@ fn builtin_agent_declares_every_status_output() {
     let outputs = value["client"]["outputs"].as_object().unwrap();
     for name in [
         "status_bar_on", "show_status_bar", "status_chips", "status_chips_narrow", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
-        "status_limit_value", "status_limit_text", "status_limit_more", "status_limits", "status_no_limits", "status_account",
-        "status_has_context", "status_has_subagents", "status_has_limit", "status_has_limit_more", "status_has_account",
+        "status_limit_bars", "status_limits", "status_no_limits", "status_account",
+        "status_has_context", "status_has_subagents", "status_has_account",
     ] {
         assert!(outputs.contains_key(name), "{name} 출력이 선언되지 않았다");
     }

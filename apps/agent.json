@@ -3,7 +3,7 @@
   "name": "에이전트",
   "icon": { "asset": "builtin-icon-agent", "version": 2 },
   "requires": {
-    "blocks": 65,
+    "blocks": 68,
     "modules": {
       "files": 1,
       "storage": 1,
@@ -838,162 +838,167 @@
                           "on_attachment": "attachment"
                         },
                         "footer": {
-                          "type": "stack",
-                          "direction": "column",
-                          "gap": "small",
-                          "children": [
-                            {
-                              "type": "repeat",
-                              "items": {
-                                "client": "permissions"
+                          "type": "repeat",
+                          "items": {
+                            "client": "permissions"
+                          },
+                          "key": "id",
+                          "template": {
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "children": [
+                              {
+                                "type": "text",
+                                "value": {
+                                  "item": "title"
+                                }
                               },
-                              "key": "id",
-                              "template": {
-                                "type": "stack",
-                                "direction": "column",
-                                "gap": "small",
-                                "children": [
-                                  {
-                                    "type": "text",
-                                    "value": {
-                                      "item": "title"
-                                    }
+                              {
+                                "type": "repeat",
+                                "items": {
+                                  "item": "options"
+                                },
+                                "key": "id",
+                                "template": {
+                                  "type": "button",
+                                  "label": {
+                                    "item": "label"
                                   },
-                                  {
-                                    "type": "repeat",
-                                    "items": {
-                                      "item": "options"
-                                    },
-                                    "key": "id",
-                                    "template": {
-                                      "type": "button",
-                                      "label": {
-                                        "item": "label"
-                                      },
-                                      "on_click": {
-                                        "client": "answer"
-                                      }
-                                    },
-                                    "layout": "row"
+                                  "on_click": {
+                                    "client": "answer"
                                   }
-                                ]
+                                },
+                                "layout": "row"
                               }
-                            },
-                            {
-                              "type": "when",
-                              "value": {
-                                "client": "show_status_bar"
-                              },
-                              "child": {
+                            ]
+                          }
+                        },
+                        "input_header": {
+                          "type": "when",
+                          "value": {
+                            "client": "show_status_bar"
+                          },
+                          "child": {
+                            "type": "stack",
+                            "direction": "row",
+                            "gap": "small",
+                            "align": "center",
+                            "fill": 0,
+                            "children": [
+                              {
                                 "type": "stack",
                                 "direction": "row",
                                 "gap": "small",
                                 "align": "center",
-                                "fill": 0,
                                 "children": [
                                   {
-                                    "type": "stack",
-                                    "direction": "row",
+                                    "type": "repeat",
+                                    "items": {
+                                      "client": "status_chips"
+                                    },
+                                    "key": "key",
                                     "gap": "small",
-                                    "align": "center",
-                                    "children": [
-                                      {
-                                        "type": "repeat",
-                                        "items": {
-                                          "client": "status_chips"
-                                        },
-                                        "key": "key",
-                                        "gap": "small",
-                                        "layout": "row",
-                                        "template": {
-                                          "type": "text",
-                                          "value": {
-                                            "item": "text"
-                                          },
-                                          "style": "meta"
-                                        }
-                                      },
-                                      {
-                                        "type": "when",
-                                        "value": {
-                                          "client": "status_has_subagents"
-                                        },
-                                        "child": {
-                                          "type": "text",
-                                          "value": {
-                                            "client": "status_subagents"
-                                          },
-                                          "style": "meta"
-                                        }
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_context"
-                                    },
-                                    "child": {
-                                      "type": "stack",
-                                      "direction": "row",
-                                      "gap": "small",
-                                      "align": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "value": "컨텍스트",
-                                          "style": "meta"
-                                        },
-                                        {
-                                          "type": "progress",
-                                          "value": {
-                                            "client": "status_context"
-                                          },
-                                          "max": 1,
-                                          "label": {
-                                            "client": "status_context_text"
-                                          },
-                                          "warning_at": 0.7,
-                                          "danger_at": 0.9
-                                        }
-                                      ]
-                                    }
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_limit"
-                                    },
-                                    "child": {
-                                      "type": "progress",
+                                    "layout": "row",
+                                    "template": {
+                                      "type": "text",
                                       "value": {
-                                        "client": "status_limit_value"
+                                        "item": "text"
                                       },
-                                      "max": 1,
-                                      "label": {
-                                        "client": "status_limit_text"
-                                      },
-                                      "warning_at": 0.8,
-                                      "danger_at": 0.95
+                                      "style": "meta"
                                     }
                                   },
                                   {
                                     "type": "when",
                                     "value": {
-                                      "client": "status_has_limit_more"
+                                      "client": "status_has_subagents"
                                     },
                                     "child": {
                                       "type": "text",
                                       "value": {
-                                        "client": "status_limit_more"
+                                        "client": "status_subagents"
                                       },
                                       "style": "meta"
                                     }
                                   }
                                 ]
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "status_has_context"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "row",
+                                  "gap": "small",
+                                  "align": "center",
+                                  "children": [
+                                    {
+                                      "type": "progress",
+                                      "value": {
+                                        "client": "status_context"
+                                      },
+                                      "max": 1,
+                                      "label": "context",
+                                      "warning_at": 0.7,
+                                      "danger_at": 0.9
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_context_text"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "repeat",
+                                "items": {
+                                  "client": "status_limit_bars"
+                                },
+                                "key": "key",
+                                "gap": "small",
+                                "layout": "row",
+                                "template": {
+                                  "type": "stack",
+                                  "direction": "row",
+                                  "gap": "small",
+                                  "align": "center",
+                                  "children": [
+                                    {
+                                      "type": "progress",
+                                      "value": {
+                                        "item": "value"
+                                      },
+                                      "max": 1,
+                                      "label": {
+                                        "item": "label"
+                                      },
+                                      "warning_at": 0.8,
+                                      "danger_at": 0.95
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "item": "text"
+                                      },
+                                      "style": "meta"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "item": "left"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  ]
+                                }
                               }
-                            }
-                          ]
+                            ]
+                          }
                         }
                       }
                     ]
@@ -1060,162 +1065,154 @@
                           "on_attachment": "attachment"
                         },
                         "footer": {
-                          "type": "stack",
-                          "direction": "column",
-                          "gap": "small",
-                          "children": [
-                            {
-                              "type": "repeat",
-                              "items": {
-                                "client": "permissions"
+                          "type": "repeat",
+                          "items": {
+                            "client": "permissions"
+                          },
+                          "key": "id",
+                          "template": {
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "children": [
+                              {
+                                "type": "text",
+                                "value": {
+                                  "item": "title"
+                                }
                               },
-                              "key": "id",
-                              "template": {
-                                "type": "stack",
-                                "direction": "column",
-                                "gap": "small",
-                                "children": [
-                                  {
-                                    "type": "text",
-                                    "value": {
-                                      "item": "title"
-                                    }
+                              {
+                                "type": "repeat",
+                                "items": {
+                                  "item": "options"
+                                },
+                                "key": "id",
+                                "template": {
+                                  "type": "button",
+                                  "label": {
+                                    "item": "label"
                                   },
-                                  {
-                                    "type": "repeat",
-                                    "items": {
-                                      "item": "options"
-                                    },
-                                    "key": "id",
-                                    "template": {
-                                      "type": "button",
-                                      "label": {
-                                        "item": "label"
-                                      },
-                                      "on_click": {
-                                        "client": "answer"
-                                      }
-                                    },
-                                    "layout": "row"
+                                  "on_click": {
+                                    "client": "answer"
                                   }
-                                ]
+                                },
+                                "layout": "row"
                               }
-                            },
-                            {
-                              "type": "when",
-                              "value": {
-                                "client": "show_status_bar"
-                              },
-                              "child": {
+                            ]
+                          }
+                        },
+                        "input_header": {
+                          "type": "when",
+                          "value": {
+                            "client": "show_status_bar"
+                          },
+                          "child": {
+                            "type": "stack",
+                            "direction": "row",
+                            "gap": "small",
+                            "align": "center",
+                            "fill": 0,
+                            "children": [
+                              {
                                 "type": "stack",
                                 "direction": "row",
                                 "gap": "small",
                                 "align": "center",
-                                "fill": 0,
                                 "children": [
                                   {
-                                    "type": "stack",
-                                    "direction": "row",
+                                    "type": "repeat",
+                                    "items": {
+                                      "client": "status_chips_narrow"
+                                    },
+                                    "key": "key",
                                     "gap": "small",
-                                    "align": "center",
-                                    "children": [
-                                      {
-                                        "type": "repeat",
-                                        "items": {
-                                          "client": "status_chips_narrow"
-                                        },
-                                        "key": "key",
-                                        "gap": "small",
-                                        "layout": "row",
-                                        "template": {
-                                          "type": "text",
-                                          "value": {
-                                            "item": "text"
-                                          },
-                                          "style": "meta"
-                                        }
-                                      },
-                                      {
-                                        "type": "when",
-                                        "value": {
-                                          "client": "status_has_subagents"
-                                        },
-                                        "child": {
-                                          "type": "text",
-                                          "value": {
-                                            "client": "status_subagents"
-                                          },
-                                          "style": "meta"
-                                        }
-                                      }
-                                    ]
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_context"
-                                    },
-                                    "child": {
-                                      "type": "stack",
-                                      "direction": "row",
-                                      "gap": "small",
-                                      "align": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "value": "컨텍스트",
-                                          "style": "meta"
-                                        },
-                                        {
-                                          "type": "progress",
-                                          "value": {
-                                            "client": "status_context"
-                                          },
-                                          "max": 1,
-                                          "label": {
-                                            "client": "status_context_text"
-                                          },
-                                          "warning_at": 0.7,
-                                          "danger_at": 0.9
-                                        }
-                                      ]
-                                    }
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_limit"
-                                    },
-                                    "child": {
-                                      "type": "progress",
-                                      "value": {
-                                        "client": "status_limit_value"
-                                      },
-                                      "max": 1,
-                                      "label": {
-                                        "client": "status_limit_text"
-                                      },
-                                      "warning_at": 0.8,
-                                      "danger_at": 0.95
-                                    }
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_limit_more"
-                                    },
-                                    "child": {
+                                    "layout": "row",
+                                    "template": {
                                       "type": "text",
                                       "value": {
-                                        "client": "status_limit_more"
+                                        "item": "text"
                                       },
                                       "style": "meta"
                                     }
                                   }
                                 ]
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "status_has_context"
+                                },
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "row",
+                                  "gap": "small",
+                                  "align": "center",
+                                  "children": [
+                                    {
+                                      "type": "progress",
+                                      "value": {
+                                        "client": "status_context"
+                                      },
+                                      "max": 1,
+                                      "label": "context",
+                                      "warning_at": 0.7,
+                                      "danger_at": 0.9
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_context_text"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "type": "repeat",
+                                "items": {
+                                  "client": "status_limit_bars"
+                                },
+                                "key": "key",
+                                "gap": "small",
+                                "layout": "row",
+                                "template": {
+                                  "type": "stack",
+                                  "direction": "row",
+                                  "gap": "small",
+                                  "align": "center",
+                                  "children": [
+                                    {
+                                      "type": "progress",
+                                      "value": {
+                                        "item": "value"
+                                      },
+                                      "max": 1,
+                                      "label": {
+                                        "item": "label"
+                                      },
+                                      "warning_at": 0.8,
+                                      "danger_at": 0.95
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "item": "text"
+                                      },
+                                      "style": "meta"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "item": "left"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  ]
+                                }
                               }
-                            }
-                          ]
+                            ]
+                          }
                         }
                       }
                     ]
@@ -1627,14 +1624,8 @@
       "status_context_bar": {
         "default": 0
       },
-      "status_limit_value": {
-        "default": null
-      },
-      "status_limit_text": {
-        "default": null
-      },
-      "status_limit_more": {
-        "default": null
+      "status_limit_bars": {
+        "default": []
       },
       "status_limits": {
         "default": []
@@ -1649,12 +1640,6 @@
         "default": false
       },
       "status_has_subagents": {
-        "default": false
-      },
-      "status_has_limit": {
-        "default": false
-      },
-      "status_has_limit_more": {
         "default": false
       },
       "status_has_account": {
