@@ -17,8 +17,8 @@
 }
 .ks-data-tree .ks-file-tree-row[data-drop-position="before"]::after { inset-block-start: 0; }
 .ks-data-tree .ks-file-tree-row[data-drop-position="after"]::after { inset-block-end: 0; }
-.ks-data-section[data-drop-position="before"]::after { inset-block-start: calc((var(--ks-repeat-gap, 0) + var(--ks-focus-width)) / -2); }
-.ks-data-section[data-drop-position="after"]::after { inset-block-end: calc((var(--ks-repeat-gap, 0) + var(--ks-focus-width)) / -2); }
+.ks-data-section[data-drop-position="before"]::after { inset-block-start: calc((var(--ks-repeat-gap, 0px) + var(--ks-focus-width)) / -2); }
+.ks-data-section[data-drop-position="after"]::after { inset-block-end: calc((var(--ks-repeat-gap, 0px) + var(--ks-focus-width)) / -2); }
 .ks-repeat-item:first-child > .ks-data-section[data-drop-position="before"]::after { inset-block-start: var(--ks-focus-width); }
 .ks-file-tree-list .ks-tree-virtual-row[data-menu-target] .ks-file-tree-empty { outline: var(--ks-focus-width) solid var(--ks-color-focus); outline-offset: calc(-1 * var(--ks-focus-width)); border-radius: var(--ks-radius-small); }
 .ks-badge { display: inline-block; flex: 0 0 auto; padding-inline: var(--ks-space-2); border-radius: var(--ks-radius-large); background: var(--ks-color-hover); color: var(--ks-color-text); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); white-space: nowrap; }
@@ -48,7 +48,7 @@
 /* 가상 스크롤이 아닌 가로 반복은 좁은 창에서도 선택지가 잘리지 않도록 줄을 바꾼다. */
 .ks-repeat.is-row:not(.is-virtual) > .ks-repeat-content { flex-wrap: wrap; }
 .ks-repeat.is-grid > .ks-repeat-content, .ks-repeat-grid-row { display: grid; gap: var(--ks-space-3); }
-.ks-repeat.gap-none { --ks-repeat-gap: 0; }
+.ks-repeat.gap-none { --ks-repeat-gap: 0px; }
 .ks-repeat.gap-small { --ks-repeat-gap: var(--ks-space-2); }
 .ks-repeat.gap-medium { --ks-repeat-gap: var(--ks-space-3); }
 .ks-repeat.gap-large { --ks-repeat-gap: var(--ks-space-5); }

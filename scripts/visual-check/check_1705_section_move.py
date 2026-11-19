@@ -22,6 +22,8 @@ def main():
     result = subprocess.run(["corepack", "pnpm@10.32.1", "--dir", "ui", "e2e:netns", "section-move-1705", "--workers=1"], cwd=ROOT, env=env, timeout=840, check=False)
     missing = [f"{width}-{state}.png" for width in (1280, 360) for state in ("normal", "before", "after", "dropped", "menu", "expanded-after", "expanded-dropped", "next-before", "first-before") if not (output / f"{width}-{state}.png").is_file()]
     missing += [name for name in ("360-long-header.png", "1280-plus-before.png", "1280-plus-after.png") if not (output / name).is_file()]
+    missing += [f"360-gap-{gap}-{position}.png" for gap in ("none", "omitted") for position in ("before", "after") if not (output / f"360-gap-{gap}-{position}.png").is_file()]
+    missing += [f"{width}-{surface}-titles.png" for width in (1280, 360) for surface in ("chat", "settings") if not (output / f"{width}-{surface}-titles.png").is_file()]
     status = "통과" if result.returncode == 0 and not missing else "미통과"
     summary = {"시험_종료코드": result.returncode, "누락_캡처": missing,
                "14_누른_뒤_초점": status, "15_Tab_Esc": status, "16_최소_폭_넘침과_겹침": status,

@@ -1,17 +1,51 @@
 import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const app = "section-move-1705";
 const section = (key: string) => `[data-repeat-key="${key}"] .ks-data-section-header`;
 const sectionRoot = (key: string) => `[data-repeat-key="${key}"] > .ks-data-section`;
 const hideChrome = `body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }`;
 
-async function open(page: Page, width: number) {
+async function open(page: Page, width: number, appId = app) {
   await page.setViewportSize({ width, height: 800 });
-  await page.goto(`/?preview=${app}`);
+  await page.goto(`/?preview=${appId}`);
   await page.addStyleTag({ content: hideChrome });
   await expect(page.locator(section("a"))).toBeVisible();
 }
+
+for (const gap of ["none", "omitted"] as const) test(`간격 ${gap}: 삽입선이 섹션 경계에 선다`, async ({ page }) => {
+  await open(page, 360, `${app}-gap-${gap}`);
+  const repeat = page.locator(".ks-repeat");
+  if (gap === "none") await expect(repeat).toHaveClass(/gap-none/);
+  else await expect(repeat).not.toHaveClass(/gap-/);
+
+  await dragStart(page, section("c"));
+  const line = async (key: string, position: "before" | "after", ratio: number) => {
+    await dragEvent(page, section(key), "dragover", ratio);
+    const target = page.locator(sectionRoot(key));
+    await expect(target).toHaveAttribute("data-drop-position", position);
+    if (process.env.KS_1705_VISUAL_OUTPUT) {
+      await page.screenshot({ path: path.join(process.env.KS_1705_VISUAL_OUTPUT, `360-gap-${gap}-${position}.png`) });
+    }
+    return target.evaluate((element, position) => {
+      const rect = element.getBoundingClientRect();
+      const pseudo = getComputedStyle(element, "::after");
+      const halfHeight = parseFloat(pseudo.height) / 2;
+      const edge = position === "before" ? rect.top : rect.bottom;
+      const center = position === "before"
+        ? edge + parseFloat(pseudo.insetBlockStart) + halfHeight
+        : edge - parseFloat(pseudo.insetBlockEnd) - halfHeight;
+      return { edge, center };
+    }, position);
+  };
+  const after = await line("a", "after", .8);
+  const before = await line("b", "before", .2);
+  console.log(`간격 ${gap} 경계와 삽입선 중앙:`, { after, before });
+  expect(Math.abs(after.center - after.edge)).toBeLessThanOrEqual(1);
+  expect(Math.abs(before.center - before.edge)).toBeLessThanOrEqual(1);
+  expect(Math.abs(after.center - before.center)).toBeLessThanOrEqual(1);
+});
 
 async function dragStart(page: Page, source: string) {
   await page.evaluate((selector) => {
@@ -166,4 +200,40 @@ for (const width of [1280, 360]) test(`시각 검수 ${width}`, async ({ page })
   await page.setViewportSize({ width: width === 360 ? 1280 : 360, height: 800 });
   await expect(input).toHaveValue("수정 중인 이름");
   await expect(page.getByRole("menu")).toHaveCount(0);
+});
+
+for (const surface of ["chat", "settings"] as const) test(`공용 제목 스타일 유지: ${surface}`, async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  if (surface === "chat") {
+    await page.goto("/?preview=workspace-pas&conversation=attach-start");
+    await page.addStyleTag({ content: hideChrome });
+    await expect(page.getByRole("heading", { name: "새 대화" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "기존 대화" })).toBeVisible();
+  } else {
+    const fixture = fileURLToPath(new URL("./fixtures/section-move-settings-1705.ts", import.meta.url));
+    await page.route("**/__section-move-settings-1705", async (route) => {
+      const response = await route.fetch({ url: new URL("/", route.request().url()).href });
+      const html = await response.text();
+      await route.fulfill({ response, body: html.replace('src="/main.tsx"', `src="/@fs${fixture}"`) });
+    });
+    await page.goto("/__section-move-settings-1705");
+    await page.addStyleTag({ content: "body { margin: 0; } #root { height: 100vh; }" });
+    await expect(page.getByRole("heading", { name: "모든 작업" })).toBeVisible();
+    await expect(page.getByRole("switch", { name: "새 세션으로 시작" })).toBeVisible();
+  }
+
+  const titles = page.locator(surface === "chat" ? ".ks-agent-chat-start-title" : ".ks-settings-group h3");
+  for (const width of [1280, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    if (process.env.KS_1705_VISUAL_OUTPUT) {
+      await page.screenshot({ path: path.join(process.env.KS_1705_VISUAL_OUTPUT, `${width}-${surface}-titles.png`) });
+    }
+    const styles = await titles.evaluateAll((elements) => elements.map((element) => {
+      const { whiteSpace, textOverflow, overflow } = getComputedStyle(element);
+      return { whiteSpace, textOverflow, overflow, minWidth: element.computedStyleMap().get("min-width")?.toString() };
+    }));
+    expect.soft(styles).toEqual(Array.from({ length: surface === "chat" ? 2 : 1 }, () => ({
+      whiteSpace: "normal", textOverflow: "clip", overflow: "visible", minWidth: surface === "chat" ? "0px" : "auto",
+    })));
+  }
 });

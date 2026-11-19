@@ -1144,4 +1144,4 @@ button.ks-agent-attachment-chip-preview,
 
 .ks-share-chip-icon { color: var(--ks-color-share); }
 .ks-data-section > .ks-data-section-header:not(.is-editing), .ks-data-section-header .ks-data-section-heading { flex-wrap: nowrap; }
-.ks-data-section-title { min-width: 0; }
+.ks-data-section-header .ks-data-section-title { min-width: 0; }

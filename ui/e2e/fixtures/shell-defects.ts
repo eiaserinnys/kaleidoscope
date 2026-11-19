@@ -1,5 +1,5 @@
 import type { AppDefinition } from "../../src/contract/contract";
-import { sectionMoveApp } from "./section-move-1705";
+import { sectionMoveApps } from "./section-move-1705";
 import stackFillRegressions from "./stack-fill-regressions.json";
 import stackContexts, { bottomPaddingCases } from "./stack-contexts";
 
@@ -10,7 +10,7 @@ const tabbedPanePair = () => ({ type: "split", direction: "row", children: [
   { type: "section", title: "구역 제목", child: { type: "text", value: "내용" } },
 ] });
 export const shellDefectFixtures = [
-  sectionMoveApp,
+  ...sectionMoveApps,
   { ...base, id: "shell-1072", name: "자료와 시간축", state: { selected: "" }, ui: { type: "split", direction: "row", column_below: 700, sizes: [32, 68], children: [
     { type: "list", items: Array.from({ length: 40 }, (_, i) => ({ key: String(i), title: `자료 ${i + 1}` })), selected: { state: "selected" }, on_select: { set_state: "selected" } },
     { type: "section", title: "시간축", child: { type: "timeline", controls: true, duration: 100, position: 0, tracks: [{ id: "track", label: "긴 트랙 이름", items: [{ id: "clip", label: "아주 긴 시간축 구간 이름입니다", start: 1, end: 15 }] }] } },

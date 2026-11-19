@@ -24,7 +24,7 @@ const source = `(() => {
   publish();
 })();`;
 export const sectionMoveMedia = { "section-move-1705-client": URL.createObjectURL(new Blob([source], { type: "text/javascript" })) };
-export const sectionMoveApp: AppDefinition = {
+const sectionMoveApp = {
   id: "section-move-1705", name: "작업 목록", requires: { blocks: 66, modules: { assets: 1, client: 1 } }, permissions: [],
   assets: [{ id: "section-move-1705-client", version: 1 }],
   client: { runtime: "javascript", entry: { id: "section-move-1705-client", version: 1 }, inputs: {}, outputs: { sections: { default: [] }, lastMove: { default: "" } }, actions: ["move_section", "move_row", "rename", "edit", "cancel", "remove", "add"], commands: {}, state_keys: [], storage_entries: [] },
@@ -36,4 +36,12 @@ export const sectionMoveApp: AppDefinition = {
     actions: [{ type: "button", label: "추가", icon: "plus", icon_only: true, on_click: { client: "add" } }],
     child: { type: "tree", items: { item: "rows" }, by: "children", empty_text: "할 일 없음", on_move: { client: "move_row" } },
   } },
-};
+} satisfies AppDefinition;
+
+export const sectionMoveApps: AppDefinition[] = [
+  sectionMoveApp,
+  ...(["none", "omitted"] as const).map((gap) => {
+    const { gap: _gap, ...repeat } = sectionMoveApp.ui;
+    return { ...sectionMoveApp, id: `section-move-1705-gap-${gap}`, ui: gap === "none" ? { ...repeat, gap } : repeat };
+  }),
+];
