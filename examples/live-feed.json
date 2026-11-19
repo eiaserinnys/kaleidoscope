@@ -1,0 +1,30 @@
+{
+  "id": "live-feed",
+  "name": "변경 알림 피드",
+  "description": "상류 스트림의 알림이 오면 목록을 다시 받습니다.",
+  "requires": {"blocks": 4, "modules": {"connection": 4}},
+  "permissions": [
+    {"module": "connection", "id": "feed", "connection": "example", "access": "read", "label": "피드"}
+  ],
+  "streams": {
+    "changes": {"permission": "feed", "path": "/events", "query": {"channel": "cards"}}
+  },
+  "state": {"kind": "card"},
+  "sources": {
+    "items": {
+      "kind": "request",
+      "permission": "feed",
+      "path": "/items",
+      "refresh_secs": 3600,
+      "watch": {
+        "stream": "changes",
+        "coalesce_secs": 2,
+        "on": [
+          {"event": "message"},
+          {"event": "update", "where": {"kind": {"state": "kind"}, "all": null}}
+        ]
+      }
+    }
+  },
+  "ui": {"type": "text", "value": {"expr": "$data.items"}}
+}

@@ -1088,6 +1088,7 @@ fn validate(definition: &AppDefinition) -> ValidationResult {
     validate_v14_definition(definition, &mut details);
     validate_worker(definition, &mut details, &mut missing_webhook_token_secret);
     validate_sources(definition, &mut details);
+    validate_streams(definition, &mut details);
     validate_client(definition, &mut details);
 
     let mut web_views = 0;
@@ -1804,6 +1805,94 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
                     }
                 }
             }
+        }
+    }
+}
+
+fn validate_streams(definition: &AppDefinition, details: &mut Vec<String>) {
+    let mut used = HashSet::new();
+    for (name, source) in &definition.sources {
+        let SourceDecl::Request {
+            watch: Some(watch), ..
+        } = source
+        else {
+            continue;
+        };
+        used.insert(watch.stream.as_str());
+        let at = format!("/sources/{}/watch", data::escape_pointer(name));
+        validate_module_version(
+            "connection",
+            data::STREAM_CONNECTION_VERSION,
+            definition,
+            details,
+            &at,
+        );
+        match definition.streams.get(&watch.stream) {
+            Some(_) => {}
+            None => details.push(format!(
+                "{at}/stream: 선언하지 않은 스트림입니다: {}",
+                watch.stream
+            )),
+        }
+        if watch.on.is_empty() {
+            details.push(format!("{at}/on: 다시 받을 알림 규칙을 하나 이상 적으세요"));
+        }
+        for (index, rule) in watch.on.iter().enumerate() {
+            if rule.event.is_empty() {
+                details.push(format!("{at}/on/{index}/event: 알림 이름을 적으세요"));
+            }
+            if let Some(where_) = &rule.where_ {
+                for (key, binding) in where_ {
+                    validate_binding_shape(
+                        binding,
+                        definition,
+                        details,
+                        &format!("{at}/on/{index}/where/{}", data::escape_pointer(key)),
+                    );
+                }
+            }
+        }
+        if watch
+            .coalesce_secs
+            .is_some_and(|secs| secs < data::WATCH_COALESCE_MIN_SECS)
+        {
+            details.push(format!(
+                "{at}/coalesce_secs: {} 이상이어야 합니다",
+                data::WATCH_COALESCE_MIN_SECS
+            ));
+        }
+    }
+    for (name, stream) in &definition.streams {
+        let at = format!("/streams/{}", data::escape_pointer(name));
+        validate_module_version(
+            "connection",
+            data::STREAM_CONNECTION_VERSION,
+            definition,
+            details,
+            &at,
+        );
+        if !data::valid_source_name(name) {
+            details.push(format!(
+                "{at}: 스트림 이름은 소문자로 시작하고 소문자, 숫자, _ 1~32자여야 합니다: {name}"
+            ));
+        }
+        match find_permission(definition, &stream.permission) {
+            Some(PermissionDecl::Connection { .. }) => {}
+            _ => details.push(format!(
+                "{at}/permission: 연결 권한이어야 합니다: {}",
+                stream.permission
+            )),
+        }
+        if !valid_request_path(&stream.path) {
+            details.push(format!(
+                "{at}/path: 연결 경로는 /로 시작하고 .. 이나 \\ 없이 연결 주소 아래를 가리켜야 합니다: {}",
+                stream.path
+            ));
+        }
+        if !used.contains(name.as_str()) {
+            details.push(format!(
+                "{at}: 어떤 request 원천의 watch도 이 스트림을 쓰지 않습니다"
+            ));
         }
     }
 }

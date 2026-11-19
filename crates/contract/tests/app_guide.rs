@@ -45,3 +45,10 @@ fn realtime_guide_explains_permission_and_network_boundary() {
         assert!(APP_AUTHORING_GUIDE.contains(phrase), "{phrase}");
     }
 }
+
+#[test]
+fn stream_watch_guide_explains_refetch_by_notification() {
+    for phrase in ["watch를 더하면", "coalesce_secs(선택, 기본 2, 최소 1)", "이름 없는 프레임은 message", "알림은 다시 받기만 일으키고 값으로 쓰지 않습니다", "서버 중계 연결은 열지 않으며", "호출 예산은 refresh_secs 주기만 셉니다"] {
+        assert!(APP_AUTHORING_GUIDE.contains(phrase), "{phrase}");
+    }
+}

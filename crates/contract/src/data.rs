@@ -42,7 +42,8 @@
 //! - 코어는 창이 이어지면(`data.attach`) 입력이 갖춰진 원천을 받는다. 입력(식이나 상태로 정한 `path` 등)이 null이면
 //!   부르지 않고 `idle`이다. 창 상태가 바뀌어 입력이 달라지면 다시 받는다.
 //! - 다시 받는 때: 입력이 바뀜, `refresh` 동작, `data.refresh`, `refresh_secs`마다(창이 이어져 있는 동안만),
-//!   `file`과 `folder`는 쉘 창이 포커스를 다시 얻을 때도.
+//!   `file`과 `folder`는 쉘 창이 포커스를 다시 얻을 때도. `request` 원천은 `watch`를 선언하면 상류 스트림의
+//!   알림이 올 때도 다시 받는다(계약 48판). 스트림은 `streams`가 정본이고, 알림 내용은 값으로 쓰지 않는다.
 //! - 식의 값([`BindingValue`]): 기대는 원천에 값이 있으면(다시 받는 중이거나 다시 받다 실패했어도) 그 값으로 계산해
 //!   `ready`다. 값이 없는 원천이 있으면 `login_required`, `failed`, `loading` 순으로 그 원천의 상태를 따른다.
 //!   `idle` 원천은 값 없이(undefined) 계산한다.
@@ -67,6 +68,12 @@ pub const SOURCE_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const FOLDER_SOURCE_MAX_ENTRIES: usize = 5000;
 /// `refresh_secs`의 최솟값.
 pub const SOURCE_REFRESH_MIN_SECS: u32 = 10;
+/// (계약 48판) `watch.coalesce_secs`의 기본값(초).
+pub const WATCH_COALESCE_DEFAULT_SECS: u32 = 2;
+/// (계약 48판) `watch.coalesce_secs`의 최솟값(초).
+pub const WATCH_COALESCE_MIN_SECS: u32 = 1;
+/// 스트림과 `watch`를 처음 지원하는 모듈 `connection` 판.
+pub const STREAM_CONNECTION_VERSION: u32 = 4;
 /// 앱 기본 화면에서 한 호스트에 허용하는 지속 호출 예산.
 pub const CALL_BUDGET_PER_MINUTE: f64 = 6.0;
 /// 연결 요청 하나를 기다리는 시간(원천 받기, 동작의 연결 부르기, 이미지와 소리).
@@ -279,6 +286,49 @@ pub struct PageDecl {
     pub items: String,
 }
 
+/// (계약 48판, 모듈 `connection` 4판) 앱 정의의 상류 SSE 스트림 하나. `permission`은
+/// 읽기 가능한 connection 권한 id이고, 코어가 그 연결의 기기 로그인으로 `path`를 연다.
+/// `path`는 원천 요청과 같은 연결 `paths` 접두사 검사를 지나는 고정 문자열이며, `query`도 고정 문자열 맵이다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct StreamDecl {
+    pub permission: String,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[ts(optional, as = "Option<BTreeMap<String, String>>")]
+    pub query: BTreeMap<String, String>,
+}
+
+/// 요청 원천의 `watch`. 스트림의 어떤 알림이 오면 그 원천을 다시 받는다. 알림 내용으로 값을 고쳐 쓰지 않는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct WatchDecl {
+    /// 앱 정의 `streams`의 스트림 이름.
+    pub stream: String,
+    /// 알림 하나와 맞출 규칙. 하나 이상이어야 하고, 하나라도 맞으면 다시 받는다.
+    pub on: Vec<WatchRule>,
+    /// 알림을 한 번으로 합치는 창(초). 기본 2초, 1초보다 짧게 둘 수 없다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub coalesce_secs: Option<u32>,
+}
+
+/// 알림 하나와 맞출 규칙. SSE `event:` 이름이 `event`와 같고, `where`의 칸마다 알림 `data:`를 JSON으로 읽은
+/// 최상위 값이 바인딩 값과 같으면 맞는다. 바인딩 값이 null이면 그 칸은 무엇이든 맞는다. `where`가 없으면
+/// 이름만 본다. 알림 `data:`가 JSON이 아니면 `where`가 있는 규칙은 맞지 않는다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "contract.ts")]
+pub struct WatchRule {
+    /// SSE `event:` 이름. 이름 없는 프레임은 `message`다.
+    pub event: String,
+    #[serde(default, rename = "where", skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub where_: Option<BTreeMap<String, Binding>>,
+}
+
 /// 원천 하나. `kind`로 가른다. 이름은 소문자로 시작하고 소문자, 숫자, `_`로 1~32자다(식에서 `$data.이름`으로 읽는다).
 /// 값 자리([`Binding`])의 식은 `$state`만 본다. 값이 null이면 그 원천을 부르지 않는다(`idle`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
@@ -303,6 +353,10 @@ pub enum SourceDecl {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         page: Option<PageDecl>,
+        /// (계약 48판) 이 원천을 다시 받을 때를 정하는 상류 스트림의 알림 규칙.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        watch: Option<WatchDecl>,
     },
     /// 정적 스토어의 색인 또는 앱 상세를 읽는다.
     Store(StoreSource),
@@ -2515,10 +2569,27 @@ pub fn all_exprs(definition: &AppDefinition) -> Vec<(String, &str)> {
 /// 원천 하나 안의 바인딩 자리(원천 자리 기준 상대 경로).
 pub fn source_bindings(source: &SourceDecl) -> Vec<(String, &Binding)> {
     match source {
-        SourceDecl::Request { path, query, .. } => {
+        SourceDecl::Request {
+            path, query, watch, ..
+        } => {
             let mut out = vec![("path".to_string(), path)];
             for (key, value) in query {
                 out.push((format!("query/{}", escape_pointer(key)), value));
+            }
+            if let Some(watch) = watch {
+                for (index, rule) in watch.on.iter().enumerate() {
+                    if let Some(where_) = &rule.where_ {
+                        for (key, value) in where_ {
+                            out.push((
+                                format!(
+                                    "watch/on/{index}/where/{}",
+                                    escape_pointer(key)
+                                ),
+                                value,
+                            ));
+                        }
+                    }
+                }
             }
             out
         }

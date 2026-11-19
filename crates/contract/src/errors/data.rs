@@ -786,4 +786,32 @@ error_catalog! { ENTRIES;
         message: "HTTP 요청을 준비하지 못했습니다. 쉘을 다시 시작하고, 계속되면 에이전트에게 이 오류 코드를 전하세요.",
         fix: "쉘을 다시 시작하세요"
     }
+    DATA_STREAM_RELAY_UNSUPPORTED(name) {
+        class: Unavailable,
+        place: "변경 알림 스트림 연결 방식 확인",
+        cause: "등록된 연결이 서버 중계 방식이다",
+        message: "연결 {name}은 서버 중계 방식이라 변경 알림 스트림을 열 수 없습니다. 주기 다시 받기로만 갱신됩니다.",
+        fix: "기기 로그인 연결로 등록해 주세요"
+    }
+    DATA_STREAM_LOGIN_REQUIRED(name) {
+        class: LoginRequired,
+        place: "변경 알림 스트림 로그인 확인",
+        cause: "토큰이 없거나 갱신 후에도 로그인이 거부됐다",
+        message: "연결 {name}에 로그인해야 변경 알림을 받을 수 있습니다. 앱의 로그인 단추를 눌러 주세요.",
+        fix: "앱의 로그인 단추를 눌러 주세요"
+    }
+    DATA_STREAM_PERMISSION_DENIED(name) {
+        class: PermissionDenied,
+        place: "변경 알림 스트림 권한 확인",
+        cause: "서버가 스트림 열기를 403으로 거절했다",
+        message: "연결 {name}의 서버가 변경 알림 스트림을 허락하지 않았습니다. 연결을 바꿀 때까지 다시 열지 않습니다.",
+        fix: "연결 설정과 권한을 확인해 주세요"
+    }
+    DATA_STREAM_PATH_DENIED(name, path) {
+        class: PermissionDenied,
+        place: "변경 알림 스트림 경로 확인",
+        cause: "스트림 경로가 연결에 선언된 경로 접두사 밖이다",
+        message: "연결 {name}에 선언되지 않은 경로 {path}로는 변경 알림 스트림을 열 수 없습니다. 연결 설정의 경로를 확인해 주세요.",
+        fix: "연결 설정의 경로를 확인해 주세요"
+    }
 }

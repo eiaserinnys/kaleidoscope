@@ -161,6 +161,10 @@ export type AppCommentThread = { replies: Array<AppCommentReply>, id: string, ap
  *      `request` 원천의 권한은 `connection` 모듈, `file`과 `folder`의 권한은 `files` 모듈이다.
  *      `refresh_secs`는 [`data::SOURCE_REFRESH_MIN_SECS`] 이상이다. 원천의 값 자리 식은 `$data`, `$event`, `$item`을
  *      쓰지 않는다. 정의에 직접 적은 `request` 경로는 `/`로 시작하고, `file` 경로는 [`FileRef`]의 경로 규칙을 지킨다.
+ *    - (48판) `streams`와 `watch`를 쓰면 `requires.modules.connection`이 [`data::STREAM_CONNECTION_VERSION`] 이상이다.
+ *      스트림 이름은 원천 이름과 같은 규칙을 지키고, 스트림 `permission`은 `connection` 권한이며 `path`는 `/`로
+ *      시작한다. `watch.stream`은 선언한 스트림을 가리키고, `on`은 비어 있지 않고 규칙마다 `event`가 비어 있지 않으며
+ *      `coalesce_secs`는 [`data::WATCH_COALESCE_MIN_SECS`] 이상이다. 선언한 스트림은 `watch` 하나 이상이 쓴다.
  *    - (4판) 모든 식(`expr`)은 JSONata로 읽혀야 하고, 식이 `$data.이름`으로 읽는 원천은 `sources`에 있다.
  *      `state`나 `expr` 하나만 가진 객체를 리터럴 바인딩으로 쓰지 않는다(모양이 틀린 바인딩).
  *    - (4판) 동작의 상태 키는 선언되어 있고, `refresh`의 원천은 있다. `call`의 권한은 `connection` 모듈이고,
@@ -221,6 +225,11 @@ file_drop?: PickFilesSpec,
  * (블록 세트 4판) 이름 붙인 원천. 식에서 `$data.이름`으로 읽는다. 규칙은 [`data`] 모듈 머리글에 있다.
  */
 sources?: { [key in string]: SourceDecl }, 
+/**
+ * (계약 48판, 모듈 `connection` 4판) 이름 붙인 상류 SSE 스트림. `request` 원천의 `watch`가 이름으로 가리키면
+ * 코어가 그 스트림을 기기에서 열어 두고, 알림이 오면 가리킨 원천을 다시 받는다.
+ */
+streams?: { [key in string]: StreamDecl }, 
 /**
  * (계약 11판, 모듈 `storage` 1판) 계정 × 앱 저장소에 둘 항목과 기본값.
  */
@@ -1654,7 +1663,11 @@ export type SortSpec = { field: string, desc?: boolean, };
  * 원천 하나. `kind`로 가른다. 이름은 소문자로 시작하고 소문자, 숫자, `_`로 1~32자다(식에서 `$data.이름`으로 읽는다).
  * 값 자리([`Binding`])의 식은 `$state`만 본다. 값이 null이면 그 원천을 부르지 않는다(`idle`).
  */
-export type SourceDecl = { "kind": "request", permission: string, path: Binding, query?: { [key in string]: Binding }, format?: SourceFormat, refresh_secs?: number, page?: PageDecl, } | { "kind": "store" } & StoreSource | { "kind": "file", permission: string, path: Binding, format?: SourceFormat, refresh_secs?: number, } | { "kind": "folder", permission: string, dir?: Binding, recursive?: boolean, extensions?: Array<string>, refresh_secs?: number, };
+export type SourceDecl = { "kind": "request", permission: string, path: Binding, query?: { [key in string]: Binding }, format?: SourceFormat, refresh_secs?: number, page?: PageDecl, 
+/**
+ * (계약 48판) 이 원천을 다시 받을 때를 정하는 상류 스트림의 알림 규칙.
+ */
+watch?: WatchDecl, } | { "kind": "store" } & StoreSource | { "kind": "file", permission: string, path: Binding, format?: SourceFormat, refresh_secs?: number, } | { "kind": "folder", permission: string, dir?: Binding, recursive?: boolean, extensions?: Array<string>, refresh_secs?: number, };
 
 /**
  * 원천이 받은 것을 읽는 방법.
@@ -1839,6 +1852,13 @@ export type StoreUpdateResponse = { request_id: string, result: StoreUpdateResul
 export type StoreUpdateResult = { "status": "installed", origin: StoreOrigin, version: number, } | { "status": "unchanged", origin: StoreOrigin, version: number, } | { "status": "consent_required", consent_request_id: string, } | { "status": "error", error: CoreError, };
 
 export type StoreUpdateStatus = "installed" | "unchanged" | "consent_required";
+
+/**
+ * (계약 48판, 모듈 `connection` 4판) 앱 정의의 상류 SSE 스트림 하나. `permission`은
+ * 읽기 가능한 connection 권한 id이고, 코어가 그 연결의 기기 로그인으로 `path`를 연다.
+ * `path`는 원천 요청과 같은 연결 `paths` 접두사 검사를 지나는 고정 문자열이며, `query`도 고정 문자열 맵이다.
+ */
+export type StreamDecl = { permission: string, path: string, query?: { [key in string]: string }, };
 
 /**
  * 문서 모음 주소의 고정 이름 또는 창 상태 참조.
@@ -2051,6 +2071,34 @@ image_base64?: string,
  * 창의 내용 영역(제목 줄 아래)이 쉘 화면(메인 웹뷰) 왼쪽 위 기준 어디에 있는가(CSS px). 모습을 찍을 때 쓴다.
  */
 bounds: Rect, };
+
+/**
+ * 요청 원천의 `watch`. 스트림의 어떤 알림이 오면 그 원천을 다시 받는다. 알림 내용으로 값을 고쳐 쓰지 않는다.
+ */
+export type WatchDecl = { 
+/**
+ * 앱 정의 `streams`의 스트림 이름.
+ */
+stream: string, 
+/**
+ * 알림 하나와 맞출 규칙. 하나 이상이어야 하고, 하나라도 맞으면 다시 받는다.
+ */
+on: Array<WatchRule>, 
+/**
+ * 알림을 한 번으로 합치는 창(초). 기본 2초, 1초보다 짧게 둘 수 없다.
+ */
+coalesce_secs?: number, };
+
+/**
+ * 알림 하나와 맞출 규칙. SSE `event:` 이름이 `event`와 같고, `where`의 칸마다 알림 `data:`를 JSON으로 읽은
+ * 최상위 값이 바인딩 값과 같으면 맞는다. 바인딩 값이 null이면 그 칸은 무엇이든 맞는다. `where`가 없으면
+ * 이름만 본다. 알림 `data:`가 JSON이 아니면 `where`가 있는 규칙은 맞지 않는다.
+ */
+export type WatchRule = { 
+/**
+ * SSE `event:` 이름. 이름 없는 프레임은 `message`다.
+ */
+event: string, where?: { [key in string]: Binding }, };
 
 export type Waveform = { peaks: Array<number>, start?: number, end?: number, };
 
