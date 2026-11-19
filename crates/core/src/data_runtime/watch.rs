@@ -3,7 +3,7 @@
 use super::*;
 use crate::source_streams::StreamKey;
 use kaleidoscope_contract::data::{
-    WatchDecl, WatchRule, WATCH_COALESCE_DEFAULT_SECS, WATCH_COALESCE_MIN_SECS,
+    escape_pointer, WatchDecl, WatchRule, WATCH_COALESCE_DEFAULT_SECS, WATCH_COALESCE_MIN_SECS,
 };
 
 pub(super) fn coalesce(watch: &WatchDecl) -> Duration {
@@ -88,7 +88,13 @@ pub(crate) fn stream_keys(inner: &Inner) -> Vec<StreamKey> {
 
 /// 알림 하나를 규칙과 맞춘다. `where`가 없으면 이름만 보고, 있으면 알림 `data:`를 JSON으로 읽어
 /// 최상위 칸을 이 인스턴스의 바인딩 값과 비교한다. 값이 null인 칸은 무엇이든 맞는다.
-fn rule_matches(runtime: &Runtime, rule: &WatchRule, payload: Option<&Value>) -> bool {
+fn rule_matches(
+    runtime: &Runtime,
+    source: &str,
+    index: usize,
+    rule: &WatchRule,
+    payload: Option<&Value>,
+) -> bool {
     let Some(where_) = &rule.where_ else {
         return true;
     };
@@ -109,10 +115,12 @@ fn rule_matches(runtime: &Runtime, rule: &WatchRule, payload: Option<&Value>) ->
         modifiers: None,
     };
     where_.iter().all(|(field, binding)| {
-        let Ok(expected) = runtime
-            .compiled
-            .evaluate_binding(binding, "/watch", &env)
-        else {
+        let pointer = format!(
+            "/sources/{}/watch/on/{index}/where/{}",
+            escape_pointer(source),
+            escape_pointer(field)
+        );
+        let Ok(expected) = runtime.compiled.evaluate_binding(binding, &pointer, &env) else {
             return false;
         };
         if expected.is_null() {
@@ -122,11 +130,16 @@ fn rule_matches(runtime: &Runtime, rule: &WatchRule, payload: Option<&Value>) ->
     })
 }
 
-fn watch_matches(runtime: &Runtime, watch: &WatchDecl, event: &str, payload: Option<&Value>) -> bool {
-    watch
-        .on
-        .iter()
-        .any(|rule| rule.event == event && rule_matches(runtime, rule, payload))
+fn watch_matches(
+    runtime: &Runtime,
+    source: &str,
+    watch: &WatchDecl,
+    event: &str,
+    payload: Option<&Value>,
+) -> bool {
+    watch.on.iter().enumerate().any(|(index, rule)| {
+        rule.event == event && rule_matches(runtime, source, index, rule, payload)
+    })
 }
 
 fn mark_due(runtime: &mut Runtime, name: &str, coalesce: Duration) {
@@ -147,8 +160,9 @@ pub(crate) fn notified(inner: &Arc<Inner>, key: &StreamKey, event: &str, data: &
         let matched: Vec<_> = watching(runtime, key)
             .into_iter()
             .filter(|(name, _)| {
-                watched_stream(runtime, name)
-                    .is_some_and(|(watch, _)| watch_matches(runtime, watch, event, payload.as_ref()))
+                watched_stream(runtime, name).is_some_and(|(watch, _)| {
+                    watch_matches(runtime, name, watch, event, payload.as_ref())
+                })
             })
             .collect();
         for (name, coalesce) in matched {

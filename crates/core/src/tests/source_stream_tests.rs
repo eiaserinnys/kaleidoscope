@@ -16,6 +16,7 @@ struct ServerState {
     open: usize,
     closed: usize,
     item_fetches: usize,
+    paged_fetches: usize,
     paths: Vec<String>,
     headers: Vec<String>,
     live: Vec<mpsc::Sender<String>>,
@@ -93,6 +94,10 @@ impl StreamFixture {
         self.state.lock().unwrap().item_fetches
     }
 
+    fn paged_fetches(&self) -> usize {
+        self.state.lock().unwrap().paged_fetches
+    }
+
     fn paths(&self) -> Vec<String> {
         self.state.lock().unwrap().paths.clone()
     }
@@ -129,6 +134,27 @@ fn serve(stream: &mut TcpStream, state: &Arc<Mutex<ServerState>>) {
             state.item_fetches
         };
         let body = json!({"version": version}).to_string();
+        let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let _ = stream.flush();
+        return;
+    }
+    if path == "/paged" {
+        let second = target.contains("cursor=c1");
+        {
+            let mut state = state.lock().unwrap();
+            state.paged_fetches += 1;
+        }
+        let body = if second {
+            json!({"items":[{"n":2}],"nextCursor":null}).to_string()
+        } else {
+            json!({"items":[{"n":1}],"nextCursor":"c1"}).to_string()
+        };
+        let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let _ = stream.flush();
+        return;
+    }
+    if path == "/first" {
+        let body = json!({"path":"/items"}).to_string();
         let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
         let _ = stream.flush();
         return;
@@ -227,8 +253,39 @@ fn definition() -> String {
         "sources":{"items":{"kind":"request","permission":"feed","path":"/items","refresh_secs":3600,
             "watch":{"stream":"changes","coalesce_secs":1,"on":[
                 {"event":"message"},
-                {"event":"update","where":{"kind":{"state":"kind"},"all":null}}
+                {"event":"update","where":{"kind":{"state":"kind"},"all":null}},
+                {"event":"expr","where":{"kind":{"expr":"$state.kind"}}}
             ]}}},
+        "ui":{"type":"text","value":{"expr":"$data.items.version"}}
+    })
+    .to_string()
+}
+
+fn paged_definition() -> String {
+    json!({
+        "id":"watch-paged","name":"쪽 있는 알림 원천","requires":{"blocks":22,"modules":{"connection":4}},
+        "permissions":[{"module":"connection","id":"feed","connection":"example","access":"read","label":"피드"}],
+        "streams":{"changes":{"permission":"feed","path":"/events"}},
+        "state":{},
+        "sources":{"items":{"kind":"request","permission":"feed","path":"/paged","refresh_secs":3600,
+            "page":{"param":"cursor","next":"nextCursor","items":"items"},
+            "watch":{"stream":"changes","coalesce_secs":1,"on":[{"event":"message"}]}}},
+        "ui":{"type":"text","value":{"expr":"$data.items.items"}}
+    })
+    .to_string()
+}
+
+fn dependent_definition() -> String {
+    json!({
+        "id":"watch-dependent","name":"앞 원천을 기다리는 알림 원천","requires":{"blocks":4,"modules":{"connection":4}},
+        "permissions":[{"module":"connection","id":"feed","connection":"example","access":"read","label":"피드"}],
+        "streams":{"changes":{"permission":"feed","path":"/events"}},
+        "state":{},
+        "sources":{
+            "first":{"kind":"request","permission":"feed","path":"/first","refresh_secs":3600},
+            "items":{"kind":"request","permission":"feed","path":{"expr":"$data.first.path"},"refresh_secs":3600,
+                "watch":{"stream":"changes","coalesce_secs":1,"on":[{"event":"message"}]}}
+        },
         "ui":{"type":"text","value":{"expr":"$data.items.version"}}
     })
     .to_string()
@@ -242,11 +299,19 @@ struct Harness {
 }
 
 fn harness(kind: ConnectionKind) -> Harness {
+    harness_with(definition(), kind)
+}
+
+fn harness_with(definition: String, kind: ConnectionKind) -> Harness {
     let fixture = StreamFixture::start();
     let temp = TempDir::new().unwrap();
+    let app_id = serde_json::from_str::<Value>(&definition).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let core = open_core(
         temp.path(),
-        vec![definition()],
+        vec![definition],
         &Arc::new(FakeHost::default()),
     );
     *core.inner.connections.lock().unwrap() = vec![ConnectionInfo {
@@ -275,7 +340,7 @@ fn harness(kind: ConnectionKind) -> Harness {
         )
         .unwrap();
     let (_, desktop) = active_ids(&core);
-    let window = open_window(&core, &desktop, "watch-app");
+    let window = open_window(&core, &desktop, &app_id);
     Harness {
         fixture,
         core,
@@ -322,6 +387,20 @@ impl Harness {
             self.fixture.item_fetches()
         );
     }
+
+    fn wait_paged_fetches(&self, expected: usize) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if self.fixture.paged_fetches() >= expected {
+                return;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        panic!(
+            "쪽 원천을 {expected}번 받지 않았습니다: {}",
+            self.fixture.paged_fetches()
+        );
+    }
 }
 
 #[test]
@@ -359,6 +438,63 @@ fn matching_notifications_refetch_watching_source_once_per_coalesce() {
     harness.wait_fetches(2);
     thread::sleep(Duration::from_millis(1500));
     assert_eq!(harness.fixture.item_fetches(), 2);
+}
+
+#[test]
+fn where_expr_rule_matches_the_window_state_value() {
+    let harness = harness(ConnectionKind::Oauth);
+    harness.attach();
+    harness.wait_fetches(1);
+    harness.wait_stream();
+
+    harness.fixture.send("expr", r#"{"kind":"other"}"#);
+    thread::sleep(Duration::from_millis(1500));
+    assert_eq!(harness.fixture.item_fetches(), 1);
+
+    harness.fixture.send("expr", r#"{"kind":"card"}"#);
+    harness.wait_fetches(2);
+    thread::sleep(Duration::from_millis(1500));
+    assert_eq!(harness.fixture.item_fetches(), 2);
+}
+
+#[test]
+fn paged_source_does_not_refetch_from_the_first_page_on_a_notification() {
+    let harness = harness_with(paged_definition(), ConnectionKind::Oauth);
+    harness.attach();
+    harness.wait_paged_fetches(1);
+    harness.wait_stream();
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let reply = harness
+            .core
+            .handle(CoreRequest::DataMore {
+                window_id: harness.window.clone(),
+                source: "items".into(),
+            })
+            .unwrap();
+        if matches!(reply, CoreReply::DataMore { started: true }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "쪽 더 받기가 시작되지 않았습니다"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+    harness.wait_paged_fetches(2);
+
+    harness.fixture.send("message", "{}");
+    thread::sleep(Duration::from_millis(1500));
+    assert_eq!(harness.fixture.paged_fetches(), 2);
+}
+
+#[test]
+fn watched_source_opens_its_stream_after_the_source_it_depends_on_fetches() {
+    let harness = harness_with(dependent_definition(), ConnectionKind::Oauth);
+    harness.attach();
+    harness.wait_fetches(1);
+    harness.wait_stream();
 }
 
 #[test]

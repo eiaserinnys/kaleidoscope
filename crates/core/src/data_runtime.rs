@@ -1016,6 +1016,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                 }
                 let handles = jobs(&inner, follow_up);
                 let due = run_due(&inner, Some(&job.window));
+                crate::source_streams::reconcile(&inner);
                 inner.layout_signal.notify();
                 for handle in handles.into_iter().chain(due) {
                     let _ = handle.join();
@@ -1613,7 +1614,9 @@ fn run_due(inner: &Arc<Inner>, only_window: Option<&str>) -> Vec<JoinHandle<()>>
                     && source
                         .waiting
                         .is_none_or(|until| until <= chrono::Utc::now())
-                    && (source.watch_due.is_some_and(|at| at <= Instant::now())
+                    && (source
+                        .watch_due
+                        .is_some_and(|at| at <= Instant::now() && source.paging.pages < 2)
                         || match (
                             source.last_fetched,
                             runtime.definition.sources[&name].refresh_secs(),
