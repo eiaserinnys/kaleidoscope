@@ -155,7 +155,8 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     return state;
   }
   if (message.method === "auth/status_update" && message.id === undefined) {
-    return { ...state, account: readAuthStatus(message.params) ?? state.account };
+    // 형식이 깨진 알림은 무시하고, 올바른 알림이 인증 안 됨을 알리면 계정을 숨긴다.
+    return typeof message.params === "object" && message.params !== null ? { ...state, account: readAuthStatus(message.params) } : state;
   }
   if (typeof message.method === "string") {
     return message.id === undefined ? state : { ...state, outbox: [...state.outbox, { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Method not found" } }] };

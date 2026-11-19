@@ -153,3 +153,20 @@ test("세션 전환은 컨텍스트만 비우고 한도와 계정은 남긴다",
   assert.equal(state.limits.length, 1);
   assert.notEqual(state.account, null);
 });
+
+test("인증이 풀렸다는 알림은 계정을 지우고, 깨진 알림은 무시한다", () => {
+  const auth = (params: unknown) => ({ jsonrpc: "2.0", method: "auth/status_update", params });
+  let state = reduceMessage(initialState(), auth({ state: "authenticated", accounts: [{ label: "A", active: true }] }), "x");
+  state = reduceMessage(state, auth(undefined), "x");
+  assert.deepEqual(state.account, { label: "A", email: null });
+  state = reduceMessage(state, auth({ state: "unauthenticated" }), "x");
+  assert.equal(state.account, null);
+});
+
+test("재생 중인 usage_update는 컨텍스트와 한도를 바꾸지 않는다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 1, size: 10, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  [state] = reserveRequest(state, "switch", "s2");
+  const replayed = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 9, size: 10, _meta: { "_claude/rateLimit": { ...fiveHour, rateLimitType: "seven_day" } } }), "x");
+  assert.deepEqual(replayed.context, { used: 1, size: 10 });
+  assert.equal(replayed.limits.length, 1);
+});
