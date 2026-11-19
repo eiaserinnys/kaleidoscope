@@ -167,6 +167,10 @@
    그림 열과 그림은 목록 줄 그림과 같은 크기(--ks-control-height)다. 한 트리 안의 그림 크기는 하나라 열 맞춤이 지켜진다(카드 #1729 S1, S2). */
 .ks-file-tree-icon.is-image.is-large { width: var(--ks-control-height); height: var(--ks-control-height); flex-basis: var(--ks-control-height); }
 .ks-data-tree .ks-file-tree-icon.is-image.is-large > .ks-media-thumbnail.ks-tree-image { width: var(--ks-control-height); height: var(--ks-control-height); }
+/* 큰 그림 트리의 바로 입력 줄: 글칸 뒤에 편집 전 줄의 제목 묶음을 보이지 않게 깔아 높이를 그 줄과 같게 하고, 글칸은 그 높이의 세로 가운데에 둔다(카드 #1729 S9). */
+.ks-tree-edit-title { display: grid; flex: 1 1 auto; min-width: 0; align-items: center; }
+.ks-tree-edit-title > * { grid-area: 1 / 1; }
+.ks-tree-edit-title > .ks-tree-title-block { visibility: hidden; }
 .ks-list-card .ks-list-grid-icon { color: inherit; }
 .ks-list-row > svg { flex: none; }
 .ks-list-card > :is(.ks-list-content, .ks-view-badges, .ks-view-meta) { padding-inline: var(--ks-space-1); }

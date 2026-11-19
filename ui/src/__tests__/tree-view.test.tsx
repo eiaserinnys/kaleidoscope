@@ -437,9 +437,9 @@ describe("공용 가상 트리", () => {
     ], new Set(["notes", "deep"]));
     const byId = new Map(rows.map((row) => [row.id, row]));
     expect(byId.get("notes")?.indent).toBeUndefined();
-    expect(byId.get("deep")?.indent).toBe("calc(var(--ks-space-4))");
+    expect(byId.get("deep")?.indent).toBe("calc(1 * var(--ks-tree-indent, var(--ks-space-4)))");
     expect(byId.get("error:notes/deep")?.indent).toBeUndefined();
-    expect(byId.get("readme")?.indent).toBe("calc(var(--ks-space-4) + var(--ks-space-4))");
+    expect(byId.get("readme")?.indent).toBe("calc(2 * var(--ks-tree-indent, var(--ks-space-4)))");
   });
 
   it("보조 행을 트리 항목과 키보드 이동에서 제외하고 안의 입력은 유지한다", async () => {

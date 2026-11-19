@@ -1,4 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
+import { DialogSubmitContext } from "./dialog-submit";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
@@ -114,6 +115,8 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
       }
     })();
   }, [data, pointer]);
+  // 본문의 한 줄 input이 Enter로 부르는 확정. 확정 단추와 같은 잠금(confirm_disabled)과 진행 중 판정을 따른다.
+  const submit = useCallback(() => { if (!confirmLocked) confirm(); }, [confirmLocked, confirm]);
 
   return <div ref={root} style={{ display: "contents" }}>
     {isOpen && host ? <Dialog
@@ -123,7 +126,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
       host={host}
       overlayClassName={hasPicker(block.child) ? "is-picker" : ""}
       title={titleText}
-      body={<>{renderBlock(block.child, context, childPointer)}<BindingFailureNotice value={title} /><BindingFailureNotice value={closeLabel} /><BindingFailureNotice value={cancelLabel} /><BindingFailureNotice value={confirmDisabled} /></>}
+      body={<><DialogSubmitContext.Provider value={hasConfirm ? submit : null}>{renderBlock(block.child, context, childPointer)}</DialogSubmitContext.Provider><BindingFailureNotice value={title} /><BindingFailureNotice value={closeLabel} /><BindingFailureNotice value={cancelLabel} /><BindingFailureNotice value={confirmDisabled} /></>}
       ok={closeText}
       danger={block.danger}
       showCancel={hasConfirm}

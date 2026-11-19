@@ -18,6 +18,7 @@ import { display, isMultilineInput } from "./data-layout";
 import { isWindowTop, useWindowStateValue, useWindowVisible } from "../data/window-state";
 import { inputDraft, decimalDigits, useInputDraft } from "./input-draft";
 import { inputOptionsError, normalizeInputOptions, resolveInputOption } from "./input-options";
+import { useDialogSubmit } from "./dialog-submit";
 import * as shellErrors from "../contract/shell-errors";
 import { createDateTimeFormat, parseISODate, parseISOTime } from "./input-date-time";
 interface Props<T extends Block["type"]> { block: Extract<Block, { type: T }>; context: BlockContext; pointer: string }
@@ -42,6 +43,7 @@ function fitTextarea(element: HTMLTextAreaElement) {
 export function InputBlock({ block, context, pointer }: Props<"input">) {
   const blockRoot = useBlockRootProps();
   const data = useWindowData();
+  const dialogSubmit = useDialogSubmit();
   const multiline = block.kind !== "number" && isMultilineInput(block);
   const inputId = useId();
   const dateTime = block.kind === "date" || block.kind === "time";
@@ -228,10 +230,15 @@ export function InputBlock({ block, context, pointer }: Props<"input">) {
     }
     if (event.key !== "Enter" || event.nativeEvent.isComposing || composing.current || (multiline && !event.ctrlKey)) return;
     normalizeNumberDraft();
-    if (dateTime || block.commit === "submit" || block.on_submit) { event.preventDefault(); if (!commit(draft)) return; }
+    // dialog 블록 안의 on_submit 없는 한 줄 input은 Enter가 확정 단추를 누른 것과 같다. 여러 줄 input은 Ctrl+Enter여도 확정하지 않는다.
+    // 열린 콤보 목록의 Enter는 Combobox가 먼저 받아 여기까지 오지 않는다.
+    const confirmDialog = dialogSubmit !== null && !block.on_submit && !multiline;
+    if (dateTime || block.commit === "submit" || block.on_submit || confirmDialog) { event.preventDefault(); if (!commit(draft)) return; }
     if (block.on_submit) {
       const submitted = mark();
       void data.act(`${pointer}/on_submit`, toEventValue(draft)).then((success) => { if (success) adopt(submitted); });
+    } else if (confirmDialog) {
+      dialogSubmit();
     }
   };
   const props = { id: inputId, className: "ks-text-input", "aria-label": block.label_position === "hidden" ? labelText : undefined, placeholder: block.placeholder === undefined ? undefined : bindingText(placeholder), value: fieldText(locked ? initialDraft : draft), readOnly: locked, disabled, "aria-readonly": readOnly,

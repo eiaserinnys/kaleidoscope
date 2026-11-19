@@ -1,4 +1,4 @@
-import { memo, type CSSProperties, type KeyboardEvent, type MouseEvent } from "react";
+import { memo, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Check, ChevronRight, FileText } from "../icons";
 import type { TreeRowModel } from "./tree-model";
 
@@ -29,6 +29,37 @@ export interface TreeRowProps {
   onDoubleClick?: (row: TreeRowModel, event: MouseEvent<HTMLButtonElement>) => void;
 }
 
+/** 트리 줄의 표식 열. 보통 줄과 바로 입력 줄이 같은 함수로 그려 같은 깊이의 제목 x와 열 크기가 같다(카드 #1729 S9). */
+export function treeRowColumns({ chevron, check, marker, image, hasChildren = false, checkEnabled = false, imageColumn = false, largeImage = false }: {
+  chevron?: ReactNode;
+  check?: ReactNode;
+  /** 그림 트리가 아닐 때 화살표 자리 다음(자식 없는 줄은 대신)에 두는 표식: 확인 상자나 잎 아이콘. */
+  marker?: ReactNode;
+  image?: ReactNode;
+  hasChildren?: boolean;
+  checkEnabled?: boolean;
+  imageColumn?: boolean;
+  largeImage?: boolean;
+}): ReactNode {
+  const iconClass = `ks-file-tree-icon${hasChildren ? " is-directory" : ""}`;
+  // 그림 트리: 모든 줄이 화살표 열, (확인 모드면) 확인 상자 열, 그림 열을 같은 차례로 두어 같은 깊이의 제목 x가 같다.
+  // 자식 없는 줄의 화살표 자리, 확인 상자 없는 줄의 확인 상자 자리, 그림 없는 항목의 그림 자리는 같은 크기의 빈 칸이다.
+  if (imageColumn) {
+    return <>
+      <span aria-hidden="true" className={iconClass}>{chevron}</span>
+      {checkEnabled ? <span aria-hidden="true" className={iconClass}>{check}</span> : null}
+      <span aria-hidden="true" className={`${iconClass} is-image${largeImage ? " is-large" : ""}`}>{image}</span>
+    </>;
+  }
+  // 그림이 없는 트리: 확인 상자가 없는 부모 행은 확인 모드가 아닐 때처럼 화살표 한 열만 두고 제목을 바로 잇는다.
+  // 확인 상자가 있는 행과 확인 상자가 없는 잎 행은 화살표 열 다음에 표식 열을 둔다.
+  const twoColumns = checkEnabled && !(check === undefined && hasChildren);
+  return twoColumns ? <>
+    <span aria-hidden="true" className={iconClass}>{chevron}</span>
+    <span aria-hidden="true" className={iconClass}>{marker}</span>
+  </> : <span aria-hidden="true" className={iconClass}>{chevron ?? marker}</span>;
+}
+
 function TreeRowView({ row, commentKey, index, start, selected, multiSelected, dropState, dropPosition, draggable, focused, menuTarget = false, checkEnabled = false, imageColumn = false, largeImage = false, measure, onFocus, onKeyDown, onActivate, onCheck, onToggleExpand, onContextMenu, onDoubleClick }: TreeRowProps) {
   const { node } = row;
   const check = node.checked !== undefined
@@ -46,22 +77,7 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
       onClick={checkEnabled ? (event) => { event.preventDefault(); event.stopPropagation(); onToggleExpand?.(row); } : undefined}
     ><ChevronRight className={`ks-chevron${row.expanded ? " is-expanded" : ""}`} size="inline" /></span>
     : undefined;
-  const iconClass = `ks-file-tree-icon${row.hasChildren ? " is-directory" : ""}`;
-  // 그림이 없는 트리: 확인 상자가 없는 부모 행은 확인 모드가 아닐 때처럼 화살표 한 열만 두고 제목을 바로 잇는다.
-  // 확인 상자가 있는 행과 확인 상자가 없는 잎 행은 화살표 열 다음에 표식 열을 둔다.
-  const twoColumns = checkEnabled && !(check === undefined && row.hasChildren);
-  // 그림 트리: 모든 줄이 화살표 열, (확인 모드면) 확인 상자 열, 그림 열을 같은 차례로 두어 같은 깊이의 제목 x가 같다.
-  // 자식 없는 줄의 화살표 자리, 확인 상자 없는 줄의 확인 상자 자리, 그림 없는 항목의 그림 자리는 같은 크기의 빈 칸이다.
-  const columns = imageColumn
-    ? <>
-      <span aria-hidden="true" className={iconClass}>{chevron}</span>
-      {checkEnabled ? <span aria-hidden="true" className={iconClass}>{check}</span> : null}
-      <span aria-hidden="true" className={`${iconClass} is-image${largeImage ? " is-large" : ""}`}>{image}</span>
-    </>
-    : twoColumns ? <>
-      <span aria-hidden="true" className={iconClass}>{chevron}</span>
-      <span aria-hidden="true" className={iconClass}>{marker}</span>
-    </> : <span aria-hidden="true" className={iconClass}>{chevron ?? marker}</span>;
+  const columns = treeRowColumns({ chevron, check, marker, image, hasChildren: row.hasChildren, checkEnabled, imageColumn, largeImage });
   return <div
     className="ks-tree-virtual-row"
     data-index={index}

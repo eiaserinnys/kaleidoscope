@@ -73,9 +73,12 @@ export function holdsUserFocus(element: Element | null): boolean {
     || Boolean(element.closest("[data-ks-overlay]"));
 }
 
-/** 대화상자가 열리거나 다시 초점을 받을 때 갈 곳: 본문의 쓰기 입력, 없으면 바닥 단추. */
+/** 대화상자 본문에서 첫 초점을 받을 입력 후보: 쓰기 입력과 잠기지 않은 select 블록 단추(기본 select가 아니라 단추로 그린다). 문서 차례다. */
+export const dialogInputSelector = `${writableControlSelector}, button.ks-select-button:not(:disabled)`;
+
+/** 대화상자가 열리거나 다시 초점을 받을 때 갈 곳: 본문의 첫 입력 후보, 없으면 바닥 단추. */
 export function dialogFirstFocus(root: HTMLElement): HTMLElement | null {
-  const input = [...root.querySelectorAll<HTMLElement>(`.ks-dialog-body :is(${writableControlSelector})`)]
+  const input = [...root.querySelectorAll<HTMLElement>(`.ks-dialog-body :is(${dialogInputSelector})`)]
     .find((element) => !element.closest("[hidden], [inert]")
       && (typeof element.checkVisibility !== "function" || element.checkVisibility({ visibilityProperty: true })));
   return input ?? dialogActionFocus(root);

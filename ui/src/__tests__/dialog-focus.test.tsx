@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, expect, it, vi } from "vitest";
 import { StrictMode, useState } from "react";
 import { Dialog } from "../components/dialog";
+import { Select } from "../components/select-toggle";
 import { isUnclaimedFocus } from "../components/focus-rescue";
 import { registerOverlay } from "../share/overlay-owner";
 
@@ -322,4 +323,26 @@ it("바닥에서 누른 Escape는 맨 위 창의 대화상자만 닫는다", () 
   expect(cancelB).toHaveBeenCalledTimes(1);
   cleanup();
   frames.forEach(({ frame }) => frame.remove());
+});
+
+const select = (props: { disabled?: boolean } = {}) => <Select items={["가", "나"]} value={undefined} onChange={() => {}} label="노드" placeholder="노드 고르기" {...props} />;
+
+it("select 블록 단추만 있는 대화상자는 그 단추에 첫 초점을 둔다", () => {
+  const dialog = show(select());
+  const button = within(dialog).getByRole("button", { name: "노드" });
+  expect(button.classList.contains("ks-select-button")).toBe(true);
+  expect(document.activeElement).toBe(button);
+});
+
+it("잠긴 select는 건너뛰고 다음 입력 후보로 가며 후보가 없으면 취소에 둔다", () => {
+  const first = show(<>{select({ disabled: true })}<input aria-label="이름" /></>);
+  expect(document.activeElement).toBe(within(first).getByRole("textbox", { name: "이름" }));
+  cleanup();
+  const second = show(select({ disabled: true }));
+  expect(document.activeElement).toBe(within(second).getByRole("button", { name: "취소" }));
+});
+
+it("입력 칸이 select보다 앞에 있으면 첫 초점은 입력 칸이다", () => {
+  const dialog = show(<><input aria-label="이름" />{select()}</>);
+  expect(document.activeElement).toBe(within(dialog).getByRole("textbox", { name: "이름" }));
 });

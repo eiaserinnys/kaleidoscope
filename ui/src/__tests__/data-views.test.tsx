@@ -1427,3 +1427,82 @@ it("이미지가 아닌 피드 첨부는 파일 칩으로 보이고 누르면 �
     URL.revokeObjectURL = previous.revoke;
   }
 });
+it("subtitle이 있는 큰 그림 트리는 들여쓰기 한 단을 그림 열 폭과 열 사이 간격의 합으로 두고, 작은 그림 트리와 그림 없는 트리는 그대로다", async () => {
+  const nested = (image: boolean, subtitle: boolean) => [{
+    key: "root", title: "뿌리", ...(image ? { image: { asset: "photo" } } : {}), ...(subtitle ? { subtitle: "둘째 줄" } : {}),
+    children: [{ key: "child", title: "자식", ...(image ? { image: { asset: "other" } } : {}), children: [{ key: "grandchild", title: "손자" }] }],
+  }];
+  const wrapperOf = (name: RegExp) => screen.getByRole("treeitem", { name }).closest<HTMLElement>("[data-tree-row]")!;
+  const step = "var(--ks-tree-indent, var(--ks-space-4))";
+  setup({ type: "tree", by: "children", default_expanded: true, items: nested(true, true) } as unknown as Block, {});
+  await screen.findByRole("treeitem", { name: /손자/ });
+  expect(screen.getByRole("tree").style.getPropertyValue("--ks-tree-indent")).toBe("calc(var(--ks-control-height) + var(--ks-space-2))");
+  expect(wrapperOf(/뿌리/).style.paddingInlineStart).toBe("");
+  expect(wrapperOf(/자식/).style.paddingInlineStart).toBe(`calc(1 * ${step})`);
+  expect(wrapperOf(/손자/).style.paddingInlineStart).toBe(`calc(2 * ${step})`);
+  cleanup();
+  for (const [image, subtitle] of [[true, false], [false, false]] as const) {
+    setup({ type: "tree", by: "children", default_expanded: true, items: nested(image, subtitle) } as unknown as Block, {});
+    await screen.findByRole("treeitem", { name: /손자/ });
+    expect(screen.getByRole("tree").style.getPropertyValue("--ks-tree-indent")).toBe("");
+    expect(wrapperOf(/뿌리/).style.paddingInlineStart).toBe("");
+    expect(wrapperOf(/자식/).style.paddingInlineStart).toBe(`calc(1 * ${step})`);
+    expect(wrapperOf(/손자/).style.paddingInlineStart).toBe(`calc(2 * ${step})`);
+    cleanup();
+  }
+});
+it("그림 트리의 이름 바꾸기 줄은 보통 줄과 같은 열 차례(화살표 자리, 그림 열)를 갖고 그 항목 그림을 보이며 큰 그림 트리면 큰 크기 표시를 갖는다", async () => {
+  const editTree = (items: unknown[], extra: Record<string, unknown> = {}) => ({
+    type: "tree", by: "children", default_expanded: true, items, on_edit: [{ set_state: "last", value: { expr: "$event" } }], on_edit_cancel: [], ...extra,
+  } as unknown as Block);
+  const columnsOf = (element: Element) => [...element.querySelectorAll(":scope > .ks-file-tree-icon")];
+  const editRowOf = async () => (await screen.findByRole("textbox", { name: "항목 이름" })).closest<HTMLElement>(".ks-file-tree-create-row")!;
+  // 큰 그림 트리(subtitle 있음): 깊이 2 줄의 편집. 화살표 자리와 큰 그림 열 두 칸이고 그 항목의 그림이 그대로 보인다.
+  setup(editTree([{ key: "root", title: "뿌리", subtitle: "둘째 줄", image: { asset: "root" }, children: [
+    { key: "child", title: "자식", subtitle: "둘째 줄", image: { asset: "child" }, editing: true },
+    { key: "other", title: "다른 자식", subtitle: "둘째 줄", image: { asset: "other" } },
+  ] }]), {});
+  let editRow = await editRowOf();
+  let columns = columnsOf(editRow);
+  expect(columns).toHaveLength(2);
+  expect(columns[0].childElementCount).toBe(0);
+  expect(columns[1].classList.contains("is-image")).toBe(true);
+  expect(columns[1].classList.contains("is-large")).toBe(true);
+  expect(columns[1].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  expect(editRow.classList.contains("is-large-image")).toBe(true);
+  const sibling = columnsOf(screen.getByRole("treeitem", { name: /다른 자식/ }));
+  expect(sibling.map((column) => column.className)).toEqual(columns.map((column) => column.className));
+  expect(editRow.closest<HTMLElement>("[data-tree-row]")!.style.paddingInlineStart).toBe("calc(1 * var(--ks-tree-indent, var(--ks-space-4)))");
+  cleanup();
+  // 확인 모드의 큰 그림 트리: 화살표 자리, 확인 상자 자리, 그림 열 세 칸이다.
+  setup(editTree([
+    { key: "a", title: "하나", subtitle: "둘째 줄", image: { asset: "a" }, checked: true, editing: true },
+    { key: "b", title: "둘", subtitle: "둘째 줄", image: { asset: "b" }, checked: false },
+  ], { on_check: [] }), {});
+  editRow = await editRowOf();
+  columns = columnsOf(editRow);
+  expect(columns).toHaveLength(3);
+  expect(columns[1].querySelector(".ks-tree-check.is-checked")).not.toBeNull();
+  expect(columns[2].classList.contains("is-large")).toBe(true);
+  expect(columns[2].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  cleanup();
+  // 작은 그림 트리(subtitle 없음): 그림 열은 작은 크기이고 큰 크기 표시가 없다.
+  setup(editTree([{ key: "a", title: "하나", image: { asset: "a" }, editing: true }, { key: "b", title: "둘" }]), {});
+  editRow = await editRowOf();
+  columns = columnsOf(editRow);
+  expect(columns).toHaveLength(2);
+  expect(columns[1].classList.contains("is-image")).toBe(true);
+  expect(columns[1].classList.contains("is-large")).toBe(false);
+  expect(columns[1].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  expect(editRow.classList.contains("is-large-image")).toBe(false);
+  cleanup();
+  // 그림 없는 트리: 표식 한 칸(잎 아이콘)이고 그림 열이 없다. 이전 구조 그대로다.
+  setup(editTree([{ key: "a", title: "하나", editing: true }, { key: "b", title: "둘", children: [{ key: "c", title: "셋" }] }]), {});
+  editRow = await editRowOf();
+  columns = columnsOf(editRow);
+  expect(columns).toHaveLength(1);
+  expect(columns[0].classList.contains("is-image")).toBe(false);
+  expect(columns[0].querySelector("svg")).not.toBeNull();
+  expect(editRow.querySelector(".ks-media-thumbnail")).toBeNull();
+  expect(editRow.classList.contains("is-large-image")).toBe(false);
+});

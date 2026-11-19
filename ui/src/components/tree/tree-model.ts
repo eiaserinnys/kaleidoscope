@@ -27,6 +27,12 @@ export interface TreeNode {
   commentKey?: import("../../contract/serde_json/JsonValue").JsonValue;
 }
 
+/** 들여쓰기 한 단. 트리 뿌리가 `--ks-tree-indent`를 두면 그 값, 없으면 --ks-space-4다. */
+export const TREE_INDENT_STEP = "var(--ks-tree-indent, var(--ks-space-4))";
+/** 큰 그림 트리(subtitle이 있는 그림 트리)의 한 단: 그림 열 폭(--ks-control-height) + 열 사이 간격(.ks-row gap, --ks-space-2).
+ *  자식 줄 그림의 왼쪽 끝이 부모 줄 제목 시작과 같아진다. */
+export const LARGE_IMAGE_TREE_INDENT_STEP = "calc(var(--ks-control-height) + var(--ks-space-2))";
+
 export interface TreeRowModel {
   id: string;
   node: TreeNode;
@@ -65,7 +71,7 @@ export function flattenTreeModel(nodes: TreeNode[], expanded: ReadonlySet<string
         hasChildren,
         position: treePosition,
         setSize: treeSiblings.length,
-        indent: depth && !node.fullWidth ? `calc(${Array.from({ length: depth }, () => "var(--ks-space-4)").join(" + ")})` : undefined,
+        indent: depth && !node.fullWidth ? `calc(${depth} * ${TREE_INDENT_STEP})` : undefined,
       });
       if (node.after) visit([node.after], parentId, depth);
       if (isExpanded && children.length) visit(children, node.id, depth + 1);
