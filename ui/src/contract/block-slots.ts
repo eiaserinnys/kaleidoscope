@@ -28,7 +28,7 @@ export const BLOCK_SLOTS: Record<string, BlockSlots> = {
   folder: { bindings: [], actions: ["on_select"], children: [] },
   markdown: { bindings: ["value"], actions: [], children: [] },
   html_view: { bindings: ["value"], actions: [], children: [] },
-  chat: { bindings: ["loading"], actions: [], children: ["footer"] },
+  chat: { bindings: ["loading"], actions: [], children: ["footer", "input_header"] },
   web_view: { bindings: [], actions: [], children: [] },
   explorer: { bindings: [], actions: [], children: [] },
   stack: { bindings: ["scroll_reset"], actions: [], children: ["children/*"] },
