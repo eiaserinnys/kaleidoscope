@@ -368,10 +368,10 @@ export function SectionBlock({ block, context, pointer }: Props<"section">) {
     if (!target || target.closest(".ks-data-section-actions") || target.closest("input, textarea, [contenteditable='true']")) return;
     menu.open(event, toggleRef.current ?? event.currentTarget, scope?.item, scope === null ? pointer : String(scope.key), "제목 복사", initialName);
   } : undefined;
-  return <section {...blockRoot} className="ks-data-section">
+  return <section {...blockRoot} className="ks-data-section" data-drop-position={drag.position}>
     <div className={`ks-data-section-header${editing ? " is-editing" : ""}`} onContextMenu={openMenu}
       draggable={block.on_move !== undefined && !editing && scope !== null || undefined}
-      data-drop-position={drag.position} onDragStart={drag.onDragStart} onDragOver={drag.onDragOver}
+      onPointerDown={drag.onPointerDown} onDragStart={drag.onDragStart} onDragOver={drag.onDragOver}
       onDrop={drag.onDrop} onDragLeave={drag.onDragLeave} onDragEnd={drag.onDragEnd}>
       {editing ? <>
         {block.collapsible

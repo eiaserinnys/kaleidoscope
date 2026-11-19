@@ -3,6 +3,7 @@ import path from "node:path";
 
 const app = "section-move-1705";
 const section = (key: string) => `[data-repeat-key="${key}"] .ks-data-section-header`;
+const sectionRoot = (key: string) => `[data-repeat-key="${key}"] > .ks-data-section`;
 const hideChrome = `body { padding: 0; } .ks-harness { display: block; height: 100vh; } .ks-harness-header, .ks-harness-dev-panel { display: none; } .ks-harness-apps.is-preview { height: 100%; }`;
 
 async function open(page: Page, width: number) {
@@ -28,6 +29,69 @@ async function dragEvent(page: Page, selector: string, type: string, ratio: numb
   }, { selector, type, ratio });
 }
 
+async function mouseDragOver(page: Page, from: string, to: string, ratio: number) {
+  const source = (await page.locator(from).boundingBox())!;
+  const target = (await page.locator(to).boundingBox())!;
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height * ratio, { steps: 12 });
+  await page.mouse.move(target.x + target.width / 2 + 2, target.y + target.height * ratio);
+}
+
+for (const width of [1280, 360]) test(`실제 마우스: 구역 경계의 자리 표시 ${width}`, async ({ page }) => {
+  await open(page, width);
+  const capture = async (name: string) => {
+    if (process.env.KS_1705_VISUAL_OUTPUT) await page.screenshot({ path: path.join(process.env.KS_1705_VISUAL_OUTPUT, `${width}-${name}.png`) });
+  };
+  await mouseDragOver(page, section("c"), section("a"), .8);
+  const a = page.locator(sectionRoot("a"));
+  await expect(a).toHaveAttribute("data-drop-position", "after");
+  const lineY = (key: string) => page.locator(sectionRoot(key)).evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const pseudo = getComputedStyle(element, "::after");
+    return rect.top + parseFloat(pseudo.top);
+  });
+  const after = await lineY("a");
+  const lastRowBottom = await page.locator('[data-tree-id="item:a2"]').evaluate((element) => element.getBoundingClientRect().bottom);
+  expect(after).toBeGreaterThanOrEqual(lastRowBottom);
+  await capture("expanded-after");
+  await page.mouse.up();
+  await expect(page.locator(".ks-repeat-item").nth(1)).toHaveAttribute("data-repeat-key", "c");
+  await capture("expanded-dropped");
+  await page.reload(); await page.addStyleTag({ content: hideChrome });
+  await expect(page.locator(section("a"))).toBeVisible();
+  await mouseDragOver(page, section("c"), section("b"), .2);
+  await expect(page.locator(sectionRoot("b"))).toHaveAttribute("data-drop-position", "before");
+  const before = await lineY("b");
+  expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
+  await capture("next-before");
+  await page.mouse.up();
+  await page.reload(); await page.addStyleTag({ content: hideChrome });
+  await expect(page.locator(section("a"))).toBeVisible();
+  await mouseDragOver(page, section("c"), section("a"), .2);
+  await expect(a).toHaveAttribute("data-drop-position", "before");
+  const first = await lineY("a");
+  const windowHeaderBottom = await page.locator(`[data-testid="app-window-${app}"] .ks-harness-window-header`).evaluate((element) => element.getBoundingClientRect().bottom);
+  expect(first).toBeGreaterThan(windowHeaderBottom);
+  console.log(`구역 자리 좌표 ${width}:`, { after, before, lastRowBottom, first, windowHeaderBottom });
+  await capture("first-before");
+  await page.mouse.up();
+});
+
+test("실제 마우스: 더하기 단추에서 끌어도 구역이 이동하지 않는다", async ({ page }) => {
+  await open(page, 1280);
+  const capture = async (name: string) => {
+    if (process.env.KS_1705_VISUAL_OUTPUT) await page.screenshot({ path: path.join(process.env.KS_1705_VISUAL_OUTPUT, `1280-${name}.png`) });
+  };
+  await capture("plus-before");
+  await mouseDragOver(page, `${section("b")} .ks-data-section-actions button`, section("c"), .8);
+  await expect(page.locator(sectionRoot("c"))).not.toHaveAttribute("data-drop-position", /.+/);
+  await page.mouse.up();
+  await expect(page.locator(".ks-repeat-item").first()).toHaveAttribute("data-repeat-key", "a");
+  await expect(page.locator(".ks-repeat-item").nth(1)).toHaveAttribute("data-repeat-key", "b");
+  await capture("plus-after");
+});
+
 test("섹션을 끌어 실제 순서를 바꾸고 트리 끌기는 섞이지 않는다", async ({ page }) => {
   await open(page, 1000);
   const source = page.locator(section("c"));
@@ -40,7 +104,7 @@ test("섹션을 끌어 실제 순서를 바꾸고 트리 끌기는 섞이지 않
   await page.keyboard.press("Escape");
   await dragStart(page, '[data-tree-id="item:a1"]');
   await dragEvent(page, section("b"), "dragover", .2);
-  await expect(page.locator(section("b"))).not.toHaveAttribute("data-drop-position", /.+/);
+  await expect(page.locator(sectionRoot("b"))).not.toHaveAttribute("data-drop-position", /.+/);
   await dragEvent(page, '[data-tree-id="item:a2"]', "dragover", .1);
   await expect(page.locator('[data-tree-id="item:a2"]')).toHaveAttribute("data-drop-position", "before");
   await dragEvent(page, '[data-tree-id="item:a2"]', "drop", .1);
@@ -52,12 +116,24 @@ for (const width of [1280, 360]) test(`시각 검수 ${width}`, async ({ page })
   const output = process.env.KS_1705_VISUAL_OUTPUT!;
   const capture = (state: string) => page.screenshot({ path: path.join(output, `${width}-${state}.png`) });
   await capture("normal");
+  if (width === 360) {
+    const header = page.locator(section("b"));
+    const title = header.locator(".ks-data-section-title");
+    const action = header.locator(".ks-data-section-actions");
+    const sizes = await title.evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth, ellipsis: getComputedStyle(element).textOverflow }));
+    const titleBox = (await title.boundingBox())!;
+    const actionBox = (await action.boundingBox())!;
+    expect(sizes.scroll).toBeGreaterThan(sizes.client);
+    expect(sizes.ellipsis).toBe("ellipsis");
+    expect(Math.abs((titleBox.y + titleBox.height / 2) - (actionBox.y + actionBox.height / 2))).toBeLessThanOrEqual(2);
+    await capture("long-header");
+  }
   await dragStart(page, section("c"));
   await dragEvent(page, section("a"), "dragover", .2);
-  await expect(page.locator(section("a"))).toHaveAttribute("data-drop-position", "before");
+  await expect(page.locator(sectionRoot("a"))).toHaveAttribute("data-drop-position", "before");
   await capture("before");
   await dragEvent(page, section("a"), "dragover", .8);
-  await expect(page.locator(section("a"))).toHaveAttribute("data-drop-position", "after");
+  await expect(page.locator(sectionRoot("a"))).toHaveAttribute("data-drop-position", "after");
   await capture("after");
   await dragEvent(page, section("a"), "drop", .8);
   await expect(page.locator(".ks-repeat-item").nth(1)).toHaveAttribute("data-repeat-key", "c");

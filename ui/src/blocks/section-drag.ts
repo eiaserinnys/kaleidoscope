@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import type { ItemScope } from "../data/item-scope";
 
 export const SECTION_MIME = "application/x-kaleidoscope-section";
@@ -9,6 +9,7 @@ let clearDisplay: (() => void) | null = null;
 
 export function useSectionDrag(enabled: boolean, windowId: string, scope: ItemScope | null, onMove: (event: { key: string; target: string; position: Position }) => void) {
   const instance = useRef({}).current;
+  const blockedStart = useRef(false);
   const [position, setPosition] = useState<Position>();
   const clear = useCallback(() => { clearDisplay?.(); clearDisplay = null; active = null; }, []);
   useEffect(() => {
@@ -27,9 +28,13 @@ export function useSectionDrag(enabled: boolean, windowId: string, scope: ItemSc
   };
   return {
     position,
+    onPointerDown: (event: PointerEvent<HTMLElement>) => {
+      const target = event.target instanceof Element ? event.target : null;
+      blockedStart.current = Boolean(target?.closest(".ks-data-section-actions, input, textarea, [contenteditable='true']"));
+    },
     onDragStart: (event: DragEvent<HTMLElement>) => {
       const target = event.target instanceof Element ? event.target : null;
-      if (!enabled || !scope || target?.closest(".ks-data-section-actions, input, textarea, [contenteditable='true']")) { event.preventDefault(); return; }
+      if (!enabled || !scope || blockedStart.current || target?.closest(".ks-data-section-actions, input, textarea, [contenteditable='true']")) { event.preventDefault(); return; }
       clear();
       active = { windowId, key: String(scope.key), index: scope.index, locator: scope.locator?.pointer, parent: scope.parentScope?.instance, owner: instance };
       event.dataTransfer.effectAllowed = "move";

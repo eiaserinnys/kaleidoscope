@@ -36,7 +36,7 @@ it("구역 머리를 끌어 다른 구역 앞에 놓으면 대상 범위와 이�
   };
   drag("dragstart", source);
   drag("dragover", target, 10);
-  expect(target.getAttribute("data-drop-position")).toBe("before");
+  expect(target.parentElement!.getAttribute("data-drop-position")).toBe("before");
   drag("drop", target, 10);
   await waitFor(() => expect(calls.mock.calls.map(([request]) => request as CoreRequest)).toContainEqual(expect.objectContaining({
     op: "data.act", pointer: "/ui/template/on_move", event: { key: "c", target: "a", position: "before" }, item: { key: "a", title: "첫째" },
@@ -50,12 +50,12 @@ it("구역 머리를 끌어 다른 구역 앞에 놓으면 대상 범위와 이�
   expect(count()).toBe(1);
   drag("dragstart", source);
   drag("dragover", middle, 30);
-  expect(middle.getAttribute("data-drop-position")).toBeNull();
+  expect(middle.parentElement!.getAttribute("data-drop-position")).toBeNull();
   drag("drop", middle, 30);
   expect(count()).toBe(1);
   drag("dragstart", target);
   drag("dragover", source, 30);
-  expect(source.getAttribute("data-drop-position")).toBe("after");
+  expect(source.parentElement!.getAttribute("data-drop-position")).toBe("after");
   drag("drop", source, 30);
   await waitFor(() => expect(count()).toBe(2));
   expect(calls.mock.calls.map(([request]) => request as CoreRequest)).toContainEqual(expect.objectContaining({
@@ -64,7 +64,7 @@ it("구역 머리를 끌어 다른 구역 앞에 놓으면 대상 범위와 이�
   drag("dragstart", source);
   drag("dragover", target, 10);
   fireEvent.keyDown(document, { key: "Escape" });
-  expect(target.getAttribute("data-drop-position")).toBeNull();
+  expect(target.parentElement!.getAttribute("data-drop-position")).toBeNull();
 });
 
 async function setupSectionDrag() {
@@ -94,9 +94,9 @@ it("머리 밖으로 나가면 놓을 자리 표시를 지운다", async () => {
   const { toggle, target, drag } = await setupSectionDrag();
   drag("dragstart", toggle.closest(".ks-data-section-header")!);
   drag("dragover", target, 10);
-  expect(target.getAttribute("data-drop-position")).toBe("before");
+  expect(target.parentElement!.getAttribute("data-drop-position")).toBe("before");
   drag("dragleave", target);
-  expect(target.getAttribute("data-drop-position")).toBeNull();
+  expect(target.parentElement!.getAttribute("data-drop-position")).toBeNull();
   drag("dragend", toggle.closest(".ks-data-section-header")!);
 });
 
@@ -106,7 +106,7 @@ it("접기 단추에서 끌기를 시작하면 구역 끌기 표식을 넣는다
   drag("dragstart", toggle);
   expect(dataTransfer.setData).toHaveBeenCalledWith(SECTION_MIME, expect.stringContaining('"key":"c"'));
   drag("dragover", target, 10);
-  expect(target.getAttribute("data-drop-position")).toBe("before");
+  expect(target.parentElement!.getAttribute("data-drop-position")).toBe("before");
   drag("dragend", toggle);
 });
 
@@ -131,7 +131,7 @@ it("구역 끌기와 트리 끌기는 서로를 놓을 자리로 받지 않는�
     fireEvent(element, event);
   };
   drag("dragstart", row); drag("dragover", second);
-  expect(second.getAttribute("data-drop-position")).toBeNull();
+  expect(second.parentElement!.getAttribute("data-drop-position")).toBeNull();
   drag("dragend", row);
   drag("dragstart", first); drag("dragover", row); drag("dragover", emptyTree);
   expect(row.getAttribute("data-drop-state")).toBeNull();
