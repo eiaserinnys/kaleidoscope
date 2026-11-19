@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 49판, 261119)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 50판, 261120)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -148,6 +148,13 @@
 //! 대화 모음 설정이 바뀌면 코어가 그 값을 쓰는 작업의 대화를 새 모음으로 옮긴다. 새 대화에서 모음을 비우는 것은
 //! 모듈 `agent` 5판이 필요한데, 옛 쉘은 빈 모음을 거부하기 때문이다.
 //!
+//! # 계약 50판: 호스트 기능
+//! [`ShellSnapshot::host_features`]로 이 쉘의 호스트가 할 수 있는 일을 알린다. 화면은 플랫폼 이름 대신 이 값으로
+//! 분기한다. `pick_folder`가 거짓이면 data-image와 data-media의 「폴더 선택」 단추를 그리지 않고, `pc_files`가
+//! 거짓이면 「내 PC」 범위의 파일이 없으며, `web_view`가 거짓이면 웹 화면을 열 수 없다. 임베디드 서버 유무는
+//! [`ShellSnapshot::embedded_available`]을 그대로 쓴다. 쉘은 임베디드 서버가 없고 연결 전이면 시작할 때 설정 창의
+//! 서버 행을 연다. 블록 세트와 모듈 판은 그대로다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -280,7 +287,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 49;
+pub const CONTRACT_VERSION: u32 = 50;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -917,6 +924,18 @@ impl Supported {
     }
 }
 
+/// (계약 50판) 이 쉘의 호스트가 할 수 있는 일. 화면은 플랫폼 이름 대신 이 값으로 분기한다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "contract.ts")]
+pub struct HostFeatures {
+    /// 기기 폴더를 골라 파일 권한을 줄 수 있다.
+    pub pick_folder: bool,
+    /// 「내 PC」 범위의 파일을 읽을 수 있다.
+    pub pc_files: bool,
+    /// 창 안에 웹 화면을 열 수 있다.
+    pub web_view: bool,
+}
+
 /// 화면이 보는 상태 전체.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "contract.ts")]
@@ -931,6 +950,9 @@ pub struct ShellSnapshot {
     pub transfer_error: Option<String>,
     #[serde(default)]
     pub embedded_available: bool,
+    /// (계약 50판) 이 호스트가 할 수 있는 일.
+    #[serde(default)]
+    pub host_features: HostFeatures,
     pub shared: SharedState,
     pub device: DeviceState,
     pub supported: Supported,

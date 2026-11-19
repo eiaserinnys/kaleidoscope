@@ -12,10 +12,12 @@ mod copy;
 mod helpers;
 
 use copy::{copy_entry, copy_name, remove_entry};
+#[cfg(not(target_os = "ios"))]
+use helpers::is_file_busy_code;
 use helpers::{
-    destination_dir, is_file_busy_code, join_relative, map_create_file_error,
-    map_create_folder_error, named_error, path_exists, protect_data_ancestor, reject_links,
-    resolve_mutation_path, result_to_op, selected_roots,
+    destination_dir, join_relative, map_create_file_error, map_create_folder_error, named_error,
+    path_exists, protect_data_ancestor, reject_links, resolve_mutation_path, result_to_op,
+    selected_roots,
 };
 pub(super) use helpers::{file_system_error, readable_path, successful_changes};
 
@@ -349,7 +351,18 @@ fn remove_one(
                 || kaleidoscope_contract::errors::FILE_REMOVE_PERMANENT_IO(path),
             )
         })?;
-    } else if let Err(error) = trash::delete(&source) {
+    } else {
+        delete_to_trash(path, &source)?;
+    }
+    Ok(FileChange {
+        from: Some(path.into()),
+        to: None,
+    })
+}
+
+#[cfg(not(target_os = "ios"))]
+fn delete_to_trash(path: &str, source: &Path) -> Result<(), CoreError> {
+    if let Err(error) = trash::delete(source) {
         let reason = error.to_string();
         let code = match error {
             trash::Error::Os { code, .. } if is_file_busy_code(code) => ErrorCode::FileBusy,
@@ -362,10 +375,13 @@ fn remove_one(
                 .and_details(vec![reason])
         });
     }
-    Ok(FileChange {
-        from: Some(path.into()),
-        to: None,
-    })
+    Ok(())
+}
+
+/// iOS에는 휴지통이 없다. 지우는 일은 영구 삭제로만 하고, 휴지통 삭제 요청은 기존 오류로 안내한다.
+#[cfg(target_os = "ios")]
+fn delete_to_trash(path: &str, _source: &Path) -> Result<(), CoreError> {
+    Err(kaleidoscope_contract::errors::FILE_REMOVE_TRASH_UNAVAILABLE(path))
 }
 
 #[cfg(test)]

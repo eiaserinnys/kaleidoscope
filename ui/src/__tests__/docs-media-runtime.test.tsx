@@ -177,6 +177,20 @@ it("미디어의 폴더 미선택 오류에서 합성 선택을 막는다", asyn
   expect((screen.getByRole("button", { name: "재생" }) as HTMLButtonElement).disabled).toBe(true);
 });
 
+it("폴더 고르기를 못 하는 호스트에는 미디어의 폴더 선택 단추를 그리지 않는다", async () => {
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { permission: "docs", path: "file.wav" } } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.host_features = { ...seed.snapshot.host_features, pick_folder: false };
+  const transport = createFakeTransport(seed);
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media.open"
+    ? Promise.reject({ code: "not_granted", id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", message: "폴더를 고르세요", details: [] }) as never
+    : original(request as never));
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  await screen.findByText("폴더를 고르세요");
+  expect(screen.queryByRole("button", { name: "폴더 선택" })).toBeNull();
+});
+
 it("폴더 미선택 뒤 다른 미디어를 열면 새 오류를 보인다", async () => {
   const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "문서" }], state: {}, ui: { type: "media", src: { expr: "$state.track" } } };
   const transport = createFakeTransport(makeTestSeed({ definitions: [definition] }));
@@ -398,6 +412,22 @@ it("이미지 폴더 미선택 오류는 넓은 칸과 작은 칸에서 합성 �
     view.unmount();
     vi.restoreAllMocks();
   }
+});
+
+it("폴더 고르기를 못 하는 호스트에는 이미지의 폴더 선택 단추를 그리지 않는다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 500, height: 400 } as DOMRect);
+  const definition: AppDefinition = { id: "test", name: "test", requires: { blocks: 4, modules: { files: 1 } }, permissions: [{ module: "files", id: "docs", access: "read", label: "그림" }], state: {}, ui: { type: "image", src: { permission: "docs", path: "image.png" } } };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.host_features = { ...seed.snapshot.host_features, pick_folder: false };
+  const transport = createFakeTransport(seed);
+  const original = transport.call.bind(transport);
+  vi.spyOn(transport, "call").mockImplementation((request) => request.op === "data.media"
+    ? Promise.reject({ id: "FILE_ACCESS_FOLDER_NOT_CHOSEN", code: "not_granted", message: "폴더 선택", details: [] }) as never
+    : original(request as never));
+  render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
+  expect(await screen.findByRole("button", { name: "다시 받기" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "폴더 선택" })).toBeNull();
 });
 
 it("이미지 오류의 전체 문구가 칸을 넘으면 원문을 툴팁에 둔 짧은 표시로 바뀐다", async () => {

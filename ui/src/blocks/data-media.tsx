@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent }
 import type { Block, MediaPlayback, MediaRef } from "../contract/contract";
 import { useBinding, useWindowData } from "../data/window-data";
 import { DataState, useFolderPick } from "../components/data-state";
+import { usePickFolderAvailable } from "../data/host-features";
 import { DataIcon } from "../components/data-icons";
 import { isMedia } from "../components/media-thumbnail";
 import { Button, IconButton, Notice } from "../components/primitives";
@@ -24,6 +25,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const blockRoot = useBlockRootProps();
   const data = useWindowData();
   const folder = useFolderPick();
+  const pickFolder = usePickFolderAvailable();
   const [attempt, setAttempt] = useState(0);
   const generation = useSyncExternalStore(data.subscribeMedia, data.getMediaGeneration, data.getMediaGeneration);
   const key = src ? JSON.stringify(src) : "";
@@ -99,7 +101,7 @@ function MediaPlayer({ src, kind, autoplay }: { src: MediaRef | null; kind?: "au
   const props = { crossOrigin: current?.playback.kind === "stream" ? "anonymous" as const : undefined, src: current?.url, onError: onMediaError, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onTimeUpdate: (e: React.SyntheticEvent<HTMLMediaElement>) => setTime(e.currentTarget.currentTime), onDurationChange: (e: React.SyntheticEvent<HTMLMediaElement>) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0), onVolumeChange: (e: React.SyntheticEvent<HTMLMediaElement>) => { setVolume(e.currentTarget.volume); setMuted(e.currentTarget.muted); } };
   return <div {...blockRoot} className={`ks-media-player${video ? " is-video" : ""}${audio ? " is-audio" : ""}`} style={video && ratio ? { "--ks-media-ratio": ratio } as React.CSSProperties : undefined}>
     {video ? <video ref={(el) => { element.current = el; }} {...props} onLoadedMetadata={(event) => { const { videoWidth, videoHeight } = event.currentTarget; if (videoWidth > 0 && videoHeight > 0) setRatio(videoWidth / videoHeight); }} /> : <audio ref={(el) => { element.current = el; }} {...props} />}
-    {error ? <Notice role="alert" errorId={(folder.error ?? error).id} actions={error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && src && "permission" in src ? [<Button key="pick" data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(src.permission, () => setAttempt((value) => value + 1)); }}>폴더 선택</Button>] : undefined}>{(folder.error ?? error).message}</Notice> : null}
+    {error ? <Notice role="alert" errorId={(folder.error ?? error).id} actions={pickFolder && error.id === "FILE_ACCESS_FOLDER_NOT_CHOSEN" && src && "permission" in src ? [<Button key="pick" data-ks-user-consent onClick={(event) => { if (event.nativeEvent.isTrusted) folder.pick(src.permission, () => setAttempt((value) => value + 1)); }}>폴더 선택</Button>] : undefined}>{(folder.error ?? error).message}</Notice> : null}
     <div className="ks-media-controls-container">
       <div className="ks-media-controls" onKeyDown={onKeyDown}>
         <div className="ks-media-main">

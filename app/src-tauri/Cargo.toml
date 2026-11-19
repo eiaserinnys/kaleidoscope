@@ -16,11 +16,9 @@ e2e = ["dep:reqwest", "dep:sha2", "dep:tokio-tungstenite", "kaleidoscope-core/e2
 tauri-build = "2"
 
 [dependencies]
-kaleidoscope-orchestrator = { path = "../../crates/orchestrator" }
 tauri = { version = "2", features = ["unstable"] }
 kaleidoscope-core = { path = "../../crates/core" }
 tauri-plugin-dialog = "2"
-tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["time"] }
 base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }
@@ -33,6 +31,11 @@ dirs = "7"
 
 [dev-dependencies]
 serde_json = "1"
+
+# iPad는 원격 서버 전용이라 내장 오케스트레이터와 앱 업데이터를 싣지 않는다.
+[target.'cfg(not(target_os = "ios"))'.dependencies]
+kaleidoscope-orchestrator = { path = "../../crates/orchestrator" }
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"

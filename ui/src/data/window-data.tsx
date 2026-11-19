@@ -15,6 +15,7 @@ import { hasRepeatLocator, resolveActionScope, type ActionRead } from "./action-
 import { trackWindowAction } from "../share/action-context";
 import { checkAppLink } from "./app-link";
 import { DefaultFolderPreparation } from "./default-folder";
+import { PickFolderAvailableContext } from "./host-features";
 import { runSavedTransition } from "../lifecycle/window-transition";
 
 const loading: BindingValue = { status: "loading" };
@@ -847,8 +848,11 @@ export function WindowDataProvider({ store, windowId, definition, children }: { 
       unmount();
     };
   }, [data, windowId]);
+  const pickFolder = useShellSelector(store, (snapshot) => snapshot?.host_features.pick_folder ?? true);
   return <WindowDataContext.Provider value={data}>
-    <DataContext.Provider value={context}><ClientRuntimeSync data={data} />{children}</DataContext.Provider>
+    <PickFolderAvailableContext.Provider value={pickFolder}>
+      <DataContext.Provider value={context}><ClientRuntimeSync data={data} />{children}</DataContext.Provider>
+    </PickFolderAvailableContext.Provider>
   </WindowDataContext.Provider>;
 }
 

@@ -44,7 +44,7 @@ fn agent_definition(agent: u32) -> Value {
 fn item_image_is_the_current_block_set_and_contract_is_49() {
     assert_eq!(BLOCK_SET_VERSION, ITEM_IMAGE_BLOCK_SET_VERSION);
     assert_eq!(ITEM_IMAGE_BLOCK_SET_VERSION, 67);
-    assert_eq!(CONTRACT_VERSION, 49);
+    assert_eq!(CONTRACT_VERSION, 50);
     assert_eq!(
         MODULE_VERSIONS
             .iter()

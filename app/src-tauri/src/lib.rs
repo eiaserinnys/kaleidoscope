@@ -11,6 +11,7 @@ mod login_path;
 mod native_webview;
 #[cfg(windows)]
 mod shell_shortcuts;
+#[cfg(not(target_os = "ios"))]
 mod updater;
 #[cfg(windows)]
 mod web_control;
@@ -21,6 +22,8 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[cfg(target_os = "ios")]
+use kaleidoscope_core::kaleidoscope_contract::HostFeatures;
 use kaleidoscope_core::kaleidoscope_contract::{
     errors, CoreError, CoreReply, CoreRequest, ThemePreference, TAURI_EVENT,
 };
@@ -36,6 +39,7 @@ const SERVER_URL: &str = match option_env!("KALEIDOSCOPE_SERVER_URL") {
 
 struct DialogHost {
     app: AppHandle,
+    #[cfg(not(target_os = "ios"))]
     updater: Arc<updater::TauriUpdateHost>,
     #[cfg(windows)]
     web: Arc<web_host::TauriWebHost>,
@@ -52,6 +56,7 @@ fn native_theme(theme: ThemePreference) -> Option<tauri::Theme> {
 }
 
 impl Host for DialogHost {
+    #[cfg(not(target_os = "ios"))]
     fn supports_pick_files(&self) -> bool {
         true
     }
@@ -63,6 +68,7 @@ impl Host for DialogHost {
             }
         }
     }
+    #[cfg(not(target_os = "ios"))]
     fn pick_folder(&self) -> Option<PathBuf> {
         let parent = self
             .app
@@ -79,6 +85,11 @@ impl Host for DialogHost {
             .blocking_pick_folder()
             .and_then(|path| path.into_path().ok())
     }
+    #[cfg(target_os = "ios")]
+    fn pick_folder(&self) -> Option<PathBuf> {
+        None
+    }
+    #[cfg(not(target_os = "ios"))]
     fn pick_files(
         &self,
         accept: &[kaleidoscope_core::kaleidoscope_contract::data::FileAccept],
@@ -106,6 +117,7 @@ impl Host for DialogHost {
             Some(vec![dialog.blocking_pick_file()?.into_path().ok()?])
         }
     }
+    #[cfg(not(target_os = "ios"))]
     fn pick_save_file(&self, suggested_name: &str, _mime: &str) -> Option<PathBuf> {
         let parent = self.app.get_window("main")?;
         self.app
@@ -117,15 +129,29 @@ impl Host for DialogHost {
             .into_path()
             .ok()
     }
+    #[cfg(not(target_os = "ios"))]
     fn pc_roots(&self) -> Vec<PcRoot> {
         pc_roots()
+    }
+    #[cfg(target_os = "ios")]
+    fn pc_roots(&self) -> Vec<PcRoot> {
+        Vec::new()
     }
     #[cfg(windows)]
     fn web(&self) -> Option<&dyn kaleidoscope_core::WebHost> {
         Some(self.web.as_ref())
     }
+    #[cfg(not(target_os = "ios"))]
     fn updater(&self) -> Option<&dyn kaleidoscope_core::UpdateHost> {
         Some(self.updater.as_ref())
+    }
+    #[cfg(target_os = "ios")]
+    fn features(&self) -> HostFeatures {
+        HostFeatures {
+            pick_folder: false,
+            pc_files: false,
+            web_view: false,
+        }
     }
 }
 
@@ -141,6 +167,7 @@ fn release_page_origin(localhost_over_http: bool, use_https: bool) -> String {
     }
 }
 
+#[cfg(not(target_os = "ios"))]
 fn pc_roots() -> Vec<PcRoot> {
     use kaleidoscope_core::kaleidoscope_contract::{PcRootKind, PC_KNOWN_FOLDERS};
     let paths = [
@@ -341,32 +368,44 @@ fn mac_computer_name() -> Option<String> {
     String::from_utf8(output.stdout).ok()
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 런타임과 스레드가 뜨기 전에 PATH를 정해 두어야 모든 자식 프로세스가 같은 PATH를 받는다.
     #[cfg(target_os = "macos")]
     login_path::apply();
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    // iPad 앱은 TestFlight로만 배포하고 앱 안에서 스스로 갱신하지 않는다.
+    #[cfg(not(target_os = "ios"))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    builder
         .setup(|app| {
             app.manage(close::CloseState::default());
             let data_dir = app.path().app_data_dir()?;
             let device_name = device_name();
-            let embedded =
-                tauri::async_runtime::block_on(kaleidoscope_orchestrator::EmbeddedServer::start(
-                    kaleidoscope_orchestrator::EmbeddedConfig {
-                        db_path: data_dir.join("local-orchestrator.db"),
-                        token_path: data_dir.join("local-orchestrator.token"),
-                        device_name: device_name.clone(),
-                    },
-                ))
+            // iPad는 원격 서버에만 붙는다. 내장 오케스트레이터를 띄우지 않는다.
+            #[cfg(not(target_os = "ios"))]
+            let embedded_server = {
+                let embedded = tauri::async_runtime::block_on(
+                    kaleidoscope_orchestrator::EmbeddedServer::start(
+                        kaleidoscope_orchestrator::EmbeddedConfig {
+                            db_path: data_dir.join("local-orchestrator.db"),
+                            token_path: data_dir.join("local-orchestrator.token"),
+                            device_name: device_name.clone(),
+                        },
+                    ),
+                )
                 .map_err(std::io::Error::other)?;
-            let embedded_info = kaleidoscope_core::EmbeddedServerInfo {
-                server_url: embedded.server_url.clone(),
-                device_id: embedded.device_id.clone(),
-                token: embedded.token.clone(),
+                let info = kaleidoscope_core::EmbeddedServerInfo {
+                    server_url: embedded.server_url.clone(),
+                    device_id: embedded.device_id.clone(),
+                    token: embedded.token.clone(),
+                };
+                app.manage(embedded);
+                Some(info)
             };
-            app.manage(embedded);
+            #[cfg(target_os = "ios")]
+            let embedded_server = None;
+            #[cfg(not(target_os = "ios"))]
             let updater = Arc::new(updater::TauriUpdateHost::default());
             #[cfg(windows)]
             let web = Arc::new(web_host::TauriWebHost::new(app.handle().clone()));
@@ -389,7 +428,7 @@ pub fn run() {
                             use_https,
                         ))
                     },
-                    embedded_server: Some(embedded_info),
+                    embedded_server,
                     data_dir,
                     seed_definitions: vec![],
                     server_url: SERVER_URL.into(),
@@ -397,6 +436,7 @@ pub fn run() {
                 },
                 Arc::new(DialogHost {
                     app: app.handle().clone(),
+                    #[cfg(not(target_os = "ios"))]
                     updater: Arc::clone(&updater),
                     #[cfg(windows)]
                     web,
@@ -439,7 +479,7 @@ pub fn run() {
                 let _ = event_app.emit(TAURI_EVENT, event);
             }));
             app.manage(Arc::clone(&core));
-            #[cfg(feature = "e2e")]
+            #[cfg(all(not(target_os = "ios"), feature = "e2e"))]
             let run_updater = matches!(
                 e2e::setting("SCENARIO")
                     .as_deref()
@@ -447,8 +487,9 @@ pub fn run() {
                 Some("update" | "update-reject")
             );
             // 배포 매니페스트는 Windows 설치본만 싣는다. 다른 플랫폼은 업데이터를 켜지 않아 `unavailable`로 남는다.
-            #[cfg(not(feature = "e2e"))]
+            #[cfg(all(not(target_os = "ios"), not(feature = "e2e")))]
             let run_updater = cfg!(windows);
+            #[cfg(not(target_os = "ios"))]
             if run_updater {
                 updater::start(app.handle().clone(), Arc::clone(&core), updater);
             }

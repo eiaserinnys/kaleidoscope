@@ -26,7 +26,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
 sha2 = "0.10"
-trash.workspace = true
 tokio = { version = "1", features = ["rt", "time", "process", "io-util", "sync", "net", "fs"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
@@ -37,6 +36,10 @@ url = "2"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Environment"] }
 winreg = "0.56"
+
+# iOS에는 휴지통이 없고 trash 크레이트도 iOS를 지원하지 않는다. 삭제는 TrashUnavailable로 안내한다.
+[target.'cfg(not(target_os = "ios"))'.dependencies]
+trash.workspace = true
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }

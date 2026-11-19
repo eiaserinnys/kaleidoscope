@@ -180,6 +180,7 @@ function linkStatus(state: string | null): LinkStatus {
 const snapshot: ShellSnapshot = {
   app_badges: {},
   embedded_available: true,
+  host_features: { pick_folder: true, pc_files: true, web_view: true },
   shared: {
     app_comments: {},
     apps,
