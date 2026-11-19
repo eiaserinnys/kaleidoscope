@@ -186,7 +186,8 @@ jobs:
           retention-days: 7
 
   # iPad 앱이 장치용으로 컴파일되는지, 시뮬레이터에서 실행되는지 확인한다.
-  # 가장 작은 iPad와 가장 큰 iPad 시뮬레이터 두 대에서 앱을 띄워 가로 화면을 찍는다.
+  # 가장 작은 iPad와 가장 큰 iPad 시뮬레이터 두 대에서 앱을 띄워 앱 장면을 가로 PNG로 찍는다.
+  # iPadOS 26은 세로로 든 기기에서 가로 장면을 줄여 검은 바탕 가운데에 그리므로, 화면에서 장면만 잘라 낸다.
   # 서명, 인증서, Apple 계정 시크릿은 쓰지 않는다. TestFlight 업로드는 다음 단위다.
   ios-app:
     runs-on: macos-latest
@@ -226,8 +227,10 @@ jobs:
           python3 - "$app" <<'PY'
           import json
           import pathlib
+          import struct
           import subprocess
           import sys
+          import tempfile
           import time
 
           BUNDLE_ID = "me.eiaserinnys.kaleidoscope"
@@ -264,6 +267,87 @@ jobs:
               return values["pixelWidth"], values["pixelHeight"]
 
 
+          RAW = pathlib.Path(tempfile.mkdtemp(prefix="ios-sim-raw-"))
+
+
+          def read_bmp(path):
+              """BMP의 머리와 화소 줄을 읽는다. 24/32비트, 위/아래 어느 쪽부터 저장해도 읽는다."""
+              data = path.read_bytes()
+              if data[:2] != b"BM":
+                  sys.exit(f"{path}: BMP가 아닙니다")
+              offset = struct.unpack_from("<I", data, 10)[0]
+              header_size = struct.unpack_from("<I", data, 14)[0]
+              width, raw_height = struct.unpack_from("<ii", data, 18)
+              planes, bits = struct.unpack_from("<HH", data, 26)
+              compression = struct.unpack_from("<I", data, 30)[0]
+              if header_size < 40 or planes != 1 or bits not in (24, 32) or compression != 0:
+                  sys.exit(f"{path}: 다루지 않는 BMP입니다(머리 {header_size}, 비트 {bits}, 압축 {compression})")
+              top_down = raw_height < 0
+              height = abs(raw_height)
+              step = bits // 8
+              stride = ((width * step + 3) // 4) * 4
+
+              def line(y):
+                  start = offset + (y if top_down else height - 1 - y) * stride
+                  if start + width * step > len(data):
+                      sys.exit(f"{path}: BMP 화소가 모자랍니다")
+                  return data[start:start + width * step]
+
+              return width, height, step, line
+
+
+          def scene_rect(path):
+              """검은 바탕 위에 그려진 앱 장면의 경계를 찾는다.
+
+              simctl에는 기기를 돌리는 명령이 없어 세로로 든 시뮬레이터 화면을 찍게 된다.
+              iPadOS 26은 그 화면의 가로 장면을 줄여 가운데에 그리므로 바탕을 걷어 내야 한다.
+              """
+              width, height, step, line = read_bmp(path)
+              bright = bytes(1 if value > 8 else 0 for value in range(256))
+              rows = []
+              for y in range(height):
+                  pixels = line(y)
+                  if any(1 in pixels[channel::step].translate(bright) for channel in range(3)):
+                      rows.append(y)
+              if not rows:
+                  sys.exit(f"{path}: 앱 장면을 찾지 못했습니다")
+              top, bottom = rows[0], rows[-1]
+              left, right = width, -1
+              for y in range(top, bottom + 1):
+                  pixels = line(y)
+                  for channel in range(3):
+                      marked = pixels[channel::step].translate(bright)
+                      first, last = marked.find(1), marked.rfind(1)
+                      if first != -1:
+                          left = min(left, first)
+                          right = max(right, last)
+              if right < left:
+                  sys.exit(f"{path}: 앱 장면의 좌우 경계를 찾지 못했습니다")
+              return left, top, right - left + 1, bottom - top + 1
+
+
+          def write_crop(path, source, left, top, width, height):
+              """장면 경계만큼 잘라 BMP로 다시 쓴다. 아래 줄부터 저장하는 보통 BMP다."""
+              source_width, source_height, step, line = read_bmp(source)
+              stride = ((width * step + 3) // 4) * 4
+              rows = []
+              for y in range(top, top + height):
+                  pixels = bytearray(line(y)[left * step:(left + width) * step])
+                  if step == 4:
+                      # 알파가 0으로 저장돼 있어도 PNG에서 투명해지지 않게 채운다.
+                      pixels[3::4] = b"\xff" * width
+                  rows.append(bytes(pixels) + b"\x00" * (stride - len(pixels)))
+              header = (
+                  b"BM"
+                  + struct.pack("<IHHI", 54 + stride * height, 0, 0, 54)
+                  + struct.pack("<IiiHHIIiiII", 40, width, height, 1, step * 8, 0, stride * height, 2835, 2835, 0, 0)
+              )
+              with open(path, "wb") as output:
+                  output.write(header)
+                  for row in reversed(rows):
+                      output.write(row)
+
+
           def capture(device, filename):
               _, name, udid, _ = device
               run("xcrun", "simctl", "boot", udid, check=False)
@@ -277,18 +361,24 @@ jobs:
                              "--predicate", 'processImagePath CONTAINS "kaleidoscope"', check=False).stdout
                   print(logs[-8000:], file=sys.stderr)
                   sys.exit(f"{name}: 앱이 실행 중에 종료되었습니다")
+              shot = RAW / f"{filename}.png"
+              run("xcrun", "simctl", "io", udid, "screenshot", str(shot))
+              bmp = RAW / f"{filename}.bmp"
+              run("sips", "-s", "format", "bmp", str(shot), "--out", str(bmp))
+              left, top, scene_width, scene_height = scene_rect(bmp)
+              scene = RAW / f"{filename}-scene.bmp"
+              write_crop(scene, bmp, left, top, scene_width, scene_height)
+              if scene_width < scene_height:
+                  # 세로 틀에 장면이 돌아간 채 찍히면 돌려서 가로로 만든다.
+                  rotated = RAW / f"{filename}-rotated.bmp"
+                  run("sips", "-r", "90", str(scene), "--out", str(rotated))
+                  scene = rotated
               path = OUT / filename
-              run("xcrun", "simctl", "io", udid, "screenshot", str(path))
+              run("sips", "-s", "format", "png", str(scene), "--out", str(path))
               width, height = image_size(path)
-              if width < height:
-                  # 세로 틀에 가로 장면이 돌아간 채 찍히면 돌려서 가로 PNG로 남긴다.
-                  rotated = path.with_suffix(".rotated.png")
-                  run("sips", "-r", "90", str(path), "--out", str(rotated))
-                  rotated.replace(path)
-                  width, height = image_size(path)
               if width <= height:
                   sys.exit(f"{filename}: 가로 PNG가 아닙니다({width}x{height})")
-              print(f"{filename}: {name} {width}x{height}", flush=True)
+              print(f"{filename}: {name} {width}x{height} (장면 {scene_width}x{scene_height} at {left},{top})", flush=True)
 
 
           raw = json.loads(run("xcrun", "simctl", "list", "devices", "available", "-j").stdout)
