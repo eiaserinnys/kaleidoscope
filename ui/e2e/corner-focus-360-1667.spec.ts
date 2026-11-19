@@ -471,4 +471,127 @@ test("360px notes 폴더 경로가 앞자리 없이 … › notes로 보인다",
   await syncMeasurements();
 });
 
+// 경로 줄에 보이는 요소의 오른쪽 끝과 현재 폴더 칸의 말줄임 상태를 함께 잰다.
+async function pathLayout(app: Locator) {
+  return app.evaluate(() => {
+    const nav = document.querySelector<HTMLElement>('[data-testid="app-window-storage-document"] .ks-explorer-breadcrumb');
+    if (!nav) throw new Error("경로 줄이 없습니다");
+    const navBox = nav.getBoundingClientRect();
+    const indicator = nav.querySelector<HTMLElement>(".ks-explorer-collapsed");
+    const crumbs = Array.from(nav.querySelectorAll<HTMLElement>(".ks-explorer-crumb"));
+    const current = nav.querySelector<HTMLElement>(".ks-explorer-crumb-current");
+    if (!indicator || !current) throw new Error("경로 표시가 없습니다");
+    const visible = [indicator, ...crumbs, current].filter((element) => element.getClientRects().length > 0);
+    const left = Math.min(...visible.map((element) => element.getBoundingClientRect().left));
+    const right = Math.max(...visible.map((element) => element.getBoundingClientRect().right));
+    const visibleCrumbs = crumbs.filter((crumb) => crumb.getClientRects().length > 0);
+    const style = getComputedStyle(current);
+    return {
+      hasCollapsed: nav.classList.contains("has-collapsed"),
+      indicatorVisible: indicator.getClientRects().length > 0,
+      indicatorText: indicator.textContent,
+      collapsed: crumbs.map((crumb) => crumb.classList.contains("is-collapsed")),
+      visibleCrumbTexts: visibleCrumbs.map((crumb) => crumb.querySelector("button")?.textContent ?? ""),
+      visibleText: [indicator.getClientRects().length > 0 ? "…" : null,
+        ...visibleCrumbs.map((crumb) => crumb.querySelector("button")?.textContent ?? ""),
+        current.textContent].filter((part) => part !== null).join(" › "),
+      nav: { left: navBox.left, right: navBox.right, width: navBox.width },
+      gap: left - navBox.left,
+      overflowRight: right - navBox.right,
+      current: current.textContent,
+      currentClipped: current.scrollWidth > current.clientWidth,
+      currentClientWidth: current.clientWidth,
+      currentScrollWidth: current.scrollWidth,
+      textOverflow: style.textOverflow,
+      overflow: style.overflow,
+      whiteSpace: style.whiteSpace,
+    };
+  });
+}
+
+// (가) 보이는 요소의 오른쪽 끝이 경로 줄 안, (나) 칸이 이름보다 좁으면 말줄임,
+// (다) 접힘과 앞쪽 「…」 표시가 같은지를 한 번에 견준다.
+function recordPath(key: string, layout: Awaited<ReturnType<typeof pathLayout>>, expected: { collapsed: boolean; current: string; clipped?: boolean }) {
+  expect(layout.current, `${key}: 현재 폴더`).toBe(expected.current);
+  expect(layout.hasCollapsed, `${key}: 접힘`).toBe(expected.collapsed);
+  expect(layout.indicatorVisible, `${key}: 「…」 표시가 접힘과 같음`).toBe(expected.collapsed);
+  expect(layout.indicatorText ?? "", `${key}: 「…」 글자`).toContain("…");
+  expect(layout.gap, `${key}: 경로 줄 왼쪽에 빈 앞자리 없음`).toBeLessThanOrEqual(1);
+  expect(layout.overflowRight, `${key}: 보이는 경로 요소의 오른쪽 끝이 경로 줄 안`).toBeLessThanOrEqual(0.5);
+  if (expected.clipped !== undefined) {
+    expect(layout.currentClipped, `${key}: 현재 폴더 칸이 이름보다 좁음`).toBe(expected.clipped);
+  }
+  if (layout.currentClipped) {
+    expect(layout.currentScrollWidth, `${key}: scrollWidth > clientWidth`).toBeGreaterThan(layout.currentClientWidth);
+    expect(layout.textOverflow, `${key}: 말줄임`).toBe("ellipsis");
+    expect(layout.overflow, `${key}: 경로 줄 안에서 감춤`).toBe("hidden");
+    expect(layout.whiteSpace, `${key}: 한 줄`).toBe("nowrap");
+  }
+  records[key] = layout;
+}
+
+// 세라피엘 반려의 「경로 깊이와 폭」 시나리오를 리포 사양으로 옮겼다. 360에서 notes, deep, deeper,
+// 긴 이름 폴더를 차례로 열고, 폭을 1100 → 700 → 520 → 360 → 1100으로 바꿔 가며 같은 검사를 한다.
+test("360px 깊은 경로와 긴 폴더 이름이 경로 줄 안에서 말줄임된다", async ({ page }) => {
+  const app = await mount(page, explorerApp, 360);
+  await expect(app.getByRole("option", { name: "settings.json" })).toBeVisible();
+  const tree = app.locator(".ks-file-tree").first();
+  const longName = "2026-11-회의록-아주-긴-폴더-이름";
+  await page.evaluate(async () => {
+    const harness = (window as any).__ksHarness;
+    await harness.call({ op: "files.write", window_id: "storage-window", permission: "documents", path: "notes/deep/deeper/memo.md", text: "# a" });
+    await harness.call({ op: "files.write", window_id: "storage-window", permission: "documents", path: "notes/deep/2026-11-회의록-아주-긴-폴더-이름/memo.md", text: "# b" });
+  });
+  const open = async (name: string) => {
+    const item = tree.getByRole("treeitem", { name, exact: true });
+    await expect(item).toBeVisible();
+    await item.click();
+    await expect(app.locator(".ks-explorer-crumb-current")).toHaveText(name);
+    await expect.poll(async () => (await pathLayout(app)).hasCollapsed).toBe(true);
+  };
+
+  // 360에서 notes, deep, deeper를 차례로 열며 매번 (가)(나)(다)를 잰다.
+  await open("notes");
+  recordPath("360-path-open-notes", await pathLayout(app), { collapsed: true, current: "notes" });
+  await open("deep");
+  recordPath("360-path-open-deep", await pathLayout(app), { collapsed: true, current: "deep" });
+  await open("deeper");
+  recordPath("360-path-open-deeper", await pathLayout(app), { collapsed: true, current: "deeper" });
+  await capture(app, "360-path-deeper");
+
+  // 같은 검사를 1100 → 700 → 520 → 360 → 1100 폭 변경에서도 한다.
+  const steps = [
+    { width: 1100, collapsed: false, key: "path-resize-1100-first" },
+    { width: 700, collapsed: false, key: "path-resize-700" },
+    { width: 520, collapsed: true, key: "path-resize-520" },
+    { width: 360, collapsed: true, key: "path-resize-360" },
+    { width: 1100, collapsed: false, key: "path-resize-1100-second" },
+  ];
+  for (const step of steps) {
+    await page.setViewportSize({ width: step.width, height: 820 });
+    await expect.poll(async () => (await pathLayout(app)).hasCollapsed).toBe(step.collapsed);
+    recordPath(step.key, await pathLayout(app), { collapsed: step.collapsed, current: "deeper" });
+  }
+
+  // 360으로 돌아와 한 칸 위에서 긴 이름 폴더를 연다. 이름이 들어가지 않으면 말줄임으로 끝난다.
+  await page.setViewportSize({ width: 360, height: 820 });
+  await expect.poll(async () => (await pathLayout(app)).hasCollapsed).toBe(true);
+  await app.getByRole("button", { name: "위 폴더" }).click();
+  await expect(app.locator(".ks-explorer-crumb-current")).toHaveText("deep");
+  await open(longName);
+  recordPath("360-path-long-name", await pathLayout(app), { collapsed: true, current: longName, clipped: true });
+  await capture(app, "360-path-long-name");
+
+  await noOverflow(page);
+  const narrow = records["360-path-long-name"] as any;
+  uiDesign["최소 폭에서 넘침과 잘림"] = {
+    통과: true,
+    비고: `360px 긴 폴더 이름이 경로 줄 안 말줄임(오른쪽 넘침 ${narrow.overflowRight.toFixed(2)}px, 칸 ${narrow.currentClientWidth}/${narrow.currentScrollWidth}px)`,
+  };
+  const resized = ["path-resize-1100-first", "path-resize-700", "path-resize-520", "path-resize-360", "path-resize-1100-second"]
+    .map((key) => `${key.replace("path-resize-", "")}:${(records[key] as any).overflowRight.toFixed(2)}px`);
+  uiDesign["창 크기 바꾸기"] = { 통과: true, 비고: `1100→700→520→360→1100 오른쪽 넘침 ${resized.join(", ")}` };
+  await syncMeasurements();
+});
+
 test.afterAll(async () => { await syncMeasurements(); });

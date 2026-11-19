@@ -205,6 +205,7 @@ export function ExplorerContent({
     const ellipsis = ellipsisRef.current;
     if (!nav || !ellipsis) return;
     const crumbs = Array.from(nav.querySelectorAll<HTMLElement>(".ks-explorer-crumb"));
+    const current = nav.querySelector<HTMLElement>(".ks-explorer-crumb-current");
     const fits = (crumb: HTMLElement) => {
       const button = crumb.querySelector<HTMLButtonElement>("button");
       if (!button) return true;
@@ -219,9 +220,12 @@ export function ExplorerContent({
       // 판정 전에 접힘을 풀고 잰다. 접힌 칸은 display:none이라 폭이 0으로만 재어진다.
       for (const crumb of crumbs) crumb.classList.remove("is-collapsed");
       nav.classList.remove("has-collapsed");
+      // 현재 폴더 칸이 줄어 말줄임이 되면 조상을 접어 자리를 넓힌다. 조상을 다 접어도
+      // 현재 폴더가 넘치면 더 접을 것이 없으므로 그대로 둔다.
+      const currentFits = () => !current || current.scrollWidth <= current.clientWidth;
       // 뿌리 쪽부터 접어 가까운 조상과 현재 폴더를 남긴다. 하나라도 접으면 앞에 「…」를 그린다.
       for (let guard = 0; guard <= crumbs.length; guard++) {
-        if (crumbs.every((crumb) => crumb.classList.contains("is-collapsed") || fits(crumb))) break;
+        if (currentFits() && crumbs.every((crumb) => crumb.classList.contains("is-collapsed") || fits(crumb))) break;
         const rootMost = crumbs.find((crumb) => !crumb.classList.contains("is-collapsed"));
         if (!rootMost) break;
         rootMost.classList.add("is-collapsed");

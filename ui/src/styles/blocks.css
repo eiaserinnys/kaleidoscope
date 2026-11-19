@@ -344,7 +344,8 @@
 }
 
 .ks-explorer-crumb-current {
-  flex: 0 0 auto;
+  /* 좁은 경로 줄에서는 현재 폴더 칸도 줄어들어 이름이 말줄임으로 끝난다. */
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;

@@ -24,7 +24,8 @@ CAPTURES = [f"{width}-{state}.png" for width in (1100, 360) for state in (
     "corner-split-left", "corner-split-right", "corner-resize", "corner-explorer-content",
     "corner-tree-list", "corner-tab-panel", "corner-window-body")]
 CAPTURES += ["360-code-body.png", "360-code-tree-child-1.png", "360-code-tree-child-2.png",
-             "360-path-notes.png", "1100-path-notes.png", "360-path-notes-back.png"]
+             "360-path-notes.png", "1100-path-notes.png", "360-path-notes-back.png",
+             "360-path-deeper.png", "360-path-long-name.png"]
 
 
 def parse_color(value):
@@ -139,6 +140,36 @@ def check_path(name, record, collapsed):
             "앞자리": record["gap"], "보이는_조상": record["visibleCrumbTexts"]}
 
 
+def check_path_depth(name, record, collapsed, current, clipped=None):
+    """깊은 경로·긴 이름 장면: 오른쪽 끝이 경로 줄 안이고, 좁은 칸은 말줄임으로 끝난다."""
+    failures = []
+    if record["current"] != current:
+        failures.append(f"현재 폴더 {record['current']!r} != {current!r}")
+    if record["hasCollapsed"] != collapsed:
+        failures.append(f"접힘 {record['hasCollapsed']} != {collapsed}")
+    if record["indicatorVisible"] != collapsed:
+        failures.append("「…」 표시가 접힘과 다름")
+    if record["gap"] > 1:
+        failures.append(f"경로 줄 왼쪽에 빈 앞자리 {record['gap']}px")
+    if record["overflowRight"] > 0.5:
+        failures.append(f"보이는 요소의 오른쪽 끝이 경로 줄을 {record['overflowRight']}px 넘음")
+    if clipped is not None and record["currentClipped"] != clipped:
+        failures.append(f"현재 폴더 칸 좁아짐 {record['currentClipped']} != {clipped}")
+    if record["currentClipped"]:
+        if record["currentScrollWidth"] <= record["currentClientWidth"]:
+            failures.append("칸이 좁은데 scrollWidth가 clientWidth 이하")
+        if record["textOverflow"] != "ellipsis":
+            failures.append(f"말줄임이 아님: {record['textOverflow']!r}")
+        if record["overflow"] != "hidden":
+            failures.append(f"경로 줄 안에서 감추지 않음: {record['overflow']!r}")
+        if record["whiteSpace"] != "nowrap":
+            failures.append(f"한 줄이 아님: {record['whiteSpace']!r}")
+    return {"통과": not failures, "실패": failures, "보이는_글": record["visibleText"],
+            "접힘": record["hasCollapsed"], "오른쪽_넘침": record["overflowRight"],
+            "현재_칸": [record["currentClientWidth"], record["currentScrollWidth"]],
+            "말줄임": record["currentClipped"]}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default=".local/visual/card1667")
@@ -158,7 +189,7 @@ def main():
     if (output / "measurements.json").is_file():
         measurements = json.loads((output / "measurements.json").read_text(encoding="utf-8"))
     records = measurements.get("records", {})
-    corners, codes, paths, failures = {}, {}, {}, []
+    corners, codes, paths, depths, failures = {}, {}, {}, {}, []
     if not missing:
         for width in (1100, 360):
             for state in ("corner-split-left", "corner-split-right", "corner-resize",
@@ -179,9 +210,25 @@ def main():
                 paths[key] = check_path(key, records[key], collapsed)
             else:
                 failures.append(f"{key}: 측정값 없음")
+        depth_cases = [
+            ("360-path-open-notes", True, "notes", None),
+            ("360-path-open-deep", True, "deep", None),
+            ("360-path-open-deeper", True, "deeper", None),
+            ("path-resize-1100-first", False, "deeper", None),
+            ("path-resize-700", False, "deeper", None),
+            ("path-resize-520", True, "deeper", None),
+            ("path-resize-360", True, "deeper", None),
+            ("path-resize-1100-second", False, "deeper", None),
+            ("360-path-long-name", True, "2026-11-회의록-아주-긴-폴더-이름", True),
+        ]
+        for key, collapsed, current, clipped in depth_cases:
+            if key in records:
+                depths[key] = check_path_depth(key, records[key], collapsed, current, clipped)
+            else:
+                failures.append(f"{key}: 측정값 없음")
         if len(corners) != 14:
             failures.append(f"모서리 초점 측정 {len(corners)}/14")
-        for group in (corners, codes, paths):
+        for group in (corners, codes, paths, depths):
             for key, verdict in group.items():
                 if not verdict["통과"]:
                     failures.append(f"{key}: " + "; ".join(verdict["실패"]))
@@ -197,6 +244,7 @@ def main():
         "모서리_초점": corners,
         "오류_코드": codes,
         "경로": paths,
+        "경로_깊이": depths,
         "ui_design_14_18": ui_design,
         "실패": failures,
     }
