@@ -6,6 +6,7 @@ import { createShellStore } from "../core/shell-store";
 import { AppWindowContent } from "../render/app-window-content";
 import { makeTestSeed, mdViewerDefinition } from "./fixtures";
 import { mockVirtualLayout } from "./virtual-layout";
+import { SECTION_MIME } from "../blocks/section-drag";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -25,6 +26,7 @@ it("구역 머리를 끌어 다른 구역 앞에 놓으면 대상 범위와 이�
   render(<AppWindowContent store={createShellStore(transport)} windowId="viewer-window" />);
   const source = (await screen.findByRole("button", { name: "셋째" })).closest(".ks-data-section-header")!;
   const target = (await screen.findByRole("button", { name: "첫째" })).closest(".ks-data-section-header")!;
+  vi.spyOn(source, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 40, height: 40 } as DOMRect);
   vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 40, height: 40 } as DOMRect);
   const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
   const drag = (type: string, element: Element, clientY = 0) => {
@@ -63,6 +65,49 @@ it("구역 머리를 끌어 다른 구역 앞에 놓으면 대상 범위와 이�
   drag("dragover", target, 10);
   fireEvent.keyDown(document, { key: "Escape" });
   expect(target.getAttribute("data-drop-position")).toBeNull();
+});
+
+async function setupSectionDrag() {
+  mockVirtualLayout();
+  const ui = { type: "repeat", items: { state: "groups" }, key: "key", template: {
+    type: "section", title: { item: "title" }, collapsible: true,
+    on_move: [{ set_state: "last" }], child: { type: "text", value: "내용" },
+  } } as unknown as Block;
+  const state = { groups: [{ key: "a", title: "첫째" }, { key: "b", title: "둘째" }, { key: "c", title: "셋째" }], last: null };
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 66, modules: {} }, permissions: [], state, ui };
+  const seed = makeTestSeed({ definitions: [definition] });
+  seed.snapshot.shared.windows[0].state = state;
+  render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
+  const toggle = await screen.findByRole("button", { name: "셋째" });
+  const target = (await screen.findByRole("button", { name: "첫째" })).closest(".ks-data-section-header")!;
+  vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 40, height: 40 } as DOMRect);
+  const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
+  const drag = (type: string, element: Element, clientY = 0) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY, relatedTarget: null });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    fireEvent(element, event);
+  };
+  return { toggle, target, dataTransfer, drag };
+}
+
+it("머리 밖으로 나가면 놓을 자리 표시를 지운다", async () => {
+  const { toggle, target, drag } = await setupSectionDrag();
+  drag("dragstart", toggle.closest(".ks-data-section-header")!);
+  drag("dragover", target, 10);
+  expect(target.getAttribute("data-drop-position")).toBe("before");
+  drag("dragleave", target);
+  expect(target.getAttribute("data-drop-position")).toBeNull();
+  drag("dragend", toggle.closest(".ks-data-section-header")!);
+});
+
+it("접기 단추에서 끌기를 시작하면 구역 끌기 표식을 넣는다", async () => {
+  const { toggle, target, dataTransfer, drag } = await setupSectionDrag();
+  expect(toggle.classList.contains("ks-data-section-toggle")).toBe(true);
+  drag("dragstart", toggle);
+  expect(dataTransfer.setData).toHaveBeenCalledWith(SECTION_MIME, expect.stringContaining('"key":"c"'));
+  drag("dragover", target, 10);
+  expect(target.getAttribute("data-drop-position")).toBe("before");
+  drag("dragend", toggle);
 });
 
 it("구역 끌기와 트리 끌기는 서로를 놓을 자리로 받지 않는다", async () => {
