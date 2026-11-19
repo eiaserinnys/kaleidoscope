@@ -532,7 +532,12 @@ on_edit?: Actions,
 /**
  * (60판) 구역 이름 바꾸기를 취소할 때 실행한다. `$event`는 null이다.
  */
-on_edit_cancel?: Actions, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, 
+on_edit_cancel?: Actions, 
+/**
+ * (66판) 구역을 끌어 놓으면 실행한다. `$event`는 {key, target, position}이고 position은 before 또는 after다.
+ * `$item`은 놓은 자리의 반복 항목이다.
+ */
+on_move?: Actions, child: Block, } | { "type": "list", items: Binding, layout?: ListLayout, 
 /**
  * 격자 칸의 최소 폭. 생략하면 medium이다.
  */

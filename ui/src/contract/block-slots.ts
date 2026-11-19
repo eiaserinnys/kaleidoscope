@@ -34,7 +34,7 @@ export const BLOCK_SLOTS: Record<string, BlockSlots> = {
   stack: { bindings: ["scroll_reset"], actions: [], children: ["children/*"] },
   tabs: { bindings: ["tabs/*/label"], actions: [], children: ["tabs/*/child"] },
   toolbar: { bindings: [], actions: [], children: ["end/*", "start/*"] },
-  section: { bindings: ["editing", "menu/*/confirm/body", "meta", "title"], actions: ["menu/*/on_select", "on_edit", "on_edit_cancel"], children: ["actions/*", "child"] },
+  section: { bindings: ["editing", "menu/*/confirm/body", "meta", "title"], actions: ["menu/*/on_select", "on_edit", "on_edit_cancel", "on_move"], children: ["actions/*", "child"] },
   list: { bindings: ["current", "disabled", "item_menu/*/confirm/body", "items", "selected"], actions: ["group_actions/*/on_click", "item_menu/*/on_select", "on_activate", "on_remove", "on_select"], children: [] },
   table: { bindings: ["columns", "item_menu/*/confirm/body", "rows", "selected"], actions: ["item_menu/*/on_select", "on_select"], children: [] },
   properties: { bindings: ["fields/*/label", "fields/*/value"], actions: [], children: [] },

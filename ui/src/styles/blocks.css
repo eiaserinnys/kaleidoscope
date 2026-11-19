@@ -1143,3 +1143,6 @@ button.ks-agent-attachment-chip-preview,
 }
 
 .ks-share-chip-icon { color: var(--ks-color-share); }
+.ks-data-section-header:has(> .ks-data-section-toggle):not(.is-editing),
+.ks-data-section-header > .ks-data-section-toggle > .ks-data-section-heading { flex-wrap: nowrap; }
+.ks-data-section-header > .ks-data-section-toggle .ks-data-section-title { min-width: 0; }
