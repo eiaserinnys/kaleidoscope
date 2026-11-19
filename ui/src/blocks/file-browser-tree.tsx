@@ -507,14 +507,14 @@ export function FileBrowserTree({
 
   const nodes = useMemo(() => {
     let noticePlaced = false;
-    const noticeRow: TreeNode = { id: "folder-operation-notice", label: "", content: actions.noticeNode, revealOnInsert: true };
+    const noticeRow: TreeNode = { id: "folder-operation-notice", label: "", content: actions.noticeNode, revealOnInsert: true, fullWidth: true };
     const buildDirectory = (directory: string, shown: boolean): TreeNode[] => {
       const rows: TreeNode[] = [];
       if (directory && loadingDirectories.has(directory) && !Object.hasOwn(entriesByDirectory, directory)) rows.push({
         id: `loading:${directory}`, label: "불러오는 중", selectable: false, content: <StatusText>불러오는 중</StatusText>,
       });
       if (directory && errors[directory]) rows.push({
-        id: `error:${directory}`, label: errors[directory].message, selectable: false, content: <ErrorNotice error={errors[directory]} actions={[<Button key="retry" onClick={(event) => retryDirectory(directory, event.currentTarget)}>다시 시도</Button>]} />,
+        id: `error:${directory}`, label: errors[directory].message, selectable: false, fullWidth: true, content: <ErrorNotice error={errors[directory]} actions={[<Button key="retry" onClick={(event) => retryDirectory(directory, event.currentTarget)}>다시 시도</Button>]} />,
       });
       if (creating?.directory === directory) rows.push({
         id: `creating:${directory}`,
@@ -589,7 +589,7 @@ export function FileBrowserTree({
       return rows;
     };
     const root: TreeNode[] = [];
-    if (!rootEmpty && errors[""]) root.push({ id: "error:", label: errors[""].message, selectable: false, content: <ErrorNotice error={errors[""]} actions={[<Button key="retry" onClick={(event) => retryDirectory("", event.currentTarget)}>다시 시도</Button>]} /> });
+    if (!rootEmpty && errors[""]) root.push({ id: "error:", label: errors[""].message, selectable: false, fullWidth: true, content: <ErrorNotice error={errors[""]} actions={[<Button key="retry" onClick={(event) => retryDirectory("", event.currentTarget)}>다시 시도</Button>]} /> });
     const children = buildDirectory("", true);
     if (actionsEnabled && actions.noticeNode && !noticePlaced) root.unshift(noticeRow);
     return [...root, ...children];

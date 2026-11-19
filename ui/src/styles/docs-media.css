@@ -1,4 +1,14 @@
 .ks-code-view, .ks-code-view .cm-editor, .ks-code-view .cm-scroller { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+/* 구조용 초점 고리는 칸 안쪽 var(--ks-focus-width) 띠에 그려진다. CodeMirror의 위치 잡힌 층(줄 번호
+   거터, 스크롤러, 스크롤바, 검색 창)이 그 띠 위에 그려져 고리를 덮지 않도록, 코드 보기는 네 쪽 모두 그
+   폭만큼 안쪽에서 시작한다. 왼쪽 띠는 거터와 같은 색으로 채워 거터가 칸 끝까지 이어져 보이게 한다.
+   띠는 초점 고리를 그리는 칸의 배경이나 그 아래에 그려지는 블록 상자에 칠한다. 안쪽에 칠하면 위치 잡힌
+   상자(코드 편집기의 .ks-editor-content) 안의 배경이라 칸의 고리를 덮는다. */
+.ks-code-view { padding: var(--ks-focus-width); }
+.ks-split-pane:has(> .ks-code-view),
+.ks-markdown-editor:has(> .ks-editor-content > .ks-code-view) {
+  background-image: linear-gradient(to right, var(--ks-color-surface-solid) var(--ks-focus-width), transparent var(--ks-focus-width));
+}
 .ks-code-view .cm-editor { background: transparent; color: var(--ks-color-text); font-family: var(--ks-font-code); font-size: var(--ks-type-body); }
 .ks-code-view .cm-editor.cm-focused, .ks-code-view .cm-content:focus { outline: none; }
 .ks-code-view .cm-scroller { overflow: auto; font-family: inherit; line-height: var(--ks-line-body); }

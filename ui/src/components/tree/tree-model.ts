@@ -18,6 +18,8 @@ export interface TreeNode {
   data?: unknown;
   currentOnSelection?: boolean;
   rowClassName?: string;
+  // 깊이와 상관없이 행 전체 폭으로 그리는 안내 행(읽기 실패, 폴더 작업 안내). 들여쓰기를 받지 않는다.
+  fullWidth?: boolean;
   commentKey?: import("../../contract/serde_json/JsonValue").JsonValue;
 }
 
@@ -52,7 +54,7 @@ export function flattenTreeModel(nodes: TreeNode[], expanded: ReadonlySet<string
         hasChildren,
         position: treePosition,
         setSize: treeSiblings.length,
-        indent: depth ? `calc(${Array.from({ length: depth }, () => "var(--ks-space-4)").join(" + ")})` : undefined,
+        indent: depth && !node.fullWidth ? `calc(${Array.from({ length: depth }, () => "var(--ks-space-4)").join(" + ")})` : undefined,
       });
       if (node.after) visit([node.after], parentId, depth);
       if (isExpanded && children.length) visit(children, node.id, depth + 1);
