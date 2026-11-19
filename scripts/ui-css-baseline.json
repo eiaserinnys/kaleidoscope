@@ -1,0 +1,27 @@
+{
+  "color-literal": {
+    "ui/harness/harness.css": 1
+  },
+  "font-literal": {
+    "ui/src/styles/blocks.css": 6
+  },
+  "outline-none": {
+    "app/src/shell.css": 1,
+    "ui/src/styles/blocks.css": 2,
+    "ui/src/styles/comments.css": 1,
+    "ui/src/styles/data-blocks.css": 1,
+    "ui/src/styles/data-views.css": 1,
+    "ui/src/styles/docs-media.css": 2,
+    "ui/src/styles/foundation.css": 1,
+    "ui/src/styles/html-view.css": 1,
+    "ui/src/styles/layout.css": 1
+  },
+  "radius-literal": {},
+  "selection-outside-policy": {},
+  "spacing-literal": {
+    "ui/src/styles/blocks.css": 1,
+    "ui/src/styles/data-blocks.css": 1
+  },
+  "tw-rounded-arbitrary": {},
+  "tw-text-arbitrary": {}
+}
