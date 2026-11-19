@@ -115,7 +115,9 @@ function SettingsEntry({ context, entry, index, open, onProblem }: { context: Bl
     if (documentSession) await documentSession.refreshOnFocus();
     restoreFocus();
   };
-  const status = state.saving || documentState?.status === "saving" ? "저장 중" : state.saved ? "저장됨" : !state.exists && state.loaded && !state.dirty && !state.conflict && !state.error && !documentState?.dirty ? "기본값" : "";
+  // 저장값이 없을 때 코어가 실어 준 지금 값. 편집을 시작하기 전까지만 보인다. 저장값이 있으면 그 값을 그대로 보인다.
+  const choice = state.loaded && !state.exists && !state.dirty && !state.conflict && !state.error && !documentState?.dirty ? state.choice : null;
+  const status = state.saving || documentState?.status === "saving" ? "저장 중" : state.saved ? "저장됨" : choice ? "지금 대화 기준" : !state.exists && state.loaded && !state.dirty && !state.conflict && !state.error && !documentState?.dirty ? "기본값" : "";
   return <div className="ks-settings-entry" ref={row}>
     <div className="ks-settings-label-row">
       {entry.kind === "md" ? <button ref={heading} type="button" className="ks-data-section-toggle" aria-expanded={expanded} aria-controls={`${id}-document`} onClick={() => {
@@ -129,7 +131,7 @@ function SettingsEntry({ context, entry, index, open, onProblem }: { context: Bl
     {!state.loaded && !state.error ? <StatusText>불러오는 중</StatusText> : null}
     {state.loaded ? <div className="ks-settings-control">
       {entry.kind === "md" ? <div id={`${id}-document`} className="ks-settings-document" hidden={!expanded}><MarkdownEditorBlock block={{ type: "markdown", document: { entry: entry.id } }} context={context} /></div>
-        : <SettingControl id={id} entry={entry} index={index} value={state.value} session={session} invalid={state.error?.code === "invalid_request"} />}
+        : <SettingControl id={id} entry={entry} index={index} value={state.value} choice={choice} session={session} invalid={state.error?.code === "invalid_request"} />}
     </div> : null}
     {state.conflict ? <Notice role="alert" actions={[
       <Button key="reload" onClick={() => void session.reload().then(restoreFocus)}>다시 불러오기</Button>,
@@ -149,7 +151,8 @@ function includeCurrent(options: SelectOption[], value: JsonValue): SelectOption
   return options.some((item) => equalOption(value, optionValue(item))) ? options : [{ value, label: valueLabel(value) }, ...options];
 }
 
-function SettingControl({ id, entry, index, value, session, invalid }: { id: string; entry: StorageEntryDecl; index: number; value: JsonValue; session: SettingsEntrySession; invalid: boolean }) {
+function SettingControl({ id, entry, index, value, choice, session, invalid }: { id: string; entry: StorageEntryDecl; index: number; value: JsonValue; choice: string | null; session: SettingsEntrySession; invalid: boolean }) {
+  const edited = useRef(false);
   const schema = entry.schema!;
   const types = Array.isArray(schema.type) ? schema.type : [schema.type];
   const nullable = types.includes("null");
@@ -164,18 +167,20 @@ function SettingControl({ id, entry, index, value, session, invalid }: { id: str
   const hasOptions = entry.choices !== undefined || schema.enum !== undefined || (kind === "boolean" && nullable);
   const describedBy = [entry.description ? `${id}-description` : null, invalid ? `${id}-error` : null].filter(Boolean).join(" ") || undefined;
   const save = (next: JsonValue) => { session.edit(next); void session.save(); };
+  // 저장값이 없고 코어가 지금 값을 알려 주면 그 값을 현재 값처럼 보인다. 사용자가 고치지 않고 빠져나가면 아무것도 저장하지 않는다.
+  const shown: JsonValue = choice !== null && kind !== "boolean" && kind !== "array" ? choice : value;
   if (entry.choices !== undefined && bound.status !== "ready") return <DataState value={bound} compact />;
   if (kind === "boolean" && !hasOptions) return <Toggle checked={Boolean(value)} labelledBy={`${id}-label`} invalid={invalid || undefined} describedBy={describedBy} onChange={save} />;
   if (kind === "array") return <StringList label={entry.label} value={Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []} options={hasOptions ? options : undefined} unique={Boolean(schema.uniqueItems)} session={session} invalid={invalid} describedBy={describedBy} onChange={save} />;
   if (hasOptions) {
     let items = kind === "boolean" && nullable && schema.enum === undefined ? [{ value: true, label: "켬" }, { value: false, label: "끔" }, { value: null, label: "지정 안 함" }] : options;
     if (entry.choices !== undefined && nullable && (schema.enum === undefined || schema.enum.includes(null))) items = [...items, { value: null, label: "지정 안 함" }];
-    return <Select label={entry.label} items={includeCurrent(items, value)} value={value} invalid={invalid || undefined} describedBy={describedBy} onChange={save} />;
+    return <Select label={entry.label} items={includeCurrent(items, shown)} value={shown} invalid={invalid || undefined} describedBy={describedBy} onChange={save} />;
   }
   const convert = (text: string): JsonValue => nullable && !text ? null : kind === "number" || kind === "integer" ? Number(text) : text;
-  return <TextInput id={id} aria-invalid={invalid || undefined} aria-describedby={describedBy} persistent value={value == null ? "" : String(value)}
-    onFocus={() => session.beginEdit()} onEdit={(text) => { session.beginEdit(); if ((kind !== "number" && kind !== "integer") || (text.trim() !== "" && Number.isFinite(Number(text))) || (nullable && text === "")) session.edit(convert(text)); }}
-    onCommit={(text) => { if ((kind === "number" || kind === "integer") && (text.trim() === "" && !nullable || !Number.isFinite(Number(text)))) return; session.edit(convert(text)); void session.finishEdit(); }} onCancel={() => session.cancel()} />;
+  return <TextInput id={id} aria-invalid={invalid || undefined} aria-describedby={describedBy} persistent value={shown == null ? "" : String(shown)}
+    onFocus={() => { edited.current = false; session.beginEdit(); }} onEdit={(text) => { edited.current = true; session.beginEdit(); if ((kind !== "number" && kind !== "integer") || (text.trim() !== "" && Number.isFinite(Number(text))) || (nullable && text === "")) session.edit(convert(text)); }}
+    onCommit={(text) => { if (choice !== null && !edited.current) { session.cancel(); return; } if ((kind === "number" || kind === "integer") && (text.trim() === "" && !nullable || !Number.isFinite(Number(text)))) return; session.edit(convert(text)); void session.finishEdit(); }} onCancel={() => { edited.current = false; session.cancel(); }} />;
 }
 
 function StringList({ label, value, options, unique, session, invalid, describedBy, onChange }: { label: string; value: string[]; options?: SelectOption[]; unique: boolean; session: SettingsEntrySession; invalid: boolean; describedBy?: string; onChange: (value: JsonValue) => void }) {

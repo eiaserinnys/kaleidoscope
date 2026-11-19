@@ -199,6 +199,19 @@ pub(crate) fn read(
     read_with_doc(inner, window, entry, None)
 }
 
+/// 저장값이 없으면 화면에 보일 지금 값을 붙인다. 대화 모음처럼 코어가 계산할 수 있는 항목만 값이 있다.
+fn with_choice(
+    inner: &Arc<Inner>,
+    app: &str,
+    entry: &str,
+    mut reply: StorageReadReply,
+) -> StorageReadReply {
+    if !reply.exists {
+        reply.choice = inner.conversation_reconcile.choice(app, entry);
+    }
+    reply
+}
+
 fn read_with_doc(
     inner: &Arc<Inner>,
     window: &str,
@@ -241,6 +254,7 @@ fn read_with_doc(
                 content: item.default.clone(),
                 revision: None,
                 exists: false,
+                choice: None,
             });
         }
     }
@@ -287,6 +301,7 @@ fn read_with_doc(
                 content,
                 revision: raw.revision,
                 exists: true,
+                choice: None,
             });
         }
         return inner
@@ -324,12 +339,18 @@ fn read_with_doc(
                 if raw.exists {
                     contract::validate_storage_content(decl, &content)?;
                 }
-                return Ok(StorageReadReply {
-                    kind: decl.kind,
-                    content,
-                    revision: raw.revision,
-                    exists: raw.exists,
-                });
+                return Ok(with_choice(
+                    inner,
+                    &ctx.app,
+                    entry,
+                    StorageReadReply {
+                        kind: decl.kind,
+                        content,
+                        revision: raw.revision,
+                        exists: raw.exists,
+                        choice: None,
+                    },
+                ));
             }
             Err(RegistryError::NotFound) => {}
             Err(err) => return Err(map_error(inner, &ctx.link, err)),
@@ -342,15 +363,21 @@ fn read_with_doc(
         entry,
         &ctx.workspace,
     ) {
-        Ok(reply) => Ok(reply),
+        Ok(reply) => Ok(with_choice(inner, &ctx.app, entry, reply)),
         Err(RegistryError::NotFound) if kaleidoscope_contract::builtin::is_builtin(&ctx.app) => {
             let decl = ctx.entries.iter().find(|item| item.id == entry).unwrap();
-            Ok(StorageReadReply {
-                kind: decl.kind,
-                content: decl.default.clone(),
-                revision: None,
-                exists: false,
-            })
+            Ok(with_choice(
+                inner,
+                &ctx.app,
+                entry,
+                StorageReadReply {
+                    kind: decl.kind,
+                    content: decl.default.clone(),
+                    revision: None,
+                    exists: false,
+                    choice: None,
+                },
+            ))
         }
         Err(err) => Err(map_error(inner, &ctx.link, err)),
     }

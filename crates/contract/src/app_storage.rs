@@ -258,6 +258,11 @@ pub struct StorageReadReply {
     pub content: JsonValue,
     pub revision: Option<String>,
     pub exists: bool,
+    /// (모듈 `agent` 5판) 저장값이 없을 때 화면에 보일 지금 값. 앱의 대화 스레드가 모두 같은 모음에 있으면
+    /// 코어가 그 모음을 계산해 싣는다. 설정 화면은 이 값을 선택지의 이름으로 보이고 기본값이라 하지 않는다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub choice: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]

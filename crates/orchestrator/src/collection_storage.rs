@@ -82,6 +82,7 @@ pub(super) fn read(
                 content: item.content,
                 revision: Some(item.revision),
                 exists: true,
+                choice: None,
             })
         }
         Some(_) => Err(kaleidoscope_contract::errors::STORAGE_DOCUMENT_READ_KIND_MISMATCH(doc)),

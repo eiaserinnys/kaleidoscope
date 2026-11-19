@@ -328,6 +328,13 @@ error_catalog! { ENTRIES;
         message: "설정을 적용할 대화를 제공자에서 찾지 못했습니다. 다시 시도하세요.",
         fix: "다시 시도하세요"
     }
+    CONV_RECONCILE_COLLECTION_MOVE_FAILED(thread, collection, reason) {
+        class: Unavailable,
+        place: "대화 모음 옮기기",
+        cause: "대화를 새 모음으로 옮기지 못했다",
+        message: "대화 {thread}를 모음 {collection}(으)로 옮기지 못했습니다. 다른 대화는 그대로 옮기고, 이 대화는 다음 모음 설정 변경 때 다시 시도합니다. 원인: {reason}",
+        fix: "대화 제공자 연결과 모음 설정을 확인하세요"
+    }
     CONV_SEND_REQUEST_ID_MISSING() {
         class: InvalidRequest,
         place: "대화 메시지 보내기",

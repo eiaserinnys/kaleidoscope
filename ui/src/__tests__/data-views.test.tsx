@@ -449,6 +449,16 @@ it.each(["rows", "grid", "icons"] as const)("%s의 그림과 아이콘 우선순
   expect(Boolean(row.querySelector(".ks-media-thumbnail"))).toBe(layout !== "rows");
   expect(row.querySelector(".ks-list-color")).toBeNull();
 });
+it.each(["list", "grid"] as const)("%s 목록은 image_shape circle이면 그림을 원으로 그린다", async (layout) => {
+  setup({ type: "list", ...(layout === "grid" ? { layout } : {}), image_shape: "circle", items: [{ key: "a", title: "원 그림", image: { asset: "photo" } }] });
+  const row = await screen.findByRole("option", { name: "원 그림" });
+  expect(row.querySelector(".ks-media-thumbnail.is-circle")).not.toBeNull();
+  cleanup();
+  setup({ type: "list", ...(layout === "grid" ? { layout } : {}), items: [{ key: "a", title: "네모 그림", image: { asset: "photo" } }] });
+  const plain = await screen.findByRole("option", { name: "네모 그림" });
+  expect(plain.querySelector(".ks-media-thumbnail")).not.toBeNull();
+  expect(plain.querySelector(".ks-media-thumbnail.is-circle")).toBeNull();
+});
 it.each(["rows", "grid", "icons"] as const)("%s의 SVG는 아이콘 배치에서만 테마색으로 칠한다", async (layout) => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 32, 32));
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"><path d="M0 0h24"/></svg>';
@@ -694,6 +704,48 @@ it("only toggles virtual path folders without selecting them", async () => {
   fireEvent.click(folder);
   expect(folder.getAttribute("aria-expanded")).toBe("false");
   expect(screen.queryByRole("treeitem", { name: "항목" })).toBeNull();
+});
+it("그림이 있는 트리 잎은 파일 표식 자리에 그림을 그리고 circle이면 원으로 그린다", async () => {
+  setup({ type: "tree", by: "children", items: [{ key: "leaf", title: "잎", image: { asset: "photo" } }] }, {});
+  const leaf = await screen.findByRole("treeitem", { name: "잎" });
+  const icons = leaf.querySelectorAll(":scope > .ks-file-tree-icon");
+  expect(icons).toHaveLength(1);
+  expect(icons[0].querySelector(".ks-chevron")).toBeNull();
+  expect(icons[0].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  cleanup();
+  setup({ type: "tree", by: "children", image_shape: "circle", items: [{ key: "leaf", title: "잎", image: { asset: "photo" } }] }, {});
+  const circled = await screen.findByRole("treeitem", { name: "잎" });
+  expect(circled.querySelector(".ks-media-thumbnail.ks-tree-image.is-circle")).not.toBeNull();
+});
+it("그림이 있는 트리 부모 줄은 펼침 화살표 뒤에 그림 열을 두고 그림이 없으면 지금 구조를 지킨다", async () => {
+  setup({ type: "tree", by: "children", items: [{ key: "folder", title: "폴더", image: { asset: "folder" }, children: [{ key: "child", title: "하위" }] }] }, {});
+  const row = await screen.findByRole("treeitem", { name: "폴더" });
+  const icons = [...row.querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(icons).toHaveLength(2);
+  expect(icons[0].querySelector(".ks-chevron")).not.toBeNull();
+  expect(icons[1].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  cleanup();
+  setup({ type: "tree", by: "children", items: [{ key: "folder", title: "폴더", children: [{ key: "child", title: "하위" }] }] }, {});
+  const plain = await screen.findByRole("treeitem", { name: "폴더" });
+  expect(plain.querySelectorAll(":scope > .ks-file-tree-icon")).toHaveLength(1);
+  expect(plain.querySelector(".ks-media-thumbnail")).toBeNull();
+});
+it("트리 항목 subtitle은 제목 아래 둘째 줄로 그리고 subtitle이 없는 행은 지금 구조를 지킨다", async () => {
+  setup({ type: "tree", by: "children", items: [{ key: "one", title: "카드", subtitle: "프로필 · 서버 · 모델" }] }, {});
+  const row = await screen.findByRole("treeitem", { name: /카드/ });
+  const block = row.querySelector(":scope > .ks-tree-title-block");
+  expect(block).not.toBeNull();
+  const lines = block!.querySelectorAll(":scope > *");
+  expect(lines).toHaveLength(2);
+  expect(lines[0].textContent).toBe("카드");
+  expect(lines[1].classList.contains("ks-view-meta")).toBe(true);
+  expect(lines[1].textContent).toBe("프로필 · 서버 · 모델");
+  cleanup();
+  setup({ type: "tree", by: "children", items: [{ key: "one", title: "카드" }] }, {});
+  const plain = await screen.findByRole("treeitem", { name: "카드" });
+  expect(plain.querySelector(":scope > .ks-tree-title-block")).toBeNull();
+  expect(plain.querySelector(":scope > .ks-tree-name")).not.toBeNull();
+  expect(plain.querySelectorAll(":scope > .ks-view-meta")).toHaveLength(0);
 });
 it("preserves feed text selection without selecting an entry", async () => {
   const { calls } = setup({ type: "feed", entries: [{ key: "a", name: "이름", body: ["첫 줄", "둘째 줄"] }], on_select: { set_state: "choice" } }, { choice: null });

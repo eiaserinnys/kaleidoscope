@@ -427,7 +427,12 @@ sizes?: Array<number>, children: Array<Block>, } | { "type": "tree", items?: Bin
 /**
  * 보일 파일 확장자(점 없이, 소문자). 비어 있으면 모든 파일. 폴더는 늘 보인다.
  */
-extensions?: Array<string>, by?: TreeBy, selected?: StateRef, on_select?: Actions, 
+extensions?: Array<string>, by?: TreeBy, 
+/**
+ * (67판) 줄 앞 그림의 모양. `square`(기본)는 지금 모습 그대로이고 `circle`은 원으로 그린다.
+ * 그림이 없는 줄은 어느 쪽이든 지금과 같다.
+ */
+image_shape?: ImageShape, selected?: StateRef, on_select?: Actions, 
 /**
  * (55판) 항목의 확인 상자를 누르거나 초점을 둔 행에서 Space를 누를 때 실행한다.
  * `$event`는 새 확인 값(참/거짓), `$item`은 그 항목이다. 동작 문맥은 `on_select`와 같다.
@@ -550,7 +555,12 @@ on_move?: Actions, child: Block, } | { "type": "list", items: Binding, layout?: 
 /**
  * 격자 칸의 최소 폭. 생략하면 medium이다.
  */
-item_width?: RepeatGridItemWidth, grouped?: boolean, select_on_focus?: boolean, selection?: ListSelection, 
+item_width?: RepeatGridItemWidth, 
+/**
+ * (67판) 줄 앞 그림의 모양. `square`(기본)는 지금 모습 그대로이고 `circle`은 원으로 그린다.
+ * 그림이 없는 항목은 어느 쪽이든 지금과 같다.
+ */
+image_shape?: ImageShape, grouped?: boolean, select_on_focus?: boolean, selection?: ListSelection, 
 /**
  * (50판) 다중 선택에서 현재 칸의 키. 선택된 키 안에서만 쓴다.
  */
@@ -792,7 +802,11 @@ export type ConversationProtocol = "conversation-v1";
 
 export type ConversationStart = { profile: string, model: string | null, };
 
-export type ConversationThread = { id: string, external: ExternalKey, title: string, model: ThreadModel, profile?: ThreadProfile, execution_id?: string, created_at: string, archived: boolean, };
+export type ConversationThread = { id: string, external: ExternalKey, title: string, model: ThreadModel, profile?: ThreadProfile, execution_id?: string, 
+/**
+ * (모듈 `agent` 5판) 이 대화가 속한 모음. 제공자가 모르는 옛 응답에는 없다.
+ */
+collection?: string, created_at: string, archived: boolean, };
 
 export type ConversationUpload = { name: string, mime: string, data_base64: string, };
 
@@ -976,13 +990,21 @@ export type EditPhase = "preview" | "commit" | "cancel";
 
 export type EnsureThreadReply = { thread: ConversationThread, created: boolean, notices: Array<string>, };
 
-export type EnsureThreadRequest = { title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
+export type EnsureThreadRequest = { title: string, selected_model: string, model_order: Array<string>, profile: string, 
+/**
+ * (모듈 `agent` 5판) 새 대화의 모음. 없거나 빈 문자열이면 제공자의 기본 모음을 쓴다.
+ */
+collection?: string, initial_instruction: string, instructions: string, };
 
 export type ErrorCode = "invalid_request" | "unauthorized" | "not_found" | "invalid_app_definition" | "unsupported_app" | "permission_denied" | "not_granted" | "path_outside_root" | "conflict" | "login_required" | "binding_conflict" | "io" | "server" | "unavailable" | "invalid_name" | "file_busy" | "trash_unavailable";
 
 export type EventModifiers = { shift: boolean, alt: boolean, ctrl: boolean, meta: boolean, };
 
-export type ExecutionThreadRequest = { expected_execution_id: string, title: string, selected_model: string, model_order: Array<string>, profile: string, collection: string, initial_instruction: string, instructions: string, };
+export type ExecutionThreadRequest = { expected_execution_id: string, title: string, selected_model: string, model_order: Array<string>, profile: string, 
+/**
+ * (모듈 `agent` 5판) 새 대화의 모음. 없거나 빈 문자열이면 제공자의 기본 모음을 쓴다.
+ */
+collection?: string, initial_instruction: string, instructions: string, };
 
 /**
  * (블록 세트 5판) 탐색기 오른쪽 칸의 보기 방식. 창 상태에는 이 문자열로 둔다.
@@ -1174,6 +1196,11 @@ export type GroupAction = { key: string, label: string, on_click: Actions, };
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ImageFit = "contain" | "cover";
+
+/**
+ * 목록과 데이터 트리에서 줄 앞 그림의 모양.
+ */
+export type ImageShape = "square" | "circle";
 
 export type InputCommit = "debounce" | "blur" | "submit";
 
@@ -1400,7 +1427,11 @@ export type PageDecl = { param: string, next: string, items?: string, };
 
 export type ParentItemRef = { parent_item: string, };
 
-export type PatchThreadRequest = { title?: string, archived?: boolean, model?: string, model_order?: Array<string>, instructions?: string, };
+export type PatchThreadRequest = { title?: string, archived?: boolean, model?: string, model_order?: Array<string>, instructions?: string, 
+/**
+ * (모듈 `agent` 5판) 대화를 옮길 모음. 코어가 모음 설정의 값이 바뀌었을 때만 보낸다.
+ */
+collection?: string, };
 
 /**
  * 경로 값. 창 상태에서 읽거나(`{ "state": "current_file" }`) 정의에 직접 적는다(`"notes/todo.md"`).
@@ -1755,7 +1786,12 @@ export type StoragePresentation = "settings" | "hidden";
 /**
  * `content`는 JSON kind에서 임의 JSON, md kind에서 문자열이다.
  */
-export type StorageReadReply = { kind: StorageKind, content: JsonValue, revision: string | null, exists: boolean, };
+export type StorageReadReply = { kind: StorageKind, content: JsonValue, revision: string | null, exists: boolean, 
+/**
+ * (모듈 `agent` 5판) 저장값이 없을 때 화면에 보일 지금 값. 앱의 대화 스레드가 모두 같은 모음에 있으면
+ * 코어가 그 모음을 계산해 싣는다. 설정 화면은 이 값을 선택지의 이름으로 보이고 기본값이라 하지 않는다.
+ */
+choice?: string, };
 
 export type StorageResetReply = { revision: string | null, };
 
@@ -1929,7 +1965,11 @@ export type ThreadModel = { id: string, label: string, group?: ConversationGroup
 
 export type ThreadProfile = { id: string, label: string, };
 
-export type ThreadRef = { id: string, title: string, created_at: string, archived: boolean, };
+export type ThreadRef = { id: string, title: string, 
+/**
+ * (모듈 `agent` 5판) 이 대화가 속한 모음. 제공자가 모르는 옛 응답에는 없다.
+ */
+collection?: string, created_at: string, archived: boolean, };
 
 export type ThreadSnapshot = { cursor: string, busy: boolean, tool: string | null, stream_id: string | null, text: string | null, items: Array<ConversationItem>, };
 
@@ -1966,7 +2006,17 @@ export type TreeItem = { key: string,
 /**
  * 없으면 `path`의 마지막 이름이다.
  */
-title?: string, path?: string, meta?: string, badges?: Array<Badge>, children?: Array<TreeItem>, 
+title?: string, 
+/**
+ * (블록 세트 67판) 제목 아래 작은 보조색 한 줄. `list` 항목의 `subtitle`과 같은 뜻과 모양이다.
+ * 있으면 그 줄이 두 줄 높이가 되고, 넘치면 말줄임한다.
+ */
+subtitle?: string, path?: string, meta?: string, badges?: Array<Badge>, 
+/**
+ * (블록 세트 67판) 줄 앞의 작은 그림. `list` 항목의 그림과 같은 미디어 참조를 쓴다.
+ * 그림이 없는 줄은 지금처럼 아이콘 자리를 비우고, 자식이 있는 줄은 펼침 화살표 뒤에 그린다.
+ */
+image?: MediaRef, children?: Array<TreeItem>, 
 /**
  * 있으면 그 줄에 확인 상자를 그린다. 참이면 확인된 상태다. 없으면 확인 상자를 그리지 않는다.
  */
