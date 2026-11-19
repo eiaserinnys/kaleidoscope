@@ -105,3 +105,51 @@ test("로그인 요청을 보내는 동안에는 시작 상태이고 실패하�
   state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32603, message: "failed" } }, "unused");
   assert.equal(state.phase, "login");
 });
+
+const update = (body: Record<string, unknown>) => ({ jsonrpc: "2.0", method: "session/update", params: { sessionId: "s", update: body } });
+const fiveHour = { status: "allowed_warning", rateLimitType: "five_hour", utilization: 0.5, resetsAt: 1763400600 };
+
+test("usage_update가 컨텍스트와 한도를 채운다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 42000, size: 100000, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  assert.deepEqual(state.context, { used: 42000, size: 100000 });
+  assert.equal(state.limits.length, 1);
+  state = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 1, size: 0 }), "x");
+  assert.equal(state.context, null);
+  state = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 1 }), "x");
+  assert.equal(state.context, null);
+});
+
+test("거절된 턴의 오류가 한도를 막힘으로 기록한다", () => {
+  let state = initialState();
+  let id: number;
+  [state, id] = reserveRequest(state, "prompt", { sessionId: "s", prompt: [] });
+  state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32000, message: "limit", data: { errorKind: "rate_limit", rateLimit: { status: "rejected", rateLimitType: "five_hour", resetsAt: 1763400600 } } } }, "x");
+  assert.equal(state.phase, "ready");
+  assert.equal(state.limits[0].blocked, true);
+});
+
+test("계정 알림은 auth/status_update만 읽고 응답을 만들지 않는다", () => {
+  let state = reduceMessage(initialState(), { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "Claude Team", email: "a@b.c", active: true }] } }, "x");
+  assert.deepEqual(state.account, { label: "Claude Team", email: "a@b.c" });
+  state = reduceMessage(state, { jsonrpc: "2.0", method: "_auth/status_update", params: { authStatus: { state: "authenticated" } } }, "x");
+  assert.deepEqual(state.account, { label: "Claude Team", email: "a@b.c" });
+  assert.deepEqual(state.outbox, []);
+});
+
+test("서브에이전트 도구는 끝나면 사라진다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "x", status: "in_progress", _meta: { claudeCode: { toolName: "Agent" } } }), "x");
+  assert.equal(state.tools[0].subagent, true);
+  state = reduceMessage(state, update({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" }), "x");
+  assert.deepEqual(state.tools, []);
+});
+
+test("세션 전환은 컨텍스트만 비우고 한도와 계정은 남긴다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 1, size: 10, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  state = reduceMessage(state, { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "A", active: true }] } }, "x");
+  let id: number;
+  [state, id] = reserveRequest(state, "switch", "s2");
+  state = reduceMessage(state, { jsonrpc: "2.0", id, result: {} }, "x");
+  assert.equal(state.context, null);
+  assert.equal(state.limits.length, 1);
+  assert.notEqual(state.account, null);
+});

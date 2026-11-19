@@ -1,6 +1,7 @@
 import type { InitializeResponse, NewSessionResponse, RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { agentError } from "./errors.ts";
 import { hadGuide } from "./guide.ts";
+import { isSubagentTool, mergeLimit, readAuthStatus, readClaudeRateLimit, type Account, type Limit } from "./status.ts";
 
 export type Attachment = { id: string; name: string; mime: string; key: string; size: number };
 export type Queued = { id: string; text: string; attachments: Attachment[] };
@@ -21,7 +22,10 @@ export type State = {
   permissions: Permission[];
   queue: Queued[];
   stream: { id: string | null; text: string };
-  tools: { id: string; title: string }[];
+  tools: { id: string; title: string; subagent: boolean }[];
+  context: { used: number; size: number } | null;
+  limits: Limit[];
+  account: Account | null;
   partial: number[];
   partialKey: string | null;
   streamKey: string | null;
@@ -45,7 +49,7 @@ export type State = {
 export function initialState(): State {
   return { schema: 1, generation: "", nextId: 1, pending: {}, sessionId: null,
     capabilities: { loadSession: false, image: false, http: false, list: false, delete: false }, authMethods: [], controls: [], permissions: [], queue: [],
-    stream: { id: null, text: "" }, tools: [], partial: [], partialKey: null, streamKey: null, guideSent: false,
+    stream: { id: null, text: "" }, tools: [], context: null, limits: [], account: null, partial: [], partialKey: null, streamKey: null, guideSent: false,
     phase: "starting", replay: false, replayItems: [], sessionError: null, needsNew: false, initialized: false, failure: null,
     completed: [], outbox: [], servicesUsed: null, restartPending: false, contextTicket: null, restoreControls: [] };
 }
@@ -130,17 +134,28 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
       const controls = controlsFrom({ configOptions: update.configOptions });
       return { ...state, controls: [...controls, ...state.controls.filter((c) => c.id.startsWith("__legacy_") && !controls.some((o) => o.category === c.category))] };
     }
+    if (update?.sessionUpdate === "usage_update") {
+      if (state.replay) return state;
+      const limit = readClaudeRateLimit(update._meta?.["_claude/rateLimit"]);
+      const size = update.size;
+      return { ...state,
+        context: typeof update.used === "number" && typeof size === "number" && size > 0 ? { used: update.used, size } : null,
+        limits: limit ? mergeLimit(state.limits, limit) : state.limits };
+    }
     if (update?.sessionUpdate === "tool_call") {
       if (state.replay) return state;
       const terminal = update.status === "completed" || update.status === "failed";
       const finished = finishText(state);
-      return { ...finished, tools: terminal ? finished.tools : [...finished.tools, { id: update.toolCallId, title: update.title }] };
+      return { ...finished, tools: terminal ? finished.tools : [...finished.tools, { id: update.toolCallId, title: update.title, subagent: isSubagentTool(update) }] };
     }
     if (update?.sessionUpdate === "tool_call_update") {
       const terminal = update.status === "completed" || update.status === "failed";
       return { ...state, tools: terminal ? state.tools.filter((t) => t.id !== update.toolCallId) : state.tools.map((t) => t.id === update.toolCallId && update.title ? { ...t, title: update.title } : t) };
     }
     return state;
+  }
+  if (message.method === "auth/status_update" && message.id === undefined) {
+    return { ...state, account: readAuthStatus(message.params) ?? state.account };
   }
   if (typeof message.method === "string") {
     return message.id === undefined ? state : { ...state, outbox: [...state.outbox, { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Method not found" } }] };
@@ -165,7 +180,8 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     if (request.kind === "load") return { ...next, phase: "starting", replay: false, needsNew: true };
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
     const finished = request.kind === "prompt" ? finishText(next) : next;
-    return { ...finished, phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, permissions: [], tools: [] };
+    const limit = request.kind === "prompt" && message.error.data?.errorKind === "rate_limit" ? readClaudeRateLimit(message.error.data.rateLimit) : null;
+    return { ...finished, limits: limit ? mergeLimit(finished.limits, limit) : finished.limits, phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, permissions: [], tools: [] };
   }
   if (!message.result) return next;
   if (request.kind === "initialize") {
@@ -178,11 +194,11 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
   if (request.kind === "switch" || request.kind === "new_user") {
     const result = message.result as NewSessionResponse;
     return { ...next, sessionId: request.kind === "switch" ? String(request.params) : result.sessionId,
-      replay: false, replayItems: [], sessionError: null, guideSent: request.kind === "switch" && hadGuide(state.replayItems ?? []), refreshAfterFirstPrompt: request.kind === "new_user", controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
+      replay: false, replayItems: [], context: null, sessionError: null, guideSent: request.kind === "switch" && hadGuide(state.replayItems ?? []), refreshAfterFirstPrompt: request.kind === "new_user", controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
   }
   if (request.kind === "new" || request.kind === "load") {
     const result = message.result as NewSessionResponse;
-    return { ...next, phase: "ready", replay: false, needsNew: false, failure: null, sessionId: request.kind === "new" ? result.sessionId : state.sessionId, refreshAfterFirstPrompt: request.kind === "new", controls: controlsFrom(result as Record<string, any>) };
+    return { ...next, phase: "ready", replay: false, needsNew: false, failure: null, context: request.kind === "new" ? null : state.context, sessionId: request.kind === "new" ? result.sessionId : state.sessionId, refreshAfterFirstPrompt: request.kind === "new", controls: controlsFrom(result as Record<string, any>) };
   }
   if (request.kind === "authenticate") return { ...next, phase: "starting", failure: null };
   if (request.kind === "prompt") return { ...finishText(next), phase: "ready", permissions: [], tools: [] };
