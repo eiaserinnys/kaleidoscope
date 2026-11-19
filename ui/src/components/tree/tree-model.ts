@@ -10,7 +10,7 @@ export interface TreeNode {
   ariaSelectable?: boolean;
   checked?: boolean;
   leading?: ReactNode;
-  /// 잎 줄의 `leading`보다 먼저 보이는 그림. 자식이 있는 줄에서는 펼침 화살표 뒤의 별도 열에 그린다.
+  /// 줄 앞의 그림. 트리에 하나라도 있으면 모든 줄이 펼침 화살표 열 다음에 같은 크기의 그림 열을 두고, 없는 줄은 그 자리를 비운다.
   leadingImage?: ReactNode;
   /// 제목 아래의 작은 보조색 한 줄. 있으면 그 줄은 두 줄 높이가 된다.
   subtitle?: ReactNode;
@@ -37,6 +37,13 @@ export interface TreeRowModel {
   position: number;
   setSize: number;
   indent?: string;
+}
+
+/** 접힌 자식과 `after` 줄까지 포함한 트리 전체에 조건을 만족하는 항목이 있는지 본다. */
+export function treeHasNode(nodes: readonly TreeNode[], predicate: (node: TreeNode) => boolean): boolean {
+  return nodes.some((node) => predicate(node)
+    || (node.after !== undefined && treeHasNode([node.after], predicate))
+    || (node.children !== undefined && treeHasNode(node.children, predicate)));
 }
 
 export function flattenTreeModel(nodes: TreeNode[], expanded: ReadonlySet<string>): TreeRowModel[] {

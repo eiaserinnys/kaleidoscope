@@ -5,7 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { isValidElement } from "react";
 import { keepRovingRow, useVirtualRows, VirtualSurface } from "../../blocks/data-view-common";
 import type { TreeNode, TreeRowModel } from "./tree-model";
-import { flattenTreeModel } from "./tree-model";
+import { flattenTreeModel, treeHasNode } from "./tree-model";
 import { TreeRow } from "./tree-row";
 import type { ReactNode } from "react";
 import { SHELL_TREE_CONTROL_HEIGHT_MISSING } from "../../contract/shell-errors";
@@ -42,6 +42,8 @@ function sameNode(left: TreeRowModel["node"], right: TreeRowModel["node"]): bool
     && left.rowClassName === right.rowClassName
     && sameValue(left.commentKey, right.commentKey)
     && sameValue(left.leading, right.leading)
+    && sameValue(left.leadingImage, right.leadingImage)
+    && sameValue(left.subtitle, right.subtitle)
     && sameValue(left.meta, right.meta)
     && sameValue(left.trailing, right.trailing)
     && sameValue(left.content, right.content)
@@ -130,6 +132,9 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
     return stable;
   }, [nodes, expanded, endAction]);
   const treeRows = useMemo(() => flat.filter((row) => row.node.content === undefined), [flat]);
+  // 그림 트리인지는 펼치지 않은 자식까지 포함한 트리 전체로 정해, 펼치고 접을 때 열이 바뀌지 않는다.
+  const imageColumn = useMemo(() => treeHasNode(nodes, (node) => node.leadingImage !== undefined), [nodes]);
+  const largeImage = useMemo(() => imageColumn && treeHasNode(nodes, (node) => node.subtitle !== undefined), [imageColumn, nodes]);
   const selectableRows = useMemo(() => treeRows.filter((row) => row.id !== "tree:end-action"), [treeRows]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const seenInteractiveRows = useRef(new Set<string>());
@@ -489,7 +494,9 @@ export function TreeView({ rootProps, commentKey, nodes, expanded, selectedId, l
           checkEnabled={onCheck !== undefined}
           commentKey={identity === undefined ? undefined : encodeCommentKey(identity)}
           focused={effectiveFocus === row.id}
+          imageColumn={imageColumn}
           index={item.index}
+          largeImage={largeImage}
           start={item.start}
           key={row.id}
           measure={virtual.measureElement}

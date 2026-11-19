@@ -395,7 +395,11 @@ min_width?: number,
 /**
  * (19판) 창 본문 너비가 CSS px 기준으로 이 값 이하일 때 자식을 그린다.
  */
-max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, 
+max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, 
+/**
+ * (67판) 참이면 확정 단추가 잠기고 Enter로도 확정되지 않는다. 취소, 닫기, Esc는 그대로다. `button.disabled`와 같은 바인딩이다.
+ */
+confirm_disabled?: Binding, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, 
 /**
  * (64판) 바를 같은 폭의 이 수만큼 나누는 칸막이를 그린다. 2 이상이어야 한다.
  */

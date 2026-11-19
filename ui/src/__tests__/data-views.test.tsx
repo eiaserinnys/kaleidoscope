@@ -705,13 +705,15 @@ it("only toggles virtual path folders without selecting them", async () => {
   expect(folder.getAttribute("aria-expanded")).toBe("false");
   expect(screen.queryByRole("treeitem", { name: "항목" })).toBeNull();
 });
-it("그림이 있는 트리 잎은 파일 표식 자리에 그림을 그리고 circle이면 원으로 그린다", async () => {
+it("그림이 있는 트리 잎은 빈 화살표 열 다음 그림 열에 그림을 그리고 circle이면 원으로 그린다", async () => {
   setup({ type: "tree", by: "children", items: [{ key: "leaf", title: "잎", image: { asset: "photo" } }] }, {});
   const leaf = await screen.findByRole("treeitem", { name: "잎" });
   const icons = leaf.querySelectorAll(":scope > .ks-file-tree-icon");
-  expect(icons).toHaveLength(1);
+  expect(icons).toHaveLength(2);
   expect(icons[0].querySelector(".ks-chevron")).toBeNull();
-  expect(icons[0].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  expect(icons[0].childElementCount).toBe(0);
+  expect(icons[1].classList.contains("is-image")).toBe(true);
+  expect(icons[1].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
   cleanup();
   setup({ type: "tree", by: "children", image_shape: "circle", items: [{ key: "leaf", title: "잎", image: { asset: "photo" } }] }, {});
   const circled = await screen.findByRole("treeitem", { name: "잎" });
@@ -729,6 +731,124 @@ it("그림이 있는 트리 부모 줄은 펼침 화살표 뒤에 그림 열을 
   const plain = await screen.findByRole("treeitem", { name: "폴더" });
   expect(plain.querySelectorAll(":scope > .ks-file-tree-icon")).toHaveLength(1);
   expect(plain.querySelector(".ks-media-thumbnail")).toBeNull();
+});
+it("그림 트리는 자식 없는 줄, 자식 있는 줄, 그림 없는 줄 모두 화살표 열과 그림 열 두 칸을 같은 차례로 둔다", async () => {
+  setup({ type: "tree", by: "children", items: [
+    { key: "leaf", title: "잎", image: { asset: "photo" } },
+    { key: "folder", title: "폴더", image: { asset: "folder" }, children: [{ key: "child", title: "하위" }] },
+    { key: "bare", title: "그림 없음" },
+  ] }, {});
+  const leaf = [...(await screen.findByRole("treeitem", { name: "잎" })).querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(leaf).toHaveLength(2);
+  expect(leaf[0].childElementCount).toBe(0);
+  expect(leaf[1].classList.contains("is-image")).toBe(true);
+  expect(leaf[1].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  const folder = [...screen.getByRole("treeitem", { name: "폴더" }).querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(folder).toHaveLength(2);
+  expect(folder[0].querySelector(".ks-chevron")).not.toBeNull();
+  expect(folder[1].classList.contains("is-image")).toBe(true);
+  expect(folder[1].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  const bare = [...screen.getByRole("treeitem", { name: "그림 없음" }).querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(bare).toHaveLength(2);
+  expect(bare[0].childElementCount).toBe(0);
+  expect(bare[1].classList.contains("is-image")).toBe(true);
+  expect(bare[1].childElementCount).toBe(0);
+});
+it("접힌 자식에만 그림이 있어도 그림 트리로 보아 보이는 줄이 두 칸을 갖는다", async () => {
+  setup({ type: "tree", by: "children", items: [
+    { key: "folder", title: "폴더", children: [{ key: "child", title: "하위", image: { asset: "photo" } }] },
+    { key: "leaf", title: "잎" },
+  ] }, {});
+  const folder = await screen.findByRole("treeitem", { name: "폴더" });
+  expect(folder.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("treeitem", { name: "하위" })).toBeNull();
+  expect(folder.querySelectorAll(":scope > .ks-file-tree-icon")).toHaveLength(2);
+  expect(folder.querySelector(":scope > .ks-file-tree-icon.is-image")!.childElementCount).toBe(0);
+  expect(screen.getByRole("treeitem", { name: "잎" }).querySelectorAll(":scope > .ks-file-tree-icon")).toHaveLength(2);
+});
+it("subtitle이 있는 그림 트리의 그림 열은 큰 크기 표시를 갖고 subtitle이 없는 그림 트리는 갖지 않는다", async () => {
+  setup({ type: "tree", by: "children", items: [
+    { key: "a", title: "하나", subtitle: "둘째 줄", image: { asset: "photo" } },
+    { key: "b", title: "둘", image: { asset: "other" } },
+    { key: "c", title: "셋" },
+  ] }, {});
+  await screen.findByRole("treeitem", { name: /하나/ });
+  for (const row of screen.getAllByRole("treeitem")) {
+    const column = row.querySelector(":scope > .ks-file-tree-icon.is-image");
+    expect(column).not.toBeNull();
+    expect(column!.classList.contains("is-large")).toBe(true);
+  }
+  cleanup();
+  setup({ type: "tree", by: "children", items: [{ key: "a", title: "하나", image: { asset: "photo" } }, { key: "b", title: "둘" }] }, {});
+  await screen.findByRole("treeitem", { name: "하나" });
+  for (const row of screen.getAllByRole("treeitem")) {
+    expect(row.querySelector(":scope > .ks-file-tree-icon.is-image")).not.toBeNull();
+    expect(row.querySelector(":scope > .ks-file-tree-icon.is-large")).toBeNull();
+  }
+});
+it("확인 상자 모드의 그림 트리는 모든 줄에 화살표, 확인 상자, 그림 차례로 세 칸을 둔다", async () => {
+  setup({ type: "tree", by: "children", on_check: [], items: [
+    { key: "folder", title: "폴더", checked: false, image: { asset: "folder" }, children: [{ key: "child", title: "하위" }] },
+    { key: "leaf", title: "잎", image: { asset: "photo" } },
+    { key: "plain", title: "확인만", checked: true },
+  ] } as unknown as Block, {});
+  const folder = [...(await screen.findByRole("treeitem", { name: "폴더" })).querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(folder).toHaveLength(3);
+  expect(folder[0].querySelector(".ks-chevron")).not.toBeNull();
+  expect(folder[1].querySelector(".ks-tree-check")).not.toBeNull();
+  expect(folder[2].classList.contains("is-image")).toBe(true);
+  expect(folder[2].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  const leaf = [...screen.getByRole("treeitem", { name: "잎" }).querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(leaf).toHaveLength(3);
+  expect(leaf[0].childElementCount).toBe(0);
+  expect(leaf[1].childElementCount).toBe(0);
+  expect(leaf[2].querySelector(".ks-media-thumbnail.ks-tree-image")).not.toBeNull();
+  const plain = [...screen.getByRole("treeitem", { name: "확인만" }).querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(plain).toHaveLength(3);
+  expect(plain[0].childElementCount).toBe(0);
+  expect(plain[1].querySelector(".ks-tree-check")).not.toBeNull();
+  expect(plain[2].classList.contains("is-image")).toBe(true);
+  expect(plain[2].childElementCount).toBe(0);
+});
+it("그림 없는 확인 상자 트리는 지금 열 구조를 지킨다", async () => {
+  setup({ type: "tree", by: "children", on_check: [], items: [
+    { key: "folder", title: "폴더", children: [{ key: "child", title: "하위" }] },
+    { key: "leaf", title: "잎", checked: false },
+  ] } as unknown as Block, {});
+  const folder = await screen.findByRole("treeitem", { name: "폴더" });
+  expect(folder.querySelectorAll(":scope > .ks-file-tree-icon")).toHaveLength(1);
+  const leaf = [...screen.getByRole("treeitem", { name: "잎" }).querySelectorAll(":scope > .ks-file-tree-icon")];
+  expect(leaf).toHaveLength(2);
+  expect(leaf[1].querySelector(".ks-tree-check")).not.toBeNull();
+  expect(screen.getByRole("tree").querySelector(".is-image")).toBeNull();
+});
+it("dialog의 confirm_disabled가 참이면 확정 단추가 잠기고 Enter로도 on_confirm이 불리지 않으며 거짓이나 생략이면 지금과 같다", async () => {
+  const dialog = (confirmDisabled?: JsonValue): Block => ({ type: "stack", direction: "column", children: [{
+    type: "dialog", open: true, title: "새 폴더", close_label: "만들기", child: { type: "text", value: "본문" },
+    on_confirm: [{ set_state: "done", value: true }], on_close: [{ set_state: "open", value: false }],
+    ...(confirmDisabled === undefined ? {} : { confirm_disabled: confirmDisabled }),
+  }] } as unknown as Block);
+  const confirmed = (calls: ReturnType<typeof setup>["calls"]) => calls.mock.calls.some(([request]) => request.op === "data.act" && request.pointer.endsWith("/on_confirm"));
+  const locked = setup(dialog({ state: "locked" }), { locked: true, done: false });
+  const button = await screen.findByRole("button", { name: "만들기" }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "취소" }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(button);
+  // 잠긴 단추는 초점을 받지 못하므로 Enter가 단추 누름이 되지 않는다. 아래 열린 경우가 같은 Enter로 확정되는 것을 보여 이 단언이 비어 있지 않음을 증명한다.
+  button.focus();
+  await userEvent.keyboard("{Enter}");
+  await act(async () => { await Promise.resolve(); });
+  expect(confirmed(locked.calls)).toBe(false);
+  cleanup();
+  for (const [binding, press] of [[{ state: "locked" }, "enter"], [undefined, "click"]] as const) {
+    const open = setup(dialog(binding), { locked: false, done: false });
+    const confirm = await screen.findByRole("button", { name: "만들기" }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(false);
+    if (press === "enter") { confirm.focus(); await userEvent.keyboard("{Enter}"); }
+    else fireEvent.click(confirm);
+    await waitFor(() => expect(confirmed(open.calls)).toBe(true));
+    cleanup();
+  }
 });
 it("트리 항목 subtitle은 제목 아래 둘째 줄로 그리고 subtitle이 없는 행은 지금 구조를 지킨다", async () => {
   setup({ type: "tree", by: "children", items: [{ key: "one", title: "카드", subtitle: "프로필 · 서버 · 모델" }] }, {});
