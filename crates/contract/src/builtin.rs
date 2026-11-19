@@ -140,7 +140,7 @@ pub const BUILTIN_IDENTITIES: &[BuiltinIdentity] = &[
         name: "에이전트",
         version: 19,
         updated_at: "2026-11-19T00:00:00Z",
-        blocks: crate::PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,
+        blocks: crate::CHAT_INPUT_HEADER_BLOCK_SET_VERSION,
         modules: &[("assets", 1), ("client", crate::RECEIVE_MESSAGE_CLIENT_VERSION), ("files", 1), ("process", 1), ("storage", 1), ("worker", 1)],
         assets: AGENT_ASSET_KEYS,
     },

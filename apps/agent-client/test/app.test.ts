@@ -270,26 +270,29 @@ test("상태 줄 표시 조건: 저장소가 켜져도 채팅이 안 보이면 �
   assert.equal(views.at(-1).show_status_bar, false);
 });
 
-test("칩 순서: 계정, model, thought_level, mode", () => {
+test("칩 순서: 계정 라벨(이메일 없이), model, thought_level, mode", () => {
   const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
   const { views, app } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: "a@b.c" } });
-  assert.deepEqual(views.at(-1).status_chips.map((chip: any) => chip.text), ["Claude Team, a@b.c", "Opus 5.5", "높음", "Auto"]);
+  assert.deepEqual(views.at(-1).status_chips.map((chip: any) => chip.text), ["Claude Team", "Opus 5.5", "높음", "Auto"]);
+  // 설정의 계정 줄은 이메일까지 보인다
+  assert.equal(views.at(-1).status_account, "Claude Team, a@b.c");
   (app as any).receive({ ...readyView(), controls, account: null });
   assert.deepEqual(views.at(-1).status_chips.map((chip: any) => chip.text), ["Opus 5.5", "높음", "Auto"]);
 });
 
-test("한도 요약: 가장 빠듯한 창과 나머지 개수", () => {
-  const limits = [limit("seven_day", "7일", 0.3), limit("five_hour", "5시간", 0.89), limit("seven_day_opus", "Opus 7일", 0.1)];
+test("한도 막대: session은 5시간, weekly는 7일 창이고 다른 창은 설정에서만 보인다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 12, 0) });
+  const at = (day: number, hour: number) => new Date(2031, 10, day, hour, 0).toISOString();
+  const limits = [limit("seven_day", "7일", 0.3, { resetsAt: at(20, 18) }), limit("five_hour", "5시간", 0.58, { resetsAt: at(17, 15) }), limit("seven_day_opus", "Opus 7일", 0.9, { resetsAt: at(19, 0) })];
   const { views, app } = stagedApp({ ...readyView(), limits });
-  assert.equal(views.at(-1).status_limit_text, "5시간 11% 남음");
-  assert.equal(views.at(-1).status_limit_value, 0.89);
-  assert.equal(views.at(-1).status_limit_more, "외 2");
-  assert.equal(views.at(-1).status_limits.length, 3);
+  assert.deepEqual(views.at(-1).status_limit_bars, [
+    { key: "session", label: "session", value: 0.58, text: "58%", left: "3시간 남음" },
+    { key: "weekly", label: "weekly", value: 0.3, text: "30%", left: "3일 남음" },
+  ]);
+  assert.deepEqual(views.at(-1).status_limits.map((row: any) => [row.label, row.text]), [["7일", "30% 사용, 3일 남음"], ["5시간", "58% 사용, 3시간 남음"], ["Opus 7일", "90% 사용, 1일 남음"]]);
   assert.equal(views.at(-1).status_no_limits, false);
   (app as any).receive({ ...readyView(), limits: [] });
-  assert.equal(views.at(-1).status_limit_text, null);
-  assert.equal(views.at(-1).status_limit_value, null);
-  assert.equal(views.at(-1).status_limit_more, null);
+  assert.deepEqual(views.at(-1).status_limit_bars, []);
   assert.equal(views.at(-1).status_no_limits, true);
 });
 
@@ -314,69 +317,77 @@ test("토글 쓰기: toggle_status_bar는 저장소 status_bar에 쓴다", async
   assert.deepEqual(writes, [["status_bar", true]]);
 });
 
-test("한도 상태 줄: 전부 모르면 숨기고 설정 행은 모름, 막히면 막힘 문구", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+test("한도 막대: 모르는 창은 빼고 설정 행은 모름, 막히면 막힘과 남은 시간", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 4, 0) });
   const unknown = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", null)] });
   const view = unknown.views.at(-1);
-  assert.equal(view.status_limit_value, null);
-  assert.equal(view.status_limit_text, null);
-  assert.equal(view.status_limit_more, null);
+  assert.deepEqual(view.status_limit_bars, []);
   assert.equal(view.status_limits.length, 1);
   assert.equal(view.status_limits[0].known, false);
+  assert.equal(view.status_limits[0].text, "아직 모름");
   const resetsAt = new Date(2031, 10, 17, 5, 0).toISOString();
   const blocked = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 1, { blocked: true, resetsAt })] });
-  assert.equal(blocked.views.at(-1).status_limit_text, "5시간 막힘, 11/17 05:00까지");
-  assert.equal(blocked.views.at(-1).status_limit_value, 1);
+  assert.deepEqual(blocked.views.at(-1).status_limit_bars, [{ key: "session", label: "session", value: 1, text: "막힘", left: "1시간 남음" }]);
+  assert.equal(blocked.views.at(-1).status_limits[0].text, "막힘, 1시간 남음");
 });
 
 test("상태 줄 칸 표시 여부: when은 참인 불리언만 보므로 값이 있는 칸마다 짝 필드가 있다", () => {
-  const limits = [limit("five_hour", "5시간", 0.89), limit("seven_day", "7일", 0.3)];
-  const { views, app } = stagedApp({ ...readyView(), context: { used: 42, size: 100 }, subagents: 2, limits, account: { label: "Claude Team", email: null } });
+  const { views, app } = stagedApp({ ...readyView(), context: { used: 42, size: 100 }, subagents: 2, account: { label: "Claude Team", email: null } });
   let view = views.at(-1);
-  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_limit, view.status_has_limit_more, view.status_has_account], [true, true, true, true, true]);
+  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_account], [true, true, true]);
   assert.equal(view.status_context_bar, 0.42);
   (app as any).receive(readyView());
   view = views.at(-1);
-  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_limit, view.status_has_limit_more, view.status_has_account], [false, false, false, false, false]);
+  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_account], [false, false, false]);
   assert.equal(view.status_context_bar, 0);
 });
 
-test("좁은 창 칩은 model 하나만, 한도를 전부 모르면 상태 줄 한도 막대가 없다", () => {
+test("좁은 창 칩은 model 하나만", () => {
   const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
-  const { views } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: null }, limits: [limit("five_hour", "5시간", null), limit("seven_day", "7일", null)] });
+  const { views } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: null } });
   const view = views.at(-1);
   assert.deepEqual(view.status_chips_narrow.map((chip: any) => chip.text), ["Opus 5.5"]);
   assert.equal(view.status_chips.length, 4);
-  assert.equal(view.status_has_limit, false);
-  assert.equal(view.status_limit_value, null);
-  assert.equal(view.status_has_limit_more, false);
-  assert.deepEqual(view.status_limits.map((row: any) => row.unknown), [true, true]);
   assert.equal(view.status_no_context, true);
 });
 
-test("다시 차는 시각이 지나면 그 창을 상태 줄 후보에서 빼고 설정 행은 아직 모름으로 다시 그린다", (t) => {
+test("다시 차는 시각이 지나면 그 막대를 빼고 설정 행은 아직 모름으로 다시 그린다", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 4, 59, 30) });
-  const soon = new Date(2031, 10, 17, 5, 0).toISOString(), later = new Date(2031, 10, 17, 18, 0).toISOString();
+  const soon = new Date(2031, 10, 17, 5, 0).toISOString(), later = new Date(2031, 10, 18, 18, 0).toISOString();
   const { views } = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 1, { blocked: true, resetsAt: soon }), limit("seven_day", "7일", 0.3, { resetsAt: later })] });
-  assert.equal(views.at(-1).status_limit_text, "5시간 막힘, 05:00까지");
-  t.mock.timers.tick(29_999);
-  assert.equal(views.at(-1).status_limit_text, "5시간 막힘, 05:00까지");
+  assert.deepEqual(views.at(-1).status_limit_bars.map((bar: any) => [bar.key, bar.text, bar.left]), [["session", "막힘", "1분 남음"], ["weekly", "30%", "1일 남음"]]);
+  t.mock.timers.tick(30_000);
+  assert.equal(views.at(-1).status_limit_bars.length, 2);
   t.mock.timers.tick(1);
   const view = views.at(-1);
-  assert.equal(view.status_limit_text, "7일 70% 남음 (18:00)");
-  assert.equal(view.status_limit_value, 0.3);
-  assert.deepEqual(view.status_limits.map((row: any) => [row.text, row.unknown]), [["아직 모름", true], ["70% 남음 (18:00)", false]]);
+  assert.deepEqual(view.status_limit_bars.map((bar: any) => bar.key), ["weekly"]);
+  assert.deepEqual(view.status_limits.map((row: any) => [row.text, row.unknown]), [["아직 모름", true], ["30% 사용, 1일 남음", false]]);
 });
 
-test("먼 다시 차는 시각은 1시간마다 다시 재서 그 시각에 다시 그린다", (t) => {
+test("남은 시간 글은 단위 경계마다 다시 그리고, 먼 경계는 1시간마다 다시 잰다", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 3, 0) });
   const resetsAt = new Date(2031, 10, 17, 5, 30).toISOString();
   const { views } = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 0.5, { resetsAt })] });
-  const published = views.length;
-  t.mock.timers.tick(2 * 3_600_000);
-  assert.equal(views.length, published);
-  assert.equal(views.at(-1).status_has_limit, true);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2시간 남음");
+  // 꼭 2시간 남은 때는 아직 2시간이고, 1ms 뒤에 1시간으로 바뀐다
   t.mock.timers.tick(30 * 60_000);
-  assert.equal(views.at(-1).status_has_limit, false);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2시간 남음");
+  t.mock.timers.tick(1);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "1시간 남음");
+  t.mock.timers.tick(60 * 60_000);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "59분 남음");
+  t.mock.timers.tick(60 * 60_000);
+  assert.deepEqual(views.at(-1).status_limit_bars, []);
   assert.equal(views.at(-1).status_limits[0].text, "아직 모름");
+});
+
+test("하루가 넘게 남은 창은 다음 경계가 멀어도 1시간 뒤에 다시 잰다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 3, 0) });
+  const resetsAt = new Date(2031, 10, 20, 2, 0).toISOString();
+  const { views } = stagedApp({ ...readyView(), limits: [limit("seven_day", "7일", 0.5, { resetsAt })] });
+  const published = views.length;
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2일 남음");
+  t.mock.timers.tick(60 * 60_000);
+  assert.equal(views.length, published);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2일 남음");
 });
