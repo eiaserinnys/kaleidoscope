@@ -69,13 +69,15 @@ for (const width of [1280, 360]) test(`시각 검수 ${width}`, async ({ page })
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(page.locator(section("a")).locator(".ks-data-section-toggle")).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.locator(section("a")).getByRole("button", { name: "추가" })).toBeFocused();
   const metrics = await page.evaluate(() => ({
     overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     focusVisible: !!document.activeElement && document.activeElement !== document.body,
     overlap: Array.from(document.querySelectorAll(".ks-data-section-header")).some((header) => {
       const heading = header.querySelector(".ks-data-section-toggle")?.getBoundingClientRect();
       const actions = header.querySelector(".ks-data-section-actions")?.getBoundingClientRect();
-      return !!heading && !!actions && heading.right > actions.left + 1;
+      return !!heading && !!actions && heading.right > actions.left + 1 && heading.left < actions.right - 1
+        && heading.bottom > actions.top + 1 && heading.top < actions.bottom - 1;
     }),
   }));
   expect(metrics.overflow).toBe(false);

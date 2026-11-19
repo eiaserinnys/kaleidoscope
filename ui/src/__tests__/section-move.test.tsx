@@ -43,6 +43,10 @@ it("구역 머리를 끌어 다른 구역 앞에 놓으면 대상 범위와 이�
   const middle = (await screen.findByRole("button", { name: "둘째" })).closest(".ks-data-section-header")!;
   vi.spyOn(middle, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 40, height: 40 } as DOMRect);
   drag("dragstart", source);
+  drag("dragover", source, 10);
+  drag("drop", source, 10);
+  expect(count()).toBe(1);
+  drag("dragstart", source);
   drag("dragover", middle, 30);
   expect(middle.getAttribute("data-drop-position")).toBeNull();
   drag("drop", middle, 30);
@@ -59,6 +63,35 @@ it("구역 머리를 끌어 다른 구역 앞에 놓으면 대상 범위와 이�
   drag("dragover", target, 10);
   fireEvent.keyDown(document, { key: "Escape" });
   expect(target.getAttribute("data-drop-position")).toBeNull();
+});
+
+it("구역 끌기와 트리 끌기는 서로를 놓을 자리로 받지 않는다", async () => {
+  mockVirtualLayout();
+  const ui = { type: "repeat", items: { state: "groups" }, key: "key", template: {
+    type: "section", title: { item: "title" }, collapsible: true, on_move: [{ set_state: "last" }],
+    child: { type: "tree", items: { item: "rows" }, by: "children", on_move: [{ set_state: "last" }] },
+  } } as unknown as Block;
+  const state = { groups: [{ key: "a", title: "첫째", rows: [{ key: "row-a", title: "첫 행" }] }, { key: "b", title: "둘째", rows: [] }], last: null };
+  const definition: AppDefinition = { ...mdViewerDefinition, requires: { blocks: 66, modules: {} }, permissions: [], state, ui };
+  const seed = makeTestSeed({ definitions: [definition] }); seed.snapshot.shared.windows[0].state = state;
+  render(<AppWindowContent store={createShellStore(createFakeTransport(seed))} windowId="viewer-window" />);
+  const first = (await screen.findByRole("button", { name: "첫째" })).closest(".ks-data-section-header")!;
+  const second = (await screen.findByRole("button", { name: "둘째" })).closest(".ks-data-section-header")!;
+  const row = await screen.findByRole("treeitem", { name: "첫 행" });
+  const emptyTree = second.parentElement!.querySelector(".ks-data-tree")!;
+  const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
+  const drag = (type: string, element: Element) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY: 5 });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    fireEvent(element, event);
+  };
+  drag("dragstart", row); drag("dragover", second);
+  expect(second.getAttribute("data-drop-position")).toBeNull();
+  drag("dragend", row);
+  drag("dragstart", first); drag("dragover", row); drag("dragover", emptyTree);
+  expect(row.getAttribute("data-drop-state")).toBeNull();
+  expect(emptyTree.getAttribute("data-drop-state")).toBeNull();
+  drag("dragend", first);
 });
 
 it("동작 단추와 편집 중인 머리는 끌기를 시작하지 않는다", async () => {

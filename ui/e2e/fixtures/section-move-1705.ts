@@ -4,7 +4,7 @@ const source = `(() => {
   const bridge = window.kaleidoscope;
   let sections = [
     {key:'a', title:'업무', rows:[{key:'a1',title:'계획 세우기'},{key:'a2',title:'자료 확인'}]},
-    {key:'b', title:'개인', rows:[{key:'b1',title:'책 읽기'}]},
+    {key:'b', title:'개인과 오래 기다리는 일을 모아 두는 긴 묶음 이름', rows:[{key:'b1',title:'책 읽기'}]},
     {key:'c', title:'나중에', rows:[]}
   ];
   const publish = () => bridge.publish({sections});
