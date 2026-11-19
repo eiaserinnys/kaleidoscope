@@ -10,6 +10,7 @@
 - pane-list: 칸에 바로 놓인 찾기 막대와 list. 찾기 칸 x와 list 행 내용 x를 기록한다(전후 같아야 한다).
 - toolbar-form: 막대 다음 입력 묶음과, 같은 묶음을 탭 패널에 둔 비교 장면. 막대 아래 선에서 첫 이름표까지의 거리가
   탭 단추 아래에서 첫 이름표까지의 거리와 같다(±1px).
+- toolbar-form-when: 같은 장면에 막대와 입력 묶음 사이에 그리지 않은 when 칸 둘을 끼운 것. 판정은 toolbar-form과 같다.
 - toolbar-list: 막대 다음 list. 막대 아래 선에서 첫 줄까지의 거리를 기록한다(전후 같아야 한다).
 - dialog-confirm-locked: confirm_disabled가 참인 대화상자. 확정 단추가 disabled다.
 
@@ -80,6 +81,7 @@ FORM = {"type": "stack", "direction": "column", "gap": "medium", "fill": 1, "chi
     {"type": "toolbar", "start": [], "end": [{"type": "button", "label": "취소", "on_click": []}, {"type": "button", "label": "만들기", "variant": "primary", "on_click": []}]},
 ]}
 TITLE_TOOLBAR = {"type": "toolbar", "start": [{"type": "text", "value": "새 카드"}]}
+HIDDEN = {"type": "when", "value": False, "child": {"type": "text", "value": "그리지 않는 칸"}}
 SEARCH_TOOLBAR = {"type": "toolbar", "start": [
     {"type": "input", "value": {"state": "query"}, "on_change": {"set_state": "query"}, "kind": "search", "placeholder": "제목으로 찾기"},
 ], "end": [{"type": "button", "label": "새로", "icon": "plus", "icon_only": True, "on_click": []}]}
@@ -109,6 +111,11 @@ SCENES = {
     ]},
     "toolbar-form": {"type": "split", "direction": "row", "children": [
         col([TITLE_TOOLBAR, FORM], fill=1),
+        tabs("설정", {"type": "stack", "direction": "column", "gap": "medium", "fill": 1, "children": [*FORM_FIELDS, {"type": "text", "value": "탭 패널 비교"}]}),
+    ]},
+    # 카드 앱의 오른쪽 칸처럼 막대와 입력 묶음 사이에 그리지 않은 when 칸이 끼어도 막대 다음으로 본다.
+    "toolbar-form-when": {"type": "split", "direction": "row", "children": [
+        col([TITLE_TOOLBAR, HIDDEN, HIDDEN, FORM], fill=3),
         tabs("설정", {"type": "stack", "direction": "column", "gap": "medium", "fill": 1, "children": [*FORM_FIELDS, {"type": "text", "value": "탭 패널 비교"}]}),
     ]},
     "toolbar-list": col([SEARCH_TOOLBAR, PLAIN_LIST], fill=1),
@@ -214,7 +221,7 @@ def judge(name, m):
         checks["tree_row_inside_panel"] = m["treeRowLeft"] is not None and m["treeRowLeft"] >= m["panelLeft"] - TOLERANCE
     elif name == "pane-list":
         checks["list_matches_search"] = close(m["listContentX"], m["toolbarInputX"])
-    elif name == "toolbar-form":
+    elif name.startswith("toolbar-form"):
         checks["labels_found"] = m["toolbarLabelTop"] is not None and m["panelLabelTop"] is not None
         gap_toolbar = m["toolbarLabelTop"] - m["toolbarBottom"] if checks["labels_found"] else None
         gap_tab = m["panelLabelTop"] - m["tabButtonBottom"] if checks["labels_found"] else None

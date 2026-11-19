@@ -834,16 +834,18 @@ it("dialog의 confirm_disabled가 참이면 확정 단추가 잠기고 Enter로�
   expect(button.disabled).toBe(true);
   expect((screen.getByRole("button", { name: "취소" }) as HTMLButtonElement).disabled).toBe(false);
   fireEvent.click(button);
-  fireEvent.keyDown(button, { key: "Enter" });
-  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+  // 잠긴 단추는 초점을 받지 못하므로 Enter가 단추 누름이 되지 않는다. 아래 열린 경우가 같은 Enter로 확정되는 것을 보여 이 단언이 비어 있지 않음을 증명한다.
+  button.focus();
+  await userEvent.keyboard("{Enter}");
   await act(async () => { await Promise.resolve(); });
   expect(confirmed(locked.calls)).toBe(false);
   cleanup();
-  for (const binding of [{ state: "locked" }, undefined]) {
+  for (const [binding, press] of [[{ state: "locked" }, "enter"], [undefined, "click"]] as const) {
     const open = setup(dialog(binding), { locked: false, done: false });
     const confirm = await screen.findByRole("button", { name: "만들기" }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(false);
-    fireEvent.click(confirm);
+    if (press === "enter") { confirm.focus(); await userEvent.keyboard("{Enter}"); }
+    else fireEvent.click(confirm);
     await waitFor(() => expect(confirmed(open.calls)).toBe(true));
     cleanup();
   }
