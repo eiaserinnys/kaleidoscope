@@ -720,7 +720,7 @@ fn builtin_agent_reads_defaults_before_linking() {
         .find(|version| version.app_id == "agent" && version.version == 18)
         .unwrap()
         .definition;
-    assert_eq!(definition.requires.blocks, 40);
+    assert_eq!(definition.requires.blocks, 65);
     assert_eq!(
         definition
             .client

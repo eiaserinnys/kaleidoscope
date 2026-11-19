@@ -486,6 +486,9 @@ export class AppClient {
       status_limit_more: tightestRow && limits.length > 1 ? `외 ${limits.length - 1}` : null,
       status_limits: limits.map((limit) => limitRow(limit, now)), status_no_limits: limits.length === 0,
       status_account: account, status_subagents_text: subagents > 0 ? `${subagents}개 실행 중` : "없음",
+      // when 블록은 true만 열린 것으로 보므로 값이 비는 칸마다 짝 불리언을 둔다. 설정의 컨텍스트 막대는 모르면 0으로 비워 둔다.
+      status_has_context: context !== null, status_has_subagents: subagents > 0, status_has_limit: tightestRow !== null,
+      status_has_limit_more: tightestRow !== null && limits.length > 1, status_has_account: account !== null, status_context_bar: context ?? 0,
       history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: this.sessionLocked,
       history_disabled: this.sessionLocked || !this.view?.canListSessions,
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",

@@ -327,3 +327,16 @@ test("한도 상태 줄: 전부 모르면 숨기고 설정 행은 모름, 막히
   assert.equal(blocked.views.at(-1).status_limit_text, "5시간 막힘, 11/17 05:00까지");
   assert.equal(blocked.views.at(-1).status_limit_value, 1);
 });
+
+test("상태 줄 칸 표시 여부: when은 참인 불리언만 보므로 값이 있는 칸마다 짝 필드가 있다", () => {
+  const limits = [limit("five_hour", "5시간", 0.89), limit("seven_day", "7일", 0.3)];
+  const { views, app } = stagedApp({ ...readyView(), context: { used: 42, size: 100 }, subagents: 2, limits, account: { label: "Claude Team", email: null } });
+  let view = views.at(-1);
+  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_limit, view.status_has_limit_more, view.status_has_account], [true, true, true, true, true]);
+  assert.equal(view.status_context_bar, 0.42);
+  (app as any).receive(readyView());
+  view = views.at(-1);
+  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_limit, view.status_has_limit_more, view.status_has_account], [false, false, false, false, false]);
+  assert.equal(view.status_context_bar, 0);
+});
+

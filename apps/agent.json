@@ -3,7 +3,7 @@
   "name": "에이전트",
   "icon": { "asset": "builtin-icon-agent", "version": 2 },
   "requires": {
-    "blocks": 40,
+    "blocks": 65,
     "modules": {
       "files": 1,
       "storage": 1,
@@ -188,6 +188,17 @@
             "url": "https://antigravity.google/docs/getting-started/"
           }
         }
+      },
+      {
+        "id": "status_bar",
+        "key": "settings/status_bar",
+        "kind": "json",
+        "label": "창에 상태 항상 보기",
+        "presentation": "hidden",
+        "schema": {
+          "type": "boolean"
+        },
+        "default": false
       }
     ]
   },
@@ -827,41 +838,152 @@
                           "on_attachment": "attachment"
                         },
                         "footer": {
-                          "type": "repeat",
-                          "items": {
-                            "client": "permissions"
-                          },
-                          "key": "id",
-                          "template": {
-                            "type": "stack",
-                            "direction": "column",
-                            "gap": "small",
-                            "children": [
-                              {
-                                "type": "text",
-                                "value": {
-                                  "item": "title"
-                                }
+                          "type": "stack",
+                          "direction": "column",
+                          "gap": "small",
+                          "children": [
+                            {
+                              "type": "repeat",
+                              "items": {
+                                "client": "permissions"
                               },
-                              {
-                                "type": "repeat",
-                                "items": {
-                                  "item": "options"
-                                },
-                                "key": "id",
-                                "template": {
-                                  "type": "button",
-                                  "label": {
-                                    "item": "label"
+                              "key": "id",
+                              "template": {
+                                "type": "stack",
+                                "direction": "column",
+                                "gap": "small",
+                                "children": [
+                                  {
+                                    "type": "text",
+                                    "value": {
+                                      "item": "title"
+                                    }
                                   },
-                                  "on_click": {
-                                    "client": "answer"
+                                  {
+                                    "type": "repeat",
+                                    "items": {
+                                      "item": "options"
+                                    },
+                                    "key": "id",
+                                    "template": {
+                                      "type": "button",
+                                      "label": {
+                                        "item": "label"
+                                      },
+                                      "on_click": {
+                                        "client": "answer"
+                                      }
+                                    },
+                                    "layout": "row"
                                   }
-                                },
-                                "layout": "row"
+                                ]
                               }
-                            ]
-                          }
+                            },
+                            {
+                              "type": "when",
+                              "value": {
+                                "client": "show_status_bar"
+                              },
+                              "child": {
+                                "type": "stack",
+                                "direction": "row",
+                                "gap": "small",
+                                "align": "center",
+                                "wrap": true,
+                                "children": [
+                                  {
+                                    "type": "repeat",
+                                    "items": {
+                                      "client": "status_chips"
+                                    },
+                                    "key": "key",
+                                    "template": {
+                                      "type": "text",
+                                      "value": {
+                                        "item": "text"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_subagents"
+                                    },
+                                    "child": {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_subagents"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_context"
+                                    },
+                                    "child": {
+                                      "type": "stack",
+                                      "direction": "row",
+                                      "gap": "small",
+                                      "align": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "value": "컨텍스트",
+                                          "style": "meta"
+                                        },
+                                        {
+                                          "type": "progress",
+                                          "value": {
+                                            "client": "status_context"
+                                          },
+                                          "max": 1,
+                                          "label": {
+                                            "client": "status_context_text"
+                                          },
+                                          "warning_at": 0.7,
+                                          "danger_at": 0.9
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_limit"
+                                    },
+                                    "child": {
+                                      "type": "progress",
+                                      "value": {
+                                        "client": "status_limit_value"
+                                      },
+                                      "max": 1,
+                                      "label": {
+                                        "client": "status_limit_text"
+                                      },
+                                      "warning_at": 0.8,
+                                      "danger_at": 0.95
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_limit_more"
+                                    },
+                                    "child": {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_limit_more"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ]
                         }
                       }
                     ]
@@ -928,41 +1050,152 @@
                           "on_attachment": "attachment"
                         },
                         "footer": {
-                          "type": "repeat",
-                          "items": {
-                            "client": "permissions"
-                          },
-                          "key": "id",
-                          "template": {
-                            "type": "stack",
-                            "direction": "column",
-                            "gap": "small",
-                            "children": [
-                              {
-                                "type": "text",
-                                "value": {
-                                  "item": "title"
-                                }
+                          "type": "stack",
+                          "direction": "column",
+                          "gap": "small",
+                          "children": [
+                            {
+                              "type": "repeat",
+                              "items": {
+                                "client": "permissions"
                               },
-                              {
-                                "type": "repeat",
-                                "items": {
-                                  "item": "options"
-                                },
-                                "key": "id",
-                                "template": {
-                                  "type": "button",
-                                  "label": {
-                                    "item": "label"
+                              "key": "id",
+                              "template": {
+                                "type": "stack",
+                                "direction": "column",
+                                "gap": "small",
+                                "children": [
+                                  {
+                                    "type": "text",
+                                    "value": {
+                                      "item": "title"
+                                    }
                                   },
-                                  "on_click": {
-                                    "client": "answer"
+                                  {
+                                    "type": "repeat",
+                                    "items": {
+                                      "item": "options"
+                                    },
+                                    "key": "id",
+                                    "template": {
+                                      "type": "button",
+                                      "label": {
+                                        "item": "label"
+                                      },
+                                      "on_click": {
+                                        "client": "answer"
+                                      }
+                                    },
+                                    "layout": "row"
                                   }
-                                },
-                                "layout": "row"
+                                ]
                               }
-                            ]
-                          }
+                            },
+                            {
+                              "type": "when",
+                              "value": {
+                                "client": "show_status_bar"
+                              },
+                              "child": {
+                                "type": "stack",
+                                "direction": "row",
+                                "gap": "small",
+                                "align": "center",
+                                "wrap": true,
+                                "children": [
+                                  {
+                                    "type": "repeat",
+                                    "items": {
+                                      "client": "status_chips"
+                                    },
+                                    "key": "key",
+                                    "template": {
+                                      "type": "text",
+                                      "value": {
+                                        "item": "text"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_subagents"
+                                    },
+                                    "child": {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_subagents"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_context"
+                                    },
+                                    "child": {
+                                      "type": "stack",
+                                      "direction": "row",
+                                      "gap": "small",
+                                      "align": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "value": "컨텍스트",
+                                          "style": "meta"
+                                        },
+                                        {
+                                          "type": "progress",
+                                          "value": {
+                                            "client": "status_context"
+                                          },
+                                          "max": 1,
+                                          "label": {
+                                            "client": "status_context_text"
+                                          },
+                                          "warning_at": 0.7,
+                                          "danger_at": 0.9
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_limit"
+                                    },
+                                    "child": {
+                                      "type": "progress",
+                                      "value": {
+                                        "client": "status_limit_value"
+                                      },
+                                      "max": 1,
+                                      "label": {
+                                        "client": "status_limit_text"
+                                      },
+                                      "warning_at": 0.8,
+                                      "danger_at": 0.95
+                                    }
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_limit_more"
+                                    },
+                                    "child": {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_limit_more"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          ]
                         }
                       }
                     ]
@@ -1349,6 +1582,63 @@
       },
       "history_cannot_delete": {
         "default": true
+      },
+      "status_bar_on": {
+        "default": false
+      },
+      "show_status_bar": {
+        "default": false
+      },
+      "status_chips": {
+        "default": []
+      },
+      "status_subagents": {
+        "default": null
+      },
+      "status_subagents_text": {
+        "default": "없음"
+      },
+      "status_context": {
+        "default": null
+      },
+      "status_context_text": {
+        "default": "아직 모름"
+      },
+      "status_context_bar": {
+        "default": 0
+      },
+      "status_limit_value": {
+        "default": null
+      },
+      "status_limit_text": {
+        "default": null
+      },
+      "status_limit_more": {
+        "default": null
+      },
+      "status_limits": {
+        "default": []
+      },
+      "status_no_limits": {
+        "default": true
+      },
+      "status_account": {
+        "default": null
+      },
+      "status_has_context": {
+        "default": false
+      },
+      "status_has_subagents": {
+        "default": false
+      },
+      "status_has_limit": {
+        "default": false
+      },
+      "status_has_limit_more": {
+        "default": false
+      },
+      "status_has_account": {
+        "default": false
       }
     },
     "channels": [
@@ -1373,7 +1663,8 @@
       "close_history",
       "select_session",
       "search_history",
-      "delete_session"
+      "delete_session",
+      "toggle_status_bar"
     ],
     "commands": {},
     "state_keys": [
@@ -1381,7 +1672,8 @@
     ],
     "storage_entries": [
       "agents",
-      "programs"
+      "programs",
+      "status_bar"
     ],
     "process_permissions": [
       "run",
@@ -1491,6 +1783,138 @@
                     }
                   }
                 ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "stack",
+          "direction": "column",
+          "gap": "small",
+          "children": [
+            {
+              "type": "text",
+              "value": "지금 세션",
+              "style": "meta"
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "status_has_account"
+              },
+              "child": {
+                "type": "stack",
+                "direction": "row",
+                "gap": "medium",
+                "align": "center",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": "계정"
+                  },
+                  {
+                    "type": "text",
+                    "value": {
+                      "client": "status_account"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "stack",
+              "direction": "row",
+              "gap": "medium",
+              "align": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "컨텍스트"
+                },
+                {
+                  "type": "progress",
+                  "value": {
+                    "client": "status_context_bar"
+                  },
+                  "max": 1,
+                  "label": {
+                    "client": "status_context_text"
+                  },
+                  "warning_at": 0.7,
+                  "danger_at": 0.9
+                }
+              ]
+            },
+            {
+              "type": "repeat",
+              "items": {
+                "client": "status_limits"
+              },
+              "key": "key",
+              "template": {
+                "type": "stack",
+                "direction": "row",
+                "gap": "medium",
+                "align": "center",
+                "children": [
+                  {
+                    "type": "text",
+                    "value": {
+                      "item": "label"
+                    }
+                  },
+                  {
+                    "type": "progress",
+                    "value": {
+                      "item": "value"
+                    },
+                    "max": 1,
+                    "label": {
+                      "item": "text"
+                    },
+                    "warning_at": 0.8,
+                    "danger_at": 0.95
+                  }
+                ]
+              }
+            },
+            {
+              "type": "when",
+              "value": {
+                "client": "status_no_limits"
+              },
+              "child": {
+                "type": "text",
+                "value": "한도 정보 없음",
+                "style": "meta"
+              }
+            },
+            {
+              "type": "stack",
+              "direction": "row",
+              "gap": "medium",
+              "align": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "value": "서브에이전트"
+                },
+                {
+                  "type": "text",
+                  "value": {
+                    "client": "status_subagents_text"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "toggle",
+              "label": "창에 상태 항상 보기",
+              "value": {
+                "client": "status_bar_on"
+              },
+              "on_change": {
+                "client": "toggle_status_bar"
               }
             }
           ]

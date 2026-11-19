@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{validate::parse_app_definition, LIST_DISABLED_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
+use kaleidoscope_contract::{validate::parse_app_definition, PROGRESS_THRESHOLDS_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
 use serde_json::Value;
 
 #[test]
@@ -23,7 +23,7 @@ fn builtin_agent_assumes_http_mcp_for_one_default() {
 fn builtin_agent_declares_client_process_and_settings() {
     let json = include_str!("../../../apps/agent.json");
     let value: Value = serde_json::from_str(json).unwrap();
-    assert_eq!(value["requires"]["blocks"], LIST_DISABLED_BLOCK_SET_VERSION);
+    assert_eq!(value["requires"]["blocks"], PROGRESS_THRESHOLDS_BLOCK_SET_VERSION);
     assert_eq!(value["requires"]["modules"]["process"], 1);
     assert_eq!(value["requires"]["modules"]["client"], RECEIVE_MESSAGE_CLIENT_VERSION);
     assert_eq!(value["client"]["device_storage"]["scope"], "window");
@@ -124,4 +124,92 @@ fn builtin_agent_shows_indeterminate_progress_while_starting() {
     assert_eq!(group["children"][0]["type"], "progress");
     assert!(group["children"][0]["value"].is_null());
     assert_eq!(group["children"][1]["value"]["client"], "show_install_label");
+}
+
+#[test]
+fn builtin_agent_declares_status_bar_storage() {
+    let json = include_str!("../../../apps/agent.json");
+    let value: Value = serde_json::from_str(json).unwrap();
+    let declared = value["storage"]["entries"].as_array().unwrap().iter().find(|entry| entry["id"] == "status_bar").unwrap();
+    assert_eq!(declared["key"], "settings/status_bar");
+    assert_eq!(declared["default"], false);
+    assert!(value["client"]["storage_entries"].as_array().unwrap().iter().any(|id| id == "status_bar"));
+    let app = parse_app_definition(json).unwrap();
+    let entry = app.storage.unwrap().entries.into_iter().find(|entry| entry.id == "status_bar").unwrap();
+    kaleidoscope_contract::app_storage::validate_storage_content(&entry, &declared["default"]).unwrap();
+    kaleidoscope_contract::app_storage::validate_storage_content(&entry, &Value::Bool(true)).unwrap();
+    assert!(kaleidoscope_contract::app_storage::validate_storage_content(&entry, &Value::String("true".into())).is_err());
+}
+
+fn collect<'a>(node: &'a Value, matches: &dyn Fn(&Value) -> bool, found: &mut Vec<&'a Value>) {
+    match node {
+        Value::Object(fields) => {
+            if matches(node) {
+                found.push(node);
+            }
+            for child in fields.values() {
+                collect(child, matches, found);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect(item, matches, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn builtin_agent_shows_status_bar_in_both_chat_footers() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let mut chats = Vec::new();
+    collect(&value["ui"], &|node| node["type"] == "chat", &mut chats);
+    assert_eq!(chats.len(), 2);
+    for chat in chats {
+        let footer = &chat["footer"];
+        assert_eq!(footer["type"], "stack");
+        assert_eq!(footer["direction"], "column");
+        let children = footer["children"].as_array().unwrap();
+        assert_eq!(children[0]["type"], "repeat");
+        assert_eq!(children[0]["items"]["client"], "permissions");
+        let mut gates = Vec::new();
+        collect(footer, &|node| node["type"] == "when" && node["value"]["client"] == "show_status_bar", &mut gates);
+        assert_eq!(gates.len(), 1);
+        assert_eq!(&children[1], gates[0]);
+        // 좁은 창에서는 칩 줄이 접히고 값 없는 칸은 짝 불리언으로 감춘다.
+        let strip = &gates[0]["child"];
+        assert_eq!(strip["wrap"], true);
+        let mut hidden = Vec::new();
+        collect(strip, &|node| node["type"] == "when", &mut hidden);
+        let conditions: Vec<_> = hidden.iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
+        assert_eq!(conditions, ["status_has_subagents", "status_has_context", "status_has_limit", "status_has_limit_more"]);
+    }
+}
+
+#[test]
+fn builtin_agent_settings_has_status_toggle() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let mut toggles = Vec::new();
+    collect(&value["settings"]["ui"], &|node| node["type"] == "toggle" && node["on_change"]["client"] == "toggle_status_bar", &mut toggles);
+    assert_eq!(toggles.len(), 1);
+    assert_eq!(toggles[0]["value"]["client"], "status_bar_on");
+    assert_eq!(toggles[0]["label"], "창에 상태 항상 보기");
+    assert!(value["client"]["actions"].as_array().unwrap().iter().any(|id| id == "toggle_status_bar"));
+    let mut limits = Vec::new();
+    collect(&value["settings"]["ui"], &|node| node["type"] == "repeat" && node["items"]["client"] == "status_limits", &mut limits);
+    assert_eq!(limits.len(), 1);
+}
+
+#[test]
+fn builtin_agent_declares_every_status_output() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let outputs = value["client"]["outputs"].as_object().unwrap();
+    for name in [
+        "status_bar_on", "show_status_bar", "status_chips", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
+        "status_limit_value", "status_limit_text", "status_limit_more", "status_limits", "status_no_limits", "status_account",
+        "status_has_context", "status_has_subagents", "status_has_limit", "status_has_limit_more", "status_has_account",
+    ] {
+        assert!(outputs.contains_key(name), "{name} 출력이 선언되지 않았다");
+    }
 }
