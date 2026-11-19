@@ -340,3 +340,15 @@ test("상태 줄 칸 표시 여부: when은 참인 불리언만 보므로 값이
   assert.equal(view.status_context_bar, 0);
 });
 
+test("좁은 창 칩은 model 하나만, 한도를 전부 모르면 상태 줄 한도 막대가 없다", () => {
+  const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
+  const { views } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: null }, limits: [limit("five_hour", "5시간", null), limit("seven_day", "7일", null)] });
+  const view = views.at(-1);
+  assert.deepEqual(view.status_chips_narrow.map((chip: any) => chip.text), ["Opus 5.5"]);
+  assert.equal(view.status_chips.length, 4);
+  assert.equal(view.status_has_limit, false);
+  assert.equal(view.status_limit_value, null);
+  assert.equal(view.status_has_limit_more, false);
+  assert.deepEqual(view.status_limits.map((row: any) => row.unknown), [true, true]);
+  assert.equal(view.status_no_context, true);
+});

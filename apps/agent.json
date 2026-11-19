@@ -889,7 +889,6 @@
                                 "direction": "row",
                                 "gap": "small",
                                 "align": "center",
-                                "wrap": true,
                                 "children": [
                                   {
                                     "type": "repeat",
@@ -1101,12 +1100,11 @@
                                 "direction": "row",
                                 "gap": "small",
                                 "align": "center",
-                                "wrap": true,
                                 "children": [
                                   {
                                     "type": "repeat",
                                     "items": {
-                                      "client": "status_chips"
+                                      "client": "status_chips_narrow"
                                     },
                                     "key": "key",
                                     "template": {
@@ -1639,6 +1637,12 @@
       },
       "status_has_account": {
         "default": false
+      },
+      "status_chips_narrow": {
+        "default": []
+      },
+      "status_no_context": {
+        "default": true
       }
     },
     "channels": [
@@ -1832,16 +1836,33 @@
                   "value": "컨텍스트"
                 },
                 {
-                  "type": "progress",
+                  "type": "when",
                   "value": {
-                    "client": "status_context_bar"
+                    "client": "status_has_context"
                   },
-                  "max": 1,
-                  "label": {
-                    "client": "status_context_text"
+                  "child": {
+                    "type": "progress",
+                    "value": {
+                      "client": "status_context_bar"
+                    },
+                    "max": 1,
+                    "label": {
+                      "client": "status_context_text"
+                    },
+                    "warning_at": 0.7,
+                    "danger_at": 0.9
+                  }
+                },
+                {
+                  "type": "when",
+                  "value": {
+                    "client": "status_no_context"
                   },
-                  "warning_at": 0.7,
-                  "danger_at": 0.9
+                  "child": {
+                    "type": "text",
+                    "value": "아직 모름",
+                    "style": "meta"
+                  }
                 }
               ]
             },
@@ -1864,16 +1885,35 @@
                     }
                   },
                   {
-                    "type": "progress",
+                    "type": "when",
                     "value": {
-                      "item": "value"
+                      "item": "known"
                     },
-                    "max": 1,
-                    "label": {
-                      "item": "text"
+                    "child": {
+                      "type": "progress",
+                      "value": {
+                        "item": "value"
+                      },
+                      "max": 1,
+                      "label": {
+                        "item": "text"
+                      },
+                      "warning_at": 0.8,
+                      "danger_at": 0.95
+                    }
+                  },
+                  {
+                    "type": "when",
+                    "value": {
+                      "item": "unknown"
                     },
-                    "warning_at": 0.8,
-                    "danger_at": 0.95
+                    "child": {
+                      "type": "text",
+                      "value": {
+                        "item": "text"
+                      },
+                      "style": "meta"
+                    }
                   }
                 ]
               }
