@@ -1396,14 +1396,14 @@
     { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
-      "version": 11
+      "version": 12
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 11
+      "version": 12
     },
     "inputs": {},
     "outputs": {
