@@ -931,10 +931,10 @@ export const DEFINITION_DEFAULTS_SAMPLE: unknown = {
   "id": "sample",
   "name": "sample",
   "requires": {
-    "blocks": 66,
+    "blocks": 67,
     "modules": {
       "files": 4,
-      "agent": 4,
+      "agent": 5,
       "web": 1,
       "connection": 4,
       "storage": 3,
@@ -1414,9 +1414,9 @@ export const DEFINITION_DEFAULTS_RESULT: unknown = {
   "id": "sample",
   "name": "sample",
   "requires": {
-    "blocks": 66,
+    "blocks": 67,
     "modules": {
-      "agent": 4,
+      "agent": 5,
       "assets": 1,
       "client": 7,
       "connection": 4,

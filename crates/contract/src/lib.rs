@@ -1,4 +1,4 @@
-//! kaleidoscope 코어와 화면 사이 계약 (계약 47판, 261109)
+//! kaleidoscope 코어와 화면 사이 계약 (계약 49판, 261119)
 //!
 //! 이 파일 하나가 코어(Rust)와 화면(TS) 양쪽 타입의 정본이다. TS 타입은
 //! `cargo test -p kaleidoscope-contract`가 `ui/src/contract/contract.ts`로 생성한다.
@@ -141,6 +141,13 @@
 //! 응답으로만 바뀐다. 스트림은 보이는 창이 쓰는 동안만 열고, 호출 예산(`refresh_secs`)은 그대로다.
 //! 새 필드는 모듈 `connection` 4판을 요구한다.
 //!
+//! # 계약 49판: 줄 그림의 모양과 대화 모음
+//! 목록과 데이터 트리에 줄 앞 그림의 모양(`image_shape`, 기본 `square`)을 더하고, 데이터 트리 항목에 그림
+//! (`TreeItem.image`)을 더한다. 새 필드는 블록 세트 67판이다. 대화는 모음을 [`ConversationThread`],
+//! [`ThreadRef`], [`PatchThreadRequest`]에 싣고, 새 대화를 만들 때 모음 값을 비우면 서버 기본 모음을 쓴다.
+//! 대화 모음 설정이 바뀌면 코어가 그 값을 쓰는 작업의 대화를 새 모음으로 옮긴다. 새 대화에서 모음을 비우는 것은
+//! 모듈 `agent` 5판이 필요한데, 옛 쉘은 빈 모음을 거부하기 때문이다.
+//!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
 //! - 코어는 이벤트 채널 하나로 [`CoreEvent`]를 보낸다.
@@ -273,7 +280,7 @@ pub const TAURI_COMMAND: &str = "core";
 /// Tauri 이벤트 이름. 화면은 `listen("core-event", ...)`로 받는다.
 pub const TAURI_EVENT: &str = "core-event";
 /// 코어와 화면 사이 계약의 판.
-pub const CONTRACT_VERSION: u32 = 48;
+pub const CONTRACT_VERSION: u32 = 49;
 
 /// 이 쉘이 그릴 수 있는 블록 세트 버전. 블록 세트 전체에 정수 하나다.
 ///
@@ -353,7 +360,11 @@ pub const CONTRACT_VERSION: u32 = 48;
 /// - 64판: progress의 칸막이(`segments`)와 세로 커서(`marker`).
 /// - 65판: progress의 경고와 위험 색 기준(`warning_at`, `danger_at`).
 /// - 66판: section의 끌어 옮기기(`on_move`).
-pub const BLOCK_SET_VERSION: u32 = SECTION_MOVE_BLOCK_SET_VERSION;
+/// - 67판: 목록과 데이터 트리의 줄 앞 그림 모양(`image_shape`)과 데이터 트리 항목의 그림(`TreeItem.image`).
+pub const BLOCK_SET_VERSION: u32 = ITEM_IMAGE_BLOCK_SET_VERSION;
+/// 목록과 데이터 트리 줄 앞 그림의 모양(`image_shape`)과 데이터 트리 항목의 그림(`TreeItem.image`)을 처음
+/// 지원하는 블록 세트 판.
+pub const ITEM_IMAGE_BLOCK_SET_VERSION: u32 = 67;
 /// 구역 머리를 끌어 순서를 바꾸는 동작.
 pub const SECTION_MOVE_BLOCK_SET_VERSION: u32 = 66;
 /// progress의 색 기준을 처음 지원하는 블록 세트 판.
@@ -446,6 +457,8 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 /// - `web` 1판: 창 안에 웹 페이지를 띄우는 웹 화면(`web.*` 명령). 쉘이 그린 화면 위에 따로 뜬다.
 /// - `agent` 3판: `conversation-v1` 제공자 설정과 `window_id` 기반 대화 명령. 옛 `workspace_id` 명령은 이행 중 유지한다.
 /// - `agent` 4판: 3판 + 연결한 대화에 말마다 덧붙이는 글(`attached_instructions_template`).
+/// - `agent` 5판: 4판 + 새 대화를 만들 때 모음 값을 비우면 서버 기본 모음을 쓴다(옛 쉘은 빈 모음을 거부한다).
+///   대화 모음 설정이 바뀌면 코어가 그 설정을 쓰는 작업의 대화를 새 모음으로 옮긴다.
 /// - `storage` 1판: 계정 × 앱 저장소의 선언과 읽기, CAS 쓰기, 초기화.
 /// - `storage` 2판: 1판 + 저장 항목의 설정 화면 보조 글과 선택지 바인딩.
 /// - `connection` 1판: 서버에 등록한 이름 붙인 연결(`connection` 권한). 원천 받기, 동작의 연결 부르기,
@@ -467,7 +480,7 @@ pub const TABLE_GRID_BLOCK_SET_VERSION: u32 = 24;
 ///   `shell.add_shortcut`.
 pub const MODULE_VERSIONS: &[(&str, u32)] = &[
     ("files", 4),
-    ("agent", 4),
+    ("agent", 5),
     ("web", 1),
     ("connection", data::STREAM_CONNECTION_VERSION),
     ("storage", 3),
@@ -1981,6 +1994,11 @@ pub enum Block {
         #[serde(default)]
         #[ts(optional, as = "Option<TreeBy>")]
         by: TreeBy,
+        /// (67판) 줄 앞 그림의 모양. `square`(기본)는 지금 모습 그대로이고 `circle`은 원으로 그린다.
+        /// 그림이 없는 줄은 어느 쪽이든 지금과 같다.
+        #[serde(default, skip_serializing_if = "is_default_image_shape")]
+        #[ts(optional)]
+        image_shape: Option<ImageShape>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         selected: Option<StateRef>,
@@ -2301,6 +2319,11 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         item_width: Option<RepeatGridItemWidth>,
+        /// (67판) 줄 앞 그림의 모양. `square`(기본)는 지금 모습 그대로이고 `circle`은 원으로 그린다.
+        /// 그림이 없는 항목은 어느 쪽이든 지금과 같다.
+        #[serde(default, skip_serializing_if = "is_default_image_shape")]
+        #[ts(optional)]
+        image_shape: Option<ImageShape>,
         #[serde(default)]
         #[ts(optional, as = "Option<bool>")]
         grouped: bool,
@@ -2914,6 +2937,8 @@ enum RawBlock {
         extensions: Vec<String>,
         #[serde(default)]
         by: TreeBy,
+        #[serde(default, skip_serializing_if = "is_default_image_shape")]
+        image_shape: Option<ImageShape>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         selected: Option<StateRef>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3147,6 +3172,8 @@ enum RawBlock {
         layout: ListLayout,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         item_width: Option<RepeatGridItemWidth>,
+        #[serde(default, skip_serializing_if = "is_default_image_shape")]
+        image_shape: Option<ImageShape>,
         #[serde(default)]
         grouped: bool,
         #[serde(default, skip_serializing_if = "is_false")]
@@ -3706,6 +3733,7 @@ impl From<RawBlock> for Block {
                 root,
                 extensions,
                 by,
+                image_shape,
                 selected,
                 on_select,
                 on_check,
@@ -3720,6 +3748,7 @@ impl From<RawBlock> for Block {
                 root,
                 extensions,
                 by,
+                image_shape,
                 selected,
                 on_select,
                 on_check,
@@ -3864,6 +3893,7 @@ impl From<RawBlock> for Block {
                 items,
                 layout,
                 item_width,
+                image_shape,
                 grouped,
                 select_on_focus,
                 selection,
@@ -3879,6 +3909,7 @@ impl From<RawBlock> for Block {
                 items,
                 layout,
                 item_width,
+                image_shape,
                 grouped,
                 select_on_focus,
                 selection,
@@ -4170,6 +4201,7 @@ impl From<RawBlock> for Block {
                 root: Some(root),
                 extensions,
                 by: TreeBy::default(),
+                image_shape: None,
                 selected: Some(selected),
                 on_select: Some(Actions::One(on_select)),
                 on_check: None,
@@ -4249,11 +4281,28 @@ impl<'de> Deserialize<'de> for Block {
     }
 }
 
+/// 리터럴로 적은 데이터 트리 항목에 그림이 하나라도 있는지.
+fn tree_items_have_image(value: &serde_json::Value) -> bool {
+    fn any(items: &[data::TreeItem]) -> bool {
+        items
+            .iter()
+            .any(|item| item.image.is_some() || any(&item.children))
+    }
+    serde_json::from_value::<Vec<data::TreeItem>>(value.clone()).is_ok_and(|items| any(&items))
+}
+
 impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
             Block::Section { on_move: Some(_), .. } => SECTION_MOVE_BLOCK_SET_VERSION,
+            Block::List { image_shape: Some(_), .. } | Block::Tree { image_shape: Some(_), .. } => {
+                ITEM_IMAGE_BLOCK_SET_VERSION
+            }
+            Block::Tree {
+                items: Some(Binding::Literal(value)),
+                ..
+            } if tree_items_have_image(value) => ITEM_IMAGE_BLOCK_SET_VERSION,
             Block::Notice { .. } => 18,
             Block::Progress { warning_at: Some(_), .. }
             | Block::Progress { danger_at: Some(_), .. } => PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,
@@ -4532,6 +4581,23 @@ pub enum ListLayout {
     Grid,
     /// 작은 아이콘과 이름의 격자.
     Icons,
+}
+
+/// 목록과 데이터 트리에서 줄 앞 그림의 모양.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum ImageShape {
+    /// 둥근 모서리의 작은 사각형. 지금 모습이다.
+    #[default]
+    Square,
+    /// 원.
+    Circle,
+}
+
+/// 기본 모양(`square`)과 같으면 직렬화에서 생략한다.
+fn is_default_image_shape(shape: &Option<ImageShape>) -> bool {
+    matches!(shape, None | Some(ImageShape::Square))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS, JsonSchema)]

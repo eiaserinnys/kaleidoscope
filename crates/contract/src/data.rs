@@ -1337,6 +1337,11 @@ pub struct TreeItem {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(optional, as = "Option<Vec<Badge>>")]
     pub badges: Vec<Badge>,
+    /// (블록 세트 67판) 줄 앞의 작은 그림. `list` 항목의 그림과 같은 미디어 참조를 쓴다.
+    /// 그림이 없는 줄은 지금처럼 아이콘 자리를 비우고, 자식이 있는 줄은 펼침 화살표 뒤에 그린다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub image: Option<MediaRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(optional, as = "Option<Vec<TreeItem>>")]
     pub children: Vec<TreeItem>,

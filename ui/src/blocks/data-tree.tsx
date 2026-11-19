@@ -5,6 +5,7 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { isBadge } from "../components/badge";
 import { Check, ChevronRight, FileText } from "../components/icons";
 import { DataState } from "../components/data-state";
+import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
 import { TreeView, type TreeFocusController } from "../components/tree/tree-view";
 import { TreeEditRow } from "../components/tree/tree-edit-row";
 import type { TreeNode, TreeRowModel } from "../components/tree/tree-model";
@@ -91,14 +92,17 @@ interface DataNode extends TreeNode {
   children: DataNode[];
 }
 
-function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: ReadonlyMap<string, boolean> = new Map(), editing?: InlineEditing): DataNode[] {
+function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: ReadonlyMap<string, boolean> = new Map(), editing?: InlineEditing, circle = false): DataNode[] {
   const items = asArray(value).filter((item): item is TreeItem => valid(item, byPath));
+  const image = (item: TreeItem) => isMedia(item.image)
+    ? <MediaThumbnail media={item.image} className={`ks-tree-image${circle ? " is-circle" : ""}`} />
+    : undefined;
   if (!byPath) return items.flatMap((item): DataNode[] => {
     const editingState = isEditing(item, editing) ? editing : undefined;
     const title = titleOf(item, editing);
     // 새 항목은 제목이 없다. 바로 입력 중이면 빈 글칸 행으로 그린다.
     if (typeof title !== "string" && editingState === undefined) return [];
-    const children = tree(item.children, false, [...parent, item.key], pending, editing);
+    const children = tree(item.children, false, [...parent, item.key], pending, editing, circle);
     const checked = pending.get(item.key) ?? item.checked;
     return [{
       id: `item:${item.key}`,
@@ -110,6 +114,7 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
       selectable: true,
       checked,
       leading: <FileText size="inline" />,
+      leadingImage: image(item),
       meta: item.meta,
       trailing: <Badges values={item.badges} />,
       content: editingState === undefined ? undefined : <DataTreeEditRow
@@ -142,6 +147,7 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
         selectable: true,
         checked: pending.get(item.key) ?? item.checked,
         leading: <FileText size="inline" />,
+        leadingImage: image(item),
         meta: item.meta,
         trailing: <Badges values={item.badges} />,
       });
@@ -243,7 +249,7 @@ function TreeReady({ block, context, pointer, value, emptyText }: { block: DataT
       },
     };
   }, [block.on_check, data, editable, ended, pointer, titles]);
-  const nodes = useMemo(() => tree(value, block.by === "path", [], pending, inline), [value, block.by, pending, inline]);
+  const nodes = useMemo(() => tree(value, block.by === "path", [], pending, inline, block.image_shape === "circle"), [value, block.by, pending, inline, block.image_shape]);
   // 앱이 항목의 editing을 끄면 지역 종료 표시를 거둔다. 같은 키가 다시 editing이 참이 되면 새 글칸을 연다.
   const editingFlags = useRef(new Map<string, boolean>());
   useEffect(() => {

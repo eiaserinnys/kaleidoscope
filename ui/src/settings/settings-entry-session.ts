@@ -6,6 +6,8 @@ import type { ShellStore } from "../core/shell-store";
 export interface SettingsEntrySnapshot {
   loaded: boolean;
   value: JsonValue;
+  /// (모듈 `agent` 5판) 저장값이 없을 때 화면에 보일 지금 값. 앱의 대화가 모두 같은 모음에 있으면 코어가 계산해 준다.
+  choice: string | null;
   revision: string | null;
   exists: boolean;
   dirty: boolean;
@@ -37,7 +39,7 @@ export class SettingsEntrySession {
   constructor(private store: ShellStore, private windowId: string, readonly entry: StorageEntryDecl) {
     this.committedValue = entry.default;
     this.confirmedValue = entry.default;
-    this.state = { loaded: false, value: entry.default, revision: null, exists: false, dirty: false, editing: false, saving: false, saved: false, conflict: false, error: null };
+    this.state = { loaded: false, value: entry.default, choice: null, revision: null, exists: false, dirty: false, editing: false, saving: false, saved: false, conflict: false, error: null };
   }
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
@@ -47,7 +49,7 @@ export class SettingsEntrySession {
     this.confirmedValue = result.content;
     this.failed = null;
     this.queue = [];
-    this.update({ loaded: true, value: result.content, revision: result.revision, exists: result.exists, dirty: false, editing: false, conflict: false, error: null, saved: false });
+    this.update({ loaded: true, value: result.content, choice: result.choice ?? null, revision: result.revision, exists: result.exists, dirty: false, editing: false, conflict: false, error: null, saved: false });
   }
   async load(force = false) {
     const version = ++this.readVersion;
@@ -111,13 +113,13 @@ export class SettingsEntrySession {
             const result = await this.store.call({ op: "storage.write", window_id: this.windowId, entry: this.entry.id, content: operation.value, expected_revision: revision });
             this.committedValue = operation.value;
             const dirty = !equal(this.state.value, operation.value);
-            this.update({ revision: result.revision, exists: true, dirty, saved: !dirty && !this.queue.length });
+            this.update({ revision: result.revision, exists: true, choice: null, dirty, saved: !dirty && !this.queue.length });
           } else {
             await this.store.call({ op: "storage.reset", window_id: this.windowId, entry: this.entry.id, expected_revision: revision });
             this.committedValue = this.entry.default;
             if (!this.queue.some((item) => item.kind === "write")) this.confirmedValue = this.entry.default;
             const value = this.editVersion === operation.editVersion && this.confirmationVersion === operation.confirmationVersion ? this.entry.default : this.state.value;
-            this.update({ value, revision: null, exists: false, dirty: !equal(value, this.entry.default), conflict: false });
+            this.update({ value, revision: null, exists: false, choice: null, dirty: !equal(value, this.entry.default), conflict: false });
           }
           this.failed = null;
           if (this.state.saved) {
@@ -140,7 +142,7 @@ export class SettingsEntrySession {
   async overwrite() {
     try {
       const { result } = await this.store.call({ op: "storage.get", window_id: this.windowId, entry: this.entry.id });
-      this.update({ revision: result.revision, exists: result.exists, conflict: false, error: null });
+      this.update({ revision: result.revision, exists: result.exists, choice: result.choice ?? null, conflict: false, error: null });
       if (this.failed?.kind === "reset") { this.queue.unshift(this.failed); await this.start(); }
       else { this.queue = []; this.update({ dirty: true }); await this.save(); }
     } catch (error) { this.update({ error: toCoreError(error) }); }

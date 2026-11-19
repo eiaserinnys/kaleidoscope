@@ -34,7 +34,8 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
       onClick={checkEnabled ? (event) => { event.preventDefault(); event.stopPropagation(); onCheck?.(row); } : undefined}
     >{node.checked ? <Check size="chrome" /> : null}</span>
     : undefined;
-  const marker = check ?? (row.hasChildren ? undefined : node.leading ?? <FileText size="inline" />);
+  const image = node.leadingImage;
+  const marker = check ?? (row.hasChildren ? undefined : image ?? node.leading ?? <FileText size="inline" />);
   const chevron = row.hasChildren
     ? <span
       className="ks-tree-chevron-trigger"
@@ -43,8 +44,10 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
     : undefined;
   const iconClass = `ks-file-tree-icon${row.hasChildren ? " is-directory" : ""}`;
   // 확인 상자가 없는 부모 행은 확인 모드가 아닐 때처럼 화살표 한 열만 두고 제목을 바로 잇는다. 확인 상자가 있는 행과
-  // 확인 상자가 없는 잎 행은 화살표 열 다음에 표식 열을 둔다.
+  // 확인 상자가 없는 잎 행은 화살표 열 다음에 표식 열을 둔다. 그림이 있는 부모 행은 화살표와 확인 상자 뒤에 그림 열을 둔다.
   const twoColumns = checkEnabled && !(check === undefined && row.hasChildren);
+  // 그림은 화살표나 확인 상자와 다른 열에 그린다. 확인 모드가 아니면 확인 상자가 없으므로 그림 하나만 놓인다.
+  const imageColumn = image !== undefined && (row.hasChildren || (check !== undefined && checkEnabled)) ? image : undefined;
   return <div
     className="ks-tree-virtual-row"
     data-index={index}
@@ -96,6 +99,10 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
       {twoColumns ? <>
         <span aria-hidden="true" className={iconClass}>{chevron}</span>
         <span aria-hidden="true" className={iconClass}>{marker}</span>
+        {imageColumn ? <span aria-hidden="true" className={iconClass}>{imageColumn}</span> : null}
+      </> : imageColumn ? <>
+        <span aria-hidden="true" className={iconClass}>{chevron}</span>
+        <span aria-hidden="true" className={iconClass}>{imageColumn}</span>
       </> : <span aria-hidden="true" className={iconClass}>{chevron ?? marker}</span>}
       <span className={`ks-file-tree-name ks-tree-name${node.checked ? " is-checked" : ""}`}>{node.label}</span>
       {node.meta ? <span className="ks-view-meta">{node.meta}</span> : null}

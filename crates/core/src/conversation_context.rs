@@ -397,13 +397,47 @@ fn required_string(v: &BTreeMap<String, Value>, key: &str) -> Result<String, Cor
     }
 }
 
+/// 없거나 null이거나 빈 문자열이면 `None`. 문자열이 아니면 값 누락 오류로 본다.
+pub(crate) fn optional_string(
+    v: &BTreeMap<String, Value>,
+    key: &str,
+) -> Result<Option<String>, CoreError> {
+    match v.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) if text.trim().is_empty() => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text.clone())),
+        Some(_) => Err(kaleidoscope_contract::errors::CONV_CONTEXT_VALUE_MISSING(key)),
+    }
+}
+
 fn same_model_group(target: Option<&str>, current: Option<&str>) -> bool {
     target.is_some() && target == current
 }
 
 #[cfg(test)]
 mod selection_tests {
-    use super::same_model_group;
+    use super::{optional_string, same_model_group};
+    use serde_json::{json, Value};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn optional_collection_treats_absent_null_and_empty_as_none() {
+        for value in [Value::Null, json!(""), json!("  ")] {
+            let values = BTreeMap::from([("collection".to_string(), value)]);
+            assert_eq!(optional_string(&values, "collection").unwrap(), None);
+        }
+        assert_eq!(optional_string(&BTreeMap::new(), "collection").unwrap(), None);
+        let values = BTreeMap::from([("collection".to_string(), json!(" collection-1 "))]);
+        assert_eq!(
+            optional_string(&values, "collection").unwrap().as_deref(),
+            Some(" collection-1 ")
+        );
+        let values = BTreeMap::from([("collection".to_string(), json!(3))]);
+        assert_eq!(
+            optional_string(&values, "collection").unwrap_err().id.as_deref(),
+            Some("CONV_CONTEXT_VALUE_MISSING")
+        );
+    }
 
     #[test]
     fn model_patch_requires_the_same_known_group() {

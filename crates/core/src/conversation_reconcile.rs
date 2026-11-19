@@ -23,6 +23,20 @@ struct RuntimeState {
     running: bool,
     dirty: bool,
     statuses: HashMap<String, Status>,
+    /// 저장값이 없을 때 설정 화면에 보일 지금 값. (앱 id, 저장 항목 id) → 모음.
+    choices: HashMap<(String, String), String>,
+}
+
+impl Runtime {
+    /// 저장값이 없을 때 설정 화면에 보일 지금 값. 모르면 `None`.
+    pub(crate) fn choice(&self, app: &str, entry: &str) -> Option<String> {
+        self.state
+            .lock()
+            .unwrap()
+            .choices
+            .get(&(app.to_string(), entry.to_string()))
+            .cloned()
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -34,6 +48,49 @@ pub(crate) struct Applied {
 struct AppliedThread {
     fingerprint: String,
     revisions: BTreeMap<String, Option<String>>,
+    /// 이 대화를 마지막으로 맞췄을 때의 모음 설정. 옛 기록에는 없다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    collection: Option<AppliedCollection>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AppliedCollection {
+    revisions: BTreeMap<String, Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value: Option<String>,
+}
+
+/// 대화 모음 설정이 가리키는 저장 항목. 저장소 식 하나를 읽는 바인딩만 옮길 수 있다.
+fn collection_entry(binding: &kaleidoscope_contract::data::Binding) -> Option<String> {
+    match binding {
+        kaleidoscope_contract::data::Binding::Expr(expr) => {
+            let refs = kaleidoscope_contract::data::storage_refs(&expr.expr);
+            (refs.len() == 1).then(|| refs[0].clone())
+        }
+        _ => None,
+    }
+}
+
+/// 이 앱의 대화가 모두 같은 모음에 있으면 그 모음을 기억하고, 아니면 지운다.
+fn remember_choice(inner: &Arc<Inner>, app: &kaleidoscope_contract::AppDefinition, collections: &[Option<String>]) {
+    let Some(entry) = app.agent.as_ref().and_then(|agent| collection_entry(&agent.collection)) else {
+        return;
+    };
+    let common = match collections.split_first() {
+        Some((Some(first), rest)) if rest.iter().all(|value| value.as_deref() == Some(first.as_str())) => {
+            Some(first.clone())
+        }
+        _ => None,
+    };
+    let mut state = inner.conversation_reconcile.state.lock().unwrap();
+    match common {
+        Some(value) => {
+            state.choices.insert((app.id.clone(), entry), value);
+        }
+        None => {
+            state.choices.remove(&(app.id.clone(), entry));
+        }
+    }
 }
 
 fn set_status(inner: &Arc<Inner>, app: &str, status: Status) {
@@ -121,6 +178,7 @@ pub(crate) fn storage_changed(inner: &Arc<Inner>, app_id: &str, entry: Option<&s
                     &agent.selected_model,
                     &agent.title_template,
                     &agent.instructions_template,
+                    &agent.collection,
                 ]
                 .iter()
                 .any(|binding| match binding {
@@ -235,6 +293,7 @@ pub(crate) fn reconcile_app(
         ctx.client.require_login()?;
         groups.entry(ctx.namespace(inner)?).or_default().push(ctx);
     }
+    let mut collections = Vec::new();
     for (namespace, contexts) in groups {
         let client = &contexts[0].client;
         let mut expected = std::collections::BTreeSet::new();
@@ -302,7 +361,7 @@ pub(crate) fn reconcile_app(
                 }
                 let workspace = &info.thread.external.key;
                 if let Some(ctx) = contexts.iter().find(|ctx| &ctx.workspace.id == workspace) {
-                    apply_thread(inner, ctx, &namespace, &info, applied)?;
+                    apply_thread(inner, ctx, &namespace, &info, applied, &mut collections)?;
                     expected.remove(&reference.id);
                 } else if safe_to_archive(inner, epoch, workspace) {
                     let patch = PatchThreadRequest {
@@ -311,6 +370,7 @@ pub(crate) fn reconcile_app(
                         model: None,
                         model_order: None,
                         instructions: None,
+                        collection: None,
                     };
                     let reply: Option<Value> = client.json(
                         reqwest::Method::PATCH,
@@ -338,6 +398,7 @@ pub(crate) fn reconcile_app(
             );
         }
     }
+    remember_choice(inner, app, &collections);
     Ok(())
 }
 
@@ -361,6 +422,7 @@ fn apply_thread(
     namespace: &str,
     info: &ThreadInfoReply,
     applied: &mut Applied,
+    collections: &mut Vec<Option<String>>,
 ) -> Result<(), CoreError> {
     let stored = ctx.read(inner, &ctx.provider.thread_entry)?;
     let binding = &stored.content;
@@ -414,6 +476,10 @@ fn apply_thread(
     {
         return Err(kaleidoscope_contract::errors::CONV_RECONCILE_MODEL_ORDER_INVALID());
     }
+    let (collection_values, collection_revisions) =
+        ctx.values_with_revisions(inner, &[("collection", &p.collection)])?;
+    let collection_value =
+        crate::conversation_context::optional_string(&collection_values, "collection")?;
     let fingerprint = format!(
         "{:x}",
         Sha256::digest(
@@ -424,17 +490,36 @@ fn apply_thread(
         )
     );
     let key = format!("{}\n{}", namespace, info.thread.id);
-    let changed = applied
-        .threads
-        .get(&key)
-        .is_none_or(|record| record.fingerprint != fingerprint);
-    if changed || info.thread.title != title {
+    let record = applied.threads.get(&key);
+    let changed = record.is_none_or(|record| record.fingerprint != fingerprint);
+    let previous_collection = record.and_then(|record| record.collection.as_ref());
+    let collection_record = (!collection_revisions.is_empty()).then(|| AppliedCollection {
+        revisions: collection_revisions,
+        value: collection_value.clone(),
+    });
+    let collection_state_changed = match (previous_collection, collection_record.as_ref()) {
+        (None, None) => false,
+        (Some(_), None) | (None, Some(_)) => true,
+        (Some(previous), Some(current)) => {
+            previous.revisions != current.revisions || previous.value != current.value
+        }
+    };
+    let collection_changed = match (previous_collection, collection_record.as_ref()) {
+        (Some(previous), Some(current)) => {
+            previous.revisions.keys().eq(current.revisions.keys())
+                && previous.revisions != current.revisions
+        }
+        _ => false,
+    };
+    let title_changed = info.thread.title != title;
+    if changed || title_changed {
         let patch = PatchThreadRequest {
             title: Some(title),
             archived: None,
             model: None,
             model_order: Some(model_order),
             instructions: Some(instructions),
+            collection: None,
         };
         let reply: Option<Value> = ctx.client.json(
             reqwest::Method::PATCH,
@@ -448,13 +533,64 @@ fn apply_thread(
                     .and_details(vec![format!("thread: {}", &info.thread.id)]),
             );
         }
+    }
+    let mut moved_to = None;
+    let target = collection_changed.then(|| {
+        collection_record.as_ref().and_then(|record| {
+            record
+                .revisions
+                .values()
+                .all(Option::is_some)
+                .then(|| record.value.clone())
+                .flatten()
+        })
+    }).flatten();
+    if let Some(target) = target {
+        if info.thread.collection.as_deref() == Some(target.as_str()) {
+            moved_to = Some(target);
+        } else {
+            let patch = PatchThreadRequest {
+                title: None,
+                archived: None,
+                model: None,
+                model_order: None,
+                instructions: None,
+                collection: Some(target.clone()),
+            };
+            let result: Result<Option<Value>, CoreError> = ctx.client.json(
+                reqwest::Method::PATCH,
+                &ctx.client.path(&["threads", &info.thread.id])?,
+                &BTreeMap::new(),
+                Some(&patch),
+            );
+            match result {
+                Ok(Some(_)) => moved_to = Some(target),
+                Ok(None) => log_collection_move_failure(&info.thread.id, &target, "대화를 찾지 못했습니다"),
+                Err(error) => log_collection_move_failure(&info.thread.id, &target, &error.message),
+            }
+        }
+    }
+    collections.push(moved_to.or_else(|| info.thread.collection.clone()));
+    if changed || title_changed || collection_state_changed {
         applied.threads.insert(
             key,
             AppliedThread {
                 fingerprint,
                 revisions,
+                collection: collection_record,
             },
         );
     }
     Ok(())
+}
+
+fn log_collection_move_failure(thread: &str, collection: &str, reason: &str) {
+    let error = kaleidoscope_contract::errors::CONV_RECONCILE_COLLECTION_MOVE_FAILED(
+        thread, collection, reason,
+    );
+    eprintln!(
+        "대화 모음을 옮기지 못했습니다 ({}): {}",
+        error.id.as_deref().unwrap_or("CONV_RECONCILE_COLLECTION_MOVE_FAILED"),
+        error.message
+    );
 }

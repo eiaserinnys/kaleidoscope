@@ -2216,7 +2216,10 @@ struct FakeRegistryClient {
     raw_values_enabled: std::sync::atomic::AtomicBool,
     legacy_storage_not_found: std::sync::atomic::AtomicBool,
     storage_value: Mutex<Option<(Value, String)>>,
-    storage_entries: Mutex<BTreeMap<String, Value>>,
+    /// (작업 id, 항목 id) → (내용, 리비전). 같은 항목을 작업마다 다르게 둘 때 쓴다.
+    storage_values: Mutex<BTreeMap<(String, String), (Value, String)>>,
+    /// 항목 id → (내용, 리비전). 리비전이 없으면 저장값이 없는 것으로 본다.
+    storage_entries: Mutex<BTreeMap<String, (Value, Option<String>)>>,
     storage_pause: Mutex<Option<mpsc::Receiver<()>>>,
     storage_workspace: Mutex<String>,
     pair_start: Mutex<Option<Result<PairStartReply, RegistryError>>>,
@@ -2410,12 +2413,29 @@ impl RegistryClient for FakeRegistryClient {
             let _ = pause.recv_timeout(Duration::from_secs(10));
         }
         *self.storage_workspace.lock().unwrap() = workspace.into();
-        if let Some(content) = self.storage_entries.lock().unwrap().get(entry).cloned() {
+        if let Some((content, revision)) = self
+            .storage_values
+            .lock()
+            .unwrap()
+            .get(&(workspace.to_string(), entry.to_string()))
+            .cloned()
+        {
             return Ok(kaleidoscope_contract::app_storage::StorageReadReply {
                 kind: kaleidoscope_contract::app_storage::StorageKind::Json,
                 content,
-                revision: Some("entry".into()),
+                revision: Some(revision),
                 exists: true,
+                choice: None,
+            });
+        }
+        if let Some((content, revision)) = self.storage_entries.lock().unwrap().get(entry).cloned()
+        {
+            return Ok(kaleidoscope_contract::app_storage::StorageReadReply {
+                kind: kaleidoscope_contract::app_storage::StorageKind::Json,
+                content,
+                exists: revision.is_some(),
+                revision,
+                choice: None,
             });
         }
         let value = self.storage_value.lock().unwrap().clone();
@@ -2427,6 +2447,7 @@ impl RegistryClient for FakeRegistryClient {
                 .unwrap_or_else(|| json!("one.json")),
             revision: value.as_ref().map(|v| v.1.clone()),
             exists: value.is_some(),
+            choice: None,
         })
     }
     fn storage_list(
@@ -2473,6 +2494,7 @@ impl RegistryClient for FakeRegistryClient {
             content: json!("# 시험 문서"),
             revision: Some("r1".into()),
             exists: true,
+            choice: None,
         })
     }
     fn storage_write(
@@ -4181,7 +4203,7 @@ fn conversation_commands_resolve_the_window_and_advertise_agent_four() {
         let request = serde_json::from_value(request).unwrap();
         expect_error(core.handle(request), ErrorCode::NotFound);
     }
-    assert_eq!(snapshot(&core).supported.modules.get("agent"), Some(&4));
+    assert_eq!(snapshot(&core).supported.modules.get("agent"), Some(&5));
 }
 
 #[test]

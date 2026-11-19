@@ -504,6 +504,7 @@ impl AppState {
                 content: item.content,
                 revision: Some(item.revision),
                 exists: true,
+                choice: None,
             }),
             Some(_) => Err(kaleidoscope_contract::errors::STORAGE_STORED_KIND_INVALID(
                 &target.key,
@@ -513,6 +514,7 @@ impl AppState {
                 content: entry.default.clone(),
                 revision: None,
                 exists: false,
+                choice: None,
             }),
         }
     }

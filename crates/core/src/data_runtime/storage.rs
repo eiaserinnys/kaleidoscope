@@ -385,6 +385,7 @@ mod freshness_tests {
             content: Value::String(value.into()),
             revision: Some(value.into()),
             exists: true,
+            choice: None,
         });
         slot.status = Status::Ready;
         slot.in_flight = false;
@@ -667,6 +668,7 @@ pub(super) fn written(
             content,
             revision: Some(revision),
             exists: true,
+            choice: None,
         };
         slot.generation = inner
             .data_runtimes

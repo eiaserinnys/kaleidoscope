@@ -10,6 +10,8 @@ export interface TreeNode {
   ariaSelectable?: boolean;
   checked?: boolean;
   leading?: ReactNode;
+  /// 잎 줄의 `leading`보다 먼저 보이는 그림. 자식이 있는 줄에서는 펼침 화살표 뒤의 별도 열에 그린다.
+  leadingImage?: ReactNode;
   meta?: ReactNode;
   trailing?: ReactNode;
   content?: ReactNode;

@@ -153,6 +153,11 @@
 .ks-list-card.is-selected:focus-visible { outline-color: var(--ks-color-accent-contrast); }
 .ks-list-card .ks-media-thumbnail { border-radius: calc(var(--ks-radius-small) - var(--ks-focus-width)); }
 .ks-list-card .ks-media-thumbnail { flex: none; width: 100%; height: auto; aspect-ratio: 4 / 3; }
+/* 줄 그림의 모양. circle은 줄 앞 그림과 격자 그림을 원으로 그리고, 격자 칸은 정사각형으로 둔다. */
+.ks-media-thumbnail.is-circle { border-radius: 50%; }
+.ks-list-card .ks-media-thumbnail.is-circle { border-radius: 50%; aspect-ratio: 1; }
+.ks-data-tree .ks-media-thumbnail.ks-tree-image { flex: none; width: var(--ks-space-4); height: var(--ks-space-4); border-radius: var(--ks-radius-small); }
+.ks-data-tree .ks-media-thumbnail.ks-tree-image.is-circle { border-radius: 50%; }
 .ks-list-card .ks-list-grid-icon { color: inherit; }
 .ks-list-row > svg { flex: none; }
 .ks-list-card > :is(.ks-list-content, .ks-view-badges, .ks-view-meta) { padding-inline: var(--ks-space-1); }

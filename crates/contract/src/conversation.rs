@@ -120,6 +120,10 @@ pub struct ConversationThread {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub execution_id: Option<String>,
+    /// (모듈 `agent` 5판) 이 대화가 속한 모음. 제공자가 모르는 옛 응답에는 없다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub collection: Option<String>,
     pub created_at: String,
     pub archived: bool,
 }
@@ -129,6 +133,10 @@ pub struct ConversationThread {
 pub struct ThreadRef {
     pub id: String,
     pub title: String,
+    /// (모듈 `agent` 5판) 이 대화가 속한 모음. 제공자가 모르는 옛 응답에는 없다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub collection: Option<String>,
     pub created_at: String,
     pub archived: bool,
 }
@@ -183,7 +191,10 @@ pub struct EnsureThreadRequest {
     pub selected_model: String,
     pub model_order: Vec<String>,
     pub profile: String,
-    pub collection: String,
+    /// (모듈 `agent` 5판) 새 대화의 모음. 없거나 빈 문자열이면 제공자의 기본 모음을 쓴다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub collection: Option<String>,
     pub initial_instruction: String,
     pub instructions: String,
 }
@@ -196,7 +207,10 @@ pub struct ExecutionThreadRequest {
     pub selected_model: String,
     pub model_order: Vec<String>,
     pub profile: String,
-    pub collection: String,
+    /// (모듈 `agent` 5판) 새 대화의 모음. 없거나 빈 문자열이면 제공자의 기본 모음을 쓴다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub collection: Option<String>,
     pub initial_instruction: String,
     pub instructions: String,
 }
@@ -228,6 +242,10 @@ pub struct PatchThreadRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub instructions: Option<String>,
+    /// (모듈 `agent` 5판) 대화를 옮길 모음. 코어가 모음 설정의 값이 바뀌었을 때만 보낸다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub collection: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -432,6 +450,7 @@ mod tests {
         let thread_json: serde_json::Value =
             serde_json::from_str(include_str!("../fixtures/conversation-v1/thread.json")).unwrap();
         let thread: ThreadByKeyReply = serde_json::from_value(thread_json.clone()).unwrap();
+        assert_eq!(thread.thread.collection.as_deref(), Some("workspace-folder"));
         assert_eq!(serde_json::to_value(thread).unwrap(), thread_json);
 
         let execution_json: serde_json::Value =
@@ -455,6 +474,7 @@ mod tests {
         assert!(legacy.model.group.is_none());
         assert!(legacy.profile.is_none());
         assert!(legacy.execution_id.is_none());
+        assert!(legacy.collection.is_none());
     }
 
     #[test]

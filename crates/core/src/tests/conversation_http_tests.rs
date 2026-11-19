@@ -537,7 +537,7 @@ fn detach_allows_attaching_another_conversation_afterwards() {
     assert_eq!(server.join().unwrap().len(), 4);
 }
 
-fn settings_entries() -> BTreeMap<String, Value> {
+fn settings_entries() -> BTreeMap<String, (Value, Option<String>)> {
     [
         ("profile", json!("profile-b")),
         ("collection", json!("collection-1")),
@@ -547,7 +547,7 @@ fn settings_entries() -> BTreeMap<String, Value> {
         ("role", json!("이 작업의 목적과 제약을 먼저 확인합니다.")),
     ]
     .into_iter()
-    .map(|(entry, value)| (entry.into(), value))
+    .map(|(entry, value)| (entry.into(), (value, Some("entry".into()))))
     .collect()
 }
 
@@ -682,7 +682,10 @@ fn attached_send_computes_an_expression_template_from_storage() {
     *registry.storage_value.lock().unwrap() = Some((attached_entry("thread-9"), "r0".into()));
     registry.storage_entries.lock().unwrap().insert(
         "attached_role".into(),
-        json!("작업 「{workspace.name}」 창에서 보냈다({workspace.id})"),
+        (
+            json!("작업 「{workspace.name}」 창에서 보냈다({workspace.id})"),
+            Some("entry".into()),
+        ),
     );
     crate::conversation_send::send(&core.inner, &ctx, "r1".into(), "안녕".into(), vec![]).unwrap();
     let requests = server.join().unwrap();
@@ -706,4 +709,432 @@ fn attached_conversation_rejects_profile_and_model_switches() {
         .unwrap_err();
     assert_eq!(error.id.as_deref(), Some("CONV_SWITCH_ATTACHED"));
     assert!(server.join().unwrap().is_empty());
+}
+
+fn owned_entry(workspace: &str, thread: &str) -> Value {
+    json!({
+        "connection": "conversation",
+        "namespace": "bucket",
+        "external_key": workspace,
+        "thread_id": thread,
+        "created_at": "2026-11-08T12:00:00Z"
+    })
+}
+
+fn thread_json_with_collection(
+    id: &str,
+    workspace: &str,
+    title: &str,
+    collection: Option<&str>,
+) -> Value {
+    let mut thread = thread_json(id, "bucket", workspace);
+    thread["title"] = json!(title);
+    if let Some(collection) = collection {
+        thread["collection"] = json!(collection);
+    }
+    thread
+}
+
+fn thread_info_with_collection(
+    id: &str,
+    workspace: &str,
+    title: &str,
+    collection: Option<&str>,
+) -> String {
+    json!({
+        "thread": thread_json_with_collection(id, workspace, title, collection),
+        "busy": false,
+        "tool": null,
+        "current_model": null
+    })
+    .to_string()
+}
+
+fn thread_list(refs: &[(&str, &str)]) -> String {
+    json!({
+        "refs": refs
+            .iter()
+            .map(|(id, title)| json!({
+                "id": id,
+                "title": title,
+                "created_at": "2026-11-08T12:00:00Z",
+                "archived": false
+            }))
+            .collect::<Vec<_>>()
+    })
+    .to_string()
+}
+
+#[test]
+fn reconcile_moves_a_thread_only_when_the_stored_collection_changes() {
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas("http://127.0.0.1:1", &temp, None);
+    let workspace = ctx.workspace.clone();
+    let title = format!("작업 PAS · {}", workspace.name);
+    *registry.storage_value.lock().unwrap() =
+        Some((owned_entry(&workspace.id, "thread-1"), "r0".into()));
+    *registry.storage_entries.lock().unwrap() = settings_entries();
+    let list = thread_list(&[("thread-1", &title)]);
+    let new_title = format!("새 제목 · {}", workspace.name);
+    let thread = || thread_info_with_collection("thread-1", &workspace.id, &title, Some("collection-1"));
+    let (base, server) = server_with_requests(vec![
+        (200, list.clone()),
+        (200, thread()),
+        (200, "{}".into()),
+        (200, list.clone()),
+        (200, thread()),
+        (200, "{}".into()),
+        (200, list.clone()),
+        (200, thread()),
+        (200, "{}".into()),
+        (200, list.clone()),
+        (
+            200,
+            thread_info_with_collection(
+                "thread-1",
+                &workspace.id,
+                &new_title,
+                Some("collection-1"),
+            ),
+        ),
+    ]);
+    core.inner.connections.lock().unwrap()[0].base_url = base;
+    let definition: AppDefinition = serde_json::from_str(&pas_definition(None)).unwrap();
+    let mut applied = crate::conversation_reconcile::Applied::default();
+    let mut reconcile = |applied: &mut crate::conversation_reconcile::Applied| {
+        crate::conversation_reconcile::reconcile_app(
+            &core.inner,
+            &definition,
+            &[workspace.clone()],
+            1,
+            applied,
+        )
+        .unwrap();
+    };
+    reconcile(&mut applied);
+    registry
+        .storage_entries
+        .lock()
+        .unwrap()
+        .insert("collection".into(), (json!("collection-2"), Some("r2".into())));
+    reconcile(&mut applied);
+    registry.storage_entries.lock().unwrap().insert(
+        "title_template".into(),
+        (json!("새 제목 · {workspace.name}"), Some("r3".into())),
+    );
+    reconcile(&mut applied);
+    registry
+        .storage_entries
+        .lock()
+        .unwrap()
+        .insert("collection".into(), (Value::Null, None));
+    reconcile(&mut applied);
+
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 11);
+    let patches: Vec<Value> = requests
+        .iter()
+        .filter(|(line, _)| line.starts_with("PATCH "))
+        .map(|(_, body)| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(patches.len(), 3, "{patches:?}");
+    assert!(patches[0].get("collection").is_none(), "{:?}", patches[0]);
+    assert_eq!(patches[1]["collection"], json!("collection-2"));
+    assert!(patches[1].get("title").is_none(), "{:?}", patches[1]);
+    assert!(patches[2].get("collection").is_none(), "{:?}", patches[2]);
+}
+
+#[test]
+fn reconcile_does_not_move_threads_recorded_by_an_older_shell() {
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas("http://127.0.0.1:1", &temp, None);
+    let workspace = ctx.workspace.clone();
+    let title = format!("작업 PAS · {}", workspace.name);
+    *registry.storage_value.lock().unwrap() =
+        Some((owned_entry(&workspace.id, "thread-1"), "r0".into()));
+    *registry.storage_entries.lock().unwrap() = settings_entries();
+    registry
+        .storage_entries
+        .lock()
+        .unwrap()
+        .insert("collection".into(), (json!("collection-2"), Some("r2".into())));
+    let (base, server) = server_with_requests(vec![
+        (200, thread_list(&[("thread-1", &title)])),
+        (
+            200,
+            thread_info_with_collection("thread-1", &workspace.id, &title, Some("collection-1")),
+        ),
+        (200, "{}".into()),
+    ]);
+    core.inner.connections.lock().unwrap()[0].base_url = base;
+    let definition: AppDefinition = serde_json::from_str(&pas_definition(None)).unwrap();
+    let mut applied: crate::conversation_reconcile::Applied = serde_json::from_value(json!({
+        "threads": {
+            "bucket\nthread-1": {"fingerprint": "old", "revisions": {}}
+        }
+    }))
+    .unwrap();
+    crate::conversation_reconcile::reconcile_app(
+        &core.inner,
+        &definition,
+        &[workspace],
+        1,
+        &mut applied,
+    )
+    .unwrap();
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    let patches: Vec<Value> = requests
+        .iter()
+        .filter(|(line, _)| line.starts_with("PATCH "))
+        .map(|(_, body)| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(patches.len(), 1, "{patches:?}");
+    assert!(patches[0].get("collection").is_none(), "{:?}", patches[0]);
+    let record = serde_json::to_value(&applied).unwrap();
+    assert_eq!(
+        record["threads"]["bucket\nthread-1"]["collection"]["revisions"]["collection"],
+        json!("r2")
+    );
+}
+
+#[test]
+fn reconcile_keeps_going_when_one_thread_cannot_move() {
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas("http://127.0.0.1:1", &temp, None);
+    let first = ctx.workspace.clone();
+    let second = kaleidoscope_contract::Workspace {
+        id: "workspace-2".into(),
+        name: "작업 2".into(),
+        created_at: "2026-11-08T12:00:00Z".into(),
+        updated_at: "2026-11-08T12:00:00Z".into(),
+    };
+    let title = |workspace: &kaleidoscope_contract::Workspace| {
+        format!("작업 PAS · {}", workspace.name)
+    };
+    *registry.storage_entries.lock().unwrap() = settings_entries();
+    {
+        let mut values = registry.storage_values.lock().unwrap();
+        values.insert(
+            (first.id.clone(), "thread".into()),
+            (owned_entry(&first.id, "thread-1"), "r0".into()),
+        );
+        values.insert(
+            (second.id.clone(), "thread".into()),
+            (owned_entry(&second.id, "thread-2"), "r1".into()),
+        );
+    }
+    let list = thread_list(&[("thread-1", &title(&first)), ("thread-2", &title(&second))]);
+    let (base, server) = server_with_requests(vec![
+        (200, list.clone()),
+        (
+            200,
+            thread_info_with_collection(
+                "thread-1",
+                &first.id,
+                &title(&first),
+                Some("collection-1"),
+            ),
+        ),
+        (200, "{}".into()),
+        (
+            200,
+            thread_info_with_collection(
+                "thread-2",
+                &second.id,
+                &title(&second),
+                Some("collection-1"),
+            ),
+        ),
+        (200, "{}".into()),
+        (200, list.clone()),
+        (
+            200,
+            thread_info_with_collection(
+                "thread-1",
+                &first.id,
+                &title(&first),
+                Some("collection-1"),
+            ),
+        ),
+        (
+            500,
+            json!({"error": {"code": "unavailable", "message": "failed"}}).to_string(),
+        ),
+        (
+            200,
+            thread_info_with_collection(
+                "thread-2",
+                &second.id,
+                &title(&second),
+                Some("collection-1"),
+            ),
+        ),
+        (200, "{}".into()),
+        (200, list),
+        (
+            200,
+            thread_info_with_collection(
+                "thread-1",
+                &first.id,
+                &title(&first),
+                Some("collection-1"),
+            ),
+        ),
+        (
+            200,
+            thread_info_with_collection(
+                "thread-2",
+                &second.id,
+                &title(&second),
+                Some("collection-1"),
+            ),
+        ),
+    ]);
+    core.inner.connections.lock().unwrap()[0].base_url = base;
+    let definition: AppDefinition = serde_json::from_str(&pas_definition(None)).unwrap();
+    let workspaces = vec![first, second];
+    let mut applied = crate::conversation_reconcile::Applied::default();
+    crate::conversation_reconcile::reconcile_app(
+        &core.inner,
+        &definition,
+        &workspaces,
+        1,
+        &mut applied,
+    )
+    .unwrap();
+    registry
+        .storage_entries
+        .lock()
+        .unwrap()
+        .insert("collection".into(), (json!("collection-2"), Some("r2".into())));
+    crate::conversation_reconcile::reconcile_app(
+        &core.inner,
+        &definition,
+        &workspaces,
+        1,
+        &mut applied,
+    )
+    .unwrap();
+    crate::conversation_reconcile::reconcile_app(
+        &core.inner,
+        &definition,
+        &workspaces,
+        1,
+        &mut applied,
+    )
+    .unwrap();
+    let requests = server.join().unwrap();
+    assert_eq!(requests.len(), 13);
+    let moves: Vec<Value> = requests
+        .iter()
+        .filter(|(line, body)| line.starts_with("PATCH ") && body.contains("collection"))
+        .map(|(_, body)| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(moves.len(), 2, "{moves:?}");
+    assert!(moves.iter().all(|body| body["collection"] == json!("collection-2")));
+}
+
+#[test]
+fn storage_read_reports_the_common_thread_collection_when_nothing_is_stored() {
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas("http://127.0.0.1:1", &temp, None);
+    let first = ctx.workspace.clone();
+    let second = kaleidoscope_contract::Workspace {
+        id: "workspace-2".into(),
+        name: "작업 2".into(),
+        created_at: "2026-11-08T12:00:00Z".into(),
+        updated_at: "2026-11-08T12:00:00Z".into(),
+    };
+    let title = |workspace: &kaleidoscope_contract::Workspace| {
+        format!("작업 PAS · {}", workspace.name)
+    };
+    *registry.storage_entries.lock().unwrap() = settings_entries();
+    {
+        let mut values = registry.storage_values.lock().unwrap();
+        values.insert(
+            (first.id.clone(), "thread".into()),
+            (owned_entry(&first.id, "thread-1"), "r0".into()),
+        );
+        values.insert(
+            (second.id.clone(), "thread".into()),
+            (owned_entry(&second.id, "thread-2"), "r1".into()),
+        );
+    }
+    let list = thread_list(&[("thread-1", &title(&first)), ("thread-2", &title(&second))]);
+    let info = |id: &str,
+                workspace: &kaleidoscope_contract::Workspace,
+                collection: &str| {
+        thread_info_with_collection(id, &workspace.id, &title(workspace), Some(collection))
+    };
+    let (base, server) = server_with_requests(vec![
+        (200, list.clone()),
+        (200, info("thread-1", &first, "collection-1")),
+        (200, "{}".into()),
+        (200, info("thread-2", &second, "collection-1")),
+        (200, "{}".into()),
+        (200, list),
+        (200, info("thread-1", &first, "collection-1")),
+        (200, info("thread-2", &second, "collection-2")),
+    ]);
+    core.inner.connections.lock().unwrap()[0].base_url = base;
+    let definition: AppDefinition = serde_json::from_str(&pas_definition(None)).unwrap();
+    let workspaces = vec![first, second];
+    let mut applied = crate::conversation_reconcile::Applied::default();
+    crate::conversation_reconcile::reconcile_app(
+        &core.inner,
+        &definition,
+        &workspaces,
+        1,
+        &mut applied,
+    )
+    .unwrap();
+    let window = core.inner.state.lock().unwrap().shared.windows[0].id.clone();
+    registry
+        .storage_entries
+        .lock()
+        .unwrap()
+        .insert("collection".into(), (Value::Null, None));
+    let reply = crate::app_storage::read(&core.inner, &window, "collection").unwrap();
+    assert!(!reply.exists);
+    assert_eq!(reply.choice.as_deref(), Some("collection-1"));
+
+    crate::conversation_reconcile::reconcile_app(
+        &core.inner,
+        &definition,
+        &workspaces,
+        1,
+        &mut applied,
+    )
+    .unwrap();
+    let reply = crate::app_storage::read(&core.inner, &window, "collection").unwrap();
+    assert!(!reply.exists);
+    assert_eq!(reply.choice, None);
+    assert_eq!(server.join().unwrap().len(), 8);
+}
+
+#[test]
+fn ensure_request_omits_an_empty_or_absent_collection() {
+    let temp = TempDir::new().unwrap();
+    let (core, registry, ctx) = open_pas("http://127.0.0.1:1", &temp, None);
+    *registry.storage_entries.lock().unwrap() = settings_entries();
+    let request = ctx
+        .ensure_request(&core.inner, "model-a", None)
+        .unwrap();
+    assert_eq!(request.collection.as_deref(), Some("collection-1"));
+    for empty in [Value::Null, json!(""), json!("   ")] {
+        registry
+            .storage_entries
+            .lock()
+            .unwrap()
+            .insert("collection".into(), (empty, Some("r".into())));
+        let request = ctx
+            .ensure_request(&core.inner, "model-a", None)
+            .unwrap();
+        assert_eq!(request.collection, None);
+        assert!(serde_json::to_value(&request)
+            .unwrap()
+            .get("collection")
+            .is_none());
+    }
 }

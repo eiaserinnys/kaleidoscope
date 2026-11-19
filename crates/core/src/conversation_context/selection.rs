@@ -1,4 +1,4 @@
-use super::{required_string, required_string_allow_empty, same_model_group, Context};
+use super::{optional_string, required_string, required_string_allow_empty, same_model_group, Context};
 use crate::{app_storage, Inner};
 use kaleidoscope_contract::{
     app_storage::{ExpectedRevision, StorageWriteRequest},
@@ -124,7 +124,7 @@ impl Context {
                 }
                 None => required_string(&v, "profile")?,
             },
-            collection: required_string(&v, "collection")?,
+            collection: optional_string(&v, "collection")?,
             initial_instruction: template("initial_instruction_template")?,
             instructions: template("instructions_template")?,
         })
@@ -180,6 +180,7 @@ impl Context {
                 model: Some(model.into()),
                 model_order: None,
                 instructions: None,
+                collection: None,
             };
             let updated: Option<ThreadByKeyReply> = self.client.json(
                 reqwest::Method::PATCH,
