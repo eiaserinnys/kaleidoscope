@@ -1,6 +1,9 @@
 import { AgentSession, type Host, type SendInput, type SessionView, type Spec } from "./session.ts";
 import { agentError } from "./errors.ts";
 import { cleanTitle } from "./guide.ts";
+import { controlLabel, limitRow, tightestLimit } from "./status-view.ts";
+
+const CHIP_CATEGORIES = ["model", "thought_level", "mode"];
 
 type Agent = Spec & { id: string };
 type Program = { name: string; winget: string; url: string };
@@ -61,6 +64,7 @@ export class AppClient {
   private lastStream = "";
   private lastActivity = "";
   private lastOutputs = "";
+  private statusBar = false;
   private historyOpen = false;
   private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
@@ -82,6 +86,7 @@ export class AppClient {
     };
     this.session = new AgentSession(host);
     client.onStorageChange("programs", (value) => { this.programs = value as Record<string, Program>; this.update(); });
+    client.onStorageChange("status_bar", (value) => { this.statusBar = value === true; this.update(); });
     client.onStorageChange("agents", (value) => { void this.acceptAgents(value).finally(() => this.finishInitial()); }, (error) => { this.storageFailure = true; this.showError(error); this.finishInitial(); });
     client.onLifecycle((event) => { if (event.phase === "ready") this.update(); });
     client.files.on_grant("work", (folder) => { this.folder = folder; this.update(); if (folder && this.restoring && !this.choosingFolder) void this.startRestore(); });
@@ -99,6 +104,7 @@ export class AppClient {
     client.handle("cancel", () => this.session.cancel());
     client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
     client.handle("attachment", ({ event }) => this.attachment(event));
+    client.handle("toggle_status_bar", ({ event }) => this.client.setStorage("status_bar", event === true));
     client.handle("new_session", () => this.switchSession(null));
     client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
     client.handle("close_history", () => { this.historyOpen = false; this.historyQuery = ""; this.update(); });
@@ -440,6 +446,19 @@ export class AppClient {
     }).filter((item) => !query || item.title.toLocaleLowerCase().includes(query));
     // 일치가 없으면 안내 문구 하나만 보이도록 삭제 가능 여부로 갈린 두 목록을 모두 숨긴다(목록 블록의 빈 상태가 겹치지 않게)
     const noMatch = sessions.length > 0 && query !== "" && historyItems.length === 0, canDelete = !!this.view?.canDeleteSessions;
+    const now = new Date(), view = this.view;
+    const account = view?.account ? (view.account.email ? `${view.account.label}, ${view.account.email}` : view.account.label) : null;
+    const chips = [
+      ...(account ? [{ key: "account", text: account }] : []),
+      ...CHIP_CATEGORIES.flatMap((category) => {
+        const control = view?.controls.find((candidate) => candidate.category === category);
+        const text = control && controlLabel(control);
+        return text ? [{ key: category, text }] : [];
+      }),
+    ];
+    const limits = view?.limits ?? [], tightest = tightestLimit(limits), tightestRow = tightest && limitRow(tightest, now);
+    const context = view?.context && view.context.size > 0 ? Math.min(1, view.context.used / view.context.size) : null;
+    const subagents = view?.subagents ?? 0;
     const output = {
       show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
@@ -458,6 +477,13 @@ export class AppClient {
       selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
+      status_bar_on: this.statusBar, show_status_bar: this.statusBar && chat,
+      status_chips: chips, status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
+      status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,
+      status_limit_value: tightestRow?.value ?? null, status_limit_text: tightest && tightestRow ? `${tightest.label} ${tightestRow.text}` : null,
+      status_limit_more: limits.length > 1 ? `외 ${limits.length - 1}` : null,
+      status_limits: limits.map((limit) => limitRow(limit, now)), status_no_limits: limits.length === 0,
+      status_account: account, status_subagents_text: subagents > 0 ? `${subagents}개 실행 중` : "없음",
       history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: this.sessionLocked,
       history_disabled: this.sessionLocked || !this.view?.canListSessions,
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
