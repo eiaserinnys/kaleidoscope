@@ -4291,6 +4291,16 @@ fn tree_items_have_image(value: &serde_json::Value) -> bool {
     serde_json::from_value::<Vec<data::TreeItem>>(value.clone()).is_ok_and(|items| any(&items))
 }
 
+/// 리터럴로 적은 데이터 트리 항목에 둘째 줄이 하나라도 있는지.
+fn tree_items_have_subtitle(value: &serde_json::Value) -> bool {
+    fn any(items: &[data::TreeItem]) -> bool {
+        items
+            .iter()
+            .any(|item| item.subtitle.is_some() || any(&item.children))
+    }
+    serde_json::from_value::<Vec<data::TreeItem>>(value.clone()).is_ok_and(|items| any(&items))
+}
+
 impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
@@ -4302,7 +4312,9 @@ impl Block {
             Block::Tree {
                 items: Some(Binding::Literal(value)),
                 ..
-            } if tree_items_have_image(value) => ITEM_IMAGE_BLOCK_SET_VERSION,
+            } if tree_items_have_image(value) || tree_items_have_subtitle(value) => {
+                ITEM_IMAGE_BLOCK_SET_VERSION
+            }
             Block::Notice { .. } => 18,
             Block::Progress { warning_at: Some(_), .. }
             | Block::Progress { danger_at: Some(_), .. } => PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,

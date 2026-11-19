@@ -104,7 +104,12 @@ function TreeRowView({ row, commentKey, index, start, selected, multiSelected, d
         <span aria-hidden="true" className={iconClass}>{chevron}</span>
         <span aria-hidden="true" className={iconClass}>{imageColumn}</span>
       </> : <span aria-hidden="true" className={iconClass}>{chevron ?? marker}</span>}
-      <span className={`ks-file-tree-name ks-tree-name${node.checked ? " is-checked" : ""}`}>{node.label}</span>
+      {node.subtitle === undefined
+        ? <span className={`ks-file-tree-name ks-tree-name${node.checked ? " is-checked" : ""}`}>{node.label}</span>
+        : <span className="ks-tree-title-block">
+          <span className={`ks-file-tree-name ks-tree-name${node.checked ? " is-checked" : ""}`}>{node.label}</span>
+          <span className="ks-view-meta ks-tree-subtitle">{node.subtitle}</span>
+        </span>}
       {node.meta ? <span className="ks-view-meta">{node.meta}</span> : null}
       {node.trailing}
     </button>}

@@ -1328,6 +1328,11 @@ pub struct TreeItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub title: Option<String>,
+    /// (블록 세트 67판) 제목 아래 작은 보조색 한 줄. `list` 항목의 `subtitle`과 같은 뜻과 모양이다.
+    /// 있으면 그 줄이 두 줄 높이가 되고, 넘치면 말줄임한다.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub subtitle: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub path: Option<String>,

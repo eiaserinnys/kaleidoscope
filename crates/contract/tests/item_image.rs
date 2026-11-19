@@ -174,6 +174,47 @@ fn tree_images_require_block_set_67() {
 }
 
 #[test]
+fn tree_subtitle_round_trips_and_requires_block_set_67() {
+    let ui = json!({
+        "type": "tree", "by": "children",
+        "items": [
+            {"key": "one", "title": "하나", "subtitle": "프로필 · 서버 · 모델"},
+            {"key": "two", "title": "둘", "children": [
+                {"key": "child", "title": "아이", "subtitle": "보조 줄"}
+            ]}
+        ]
+    });
+    let parsed =
+        parse_app_definition(&definition(ui.clone(), ITEM_IMAGE_BLOCK_SET_VERSION).to_string())
+            .unwrap();
+    let encoded = serde_json::to_value(&parsed).unwrap();
+    assert_eq!(
+        encoded["ui"]["items"][0]["subtitle"],
+        json!("프로필 · 서버 · 모델")
+    );
+    assert_eq!(
+        encoded["ui"]["items"][1]["children"][0]["subtitle"],
+        json!("보조 줄")
+    );
+
+    let error =
+        parse_app_definition(&definition(ui.clone(), ITEM_IMAGE_BLOCK_SET_VERSION - 1).to_string())
+            .unwrap_err();
+    assert!(
+        error
+            .details
+            .iter()
+            .any(|detail| detail.contains("블록 세트 67판")),
+        "{:?}",
+        error.details
+    );
+    parse_app_definition(&definition(ui, ITEM_IMAGE_BLOCK_SET_VERSION).to_string()).unwrap();
+
+    let plain = json!({"type": "tree", "items": [{"key": "one", "title": "하나"}]});
+    parse_app_definition(&definition(plain, 4).to_string()).unwrap();
+}
+
+#[test]
 fn agent_module_five_is_supported_and_six_is_not() {
     parse_app_definition(&agent_definition(5).to_string()).unwrap();
     assert_eq!(

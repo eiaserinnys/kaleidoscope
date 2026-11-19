@@ -21,6 +21,7 @@ export type DataTreeBlockData = Extract<Block, { type: "tree" }> & { items: Bind
 function valid(value: unknown, byPath: boolean): value is TreeItem {
   if (!isObject(value) || typeof value.key !== "string") return false;
   if (value.title != null && typeof value.title !== "string") return false;
+  if (value.subtitle != null && typeof value.subtitle !== "string") return false;
   if (byPath ? typeof value.path !== "string" : value.path != null && typeof value.path !== "string") return false;
   if (value.meta != null && typeof value.meta !== "string") return false;
   if (value.checked != null && typeof value.checked !== "boolean") return false;
@@ -115,6 +116,7 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
       checked,
       leading: <FileText size="inline" />,
       leadingImage: image(item),
+      subtitle: item.subtitle ?? undefined,
       meta: item.meta,
       trailing: <Badges values={item.badges} />,
       content: editingState === undefined ? undefined : <DataTreeEditRow
@@ -148,6 +150,7 @@ function tree(value: unknown, byPath: boolean, parent: string[] = [], pending: R
         checked: pending.get(item.key) ?? item.checked,
         leading: <FileText size="inline" />,
         leadingImage: image(item),
+        subtitle: item.subtitle ?? undefined,
         meta: item.meta,
         trailing: <Badges values={item.badges} />,
       });

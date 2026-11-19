@@ -730,6 +730,23 @@ it("그림이 있는 트리 부모 줄은 펼침 화살표 뒤에 그림 열을 
   expect(plain.querySelectorAll(":scope > .ks-file-tree-icon")).toHaveLength(1);
   expect(plain.querySelector(".ks-media-thumbnail")).toBeNull();
 });
+it("트리 항목 subtitle은 제목 아래 둘째 줄로 그리고 subtitle이 없는 행은 지금 구조를 지킨다", async () => {
+  setup({ type: "tree", by: "children", items: [{ key: "one", title: "카드", subtitle: "프로필 · 서버 · 모델" }] }, {});
+  const row = await screen.findByRole("treeitem", { name: /카드/ });
+  const block = row.querySelector(":scope > .ks-tree-title-block");
+  expect(block).not.toBeNull();
+  const lines = block!.querySelectorAll(":scope > *");
+  expect(lines).toHaveLength(2);
+  expect(lines[0].textContent).toBe("카드");
+  expect(lines[1].classList.contains("ks-view-meta")).toBe(true);
+  expect(lines[1].textContent).toBe("프로필 · 서버 · 모델");
+  cleanup();
+  setup({ type: "tree", by: "children", items: [{ key: "one", title: "카드" }] }, {});
+  const plain = await screen.findByRole("treeitem", { name: "카드" });
+  expect(plain.querySelector(":scope > .ks-tree-title-block")).toBeNull();
+  expect(plain.querySelector(":scope > .ks-tree-name")).not.toBeNull();
+  expect(plain.querySelectorAll(":scope > .ks-view-meta")).toHaveLength(0);
+});
 it("preserves feed text selection without selecting an entry", async () => {
   const { calls } = setup({ type: "feed", entries: [{ key: "a", name: "이름", body: ["첫 줄", "둘째 줄"] }], on_select: { set_state: "choice" } }, { choice: null });
   const text = await screen.findByText("첫 줄");

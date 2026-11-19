@@ -272,6 +272,9 @@
 .ks-property-loading { height: var(--ks-type-body); border-radius: var(--ks-radius-small); background: var(--ks-color-hover); }
 .ks-data-tree { padding: var(--ks-space-2); }
 .ks-tree-name { flex: 1 1 auto; }
+/* 제목과 둘째 줄을 한 열로 묶는다. 둘째 줄이 없는 행은 이 묶음을 쓰지 않아 지금 마크업 그대로다. */
+.ks-tree-title-block { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.ks-tree-subtitle { flex: none; }
 .ks-feed { padding-top: var(--ks-space-3); }
 .ks-feed-entry { display: flex; gap: var(--ks-space-2); padding: 0 var(--ks-space-3); margin-bottom: var(--ks-space-3); }
 .ks-feed-entry-nested { margin-inline-start: calc(var(--ks-feed-depth, 0) * 1.5 * var(--ks-space-3)); border-inline-start: var(--ks-line-width) solid var(--ks-color-border); padding-inline-start: var(--ks-space-2); }
