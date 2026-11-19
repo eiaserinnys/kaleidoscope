@@ -96,20 +96,23 @@ test("초기 저장소 오류는 가운데에 보이고 다시 읽기에 실패�
 function makeApp() {
   const handlers = new Map<string, (context: any) => unknown>();
   const views: any[] = [];
+  const storage = new Map<string, (value: unknown) => void>(), writes: [string, unknown][] = [];
   const client = {
     process: { onReady() {}, onServicesChanged() {} },
     files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
-    onStorageChange() {}, onLifecycle() {}, onMessage() {},
+    onStorageChange: (entry: string, fn: any) => { storage.set(entry, fn); }, onLifecycle() {}, onMessage() {},
+    setStorage: async (entry: string, value: unknown) => { writes.push([entry, value]); },
     handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
   };
-  return { handlers, views, app: new AppClient(client as any, []) };
+  return { handlers, views, storage, writes, app: new AppClient(client as any, []) };
 }
 
 function readyView() {
   return { phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null,
     queued: [], permissions: [], controls: [], authMethods: [], failure: null,
     sessionId: "current", canListSessions: true, canDeleteSessions: false, sessions: [], sessionsLoading: false, sessionError: null,
-    switching: false, deleting: false, configuring: false };
+    switching: false, deleting: false, configuring: false,
+    context: null, limits: [], account: null, subagents: 0 };
 }
 
 test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 이유를 표시한다", () => {
@@ -242,4 +245,71 @@ test("삭제는 능력이 있을 때만 메뉴를 보이고 잠긴 동안에는 
   (app as any).receive({ ...(app as any).view, deleting: true });
   assert.equal(views.at(-1).session_buttons_busy, true);
   assert.equal(views.at(-1).history_disabled, true);
+});
+
+function stagedApp(view: any) {
+  const made = makeApp();
+  (made.app as any).stage = "session";
+  (made.app as any).receive(view);
+  return made;
+}
+const control = (id: string, category: string, value: string, label: string) => ({ id, label: id, category, kind: "select" as const, value, options: [{ value, label }] });
+const limit = (id: string, label: string, usedRatio: number | null, extra: any = {}) => ({ id, label, usedRatio, resetsAt: null, blocked: false, ...extra });
+
+test("상태 줄 표시 조건: 저장소가 켜져도 채팅이 안 보이면 숨긴다", () => {
+  const { views, storage, app } = makeApp();
+  storage.get("status_bar")!(true);
+  (app as any).stage = "session";
+  (app as any).receive({ ...readyView(), phase: "starting" });
+  assert.equal(views.at(-1).status_bar_on, true);
+  assert.equal(views.at(-1).show_status_bar, false);
+  (app as any).receive({ ...readyView(), phase: "ready" });
+  assert.equal(views.at(-1).show_status_bar, true);
+  storage.get("status_bar")!(false);
+  assert.equal(views.at(-1).status_bar_on, false);
+  assert.equal(views.at(-1).show_status_bar, false);
+});
+
+test("칩 순서: 계정, model, thought_level, mode", () => {
+  const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
+  const { views, app } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: "a@b.c" } });
+  assert.deepEqual(views.at(-1).status_chips.map((chip: any) => chip.text), ["Claude Team, a@b.c", "Opus 5.5", "높음", "Auto"]);
+  (app as any).receive({ ...readyView(), controls, account: null });
+  assert.deepEqual(views.at(-1).status_chips.map((chip: any) => chip.text), ["Opus 5.5", "높음", "Auto"]);
+});
+
+test("한도 요약: 가장 빠듯한 창과 나머지 개수", () => {
+  const limits = [limit("seven_day", "7일", 0.3), limit("five_hour", "5시간", 0.89), limit("seven_day_opus", "Opus 7일", 0.1)];
+  const { views, app } = stagedApp({ ...readyView(), limits });
+  assert.equal(views.at(-1).status_limit_text, "5시간 11% 남음");
+  assert.equal(views.at(-1).status_limit_value, 0.89);
+  assert.equal(views.at(-1).status_limit_more, "외 2");
+  assert.equal(views.at(-1).status_limits.length, 3);
+  assert.equal(views.at(-1).status_no_limits, false);
+  (app as any).receive({ ...readyView(), limits: [] });
+  assert.equal(views.at(-1).status_limit_text, null);
+  assert.equal(views.at(-1).status_limit_value, null);
+  assert.equal(views.at(-1).status_limit_more, null);
+  assert.equal(views.at(-1).status_no_limits, true);
+});
+
+test("컨텍스트와 서브에이전트 표기", () => {
+  const { views, app } = stagedApp({ ...readyView(), context: { used: 42, size: 100 }, subagents: 2, account: { label: "Claude Team", email: null } });
+  assert.equal(views.at(-1).status_context, 0.42);
+  assert.equal(views.at(-1).status_context_text, "42%");
+  assert.equal(views.at(-1).status_subagents, "서브에이전트 2");
+  assert.equal(views.at(-1).status_subagents_text, "2개 실행 중");
+  assert.equal(views.at(-1).status_account, "Claude Team");
+  (app as any).receive(readyView());
+  assert.equal(views.at(-1).status_context, null);
+  assert.equal(views.at(-1).status_context_text, "아직 모름");
+  assert.equal(views.at(-1).status_subagents, null);
+  assert.equal(views.at(-1).status_subagents_text, "없음");
+  assert.equal(views.at(-1).status_account, null);
+});
+
+test("토글 쓰기: toggle_status_bar는 저장소 status_bar에 쓴다", async () => {
+  const { handlers, writes } = makeApp();
+  await handlers.get("toggle_status_bar")!({ event: true });
+  assert.deepEqual(writes, [["status_bar", true]]);
 });
