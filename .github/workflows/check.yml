@@ -186,6 +186,7 @@ jobs:
           retention-days: 7
 
   # iPad 앱이 장치용으로 컴파일되는지, 시뮬레이터에서 실행되는지 확인한다.
+  # 가장 작은 iPad와 가장 큰 iPad 시뮬레이터 두 대에서 앱을 띄워 가로 화면을 찍는다.
   # 서명, 인증서, Apple 계정 시크릿은 쓰지 않는다. TestFlight 업로드는 다음 단위다.
   ios-app:
     runs-on: macos-latest
@@ -215,33 +216,99 @@ jobs:
         run: cargo check -p kaleidoscope-app --target aarch64-apple-ios
       - name: iPad 시뮬레이터용 앱 빌드
         run: pnpm --dir app tauri ios build --target aarch64-sim --debug --no-sign --ci
-      - name: 시뮬레이터에서 실행하고 화면 찍기
+      - name: iPad 시뮬레이터 두 대에서 실행하고 화면 찍기
         run: |
           set -euo pipefail
           app=$(ls -d app/src-tauri/gen/apple/build/arm64-sim/*.app | head -n 1)
           test -d "$app"
           echo "앱 번들: $app"
-          udid=$(xcrun simctl list devices available | sed -n 's/^ *iPad.*(\([0-9A-F-]\{36\}\)) (.*$/\1/p' | head -n 1)
-          if [ -z "$udid" ]; then
-            echo "iPad 시뮬레이터를 찾지 못했습니다" >&2
-            xcrun simctl list devices available >&2
-            exit 1
-          fi
-          echo "iPad 시뮬레이터: $udid"
-          xcrun simctl boot "$udid" 2>/dev/null || true
-          xcrun simctl bootstatus "$udid" -b
-          open -a Simulator --args -CurrentDeviceUDID "$udid" || true
-          xcrun simctl install "$udid" "$app"
-          xcrun simctl launch "$udid" me.eiaserinnys.kaleidoscope
-          sleep 25
-          if ! xcrun simctl spawn "$udid" launchctl list | grep -q "me.eiaserinnys.kaleidoscope"; then
-            echo "앱이 실행 중에 종료되었습니다" >&2
-            xcrun simctl spawn "$udid" log show --last 3m --style compact --predicate 'processImagePath CONTAINS "kaleidoscope"' | tail -n 80 || true
-            exit 1
-          fi
           mkdir -p ios-sim
-          xcrun simctl io booted screenshot ios-sim/ipad.png
-          ls -l ios-sim/ipad.png
+          python3 - "$app" <<'PY'
+          import json
+          import pathlib
+          import subprocess
+          import sys
+          import time
+
+          BUNDLE_ID = "me.eiaserinnys.kaleidoscope"
+          APP = sys.argv[1]
+          OUT = pathlib.Path("ios-sim")
+
+
+          def rank(name, identifier):
+              """iPad 화면 크기 순서. 작을수록 작은 화면이다."""
+              text = f"{name} {identifier}".lower()
+              if "mini" in text:
+                  return 1
+              if "13-inch" in text or "12.9-inch" in text:
+                  return 5
+              if "11-inch" in text:
+                  return 3
+              if "10." in text or "10th" in text or "9.7" in text or "a16" in text:
+                  return 2
+              if "air" in text:
+                  return 4
+              return 3
+
+
+          def run(*args, check=True):
+              return subprocess.run(args, check=check, capture_output=True, text=True)
+
+
+          def image_size(path):
+              values = {}
+              for line in run("sips", "-g", "pixelWidth", "-g", "pixelHeight", str(path)).stdout.splitlines():
+                  key, _, value = line.strip().partition(":")
+                  if key in ("pixelWidth", "pixelHeight"):
+                      values[key] = int(value.strip())
+              return values["pixelWidth"], values["pixelHeight"]
+
+
+          def capture(device, filename):
+              _, name, udid, _ = device
+              run("xcrun", "simctl", "boot", udid, check=False)
+              run("xcrun", "simctl", "bootstatus", udid, "-b")
+              run("xcrun", "simctl", "install", udid, APP)
+              run("xcrun", "simctl", "launch", udid, BUNDLE_ID)
+              time.sleep(25)
+              listing = run("xcrun", "simctl", "spawn", udid, "launchctl", "list", check=False).stdout
+              if BUNDLE_ID not in listing:
+                  logs = run("xcrun", "simctl", "spawn", udid, "log", "show", "--last", "3m", "--style", "compact",
+                             "--predicate", 'processImagePath CONTAINS "kaleidoscope"', check=False).stdout
+                  print(logs[-8000:], file=sys.stderr)
+                  sys.exit(f"{name}: 앱이 실행 중에 종료되었습니다")
+              path = OUT / filename
+              run("xcrun", "simctl", "io", udid, "screenshot", str(path))
+              width, height = image_size(path)
+              if width < height:
+                  # 세로 틀에 가로 장면이 돌아간 채 찍히면 돌려서 가로 PNG로 남긴다.
+                  rotated = path.with_suffix(".rotated.png")
+                  run("sips", "-r", "90", str(path), "--out", str(rotated))
+                  rotated.replace(path)
+                  width, height = image_size(path)
+              if width <= height:
+                  sys.exit(f"{filename}: 가로 PNG가 아닙니다({width}x{height})")
+              print(f"{filename}: {name} {width}x{height}", flush=True)
+
+
+          raw = json.loads(run("xcrun", "simctl", "list", "devices", "available", "-j").stdout)
+          devices = []
+          for runtime, entries in raw["devices"].items():
+              for entry in entries:
+                  if entry.get("isAvailable") and "iPad" in entry.get("name", ""):
+                      devices.append((rank(entry["name"], entry.get("deviceTypeIdentifier", "")), entry["name"], entry["udid"], runtime))
+          if not devices:
+              sys.exit("iPad 시뮬레이터를 찾지 못했습니다")
+          devices.sort(key=lambda item: item[0])
+          small, large = devices[0], devices[-1]
+          print("가장 작은 iPad:", small[1], small[2])
+          print("가장 큰 iPad:", large[1], large[2])
+          if small[2] == large[2]:
+              sys.exit("크기가 다른 iPad 시뮬레이터가 둘 이상 필요합니다:\n" + "\n".join(f"- {item[1]}" for item in devices))
+          capture(small, "ipad-small.png")
+          capture(large, "ipad-large.png")
+          PY
+          ls -l ios-sim
       - name: 시뮬레이터 화면 올리기
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

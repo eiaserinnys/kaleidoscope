@@ -4,14 +4,47 @@ const RESIZE_CORNER_SIZE = 12;
 /** 바탕 영역 가장자리에서 창과 아이콘이 비켜서는 안쪽 여백. */
 export const DESKTOP_USABLE_PADDING = RESIZE_CORNER_SIZE;
 export const TASKBAR_HEIGHT = 40;
-const TASKBAR_RESERVED_BOTTOM = RESIZE_CORNER_SIZE + TASKBAR_HEIGHT + RESIZE_CORNER_SIZE;
 
-export function usableWindowArea(area: { width: number; height: number }) {
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+const SAFE_AREA_TOKENS: Record<keyof SafeAreaInsets, string> = {
+  top: "--ks-safe-top",
+  right: "--ks-safe-right",
+  bottom: "--ks-safe-bottom",
+  left: "--ks-safe-left",
+};
+
+function cssLength(style: CSSStyleDeclaration, token: string): number {
+  const value = Number.parseFloat(style.getPropertyValue(token));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/** 안전 영역 네 값을 :root 사용자 속성에서 읽는다. CSS와 같은 값을 쓴다. 값이 없으면 0이다(PC). */
+export function readSafeAreaInsets(): SafeAreaInsets {
+  const style = getComputedStyle(document.documentElement);
   return {
-    x: RESIZE_CORNER_SIZE,
-    y: RESIZE_CORNER_SIZE,
-    width: Math.max(0, area.width - 2 * RESIZE_CORNER_SIZE),
-    height: Math.max(0, area.height - RESIZE_CORNER_SIZE - TASKBAR_RESERVED_BOTTOM),
+    top: cssLength(style, SAFE_AREA_TOKENS.top),
+    right: cssLength(style, SAFE_AREA_TOKENS.right),
+    bottom: cssLength(style, SAFE_AREA_TOKENS.bottom),
+    left: cssLength(style, SAFE_AREA_TOKENS.left),
+  };
+}
+
+export function usableWindowArea(area: { width: number; height: number }, insets: SafeAreaInsets = readSafeAreaInsets()) {
+  const left = Math.max(RESIZE_CORNER_SIZE, insets.left);
+  const top = Math.max(RESIZE_CORNER_SIZE, insets.top);
+  const right = Math.max(RESIZE_CORNER_SIZE, insets.right);
+  const bottom = Math.max(RESIZE_CORNER_SIZE, insets.bottom) + TASKBAR_HEIGHT + RESIZE_CORNER_SIZE;
+  return {
+    x: left,
+    y: top,
+    width: Math.max(0, area.width - left - right),
+    height: Math.max(0, area.height - top - bottom),
   };
 }
 
