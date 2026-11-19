@@ -15,7 +15,7 @@ export function readClaudeRateLimit(info: unknown): Limit | null {
   const value = info as Record<string, unknown> | null | undefined;
   const id = value?.rateLimitType;
   if (typeof id !== "string" || id === "") return null;
-  // utilization 단위: 번들 소스에서는 확인되지 않아(네이티브 바이너리) 0~1로 가정한다. /usage 엔드포인트의 0~100과 다르다.
+  // utilization 단위: 0~1로 가정(미확인, 실제 이벤트로 확인 예정)
   const utilization = value?.utilization;
   const resetsAt = value?.resetsAt;
   return {
