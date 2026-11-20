@@ -2,6 +2,7 @@
 html,
 body {
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .ks-notice-message,
@@ -38,10 +39,12 @@ textarea,
 .ks-data-section-meta,
 .ks-combobox-description {
   user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .ks-data-button.is-chip.has-preview {
   user-select: text;
+  -webkit-touch-callout: default;
 }
 
 button,
@@ -65,10 +68,10 @@ summary,
   user-select: none;
 }
 
-.ks-install-consent .ks-dialog-body strong.ks-consent-value { user-select: text; }
+.ks-install-consent .ks-dialog-body strong.ks-consent-value { user-select: text; -webkit-touch-callout: default; }
 
 .ks-table-grid .ks-table-cell { user-select: none; }
 .ks-table-grid .ks-table-content-title,
-.ks-table-grid .ks-table-content-subtitle { user-select: text; }
+.ks-table-grid .ks-table-content-subtitle { user-select: text; -webkit-touch-callout: default; }
 /* 커멘트가 무엇을 보내는지 사용자가 복사할 수 있다. */
-.ks-comment-sends-text { user-select: text; }
+.ks-comment-sends-text { user-select: text; -webkit-touch-callout: default; }

@@ -570,6 +570,34 @@
   left: -12px;
 }
 
+/* 손가락 기기에서는 보이는 모양은 그대로 두고 투명한 눌림 범위만 바깥으로 넓힌다.
+   창 안 내용과 제목줄 단추를 가리지 않도록 넓힌 만큼 전부 창 밖으로 밀어 둔다. */
+@media (pointer: coarse) {
+  .ks-window-resize-east,
+  .ks-window-resize-west {
+    width: var(--ks-space-4);
+  }
+  .ks-window-resize-east { right: calc(-1 * var(--ks-space-4)); }
+  .ks-window-resize-west { left: calc(-1 * var(--ks-space-4)); }
+  .ks-window-resize-north,
+  .ks-window-resize-south {
+    height: var(--ks-space-4);
+  }
+  .ks-window-resize-north { top: calc(-1 * var(--ks-space-4)); }
+  .ks-window-resize-south { bottom: calc(-1 * var(--ks-space-4)); }
+  .ks-window-resize-north-west,
+  .ks-window-resize-south-east,
+  .ks-window-resize-north-east,
+  .ks-window-resize-south-west {
+    width: var(--ks-space-5);
+    height: var(--ks-space-5);
+  }
+  .ks-window-resize-north-west { top: calc(-1 * var(--ks-space-5)); left: calc(-1 * var(--ks-space-5)); }
+  .ks-window-resize-south-east { right: calc(-1 * var(--ks-space-5)); bottom: calc(-1 * var(--ks-space-5)); }
+  .ks-window-resize-north-east { top: calc(-1 * var(--ks-space-5)); right: calc(-1 * var(--ks-space-5)); }
+  .ks-window-resize-south-west { bottom: calc(-1 * var(--ks-space-5)); left: calc(-1 * var(--ks-space-5)); }
+}
+
 .ks-shell-notice-layer {
   position: absolute;
   z-index: 100;

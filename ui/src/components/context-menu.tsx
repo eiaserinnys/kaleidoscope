@@ -9,6 +9,7 @@ import { Button, Notice } from "./primitives";
 import { ownerOf } from "../share/overlay-owner";
 import { windowActionActive } from "../share/action-context";
 import { requestChatAttachment } from "../blocks/chat-paste";
+import { installTouchGestures, isTextSelectable, isTouchLongPress, markContextMenuOpened } from "./touch-gestures";
 
 type MenuEvent = MouseEvent | ReactMouseEvent<HTMLElement>;
 type MenuState = { anchor: HTMLElement; point?: { x: number; y: number }; keyboardRect?: { left: number; top: number; bottom: number }; entries: MenuEntry[] };
@@ -168,6 +169,7 @@ export function openContextMenu(event: MenuEvent, siteEntries: MenuEntry[], opti
   const entries: MenuEntry[] = comment ? [...existing, ...(existing.length ? [{ id: "comment-separator", type: "separator" as const }] : []), comment] : existing;
   if (!entries.length) { closeMenu(); return; }
   const anchor = options.anchor ?? target.closest<HTMLElement>(".cm-content, [contenteditable='true'], [contenteditable='plaintext-only']") ?? target;
+  markContextMenuOpened(event instanceof Event ? event : event.nativeEvent);
   setMenu({ anchor, point, keyboardRect, entries });
 }
 
@@ -193,7 +195,12 @@ export function ContextMenuHost({ onError }: { onError?: (error: CoreError) => v
   const menu = useSyncExternalStore(subscribe, () => current, () => null);
   const [error, setError] = useState<CoreError | null>(null);
   useEffect(() => {
-    const onContextMenu = (event: MouseEvent) => { if (!event.defaultPrevented) openContextMenu(event, []); };
+    const onContextMenu = (event: MouseEvent) => {
+      if (event.defaultPrevented) return;
+      // 손가락 길게 누르기가 글자 선택이 열린 자리에서 났으면 기기의 글자 선택을 그대로 둔다.
+      if (isTouchLongPress(event) && isTextSelectable(event.target)) return;
+      openContextMenu(event, []);
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !(event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))) return;
       const eventTarget = event.target instanceof Element ? event.target : null;
@@ -205,8 +212,9 @@ export function ContextMenuHost({ onError }: { onError?: (error: CoreError) => v
       target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: rect.left, clientY: rect.bottom, detail: -1 }));
     };
     const report = (value: CoreError) => { if (onError) onError(value); else setError(value); };
+    const uninstallTouch = installTouchGestures(closeMenu);
     errors.add(report); document.addEventListener("contextmenu", onContextMenu); document.addEventListener("keydown", onKeyDown); window.addEventListener("blur", closeMenu);
-    return () => { errors.delete(report); document.removeEventListener("contextmenu", onContextMenu); document.removeEventListener("keydown", onKeyDown); window.removeEventListener("blur", closeMenu); closeMenu(); };
+    return () => { uninstallTouch(); errors.delete(report); document.removeEventListener("contextmenu", onContextMenu); document.removeEventListener("keydown", onKeyDown); window.removeEventListener("blur", closeMenu); closeMenu(); };
   }, [onError]);
   return <>{menu ? <Menu anchor={menu.anchor} anchorPoint={menu.point} keyboardRect={menu.keyboardRect} items={menu.entries} onClose={closeMenu} /> : null}{error ? <Notice role="alert" errorId={error.id} actions={[<Button key="close" onClick={() => setError(null)}>닫기</Button>]}>{error.message}</Notice> : null}</>;
 }

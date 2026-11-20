@@ -77,3 +77,8 @@
 .ks-media-range:hover::-webkit-slider-thumb, .ks-media-range:active::-webkit-slider-thumb, .ks-media-range:focus-visible::-webkit-slider-thumb { opacity: 1; }
 .ks-media-range::-moz-range-thumb { width: var(--ks-space-3); height: var(--ks-space-3); border: 0; border-radius: 50%; background: var(--ks-color-accent); opacity: 0; }
 .ks-media-range:hover::-moz-range-thumb, .ks-media-range:active::-moz-range-thumb, .ks-media-range:focus-visible::-moz-range-thumb { opacity: 1; }
+/* hover가 없는 손가락 기기에서는 손잡이를 늘 보인다. 모양과 치수는 hover 때와 같다. */
+@media (hover: none) {
+  .ks-media-range::-webkit-slider-thumb { opacity: 1; }
+  .ks-media-range::-moz-range-thumb { opacity: 1; }
+}

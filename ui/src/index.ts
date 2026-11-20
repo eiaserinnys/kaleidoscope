@@ -45,6 +45,7 @@ export {
 } from "./components/icons";
 export { Menu, type MenuEntry, type MenuHeading, type MenuItem, type MenuProps, type MenuSeparator } from "./components/menu";
 export { ContextMenuHost, openContextMenu, writeMenuClipboard } from "./components/context-menu";
+export { markContextMenuOpened } from "./components/touch-gestures";
 export { APP_COMMENT_ANCHOR_SCHEMA_VERSION, BUILTIN_APP_IDS } from "./contract/limits";
 export { buildDefinitionIndex, resolveDefinition, type DefinitionEntry, type DefinitionIndex, type DefinitionResult } from "./comments/definition";
 export { describeTarget, type TargetDescription } from "./comments/target";

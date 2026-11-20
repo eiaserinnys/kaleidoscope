@@ -1,5 +1,5 @@
 import { useBlockRootProps } from "../comments/block-root";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { App, AppDefinition, Block, CoreError, ExplorerView, ShellSnapshot } from "../contract/contract";
 import { Menu, type MenuEntry } from "../components/menu";
 import { Button, EmptyState, ErrorId } from "../components/primitives";
@@ -11,6 +11,7 @@ import { SplitPanes } from "./split";
 import { ExplorerContent } from "./explorer-content";
 import { patchWindowState, useWindowGrant, useWindowStateValue } from "../data/window-state";
 import { useShellSelector } from "../core/shell-store";
+import { markContextMenuOpened } from "../components/touch-gestures";
 
 type ExplorerBlockData = Extract<Block, { type: "explorer" }>;
 
@@ -137,7 +138,8 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
       setActionError(toCoreError(error));
     }
   };
-  const openMenu = (anchor: HTMLElement, path: string, apps = appsFor(path)) => {
+  const openMenu = (anchor: HTMLElement, path: string, apps = appsFor(path), event?: ReactMouseEvent<HTMLElement>) => {
+    if (event) markContextMenuOpened(event.nativeEvent);
     const entries = apps.length > 0
       ? apps.map((app) => ({ id: `open-${app.id}`, label: app.name, onSelect: () => void openWith(path, app) }))
       : [{ id: "open-none", label: "열 수 있는 앱이 없습니다", disabled: true }];
@@ -148,7 +150,7 @@ export function ExplorerBlock({ block, context }: { block: ExplorerBlockData; co
     if (apps.length === 1) void openWith(path, apps[0]);
     else openMenu(anchor, path, apps);
   };
-  const contextFile = (anchor: HTMLElement, path: string) => openMenu(anchor, path);
+  const contextFile = (anchor: HTMLElement, path: string, event?: ReactMouseEvent<HTMLElement>) => openMenu(anchor, path, appsFor(path), event);
 
   const fileTree = <FileBrowserTree
     rootProps={rootPath === null ? blockRoot : undefined}
