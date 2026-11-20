@@ -60,6 +60,30 @@ impl Host for BrowserHost {
     }
 }
 
+/// 인가 주소를 `open_auth_url`로만 받는 호스트. `open_url`로 흘러가면 실패한다.
+#[derive(Default)]
+struct InAppAuthHost {
+    browser: BrowserHost,
+    auth_urls: Mutex<Vec<String>>,
+}
+
+impl Host for InAppAuthHost {
+    fn pick_folder(&self) -> Option<PathBuf> {
+        None
+    }
+
+    fn open_url(&self, _: &str) -> std::io::Result<()> {
+        Err(std::io::Error::other(
+            "인가 주소는 open_url이 아니라 open_auth_url로 연다",
+        ))
+    }
+
+    fn open_auth_url(&self, url: &str) -> std::io::Result<()> {
+        self.auth_urls.lock().unwrap().push(url.to_string());
+        self.browser.open_url(url)
+    }
+}
+
 struct NoCallbackHost;
 
 impl Host for NoCallbackHost {

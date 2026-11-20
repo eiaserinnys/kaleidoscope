@@ -32,6 +32,8 @@ use kaleidoscope_core::kaleidoscope_contract::{
 use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+#[cfg(target_os = "ios")]
+use tauri_plugin_opener::OpenerExt;
 
 // const 문맥에서는 Option::unwrap_or를 부를 수 없어(E0658) match로 고른다.
 const SERVER_URL: &str = match option_env!("KALEIDOSCOPE_SERVER_URL") {
@@ -154,6 +156,21 @@ impl Host for DialogHost {
             pc_files: false,
             web_view: false,
         }
+    }
+    #[cfg(target_os = "ios")]
+    fn open_url(&self, url: &str) -> std::io::Result<()> {
+        self.app
+            .opener()
+            .open_url(url, None::<&str>)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+    // 콜백 리스너가 앱 프로세스에 있으므로 인가 주소는 앱이 앞에 남는 Safari 시트로 연다.
+    #[cfg(target_os = "ios")]
+    fn open_auth_url(&self, url: &str) -> std::io::Result<()> {
+        self.app
+            .opener()
+            .open_url(url, Some("inAppBrowser"))
+            .map_err(|error| std::io::Error::other(error.to_string()))
     }
 }
 
@@ -379,6 +396,13 @@ pub fn run() {
     // iPad 앱은 TestFlight로만 배포하고 앱 안에서 스스로 갱신하지 않는다.
     #[cfg(not(target_os = "ios"))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    // iPad는 인가 주소를 앱 안 Safari 시트로 연다. JS에서 부르지 않으므로 링크 가로채기 스크립트는 넣지 않는다.
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(
+        tauri_plugin_opener::Builder::new()
+            .open_js_links_on_click(false)
+            .build(),
+    );
     builder
         .setup(|app| {
             app.manage(close::CloseState::default());

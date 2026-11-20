@@ -150,6 +150,36 @@ fn login_registers_persists_and_oauth_source_uses_bearer_token() {
 }
 
 #[test]
+fn authorization_url_opens_through_open_auth_url() {
+    let fixture = OAuthFixture::start();
+    let temp = TempDir::new().unwrap();
+    let host = Arc::new(InAppAuthHost::default());
+    let (core, window) = make_core(host.clone(), &temp, &fixture, ConnectionKind::Oauth);
+    login(&core, &window).unwrap();
+    assert_eq!(
+        core.inner
+            .login_store
+            .entry("example")
+            .and_then(|entry| entry.access_token),
+        Some("access-token".into())
+    );
+    let auth_urls = host.auth_urls.lock().unwrap();
+    assert_eq!(
+        auth_urls.len(),
+        1,
+        "인가 주소는 open_auth_url로 한 번 열고 open_url로는 열지 않는다"
+    );
+    assert!(
+        auth_urls[0].starts_with(&format!(
+            "{}/authorize?response_type=code&client_id=client-1",
+            fixture.base
+        )),
+        "{}",
+        auth_urls[0]
+    );
+}
+
+#[test]
 fn repeated_login_reuses_registered_client_and_loopback_port() {
     let fixture = OAuthFixture::start();
     let temp = TempDir::new().unwrap();

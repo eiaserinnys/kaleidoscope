@@ -110,9 +110,13 @@ pub trait Host: Send + Sync + 'static {
     fn pc_roots(&self) -> Vec<PcRoot> {
         Vec::new()
     }
-    /// 기본 브라우저에서 OAuth 인가 주소를 연다.
+    /// 기본 브라우저에서 주소를 연다.
     fn open_url(&self, url: &str) -> io::Result<()> {
         opener::open_browser(url).map_err(|error| io::Error::other(error.to_string()))
+    }
+    /// OAuth 인가 주소를 연다. 콜백 리스너가 이 프로세스에 있으니 앱이 앞에 남는 방식으로 열 수 있으면 그렇게 연다.
+    fn open_auth_url(&self, url: &str) -> io::Result<()> {
+        self.open_url(url)
     }
     fn web(&self) -> Option<&dyn WebHost> {
         None
