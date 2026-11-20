@@ -3,8 +3,10 @@
 
 장면: 바탕화면과 작업 표시줄, 설정 창, 앱 창 두 개, 최대화한 창, 입력칸에 초점이 간 모습.
 iPad 가로 1024x768, 1194x834, 1366x1024를 찍는다. 장면마다 위 0, 아래 20px의 안전 영역을
-흉내 낸 것과 0으로 둔 것을 모두 찍는다. 흉내는 :root 사용자 속성(--ks-safe-top/right/bottom/left)을
-덮어 한다. CSS와 창 배치 계산이 이 속성을 같은 값으로 읽는지가 이 스크립트의 관심사다.
+흉내 낸 것과 0으로 둔 것을 모두 찍는다. 위 24px·아래 20px인 기기(상태 표시줄이 숨지 않은 경우)의
+최대화한 창도 함께 찍어, 창이 자란 막대 아래 끝에서 12px만 비켜 시작하는지 잰다. 흉내는
+:root 사용자 속성(--ks-safe-top/right/bottom/left)을 덮어 한다. CSS와 창 배치 계산이
+이 속성을 같은 값으로 읽는지가 이 스크립트의 관심사다.
 
   python3 scripts/visual-check/check_ipad_screen.py [--output 산출폴더] [--port 5317] [--label after]
 
@@ -185,7 +187,7 @@ def capture(page, output, key):
     return path
 
 
-def check_edges(key, facts, safe_bottom, problems):
+def check_edges(key, facts, safe_top, safe_bottom, problems):
     viewport = facts["viewport"]
     bar, taskbar = facts["bar"], facts["taskbar"]
     if bar is None or taskbar is None:
@@ -195,8 +197,8 @@ def check_edges(key, facts, safe_bottom, problems):
         problems.append(f"{key}: 위 막대가 화면 맨 위에 있지 않습니다(y={bar['y']})")
     if abs(bar["width"] - viewport["width"]) > 1:
         problems.append(f"{key}: 위 막대가 화면 폭을 다 채우지 않습니다({bar['width']} != {viewport['width']})")
-    if abs(bar["height"] - BAR_HEIGHT) > 1:
-        problems.append(f"{key}: 위 막대 높이가 {bar['height']}입니다(위 안전 영역 0이면 {BAR_HEIGHT})")
+    if abs(bar["height"] - (BAR_HEIGHT + safe_top)) > 1:
+        problems.append(f"{key}: 위 막대 높이가 {bar['height']}입니다(위 안전 영역 {safe_top}이면 {BAR_HEIGHT + safe_top})")
     bottom_gap = viewport["height"] - taskbar["bottom"]
     if abs(bottom_gap - max(EDGE_INSET, safe_bottom)) > 1:
         problems.append(f"{key}: 작업 표시줄 아래 여백이 {bottom_gap}px입니다(기대 {max(EDGE_INSET, safe_bottom)})")
@@ -236,6 +238,12 @@ def check_windows(key, scene, facts, problems):
             problems.append(f"{key}: 최대화한 창이 쓸 수 있는 폭을 다 쓰지 않습니다({window['width']} != {usable_width})")
         if window["bottom"] >= taskbar["y"]:
             problems.append(f"{key}: 최대화한 창 아래 끝이 작업 표시줄에 닿습니다 {window}")
+        # 위 안전 영역은 막대가 이미 안고 있으므로 창은 막대 아래 끝에서 12px만 비켜 시작한다.
+        # (막대 아래로 또 안전 영역만큼 밀면 막대 아래 여백이 두 번 들어간다.)
+        if facts["bar"] is not None:
+            expected_y = facts["bar"]["bottom"] + EDGE_INSET
+            if abs(window["y"] - expected_y) > 1:
+                problems.append(f"{key}: 최대화한 창이 위 막대 아래 {EDGE_INSET}px에서 시작하지 않습니다(y={window['y']}, 기대 {expected_y})")
 
 
 def check_focus(key, scene, facts, problems):
@@ -252,9 +260,9 @@ def check_focus(key, scene, facts, problems):
         problems.append(f"{key}: 초점을 받은 입력칸이 화면 밖에 있습니다 {box}")
 
 
-def check_safe_variables(key, facts, safe_bottom, problems):
+def check_safe_variables(key, facts, safe_top, safe_bottom, problems):
     safe = facts["safe"]
-    expected = {"top": "0px", "right": "0px", "bottom": f"{safe_bottom}px", "left": "0px"}
+    expected = {"top": f"{safe_top}px", "right": "0px", "bottom": f"{safe_bottom}px", "left": "0px"}
     for name, value in expected.items():
         if safe[name] != value:
             problems.append(f"{key}: --ks-safe-{name}이 {safe[name]!r}입니다(기대 {value!r})")
@@ -284,14 +292,55 @@ def ipad_run(playwright, port, output, result):
                     facts = page.evaluate(MEASURE)
                     facts["capture"] = str(capture(page, output, key))
                     result[key] = facts
-                    check_safe_variables(key, facts, safe_bottom, problems)
-                    check_edges(key, facts, safe_bottom, problems)
+                    check_safe_variables(key, facts, safe_top, safe_bottom, problems)
+                    check_edges(key, facts, safe_top, safe_bottom, problems)
                     check_windows(key, scene, facts, problems)
                     check_focus(key, scene, facts, problems)
                     taskbar = facts["taskbar"] or {}
                     print(f"{key} bar={facts['bar']['height'] if facts['bar'] else None} "
                           f"taskbar_bottom={round(facts['viewport']['height'] - taskbar.get('bottom', 0), 1)}", flush=True)
             context.close()
+    finally:
+        browser.close()
+    return problems
+
+
+def ipad_safe_top_run(playwright, port, output, result):
+    """위 안전 영역이 있는 기기(상태 표시줄이 숨지 않은 경우)에서 최대화한 창의 자리를 잰다.
+
+    쉘 막대가 위 안전 영역만큼 자라므로 창은 막대 아래 끝에서 12px만 비켜 시작해야 한다.
+    """
+    browser = playwright.webkit.launch()
+    problems = []
+    safe_top, safe_bottom = 24, 20
+    try:
+        context = browser.new_context(
+            locale="ko-KR",
+            has_touch=True,
+            is_mobile=True,
+            device_scale_factor=2,
+            viewport={"width": IPAD_SIZES[0][0], "height": IPAD_SIZES[0][1]},
+            color_scheme="light",
+        )
+        context.add_init_script(safe_area_script(safe_top, safe_bottom))
+        page = context.new_page()
+        for width, height in IPAD_SIZES:
+            page.set_viewport_size({"width": width, "height": height})
+            scene = "maximized"
+            key = f"ipad-safe-top-{width}x{height}-{scene}"
+            open_scene(page, port, scene)
+            facts = page.evaluate(MEASURE)
+            facts["capture"] = str(capture(page, output, key))
+            bar_bottom = facts["bar"]["bottom"] if facts["bar"] else None
+            facts["expected_maximized_y"] = None if bar_bottom is None else bar_bottom + EDGE_INSET
+            result[key] = facts
+            check_safe_variables(key, facts, safe_top, safe_bottom, problems)
+            check_edges(key, facts, safe_top, safe_bottom, problems)
+            check_windows(key, scene, facts, problems)
+            print(f"{key} bar={facts['bar']['height'] if facts['bar'] else None} "
+                  f"maximized_y={facts['windows'][0]['y'] if facts['windows'] else None} "
+                  f"expected={facts['expected_maximized_y']}", flush=True)
+        context.close()
     finally:
         browser.close()
     return problems
@@ -367,6 +416,7 @@ def main():
             )
             result["console"] = []
             problems += ipad_run(playwright, args.port, output, result)
+            problems += ipad_safe_top_run(playwright, args.port, output, result)
             problems += pc_run(playwright, args.port, output, args.label, result)
     finally:
         if app_server is not None:

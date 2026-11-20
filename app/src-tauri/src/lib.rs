@@ -5,6 +5,8 @@ mod context_menu;
 mod e2e;
 #[cfg(windows)]
 mod freeze_cover;
+#[cfg(target_os = "ios")]
+mod ios_webview;
 #[cfg(any(target_os = "macos", all(unix, test)))]
 mod login_path;
 #[cfg(windows)]
@@ -473,6 +475,8 @@ pub fn run() {
                 .build()?;
             #[cfg(windows)]
             native_webview::configure_main(app.handle())?;
+            #[cfg(target_os = "ios")]
+            ios_webview::configure_main(app.handle())?;
 
             let event_app = app.handle().clone();
             core.subscribe(Box::new(move |event| {

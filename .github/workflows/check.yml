@@ -343,6 +343,74 @@ jobs:
               return left, top, right - left + 1, bottom - top + 1
 
 
+          def white_edge_ratios(path, left, top, width, height):
+              """장면 네 가장자리 4줄에서 순백(모든 채널 250 이상) 화소 비율을 잰다."""
+              _, _, step, channels, line = read_bmp(path)
+
+              def is_white(pixels, x):
+                  base = x * step
+                  return all(pixels[base + channel] >= 250 for channel in channels)
+
+              counts = {side: [0, 0] for side in ("위", "아래", "왼쪽", "오른쪽")}
+              for y in range(top, top + 4):
+                  pixels = line(y)
+                  for x in range(left, left + width):
+                      counts["위"][0] += 1
+                      counts["위"][1] += is_white(pixels, x)
+              for y in range(top + height - 4, top + height):
+                  pixels = line(y)
+                  for x in range(left, left + width):
+                      counts["아래"][0] += 1
+                      counts["아래"][1] += is_white(pixels, x)
+              for y in range(top, top + height):
+                  pixels = line(y)
+                  for x in list(range(left, left + 4)) + list(range(left + width - 4, left + width)):
+                      side = "왼쪽" if x < left + 4 else "오른쪽"
+                      counts[side][0] += 1
+                      counts[side][1] += is_white(pixels, x)
+              return {side: white / total for side, (total, white) in counts.items()}
+
+
+          def check_scene_edges(path, left, top, width, height, filename):
+              """장면 가장자리에 흰 띠가 남았는지 본다(기준본 4번 「띠 없음」)."""
+              ratios = white_edge_ratios(path, left, top, width, height)
+              print(f"{filename}: 가장자리 순백 비율 " + ", ".join(f"{side} {ratio:.2f}" for side, ratio in ratios.items()), flush=True)
+              for side, ratio in ratios.items():
+                  if ratio >= 0.5:
+                      sys.exit(f"{filename}: {side} 가장자리 4줄이 순백 {ratio:.0%}입니다(띠가 남았습니다)")
+
+
+          def taskbar_edges(path, left, top, width, height):
+              """아래 30%에서 폭을 거의 다 덮는 가로 경계 두 줄(작업 표시줄 위·아래)의 가운데 y를 찾는다.
+
+              작업 표시줄 경계는 장면 폭을 거의 다 덮어 창 아래 끝 같은 다른 경계와 구별된다.
+              안티에일리어싱으로 여러 줄에 걸치므로 이어진 줄을 한 묶음으로 본다.
+              """
+              _, _, step, channels, line = read_bmp(path)
+              margin = max(8, width // 40)
+              columns = list(range(left + margin, left + width - margin, max(4, width // 300)))
+              start = top + int(height * 0.7)
+              hits = []
+              for y in range(start, top + height):
+                  current, previous = line(y), line(y - 3)
+                  changed = 0
+                  for x in columns:
+                      base = x * step
+                      if max(abs(current[base + channel] - previous[base + channel]) for channel in channels) > 12:
+                          changed += 1
+                  if changed >= len(columns) * 0.9:
+                      hits.append(y)
+              bands = []
+              for y in hits:
+                  if bands and y - bands[-1][-1] <= 2:
+                      bands[-1].append(y)
+                  else:
+                      bands.append([y])
+              if len(bands) < 2:
+                  sys.exit(f"{path}: 작업 표시줄의 위·아래 경계를 찾지 못했습니다({len(bands)}개)")
+              return (bands[0][0] + bands[0][-1]) / 2, (bands[1][0] + bands[1][-1]) / 2
+
+
           def write_crop(path, source, left, top, width, height):
               """장면 경계만큼 잘라 BMP로 다시 쓴다. 아래 줄부터 저장하는 보통 BMP다."""
               _, _, step, channels, line = read_bmp(source)
@@ -389,6 +457,12 @@ jobs:
               bmp = RAW / f"{filename}.bmp"
               run("sips", "-s", "format", "bmp", str(shot), "--out", str(bmp))
               left, top, scene_width, scene_height = scene_rect(bmp)
+              check_scene_edges(bmp, left, top, scene_width, scene_height, filename)
+              taskbar_top, taskbar_bottom = taskbar_edges(bmp, left, top, scene_width, scene_height)
+              # 작업 표시줄 높이는 안전 영역과 무관하게 40pt다. 그 높이로 이 장면의 축척을 구하고,
+              # 작업 표시줄 아래 끝에서 장면 아래 끝까지를 pt로 잰다.
+              gap_pt = (top + scene_height - 1 - taskbar_bottom) * 40 / (taskbar_bottom - taskbar_top)
+              print(f"{filename}: 작업 표시줄 높이 {taskbar_bottom - taskbar_top:.1f}px, 아래 끝에서 장면 아래 끝까지 {gap_pt:.1f}pt", flush=True)
               scene = RAW / f"{filename}-scene.bmp"
               write_crop(scene, bmp, left, top, scene_width, scene_height)
               if scene_width < scene_height:
@@ -402,6 +476,7 @@ jobs:
               if width <= height:
                   sys.exit(f"{filename}: 가로 PNG가 아닙니다({width}x{height})")
               print(f"{filename}: {name} {width}x{height} (장면 {scene_width}x{scene_height} at {left},{top})", flush=True)
+              return gap_pt
 
 
           raw = json.loads(run("xcrun", "simctl", "list", "devices", "available", "-j").stdout)
@@ -418,8 +493,11 @@ jobs:
           print("가장 큰 iPad:", large[1], large[2])
           if small[2] == large[2]:
               sys.exit("크기가 다른 iPad 시뮬레이터가 둘 이상 필요합니다:\n" + "\n".join(f"- {item[1]}" for item in devices))
-          capture(small, "ipad-small.png")
-          capture(large, "ipad-large.png")
+          small_gap = capture(small, "ipad-small.png")
+          large_gap = capture(large, "ipad-large.png")
+          print(f"작업 표시줄 아래 여백: 작은 iPad {small_gap:.1f}pt, 큰 iPad {large_gap:.1f}pt", flush=True)
+          if abs(small_gap - large_gap) > 2:
+              sys.exit(f"작업 표시줄 아래 여백이 기기마다 다릅니다({small_gap:.1f}pt != {large_gap:.1f}pt)")
           PY
           ls -l ios-sim
       - name: 시뮬레이터 화면 올리기

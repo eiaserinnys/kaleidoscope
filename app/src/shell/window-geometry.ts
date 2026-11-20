@@ -37,7 +37,9 @@ export function readSafeAreaInsets(): SafeAreaInsets {
 
 export function usableWindowArea(area: { width: number; height: number }, insets: SafeAreaInsets = readSafeAreaInsets()) {
   const left = Math.max(RESIZE_CORNER_SIZE, insets.left);
-  const top = Math.max(RESIZE_CORNER_SIZE, insets.top);
+  // 위 안전 영역은 쉘 막대가 이미 안고 있다(막대가 그만큼 위로 늘고 바탕 영역은 그 아래에서 시작한다).
+  // 여기서 또 비키면 막대 아래 여백이 두 번 들어간다.
+  const top = RESIZE_CORNER_SIZE;
   const right = Math.max(RESIZE_CORNER_SIZE, insets.right);
   const bottom = Math.max(RESIZE_CORNER_SIZE, insets.bottom) + TASKBAR_HEIGHT + RESIZE_CORNER_SIZE;
   return {

@@ -79,6 +79,11 @@ describe("안전 영역과 쓸 수 있는 창 영역", () => {
       .toEqual({ x: 12, y: 12, width: 1000, height: 636 });
   });
 
+  it("위 안전 영역은 쉘 막대가 이미 안고 있으므로 창 위 여백을 더 비키지 않는다", () => {
+    expect(usableWindowArea({ width: 1024, height: 720 }, { top: 24, right: 0, bottom: 0, left: 0 }))
+      .toEqual({ x: 12, y: 12, width: 1000, height: 644 });
+  });
+
   it("안전 영역 네 값을 :root 사용자 속성에서 읽는다", () => {
     const root = document.documentElement;
     root.style.setProperty("--ks-safe-top", "0px");
