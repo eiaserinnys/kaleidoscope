@@ -13,19 +13,39 @@ async function pointer(page: Page, type: "pointerdown" | "pointermove" | "pointe
   }, { type, x, y });
 }
 
-async function rowCenter(page: Page, name: string) {
+// 목록은 첫 그림을 추정 높이(40px)로 그린 뒤 잰 높이(32px)로 다시 그린다. 그 사이에 미리 잰 상자로
+// 누르면 행이 밀린 만큼 이웃 행을 누르게 되어, 메뉴는 열리지만 다른 행이 지워진다.
+// 누르는 순간의 자리에서 좌표를 잡고 그 자리가 그 행에 닿는 것을 확인한 뒤 같은 과제에서 누른다.
+// release를 주면 길게 누르기 문턱(500ms) 전에 떼는 탭이 된다. 누름과 뗌을 같은 과제에서 보내야
+// 그 사이 지연이 문턱을 넘지 않는다.
+async function rowGesture(page: Page, name: string, release = false) {
   const row = page.getByTestId("app-window-data-views-test").getByRole("option", { name, exact: true });
   await expect(row).toBeVisible();
-  const box = (await row.boundingBox())!;
-  return { row, x: box.x + Math.min(48, box.width / 3), y: box.y + box.height / 2 };
+  const key = await row.getAttribute("data-row-key");
+  if (key === null) throw new Error(`행 키를 읽지 못했습니다: ${name}`);
+  const point = await page.evaluate(({ key, release }) => {
+    const target = document.querySelector<HTMLElement>(`[data-testid="app-window-data-views-test"] [role="option"][data-row-key="${key}"]`);
+    if (!target) throw new Error(`누를 행을 찾지 못했습니다: ${key}`);
+    const box = target.getBoundingClientRect();
+    const x = box.left + Math.min(48, box.width / 3);
+    const y = box.top + box.height / 2;
+    const element = document.elementFromPoint(x, y) ?? target;
+    if (element.closest('[role="option"]') !== target) throw new Error(`누를 자리가 그 행이 아닙니다: ${key}`);
+    const init = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, pointerId: 7, pointerType: "touch", isPrimary: true, button: 0 };
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...init, buttons: 1 }));
+    if (release) document.dispatchEvent(new PointerEvent("pointerup", { ...init, buttons: 0 }));
+    return { x, y };
+  }, { key, release });
+  return { row, x: point.x, y: point.y };
 }
+
+const rowPress = (page: Page, name: string) => rowGesture(page, name, false);
+const rowTap = (page: Page, name: string) => rowGesture(page, name, true);
 
 test("행을 길게 누르면 누른 자리에 메뉴가 뜬다", async ({ page }) => {
   await page.goto("/?preview=data-views-test");
-  const { x, y } = await rowCenter(page, "항목 1");
-  await pointer(page, "pointerdown", x, y);
+  const { x, y } = await rowPress(page, "항목 1");
   await expect(page.getByRole("menuitem", { name: "주소 복사" })).toHaveCount(0);
-  await page.waitForTimeout(650);
   await expect(page.getByRole("menuitem", { name: "주소 복사" })).toBeVisible();
   await pointer(page, "pointerup", x, y);
   const menuBox = (await page.getByRole("menu").boundingBox())!;
@@ -35,15 +55,13 @@ test("행을 길게 누르면 누른 자리에 메뉴가 뜬다", async ({ page 
 
 test("10px 넘게 움직이거나 일찍 떼면 메뉴가 뜨지 않는다", async ({ page }) => {
   await page.goto("/?preview=data-views-test");
-  const { x, y } = await rowCenter(page, "항목 1");
-  await pointer(page, "pointerdown", x, y);
+  const { x, y } = await rowPress(page, "항목 1");
   await pointer(page, "pointermove", x + 40, y);
   await page.waitForTimeout(650);
   await pointer(page, "pointerup", x + 40, y);
   await expect(page.getByRole("menu")).toHaveCount(0);
-  await pointer(page, "pointerdown", x, y);
-  await page.waitForTimeout(200);
-  await pointer(page, "pointerup", x, y);
+  await rowTap(page, "항목 1");
+  // 문턱 전에 뗐으니 메뉴가 없어야 한다. 잘못 걸린 타이머가 늦게라도 돌지 않는지 기다려 본다.
   await page.waitForTimeout(650);
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
@@ -52,10 +70,9 @@ test("길게 눌러 연 메뉴 항목은 한 번만 실행된다", async ({ page
   await page.goto("/?preview=data-views-test");
   const app = page.getByTestId("app-window-data-views-test");
   await selectTab(app, "지우기 시험");
-  const { row, x, y } = await rowCenter(page, "항목 3");
+  const { row, x, y } = await rowPress(page, "항목 3");
   const before = await app.getByRole("option").count();
-  await pointer(page, "pointerdown", x, y);
-  await page.waitForTimeout(650);
+  await expect(page.getByRole("menuitem", { name: "지우기" })).toBeVisible();
   await pointer(page, "pointerup", x, y);
   await page.getByRole("menuitem", { name: "지우기" }).click();
   const dialog = page.getByRole("dialog", { name: "지울까요?" });
