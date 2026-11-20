@@ -1,5 +1,5 @@
 // 메뉴·인라인 편집·알림이 같은 동작 상태를 공유한다. 지정된 알림 보완 범위를 지키기 위해 500줄 분리는 이 변경에서 보류한다.
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { ShellStore } from "../core/shell-store";
 import type { CoreError } from "../contract/contract";
 import { SHELL_FILE_EDITOR_SAVE_FAILED, SHELL_FILE_EXTENSION_NOT_ALLOWED } from "../contract/shell-errors";
@@ -17,6 +17,7 @@ import { treeRowColumns } from "../components/tree/tree-row";
 import type { FolderBackend, FolderItem } from "./folder-backend";
 import { editorRevision, flushEditors } from "./file-editor-session";
 import { clipboardListeners, getClipboard, setClipboard, type ShellClipboard } from "./folder-clipboard";
+import { markContextMenuOpened } from "../components/touch-gestures";
 
 function parentPath(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -150,7 +151,8 @@ export function useFolderActions({
   const isCutPath = useCallback((path: string) => clipboard?.root === backend.identity
     && clipboard.mode === "cut" && clipboard.paths.includes(path), [backend.identity, clipboard]);
 
-  const openMenu = useCallback((row: TreeRowModel | null, anchor: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController) => {
+  const openMenu = useCallback((row: TreeRowModel | null, anchor: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController, event?: ReactMouseEvent<HTMLElement>) => {
+    if (event) markContextMenuOpened(event.nativeEvent);
     const item = itemFromRow(row);
     if (item && row && !selection.includes(row.id)) setSelection([row.id]);
     setNotice(null);

@@ -18,6 +18,7 @@ import {
   Menu,
   Notice,
   Plus,
+  markContextMenuOpened,
   Settings,
   TextInput,
   UpdateReady,
@@ -427,6 +428,7 @@ export function Shell({ store }: { store: ShellStore }) {
                     onClick={() => { void runCommand({ op: "desktop.activate", desktop_id: desktop.id }); }}
                     onContextMenu={(event) => {
                       event.preventDefault();
+                      markContextMenuOpened(event.nativeEvent);
                       openDesktopMenu(event.currentTarget, desktop);
                     }}
                     onDoubleClick={() => setRenamingDesktopId(desktop.id)}

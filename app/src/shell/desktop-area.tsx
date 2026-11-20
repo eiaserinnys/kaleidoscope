@@ -11,6 +11,7 @@ import {
   Menu,
   Minus,
   Settings,
+  markContextMenuOpened,
   useShellSelector,
   type AppWindow,
   type Block,
@@ -253,6 +254,7 @@ function TaskbarButton({ ref, title, icon, minimized, isTop, onClick, onContextM
     onClick={onClick}
     onContextMenu={(event) => {
       event.preventDefault();
+      markContextMenuOpened(event.nativeEvent);
       onContextMenu(event.currentTarget);
     }}
     title={title}

@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { CoreError, FolderEntry } from "../contract/contract";
 import { toCoreError } from "../core/core-transport";
 import { Button, ErrorId, ErrorNotice, IconButton, StatusText } from "../components/primitives";
@@ -40,7 +40,7 @@ export interface FileBrowserTreeProps {
   fileIcon?: (entry: FolderEntry) => ReactNode;
   onFileDoubleClick?: (anchor: HTMLElement, path: string) => void;
   onFileEnter?: (anchor: HTMLElement, path: string) => void;
-  onFileContextMenu?: (anchor: HTMLElement, path: string) => void;
+  onFileContextMenu?: (anchor: HTMLElement, path: string, event?: ReactMouseEvent<HTMLElement>) => void;
   actionError?: CoreError | null;
   onActionError?: (error: CoreError | null) => void;
   backend?: FolderBackend;
@@ -609,16 +609,16 @@ export function FileBrowserTree({
     else void selectFile(entry.path, entry);
   }, [mode, onFileEnter, selectFile, selectFolder, selectedPath, setDirectoryExpanded]);
 
-  const contextMenu = useCallback((row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController) => {
+  const contextMenu = useCallback((row: TreeRowModel | null, target: HTMLElement, point: { x: number; y: number }, focus: TreeFocusController, event?: ReactMouseEvent<HTMLElement>) => {
     if (actionsEnabled) {
-      actions.onContextMenu(row, target, point, focus);
+      actions.onContextMenu(row, target, point, focus, event);
       return;
     }
     if (!row) return;
     const entry = (row.node.data as { entry?: FolderEntry } | undefined)?.entry;
     if (!entry || entry.kind === "dir" || !onFileContextMenu) return;
     void selectFile(entry.path, entry);
-    onFileContextMenu(target, entry.path);
+    onFileContextMenu(target, entry.path, event);
   }, [actions, actionsEnabled, onFileContextMenu, selectFile]);
 
   const commandKeyDown = useCallback((row: TreeRowModel | null, event: KeyboardEvent<HTMLElement>, focus: TreeFocusController) => {

@@ -104,6 +104,37 @@ describe("메뉴와 길게 누르기", () => {
     await act(async () => { later = new MouseEvent("click", { bubbles: true, cancelable: true }); row.dispatchEvent(later); });
     expect(later.defaultPrevented).toBe(false);
   });
+
+  it("메뉴를 연 뒤 첫 click은 메뉴 항목이어도 막는다", async () => {
+    const select = vi.fn();
+    render(<><ContextMenuHost /><button onContextMenu={(event) => openContextMenu(event, [{ id: "act", label: "동작", onSelect: select }])}>행</button></>);
+    const row = screen.getByRole("button", { name: "행" });
+    await send(row, "pointerdown", { x: 40, y: 50 });
+    await wait(500);
+    const item = screen.getByRole("menuitem", { name: "동작" });
+    await send(row, "pointerup", { x: 40, y: 50 });
+    let click!: MouseEvent;
+    await act(async () => { click = new MouseEvent("click", { bubbles: true, cancelable: true }); item.dispatchEvent(click); });
+    expect(click.defaultPrevented).toBe(true);
+    expect(select).not.toHaveBeenCalled();
+    expect(screen.getByRole("menuitem", { name: "동작" })).toBeTruthy();
+  });
+
+  it("억제 뒤 손가락으로 메뉴 항목을 새로 누르면 한 번 실행된다", async () => {
+    const select = vi.fn();
+    render(<><ContextMenuHost /><button onContextMenu={(event) => openContextMenu(event, [{ id: "act", label: "동작", onSelect: select }])}>행</button></>);
+    const row = screen.getByRole("button", { name: "행" });
+    await send(row, "pointerdown", { x: 40, y: 50 });
+    await wait(500);
+    const item = screen.getByRole("menuitem", { name: "동작" });
+    await send(row, "pointerup", { x: 40, y: 50 });
+    await send(item, "pointerdown", { x: 60, y: 60 });
+    await send(item, "pointerup", { x: 60, y: 60 });
+    let click!: MouseEvent;
+    await act(async () => { click = new MouseEvent("click", { bubbles: true, cancelable: true }); item.dispatchEvent(click); });
+    expect(click.defaultPrevented).toBe(false);
+    expect(select).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("짧은 두 번 누르기", () => {

@@ -75,7 +75,7 @@ export function installTouchGestures(closeMenu: () => void): () => void {
 function start(closeMenu: () => void): () => void {
   let press: PressState | null = null;
   let lastTap: { x: number; y: number; at: number } | null = null;
-  let suppressClick: { target: Element; until: number } | null = null;
+  let suppressClick: { until: number } | null = null;
   let suppressDoubleUntil = 0;
   const now = () => performance.now();
 
@@ -102,7 +102,7 @@ function start(closeMenu: () => void): () => void {
     current.opened = openedMenus.has(event);
     if (current.opened) {
       clearSelectionOutsideEditable();
-      suppressClick = { target: current.target, until: now() + CLICK_SUPPRESS_MS };
+      suppressClick = { until: now() + CLICK_SUPPRESS_MS };
     }
     lastTap = null;
   };
@@ -125,6 +125,8 @@ function start(closeMenu: () => void): () => void {
 
   const onPointerDown = (event: PointerEvent) => {
     if (event.pointerType !== "touch") return;
+    // 새 손가락 누름이 오면 앞선 길게 누르기의 click 억제는 끝난다. 메뉴 안을 눌러도 같다.
+    suppressClick = null;
     if (!event.isPrimary || event.button !== 0) {
       clearPress();
       lastTap = null;
@@ -166,7 +168,8 @@ function start(closeMenu: () => void): () => void {
       if (current.opened) {
         clearSelectionOutsideEditable();
         // 메뉴를 연 손가락을 늦게 떼어도 그에 딸린 클릭이 메뉴를 닫지 않게 창을 다시 연다.
-        suppressClick = { target: current.target, until: now() + CLICK_SUPPRESS_MS };
+        // 이미 click 하나를 막았거나 새 손가락 누름이 억제를 풀었으면 다시 걸지 않는다.
+        if (suppressClick) suppressClick = { until: now() + CLICK_SUPPRESS_MS };
       }
       lastTap = null;
       return;
@@ -212,8 +215,8 @@ function start(closeMenu: () => void): () => void {
       suppressClick = null;
       return;
     }
-    const target = event.target;
-    if (!(target instanceof Node) || !suppressClick.target.contains(target)) return;
+    // 기기가 손가락을 뗀 자리를 주변의 누를 수 있는 요소로 보정해도, 메뉴를 연 길게 누르기 뒤의
+    // 첫 click 하나는 대상과 관계없이 막는다. 그 click이 메뉴 항목을 실행하면 첫 항목이 눌린다.
     suppressClick = null;
     event.preventDefault();
     event.stopImmediatePropagation();

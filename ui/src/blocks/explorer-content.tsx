@@ -1,5 +1,5 @@
 import { encodeCommentKey } from "../comments/key";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { Column, CoreError, ExplorerView, FileEntry, SortSpec } from "../contract/contract";
 import { Button, EmptyState, ErrorId, ErrorNotice, IconButton, StatusText } from "../components/primitives";
 import { ArrowUp, ChevronRight, Download, File, FileCode, FileImage, FileText, Folder, FolderOpen, HardDrive, Image, LayoutGrid, List, Monitor, Music, Video } from "../components/icons";
@@ -114,7 +114,7 @@ export function ExplorerContent({
   onNavigate: (folder: string) => void;
   onViewChange: (view: ExplorerView) => void;
   onActivateFile: (anchor: HTMLElement, path: string) => void;
-  onContextFile: (anchor: HTMLElement, path: string) => void;
+  onContextFile: (anchor: HTMLElement, path: string, event?: ReactMouseEvent<HTMLElement>) => void;
 }) {
   const { store, window } = context;
   const [entries, setEntries] = useState<FileEntry[] | null>(null);
@@ -279,7 +279,7 @@ export function ExplorerContent({
             {sortedEntries.map((entry, index) => {
               const active = selected === entry.path;
               return <IconTile name={entry.name} icon={entry.kind === "dir" ? directoryIcon(entry, "tile") : fileIcon(entry, "tile")} selected={active} aria-label={entry.name} aria-posinset={index + 1} aria-selected={active} aria-setsize={sortedEntries.length} data-ks-comment-key={encodeCommentKey({ permission, path: entry.path })} data-file-path={entry.kind === "file" ? entry.path : undefined} data-folder-path={entry.kind === "dir" ? entry.path : undefined} data-focus-index={index} key={entry.path} onClick={() => onChoose(entry)} onContextMenu={(event) => {
-                if (entry.kind === "file") { event.preventDefault(); setSelected(entry.path); onContextFile(event.currentTarget, entry.path); }
+                if (entry.kind === "file") { event.preventDefault(); setSelected(entry.path); onContextFile(event.currentTarget, entry.path, event); }
               }} onDoubleClick={(event) => activate(event.currentTarget, entry)} onFocus={() => roving.setFocus(index)} onKeyDown={(event) => roving.keyDown(event, index, () => activate(event.currentTarget, entry), gridColumns)} role="option" tabIndex={roving.focus === index ? 0 : -1} title={entry.name} />;
             })}
           </div>
@@ -289,9 +289,9 @@ export function ExplorerContent({
           }} onChoose={(row) => {
             const entry = sortedEntries.find((item) => item.path === row.key);
             if (entry) onChoose(entry);
-          }} onContextMenu={(row, anchor) => {
+          }} onContextMenu={(row, anchor, event) => {
             const entry = sortedEntries.find((item) => item.path === row.key);
-            if (entry?.kind === "file") { setSelected(entry.path); onContextFile(anchor, entry.path); }
+            if (entry?.kind === "file") { setSelected(entry.path); onContextFile(anchor, entry.path, event); }
           }} renderCell={(row, column) => {
             const entry = sortedEntries.find((item) => item.path === row.key);
             if (!entry) return undefined;

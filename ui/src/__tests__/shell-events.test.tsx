@@ -380,6 +380,37 @@ describe("shell core events", () => {
     store.dispose();
   });
 
+  it("작업 표시줄 창 단추를 길게 눌러 연 메뉴는 그 뒤 클릭으로 창을 올리지 않는다", async () => {
+    const transport = createFakeTransport(makeTestSeed());
+    const calls = vi.spyOn(transport, "call");
+    const store = createShellStore(transport);
+    render(<Shell store={store} />);
+    await store.ready;
+
+    const editorItem = document.querySelector<HTMLButtonElement>('.ks-taskbar-window[data-window-id="editor-window"]');
+    if (!editorItem) throw new Error("편집기 태스크바 항목을 찾지 못했습니다");
+    const pointer = (type: string) => {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: 20, clientY: 20 }) as PointerEvent;
+      Object.defineProperty(event, "pointerType", { value: "touch" });
+      Object.defineProperty(event, "pointerId", { value: 1 });
+      Object.defineProperty(event, "isPrimary", { value: true });
+      return event;
+    };
+    await act(async () => { editorItem.dispatchEvent(pointer("pointerdown")); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 550)); });
+    expect(screen.getByRole("menuitem", { name: "창 최소화" })).toBeTruthy();
+    await act(async () => { editorItem.dispatchEvent(pointer("pointerup")); });
+
+    // 기기가 손가락을 뗀 자리를 주변 요소로 보정해 click이 단추에 와도 창 동작을 일으키지 않는다.
+    let click!: MouseEvent;
+    await act(async () => { click = new MouseEvent("click", { bubbles: true, cancelable: true }); editorItem.dispatchEvent(click); });
+    expect(click.defaultPrevented).toBe(true);
+    expect(calls).not.toHaveBeenCalledWith({ op: "window.raise", window_id: "editor-window" });
+    expect(calls).not.toHaveBeenCalledWith({ op: "window.minimize", window_id: "editor-window" });
+    expect(screen.getByRole("menuitem", { name: "창 최소화" })).toBeTruthy();
+    store.dispose();
+  });
+
   it("앱 열기 격자에서 기본 앱과 커스텀 앱을 각각 가나다순으로 열 수 있다", async () => {
     document.documentElement.style.setProperty("--ks-window-min-width", "360px");
     document.documentElement.style.setProperty("--ks-window-min-height", "240px");

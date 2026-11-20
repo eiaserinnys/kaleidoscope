@@ -470,6 +470,14 @@ pub fn run() {
                 .find(|window| window.label == "main")
                 .ok_or("main window config missing")?
                 .clone();
+            // iOS에서는 링크 길게 누르기 미리보기가 우리 메뉴 위에 뜨지 않게 끈다.
+            // 빌더의 allow_link_preview는 macOS 전용이라 설정 값을 iOS에서만 고친다.
+            #[cfg(target_os = "ios")]
+            let main_config = {
+                let mut config = main_config;
+                config.allow_link_preview = false;
+                config
+            };
             tauri::WebviewWindowBuilder::from_config(app.handle(), &main_config)?
                 .theme(native_theme(core.theme()))
                 .build()?;
