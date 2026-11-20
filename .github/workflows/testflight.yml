@@ -1,15 +1,23 @@
 name: TestFlight
 
 # 개인용 iPad 앱을 서명해 TestFlight에 올린다.
+# 정기 실행은 매일 05:00 KST(20:00 UTC)이고, 지난 업로드 뒤로 main이 바뀌었을 때만 빌드해 올린다.
+# 기준은 이 워크플로에서 업로드 잡(testflight)까지 성공한 가장 최근 실행의 head_sha다. 판단은 decide 잡이 한다.
+# workflow_dispatch의 force를 켜면 변경 판단 없이 빌드한다.
+# 판단이나 업로드가 실패하면 schedule/workflow_dispatch 실행에서만 PAS 웹훅(시크릿 PAS_FAILURE_WEBHOOK_URL)으로 알린다.
 # PR에서는 이 파일이 바뀔 때만 돌려 서명과 업로드 경로를 실제로 확인한다. 같은 리포 가지 PR만 돈다.
-# 머지 뒤에는 release.yml과 같은 태그(v*)와 workflow_dispatch로 돈다.
 on:
   pull_request:
     paths:
       - .github/workflows/testflight.yml
+  schedule:
+    - cron: '0 20 * * *'
   workflow_dispatch:
-  push:
-    tags: ['v*']
+    inputs:
+      force:
+        description: 변경 판단 없이 빌드한다
+        type: boolean
+        default: false
 
 # 서명과 업로드가 겹치지 않게 한 줄로 세운다. 진행 중인 실행은 취소하지 않는다.
 concurrency:
@@ -20,9 +28,99 @@ permissions:
   contents: read
 
 jobs:
+  # 지난 업로드 커밋과 지금 커밋을 견줘 빌드할지 정한다.
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      build: ${{ steps.judge.outputs.build }}
+    steps:
+      - name: 지난 업로드 커밋과 지금 커밋 견주기
+        id: judge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          event="$GITHUB_EVENT_NAME"
+          target="$GITHUB_SHA"
+
+          # 기준 후보: 이 워크플로의 최근 성공 실행(최신 순). 지금 실행은 뺀다.
+          runs_file="$RUNNER_TEMP/testflight-runs.txt"
+          gh api "repos/$repo/actions/workflows/testflight.yml/runs?status=success&per_page=50" \
+            --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' > "$runs_file"
+
+          # 업로드 잡(testflight)이 success로 끝난 가장 최근 실행이 기준이다. 건너뛴(skipped) 실행은 빼다.
+          baseline_run=""
+          baseline_sha=""
+          while read -r run_id run_sha; do
+            if [ "$run_id" = "$GITHUB_RUN_ID" ]; then
+              continue
+            fi
+            conclusion=$(gh api "repos/$repo/actions/runs/$run_id/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "testflight") | .conclusion] | first // ""')
+            if [ "$conclusion" = "success" ]; then
+              baseline_run="$run_id"
+              baseline_sha="$run_sha"
+              break
+            fi
+          done < "$runs_file"
+
+          if [ -z "$baseline_run" ]; then
+            change="기준 실행이 없음"
+            would="빌드(기준 실행 없음)"
+          elif [ "$baseline_sha" = "$target" ]; then
+            change="기준과 대상 커밋이 같음"
+            would="건너뜀(기준과 대상 커밋이 같음)"
+          else
+            change="기준과 대상 커밋이 다름"
+            would="빌드(기준과 대상 커밋이 다름)"
+          fi
+
+          build="true"
+          extra=""
+          if [ "$event" = "pull_request" ]; then
+            # PR은 서명과 업로드 경로를 확인하려고 항상 빌드한다. schedule이었다면 무엇을 할지도 남긴다.
+            decision="빌드(PR 검증, schedule이었다면 $would)"
+            echo "schedule이었다면 $would"
+            extra="- schedule이었다면: $would"
+          elif [ "$event" = "workflow_dispatch" ] && [ "${FORCE:-false}" = "true" ]; then
+            decision="빌드(force 입력, $change)"
+          elif [ -n "$baseline_run" ] && [ "$baseline_sha" = "$target" ]; then
+            build="false"
+            decision="건너뜀(기준과 대상 커밋이 같음)"
+          else
+            decision=$would
+          fi
+
+          echo "이벤트: $event"
+          echo "대상 커밋: $target"
+          echo "기준 실행: ${baseline_run:-없음}, head_sha: ${baseline_sha:-없음} ($change)"
+          echo "결정: $decision"
+
+          {
+            echo "### TestFlight 빌드 판단"
+            echo ""
+            echo "- 이벤트: $event"
+            echo "- 대상 커밋: $target"
+            echo "- 기준 실행: ${baseline_run:-없음}"
+            echo "- 기준 head_sha: ${baseline_sha:-없음}"
+            if [ -n "$extra" ]; then
+              echo "$extra"
+            fi
+            echo "- 결정: $decision"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
   testflight:
-    # 포크 PR에는 시크릿이 전달되지 않으므로 같은 리포 가지 PR만 돈다.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # 포크 PR에는 시크릿이 전달되지 않으므로 같은 리포 가지 PR만 돈다. decide가 빌드하기로 한 실행만 돈다.
+    needs: decide
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.decide.outputs.build == 'true'
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
@@ -42,10 +140,10 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
-      # 장치용 빌드도 매번 처음부터 하지 않도록 캐시한다. 저장은 main push에서만 한다.
+      # 장치용 빌드도 매번 처음부터 하지 않도록 캐시한다. 저장은 main에서 도는 schedule과 workflow_dispatch 실행에서만 한다.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
 
       - name: 의존성 설치
         run: pnpm install --frozen-lockfile
@@ -141,7 +239,47 @@ jobs:
         run: |
           {
             echo "### TestFlight 업로드"
+            echo "- 이벤트: $GITHUB_EVENT_NAME"
             echo "- 판: $VERSION"
             echo "- 빌드 번호(CFBundleVersion): $BUILD_NUMBER"
             echo "- 커밋: $GITHUB_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # 판단이나 업로드가 실패하면 정기 실행에서만 PAS 웹훅으로 알린다. PR 실행에서는 보내지 않는다.
+  notify-failure:
+    needs: [decide, testflight]
+    if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 실패 알림 보내기
+        env:
+          WEBHOOK_URL: ${{ secrets.PAS_FAILURE_WEBHOOK_URL }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          DECIDE_RESULT: ${{ needs.decide.result }}
+          TESTFLIGHT_RESULT: ${{ needs.testflight.result }}
+        run: |
+          set -euo pipefail
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "웹훅 미설정, 건너뜀"
+            exit 0
+          fi
+          summary="decide: ${DECIDE_RESULT:-unknown}, testflight: ${TESTFLIGHT_RESULT:-unknown}"
+          body="$RUNNER_TEMP/testflight-failure.json"
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg run_url "$RUN_URL" \
+            --arg event "$EVENT_NAME" \
+            --arg branch "$REF_NAME" \
+            --arg sha "$COMMIT_SHA" \
+            --arg summary "$summary" \
+            '{repository: $repository, workflow: $workflow, run_url: $run_url, event: $event, branch: $branch, sha: $sha, summary: $summary}' > "$body"
+          # 웹훅 주소와 시크릿 값이 로그에 남지 않도록 응답과 오류 문구를 버리고, 실패는 경고 한 줄로만 남긴다.
+          if ! curl -sS --fail --max-time 20 -X POST -H 'Content-Type: application/json' --data @"$body" "$WEBHOOK_URL" > /dev/null 2>&1; then
+            echo "::warning::실패 알림 웹훅 전송이 실패했습니다"
+          fi
