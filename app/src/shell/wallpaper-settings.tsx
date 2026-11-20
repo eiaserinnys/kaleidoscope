@@ -17,7 +17,7 @@ import { LoaderCircle } from "../../../ui/src/components/icons";
 import { Select } from "../../../ui/src/components/select-toggle";
 import { serverContext } from "../../../ui/src/components/app-icon";
 import { selectDesktop, selectWorkspace } from "./shell-window-actions";
-import { loadWallpaperUrl } from "./wallpaper-layer";
+import { isAwaitingLinkReadFailure, loadWallpaperUrl } from "./wallpaper-layer";
 
 const WALLPAPER_MAX_BYTES = 20 * 1024 * 1024;
 const FORMATS: Record<string, "png" | "jpeg" | "webp"> = {
@@ -60,6 +60,8 @@ function WallpaperPreview({ store, snapshot, wallpaper, activeDesktopId, desktop
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<CoreError | null>(null);
   const context = serverContext(snapshot.link);
+  // 배경 레이어와 같이, 연결 전(offline)과 연결 뒤(connected)의 context가 같으므로 상태를 따로 본다.
+  const linkState = snapshot.link.state;
   useEffect(() => {
     let active = true;
     setUrl(null);
@@ -68,11 +70,15 @@ function WallpaperPreview({ store, snapshot, wallpaper, activeDesktopId, desktop
     void loadWallpaperUrl(store, context, wallpaper).then((next) => {
       if (active) setUrl(next);
     }, (cause: unknown) => {
+      if (!active) return;
+      const problem = toCoreError(cause);
+      // 연결이 끝나면 다시 읽으므로 연결 전 실패는 알리지 않는다.
+      if (isAwaitingLinkReadFailure(problem, linkState)) return;
       // 활성 데스크톱의 읽기 실패는 배경 레이어가 쉘 알림으로 알린다.
-      if (active && desktopId !== activeDesktopId) setError(toCoreError(cause));
+      if (desktopId !== activeDesktopId) setError(problem);
     });
     return () => { active = false; };
-  }, [store, context, wallpaper, desktopId, activeDesktopId]);
+  }, [store, context, wallpaper, desktopId, activeDesktopId, linkState]);
   return <>
     <div aria-busy={wallpaper && !url ? true : undefined} className="ks-wallpaper-preview" style={url ? { backgroundImage: `url("${url}")` } : undefined}>
       {wallpaper && !url ? <LoaderCircle className="ks-settings-apply-spinner" size="inline" /> : null}
