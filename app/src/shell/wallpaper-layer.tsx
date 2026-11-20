@@ -5,6 +5,7 @@ import {
   useShellSelector,
   type CoreError,
   type DesktopWallpaper,
+  type ShellSnapshot,
   type ShellStore,
 } from "@kaleidoscope/ui";
 import { serverContext } from "../../../ui/src/components/app-icon";
@@ -49,6 +50,21 @@ async function fetchWallpaper(store: ShellStore, wallpaper: DesktopWallpaper): P
   }
 }
 
+type LinkState = ShellSnapshot["link"]["state"] | undefined;
+
+/// 링크는 있으나 아직 connected가 아닌 상태다. 이때의 배경 읽기 실패는 연결이 끝나면 다시 읽으므로 알리지 않는다.
+/// 링크가 아예 없거나(unlinked) 연결된(connected) 뒤의 실패는 그대로 알린다.
+function awaitingLink(state: LinkState): boolean {
+  return state !== undefined && state !== "connected" && state !== "unlinked";
+}
+
+/// 연결 전 미디어 읽기 실패인지 가른다. 코어는 MEDIA_LOAD_SERVER_NOT_CONNECTED를 DESK_WALLPAPER_MEDIA_READ_FAILED로
+/// 감싸고 원인 문구만 details에 남기므로, 원인 코드 대신 감싼 코드와 그때의 링크 상태로 판정한다.
+export function isAwaitingLinkReadFailure(error: CoreError, state: LinkState): boolean {
+  return awaitingLink(state)
+    && (error.id === "DESK_WALLPAPER_MEDIA_READ_FAILED" || error.id === "MEDIA_LOAD_SERVER_NOT_CONNECTED");
+}
+
 /// 고른 배경의 Blob URL을 돌려준다. 배경 레코드가 없으면 null이다.
 export function loadWallpaperUrl(store: ShellStore, context: string, wallpaper: DesktopWallpaper): Promise<string | null> {
   ensureContext(context);
@@ -75,6 +91,8 @@ export function WallpaperLayer({ store, activeDesktopId, onError }: {
   const wallpaper = useShellSelector(store, (snapshot) =>
     activeDesktopId ? snapshot?.shared.desktop_wallpapers?.find((item) => item.desktop_id === activeDesktopId) : undefined);
   const context = useShellSelector(store, (snapshot) => snapshot ? serverContext(snapshot.link) : "");
+  // serverContext는 연결 전(offline)과 연결 뒤(connected)가 같다. 연결이 끝나면 다시 읽도록 상태를 따로 구독한다.
+  const linkState = useShellSelector(store, (snapshot) => snapshot?.link.state);
   const [shown, setShown] = useState<{ key: string; url: string } | null>(null);
   const generation = useRef(0);
 
@@ -95,10 +113,13 @@ export function WallpaperLayer({ store, activeDesktopId, onError }: {
     }, (cause: unknown) => {
       if (current !== generation.current) return;
       setShown(null);
-      onError(toCoreError(cause));
+      const error = toCoreError(cause);
+      // 연결 전 실패는 기본 배경을 두고 연결되면 이 effect가 다시 읽는다. 알리지 않는다.
+      if (isAwaitingLinkReadFailure(error, linkState)) return;
+      onError(error);
     });
     return () => { generation.current += 1; };
-  }, [store, context, wallpaper, onError]);
+  }, [store, context, wallpaper, onError, linkState]);
 
   if (!shown) return null;
   return <div aria-hidden="true" className="ks-wallpaper-layer" style={{ backgroundImage: `url("${shown.url}")` }} />;
