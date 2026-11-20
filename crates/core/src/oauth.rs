@@ -266,7 +266,7 @@ pub(crate) fn login_with_timeout(
                 query.append_pair("resource", resource);
             }
         }
-        host.open_url(authorization.as_str()).map_err(|detail| {
+        host.open_auth_url(authorization.as_str()).map_err(|detail| {
             if detail.kind() == std::io::ErrorKind::Unsupported {
                 errors::CONN_LOGIN_BROWSER_UNAVAILABLE(&info.name)
             } else {
