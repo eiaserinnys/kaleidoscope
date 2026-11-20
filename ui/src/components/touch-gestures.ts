@@ -124,9 +124,10 @@ function start(closeMenu: () => void): () => void {
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (event.pointerType !== "touch") return;
-    // 새 손가락 누름이 오면 앞선 길게 누르기의 click 억제는 끝난다. 메뉴 안을 눌러도 같다.
+    // 새로 누르는 것은 새 조작의 시작이다. 앞선 길게 누르기의 click 억제를 여기서 끝낸다. 메뉴 안을 눌러도 같다.
+    // 손가락뿐 아니라 마우스와 펜으로 눌러도 같은 규칙을 따른다. 이 모듈은 손가락 조작만 맞추고 마우스 조작은 건드리지 않는다.
     suppressClick = null;
+    if (event.pointerType !== "touch") return;
     if (!event.isPrimary || event.button !== 0) {
       clearPress();
       lastTap = null;
