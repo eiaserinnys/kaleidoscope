@@ -4,6 +4,14 @@
 <dict>
   <key>ITSAppUsesNonExemptEncryption</key>
   <false/>
+  <!-- 위 막대가 화면 맨 위에 붙도록 상태 표시줄을 숨긴다. 뷰 컨트롤러가 이 값을 이기지 않게 한다. -->
+  <key>UIStatusBarHidden</key>
+  <true/>
+  <key>UIViewControllerBasedStatusBarAppearance</key>
+  <false/>
+  <!-- 개인 TestFlight 동안 가로 장면만 쓴다. -->
+  <key>UIRequiresFullScreen</key>
+  <true/>
   <key>UISupportedInterfaceOrientations~ipad</key>
   <array>
     <string>UIInterfaceOrientationLandscapeLeft</string>

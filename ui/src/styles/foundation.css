@@ -59,6 +59,12 @@
   --ks-blur-popover: 30px;
   --ks-blur-overlay: 9px;
   --ks-letter-label: 0.06em;
+  /* 안전 영역은 이 네 값 한 곳에서 읽는다. CSS와 창 배치 계산(TS)이 같은 값을 쓴다.
+     iPad 가로에서는 아래 20px 남짓이고 PC에서는 0이다. 시각 검수 스크립트는 이 값을 덮어 흉내 낸다. */
+  --ks-safe-top: env(safe-area-inset-top, 0px);
+  --ks-safe-right: env(safe-area-inset-right, 0px);
+  --ks-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ks-safe-left: env(safe-area-inset-left, 0px);
 
   color-scheme: light;
   --ks-color-share: #5f3dc4;

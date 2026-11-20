@@ -91,12 +91,13 @@
   position: relative;
   z-index: 2;
   display: flex;
-  height: calc(var(--ks-control-height) + 2 * var(--ks-space-2));
-  min-height: calc(var(--ks-control-height) + 2 * var(--ks-space-2));
+  /* 위 안전 영역만큼 같은 재질로 위로 늘어나고, 내용은 그 아래에 지금 높이 그대로 놓인다. */
+  height: calc(var(--ks-control-height) + 2 * var(--ks-space-2) + var(--ks-safe-top));
+  min-height: calc(var(--ks-control-height) + 2 * var(--ks-space-2) + var(--ks-safe-top));
   align-items: center;
   gap: var(--ks-space-2);
   background: var(--ks-material-shellbar);
-  padding: 0 var(--ks-space-3);
+  padding: var(--ks-safe-top) var(--ks-space-3) 0;
   backdrop-filter: blur(var(--ks-blur-bar)) saturate(1.08);
 }
 
@@ -277,9 +278,10 @@
 .ks-taskbar {
   position: absolute;
   z-index: 9000;
-  left: var(--ks-space-3);
-  right: var(--ks-space-3);
-  bottom: var(--ks-space-3);
+  /* 홈 인디케이터가 있는 기기에서는 지금 여백과 안전 영역 가운데 큰 쪽만큼 비운다. */
+  left: max(var(--ks-space-3), var(--ks-safe-left));
+  right: max(var(--ks-space-3), var(--ks-safe-right));
+  bottom: max(var(--ks-space-3), var(--ks-safe-bottom));
   display: flex;
   height: calc(var(--ks-control-height) + var(--ks-space-1) * 2);
   align-items: center;

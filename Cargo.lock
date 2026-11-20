@@ -2271,6 +2271,8 @@ dependencies = [
  "image",
  "kaleidoscope-core",
  "kaleidoscope-orchestrator",
+ "objc2",
+ "objc2-ui-kit",
  "percent-encoding",
  "reqwest 0.12.28",
  "serde_json",
