@@ -45,6 +45,8 @@ export interface FakeTransportSeed {
   wallpaperUploadDelayMs?: number;
   /** 데스크톱 id → 미디어 응답 지연. 늦은 응답 역전 시험에 쓴다. */
   wallpaperMediaDelayMs?: Record<string, number>;
+  /** 배경 그림 읽기가 연결된 상태에서도 이 문구로 실패한다. */
+  wallpaperMediaError?: string;
 }
 
 export interface FakeConversationSeed {
@@ -642,6 +644,12 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "desktop.wallpaper.media": {
         const wait = seed.wallpaperMediaDelayMs?.[request.desktop_id];
         if (wait) await delay(wait);
+        // 실제 코어는 링크가 Connected가 아니면 MEDIA_LOAD_SERVER_NOT_CONNECTED를 내고, 배경 읽기는 이를 DESK_WALLPAPER_MEDIA_READ_FAILED로 감싼다.
+        if (snapshot.link.state === "offline" || snapshot.link.state === "pairing") {
+          return fail("server", "저장된 배경 그림을 읽지 못했습니다. 기본 배경으로 보여 줍니다. 서버 연결을 확인하세요.",
+            ["kaleidoscope 서버에 연결되어 있지 않아 미디어를 불러올 수 없습니다. 서버를 연결한 뒤 다시 시도하세요."], "DESK_WALLPAPER_MEDIA_READ_FAILED");
+        }
+        if (seed.wallpaperMediaError) return fail("server", seed.wallpaperMediaError, [], "DESK_WALLPAPER_MEDIA_READ_FAILED");
         const wallpaper = snapshot.shared.desktop_wallpapers?.find((item) => item.desktop_id === request.desktop_id);
         const media = wallpaper ? wallpaperAssets.get(wallpaper.asset.id) : undefined;
         return {
