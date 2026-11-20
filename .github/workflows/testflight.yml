@@ -4,6 +4,7 @@ name: TestFlight
 # 정기 실행은 매일 05:00 KST(20:00 UTC)이고, 지난 업로드 뒤로 main이 바뀌었을 때만 빌드해 올린다.
 # 기준은 이 워크플로에서 업로드 잡(testflight)까지 성공한 가장 최근 실행의 head_sha다. 판단은 decide 잡이 한다.
 # workflow_dispatch의 force를 켜면 변경 판단 없이 빌드한다.
+# 판단이나 업로드가 실패하면 schedule/workflow_dispatch 실행에서만 PAS 웹훅(시크릿 PAS_FAILURE_WEBHOOK_URL)으로 알린다.
 # PR에서는 이 파일이 바뀔 때만 돌려 서명과 업로드 경로를 실제로 확인한다. 같은 리포 가지 PR만 돈다.
 on:
   pull_request:
@@ -243,3 +244,42 @@ jobs:
             echo "- 빌드 번호(CFBundleVersion): $BUILD_NUMBER"
             echo "- 커밋: $GITHUB_SHA"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # 판단이나 업로드가 실패하면 정기 실행에서만 PAS 웹훅으로 알린다. PR 실행에서는 보내지 않는다.
+  notify-failure:
+    needs: [decide, testflight]
+    if: failure() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 실패 알림 보내기
+        env:
+          WEBHOOK_URL: ${{ secrets.PAS_FAILURE_WEBHOOK_URL }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          DECIDE_RESULT: ${{ needs.decide.result }}
+          TESTFLIGHT_RESULT: ${{ needs.testflight.result }}
+        run: |
+          set -euo pipefail
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "웹훅 미설정, 건너뜀"
+            exit 0
+          fi
+          summary="decide: ${DECIDE_RESULT:-unknown}, testflight: ${TESTFLIGHT_RESULT:-unknown}"
+          body="$RUNNER_TEMP/testflight-failure.json"
+          jq -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg workflow "$WORKFLOW_NAME" \
+            --arg run_url "$RUN_URL" \
+            --arg event "$EVENT_NAME" \
+            --arg branch "$REF_NAME" \
+            --arg sha "$COMMIT_SHA" \
+            --arg summary "$summary" \
+            '{repository: $repository, workflow: $workflow, run_url: $run_url, event: $event, branch: $branch, sha: $sha, summary: $summary}' > "$body"
+          # 웹훅 주소와 시크릿 값이 로그에 남지 않도록 응답과 오류 문구를 버리고, 실패는 경고 한 줄로만 남긴다.
+          if ! curl -sS --fail --max-time 20 -X POST -H 'Content-Type: application/json' --data @"$body" "$WEBHOOK_URL" > /dev/null 2>&1; then
+            echo "::warning::실패 알림 웹훅 전송이 실패했습니다"
+          fi
