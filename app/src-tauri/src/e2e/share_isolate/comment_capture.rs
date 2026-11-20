@@ -125,8 +125,10 @@ pub(in crate::e2e) fn scenario(
     })();
     fs::write(out.join("record.stop"), "").map_err(|error| error.to_string())?;
     result?;
+    // 녹화기는 stop을 보고 screen-frames.csv를 다 쓴 뒤에 screen-phase-samples.json을 쓴다.
+    // csv는 쓰는 도중에도 보이므로, 마지막 파일이 생겨 쓰기가 끝난 뒤에 읽는다.
     wait_file(
-        &out.join("screen-frames.csv"),
+        &out.join("screen-phase-samples.json"),
         "screen frames",
         Duration::from_secs(15),
     )?;
