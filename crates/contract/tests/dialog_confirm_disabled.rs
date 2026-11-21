@@ -25,8 +25,8 @@ fn dialog(confirm_disabled: Option<Value>) -> Value {
 
 #[test]
 fn dialog_confirm_disabled_stays_in_block_set_67() {
-    assert_eq!(BLOCK_SET_VERSION, ITEM_IMAGE_BLOCK_SET_VERSION);
-    assert_eq!(BLOCK_SET_VERSION, 67);
+    assert!(BLOCK_SET_VERSION >= ITEM_IMAGE_BLOCK_SET_VERSION);
+    assert_eq!(ITEM_IMAGE_BLOCK_SET_VERSION, 67);
 }
 
 #[test]

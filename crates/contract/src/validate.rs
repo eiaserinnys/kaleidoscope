@@ -3406,6 +3406,7 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
         Block::Chat {
             client: chat_client,
             footer,
+            input_header,
             loading,
         } => {
             if let Some(loading) = loading {
@@ -3446,6 +3447,10 @@ fn validate_block(block: &Block, definition: &AppDefinition, details: &mut Vec<S
             } else if footer.is_some() {
                 details.push(format!(
                     "{at}: chat.footer에는 chat.client 연결이 필요합니다"
+                ));
+            } else if input_header.is_some() {
+                details.push(format!(
+                    "{at}: chat.input_header에는 chat.client 연결이 필요합니다"
                 ));
             } else {
                 if !definition.requires.modules.contains_key("agent") {

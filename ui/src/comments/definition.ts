@@ -15,7 +15,10 @@ function children(block: Block): Child[] {
     case "section": return [...(block.actions ?? []).map((child, i) => ({ path: `actions/${i}`, block: child })), { path: "child", block: block.child }];
     case "when": case "dialog": case "anchor": return [{ path: "child", block: block.child }];
     case "repeat": return [{ path: "template", block: block.template }];
-    case "chat": return block.footer ? [{ path: "footer", block: block.footer }] : [];
+    case "chat": return [
+      ...(block.footer ? [{ path: "footer", block: block.footer }] : []),
+      ...(block.input_header ? [{ path: "input_header", block: block.input_header }] : []),
+    ];
     case "button": return block.preview ? [{ path: "preview", block: block.preview }] : [];
     default: return [];
   }

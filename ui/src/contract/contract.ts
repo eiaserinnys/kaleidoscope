@@ -485,7 +485,12 @@ client?: ChatClient,
 /**
  * (블록 세트 18판) 기록과 입력 사이에 그릴 앱 정의 블록.
  */
-footer?: Block, } | { "type": "web_view", 
+footer?: Block, 
+/**
+ * (블록 세트 68판) 입력창 바로 위에 고정해 그릴 앱 정의 블록. 기록과 함께 스크롤되지 않고 늘 보인다.
+ * `chat.client`가 있어야 한다.
+ */
+input_header?: Block, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */

@@ -231,6 +231,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       footer={footer}
       state={historyState}
     />
+    {block.input_header ? <div className="ks-agent-chat-input-header">{renderBlock(block.input_header, context, `${pointer}/input_header`)}</div> : null}
     <ChatComposer
       draft={draft}
       onDraft={setDraft}
