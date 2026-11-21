@@ -4,6 +4,7 @@ name: TestFlight
 # 정기 실행은 매일 05:00 KST(20:00 UTC)이고, 지난 업로드 뒤로 main이 바뀌었을 때만 빌드해 올린다.
 # 기준은 이 워크플로에서 업로드 잡(testflight)까지 성공한 가장 최근 실행의 head_sha다. 판단은 decide 잡이 한다.
 # workflow_dispatch의 force를 켜면 변경 판단 없이 빌드한다.
+# 빌드는 GitHub 호스트 러너 xcode-27에서 Xcode 27.1(iOS 27 SDK)로 한다. 업로드 전 관문이 IPA의 DTSDKName이 iphoneos27로 시작하는지 확인한다.
 # 판단이나 업로드가 실패하면 schedule/workflow_dispatch 실행에서만 PAS 웹훅(시크릿 PAS_FAILURE_WEBHOOK_URL)으로 알린다.
 # PR에서는 이 파일이 바뀔 때만 돌려 서명과 업로드 경로를 실제로 확인한다. 같은 리포 가지 PR만 돈다.
 on:
@@ -121,10 +122,17 @@ jobs:
     # 포크 PR에는 시크릿이 전달되지 않으므로 같은 리포 가지 PR만 돈다. decide가 빌드하기로 한 실행만 돈다.
     needs: decide
     if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.decide.outputs.build == 'true'
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # App Store Connect는 2027년 4월부터 iOS 27 SDK로 빌드한 앱만 받는다. 러너 기본 Xcode가 아니라 27.1을 명시로 고른다.
+      - name: Xcode 27.1 고르기
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
@@ -141,8 +149,10 @@ jobs:
           targets: aarch64-apple-ios
 
       # 장치용 빌드도 매번 처음부터 하지 않도록 캐시한다. 저장은 main에서 도는 schedule과 workflow_dispatch 실행에서만 한다.
+      # macos-26 캐시에는 그 이미지의 Xcode_26.6 경로를 담은 빌드 산출물이 있어, 경로가 없는 xcode-27 러너에서 그대로 쓰면 링크가 깨진다.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          prefix-key: xcode-27
           save-if: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' }}
 
       - name: 의존성 설치
@@ -194,7 +204,7 @@ jobs:
           build_config=$(printf '{"bundle":{"iOS":{"bundleVersion":"%s"}}}' "$BUILD_NUMBER")
           pnpm --dir app tauri ios build --export-method app-store-connect --ci --config "$build_config"
 
-      # 산출 IPA의 판·빌드 번호·번들 ID가 기대와 다르면 업로드하지 않는다.
+      # 산출 IPA의 판·빌드 번호·번들 ID와 SDK가 기대와 다르면 업로드하지 않는다.
       - name: 업로드 전 관문
         run: |
           set -euo pipefail
@@ -210,6 +220,8 @@ jobs:
           got_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
           got_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
           got_id=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
+          got_sdk=$(/usr/libexec/PlistBuddy -c 'Print :DTSDKName' "$plist")
+          got_xcode=$(/usr/libexec/PlistBuddy -c 'Print :DTXcode' "$plist")
           if [ "$got_build" != "$BUILD_NUMBER" ]; then
             echo "관문 실패: CFBundleVersion=$got_build, 기대=$BUILD_NUMBER" >&2
             exit 1
@@ -222,7 +234,14 @@ jobs:
             echo "관문 실패: CFBundleIdentifier=$got_id" >&2
             exit 1
           fi
-          echo "관문 통과: CFBundleVersion=$got_build CFBundleShortVersionString=$got_version CFBundleIdentifier=$got_id"
+          case "$got_sdk" in
+            iphoneos27*) ;;
+            *)
+              echo "관문 실패: DTSDKName=$got_sdk, 기대=iphoneos27*" >&2
+              exit 1
+              ;;
+          esac
+          echo "관문 통과: CFBundleVersion=$got_build CFBundleShortVersionString=$got_version CFBundleIdentifier=$got_id DTSDKName=$got_sdk DTXcode=$got_xcode"
           echo "IPA=$ipa" >> "$GITHUB_ENV"
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
