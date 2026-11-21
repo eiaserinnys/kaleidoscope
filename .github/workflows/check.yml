@@ -191,15 +191,22 @@ jobs:
           path: ${{ runner.temp }}/kaleidoscope-macos-arm64.zip
           retention-days: 7
 
-  # iPad 앱이 장치용으로 컴파일되는지, 시뮬레이터에서 실행되는지 확인한다.
-  # 가장 작은 iPad와 가장 큰 iPad 시뮬레이터 두 대에서 앱을 띄워 앱 장면을 가로 PNG로 찍는다.
-  # iPadOS 26은 세로로 든 기기에서 가로 장면을 줄여 검은 바탕 가운데에 그리므로, 화면에서 장면만 잘라 낸다.
-  # 서명, 인증서, Apple 계정 시크릿은 쓰지 않는다. TestFlight 업로드는 다음 단위다.
+  # iPad 앱이 장치용으로 컴파일되는지, iOS 27 시뮬레이터에서 실행되는지 확인한다.
+  # iOS 27 런타임의 가장 작은 iPad와 가장 큰 iPad 두 대에서 앱을 띄워 장면을 가로 PNG로 찍는다.
+  # 세로로 든 기기에서 가로 장면을 줄여 검은 바탕 가운데에 그리면, 화면에서 장면만 잘라 낸다.
+  # 프로세스 생존, 크래시 리포트, NoSceneLifecycleAdoption을 기계로 판정한다.
+  # 서명, 인증서, Apple 계정 시크릿은 쓰지 않는다. TestFlight 업로드는 testflight.yml이 맡는다.
   ios-app:
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Xcode 27.1 고르기
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.1.app
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          xcrun simctl list runtimes
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 10.32.1
@@ -445,19 +452,43 @@ jobs:
                       output.write(row)
 
 
+          CRASH_DIR = pathlib.Path.home() / "Library" / "Logs" / "DiagnosticReports"
+
+
+          def crash_reports():
+              """이 기기에서 방금 난 앱 크래시 리포트 파일 이름을 모은다."""
+              if not CRASH_DIR.is_dir():
+                  return set()
+              return {
+                  path.name
+                  for path in CRASH_DIR.iterdir()
+                  if path.suffix == ".ips" and "kaleidoscope" in path.name.lower()
+              }
+
+
           def capture(device, filename):
-              _, name, udid, _ = device
+              _, name, udid, runtime = device
+              before_reports = crash_reports()
               run("xcrun", "simctl", "boot", udid, check=False)
               run("xcrun", "simctl", "bootstatus", udid, "-b")
               run("xcrun", "simctl", "install", udid, APP)
               run("xcrun", "simctl", "launch", udid, BUNDLE_ID)
               time.sleep(25)
               listing = run("xcrun", "simctl", "spawn", udid, "launchctl", "list", check=False).stdout
+              logs = run("xcrun", "simctl", "spawn", udid, "log", "show", "--last", "5m", "--style", "compact",
+                         "--predicate", 'processImagePath CONTAINS "kaleidoscope"', check=False).stdout
               if BUNDLE_ID not in listing:
-                  logs = run("xcrun", "simctl", "spawn", udid, "log", "show", "--last", "3m", "--style", "compact",
-                             "--predicate", 'processImagePath CONTAINS "kaleidoscope"', check=False).stdout
                   print(logs[-8000:], file=sys.stderr)
                   sys.exit(f"{name}: 앱이 실행 중에 종료되었습니다")
+              new_reports = sorted(crash_reports() - before_reports)
+              if new_reports:
+                  print(logs[-8000:], file=sys.stderr)
+                  sys.exit(f"{name}: 새 크래시 리포트가 생겼습니다: {', '.join(new_reports)}")
+              adoption = [line for line in logs.splitlines() if "NoSceneLifecycleAdoption" in line]
+              if adoption:
+                  print("\n".join(adoption[-40:]), file=sys.stderr)
+                  sys.exit(f"{name}: 시스템 로그에 NoSceneLifecycleAdoption이 있습니다")
+              print(f"{filename}: 기동 판정 통과: {name} {runtime}, 프로세스 생존, 크래시 리포트 없음, NoSceneLifecycleAdoption 없음", flush=True)
               shot = RAW / f"{filename}.png"
               run("xcrun", "simctl", "io", udid, "screenshot", str(shot))
               bmp = RAW / f"{filename}.bmp"
@@ -485,18 +516,26 @@ jobs:
               return gap_pt
 
 
+          IOS27 = "com.apple.CoreSimulator.SimRuntime.iOS-27-"
           raw = json.loads(run("xcrun", "simctl", "list", "devices", "available", "-j").stdout)
           devices = []
           for runtime, entries in raw["devices"].items():
+              if not runtime.startswith(IOS27):
+                  continue
               for entry in entries:
                   if entry.get("isAvailable") and "iPad" in entry.get("name", ""):
                       devices.append((rank(entry["name"], entry.get("deviceTypeIdentifier", "")), entry["name"], entry["udid"], runtime))
           if not devices:
-              sys.exit("iPad 시뮬레이터를 찾지 못했습니다")
+              print("iOS 27 런타임의 iPad 시뮬레이터를 찾지 못했습니다. 런타임과 기기 종류를 남긴다.", file=sys.stderr)
+              print(run("xcrun", "simctl", "list", "runtimes", check=False).stdout, file=sys.stderr)
+              print(run("xcrun", "simctl", "list", "devicetypes", check=False).stdout, file=sys.stderr)
+              print(run("xcrun", "simctl", "list", "devices", "available", check=False).stdout, file=sys.stderr)
+              sys.exit("iOS 27 iPad 시뮬레이터를 찾지 못했습니다")
+          print("iOS 27 iPad 후보:", ", ".join(f"{item[1]} ({item[3]})" for item in devices), flush=True)
           devices.sort(key=lambda item: item[0])
           small, large = devices[0], devices[-1]
-          print("가장 작은 iPad:", small[1], small[2])
-          print("가장 큰 iPad:", large[1], large[2])
+          print("가장 작은 iPad:", small[1], small[2], small[3])
+          print("가장 큰 iPad:", large[1], large[2], large[3])
           if small[2] == large[2]:
               sys.exit("크기가 다른 iPad 시뮬레이터가 둘 이상 필요합니다:\n" + "\n".join(f"- {item[1]}" for item in devices))
           small_gap = capture(small, "ipad-small.png")
