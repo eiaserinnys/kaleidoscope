@@ -93,7 +93,7 @@ test("초기 저장소 오류는 가운데에 보이고 다시 읽기에 실패�
   assert.equal(views.at(-1).error_id, null);
 });
 
-test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 이유를 표시한다", () => {
+function makeApp() {
   const handlers = new Map<string, (context: any) => unknown>();
   const views: any[] = [];
   const client = {
@@ -102,10 +102,19 @@ test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 
     onStorageChange() {}, onLifecycle() {}, onMessage() {},
     handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
   };
-  const app = new AppClient(client as any, []);
-  (app as any).receive({ phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null,
+  return { handlers, views, app: new AppClient(client as any, []) };
+}
+
+function readyView() {
+  return { phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null,
     queued: [], permissions: [], controls: [], authMethods: [], failure: null,
-    sessionId: "current", canListSessions: false, sessions: [], sessionsLoading: false, sessionError: null, switching: false });
+    sessionId: "current", canListSessions: true, canDeleteSessions: false, sessions: [], sessionsLoading: false, sessionError: null,
+    switching: false, deleting: false, configuring: false };
+}
+
+test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 이유를 표시한다", () => {
+  const { views, app } = makeApp();
+  (app as any).receive({ ...readyView(), canListSessions: false });
   assert.equal(views.at(-1).history_disabled, true);
   assert.equal(views.at(-1).history_description, "이 에이전트는 지난 세션 목록을 주지 않습니다");
   assert.equal(views.at(-1).history_unsupported, true);
@@ -172,4 +181,65 @@ test("세션 전환 중 대화를 숨기고 실패하면 대화상자와 오류�
   assert.equal(views.at(-1).history_open, true);
   assert.equal(views.at(-1).session_switching, false);
   assert.equal(views.at(-1).history_error_message, "오류");
+});
+
+test("제목 검색은 표시 제목을 대소문자 없이 거르고 대화상자를 닫으면 비운다", async () => {
+  const { handlers, views, app } = makeApp();
+  (app as any).receive({ ...readyView(), sessions: [
+    { sessionId: "a1", cwd: "/work", title: "Fix Login" },
+    { sessionId: "b2", cwd: "/work", title: "배포 정리" },
+    { sessionId: "zz998877665544", cwd: "/work" },
+  ] });
+  await handlers.get("search_history")!({ event: "  login " });
+  assert.deepEqual(views.at(-1).history_items.map((i: any) => i.key), ["a1"]);
+  assert.equal(views.at(-1).history_query, "  login ");
+  await handlers.get("search_history")!({ event: "ZZ9988" });
+  assert.deepEqual(views.at(-1).history_items.map((i: any) => i.key), ["zz998877665544"]);
+  await handlers.get("search_history")!({ event: "없는 제목" });
+  assert.deepEqual(views.at(-1).history_items, []);
+  assert.equal(views.at(-1).history_no_match, true);
+  assert.equal(views.at(-1).history_has_items, true);
+  await handlers.get("search_history")!({ event: "정리" });
+  (app as any).receive({ ...(app as any).view, sessions: [{ sessionId: "a1", cwd: "/work", title: "Fix Login" }] });
+  assert.deepEqual(views.at(-1).history_items, []);
+  assert.equal(views.at(-1).history_query, "정리");
+  await handlers.get("close_history")!({});
+  assert.equal(views.at(-1).history_query, "");
+  assert.deepEqual(views.at(-1).history_items.map((i: any) => i.key), ["a1"]);
+  assert.equal(views.at(-1).history_no_match, false);
+});
+
+test("삭제는 능력이 있을 때만 메뉴를 보이고 잠긴 동안에는 보내지 않는다", async () => {
+  const { handlers, views, app } = makeApp();
+  (app as any).receive({ ...readyView(), sessions: [{ sessionId: "a1", cwd: "/work", title: "Fix Login" }] });
+  assert.equal(views.at(-1).history_can_delete, false);
+  assert.equal(views.at(-1).history_cannot_delete, true);
+  assert.equal(views.at(-1).history_items[0].confirm, "「Fix Login」 세션을 지웁니다. 되돌릴 수 없습니다.");
+  await handlers.get("search_history")!({ event: "없는 제목" });
+  assert.equal(views.at(-1).history_no_match, true);
+  assert.equal(views.at(-1).history_can_delete, false);
+  assert.equal(views.at(-1).history_cannot_delete, false);
+  await handlers.get("search_history")!({ event: "" });
+  assert.equal(views.at(-1).history_cannot_delete, true);
+  const deleted: string[] = [];
+  (app as any).session.deleteSession = async (id: string) => { deleted.push(id); };
+  await handlers.get("delete_session")!({ event: "a1" });
+  assert.deepEqual(deleted, []);
+  (app as any).receive({ ...(app as any).view, canDeleteSessions: true });
+  assert.equal(views.at(-1).history_can_delete, true);
+  await handlers.get("search_history")!({ event: "없는 제목" });
+  assert.equal(views.at(-1).history_can_delete, false);
+  assert.equal(views.at(-1).history_cannot_delete, false);
+  await handlers.get("search_history")!({ event: "" });
+  assert.equal(views.at(-1).history_can_delete, true);
+  assert.equal(views.at(-1).history_cannot_delete, false);
+  (app as any).receive({ ...(app as any).view, busy: true });
+  await handlers.get("delete_session")!({ event: "a1" });
+  assert.deepEqual(deleted, []);
+  (app as any).receive({ ...(app as any).view, busy: false });
+  await handlers.get("delete_session")!({ event: "a1" });
+  assert.deepEqual(deleted, ["a1"]);
+  (app as any).receive({ ...(app as any).view, deleting: true });
+  assert.equal(views.at(-1).session_buttons_busy, true);
+  assert.equal(views.at(-1).history_disabled, true);
 });

@@ -15,7 +15,7 @@ export type State = {
   nextId: number;
   pending: Record<string, Pending>;
   sessionId: string | null;
-  capabilities: { loadSession: boolean; image: boolean; http: boolean; list: boolean };
+  capabilities: { loadSession: boolean; image: boolean; http: boolean; list: boolean; delete: boolean };
   authMethods: { id: string; name: string; description: string }[];
   controls: Control[];
   permissions: Permission[];
@@ -44,7 +44,7 @@ export type State = {
 
 export function initialState(): State {
   return { schema: 1, generation: "", nextId: 1, pending: {}, sessionId: null,
-    capabilities: { loadSession: false, image: false, http: false, list: false }, authMethods: [], controls: [], permissions: [], queue: [],
+    capabilities: { loadSession: false, image: false, http: false, list: false, delete: false }, authMethods: [], controls: [], permissions: [], queue: [],
     stream: { id: null, text: "" }, tools: [], partial: [], partialKey: null, streamKey: null, guideSent: false,
     phase: "starting", replay: false, replayItems: [], sessionError: null, needsNew: false, initialized: false, failure: null,
     completed: [], outbox: [], servicesUsed: null, restartPending: false, contextTicket: null, restoreControls: [] };
@@ -54,7 +54,7 @@ export function reserveRequest(state: State, kind: string, params: unknown): [St
   const id = state.nextId;
   return [{ ...state, nextId: id + 1, phase: kind === "prompt" ? "responding" : kind === "authenticate" ? "starting" : state.phase,
     failure: kind === "prompt" ? null : state.failure, replay: kind === "load" || kind === "switch" ? true : state.replay,
-    replayItems: kind === "switch" ? [] : state.replayItems, sessionError: kind === "switch" || kind === "new_user" ? null : state.sessionError,
+    replayItems: kind === "switch" ? [] : state.replayItems, sessionError: kind === "switch" || kind === "new_user" || kind === "delete" ? null : state.sessionError,
     pending: { ...state.pending, [id]: { kind, params } } }, id];
 }
 
@@ -157,6 +157,10 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
       const error = agentError(active ? "AGENT_SESSION_LOAD_ACTIVE_WRITER" : request.kind === "switch" ? "AGENT_SESSION_LOAD_FAILED" : "AGENT_SESSION_NEW_FAILED", reason);
       return { ...next, replay: false, replayItems: [], sessionError: { id: error.id, message: error.message } };
     }
+    if (request.kind === "delete") {
+      const error = agentError("AGENT_SESSION_DELETE_FAILED", reason);
+      return { ...next, sessionError: { id: error.id, message: error.message } };
+    }
     if ((request.kind === "new" || request.kind === "load") && message.error.code === -32000) return { ...next, phase: "login", replay: false };
     if (request.kind === "load") return { ...next, phase: "starting", replay: false, needsNew: true };
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
@@ -168,7 +172,7 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     const result = message.result as InitializeResponse;
     return { ...next, initialized: true, capabilities: { loadSession: result.agentCapabilities?.loadSession === true,
       image: result.agentCapabilities?.promptCapabilities?.image === true, http: result.agentCapabilities?.mcpCapabilities?.http === true,
-      list: result.agentCapabilities?.sessionCapabilities?.list != null },
+      list: result.agentCapabilities?.sessionCapabilities?.list != null, delete: result.agentCapabilities?.sessionCapabilities?.delete != null },
       authMethods: (result.authMethods ?? []).filter((method) => "id" in method && "name" in method && (method as { type?: string }).type !== "terminal").map((method) => ({ id: method.id, name: method.name, description: method.description ?? "" })) };
   }
   if (request.kind === "switch" || request.kind === "new_user") {

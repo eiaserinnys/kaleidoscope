@@ -678,7 +678,10 @@
                             "type": "stack",
                             "direction": "column",
                             "gap": "small",
-                            "fill": 2,
+                            "fill": [
+                              4,
+                              5
+                            ],
                             "children": [
                               {
                                 "type": "when",
@@ -721,18 +724,83 @@
                                 }
                               },
                               {
-                                "type": "list",
-                                "items": {
-                                  "client": "history_items"
+                                "type": "input",
+                                "kind": "search",
+                                "value": {
+                                  "client": "history_query"
                                 },
-                                "disabled": {
-                                  "client": "session_buttons_busy"
+                                "on_change": {
+                                  "client": "search_history"
                                 },
-                                "selected": {
-                                  "client": "history_selected"
+                                "placeholder": "제목으로 찾기"
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_no_match"
                                 },
-                                "on_select": {
-                                  "client": "select_session"
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "info",
+                                  "message": "일치하는 세션이 없습니다"
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_cannot_delete"
+                                },
+                                "child": {
+                                  "type": "list",
+                                  "items": {
+                                    "client": "history_items"
+                                  },
+                                  "disabled": {
+                                    "client": "session_buttons_busy"
+                                  },
+                                  "selected": {
+                                    "client": "history_selected"
+                                  },
+                                  "on_select": {
+                                    "client": "select_session"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_can_delete"
+                                },
+                                "child": {
+                                  "type": "list",
+                                  "items": {
+                                    "client": "history_items"
+                                  },
+                                  "disabled": {
+                                    "client": "session_buttons_busy"
+                                  },
+                                  "selected": {
+                                    "client": "history_selected"
+                                  },
+                                  "item_menu": [
+                                    {
+                                      "label": "삭제",
+                                      "danger": true,
+                                      "confirm": {
+                                        "title": "세션 삭제",
+                                        "body": {
+                                          "item": "confirm"
+                                        },
+                                        "ok": "삭제"
+                                      },
+                                      "on_select": {
+                                        "client": "delete_session"
+                                      }
+                                    }
+                                  ],
+                                  "on_select": {
+                                    "client": "select_session"
+                                  }
                                 }
                               }
                             ]
@@ -981,19 +1049,95 @@
                             "client": "history_has_items"
                           },
                           "child": {
-                            "type": "list",
-                            "items": {
-                              "client": "history_items"
-                            },
-                            "disabled": {
-                              "client": "session_buttons_busy"
-                            },
-                            "selected": {
-                              "client": "history_selected"
-                            },
-                            "on_select": {
-                              "client": "select_session"
-                            }
+                            "type": "stack",
+                            "direction": "column",
+                            "gap": "small",
+                            "fill": [
+                              2,
+                              3
+                            ],
+                            "children": [
+                              {
+                                "type": "input",
+                                "kind": "search",
+                                "value": {
+                                  "client": "history_query"
+                                },
+                                "on_change": {
+                                  "client": "search_history"
+                                },
+                                "placeholder": "제목으로 찾기"
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_no_match"
+                                },
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "info",
+                                  "message": "일치하는 세션이 없습니다"
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_cannot_delete"
+                                },
+                                "child": {
+                                  "type": "list",
+                                  "items": {
+                                    "client": "history_items"
+                                  },
+                                  "disabled": {
+                                    "client": "session_buttons_busy"
+                                  },
+                                  "selected": {
+                                    "client": "history_selected"
+                                  },
+                                  "on_select": {
+                                    "client": "select_session"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "when",
+                                "value": {
+                                  "client": "history_can_delete"
+                                },
+                                "child": {
+                                  "type": "list",
+                                  "items": {
+                                    "client": "history_items"
+                                  },
+                                  "disabled": {
+                                    "client": "session_buttons_busy"
+                                  },
+                                  "selected": {
+                                    "client": "history_selected"
+                                  },
+                                  "item_menu": [
+                                    {
+                                      "label": "삭제",
+                                      "danger": true,
+                                      "confirm": {
+                                        "title": "세션 삭제",
+                                        "body": {
+                                          "item": "confirm"
+                                        },
+                                        "ok": "삭제"
+                                      },
+                                      "on_select": {
+                                        "client": "delete_session"
+                                      }
+                                    }
+                                  ],
+                                  "on_select": {
+                                    "client": "select_session"
+                                  }
+                                }
+                              }
+                            ]
                           }
                         }
                       ]
@@ -1021,14 +1165,14 @@
     { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
-      "version": 10
+      "version": 11
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 10
+      "version": 11
     },
     "inputs": {},
     "outputs": {
@@ -1193,6 +1337,18 @@
       },
       "history_other_error": {
         "default": false
+      },
+      "history_query": {
+        "default": ""
+      },
+      "history_no_match": {
+        "default": false
+      },
+      "history_can_delete": {
+        "default": false
+      },
+      "history_cannot_delete": {
+        "default": true
       }
     },
     "channels": [
@@ -1215,7 +1371,9 @@
       "new_session",
       "open_history",
       "close_history",
-      "select_session"
+      "select_session",
+      "search_history",
+      "delete_session"
     ],
     "commands": {},
     "state_keys": [
