@@ -1,17 +1,119 @@
 //! 네트워크 없이 고정된 ACP 응답을 내는 시험 프로세스.
+//! 연결 하나에 세션 여러 개를 두고, 오래 걸리는 턴은 스레드에서 흘려 다른 세션 요청을 계속 받는다.
 use serde_json::{json, Value};
+use std::collections::{BTreeMap, HashMap};
 use std::io::{self, BufRead, Write};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+/// 한 줄을 통째로 쓴다. `io::stdout().lock()`이 프로세스 전체에서 공유되는 뮤텍스라
+/// 여러 스레드가 동시에 써도 줄 단위로 섞이지 않는다.
 fn emit(value: Value) {
     let mut stdout = io::stdout().lock();
     writeln!(stdout, "{value}").unwrap();
     stdout.flush().unwrap();
 }
-fn update(value: Value) {
+fn update(session: &str, value: Value) {
     emit(
-        json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-1","update":value}}),
+        json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":session,"update":value}}),
     );
 }
+fn chunk(session: &str, text: &str) {
+    update(
+        session,
+        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":text}}),
+    );
+}
+
+/// 응답을 아직 보내지 않은 프롬프트. `token`으로 끝낼 권한이 누구에게 있는지 가린다.
+struct Turn {
+    id: Value,
+    token: u64,
+}
+#[derive(Default)]
+struct Session {
+    cwd: String,
+    title: Option<String>,
+    turn: Option<Turn>,
+    // 권한 요청 id -> 기다리는 프롬프트 id
+    permissions: HashMap<String, Value>,
+}
+#[derive(Default)]
+struct State {
+    sessions: BTreeMap<String, Session>,
+    // session/list 순서를 위해 만든(불러온) 차례를 따로 둔다.
+    order: Vec<String>,
+    next_session: usize,
+    next_permission: usize,
+    next_token: u64,
+}
+impl State {
+    fn session(&mut self, id: &str) -> &mut Session {
+        if !self.sessions.contains_key(id) {
+            self.order.push(id.to_owned());
+        }
+        self.sessions.entry(id.to_owned()).or_default()
+    }
+    fn new_session_id(&mut self) -> String {
+        loop {
+            self.next_session += 1;
+            let id = format!("session-{}", self.next_session);
+            if !self.sessions.contains_key(&id) {
+                return id;
+            }
+        }
+    }
+    fn start_turn(&mut self, session: &str, id: Value) -> u64 {
+        self.next_token += 1;
+        let token = self.next_token;
+        self.session(session).turn = Some(Turn { id, token });
+        token
+    }
+    /// 해당 턴이 아직 살아 있으면 꺼내 돌려준다. 이미 취소된 턴이면 None.
+    fn take_turn(&mut self, session: &str, token: u64) -> Option<Value> {
+        let entry = self.sessions.get_mut(session)?;
+        if entry.turn.as_ref().map(|turn| turn.token) != Some(token) {
+            return None;
+        }
+        entry.turn.take().map(|turn| turn.id)
+    }
+    fn alive(&self, session: &str, token: u64) -> bool {
+        self.sessions
+            .get(session)
+            .and_then(|entry| entry.turn.as_ref())
+            .map(|turn| turn.token)
+            == Some(token)
+    }
+}
+
+/// 턴을 스레드에서 흘린다. 청크 사이마다 취소됐는지 보고, 끝까지 가면 end_turn으로 답한다.
+fn spawn_chunks(
+    state: &Arc<Mutex<State>>,
+    session: String,
+    token: u64,
+    count: usize,
+    interval: Duration,
+) {
+    let state = Arc::clone(state);
+    std::thread::spawn(move || {
+        for index in 0..count {
+            {
+                // 취소와 청크 쓰기가 엇갈리지 않게 상태를 잡은 채로 확인하고 쓴다.
+                let state = state.lock().unwrap();
+                if !state.alive(&session, token) {
+                    return;
+                }
+                chunk(&session, &format!("[{index:02}]"));
+            }
+            std::thread::sleep(interval);
+        }
+        let mut state = state.lock().unwrap();
+        if let Some(id) = state.take_turn(&session, token) {
+            emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
+        }
+    });
+}
+
 fn main() {
     let scenario = std::env::var("TEST_SCENARIO").unwrap_or_default();
     if scenario.contains("exit") {
@@ -43,7 +145,7 @@ fn main() {
     }
     let mut authenticated = false;
     let mut login_attempts = 0;
-    let mut pending = Value::Null;
+    let state = Arc::new(Mutex::new(State::default()));
     let mut image_count = 0usize;
     for line in io::stdin().lock().lines() {
         let value: Value = match line.ok().and_then(|s| serde_json::from_str(&s).ok()) {
@@ -74,12 +176,31 @@ fn main() {
             line.push('\n');
             file.write_all(line.as_bytes()).unwrap();
         }
-        if method.is_empty() && value["id"] == json!("permission-1") {
-            update(
-                json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("선택: {}",value["result"]["outcome"]["optionId"].as_str().unwrap_or("cancelled"))}}),
-            );
-            emit(json!({"jsonrpc":"2.0","id":pending,"result":{"stopReason":"end_turn"}}));
-            pending = Value::Null;
+        if method.is_empty() {
+            // 권한 요청에 대한 클라이언트 응답. 어느 세션의 요청인지 찾아 그 턴만 끝낸다.
+            let answer = value["id"].as_str().unwrap_or("").to_owned();
+            let mut state = state.lock().unwrap();
+            let found = state.sessions.iter_mut().find_map(|(session, entry)| {
+                entry
+                    .permissions
+                    .remove(&answer)
+                    .map(|prompt| (session.clone(), prompt, entry))
+            });
+            if let Some((session, prompt, entry)) = found {
+                if entry.turn.as_ref().map(|turn| &turn.id) == Some(&prompt) {
+                    entry.turn = None;
+                }
+                chunk(
+                    &session,
+                    &format!(
+                        "선택: {}",
+                        value["result"]["outcome"]["optionId"]
+                            .as_str()
+                            .unwrap_or("cancelled")
+                    ),
+                );
+                emit(json!({"jsonrpc":"2.0","id":prompt,"result":{"stopReason":"end_turn"}}));
+            }
             continue;
         }
         let id = value["id"].clone();
@@ -89,8 +210,14 @@ fn main() {
                 if scenario.contains("delay_start") {
                     std::thread::sleep(std::time::Duration::from_secs(4));
                 }
+                // session/list는 기본으로 알리고, no_list 시나리오에서만 뺀다.
+                let session_capabilities = if scenario.contains("no_list") {
+                    json!({})
+                } else {
+                    json!({"list":{}})
+                };
                 emit(
-                    json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":!scenario.contains("no_load"),"promptCapabilities":{"image":!scenario.contains("no_image")},"mcpCapabilities":{"http":!scenario.contains("no_http")}},"authMethods":[{"id":"login","name":"로그인"},{"id":"terminal","name":"터미널","type":"terminal","args":[]}]}}),
+                    json!({"jsonrpc":"2.0","id":id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":!scenario.contains("no_load"),"promptCapabilities":{"image":!scenario.contains("no_image")},"mcpCapabilities":{"http":!scenario.contains("no_http")},"sessionCapabilities":session_capabilities},"authMethods":[{"id":"login","name":"로그인"},{"id":"terminal","name":"터미널","type":"terminal","args":[]}]}}),
                 );
             }
             "authenticate" => {
@@ -123,12 +250,28 @@ fn main() {
                     );
                     continue;
                 }
+                let session = {
+                    let mut state = state.lock().unwrap();
+                    let session = if method == "session/load" {
+                        value["params"]["sessionId"]
+                            .as_str()
+                            .unwrap_or("session-1")
+                            .to_owned()
+                    } else {
+                        state.new_session_id()
+                    };
+                    let cwd = value["params"]["cwd"].as_str().unwrap_or("").to_owned();
+                    let entry = state.session(&session);
+                    if !cwd.is_empty() {
+                        entry.cwd = cwd;
+                    }
+                    session
+                };
                 if method == "session/load" {
-                    update(
-                        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"replay"}}),
-                    );
+                    // 지난 기록 재생은 고정된 한 조각으로 흉내 낸다.
+                    chunk(&session, "replay");
                 }
-                let mut result = json!({"sessionId":"session-1","models":{"currentModelId":"model-a","availableModels":[{"modelId":"model-a","name":"A"},{"modelId":"model-b","name":"B"}]}});
+                let mut result = json!({"sessionId":session,"models":{"currentModelId":"model-a","availableModels":[{"modelId":"model-a","name":"A"},{"modelId":"model-b","name":"B"}]}});
                 if !scenario.contains("legacy") {
                     result["configOptions"] = json!([{ "id":"mode","name":"모드","category":"mode","type":"select","currentValue":"a","options":[{"group":"group-a","name":"묶음","options":[{"value":"a","name":"A"},{"value":"b","name":"B"}]}] },{"id":"toggle","name":"토글","type":"boolean","currentValue":false}]);
                 }
@@ -149,6 +292,28 @@ fn main() {
                 }
                 emit(json!({"jsonrpc":"2.0","id":id,"result":result}));
             }
+            "session/list" => {
+                let cwd = value["params"]["cwd"].as_str();
+                let state = state.lock().unwrap();
+                // 최근에 만든 세션부터 돌려준다.
+                let sessions: Vec<Value> = state
+                    .order
+                    .iter()
+                    .rev()
+                    .filter_map(|session| {
+                        let entry = &state.sessions[session];
+                        if cwd.is_some_and(|cwd| !entry.cwd.is_empty() && entry.cwd != cwd) {
+                            return None;
+                        }
+                        let mut info = json!({"sessionId":session,"cwd":entry.cwd});
+                        if let Some(title) = &entry.title {
+                            info["title"] = json!(title);
+                        }
+                        Some(info)
+                    })
+                    .collect();
+                emit(json!({"jsonrpc":"2.0","id":id,"result":{"sessions":sessions}}));
+            }
             "session/set_config_option" => {
                 let toggle = value["params"]["value"].as_bool().unwrap_or(false);
                 emit(
@@ -168,6 +333,17 @@ fn main() {
                             .find_map(|b| b.get("text").and_then(Value::as_str))
                     })
                     .unwrap_or("");
+                let session = value["params"]["sessionId"]
+                    .as_str()
+                    .unwrap_or("session-1")
+                    .to_owned();
+                {
+                    let mut state = state.lock().unwrap();
+                    let entry = state.session(&session);
+                    if entry.title.is_none() && !text.is_empty() {
+                        entry.title = Some(text.chars().take(40).collect());
+                    }
+                }
                 if scenario.contains("share") {
                     if let Ok(directory) = std::env::var("KALEIDOSCOPE_E2E_IMAGE_DIR") {
                         let directory = std::path::PathBuf::from(directory);
@@ -205,55 +381,64 @@ fn main() {
                     }
                 }
                 if text.contains("end-mid-turn") {
-                    update(json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"종료 전 응답"}}));
+                    chunk(&session, "종료 전 응답");
                     return;
                 } else if text.contains("fail-turn") {
-                    update(
-                        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OLD"}}),
-                    );
+                    chunk(&session, "OLD");
                     emit(
                         json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"turn failed"}}),
                     );
                 } else if text.contains("fresh-turn") {
-                    update(
-                        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"NEW"}}),
-                    );
+                    chunk(&session, "NEW");
                     emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
                 } else if text.contains("stream") {
-                    for index in 0..80 {
-                        update(
-                            json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":format!("[{index:02}]")}}),
-                        );
-                        std::thread::sleep(std::time::Duration::from_millis(100));
-                    }
-                    emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
+                    // 8초 동안 80조각. 스레드에서 흘려 그동안 다른 세션 요청도 받는다.
+                    let token = state.lock().unwrap().start_turn(&session, id);
+                    spawn_chunks(&state, session, token, 80, Duration::from_millis(100));
+                } else if text.contains("drip") {
+                    // 두 세션 동시 실행 시험용: 약 3초 동안 20조각을 흘리고 end_turn.
+                    let token = state.lock().unwrap().start_turn(&session, id);
+                    spawn_chunks(&state, session, token, 20, Duration::from_millis(150));
                 } else if text.contains("permission") {
-                    pending = id;
+                    let mut state = state.lock().unwrap();
+                    state.next_permission += 1;
+                    let permission = format!("permission-{}", state.next_permission);
+                    state.start_turn(&session, id.clone());
+                    state
+                        .session(&session)
+                        .permissions
+                        .insert(permission.clone(), id);
                     emit(
-                        json!({"jsonrpc":"2.0","id":"permission-1","method":"session/request_permission","params":{"sessionId":"session-1","toolCall":{"toolCallId":"tool-1","title":"파일 수정"},"options":[{"optionId":"yes","name":"허용","kind":"allow_once"},{"optionId":"no","name":"거부","kind":"reject_once"}]}}),
+                        json!({"jsonrpc":"2.0","id":permission,"method":"session/request_permission","params":{"sessionId":session,"toolCall":{"toolCallId":"tool-1","title":"파일 수정"},"options":[{"optionId":"yes","name":"허용","kind":"allow_once"},{"optionId":"no","name":"거부","kind":"reject_once"}]}}),
                     );
                 } else if text.contains("slow") {
-                    pending = id;
+                    // 취소될 때까지 응답하지 않는다.
+                    state.lock().unwrap().start_turn(&session, id);
                 } else {
+                    chunk(&session, "안");
+                    chunk(&session, "녕");
                     update(
-                        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"안"}}),
-                    );
-                    update(
-                        json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"녕"}}),
-                    );
-                    update(
+                        &session,
                         json!({"sessionUpdate":"tool_call","toolCallId":"tool-1","title":"도구","status":"in_progress"}),
                     );
                     update(
+                        &session,
                         json!({"sessionUpdate":"tool_call_update","toolCallId":"tool-1","status":"completed"}),
                     );
                     emit(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn"}}));
                 }
             }
             "session/cancel" => {
-                if !pending.is_null() {
-                    emit(json!({"jsonrpc":"2.0","id":pending,"result":{"stopReason":"cancelled"}}));
-                    pending = Value::Null;
+                // 그 세션의 진행 중 턴만 cancelled로 끝내고 권한 대기도 버린다.
+                let session = value["params"]["sessionId"].as_str().unwrap_or("session-1");
+                let mut state = state.lock().unwrap();
+                if let Some(entry) = state.sessions.get_mut(session) {
+                    entry.permissions.clear();
+                    if let Some(turn) = entry.turn.take() {
+                        emit(
+                            json!({"jsonrpc":"2.0","id":turn.id,"result":{"stopReason":"cancelled"}}),
+                        );
+                    }
                 }
             }
             _ => {}
