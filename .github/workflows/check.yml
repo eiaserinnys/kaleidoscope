@@ -219,8 +219,11 @@ jobs:
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
       # 시뮬레이터 빌드도 매번 처음부터 하지 않도록 캐시한다. 저장은 main push에서만 한다.
+      # macos-26 캐시에는 그 이미지의 Xcode_26.6 경로를 담은 빌드 산출물이 있어, 경로가 없는
+      # xcode-27 러너에서 그대로 쓰면 링크가 깨진다. 러너 이미지가 바뀌었으니 캐시 접두사를 따로 둔다.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          prefix-key: xcode-27
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir app build
