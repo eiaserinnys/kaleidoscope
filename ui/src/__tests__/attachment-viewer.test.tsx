@@ -23,10 +23,10 @@ function definition(ui: AppDefinition["ui"]): AppDefinition {
   return { ...mdViewerDefinition, requires: { blocks: 12, modules: {} }, permissions: [], state: {}, ui };
 }
 
-function setupViewer(source: AttachmentSource, name: string, options: { media?: Record<string, string>; saveCancelled?: boolean; saveLocation?: string; nativeFiles?: boolean } = {}) {
+function setupViewer(source: AttachmentSource, name: string, options: { media?: Record<string, string>; saveCancelled?: boolean; saveLocation?: string; saveError?: string; nativeFiles?: boolean } = {}) {
   const app = definition({ type: "text", value: "빈 창" });
   const seed = makeTestSeed({ definitions: [app] });
-  const transport = createFakeTransport({ ...seed, media: options.media ?? {}, saveCancelled: options.saveCancelled, saveLocation: options.saveLocation });
+  const transport = createFakeTransport({ ...seed, media: options.media ?? {}, saveCancelled: options.saveCancelled, saveLocation: options.saveLocation, saveError: options.saveError });
   if (options.nativeFiles) transport.nativeFiles = true;
   const store = createShellStore(transport);
   const trigger = document.createElement("button");
@@ -93,6 +93,9 @@ it("받은 형식에 따라 그림, 영상, 소리, 마크다운, 글, 기타 �
   expect(await screen.findByText("묶음.zip")).toBeTruthy();
   expect(screen.getByText("application/zip")).toBeTruthy();
   expect(screen.getByText("3B")).toBeTruthy();
+  // 정보 화면은 머리에 이미 이름이 있으니 크기와 형식만 둔다.
+  expect(document.querySelectorAll(".ks-attachment-viewer-info-row")).toHaveLength(2);
+  expect(screen.queryByText("이름")).toBeNull();
 });
 
 it("받은 형식이 비었으면 파일 이름의 확장자로 가른다", async () => {
@@ -116,7 +119,7 @@ it("1MiB를 넘는 글은 앞부분만 보여 주고 안내한다", async () => 
 
 it("데스크톱 받기는 저장 대화상자를 한 번 열고 제안 이름을 표시 이름으로 준다", async () => {
   const { transport } = setupViewer({ kind: "bytes", mime: "text/markdown", data_base64: toBase64("# 문서") }, "회의록.md", { nativeFiles: true });
-  fireEvent.click(await screen.findByRole("button", { name: "받기" }));
+  fireEvent.click(await screen.findByRole("button", { name: "저장" }));
   await waitFor(() => expect(transport.getCalls().some((call) => call.op === "data.media.save")).toBe(true));
   const call = transport.getCalls().find((item) => item.op === "data.media.save");
   if (call?.op !== "data.media.save") throw new Error("저장 요청 없음");
@@ -128,7 +131,7 @@ it("이미 받아 둔 미디어 원본은 다시 받지 않고 바이트 원천�
   const media = { permission: "docs", path: "notes.md" };
   const { transport } = setupViewer({ kind: "media", media }, "회의록.md", { nativeFiles: true, media: { "notes.md": `data:text/markdown;base64,${toBase64("# 문서")}` } });
   expect(await screen.findByRole("heading", { name: "문서" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "받기" }));
+  fireEvent.click(screen.getByRole("button", { name: "저장" }));
   await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.media.save")).toHaveLength(1));
   const call = transport.getCalls().find((item) => item.op === "data.media.save");
   if (call?.op !== "data.media.save") throw new Error("저장 요청 없음");
@@ -139,24 +142,61 @@ it("이미 받아 둔 미디어 원본은 다시 받지 않고 바이트 원천�
 it("호스트가 스스로 고른 저장 위치를 받으면 머리 아래에 보인다", async () => {
   const location = "파일 앱 › 나의 iPad › kaleidoscope › 회의록.md";
   setupViewer({ kind: "bytes", mime: "text/markdown", data_base64: toBase64("# 문서") }, "회의록.md", { nativeFiles: true, saveLocation: location });
-  fireEvent.click(await screen.findByRole("button", { name: "받기" }));
+  fireEvent.click(await screen.findByRole("button", { name: "저장" }));
   expect(await screen.findByText(`${location}에 저장했습니다`)).toBeTruthy();
 });
 
 it("저장을 취소해도 오류를 보이지 않는다", async () => {
   const { transport } = setupViewer({ kind: "bytes", mime: "text/plain", data_base64: toBase64("글") }, "메모.txt", { nativeFiles: true, saveCancelled: true });
-  fireEvent.click(await screen.findByRole("button", { name: "받기" }));
+  fireEvent.click(await screen.findByRole("button", { name: "저장" }));
   await waitFor(() => expect(transport.getCalls().some((call) => call.op === "data.media.save")).toBe(true));
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.queryByText(/저장했습니다/)).toBeNull();
   expect(screen.getByRole("dialog")).toBeTruthy();
 });
 
+it("크기 초과 코어 오류는 뷰어 문구로 바꾸고 저장과 다시 받기를 두지 않는다", async () => {
+  const message = "미디어가 허용 크기 20MB보다 커서 불러오지 못했습니다. 더 작은 파일이나 응답을 사용하세요. 미디어: missing.pdf";
+  const error = { id: "MEDIA_LOAD_DATA_TOO_LARGE", code: "io" as const, message, details: [] };
+  setupViewer({ kind: "later", load: async () => { throw error; } }, "큰 파일.pdf", { nativeFiles: true });
+  expect(await screen.findByText(/20MB보다 큰 첨부라 미리 보거나 저장할 수 없습니다/)).toBeTruthy();
+  expect(screen.queryByText(message)).toBeNull();
+  expect(screen.queryByText("다시 받기")).toBeNull();
+  expect((screen.getByRole("button", { name: "저장" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("본문 실패와 저장 실패 문구가 같으면 한 화면에 두 번 보이지 않는다", async () => {
+  const message = "첨부를 읽지 못했습니다. 파일이 바뀌었는지 확인하세요.";
+  const error = { id: "MEDIA_BLOB_READ_FAILED", code: "io" as const, message, details: [] };
+  const load = vi.fn(async () => { throw error; });
+  setupViewer({ kind: "later", load }, "회의록.md", { nativeFiles: true });
+  expect(await screen.findByText(message)).toBeTruthy();
+  expect(load).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "저장" }));
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(document.querySelector(".ks-attachment-viewer-save-error")).toBeNull());
+  expect(screen.getAllByText(message)).toHaveLength(1);
+});
+
+it("그림과 영상 뷰어는 본문 빈자리를 누르면 닫고 글 뷰어는 닫지 않는다", async () => {
+  stubBlobUrls();
+  const image = setupViewer({ kind: "bytes", mime: "image/png", data_base64: PNG }, "그림.png");
+  await screen.findByRole("img", { name: "그림.png" });
+  fireEvent.click(document.querySelector(".ks-attachment-viewer-body")!);
+  expect(image.onClose).toHaveBeenCalledTimes(1);
+  cleanup();
+
+  const textViewer = setupViewer({ kind: "bytes", mime: "text/plain", data_base64: toBase64("글") }, "메모.txt");
+  await waitFor(() => expect(document.querySelector("pre.ks-attachment-viewer-plain")).not.toBeNull());
+  fireEvent.click(document.querySelector(".ks-attachment-viewer-body")!);
+  expect(textViewer.onClose).not.toHaveBeenCalled();
+});
+
 it("브라우저 받기는 코어 저장 대신 download를 일으킨다", async () => {
   stubBlobUrls();
   const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   const { transport } = setupViewer({ kind: "bytes", mime: "text/plain", data_base64: toBase64("글") }, "메모.txt");
-  fireEvent.click(await screen.findByRole("button", { name: "받기" }));
+  fireEvent.click(await screen.findByRole("button", { name: "저장" }));
   await waitFor(() => expect(click).toHaveBeenCalled());
   const anchor = click.mock.instances[0] as unknown as HTMLAnchorElement;
   expect(anchor.download).toBe("메모.txt");

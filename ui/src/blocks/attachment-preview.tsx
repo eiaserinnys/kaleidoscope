@@ -10,7 +10,7 @@ import {
   type AttachmentPreviewRequest,
 } from "../data/attachments";
 import { Button, IconButton, Notice } from "../components/primitives";
-import { X } from "../components/icons";
+import { Download, X } from "../components/icons";
 import { MarkdownText } from "./markdown-text";
 import { useOverlayDialog } from "./agent-attachments";
 
@@ -18,6 +18,9 @@ type LoadState =
   | { status: "loading" }
   | { status: "ready"; mime: string; data_base64: string }
   | { status: "failed"; error: CoreError };
+
+/** 코어의 크기 초과 오류 id. 쉘은 이 id로만 크기 초과를 가르고 앱 이름이나 경로를 쓰지 않는다. */
+const MEDIA_TOO_LARGE_ID = "MEDIA_LOAD_DATA_TOO_LARGE";
 
 function BlobMedia({ mime, data_base64, kind }: { mime: string; data_base64: string; kind: "video" | "audio" }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -69,6 +72,12 @@ export function AttachmentPreview({ request, onClose, store: storeProp, windowId
     return attachmentText(state.data_base64);
   }, [kind, state]);
 
+  // 크기 초과는 코어 오류 id로 가르고, 뷰어에서 할 수 없는 일을 시키지 않는 쉘 문구로 바꾼다.
+  const tooLarge = state.status === "failed" && state.error.id === MEDIA_TOO_LARGE_ID;
+  const loadError = state.status === "failed"
+    ? (tooLarge ? shellErrors.SHELL_ATTACHMENT_VIEWER_TOO_LARGE({ limit: "20MB" }) : state.error)
+    : null;
+
   const save = async () => {
     setSaving(true);
     setSaveError(null);
@@ -91,39 +100,46 @@ export function AttachmentPreview({ request, onClose, store: storeProp, windowId
   if (state.status === "loading") {
     body = <div className="ks-media-preview-state"><div className="ks-data-skeleton" role="status" aria-label="불러오는 중"><i /><i /><i /></div></div>;
   } else if (state.status === "failed") {
-    body = <div className="ks-attachment-viewer-state"><Notice role="alert" errorId={state.error.id}>{state.error.message}</Notice><Button onClick={() => setAttempt((current) => current + 1)}>다시 받기</Button></div>;
+    body = <div className="ks-attachment-viewer-state">
+      <Notice role="alert" errorId={loadError!.id}>{loadError!.message}</Notice>
+      {tooLarge ? null : <Button onClick={() => setAttempt((current) => current + 1)}>다시 받기</Button>}
+    </div>;
   } else if (kind === "image") {
     body = <img className="ks-attachment-viewer-image" src={attachmentDataUrl(state)} alt={request.name} />;
   } else if (kind === "video" || kind === "audio") {
     body = <BlobMedia mime={state.mime} data_base64={state.data_base64} kind={kind} />;
   } else if (text && kind === "markdown") {
     body = <div className="ks-attachment-viewer-text">
-      {text.truncated ? <Notice>앞부분만 보입니다. 전체 내용은 받기로 저장해 확인하세요.</Notice> : null}
+      {text.truncated ? <Notice>앞부분만 보입니다. 전체 내용은 저장해서 확인하세요.</Notice> : null}
       <MarkdownText>{text.text}</MarkdownText>
     </div>;
   } else if (text) {
     body = <div className="ks-attachment-viewer-text">
-      {text.truncated ? <Notice>앞부분만 보입니다. 전체 내용은 받기로 저장해 확인하세요.</Notice> : null}
+      {text.truncated ? <Notice>앞부분만 보입니다. 전체 내용은 저장해서 확인하세요.</Notice> : null}
       <pre className="ks-attachment-viewer-plain" tabIndex={0}>{text.text}</pre>
     </div>;
   } else {
     body = <div className="ks-attachment-viewer-info">
-      <div className="ks-attachment-viewer-info-row"><span>이름</span><strong className="ks-attachment-viewer-info-value">{request.name}</strong></div>
       <div className="ks-attachment-viewer-info-row"><span>크기</span><span className="ks-attachment-viewer-info-value">{formatAttachmentSize(attachmentBytes(state.data_base64).length)}</span></div>
       <div className="ks-attachment-viewer-info-row"><span>형식</span><span className="ks-attachment-viewer-info-value">{state.mime || "알 수 없음"}</span></div>
     </div>;
   }
 
+  // 그림과 영상은 본문의 빈자리를 눌러도 닫는다. 글 뷰어는 눌러도, 끌어서 골라도 닫지 않는다.
+  const closesFromBody = state.status === "ready" && (kind === "image" || kind === "video");
+  // 본문 실패 문구와 저장 실패 문구가 같으면 같은 오류를 한 화면에 두 번 보이지 않는다.
+  const duplicateSaveError = saveError !== null && loadError !== null && saveError.message === loadError.message;
+
   return createPortal(<div className="ks-agent-image-overlay" data-ks-overlay role="dialog" aria-modal="true" aria-label={request.name} onClick={onClose} ref={dialogRef}>
     <div className="ks-attachment-viewer" onClick={(event) => event.stopPropagation()}>
       <div className="ks-attachment-viewer-header">
         <strong className="ks-attachment-viewer-name" title={request.name}>{request.name}</strong>
-        <Button onClick={() => void save()} disabled={saving}>받기</Button>
+        <IconButton aria-label="저장" tooltip="저장" onClick={() => void save()} disabled={saving || tooLarge}><Download /></IconButton>
         <div className="ks-attachment-viewer-close" ref={closeRef}><IconButton aria-label="닫기" onClick={onClose}><X /></IconButton></div>
       </div>
       {savedTo ? <div className="ks-attachment-viewer-saved" role="status">{savedTo}에 저장했습니다</div> : null}
-      <div className="ks-attachment-viewer-body">{body}</div>
-      {saveError ? <div className="ks-attachment-viewer-save-error"><Notice role="alert" errorId={saveError.id}>{saveError.message}</Notice></div> : null}
+      <div className="ks-attachment-viewer-body" onClick={closesFromBody ? (event) => { if (event.target === event.currentTarget) onClose(); } : undefined}>{body}</div>
+      {saveError && !duplicateSaveError ? <div className="ks-attachment-viewer-save-error"><Notice role="alert" errorId={saveError.id}>{saveError.message}</Notice></div> : null}
     </div>
   </div>, document.body);
 }

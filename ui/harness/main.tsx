@@ -251,6 +251,11 @@ const reclickDocument = `# 다시 누르기 시험
 `;
 
 const params = new URLSearchParams(window.location.search);
+// 뷰어 실패 장면: 기본은 크기 초과(코어 오류 id로 쉘 문구를 가른다), viewer-load-error=other는 다른 실패다.
+const viewerOtherErrorMessage = "첨부를 읽지 못했습니다. 파일이 바뀌었는지 확인하세요.";
+const missingMediaError = params.get("viewer-load-error") === "other"
+  ? { id: "MEDIA_BLOB_READ_FAILED", message: viewerOtherErrorMessage }
+  : { id: "MEDIA_LOAD_DATA_TOO_LARGE", message: "미디어가 허용 크기 20MB보다 커서 불러오지 못했습니다. 더 작은 파일이나 응답을 사용하세요. 미디어: missing.pdf" };
 const chatAttachments = params.has("chat-attachments");
 const pasMode = params.get("pas");
 const previewAppId = params.get("preview") || "md-editor";
@@ -310,7 +315,8 @@ const fakeTransport = createFakeTransport({
     ].map((body, index) => [`tile-${index}.svg`, `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>${body}</svg>`)}`])),
     ...canvasLoadingMedia,
   },
-  mediaOriginalErrors: { "missing.pdf": "미디어가 허용 크기 20MB보다 커서 불러오지 못했습니다. 더 작은 파일이나 응답을 사용하세요. 미디어: missing.pdf" },
+  mediaOriginalErrors: { "missing.pdf": missingMediaError },
+  saveError: params.has("save-error") ? viewerOtherErrorMessage : undefined,
   mediaOriginalDelayMs: params.has("slow-media") ? { "poster.jpg": 1200 } : undefined,
   // iOS 받기 장면: 호스트가 대화상자 없이 파일 앱의 앱 폴더를 골랐을 때의 응답을 흉내 낸다.
   saveLocation: params.get("ios-save") === "1" ? "파일 앱 › 나의 iPad › kaleidoscope › 회의록.md" : undefined,

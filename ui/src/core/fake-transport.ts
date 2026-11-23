@@ -38,10 +38,10 @@ export interface FakeTransportSeed {
   storageWriteDelayMs?: number;
   webUnavailable?: boolean;
   media?: Record<string, string>;
-  /** 미디어 키 → 실패 문구. 큰 첨부의 실패 화면을 잡을 때 쓴다. */
-  mediaErrors?: Record<string, string>;
-  /** 미디어 키 → 실패 문구. 크기 요청이 없는 원본 읽기만 실패한다. */
-  mediaOriginalErrors?: Record<string, string>;
+  /** 미디어 키 → 실패 문구와 오류 id. 큰 첨부의 실패 화면을 잡을 때 쓴다. */
+  mediaErrors?: Record<string, string | { message: string; id?: string }>;
+  /** 미디어 키 → 실패 문구와 오류 id. 크기 요청이 없는 원본 읽기만 실패한다. */
+  mediaOriginalErrors?: Record<string, string | { message: string; id?: string }>;
   /** 미디어 키 → 지연(ms). 크기 요청이 없는 원본 읽기만 늦춘다. 뷰어의 로딩 화면을 잡을 때 쓴다. */
   mediaOriginalDelayMs?: Record<string, number>;
   playback?: Record<string, MediaPlayback>;
@@ -450,7 +450,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const playback = seed.playback?.[key];
         if (request.op === "data.media.open" && playback) return { op: "data.media.open", playback };
         const mediaError = (request.op === "data.media" && request.max_px == null ? seed.mediaOriginalErrors?.[key] : undefined) ?? seed.mediaErrors?.[key];
-        if (mediaError) return fail("io", mediaError);
+        if (mediaError) {
+          const detail = typeof mediaError === "string" ? { message: mediaError } : mediaError;
+          return fail("io", detail.message, [], detail.id);
+        }
         const originalDelay = request.op === "data.media" && request.max_px == null ? seed.mediaOriginalDelayMs?.[key] : undefined;
         if (originalDelay) await new Promise((resolve) => setTimeout(resolve, originalDelay));
         const url = seed.media?.[key];
