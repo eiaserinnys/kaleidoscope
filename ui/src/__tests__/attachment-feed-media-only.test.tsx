@@ -9,6 +9,7 @@ import { mockVirtualLayout } from "./virtual-layout";
 
 // 쌓기 항목으로 바로 놓인 첨부만 담은 feed의 여백은 이 표지로 켠다(카드 #1729 6절, data-blocks.css).
 // 표지는 화면에 그려진 줄이 아니라 자료 전체를 보고 정해야 긴 feed를 굴릴 때 여백이 들락날락하지 않는다.
+// 접기 단추(collapsible)나 묶음 제목(grouped)이 있으면 화면에 보이는 머리가 있으므로 표지를 달지 않는다.
 beforeEach(mockVirtualLayout);
 afterEach(cleanup);
 
@@ -68,13 +69,13 @@ it("접기 단추가 붙는 feed(collapsible)에는 여백 표지를 달지 않�
   expect(document.querySelector(".ks-feed")!.classList.contains("is-media-only")).toBe(false);
 });
 
-it("모두 첨부만인 묶음 feed는 접기 없이도 자료 전체로 여백 표지를 단다", async () => {
+it("묶음 feed는 접기와 상관없이 여백 표지를 달지 않는다", async () => {
   setup({ type: "stack", direction: "column", children: [{ type: "feed", grouped: true, entries: [
     { title: "그림", items: [{ key: "g1", body: "", media }] },
     { title: "문서", items: [{ key: "g2", body: "   ", media }] },
   ] }] } as unknown as Block);
   await waitFor(() => expect(document.querySelector(".ks-feed")).toBeTruthy());
-  expect(document.querySelector(".ks-feed")!.classList.contains("is-media-only")).toBe(true);
+  expect(document.querySelector(".ks-feed")!.classList.contains("is-media-only")).toBe(false);
 });
 
 it("접기 단추가 붙는 묶음 feed는 묶음을 접어도 여백 표지가 켜지지 않는다", async () => {

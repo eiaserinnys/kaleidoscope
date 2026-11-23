@@ -62,6 +62,15 @@ const mediaOnlyEntries = [
 
 const spacingPermissions = [{ module: "files", id: "media", access: "read", label: "첨부" }];
 
+/** 접기 없는 묶음 feed의 항목. 모든 항목이 머리 없는 첨부만이다(화면 검수 4회차 표본). */
+const groupedPlainEntries = [
+  { title: "그림", items: [{ key: "g1", body: "", media: [{ image: { permission: "media", path: "poster.jpg" }, alt: "포스터.jpg" }] }] },
+  { title: "문서", items: [{ key: "g2", body: "", media: [
+    { image: { permission: "media", path: "notes.md" }, alt: "회의록.md" },
+    { image: { permission: "media", path: "memo.txt" }, alt: "메모.txt" },
+  ] }] },
+];
+
 /** 쌓기 안에 글 항목, 첨부만 담은 feed 항목, 다음 항목을 차례로 둔 표본(카드 #1729 6절). */
 export const stackFeedSpacingFeedApp = {
   id: "stack-feed-spacing-feed",
@@ -196,6 +205,38 @@ export const stackFeedSpacingGroupedApp = {
       ] },
       { type: "text", value: "뒤 글", style: "body" },
     ],
+  },
+} as unknown as AppDefinition;
+
+/** 접기 없는 묶음 feed(모든 항목이 머리 없는 첨부만)를 쌓기 안에 둔 표본. 묶음 제목이 화면에 보이는 머리라 표지를 달면 제목→첨부와 마지막 첨부→뒤 글이 좁아진다(화면 검수 4회차). */
+export const stackFeedSpacingGroupedPlainApp = {
+  id: "stack-feed-spacing-grouped-plain",
+  name: "쌓기 접기 없는 묶음 feed 간격 시험",
+  requires: { blocks: 12, modules: {} },
+  permissions: spacingPermissions,
+  state: {},
+  ui: {
+    type: "stack",
+    direction: "column",
+    gap: "small",
+    children: [
+      { type: "text", value: "앞 글", style: "body" },
+      { type: "feed", grouped: true, entries: groupedPlainEntries },
+      { type: "text", value: "뒤 글", style: "body" },
+    ],
+  },
+} as unknown as AppDefinition;
+
+/** 같은 묶음 feed를 쌓기 밖(탭 바로 아래)에 둔 표본. 묶음 제목→첨부 값의 기준이다. */
+export const stackFeedSpacingGroupedPlainTabApp = {
+  id: "stack-feed-spacing-grouped-plain-tab",
+  name: "탭 접기 없는 묶음 feed 간격 시험",
+  requires: { blocks: 12, modules: {} },
+  permissions: spacingPermissions,
+  state: {},
+  ui: {
+    type: "tabs",
+    tabs: [{ label: "탭", child: { type: "feed", grouped: true, entries: groupedPlainEntries } }],
   },
 } as unknown as AppDefinition;
 

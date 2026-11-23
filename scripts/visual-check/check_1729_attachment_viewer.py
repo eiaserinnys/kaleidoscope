@@ -32,7 +32,8 @@
   항목 사이 틈과 본문 있는 feed, 탭 바로 아래 feed의 간격이 그대로인지 잰다(카드 #1729 6절).
 - stack-feed-spacing-guards: 머리(이름·시각)가 있는 항목은 목록 간격(위 12, 머리→첨부 8, 마지막 아래 12)을
   지키고, is-fill 쌓기의 커멘트 탭은 끝까지 굴렸을 때 마지막 카드 아래 12가 본문 섞인 목록과 같으며,
-  묶음과 답글을 접고 펼 때 feed 위 여백과 누른 머리 top이 그대로인지 잰다(화면 검수 3회차).
+  묶음과 답글을 접고 펼 때 feed 위 여백과 누른 머리 top이 그대로이고, 접기 없는 묶음 feed(모든 항목이
+  머리 없는 첨부만)는 표지 없이 제목→첨부 12와 마지막 첨부→뒤 글 20을 지키는지 잰다(화면 검수 3·4회차).
 
   python3 scripts/visual-check/check_1729_attachment_viewer.py [--output 산출폴더] [--port 포트] [--only 장면...]
 
@@ -80,6 +81,8 @@ SPACING_NAMED_APP = "stack-feed-spacing-named"
 SPACING_COMMENTS_APP = "stack-feed-spacing-comments"
 SPACING_COMMENTS_MIXED_APP = "stack-feed-spacing-comments-mixed"
 SPACING_GROUPED_APP = "stack-feed-spacing-grouped"
+SPACING_GROUPED_PLAIN_APP = "stack-feed-spacing-grouped-plain"
+SPACING_GROUPED_PLAIN_TAB_APP = "stack-feed-spacing-grouped-plain-tab"
 SPACING_NESTED_APP = "stack-feed-spacing-nested"
 
 SCENES = ["feed-attachments", "viewer-image", "viewer-loading", "viewer-head-stability", "viewer-video", "viewer-markdown", "viewer-text", "viewer-file", "viewer-error", "viewer-error-other", "chat-attachments", "viewer-narrow", "viewer-narrow-bodies", "viewer-saved-ios", "stack-feed-spacing", "stack-feed-spacing-guards"]
@@ -264,6 +267,40 @@ GUARD_JS = """({ appId }) => {
     entries: entries.map((el) => ({ rect: rect(el), marginBottom: style(el).marginBottom, head: rect(el.querySelector('.ks-feed-header')), media: rect(mediaOf(el)), mediaMarginTop: mediaOf(el) ? style(mediaOf(el)).marginTop : null, headerMediaGap: el.querySelector('.ks-feed-header') && mediaOf(el) ? +(mediaOf(el).getBoundingClientRect().top - el.querySelector('.ks-feed-header').getBoundingClientRect().bottom).toFixed(2) : null, table: el.classList.contains('is-table-row') })),
     groupHeads: groupHeads.map((el) => ({ rect: rect(el), text: el.innerText.replace(/\\s+/g, ' ').trim() })),
     lastEntryGap: feed && entries.length ? +(rect(feed).bottom - rect(entries[entries.length - 1]).bottom).toFixed(2) : null,
+    docOverflowX: document.documentElement.scrollWidth - window.innerWidth,
+  };
+}"""
+
+
+GROUPED_PLAIN_JS = """({ appId }) => {
+  const rect = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { top: +b.top.toFixed(2), bottom: +b.bottom.toFixed(2), left: +b.left.toFixed(2), right: +b.right.toFixed(2), width: +b.width.toFixed(2), height: +b.height.toFixed(2) }; };
+  const style = (el) => el ? getComputedStyle(el) : null;
+  const root = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const feed = root ? root.querySelector('.ks-feed') : null;
+  const item = feed ? feed.closest('.ks-data-stack-item') : null;
+  const prev = item ? item.previousElementSibling : null;
+  const next = item ? item.nextElementSibling : null;
+  const tabBar = root ? root.querySelector('[role="tablist"]') : null;
+  const groups = feed ? [...feed.querySelectorAll('.ks-view-group')].filter((group) => !group.closest('.ks-view-sticky')) : [];
+  const titles = groups.map((group) => rect(group.querySelector('strong') || group));
+  const cells = feed ? [...feed.querySelectorAll('.ks-feed-media-cell')].map(rect) : [];
+  const below = (title) => cells.filter((cell) => cell.top >= title.bottom - 0.5).sort((a, b) => a.top - b.top)[0] || null;
+  const above = (title) => cells.filter((cell) => cell.bottom <= title.top + 0.5).sort((a, b) => b.bottom - a.bottom)[0] || null;
+  const lastCell = cells.length ? cells.reduce((best, cell) => (!best || cell.bottom > best.bottom ? cell : best), null) : null;
+  const firstBelow = titles[0] ? below(titles[0]) : null;
+  const aboveSecond = titles[1] ? above(titles[1]) : null;
+  return {
+    feed: feed ? { className: feed.className, mediaOnly: feed.classList.contains('is-media-only'), paddingBlockStart: style(feed).paddingBlockStart, rect: rect(feed) } : null,
+    groups: groups.length,
+    titleTexts: groups.map((group) => group.innerText.replace(/\\s+/g, ' ').trim()),
+    titles: titles.map((title) => title ? title.top : null),
+    cells: cells.length,
+    prevToFirstTitle: titles[0] && prev ? +(titles[0].top - rect(prev).bottom).toFixed(2) : null,
+    titleToMedia: titles[0] && firstBelow ? +(firstBelow.top - titles[0].bottom).toFixed(2) : null,
+    groupGap: titles[1] && aboveSecond ? +(titles[1].top - aboveSecond.bottom).toFixed(2) : null,
+    lastToNext: lastCell && next ? +(rect(next).top - lastCell.bottom).toFixed(2) : null,
+    tabToFirstTitle: titles[0] && tabBar ? +(titles[0].top - rect(tabBar).bottom).toFixed(2) : null,
+    lastMediaBottom: lastCell ? lastCell.bottom : null,
     docOverflowX: document.documentElement.scrollWidth - window.innerWidth,
   };
 }"""
@@ -1127,6 +1164,28 @@ def scene_stack_feed_spacing_guards(browser, port, output, results, failures):
         checks[f"{label}_grouped_padding_kept"] = pads == ["12px", "12px", "12px"]
         checks[f"{label}_grouped_head_top_kept"] = close_enough(heads[0], heads[1]) and close_enough(heads[0], heads[2])
         checks[f"{label}_grouped_no_overflow"] = all(s["docOverflowX"] <= 1 for s in (grouped_initial, grouped_collapsed, grouped_expanded))
+
+        plain = {}
+        for key, app_id in (("stack", SPACING_GROUPED_PLAIN_APP), ("tab", SPACING_GROUPED_PLAIN_TAB_APP)):
+            page = guard_sample(browser, port, app_id, size)
+            try:
+                plain[key] = page.evaluate(GROUPED_PLAIN_JS, {"appId": app_id})
+                if key == "stack":
+                    page.screenshot(path=str(output / (f"stack-feed-spacing-grouped-plain-{label}.png")), animations="disabled")
+            finally:
+                page.close()
+        m[f"{label}/grouped_plain"] = plain
+        stack_plain = plain["stack"]
+        tab_plain = plain["tab"]
+        stack_feed = stack_plain["feed"] or {}
+        checks[f"{label}_grouped_plain_no_flag"] = stack_feed.get("mediaOnly") is False
+        checks[f"{label}_grouped_plain_padding_12"] = stack_feed.get("paddingBlockStart") == "12px"
+        checks[f"{label}_grouped_plain_prev_to_title_32"] = close_enough(stack_plain.get("prevToFirstTitle"), 32)
+        checks[f"{label}_grouped_plain_title_to_media_12"] = close_enough(stack_plain.get("titleToMedia"), 12)
+        checks[f"{label}_grouped_plain_title_gap_matches_tab"] = close_enough(stack_plain.get("titleToMedia"), tab_plain.get("titleToMedia"))
+        checks[f"{label}_grouped_plain_group_gap_24"] = close_enough(stack_plain.get("groupGap"), 24)
+        checks[f"{label}_grouped_plain_last_to_next_20"] = close_enough(stack_plain.get("lastToNext"), 20)
+        checks[f"{label}_grouped_plain_no_overflow"] = stack_plain["docOverflowX"] <= 1 and tab_plain["docOverflowX"] <= 1
 
         page = guard_sample(browser, port, SPACING_NESTED_APP, size)
         try:

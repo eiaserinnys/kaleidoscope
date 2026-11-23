@@ -188,9 +188,10 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   // 첨부만 담은 feed(모든 항목의 본문이 비고 media가 하나 이상이며 머리에 보일 것이 없는)인지 자료로 가른다.
   // 화면에 그려진 줄만 보면 긴 feed를 굴리거나 묶음과 답글을 접고 펼 때 이 표지가 뒤집혀 쌓기 안 여백과 누른 머리가 튄다(카드 #1729 6절).
   // 이름, 시각, 배지, 체크, 표 줄, 답글, 초상이 있는 항목은 목록으로 그려야 머리와 첨부 사이 틈이 남는다.
+  // 접기 단추(collapsible)나 묶음 제목(grouped)이 있는 feed도 화면에 보이는 머리가 있으므로 목록으로 본다(화면 검수 4회차).
   // 초상(avatars)처럼 접힌 묶음과 답글까지 자료 전체를 본다.
   const mediaOnly = useMemo(() => {
-    if (block.collapsible) return false;
+    if (block.collapsible || block.grouped) return false;
     const all = groups(value, Boolean(block.grouped), valid).flatMap((group) => {
       const entries = group.items.map((entry) => asFeedEntry(entry)!).filter(Boolean);
       return flattenFeedEntries(entries).map((item) => item.entry);
