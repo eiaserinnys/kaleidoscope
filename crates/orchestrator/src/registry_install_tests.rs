@@ -71,6 +71,28 @@ fn bundle_with_storage(id: &str, release: u32, name: &str, expected: Option<u32>
     request
 }
 
+/// 요청의 앱 정의를 고치고 그 바이트로 매니페스트 해시를 다시 맞춘다.
+fn rebuild_definition(request: &mut Value, change: impl FnOnce(&mut Value)) {
+    let mut definition: Value =
+        serde_json::from_str(request["definition_json"].as_str().unwrap()).unwrap();
+    change(&mut definition);
+    let raw = definition.to_string();
+    let bytes = STANDARD
+        .decode(request["manifest_base64"].as_str().unwrap())
+        .unwrap();
+    let mut manifest: Value = serde_json::from_slice(&bytes).unwrap();
+    let id = request["origin"]["store_app_id"].as_str().unwrap();
+    let release = request["origin"]["release"].as_u64().unwrap();
+    manifest["files"][format!("apps/{id}/{release}/app.json")] =
+        json!({"sha256":sha256_hex(raw.as_bytes()),"bytes":raw.len()});
+    let manifest = manifest.to_string();
+    let digest = sha256_hex(manifest.as_bytes());
+    request["definition_json"] = json!(raw);
+    request["manifest_base64"] = json!(STANDARD.encode(manifest));
+    request["approved_digest"] = json!(digest);
+    request["origin"]["digest"] = json!(digest);
+}
+
 #[tokio::test]
 async fn store_connections_are_atomic_preserved_and_broadcast() {
     let (_dir, state) = setup();
@@ -435,10 +457,94 @@ async fn conflicting_asset_rolls_back_app_and_other_assets() {
         bundle_with_asset("asset-second", "<svg><path/></svg>", true),
     )
     .await;
-    assert_ne!(status, StatusCode::OK);
-    assert_eq!(error["id"], "ASSET_REGISTER_VERSION_CONFLICT");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(error["id"], "REGISTRYINSTALL_FIRST_RELEASE_REJECTED");
+    assert_eq!(error["message"], "자산 앱에 문제가 있어 깔지 못했습니다.");
+    let details = error["details"].as_array().unwrap();
+    assert!(details
+        .iter()
+        .any(|detail| detail == "원인 코드: ASSET_REGISTER_VERSION_CONFLICT"));
+    assert!(details.iter().any(|detail| detail == "자산: shared-icon, 판: 1"));
     assert!(state.app("asset-second", None).unwrap().is_none());
     assert_eq!(state.list_assets().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn storage_incompatibility_on_device_update_uses_user_facing_error() {
+    let (_dir, state) = setup();
+    assert_eq!(
+        call(
+            &state,
+            "POST",
+            "/api/device/app-installs",
+            bundle_with_storage("storage-guard", 1, "저장 앱", None)
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    insert_store_storage_item(&state, "storage-guard");
+    let mut request = bundle_with_storage("storage-guard", 2, "저장 앱", Some(1));
+    rebuild_definition(&mut request, |definition| {
+        definition["storage"]["entries"][0]["key"] = json!("settings/title-renamed");
+    });
+    let (status, error) = call(&state, "POST", "/api/device/app-installs", request).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(error["id"], "REGISTRYINSTALL_UPDATE_RELEASE_REJECTED");
+    assert_eq!(
+        error["message"],
+        "저장 앱의 새 판에 문제가 있어 깔지 못했습니다. 지금 판을 그대로 씁니다."
+    );
+    let details = error["details"].as_array().unwrap();
+    assert!(details
+        .iter()
+        .any(|detail| detail == "원인 코드: STORAGE_PUBLISH_INCOMPATIBLE"));
+    assert!(details
+        .iter()
+        .any(|detail| detail.as_str().unwrap().contains("title")));
+    assert_eq!(
+        state
+            .app("storage-guard", None)
+            .unwrap()
+            .unwrap()
+            .app
+            .current_version,
+        1
+    );
+}
+
+#[tokio::test]
+async fn agent_uploads_keep_publish_error_codes_for_both_causes() {
+    use kaleidoscope_contract::assets::AssetUpload;
+
+    let (_dir, state) = setup();
+    let storage = r#"{"id":"upload-storage","name":"올린 앱","requires":{"blocks":6,"modules":{"storage":1}},"storage":{"entries":[{"id":"title","key":"settings/title","kind":"json","schema":{"type":"string"},"default":"","label":"제목","presentation":"settings"}]},"ui":{"type":"text","value":"안녕"}}"#;
+    state.publish_app(storage, "agent", false, None).unwrap();
+    insert_store_storage_item(&state, "upload-storage");
+    let renamed = storage.replace("settings/title", "settings/title-renamed");
+    let error = state
+        .publish_app(&renamed, "agent", false, None)
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("STORAGE_PUBLISH_INCOMPATIBLE"));
+
+    let first = bundle_with_asset("upload-asset-first", "<svg/>", false);
+    let definition = first["definition_json"].as_str().unwrap();
+    let uploads: Vec<AssetUpload> = serde_json::from_value(first["asset_uploads"].clone()).unwrap();
+    state
+        .publish_app_with_assets_for_device(definition, "agent", false, None, None, &uploads)
+        .unwrap();
+    let second = bundle_with_asset("upload-asset-second", "<svg><path/></svg>", false);
+    let definition = second["definition_json"].as_str().unwrap();
+    let uploads: Vec<AssetUpload> =
+        serde_json::from_value(second["asset_uploads"].clone()).unwrap();
+    let error = state
+        .publish_app_with_assets_for_device(definition, "agent", false, None, None, &uploads)
+        .unwrap_err();
+    assert_eq!(error.id.as_deref(), Some("ASSET_REGISTER_VERSION_CONFLICT"));
+    assert!(error
+        .details
+        .iter()
+        .any(|detail| detail == "자산: shared-icon, 판: 1"));
 }
 
 #[tokio::test]

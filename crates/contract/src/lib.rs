@@ -247,6 +247,7 @@ pub const APP_AUTHORING_GUIDE: &str = include_str!("app_guide.txt");
 pub mod store;
 pub mod app_comments;
 pub mod app_storage;
+pub mod app_upgrade;
 pub mod assets;
 pub mod builtin;
 pub mod client;
