@@ -12,7 +12,9 @@ import { useShellSelector } from "../core/shell-store";
 import { useBinding, useChatDraft } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
 import { prepareShareForSend } from "../share/share-view";
-import { HistoryAttachmentView, ImagePreview, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment, type Preview } from "./agent-attachments";
+import { HistoryAttachmentView, PendingAttachment, makeDraftAttachment, readUpload, type DraftAttachment } from "./agent-attachments";
+import { AttachmentPreview } from "./attachment-preview";
+import type { AttachmentPreviewRequest } from "../data/attachments";
 import { ChatComposer, chatAreaPaste } from "./chat-composer";
 import { ChatHistory } from "./chat-history";
 import { useFrameCoalesced } from "./frame-coalesced";
@@ -81,7 +83,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const [notices, setNotices] = useState<string[]>([]);
   const { draft, setDraft, attachments, setAttachments, error: sendError, setError: setSendError, updateComposer, getComposer } = useChatDraft("conversation");
   const [pending, setPending] = useState<PendingMessage | null>(null);
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [attachment, setAttachment] = useState<AttachmentPreviewRequest | null>(null);
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tool, setTool] = useState<string | null>(null);
@@ -116,7 +118,6 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
   const streamId = useRef<string | null>(null);
   const conversationQueue = useRef<CoreEvent[] | null>(null);
   const creatingConversation = useRef(false);
-  const closePreview = useCallback(() => setPreview(null), []);
 
   const renderAttachment = useCallback((attachment: ConversationAttachment, item: ConversationItem, index: number) => <HistoryAttachmentView
     key={index}
@@ -127,10 +128,8 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
       if (reply.op !== "conversation.attachment") throw shellErrors.SHELL_CONVERSATION_ATTACHMENT_REPLY_INVALID();
       return { mime: reply.mime, data_base64: reply.data_base64 };
     }}
-    open={async () => { await context.store.call({ op: "conversation.attachment_open", window_id: windowId, item_id: item.id, attachment_id: attachment.id }); }}
-    onPreview={setPreview}
-    onError={(reason) => setSendError(toCoreError(reason))}
-  />, [context.store, windowId, setSendError]);
+    onPreview={setAttachment}
+  />, [context.store, windowId]);
 
   const acknowledge = useCallback((incoming: ConversationItem[]) => {
     setPending((current) => current && incoming.some((item) => matchesPending(item, current)) ? null : current);
@@ -619,7 +618,7 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
         followTail={followTail}
         onReachTop={() => { if (hasProvider && nextBefore) loadOlder(); }}
         renderAttachment={renderAttachment}
-        renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setPreview} />}
+        renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setAttachment} />}
         state={historyState}
       />
       <ChatComposer
@@ -633,11 +632,11 @@ export function AgentChatBlock({ block, context, pointer }: { block: AgentChatBl
         busy={sending}
         sharedWindows={sharedWindows}
         onRemoveShared={(id) => { void context.store.call({ op: "share.set", window_id: id, on: false }); }}
-        onPreview={setPreview}
+        onPreview={setAttachment}
         error={sendError}
         onError={setSendError}
       />
-      {preview ? <ImagePreview preview={preview} onClose={closePreview} /> : null}
+      {attachment ? <AttachmentPreview request={attachment} onClose={() => setAttachment(null)} /> : null}
       {pendingSwitch ? (() => {
         const host = shareRef.current?.closest<HTMLElement>(".ks-data-window") ?? shareRef.current?.parentElement;
         if (!host) return null;

@@ -20,6 +20,12 @@ import fieldLayoutJson from "../../examples/field-layout.json";
 import sampleOne from "./assets/landscape.png";
 import sampleTwo from "./assets/shapes.png";
 import sampleTone from "./assets/tone.wav";
+import samplePoster from "./assets/poster.jpg";
+import sampleClip from "./assets/clip.mp4";
+import sampleNotes from "./assets/notes.md?url";
+import sampleLongNotes from "./assets/long-notes.md?url";
+import sampleMemo from "./assets/memo.txt?url";
+import sampleBundle from "./assets/bundle.zip?url";
 import mdEditorJson from "../../apps/md-editor.json";
 import htmlReportJson from "../../apps/html-report.json";
 import { htmlReportSample } from "./html-report-sample";
@@ -50,6 +56,7 @@ import windowBodyGutterLists from "../e2e/fixtures/window-body-gutter-lists.json
 import windowBodyGutterRow from "../e2e/fixtures/window-body-gutter-row.json";
 import bareLayoutEdges1063 from "../e2e/fixtures/bare-layout-edges-1063.json";
 import progressTrackJson from "../e2e/fixtures/progress-track-app.json";
+import { attachmentViewerApp, stackFeedSpacingCommentsApp, stackFeedSpacingCommentsMixedApp, stackFeedSpacingFeedApp, stackFeedSpacingGroupedApp, stackFeedSpacingGroupedPlainApp, stackFeedSpacingGroupedPlainTabApp, stackFeedSpacingImageApp, stackFeedSpacingNamedApp, stackFeedSpacingNestedApp, stackFeedSpacingTabApp } from "./attachment-fixtures";
 import { executeWindowAction, readWindowView, registerControlWindow } from "../src/share/window-control";
 import { describeVisible } from "../src/share/visible";
 
@@ -101,7 +108,7 @@ const shellSelectionApp: AppDefinition = {
     ] },
   ] },
 };
-const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, repeatEmptyCenterApp, inputSpinApp, inputOptionsApp, inputDateTimeApp, frameVisibilityApp, canvasLoadingApp, treeEditMoveApp, treeNameKeyApp];
+const previewDefinitions = [windowBodyGutter as unknown as AppDefinition, windowBodyGutterLists as unknown as AppDefinition, windowBodyGutterRow as unknown as AppDefinition, bareLayoutEdges1063 as unknown as AppDefinition, progressTrackJson as unknown as AppDefinition, ...visualPreviewDefinitions, ...blockSet18Fixtures, ...previewGridFixtures, ...shellDefectFixtures, fieldLayoutJson as unknown as AppDefinition, shellSelectionApp, pagingApp, pagingComparisonApp, pagingSplitApp, stackWhenFillApp, repeatEmptyCenterApp, inputSpinApp, inputOptionsApp, inputDateTimeApp, frameVisibilityApp, canvasLoadingApp, treeEditMoveApp, treeNameKeyApp, attachmentViewerApp, stackFeedSpacingFeedApp, stackFeedSpacingImageApp, stackFeedSpacingTabApp, stackFeedSpacingNamedApp, stackFeedSpacingCommentsApp, stackFeedSpacingCommentsMixedApp, stackFeedSpacingGroupedApp, stackFeedSpacingGroupedPlainApp, stackFeedSpacingGroupedPlainTabApp, stackFeedSpacingNestedApp];
 const storageDocument: AppDefinition = {
   id: "storage-document", name: "저장소 문서", requires: { blocks: 6, modules: { storage: 1 } },
   permissions: [], state: {},
@@ -244,6 +251,12 @@ const reclickDocument = `# 다시 누르기 시험
 `;
 
 const params = new URLSearchParams(window.location.search);
+// 뷰어 실패 장면: 기본은 크기 초과(코어 오류 id로 쉘 문구를 가른다), viewer-load-error=other는 다른 실패다.
+const viewerOtherErrorMessage = "첨부를 읽지 못했습니다. 파일이 바뀌었는지 확인하세요.";
+const missingMediaError = params.get("viewer-load-error") === "other"
+  ? { id: "MEDIA_BLOB_READ_FAILED", message: viewerOtherErrorMessage }
+  : { id: "MEDIA_LOAD_DATA_TOO_LARGE", message: "미디어가 허용 크기 20MB보다 커서 불러오지 못했습니다. 더 작은 파일이나 응답을 사용하세요. 미디어: missing.pdf" };
+const chatAttachments = params.has("chat-attachments");
 const pasMode = params.get("pas");
 const previewAppId = params.get("preview") || "md-editor";
 const previewOnly = params.has("preview");
@@ -291,7 +304,9 @@ const fakeTransport = createFakeTransport({
         ],
         chart_series: [], categories: [], targets: [], apps: [], slowest_spans: [], slowest_bindings: [], recent_spans: [],
       } } }, callError: "요청을 처리하지 못했습니다" },
-  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone, "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne,
+  media: { "landscape.png": sampleOne, "shapes.png": sampleTwo, "tone.wav": sampleTone, "tone-second.wav": sampleTone,
+    "poster.jpg": samplePoster, "clip.mp4": sampleClip, "notes.md": sampleNotes, "long-notes.md": sampleLongNotes, "memo.txt": sampleMemo, "bundle.zip": sampleBundle, "missing.pdf": sampleBundle,
+    "client-chat-fixture": clientChatScriptUrl, "client-chat-image": sampleOne,
     ...Object.fromEntries([
       "<rect x='5' y='3' width='14' height='18' rx='2'/><path d='M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15v2M8 18h2M12 18h2'/>",
       "<path d='M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.3 9.6 4 4 0 0 0 7 17.5h10.5z'/>",
@@ -300,10 +315,26 @@ const fakeTransport = createFakeTransport({
     ].map((body, index) => [`tile-${index}.svg`, `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>${body}</svg>`)}`])),
     ...canvasLoadingMedia,
   },
+  mediaOriginalErrors: { "missing.pdf": missingMediaError },
+  saveError: params.has("save-error") ? viewerOtherErrorMessage : undefined,
+  mediaOriginalDelayMs: params.has("slow-media") ? { "poster.jpg": 1200 } : undefined,
+  // iOS 받기 장면: 호스트가 대화상자 없이 파일 앱의 앱 폴더를 골랐을 때의 응답을 흉내 낸다.
+  saveLocation: params.get("ios-save") === "1" ? "파일 앱 › 나의 iPad › kaleidoscope › 회의록.md" : undefined,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: withRealNames(conversationMode || pasMode ? {
     thread: ["start", "login-start", "attach-start", "attach-own"].includes(conversationMode ?? "") || pasMode === "empty" ? null : conversationMode === "attach-attached" ? { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록 2026년 11월", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
-    items: historyCount === null ? [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }] : makeLongConversation(historyCount),
+    items: chatAttachments
+      ? [{ id: "chat-attach", kind: "user", text: "첨부를 보냈습니다", at: timestamp, attachments: [
+        { id: "img", name: "카드 화면.png", mime: "image/png" },
+        { id: "vid", name: "시연.mp4", mime: "video/mp4" },
+        { id: "doc", name: "회의록.md", mime: "text/markdown" },
+      ] }]
+      : historyCount === null ? [{ id: "1", kind: "assistant", text: "기존 기록", at: timestamp, attachments: [] }] : makeLongConversation(historyCount),
+    uploads: chatAttachments ? {
+      "chat-attach:img": { name: "카드 화면.png", mime: "image/png", url: sampleOne },
+      "chat-attach:vid": { name: "시연.mp4", mime: "video/mp4", url: sampleClip },
+      "chat-attach:doc": { name: "회의록.md", mime: "text/markdown", url: sampleNotes },
+    } : undefined,
     olderPages: [[{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }], [{ id: "older", kind: "assistant", text: "더 이전 기록", at: timestamp, attachments: [] }]],
     profiles: [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }],
     start: { profile: "profile-a", model: "sol" },
@@ -346,6 +377,9 @@ const fakeTransport = createFakeTransport({
     "reclick.md": reclickDocument,
   },
 });
+
+// iOS 받기 장면은 데스크톱 저장 대화상자 대신 코어 저장 응답을 쓴다.
+if (params.get("ios-save") === "1") fakeTransport.nativeFiles = true;
 
 let holdDateInput: string | null = null;
 let releaseDateInput: (() => void) | null = null;

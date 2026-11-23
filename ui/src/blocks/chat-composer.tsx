@@ -4,7 +4,8 @@ import type { CoreError } from "../contract/contract";
 import { Square as SquareIcon } from "lucide-react";
 import { ArrowUp, ICON_SIZE, Paperclip, ScreenShare } from "../components/icons";
 import { IconButton, Notice } from "../components/primitives";
-import { AttachmentChip, DraftChip, makeDraftAttachment, type DraftAttachment, type Preview } from "./agent-attachments";
+import { AttachmentChip, DraftChip, makeDraftAttachment, type DraftAttachment } from "./agent-attachments";
+import type { AttachmentPreviewRequest } from "../data/attachments";
 import { CHAT_PASTE_FILES_EVENT, requestChatAttachment } from "./chat-paste";
 import * as shellErrors from "../contract/shell-errors";
 
@@ -59,7 +60,7 @@ export function ChatComposer({ draft, onDraft, inputRef, attachments, onAttachme
   onCancel?: () => void;
   sharedWindows: Array<{ id: string; name: string }>;
   onRemoveShared: (id: string) => void;
-  onPreview: (preview: Preview) => void;
+  onPreview: (request: AttachmentPreviewRequest) => void;
   error: CoreError | null;
   onError: (error: CoreError | null) => void;
 }) {

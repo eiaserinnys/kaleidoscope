@@ -37,7 +37,9 @@ textarea,
 .ks-update-item,
 .ks-metric-subvalue,
 .ks-data-section-meta,
-.ks-combobox-description {
+.ks-combobox-description,
+.ks-attachment-viewer-plain,
+.ks-attachment-viewer-info-value {
   user-select: text;
   -webkit-touch-callout: default;
 }
