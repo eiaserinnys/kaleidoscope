@@ -662,6 +662,19 @@ pub fn storage_revision(kind: StorageKind, content: &Value) -> Result<String, St
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
+/// 새 type이 옛 type을 모두 담는지 본다. `"string"` → `["string","null"]`처럼
+/// 형제 type을 더하는 넓히기만 허용하고, 좁히기와 다른 type으로의 교체는 거절한다.
+/// 넓히기는 기존 저장값을 그대로 유효하게 두므로 새 판이 옛 값을 잃지 않는다.
+fn storage_type_widens_only(old: &StorageSchemaType, new: &StorageSchemaType) -> bool {
+    fn type_set(value_type: &StorageSchemaType) -> HashSet<JsonValueType> {
+        match value_type {
+            StorageSchemaType::One(one) => HashSet::from([*one]),
+            StorageSchemaType::Many(many) => many.iter().copied().collect(),
+        }
+    }
+    type_set(old).is_subset(&type_set(new))
+}
+
 /// 기존 선언과 저장 행이 새 앱 판과 호환되는지 각각 검사한다.
 pub fn validate_storage_upgrade(
     previous: &StorageDecl,
@@ -698,7 +711,12 @@ pub fn validate_storage_upgrade(
         }
         let old_type = old.schema.as_ref().map(|schema| &schema.value_type);
         let new_type = new.schema.as_ref().map(|schema| &schema.value_type);
-        if old_type != new_type {
+        let type_allowed = match (old_type, new_type) {
+            (None, None) => true,
+            (Some(old), Some(new)) => storage_type_widens_only(old, new),
+            _ => false,
+        };
+        if !type_allowed {
             errors.push(format!(
                 "저장 항목의 JSON type을 바꿀 수 없습니다: {entry_id}"
             ));
