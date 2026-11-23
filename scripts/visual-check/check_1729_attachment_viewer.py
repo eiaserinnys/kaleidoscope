@@ -30,6 +30,9 @@
   「…에 저장했습니다」 한 줄이 서고, 저장이 원본 재수신 없이 바이트 원천 한 번으로 끝나는지 잰다.
 - stack-feed-spacing: 쌓기 안 첨부만 담은 feed의 위아래 틈을 같은 자리에 image 블록을 둔 표본과 견주고,
   항목 사이 틈과 본문 있는 feed, 탭 바로 아래 feed의 간격이 그대로인지 잰다(카드 #1729 6절).
+- stack-feed-spacing-guards: 머리(이름·시각)가 있는 항목은 목록 간격(위 12, 머리→첨부 8, 마지막 아래 12)을
+  지키고, is-fill 쌓기의 커멘트 탭은 끝까지 굴렸을 때 마지막 카드 아래 12가 본문 섞인 목록과 같으며,
+  묶음과 답글을 접고 펼 때 feed 위 여백과 누른 머리 top이 그대로인지 잰다(화면 검수 3회차).
 
   python3 scripts/visual-check/check_1729_attachment_viewer.py [--output 산출폴더] [--port 포트] [--only 장면...]
 
@@ -73,8 +76,13 @@ LONG_NAME = "아주 긴 이름의 회의록 파일 이름이 계속 이어지는
 SPACING_FEED_APP = "stack-feed-spacing-feed"
 SPACING_IMAGE_APP = "stack-feed-spacing-image"
 SPACING_TAB_APP = "stack-feed-spacing-tab"
+SPACING_NAMED_APP = "stack-feed-spacing-named"
+SPACING_COMMENTS_APP = "stack-feed-spacing-comments"
+SPACING_COMMENTS_MIXED_APP = "stack-feed-spacing-comments-mixed"
+SPACING_GROUPED_APP = "stack-feed-spacing-grouped"
+SPACING_NESTED_APP = "stack-feed-spacing-nested"
 
-SCENES = ["feed-attachments", "viewer-image", "viewer-loading", "viewer-head-stability", "viewer-video", "viewer-markdown", "viewer-text", "viewer-file", "viewer-error", "viewer-error-other", "chat-attachments", "viewer-narrow", "viewer-narrow-bodies", "viewer-saved-ios", "stack-feed-spacing"]
+SCENES = ["feed-attachments", "viewer-image", "viewer-loading", "viewer-head-stability", "viewer-video", "viewer-markdown", "viewer-text", "viewer-file", "viewer-error", "viewer-error-other", "chat-attachments", "viewer-narrow", "viewer-narrow-bodies", "viewer-saved-ios", "stack-feed-spacing", "stack-feed-spacing-guards"]
 
 DIALOG_JS = """() => {
   const rect = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
@@ -239,6 +247,24 @@ NEIGHBOR_JS = """({ appId }) => {
     feed: feed ? { className: feed.className, paddingBlockStart: style(feed).paddingBlockStart, mediaOnly: feed.classList.contains('is-media-only') } : null,
     entryMarginBottom: entry ? style(entry).marginBottom : null,
     mediaMarginTop: media ? style(media).marginTop : null,
+  };
+}"""
+
+
+GUARD_JS = """({ appId }) => {
+  const rect = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { top: +b.top.toFixed(2), bottom: +b.bottom.toFixed(2), left: +b.left.toFixed(2), right: +b.right.toFixed(2), height: +b.height.toFixed(2) }; };
+  const style = (el) => el ? getComputedStyle(el) : null;
+  const root = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const feed = root ? root.querySelector('.ks-feed') : null;
+  const entries = feed ? [...feed.querySelectorAll('.ks-feed-entry')] : [];
+  const groupHeads = feed ? [...feed.querySelectorAll('.ks-feed-group-head')] : [];
+  const mediaOf = (el) => el.querySelector('.ks-feed-media');
+  return {
+    feed: feed ? { className: feed.className, mediaOnly: feed.classList.contains('is-media-only'), paddingBlockStart: style(feed).paddingBlockStart, rect: rect(feed) } : null,
+    entries: entries.map((el) => ({ rect: rect(el), marginBottom: style(el).marginBottom, head: rect(el.querySelector('.ks-feed-header')), media: rect(mediaOf(el)), mediaMarginTop: mediaOf(el) ? style(mediaOf(el)).marginTop : null, headerMediaGap: el.querySelector('.ks-feed-header') && mediaOf(el) ? +(mediaOf(el).getBoundingClientRect().top - el.querySelector('.ks-feed-header').getBoundingClientRect().bottom).toFixed(2) : null, table: el.classList.contains('is-table-row') })),
+    groupHeads: groupHeads.map((el) => ({ rect: rect(el), text: el.innerText.replace(/\\s+/g, ' ').trim() })),
+    lastEntryGap: feed && entries.length ? +(rect(feed).bottom - rect(entries[entries.length - 1]).bottom).toFixed(2) : null,
+    docOverflowX: document.documentElement.scrollWidth - window.innerWidth,
   };
 }"""
 
@@ -1013,6 +1039,118 @@ def scene_stack_feed_spacing(browser, port, output, results, failures):
     record(results, failures, "stack-feed-spacing", m, checks)
 
 
+def guard_sample(browser, port, app_id, size):
+    page, _app = open_page(browser, port, f"preview={app_id}", app_id, viewport=size)
+    page.wait_for_function("() => document.querySelector('.ks-feed') !== null", timeout=120000)
+    page.wait_for_function("() => document.querySelectorAll('.ks-media-skeleton').length === 0", timeout=60000)
+    page.wait_for_timeout(350)
+    return page
+
+
+def scroll_feed_end(page, app_id):
+    for _ in range(2):
+        page.evaluate(f"() => {{ const f = document.querySelector('[data-testid=\"app-window-{app_id}\"] .ks-feed'); if (f) f.scrollTop = f.scrollHeight; }}")
+        page.wait_for_timeout(400)
+
+
+def scene_stack_feed_spacing_guards(browser, port, output, results, failures):
+    """화면 검수 3회차: 머리 있는 항목, 굴러가는 목록, 접기에도 여백 규칙이 어긋나지 않는지 잰다(카드 #1729 6절).
+
+    넓은 폭과 360 모두에서 잰다. 이름·시각이 있는 항목은 목록 간격(위 12, 머리→첨부 8, 마지막 아래 12)을,
+    is-fill 쌓기의 커멘트 탭은 끝까지 굴렸을 때 마지막 카드 아래 12를, 묶음·답글을 접고 펼 때 feed 위 여백과
+    누른 머리 top이 그대로인지를 잰다. 기준 표본(머리 없는 첨부만 feed)은 표지가 그대로 붙는지 다시 본다.
+    """
+    m = {}
+    checks = {}
+    for label, size in (("wide", SIZE), ("narrow", NARROW)):
+        page = guard_sample(browser, port, SPACING_FEED_APP, size)
+        try:
+            state = page.evaluate(GUARD_JS, {"appId": SPACING_FEED_APP})
+        finally:
+            page.close()
+        m[f"{label}/headerless"] = state
+        checks[f"{label}_headerless_flag_kept"] = (state["feed"] or {}).get("mediaOnly") is True
+
+        page = guard_sample(browser, port, SPACING_NAMED_APP, size)
+        try:
+            named = page.evaluate(GUARD_JS, {"appId": SPACING_NAMED_APP})
+            page.screenshot(path=str(output / (f"stack-feed-spacing-named-{label}.png")), animations="disabled")
+        finally:
+            page.close()
+        m[f"{label}/named"] = named
+        named_feed = named["feed"] or {}
+        first = (named["entries"] or [{}])[0]
+        checks[f"{label}_named_no_flag"] = named_feed.get("mediaOnly") is False
+        checks[f"{label}_named_padding_12"] = named_feed.get("paddingBlockStart") == "12px"
+        checks[f"{label}_named_header_media_gap_8"] = close_enough(first.get("headerMediaGap"), 8)
+        checks[f"{label}_named_last_margin_12"] = first.get("marginBottom") == "12px"
+        checks[f"{label}_named_no_overflow"] = named["docOverflowX"] <= 1
+
+        comments = {}
+        for key, app_id in (("only", SPACING_COMMENTS_APP), ("mixed", SPACING_COMMENTS_MIXED_APP)):
+            page = guard_sample(browser, port, app_id, size)
+            try:
+                scroll_feed_end(page, app_id)
+                comments[key] = page.evaluate(GUARD_JS, {"appId": app_id})
+                if key == "only":
+                    page.screenshot(path=str(output / (f"stack-feed-spacing-comments-end-{label}.png")), animations="disabled")
+            finally:
+                page.close()
+        m[f"{label}/comments"] = comments
+        only = comments["only"]
+        mixed = comments["mixed"]
+        only_feed = only["feed"] or {}
+        checks[f"{label}_comments_no_flag"] = only_feed.get("mediaOnly") is False
+        checks[f"{label}_comments_padding_kept"] = only_feed.get("paddingBlockStart") == "0px"
+        checks[f"{label}_comments_last_gap_12"] = close_enough(only.get("lastEntryGap"), 12)
+        checks[f"{label}_comments_last_margin_12"] = (only["entries"] or [{}])[-1].get("marginBottom") == "12px"
+        checks[f"{label}_comments_table_media_margin_zero"] = all(entry.get("mediaMarginTop") in (None, "0px") for entry in only["entries"])
+        checks[f"{label}_comments_gap_matches_mixed"] = close_enough(only.get("lastEntryGap"), mixed.get("lastEntryGap"))
+        checks[f"{label}_comments_no_overflow"] = only["docOverflowX"] <= 1 and mixed["docOverflowX"] <= 1
+
+        page = guard_sample(browser, port, SPACING_GROUPED_APP, size)
+        try:
+            grouped_initial = page.evaluate(GUARD_JS, {"appId": SPACING_GROUPED_APP})
+            page.locator(f'[data-testid="app-window-{SPACING_GROUPED_APP}"] .ks-feed-group-head').first.click()
+            page.wait_for_timeout(400)
+            grouped_collapsed = page.evaluate(GUARD_JS, {"appId": SPACING_GROUPED_APP})
+            page.screenshot(path=str(output / (f"stack-feed-spacing-grouped-collapsed-{label}.png")), animations="disabled")
+            page.locator(f'[data-testid="app-window-{SPACING_GROUPED_APP}"] .ks-feed-group-head').first.click()
+            page.wait_for_timeout(400)
+            grouped_expanded = page.evaluate(GUARD_JS, {"appId": SPACING_GROUPED_APP})
+        finally:
+            page.close()
+        m[f"{label}/grouped"] = {"initial": grouped_initial, "collapsed": grouped_collapsed, "expanded": grouped_expanded}
+        pads = [(grouped_initial["feed"] or {}).get("paddingBlockStart"), (grouped_collapsed["feed"] or {}).get("paddingBlockStart"), (grouped_expanded["feed"] or {}).get("paddingBlockStart")]
+        heads = [((s.get("groupHeads") or [{}])[0].get("rect") or {}).get("top") for s in (grouped_initial, grouped_collapsed, grouped_expanded)]
+        checks[f"{label}_grouped_no_flag"] = all((s["feed"] or {}).get("mediaOnly") is False for s in (grouped_initial, grouped_collapsed, grouped_expanded))
+        checks[f"{label}_grouped_padding_kept"] = pads == ["12px", "12px", "12px"]
+        checks[f"{label}_grouped_head_top_kept"] = close_enough(heads[0], heads[1]) and close_enough(heads[0], heads[2])
+        checks[f"{label}_grouped_no_overflow"] = all(s["docOverflowX"] <= 1 for s in (grouped_initial, grouped_collapsed, grouped_expanded))
+
+        page = guard_sample(browser, port, SPACING_NESTED_APP, size)
+        try:
+            nested_initial = page.evaluate(GUARD_JS, {"appId": SPACING_NESTED_APP})
+            page.locator(f'[data-testid="app-window-{SPACING_NESTED_APP}"] button[aria-label*="답글"]').click()
+            page.wait_for_timeout(400)
+            nested_collapsed = page.evaluate(GUARD_JS, {"appId": SPACING_NESTED_APP})
+            page.screenshot(path=str(output / (f"stack-feed-spacing-nested-collapsed-{label}.png")), animations="disabled")
+            page.locator(f'[data-testid="app-window-{SPACING_NESTED_APP}"] button[aria-label*="답글"]').click()
+            page.wait_for_timeout(400)
+            nested_expanded = page.evaluate(GUARD_JS, {"appId": SPACING_NESTED_APP})
+        finally:
+            page.close()
+        m[f"{label}/nested"] = {"initial": nested_initial, "collapsed": nested_collapsed, "expanded": nested_expanded}
+        pads = [(nested_initial["feed"] or {}).get("paddingBlockStart"), (nested_collapsed["feed"] or {}).get("paddingBlockStart"), (nested_expanded["feed"] or {}).get("paddingBlockStart")]
+        heads = [((s.get("entries") or [{}])[0].get("head") or {}).get("top") for s in (nested_initial, nested_collapsed, nested_expanded)]
+        checks[f"{label}_nested_no_flag"] = all((s["feed"] or {}).get("mediaOnly") is False for s in (nested_initial, nested_collapsed, nested_expanded))
+        checks[f"{label}_nested_padding_kept"] = pads == ["12px", "12px", "12px"]
+        checks[f"{label}_nested_head_top_kept"] = close_enough(heads[0], heads[1]) and close_enough(heads[0], heads[2])
+        checks[f"{label}_nested_header_media_gap_8"] = close_enough((nested_initial["entries"] or [{}])[0].get("headerMediaGap"), 8)
+        checks[f"{label}_nested_no_overflow"] = all(s["docOverflowX"] <= 1 for s in (nested_initial, nested_collapsed, nested_expanded))
+    record(results, failures, "stack-feed-spacing-guards", m, checks)
+
+
 BROWSER_SCENES = {
     "feed-attachments": scene_feed,
     "viewer-image": scene_viewer_image,
@@ -1029,6 +1167,7 @@ BROWSER_SCENES = {
     "viewer-narrow-bodies": scene_viewer_narrow_bodies,
     "viewer-saved-ios": scene_viewer_saved_ios,
     "stack-feed-spacing": scene_stack_feed_spacing,
+    "stack-feed-spacing-guards": scene_stack_feed_spacing_guards,
 }
 
 
