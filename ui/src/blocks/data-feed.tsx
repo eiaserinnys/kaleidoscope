@@ -185,6 +185,14 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
     return next;
   }, [value, block.grouped, collapsedGroups, collapsedKeys]);
   const items = useMemo(() => rows.flatMap((row) => row.kind === "entry" ? [row.item.entry] : []), [rows]);
+  // 첨부만 담은 feed(모든 항목의 본문이 비고 media가 하나 이상)인지 자료로 가른다. 화면에 그려진 줄만 보면
+  // 긴 feed를 굴릴 때 이 표지가 바뀌어 쌓기 안 여백이 들락날락한다(카드 #1729 6절).
+  const mediaOnly = useMemo(() => items.length > 0
+    && items.some((entry) => entry.media?.some((media) => isMedia(media.image)))
+    && items.every((entry) => {
+      const parts = typeof entry.body === "string" ? [entry.body] : entry.body;
+      return !parts.some((part) => part.trim().length > 0);
+    }), [items]);
   const checkable = useMemo(() => items.some((entry) => typeof entry.checked === "boolean"), [items]);
   // 접힌 묶음과 답글까지 모든 항목을 본다. 보이는 줄만 세면 초상이 든 묶음을 접을 때 다른 줄의 빈 초상 칸이 사라져 글이 옮겨진다.
   const avatars = useMemo(() => groups(value, Boolean(block.grouped), valid).some((group) => {
@@ -269,11 +277,11 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   };
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const heading = block.grouped ? rows.slice(0, first + 1).reverse().find((r) => r.kind === "heading") : undefined;
-  return <><div {...blockRoot} className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; const distance = el.scrollHeight - el.scrollTop - el.clientHeight; atEnd.current = distance <= line || (atEnd.current && el.scrollTop >= lastScrollTop.current); lastScrollTop.current = el.scrollTop; }}>
+  return <><div {...blockRoot} className={`ks-data-view ks-feed${mediaOnly ? " is-media-only" : ""}`} ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; const distance = el.scrollHeight - el.scrollTop - el.clientHeight; atEnd.current = distance <= line || (atEnd.current && el.scrollTop >= lastScrollTop.current); lastScrollTop.current = el.scrollTop; }}>
     {heading?.kind === "heading" && first > 0 && <div className="ks-view-sticky"><GroupHeading title={heading.title} meta={heading.meta} /></div>}
     <VirtualSurface virtual={virtual}>{vrows.map((v) => {
       const row = rows[v.index];
-      return <div data-index={v.index} key={v.key} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}>
+      return <div data-index={v.index} data-last={v.index === rows.length - 1 ? "true" : undefined} key={v.key} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}>
         {row.kind === "heading" ? block.collapsible ? <div className="ks-feed-group-head" role="button" tabIndex={0} aria-expanded={!row.collapsed} onClick={() => toggleGroup(row.groupKey)} onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggleGroup(row.groupKey); }
         }}>

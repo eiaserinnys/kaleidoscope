@@ -28,6 +28,8 @@
   실패 상자의 좌우 틈 차이가 1px 안이다. viewer-narrow-error.png를 찍는다.
 - viewer-saved-ios: 호스트가 스스로 고른 저장 위치를 가짜 응답으로 돌려줄 때(?ios-save=1) 머리 아래에
   「…에 저장했습니다」 한 줄이 서고, 저장이 원본 재수신 없이 바이트 원천 한 번으로 끝나는지 잰다.
+- stack-feed-spacing: 쌓기 안 첨부만 담은 feed의 위아래 틈을 같은 자리에 image 블록을 둔 표본과 견주고,
+  항목 사이 틈과 본문 있는 feed, 탭 바로 아래 feed의 간격이 그대로인지 잰다(카드 #1729 6절).
 
   python3 scripts/visual-check/check_1729_attachment_viewer.py [--output 산출폴더] [--port 포트] [--only 장면...]
 
@@ -68,7 +70,11 @@ BUNDLE = "묶음.zip"
 MISSING = "큰 파일.pdf"
 LONG_NAME = "아주 긴 이름의 회의록 파일 이름이 계속 이어지는 첨부.md"
 
-SCENES = ["feed-attachments", "viewer-image", "viewer-loading", "viewer-head-stability", "viewer-video", "viewer-markdown", "viewer-text", "viewer-file", "viewer-error", "viewer-error-other", "chat-attachments", "viewer-narrow", "viewer-narrow-bodies", "viewer-saved-ios"]
+SPACING_FEED_APP = "stack-feed-spacing-feed"
+SPACING_IMAGE_APP = "stack-feed-spacing-image"
+SPACING_TAB_APP = "stack-feed-spacing-tab"
+
+SCENES = ["feed-attachments", "viewer-image", "viewer-loading", "viewer-head-stability", "viewer-video", "viewer-markdown", "viewer-text", "viewer-file", "viewer-error", "viewer-error-other", "chat-attachments", "viewer-narrow", "viewer-narrow-bodies", "viewer-saved-ios", "stack-feed-spacing"]
 
 DIALOG_JS = """() => {
   const rect = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
@@ -183,6 +189,57 @@ SAVED_WRAP_JS = """() => {
   range.selectNodeContents(el);
   const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top * 10) / 10)).size;
   return { lineCount: lines, words, overflow: el.scrollWidth - el.clientWidth, text: el.textContent };
+}"""
+
+
+SPACING_JS = """({ appId }) => {
+  const rect = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
+  const style = (el) => el ? getComputedStyle(el) : null;
+  const root = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const body = root ? root.querySelector('.ks-data-window-body') : null;
+  const stack = body ? body.querySelector('.ks-data-stack') : null;
+  const items = stack ? [...stack.children].filter((el) => el.classList.contains('ks-data-stack-item')) : [];
+  const firstText = items[0] ? items[0].querySelector('.ks-data-text') : null;
+  const nextText = items[2] ? items[2].querySelector('.ks-data-text') : null;
+  const middle = items[1] || null;
+  const cells = middle ? [...middle.querySelectorAll('.ks-feed-media-cell')].map(rect) : [];
+  const image = middle ? middle.querySelector('.ks-image-view') : null;
+  const mediaRects = cells.length ? cells : image ? [rect(image)] : [];
+  const mediaTop = mediaRects.length ? Math.min(...mediaRects.map((box) => box.top)) : null;
+  const mediaBottom = mediaRects.length ? Math.max(...mediaRects.map((box) => box.bottom)) : null;
+  const firstBottom = firstText ? rect(firstText).bottom : null;
+  const nextTop = nextText ? rect(nextText).top : null;
+  const feed = middle ? middle.querySelector('.ks-feed') : null;
+  const entryEls = middle ? [...middle.querySelectorAll('.ks-feed-entry')] : [];
+  const entryRects = entryEls.map(rect);
+  const mediaEl = middle ? middle.querySelector('.ks-feed-media') : null;
+  const lastRow = entryEls.length ? entryEls[entryEls.length - 1].closest('[data-index]') : null;
+  return {
+    gapTop: mediaTop !== null && firstBottom !== null ? mediaTop - firstBottom : null,
+    gapBottom: mediaBottom !== null && nextTop !== null ? nextTop - mediaBottom : null,
+    mediaTop, mediaBottom, firstTextBottom: firstBottom, nextTop,
+    cells: cells.length,
+    entries: entryEls.length,
+    itemGap: entryRects.length > 1 ? entryRects[1].top - entryRects[0].bottom : null,
+    entryMargins: entryEls.map((el) => style(el).marginBottom),
+    mediaMarginTop: mediaEl ? style(mediaEl).marginTop : null,
+    feed: feed ? { className: feed.className, paddingBlockStart: style(feed).paddingBlockStart, mediaOnly: feed.classList.contains('is-media-only') } : null,
+    lastRowMarked: lastRow ? lastRow.getAttribute('data-last') === 'true' : null,
+    docOverflowX: document.documentElement.scrollWidth - window.innerWidth,
+  };
+}"""
+
+NEIGHBOR_JS = """({ appId }) => {
+  const style = (el) => el ? getComputedStyle(el) : null;
+  const root = document.querySelector(`[data-testid="app-window-${appId}"]`);
+  const feed = root ? root.querySelector('.ks-feed') : null;
+  const entry = root ? root.querySelector('.ks-feed-entry') : null;
+  const media = root ? root.querySelector('.ks-feed-media') : null;
+  return {
+    feed: feed ? { className: feed.className, paddingBlockStart: style(feed).paddingBlockStart, mediaOnly: feed.classList.contains('is-media-only') } : null,
+    entryMarginBottom: entry ? style(entry).marginBottom : null,
+    mediaMarginTop: media ? style(media).marginTop : null,
+  };
 }"""
 
 
@@ -898,6 +955,64 @@ def scene_viewer_saved_ios(browser, port, output, results, failures):
         page.close()
 
 
+def spacing_sample(browser, port, query, app_id, viewport, kind):
+    page, _app = open_page(browser, port, query, app_id, viewport=viewport)
+    if kind == "feed":
+        page.wait_for_function("() => document.querySelectorAll('.ks-feed-media-cell').length >= 3 && document.querySelectorAll('.ks-media-skeleton').length === 0", timeout=60000)
+    else:
+        page.wait_for_function("() => { const img = document.querySelector('.ks-image-view img'); return img !== null && img.complete && img.naturalWidth > 0; }", timeout=60000)
+    page.wait_for_timeout(350)
+    return page
+
+
+def scene_stack_feed_spacing(browser, port, output, results, failures):
+    """쌓기 안 첨부만 담은 feed의 두 틈이 같은 자리에 image 블록을 둔 표본과 같아야 한다(카드 #1729 6절).
+
+    넓은 폭과 360 모두에서 잰다. 항목이 여럿인 feed의 항목 사이 틈(12)은 지금 그대로이고, 본문이 있는
+    쌓기 안 feed와 탭 바로 아래 feed의 padding 12·항목 아래 12·media 위 8도 그대로여야 한다.
+    """
+    m = {}
+    checks = {}
+    for label, size in (("wide", SIZE), ("narrow", NARROW)):
+        feed_page = spacing_sample(browser, port, f"preview={SPACING_FEED_APP}", SPACING_FEED_APP, size, "feed")
+        try:
+            feed_state = feed_page.evaluate(SPACING_JS, {"appId": SPACING_FEED_APP})
+            feed_page.screenshot(path=str(output / ("stack-feed-spacing.png" if label == "wide" else "stack-feed-spacing-narrow.png")), animations="disabled")
+        finally:
+            feed_page.close()
+        image_page = spacing_sample(browser, port, f"preview={SPACING_IMAGE_APP}", SPACING_IMAGE_APP, size, "image")
+        try:
+            image_state = image_page.evaluate(SPACING_JS, {"appId": SPACING_IMAGE_APP})
+        finally:
+            image_page.close()
+        m[label] = {"feed": feed_state, "image": image_state}
+        feed = feed_state["feed"] or {}
+        checks[f"{label}_top_gap_matches_image"] = close_enough(feed_state["gapTop"], image_state["gapTop"])
+        checks[f"{label}_bottom_gap_matches_image"] = close_enough(feed_state["gapBottom"], image_state["gapBottom"])
+        checks[f"{label}_no_overflow"] = feed_state["docOverflowX"] <= 1 and image_state["docOverflowX"] <= 1
+        checks[f"{label}_feed_no_outer_padding"] = feed.get("mediaOnly") is True and feed.get("paddingBlockStart") == "0px"
+        checks[f"{label}_last_entry_margin_zero"] = feed_state["entryMargins"][-1:] == ["0px"] and feed_state["lastRowMarked"] is True
+        checks[f"{label}_item_gap_kept"] = feed_state["itemGap"] is not None and close_enough(feed_state["itemGap"], 12)
+        checks[f"{label}_media_margin_zero"] = feed_state["mediaMarginTop"] == "0px"
+    neighbors = {}
+    for name, query, app_id in (("body_feed_in_stack", FEED_QUERY, FEED_APP), ("feed_in_tab", f"preview={SPACING_TAB_APP}", SPACING_TAB_APP)):
+        page = spacing_sample(browser, port, query, app_id, SIZE, "feed")
+        try:
+            neighbors[name] = page.evaluate(NEIGHBOR_JS, {"appId": app_id})
+        finally:
+            page.close()
+    m["neighbors"] = neighbors
+    body = neighbors["body_feed_in_stack"] or {}
+    tab = neighbors["feed_in_tab"] or {}
+    body_feed = body.get("feed") or {}
+    tab_feed = tab.get("feed") or {}
+    checks["body_feed_keeps_spacing"] = (body_feed.get("paddingBlockStart") == "12px" and body_feed.get("mediaOnly") is False
+                                         and body.get("entryMarginBottom") == "12px" and body.get("mediaMarginTop") == "8px")
+    checks["tab_feed_keeps_spacing"] = (tab_feed.get("paddingBlockStart") == "0px"
+                                        and tab.get("entryMarginBottom") == "12px" and tab.get("mediaMarginTop") == "8px")
+    record(results, failures, "stack-feed-spacing", m, checks)
+
+
 BROWSER_SCENES = {
     "feed-attachments": scene_feed,
     "viewer-image": scene_viewer_image,
@@ -913,6 +1028,7 @@ BROWSER_SCENES = {
     "viewer-narrow": scene_narrow,
     "viewer-narrow-bodies": scene_viewer_narrow_bodies,
     "viewer-saved-ios": scene_viewer_saved_ios,
+    "stack-feed-spacing": scene_stack_feed_spacing,
 }
 
 
