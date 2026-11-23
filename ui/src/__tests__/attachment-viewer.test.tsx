@@ -23,10 +23,10 @@ function definition(ui: AppDefinition["ui"]): AppDefinition {
   return { ...mdViewerDefinition, requires: { blocks: 12, modules: {} }, permissions: [], state: {}, ui };
 }
 
-function setupViewer(source: AttachmentSource, name: string, options: { media?: Record<string, string>; saveCancelled?: boolean; nativeFiles?: boolean } = {}) {
+function setupViewer(source: AttachmentSource, name: string, options: { media?: Record<string, string>; saveCancelled?: boolean; saveLocation?: string; nativeFiles?: boolean } = {}) {
   const app = definition({ type: "text", value: "빈 창" });
   const seed = makeTestSeed({ definitions: [app] });
-  const transport = createFakeTransport({ ...seed, media: options.media ?? {}, saveCancelled: options.saveCancelled });
+  const transport = createFakeTransport({ ...seed, media: options.media ?? {}, saveCancelled: options.saveCancelled, saveLocation: options.saveLocation });
   if (options.nativeFiles) transport.nativeFiles = true;
   const store = createShellStore(transport);
   const trigger = document.createElement("button");
@@ -124,14 +124,23 @@ it("데스크톱 받기는 저장 대화상자를 한 번 열고 제안 이름�
   expect(call.source.kind).toBe("bytes");
 });
 
-it("미디어 참조 받기는 원본 참조를 그대로 코어에 넘긴다", async () => {
+it("이미 받아 둔 미디어 원본은 다시 받지 않고 바이트 원천으로 한 번만 저장한다", async () => {
   const media = { permission: "docs", path: "notes.md" };
   const { transport } = setupViewer({ kind: "media", media }, "회의록.md", { nativeFiles: true, media: { "notes.md": `data:text/markdown;base64,${toBase64("# 문서")}` } });
-  fireEvent.click(await screen.findByRole("button", { name: "받기" }));
-  await waitFor(() => expect(transport.getCalls().some((call) => call.op === "data.media.save")).toBe(true));
+  expect(await screen.findByRole("heading", { name: "문서" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "받기" }));
+  await waitFor(() => expect(transport.getCalls().filter((call) => call.op === "data.media.save")).toHaveLength(1));
   const call = transport.getCalls().find((item) => item.op === "data.media.save");
   if (call?.op !== "data.media.save") throw new Error("저장 요청 없음");
-  expect(call.source).toEqual({ kind: "media", media });
+  expect(call.source).toEqual({ kind: "bytes", mime: "text/markdown", data_base64: toBase64("# 문서") });
+  expect(transport.getCalls().filter((item) => item.op === "data.media")).toHaveLength(1);
+});
+
+it("호스트가 스스로 고른 저장 위치를 받으면 머리 아래에 보인다", async () => {
+  const location = "파일 앱 › 나의 iPad › kaleidoscope › 회의록.md";
+  setupViewer({ kind: "bytes", mime: "text/markdown", data_base64: toBase64("# 문서") }, "회의록.md", { nativeFiles: true, saveLocation: location });
+  fireEvent.click(await screen.findByRole("button", { name: "받기" }));
+  expect(await screen.findByText(`${location}에 저장했습니다`)).toBeTruthy();
 });
 
 it("저장을 취소해도 오류를 보이지 않는다", async () => {
@@ -139,6 +148,7 @@ it("저장을 취소해도 오류를 보이지 않는다", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "받기" }));
   await waitFor(() => expect(transport.getCalls().some((call) => call.op === "data.media.save")).toBe(true));
   expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByText(/저장했습니다/)).toBeNull();
   expect(screen.getByRole("dialog")).toBeTruthy();
 });
 

@@ -89,6 +89,14 @@ pub fn crop_share_capture_png(bytes: &[u8], bounds: Rect, scale_factor: f64) -> 
     share::prepare_png(bytes, Some((bounds, scale_factor))).map(|(png, _)| png)
 }
 
+/// 저장 대화상자나 호스트가 고른 저장 위치. `location`은 사용자가 대화상자로 고르지 않고
+/// 호스트가 스스로 고른 경우에만 화면에 보일 이름을 담는다(예: iOS 파일 앱 경로).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SaveFileTarget {
+    pub path: PathBuf,
+    pub location: Option<String>,
+}
+
 pub trait Host: Send + Sync + 'static {
     /// 폴더 고르기 창을 띄우고 고른 폴더의 절대 경로를 돌려준다. 취소하면 None이다.
     fn pick_folder(&self) -> Option<PathBuf>;
@@ -104,7 +112,7 @@ pub trait Host: Send + Sync + 'static {
     ) -> Option<Vec<PathBuf>> {
         None
     }
-    fn pick_save_file(&self, _suggested_name: &str, _mime: &str) -> Option<PathBuf> {
+    fn pick_save_file(&self, _suggested_name: &str, _mime: &str) -> Option<SaveFileTarget> {
         None
     }
     fn pc_roots(&self) -> Vec<PcRoot> {
@@ -1074,9 +1082,13 @@ impl Core {
                 window_id,
                 source,
                 suggested_name,
-            } => Ok(CoreReply::DataMediaSave {
-                cancelled: media::save(&self.inner, &window_id, &source, &suggested_name)?,
-            }),
+            } => {
+                let saved = media::save(&self.inner, &window_id, &source, &suggested_name)?;
+                Ok(CoreReply::DataMediaSave {
+                    cancelled: saved.cancelled,
+                    saved_to: saved.location,
+                })
+            }
             CoreRequest::ConnectionLogin {
                 window_id,
                 permission,

@@ -264,6 +264,7 @@ fn begin_with_retention(
         return Ok(None);
     };
     let parent = target
+        .path
         .parent()
         .ok_or_else(|| kaleidoscope_contract::errors::FILE_CLIENT_EXPORT_TARGET_INVALID(name))?;
     let id = Uuid::new_v4().to_string();
@@ -286,7 +287,7 @@ fn begin_with_retention(
         id.clone(),
         Output {
             window: window.into(),
-            target,
+            target: target.path,
             temp,
             file,
             retain_on_commit,

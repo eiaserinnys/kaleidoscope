@@ -17,6 +17,8 @@
 - chat-attachments: 채팅 기록 첨부의 그림·영상·마크다운 칩. 그림과 영상, 마크다운을 각각 눌러 뷰어가 열리는지 잰다.
 - viewer-narrow: 360px 폭에서 아주 긴 이름의 마크다운을 열어 가로 넘침과 이름 말줄임을 재고, 700px로 넓혔다 360px로
   되돌려 대화상자가 남고 스크롤 위치가 유지되는지 잰다.
+- viewer-saved-ios: 호스트가 스스로 고른 저장 위치를 가짜 응답으로 돌려줄 때(?ios-save=1) 머리 아래에
+  「…에 저장했습니다」 한 줄이 서고, 저장이 원본 재수신 없이 바이트 원천 한 번으로 끝나는지 잰다.
 
   python3 scripts/visual-check/check_1729_attachment_viewer.py [--output 산출폴더] [--port 포트] [--only 장면...]
 
@@ -43,6 +45,8 @@ FEED_APP = "attachment-viewer-fixture"
 CHAT_APP = "workspace-pas"
 FEED_QUERY = f"preview={FEED_APP}"
 CHAT_QUERY = f"preview={CHAT_APP}&pas=ready&chat-attachments=1"
+IOS_QUERY = f"{FEED_QUERY}&ios-save=1"
+IOS_LOCATION = "파일 앱 › 나의 iPad › kaleidoscope › 회의록.md"
 POSTER = "포스터.jpg"
 CLIP = "시연.mp4"
 NOTES = "회의록.md"
@@ -51,13 +55,15 @@ BUNDLE = "묶음.zip"
 MISSING = "큰 파일.pdf"
 LONG_NAME = "아주 긴 이름의 회의록 파일 이름이 계속 이어지는 첨부.md"
 
-SCENES = ["feed-attachments", "viewer-image", "viewer-loading", "viewer-video", "viewer-markdown", "viewer-text", "viewer-file", "viewer-error", "chat-attachments", "viewer-narrow"]
+SCENES = ["feed-attachments", "viewer-image", "viewer-loading", "viewer-video", "viewer-markdown", "viewer-text", "viewer-file", "viewer-error", "chat-attachments", "viewer-narrow", "viewer-saved-ios"]
 
 DIALOG_JS = """() => {
   const rect = (el) => { const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }; };
   const dialog = document.querySelector('[role="dialog"]');
   const viewer = document.querySelector('.ks-attachment-viewer');
   const nameEl = document.querySelector('.ks-attachment-viewer-name');
+  const header = document.querySelector('.ks-attachment-viewer-header');
+  const saved = document.querySelector('.ks-attachment-viewer-saved');
   const body = document.querySelector('.ks-attachment-viewer-body');
   const buttons = dialog ? [...dialog.querySelectorAll('button')] : [];
   const save = buttons.find((b) => b.textContent.trim() === '받기') ?? null;
@@ -79,6 +85,8 @@ DIALOG_JS = """() => {
     outsideInert: root ? root.hasAttribute('inert') : null,
     viewer: viewer ? rect(viewer) : null,
     viewerOverflowX: viewer ? viewer.scrollWidth - viewer.clientWidth : null,
+    header: header ? rect(header) : null,
+    saved: saved ? { text: saved.textContent, ...rect(saved), fontSize: getComputedStyle(saved).fontSize } : null,
     body: body ? { ...rect(body), scrollWidth: body.scrollWidth, clientWidth: body.clientWidth, scrollTop: body.scrollTop, scrollHeight: body.scrollHeight } : null,
     name: nameEl ? { text: nameEl.textContent, ...rect(nameEl), clientWidth: nameEl.clientWidth, scrollWidth: nameEl.scrollWidth, lineRects: nameEl.getClientRects().length, textOverflow: nameStyle.textOverflow, whiteSpace: nameStyle.whiteSpace, ellipsis: nameStyle.textOverflow === 'ellipsis' && nameEl.scrollWidth > nameEl.clientWidth + 1 } : null,
     save: save ? { ...rect(save), disabled: save.disabled } : null,
@@ -542,6 +550,37 @@ def scene_narrow(browser, port, output, results, failures):
         page.close()
 
 
+def scene_viewer_saved_ios(browser, port, output, results, failures):
+    page, app = open_page(browser, port, IOS_QUERY, FEED_APP)
+    try:
+        wait_feed_ready(page)
+        open_by_click(app, NOTES)
+        wait_dialog(page)
+        wait_until(page, "() => { const dialog = document.querySelector('[role=\"dialog\"]'); return dialog !== null && dialog.querySelector('h1, h2, h3') !== null; }")
+        page.wait_for_timeout(300)
+        page.get_by_role("dialog").get_by_role("button", name="받기").click()
+        wait_until(page, "() => document.querySelector('.ks-attachment-viewer-saved') !== null")
+        page.wait_for_timeout(300)
+        m = page.evaluate(DIALOG_JS)
+        m["saveCalls"] = page.evaluate("() => window.conversationHarness.calls().filter((call) => call.op === 'data.media.save').map((call) => ({ source: call.source.kind, name: call.suggested_name }))")
+        m["originalCalls"] = media_calls(page, "notes.md", original=True)
+        page.screenshot(path=str(output / "viewer-saved-ios.png"), animations="disabled")
+        saved = m["saved"] or {}
+        header = m["header"] or {}
+        body = m["body"] or {}
+        checks = {
+            "dialog_named": m["dialogOpen"] and m["label"] == NOTES,
+            "saved_line_text": saved.get("text") == f"{IOS_LOCATION}에 저장했습니다",
+            "saved_below_header": saved.get("top", 0) >= header.get("bottom", 0) - 1 and saved.get("bottom", 10 ** 9) <= body.get("top", 0) + 1,
+            "one_core_save_with_bytes": m["saveCalls"] == [{"source": "bytes", "name": NOTES}],
+            "original_fetched_once": m["originalCalls"] == 1,
+            "no_overflow": m["docOverflowX"] <= 1 and m["viewerOverflowX"] is not None and m["viewerOverflowX"] <= 1,
+        }
+        record(results, failures, "viewer-saved-ios", m, checks)
+    finally:
+        page.close()
+
+
 BROWSER_SCENES = {
     "feed-attachments": scene_feed,
     "viewer-image": scene_viewer_image,
@@ -553,6 +592,7 @@ BROWSER_SCENES = {
     "viewer-error": scene_viewer_error,
     "chat-attachments": scene_chat,
     "viewer-narrow": scene_narrow,
+    "viewer-saved-ios": scene_viewer_saved_ios,
 }
 
 

@@ -312,6 +312,8 @@ const fakeTransport = createFakeTransport({
   },
   mediaOriginalErrors: { "missing.pdf": "미디어가 허용 크기 20MB보다 커서 불러오지 못했습니다. 더 작은 파일이나 응답을 사용하세요. 미디어: missing.pdf" },
   mediaOriginalDelayMs: params.has("slow-media") ? { "poster.jpg": 1200 } : undefined,
+  // iOS 받기 장면: 호스트가 대화상자 없이 파일 앱의 앱 폴더를 골랐을 때의 응답을 흉내 낸다.
+  saveLocation: params.get("ios-save") === "1" ? "파일 앱 › 나의 iPad › kaleidoscope › 회의록.md" : undefined,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: withRealNames(conversationMode || pasMode ? {
     thread: ["start", "login-start", "attach-start", "attach-own"].includes(conversationMode ?? "") || pasMode === "empty" ? null : conversationMode === "attach-attached" ? { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록 2026년 11월", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
@@ -369,6 +371,9 @@ const fakeTransport = createFakeTransport({
     "reclick.md": reclickDocument,
   },
 });
+
+// iOS 받기 장면은 데스크톱 저장 대화상자 대신 코어 저장 응답을 쓴다.
+if (params.get("ios-save") === "1") fakeTransport.nativeFiles = true;
 
 let holdDateInput: string | null = null;
 let releaseDateInput: (() => void) | null = null;

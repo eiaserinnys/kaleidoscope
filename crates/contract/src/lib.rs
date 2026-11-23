@@ -159,7 +159,9 @@
 //! [`CoreRequest::DataMediaSave`]로 화면이 그리는 첨부 하나를 사용자가 고른 자리에 저장한다. 원천은
 //! [`data::MediaSaveSource`]이고, 미디어 참조는 `data.media`와 같은 권한 검사와 크기 제한을 거쳐 원본을 읽는다.
 //! 사용자가 저장 위치를 고르므로 앱의 `client` 선언이 필요 없다. 대화처럼 참조 없이 이미 받은 바이트도 같은
-//! 명령으로 저장한다. 저장 대화상자에서 취소하면 오류가 아니라 `cancelled: true`다. 블록 세트와 모듈 판은 그대로다.
+//! 명령으로 저장한다. 저장 대화상자에서 취소하면 오류가 아니라 `cancelled: true`다. 호스트가 대화상자 없이 스스로
+//! 고른 경우(iOS 파일 앱의 앱 폴더)에는 `saved_to`로 사용자에게 보일 위치를 싣고, 사용자가 고른 데스크톱에서는 비운다.
+//! 블록 세트와 모듈 판은 그대로다.
 //!
 //! # 전송
 //! - 화면은 명령 하나로 [`CoreRequest`]를 보내고 [`CoreReply`]를 받거나 [`CoreError`]로 실패를 받는다.
@@ -6662,7 +6664,13 @@ pub enum CoreReply {
     #[serde(rename = "data.media.status")]
     DataMediaStatus { error: Option<CoreError> },
     #[serde(rename = "data.media.save")]
-    DataMediaSave { cancelled: bool },
+    DataMediaSave {
+        cancelled: bool,
+        /// 호스트가 대화상자 없이 스스로 고른 저장 위치를 사용자에게 보일 이름. 사용자가 대화상자로 고른 데스크톱은 없음.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        saved_to: Option<String>,
+    },
     #[serde(rename = "connection.login")]
     ConnectionLogin {},
     #[serde(rename = "share.set")]

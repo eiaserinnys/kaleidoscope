@@ -47,6 +47,7 @@ export function AttachmentPreview({ request, onClose, store: storeProp, windowId
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [savedTo, setSavedTo] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<CoreError | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useOverlayDialog({ trigger: request.trigger, onClose, dialog: dialogRef });
@@ -71,9 +72,14 @@ export function AttachmentPreview({ request, onClose, store: storeProp, windowId
   const save = async () => {
     setSaving(true);
     setSaveError(null);
+    setSavedTo(null);
     try {
       if (!store || !windowId) throw shellErrors.SHELL_WINDOW_DATA_CONTEXT_MISSING();
-      await saveAttachment(store, windowId, request.source, request.name);
+      // 이미 받아 둔 원본이 있으면 다시 받지 않고 그 바이트로 저장한다.
+      const source = state.status === "ready"
+        ? { kind: "bytes" as const, mime: state.mime, data_base64: state.data_base64 }
+        : request.source;
+      setSavedTo(await saveAttachment(store, windowId, source, request.name));
     } catch (reason) {
       setSaveError(toCoreError(reason));
     } finally {
@@ -115,6 +121,7 @@ export function AttachmentPreview({ request, onClose, store: storeProp, windowId
         <Button onClick={() => void save()} disabled={saving}>받기</Button>
         <div className="ks-attachment-viewer-close" ref={closeRef}><IconButton aria-label="닫기" onClick={onClose}><X /></IconButton></div>
       </div>
+      {savedTo ? <div className="ks-attachment-viewer-saved" role="status">{savedTo}에 저장했습니다</div> : null}
       <div className="ks-attachment-viewer-body">{body}</div>
       {saveError ? <div className="ks-attachment-viewer-save-error"><Notice role="alert" errorId={saveError.id}>{saveError.message}</Notice></div> : null}
     </div>

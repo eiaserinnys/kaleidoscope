@@ -49,6 +49,8 @@ export interface FakeTransportSeed {
   saveCancelled?: boolean;
   /** 있으면 `data.media.save`가 이 문구로 실패한다. */
   saveError?: string;
+  /** 있으면 호스트가 스스로 고른 저장 위치로 응답한다(iOS 파일 앱). */
+  saveLocation?: string;
   /** 배경 그림 자산 id → 서버가 돌려주는 원본. */
   wallpaperMedia?: Record<string, { data_base64: string; mime: string }>;
   wallpaperUploadError?: string;
@@ -464,7 +466,11 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "data.media.status": return { op: "data.media.status", error: null };
       case "data.media.save": {
         if (seed.saveError) return fail("io", seed.saveError);
-        return { op: "data.media.save", cancelled: seed.saveCancelled ?? false };
+        return {
+          op: "data.media.save",
+          cancelled: seed.saveCancelled ?? false,
+          ...(seed.saveLocation ? { saved_to: seed.saveLocation } : {}),
+        };
       }
       case "external.open": {
         const url = new URL(request.url);

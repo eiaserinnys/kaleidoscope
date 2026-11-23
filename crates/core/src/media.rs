@@ -530,13 +530,19 @@ pub(crate) fn get(
     Ok(as_data(&result))
 }
 
-/// `data.media.save`. 사용자가 고른 자리에 첨부를 쓴다. 대화상자에서 취소하면 `true`를 돌려주고 오류가 아니다.
+/// `data.media.save`의 결과. `location`은 호스트가 대화상자 없이 스스로 고른 위치의 표시 이름이다.
+pub(crate) struct Saved {
+    pub cancelled: bool,
+    pub location: Option<String>,
+}
+
+/// `data.media.save`. 사용자가 고른 자리에 첨부를 쓴다. 대화상자에서 취소하면 `cancelled`로 끝나고 오류가 아니다.
 pub(crate) fn save(
     inner: &Arc<Inner>,
     window: &str,
     source: &MediaSaveSource,
     suggested_name: &str,
-) -> Result<bool, CoreError> {
+) -> Result<Saved, CoreError> {
     let (mime, bytes) = match source {
         MediaSaveSource::Media { media } => {
             let data = get(inner, window, media, None)?;
@@ -553,11 +559,11 @@ pub(crate) fn save(
         }
     };
     let Some(target) = inner.host.pick_save_file(suggested_name, &mime) else {
-        return Ok(true);
+        return Ok(Saved { cancelled: true, location: None });
     };
-    std::fs::write(&target, &bytes)
+    std::fs::write(&target.path, &bytes)
         .map_err(|error| errors::MEDIA_SAVE_WRITE_FAILED(suggested_name, &error.to_string()))?;
-    Ok(false)
+    Ok(Saved { cancelled: false, location: target.location })
 }
 
 #[cfg(test)]

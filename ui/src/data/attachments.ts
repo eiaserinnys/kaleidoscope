@@ -132,19 +132,23 @@ function downloadBytes(dataBase64: string, name: string, mime: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-/** 받기. 데스크톱 전송은 코어의 저장 대화상자를, 브라우저 전송은 download를 쓴다. 취소는 조용히 끝난다. */
-export async function saveAttachment(store: ShellStore, windowId: string, source: AttachmentSource, displayName: string): Promise<void> {
+/**
+ * 받기. 데스크톱 전송은 코어의 저장 대화상자를, 브라우저 전송은 download를 쓴다. 취소는 조용히 끝난다.
+ * 호스트가 대화상자 없이 스스로 고른 위치가 있으면 그 표시 이름을 돌려주고, 없으면 null이다.
+ */
+export async function saveAttachment(store: ShellStore, windowId: string, source: AttachmentSource, displayName: string): Promise<string | null> {
   const content = await resolveSource(source);
   if (store.nativeFiles) {
     const mime = content.kind === "bytes" ? content.mime : (await loadAttachment(store, windowId, content)).mime;
-    await store.call({
+    const reply = await store.call({
       op: "data.media.save",
       window_id: windowId,
       source: content,
       suggested_name: suggestedAttachmentName(displayName, mime),
     });
-    return;
+    return reply.saved_to ?? null;
   }
   const loaded = await loadAttachment(store, windowId, content);
   downloadBytes(loaded.data_base64, suggestedAttachmentName(displayName, loaded.mime), loaded.mime);
+  return null;
 }
