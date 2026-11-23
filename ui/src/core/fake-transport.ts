@@ -38,7 +38,17 @@ export interface FakeTransportSeed {
   storageWriteDelayMs?: number;
   webUnavailable?: boolean;
   media?: Record<string, string>;
+  /** 미디어 키 → 실패 문구. 큰 첨부의 실패 화면을 잡을 때 쓴다. */
+  mediaErrors?: Record<string, string>;
+  /** 미디어 키 → 실패 문구. 크기 요청이 없는 원본 읽기만 실패한다. */
+  mediaOriginalErrors?: Record<string, string>;
+  /** 미디어 키 → 지연(ms). 크기 요청이 없는 원본 읽기만 늦춘다. 뷰어의 로딩 화면을 잡을 때 쓴다. */
+  mediaOriginalDelayMs?: Record<string, number>;
   playback?: Record<string, MediaPlayback>;
+  /** 있으면 `data.media.save`가 취소로 끝난다. */
+  saveCancelled?: boolean;
+  /** 있으면 `data.media.save`가 이 문구로 실패한다. */
+  saveError?: string;
   /** 배경 그림 자산 id → 서버가 돌려주는 원본. */
   wallpaperMedia?: Record<string, { data_base64: string; mime: string }>;
   wallpaperUploadError?: string;
@@ -69,6 +79,8 @@ export interface FakeConversationSeed {
   waitForAttach?: () => Promise<void>;
   /** 시작과 연결이 이 오류로 실패한다. 시작 판의 오류 자리를 보려고 쓴다. */
   startError?: CoreError;
+  /** 이미 있는 기록의 첨부 내용. 키는 `item_id:attachment_id`다. `url`이면 받을 때 내려받는다. */
+  uploads?: Record<string, ConversationUpload | { name: string; mime: string; url: string }>;
   draft?: { request_id: string; text: string; attachments: ConversationUpload[]; failed: boolean };
   /** 연결한 대화임을 표시한다. 없으면 이 작업이 만든 대화다. */
   attached?: boolean;
@@ -184,7 +196,7 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
   const conversationOlderPages = conversation?.olderPages ?? (conversation?.older?.length ? [conversation.older] : []);
   let conversationLoggedIn = !conversation?.loginRequired;
   let conversationWatching = false;
-  const conversationAttachments = new Map<string, ConversationUpload>();
+  const conversationAttachments = new Map<string, ConversationUpload | { name: string; mime: string; url: string }>(Object.entries(seed.conversation?.uploads ?? {}));
   for (const [path, text] of Object.entries(seed.files)) {
     files.set(path, { text, revision: `fake-revision-${revisionNumber++}` });
   }
@@ -435,6 +447,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
         const key = "blob" in request.media ? request.media.blob : "asset" in request.media ? request.media.asset : "app_icon" in request.media ? request.media.app_icon : request.media.path;
         const playback = seed.playback?.[key];
         if (request.op === "data.media.open" && playback) return { op: "data.media.open", playback };
+        const mediaError = (request.op === "data.media" && request.max_px == null ? seed.mediaOriginalErrors?.[key] : undefined) ?? seed.mediaErrors?.[key];
+        if (mediaError) return fail("io", mediaError);
+        const originalDelay = request.op === "data.media" && request.max_px == null ? seed.mediaOriginalDelayMs?.[key] : undefined;
+        if (originalDelay) await new Promise((resolve) => setTimeout(resolve, originalDelay));
         const url = seed.media?.[key];
         if (!url) return fail("not_found", "미디어를 찾을 수 없습니다");
         const response = await fetch(url);
@@ -446,6 +462,10 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       }
       case "data.media.close": return { op: "data.media.close" };
       case "data.media.status": return { op: "data.media.status", error: null };
+      case "data.media.save": {
+        if (seed.saveError) return fail("io", seed.saveError);
+        return { op: "data.media.save", cancelled: seed.saveCancelled ?? false };
+      }
       case "external.open": {
         const url = new URL(request.url);
         if (url.protocol !== "http:" && url.protocol !== "https:") return fail("invalid_request", "주소가 올바르지 않습니다");
@@ -555,6 +575,13 @@ export function createFakeTransport(seed: FakeTransportSeed): FakeTransport {
       case "conversation.attachment": {
         const attachment = conversationAttachments.get(`${request.item_id}:${request.attachment_id}`);
         if (!attachment) return fail("not_found", "첨부를 찾을 수 없습니다");
+        if ("url" in attachment) {
+          const response = await fetch(attachment.url);
+          if (!response.ok) return fail("not_found", "첨부를 찾을 수 없습니다");
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          const encoded = btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+          return { op: "conversation.attachment", name: attachment.name, mime: attachment.mime, data_base64: encoded };
+        }
         return { op: "conversation.attachment", ...attachment };
       }
       case "conversation.attachment_open": return { op: "conversation.attachment_open" };

@@ -1070,6 +1070,13 @@ impl Core {
             CoreRequest::DataMediaStatus { window_id, handle } => Ok(CoreReply::DataMediaStatus {
                 error: media::stream::status(&self.inner, &window_id, &handle)?,
             }),
+            CoreRequest::DataMediaSave {
+                window_id,
+                source,
+                suggested_name,
+            } => Ok(CoreReply::DataMediaSave {
+                cancelled: media::save(&self.inner, &window_id, &source, &suggested_name)?,
+            }),
             CoreRequest::ConnectionLogin {
                 window_id,
                 permission,

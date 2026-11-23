@@ -6,7 +6,8 @@ import { ArrowUp, Image, X } from "../components/icons";
 import { ErrorId, IconButton } from "../components/primitives";
 import { SHELL_COMMENT_TARGET_CHANGED } from "../contract/shell-errors";
 import { captureWindowForComment } from "../share/share-view";
-import { ImagePreview } from "../blocks/agent-attachments";
+import { AttachmentPreview } from "../blocks/attachment-preview";
+import type { AttachmentPreviewRequest } from "../data/attachments";
 import { describeTarget, type TargetDescription } from "./target";
 import type { DefinitionIndex } from "./definition";
 import { commentLabel } from "./label";
@@ -24,7 +25,7 @@ export function CommentComposer({ store, content, windowId, appId, appName, vers
   const [captureError, setCaptureError] = useState<CoreError>();
   const [capturing, setCapturing] = useState(Boolean(target));
   const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState<HTMLButtonElement | null>(null);
+  const [preview, setPreview] = useState<AttachmentPreviewRequest | null>(null);
   const capturePromise = useRef<Promise<AppCommentImage | undefined>>(Promise.resolve(undefined));
   const input = useRef<HTMLTextAreaElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -83,8 +84,8 @@ export function CommentComposer({ store, content, windowId, appId, appName, vers
     {target ? <div className="ks-html-target"><nav className="ks-html-crumbs" aria-label="부모 경로">{rowName || quote ? <button type="button" className="ks-html-crumb" onClick={() => selectParent(target.element.closest<HTMLElement>("[data-ks-block]"))}>{blockName}</button> : blockName}{rowName ? <><span aria-hidden="true">›</span>{quote ? <button type="button" className="ks-html-crumb" onClick={() => selectParent(target.element)}>{rowName}</button> : rowName}</> : null}</nav><div className={`ks-html-target-name${quote || rowName ? " is-quote" : ""}`}>{quote ? `“${quote}”` : rowName ? target.name ?? target.anchor.element?.description : commentLabel(target.anchor, true)}</div><IconButton aria-label="취소" onClick={onClose}><X size="inline" /></IconButton></div> : <div className="ks-html-target"><span>{targetChanged ? "자리를 다시 골라 주세요" : "자리를 골라 주세요"}</span><IconButton aria-label="취소" onClick={onClose}><X size="inline" /></IconButton></div>}
     {targetChanged ? <p className="ks-comment-sends-text" role="alert">{SHELL_COMMENT_TARGET_CHANGED().message} <ErrorId id="SHELL_COMMENT_TARGET_CHANGED" /></p> : null}
     <div className="ks-html-compose"><textarea ref={input} aria-label="커멘트" className="ks-text-input ks-agent-chat-input" rows={1} placeholder="커멘트" value={text} onChange={(event) => { setText(event.target.value); session.updateDraft({ text: event.target.value }); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (text) { setText(""); session.updateDraft({ text: "" }); } else onClose(); } }} /><IconButton aria-label="추가" disabled={!target || !text.trim() || busy} onClick={() => void submit()}><ArrowUp /></IconButton></div>
-    <div className="ks-comment-sends">{capturing ? <span className="ks-comment-thumb ks-media-skeleton" aria-busy="true" /> : image && includeImage ? <span className="ks-comment-thumb"><button type="button" onClick={(event) => setPreview(event.currentTarget)} aria-label="창 그림 크게 보기"><img src={`data:image/png;base64,${image.image_base64}`} alt="창 그림" /></button><IconButton className="ks-list-remove" aria-label="창 그림 빼기" onClick={() => { setIncludeImage(false); session.updateDraft({ includeImage: false }); }}><X /></IconButton></span> : <span className="ks-comment-thumb is-removed"><IconButton aria-label="창 그림 넣기" disabled={!image} onClick={() => { setIncludeImage(true); session.updateDraft({ includeImage: true }); }}><Image /></IconButton></span>}<p className="ks-comment-sends-text">{sends}</p></div>
+    <div className="ks-comment-sends">{capturing ? <span className="ks-comment-thumb ks-media-skeleton" aria-busy="true" /> : image && includeImage ? <span className="ks-comment-thumb"><button type="button" onClick={(event) => setPreview({ source: { kind: "bytes", mime: "image/png", data_base64: image.image_base64 }, name: "창 그림", trigger: event.currentTarget })} aria-label="창 그림 크게 보기"><img src={`data:image/png;base64,${image.image_base64}`} alt="창 그림" /></button><IconButton className="ks-list-remove" aria-label="창 그림 빼기" onClick={() => { setIncludeImage(false); session.updateDraft({ includeImage: false }); }}><X /></IconButton></span> : <span className="ks-comment-thumb is-removed"><IconButton aria-label="창 그림 넣기" disabled={!image} onClick={() => { setIncludeImage(true); session.updateDraft({ includeImage: true }); }}><Image /></IconButton></span>}<p className="ks-comment-sends-text">{sends}</p></div>
     {captureError ? <p className="ks-comment-sends-text">창 그림을 찍지 못했습니다{captureError.id ? <> <ErrorId id={captureError.id} /></> : null}</p> : null}
-    {preview && image ? <ImagePreview preview={{ src: `data:image/png;base64,${image.image_base64}`, name: "창 그림", trigger: preview }} onClose={() => setPreview(null)} /> : null}
+    {preview && image ? <AttachmentPreview request={preview} store={store} windowId={windowId} onClose={() => setPreview(null)} /> : null}
   </div>;
 }

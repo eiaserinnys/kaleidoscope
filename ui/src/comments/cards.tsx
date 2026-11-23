@@ -8,7 +8,8 @@ import { Menu } from "../components/menu";
 import { Dialog } from "../components/dialog";
 import { IconButton } from "../components/primitives";
 import { Compose, Group } from "../blocks/html-document/parts";
-import { ImagePreview } from "../blocks/agent-attachments";
+import { AttachmentPreview } from "../blocks/attachment-preview";
+import type { AttachmentPreviewRequest } from "../data/attachments";
 import { appCommentStore } from "./store";
 import { commentLabel } from "./label";
 import { sendCommentReply } from "./send";
@@ -23,7 +24,7 @@ export function CommentCard({ item, status, active, host, store, windowId, open,
   const [busy, setBusy] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
   const [image, setImage] = useState<string>();
-  const [preview, setPreview] = useState<HTMLButtonElement | null>(null);
+  const [preview, setPreview] = useState<AttachmentPreviewRequest | null>(null);
   const targetButton = useRef<HTMLButtonElement>(null);
   const replyInFlight = useRef(false);
   const data = appCommentStore(store, item.app_id);
@@ -65,8 +66,8 @@ export function CommentCard({ item, status, active, host, store, windowId, open,
       <IconButton aria-label="더 보기" onClick={(event) => setMenu(event.currentTarget)}><Ellipsis /></IconButton>
     </span>}>
     {thread?.replies.map((entry) => <div key={entry.id} className="ks-html-reply"><span className="ks-html-reply-role">{entry.author === "agent" ? "에이전트" : "나"}</span><p>{entry.text}</p></div>)}
-    {image ? <span className="ks-comment-thumb"><button type="button" onClick={(event) => setPreview(event.currentTarget)} aria-label="그때의 창 그림 크게 보기"><img src={`data:image/png;base64,${image}`} alt="그때의 창 그림" /></button></span> : null}
-    {image && preview ? <ImagePreview preview={{ src: `data:image/png;base64,${image}`, name: "그때의 창 그림", trigger: preview }} onClose={() => setPreview(null)} /> : null}
+    {image ? <span className="ks-comment-thumb"><button type="button" onClick={(event) => setPreview({ source: { kind: "bytes", mime: "image/png", data_base64: image }, name: "그때의 창 그림", trigger: event.currentTarget })} aria-label="그때의 창 그림 크게 보기"><img src={`data:image/png;base64,${image}`} alt="그때의 창 그림" /></button></span> : null}
+    {image && preview ? <AttachmentPreview request={preview} store={store} windowId={windowId} onClose={() => setPreview(null)} /> : null}
     <Compose label="답글" disabled={replyBusy} initialValue={data.draft(item.id)} onDraftChange={(value) => data.setDraft(item.id, value)} onSubmit={reply} onEscape={closeCard} />
     {menu ? <Menu anchor={menu} onClose={() => setMenu(null)} items={[{ id: "delete", label: "삭제", danger: true, onSelect: () => setConfirm(true) }]} /> : null}
     {confirm ? <Dialog host={host.closest<HTMLElement>(".ks-window") ?? host} overlayClassName="ks-comment-dialog" inertSelector=":scope > .ks-window-frame, :scope > .ks-comment-layer" title={`커멘트 ${item.number}번을 지울까요?`} ok="지우기" danger onCancel={() => setConfirm(false)} onConfirm={() => void change(async () => { await store.call({ op: "comment.delete", app_id: item.app_id, id: item.id }); setConfirm(false); close(); requestAnimationFrame(() => { const win = host.closest(".ks-window"); (win?.querySelector<HTMLElement>('.ks-comment-bar button, .ks-comment-title-button') ?? host).focus({ preventScroll: true }); }); })} /> : null}

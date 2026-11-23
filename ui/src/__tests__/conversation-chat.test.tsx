@@ -52,7 +52,7 @@ it("클라이언트 채팅의 미디어 첨부 응답을 호스트에서 읽어 
   const snapshot = makeTestSnapshot({ definitions: [app] });
   const transport = createFakeTransport({ snapshot, folder: null, files: {} });
   const originalCall = transport.call.bind(transport);
-  const media = { permission: "cards", path: "/api/attachments/a1/content" };
+  const media = { permission: "cards", path: "/files/a1/content" };
   const call = vi.spyOn(transport, "call").mockImplementation(async (request) => request.op === "data.media"
     ? { op: "data.media", media: { mime: "image/png", data_base64: "aW1hZ2U=", width: 1, height: 1 } }
     : originalCall(request));
@@ -646,7 +646,7 @@ describe("공용 대화 부품", () => {
     render(<ChatComposer
       draft="" onDraft={() => {}} inputRef={createRef<HTMLTextAreaElement>()} attachments={[]} onAttachmentsChange={() => {}}
       onSend={onSend} disabled={false} busy={false} sharedWindows={[]}
-      onRemoveShared={() => {}} onPreview={() => {}} error={null} onError={() => {}}
+      onRemoveShared={() => {}} onPreview={() => {}} onError={() => {}} error={null}
     />);
     const input = screen.getByRole("textbox", { name: "메시지" });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -674,7 +674,7 @@ describe("공용 대화 부품", () => {
     const attachment = { id: "0", name: "기록.png", mime: "image/png" };
     let resolveLoad!: (value: { mime: string; data_base64: string }) => void;
     const load = () => new Promise<{ mime: string; data_base64: string }>((resolve) => { resolveLoad = resolve; });
-    const { container } = render(<HistoryAttachmentView attachment={attachment} cacheKey={["frame-test"]} load={load} open={async () => {}} onPreview={() => {}} onError={() => {}} />);
+    const { container } = render(<HistoryAttachmentView attachment={attachment} cacheKey={["frame-test"]} load={load} onPreview={() => {}} />);
     expect(container.querySelector(".ks-agent-attachment-placeholder")?.classList.contains("ks-agent-attachment-image")).toBe(true);
     await act(async () => resolveLoad({ mime: "image/png", data_base64: "YQ==" }));
     expect(screen.getByRole("button", { name: "기록.png" }).classList.contains("ks-agent-attachment-image")).toBe(true);

@@ -32,6 +32,7 @@ mod client_blobs_tests;
 mod client_files_tests;
 mod client_http_request_tests;
 mod media_stream_tests;
+mod media_save_tests;
 mod connection_snapshot_race_tests;
 mod file_write_tests;
 mod layout_sync_tests;

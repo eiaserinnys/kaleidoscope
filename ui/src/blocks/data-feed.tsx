@@ -19,7 +19,8 @@ import { MediaAttachment } from "./media-attachment";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
 import { toCoreError } from "../core/core-transport";
 import { checkAppLink } from "../data/app-link";
-import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
+import type { AttachmentPreviewRequest } from "../data/attachments";
+import { AttachmentPreview } from "./attachment-preview";
 
 function asFeedEntry(value: unknown): FeedEntry | null {
   if (!isObject(value) || typeof value.key !== "string" || !(typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")))) return null;
@@ -89,7 +90,7 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
   const entry = item.entry;
   const nameColor = validColor(entry.color) ? entry.color : undefined;
   const data = useWindowData();
-  const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
+  const [preview, setPreview] = useState<AttachmentPreviewRequest | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
   const openLink = () => {
     try {
@@ -127,7 +128,7 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
     {!collapsed && hasMedia ? <div className="ks-feed-media">{entry.media!.map((media, index) => isMedia(media.image) &&
       <MediaAttachment key={index} media={media} name={media.alt || `그림 ${index + 1}`} onPreview={setPreview} />)}</div> : null}
     </div>
-  </article>{preview && <MediaPreview request={preview} onClose={closePreview} />}</>;
+  </article>{preview && <AttachmentPreview request={preview} onClose={closePreview} />}</>;
 });
 export function FeedBlock({ block, context, pointer }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string }) {
   const blockRoot = useBlockRootProps();

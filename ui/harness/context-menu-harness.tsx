@@ -8,7 +8,9 @@ import { sandboxSource } from "../src/blocks/sandbox-frame";
 import { WindowFrame } from "../../app/src/shell/window-frame";
 import { makeTestSnapshot } from "../src/__tests__/fixtures";
 import { ChatItem } from "../src/blocks/chat-history";
-import { HistoryAttachmentView, ImagePreview, type Preview } from "../src/blocks/agent-attachments";
+import { HistoryAttachmentView } from "../src/blocks/agent-attachments";
+import { AttachmentPreview } from "../src/blocks/attachment-preview";
+import type { AttachmentPreviewRequest } from "../src/data/attachments";
 import type { ConversationItem } from "../src/contract/contract";
 import "../src/styles/index.css";
 import "../../app/src/shell.css";
@@ -16,7 +18,7 @@ import "./harness.css";
 
 const html = "<html><body><p id='frame-text'>프레임에서 고를 글입니다.</p><input id='frame-input' value='원본'></body></html>";
 function Harness() {
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [attachment, setAttachment] = useState<AttachmentPreviewRequest | null>(null);
   const [text, setText] = useState("abcde");
   const [number, setNumber] = useState("12345");
   const [email, setEmail] = useState("abcde@example.com");
@@ -37,8 +39,8 @@ function Harness() {
     };
     return <main className="ks-harness"><ContextMenuHost /><h1>대화</h1>
       <div className="ks-agent-chat"><div className="ks-agent-chat-content"><ChatItem item={item} renderAttachment={() => null} />
-        <HistoryAttachmentView attachment={{ id: "image", name: "그림.png", mime: "image/png" }} cacheKey={["content-menu-harness"]} load={loadPng} open={async () => {}} onPreview={setPreview} onError={() => {}} />
-      </div></div>{preview ? <ImagePreview preview={preview} onClose={() => setPreview(null)} /> : null}
+        <HistoryAttachmentView attachment={{ id: "image", name: "그림.png", mime: "image/png" }} cacheKey={["content-menu-harness"]} load={loadPng} onPreview={setAttachment} />
+      </div></div>{attachment ? <AttachmentPreview request={attachment} onClose={() => setAttachment(null)} /> : null}
     </main>;
   }
   useEffect(() => {

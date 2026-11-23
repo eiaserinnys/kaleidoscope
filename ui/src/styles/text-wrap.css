@@ -32,7 +32,9 @@
 .ks-icon-tile-name,
 .ks-html-text,
 .ks-settings-row-label,
-.ks-settings-description {
+.ks-settings-description,
+.ks-attachment-viewer-plain,
+.ks-attachment-viewer-info-value {
   overflow-wrap: anywhere;
   word-break: keep-all;
 }
