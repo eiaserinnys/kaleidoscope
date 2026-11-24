@@ -28,14 +28,17 @@ import { useLocalDraft } from "../data/use-local-draft";
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "status"; group: ListGroup<ListItem> } | { kind: "items"; items: ListItem[]; start: number };
 // 짧은 고르기 창에서 목록이 바깥 본문과 함께 굴러가도 가상 목록은 보이는 줄만 그린다.
-function useDialogListViewport(scroll: React.RefObject<HTMLDivElement | null>) {
+function useDialogListViewport(scroll: React.RefObject<HTMLDivElement | null>, hasList: boolean) {
   const [viewport, setViewport] = useState<{ element: HTMLDivElement; margin: number } | null>(null);
   useLayoutEffect(() => {
     const root = scroll.current;
     const overlay = root?.closest<HTMLElement>(".ks-dialog-overlay.is-picker");
     const outer = overlay?.querySelector<HTMLDivElement>(".ks-dialog-scroll");
     const host = overlay?.closest<HTMLElement>(".ks-data-window");
-    if (!root || !outer || !host) return;
+    if (!root || !outer || !host) {
+      setViewport((previous) => previous === null ? previous : null);
+      return;
+    }
     const update = () => {
       if (getComputedStyle(root).overflowY !== "visible") {
         setViewport((previous) => previous === null ? previous : null);
@@ -50,7 +53,7 @@ function useDialogListViewport(scroll: React.RefObject<HTMLDivElement | null>) {
     observer.observe(host); observer.observe(outer); observer.observe(root);
     outer.addEventListener("scroll", update, { passive: true });
     return () => { observer.disconnect(); outer.removeEventListener("scroll", update); };
-  }, [scroll]);
+  }, [scroll, hasList]);
   return viewport;
 }
 type ListHandlers = {
@@ -131,12 +134,13 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const grouped = useMemo(() => listGroups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
   const parentScope = useItemScope();
   const items = useMemo(() => grouped.flatMap((group) => group.items), [grouped]);
+  const hasStatus = grouped.some((group) => group.status);
   const grid = block.layout === "grid";
   const icons = block.layout === "icons";
   const [columns, setColumns] = useState(1);
   const measuredColumns = useRef<number | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
-  const viewport = useDialogListViewport(scroll);
+  const viewport = useDialogListViewport(scroll, (value !== null || !!more) && (items.length > 0 || !!more || hasStatus));
   const iconColumns = useIconGridColumns(scroll, icons && (items.length > 0 || !!more));
   const activeColumns = icons ? iconColumns : grid ? columns : 1;
   // 격자의 칸 수는 첫 그림 전에 잰다. 칸 수가 그려진 뒤에 바뀌면 줄 묶음이 달라져 줄이 다시 만들어지고,
@@ -316,7 +320,6 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   };
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, useWindowVisible(context), icons ? <IconTileSkeleton count={activeColumns} /> : undefined, items.length);
-  const hasStatus = grouped.some((group) => group.status);
   if (value === null && !more) return null;
   if (!items.length && !more && !hasStatus) return <NoItems rootProps={blockRoot} />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;

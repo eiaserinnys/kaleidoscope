@@ -885,7 +885,8 @@
                             "gap": "none",
                             "fill": [
                               0,
-                              1
+                              1,
+                              2
                             ],
                             "children": [
                               {
@@ -1007,6 +1008,35 @@
                                       "type": "text",
                                       "value": {
                                         "client": "status_compact_usage"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  ]
+                                },
+                                "min_width": 260
+                              },
+                              {
+                                "type": "when",
+                                "width_scope": "container",
+                                "max_width": 259,
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "row",
+                                  "gap": "small",
+                                  "align": "center",
+                                  "fill": 0,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_compact_model"
+                                      },
+                                      "style": "meta"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_tight_usage"
                                       },
                                       "style": "meta"
                                     }
@@ -1583,6 +1613,9 @@
         "default": ""
       },
       "status_compact_usage": {
+        "default": ""
+      },
+      "status_tight_usage": {
         "default": ""
       },
       "status_no_context": {

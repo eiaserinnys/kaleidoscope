@@ -176,7 +176,6 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
         assert_eq!(header["value"]["client"], "show_status_bar");
         let mut compact = Vec::new();
         collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_model", &mut compact);
-        assert_eq!(compact.len(), 1);
         let mut usage = Vec::new();
         collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_usage", &mut usage);
         assert_eq!(usage.len(), 1);
@@ -184,9 +183,13 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
         collect(header, &|node| node["type"] == "when" && node["width_scope"] == "container", &mut wide);
         if !wide.is_empty() {
             scoped += 1;
-            assert_eq!(wide.len(), 2);
+            assert_eq!(compact.len(), 2);
+            assert_eq!(wide.len(), 3);
             assert_eq!(wide[0]["min_width"], 620);
             assert_eq!(wide[1]["max_width"], 619);
+            assert_eq!(wide[1]["min_width"], 260);
+            assert_eq!(wide[2]["max_width"], 259);
+            assert_eq!(wide[2]["child"]["children"][1]["value"]["client"], "status_tight_usage");
             let strip = &wide[0]["child"];
             assert_eq!(strip["gap"], "medium");
             assert_eq!(strip["children"][0]["value"]["client"], "status_identity");
@@ -198,6 +201,8 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
             assert_eq!(bars[1]["label"]["item"], "label");
             assert_eq!(bars[1]["label_position"], "inline");
             assert_eq!(strip["children"][2]["gap"], "medium");
+        } else {
+            assert_eq!(compact.len(), 1);
         }
     }
     assert_eq!(scoped, 1);
@@ -222,7 +227,7 @@ fn builtin_agent_declares_every_status_output() {
     let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     let outputs = value["client"]["outputs"].as_object().unwrap();
     for name in [
-        "status_bar_on", "show_status_bar", "status_identity", "status_compact_model", "status_compact_usage", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
+        "status_bar_on", "show_status_bar", "status_identity", "status_compact_model", "status_compact_usage", "status_tight_usage", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
         "status_limit_bars", "status_limits", "status_no_limits", "status_account",
         "status_has_context", "status_has_subagents", "status_has_account",
     ] {

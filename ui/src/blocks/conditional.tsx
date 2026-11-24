@@ -23,8 +23,10 @@ export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; c
       .find((element) => element.dataset.windowId === context.window.id);
     const content = block.width_scope === "container" && scopedElement !== undefined ? scopedElement : host;
     const update = (width: number) => {
-      const matches = (block.min_width === undefined || width >= block.min_width)
-        && (block.max_width === undefined || width <= block.max_width);
+      // 나란히 둔 정수 폭 조건 사이에 소수점 폭의 빈 구간이 생기지 않게 한다.
+      const measured = block.width_scope === "container" ? Math.floor(width) : width;
+      const matches = (block.min_width === undefined || measured >= block.min_width)
+        && (block.max_width === undefined || measured <= block.max_width);
       if (widthMatchesRef.current === matches) return;
       widthMatchesRef.current = matches;
       setWidthMatches(matches);

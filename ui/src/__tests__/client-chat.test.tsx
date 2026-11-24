@@ -168,7 +168,10 @@ it("입력창 위 폭 조건은 창이 그대로여도 입력칸 너비가 바�
     unobserve() {}
     disconnect() {}
   });
-  const conditional = { type: "when", min_width: 620, width_scope: "container", child: { type: "text", value: "넓은 상태" } } as unknown as NonNullable<ClientChatBlockData["input_header"]>;
+  const conditional = { type: "stack", direction: "row", children: [
+    { type: "when", min_width: 620, width_scope: "container", child: { type: "text", value: "넓은 상태" } },
+    { type: "when", max_width: 619, width_scope: "container", child: { type: "text", value: "좁은 상태" } },
+  ] } as NonNullable<ClientChatBlockData["input_header"]>;
   const headed: ClientChatBlockData = { ...block, input_header: conditional };
   const headedApp: AppDefinition = { ...app, ui: headed };
   const seed = makeTestSnapshot({ definitions: [headedApp] });
@@ -179,9 +182,10 @@ it("입력창 위 폭 조건은 창이 그대로여도 입력칸 너비가 바�
   try {
     expect(await screen.findByText("넓은 상태")).toBeTruthy();
     expect(observers.length).toBeGreaterThan(0);
-    available = 500;
+    available = 619.8;
     act(() => observers.forEach((notify) => notify()));
     await waitFor(() => expect(screen.queryByText("넓은 상태")).toBeNull());
+    expect(await screen.findByText("좁은 상태")).toBeTruthy();
   } finally {
     view.unmount(); store.dispose(); vi.unstubAllGlobals();
   }

@@ -306,6 +306,7 @@ test("한도 막대: session은 5시간, weekly는 7일 창이고 다른 창은 
   ]);
   assert.deepEqual(views.at(-1).status_limits.map((row: any) => [row.label, row.text]), [["7일", "30% 사용, 3일 남음"], ["5시간", "58% 사용, 3시간 남음"], ["Opus 7일", "90% 사용, 1일 남음"]]);
   assert.equal(views.at(-1).status_compact_usage, "5시간 58% · 7일 30%");
+  assert.equal(views.at(-1).status_tight_usage, "58%·30%");
   assert.equal(views.at(-1).status_no_limits, false);
   (app as any).receive({ ...readyView(), limits: [] });
   assert.deepEqual(views.at(-1).status_limit_bars, []);
@@ -365,6 +366,7 @@ test("상태 줄 칸 표시 여부: when은 참인 불리언만 보므로 값이
   let view = views.at(-1);
   assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_account], [true, true, true]);
   assert.equal(view.status_context_bar, 0.42);
+  assert.equal(view.status_tight_usage, "42%");
   (app as any).receive(readyView());
   view = views.at(-1);
   assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_account], [false, false, false]);
