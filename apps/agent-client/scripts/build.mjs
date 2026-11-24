@@ -19,7 +19,7 @@ const bytes = bundle.outputFiles[0].contents;
 const hash = createHash("sha256").update(bytes).digest("hex");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const entry = { id: "builtin-agent-client", version: 12, format: "javascript", sha256: hash, source: "apps/agent-client", license: "MIT", byte_size: bytes.length, created_at: "2026-11-19T00:00:00Z", path: "agent/client-v12.js" };
-const preserved = { id: "builtin-agent-client", version: 11, format: "javascript", sha256: "19150db10dfb56e34f84d24c0786429472ac8a4f42e61cc98ba7a0850a51e393", source: "apps/agent-client", license: "MIT", byte_size: 49767, created_at: "2026-11-16T00:00:00Z", path: "agent/client-v11.js" };
+const preserved = { id: "builtin-agent-client", version: 11, format: "javascript", sha256: "4a36d1dc39e1f0d75d9d5a81c4157a1bbbee887beac2a41f83522bd8ff27a887", source: "apps/agent-client", license: "MIT", byte_size: 48570, created_at: "2026-11-24T00:00:00Z", path: "agent/client-v11.js" };
 const oldBytes = await readFile(resolve(assets, preserved.path));
 checkPreserved(oldBytes, manifest.find((item) => item.id === preserved.id && item.version === preserved.version), preserved);
 const index = manifest.findIndex((item) => item.id === entry.id && item.version === entry.version);

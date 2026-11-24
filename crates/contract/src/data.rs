@@ -955,6 +955,17 @@ pub struct AppIconMediaRef {
     pub app_version: u32,
 }
 
+/// `data.media.save`가 저장할 첨부의 원천. 화면이 이미 들고 있는 참조나 바이트를 그대로 넘긴다.
+/// `media`는 창이 읽을 수 있는 미디어 참조이고, 코어가 `data.media`와 같은 권한 검사를 한 뒤 원본을 읽는다.
+/// `bytes`는 대화 첨부처럼 참조 없이 이미 받아 둔 내용이다.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum MediaSaveSource {
+    Media { media: MediaRef },
+    Bytes { mime: String, data_base64: String },
+}
+
 /// 이미지에서 보일 부분. 원본 가로와 세로에 대한 비율(0~1)이고 `x`, `y`는 왼쪽 위다.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[ts(export, export_to = "contract.ts")]

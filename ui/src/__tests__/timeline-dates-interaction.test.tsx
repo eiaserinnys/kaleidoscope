@@ -6,7 +6,11 @@ const runtime = vi.hoisted(() => ({ act: vi.fn().mockResolvedValue(true), holdIn
 vi.mock("../data/window-data", () => ({ useWindowData: () => runtime, useBinding: (_: string, value: unknown) => ({ status: "ready", value }) }));
 vi.mock("../share/visible", () => ({ useShareDescriber: (_root: unknown, describe: () => { text: string }) => { runtime.describe = describe; } }));
 vi.mock("../data/window-state", () => ({ useWindowVisible: () => true, useWindowGrants: () => [], useWindowStateValue: () => "ko-KR" }));
+// 고정 날짜 항목(11-10~11-12)을 쓰므로 오늘 날짜가 표시 범위 안에 들 때 초기 스크롤 시작이
+// monday(오늘-7)로 옮겨지는 일이 없게 시각을 항목 범위 밖으로 고정한다.
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-05T12:00:00Z"));
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     if (this.classList.contains("ks-dates-period-text")) return { width: 180, height: 16 } as DOMRect;
     if (this.classList.contains("ks-dates-name-measure")) return { width: this.textContent === "짧음" ? 12 : 100, height: 16 } as DOMRect;
@@ -16,7 +20,7 @@ beforeEach(() => {
     return { left: 0, top: 0, width: 600, height: 300 } as DOMRect;
   });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); runtime.act.mockClear(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); runtime.act.mockClear(); vi.useRealTimers(); });
 
 const context = { store: {} as never, window: { id: "window-1", app_id: "app", app_version: 1, desktop_id: "desktop" }, definition: {} as never };
 const block = { type: "timeline" as const, scale: "dates" as const, today: false,

@@ -1399,33 +1399,20 @@ it("사용자가 위로 스크롤한 피드는 새 항목이 와도 따라가지
   expect(feed.scrollTop).toBe(100);
 });
 
-it("이미지가 아닌 피드 첨부는 파일 칩으로 보이고 누르면 새 탭에서 연다", async () => {
-  const create = vi.fn(() => "blob:회의록");
-  const revoke = vi.fn();
-  const previous = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
-  URL.createObjectURL = create;
-  URL.revokeObjectURL = revoke;
-  const tab = { opener: window, location: { href: "" } };
-  const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
-  try {
-    setup({ type: "feed", entries: [{ key: "a", body: "본문", media: [{ image: { asset: "doc" }, alt: "회의록.pdf" }] }] } as unknown as Block,
-      {}, 4, { doc: "data:application/pdf;base64,JVBERi0=" });
-    /* 처음에는 불러오는 자리 표시가 서고, 미디어가 닿으면 파일 칩으로 바뀐다. */
-    const chip = await waitFor(() => {
-      const element = screen.getByRole("button", { name: "회의록.pdf" });
-      expect(element.classList.contains("ks-agent-attachment-file")).toBe(true);
-      return element;
-    });
-    expect(chip.querySelector(".ks-agent-attachment-name")?.textContent).toBe("회의록.pdf");
-    expect(chip.querySelector("img")).toBeNull();
-    fireEvent.click(chip);
-    await waitFor(() => expect(open).toHaveBeenCalledWith("about:blank", "_blank"));
-    expect(create).toHaveBeenCalledWith(expect.any(Blob));
-    expect(tab.location.href).toBe("blob:회의록");
-  } finally {
-    URL.createObjectURL = previous.create;
-    URL.revokeObjectURL = previous.revoke;
-  }
+it("이미지가 아닌 피드 첨부는 파일 칩으로 보이고 누르면 범용 뷰어를 연다", async () => {
+  setup({ type: "feed", entries: [{ key: "a", body: "본문", media: [{ image: { asset: "doc" }, alt: "회의록.pdf" }] }] } as unknown as Block,
+    {}, 4, { doc: "data:application/pdf;base64,JVBERi0=" });
+  /* 처음에는 불러오는 자리 표시가 서고, 미디어가 닿으면 파일 칩으로 바뀐다. */
+  const chip = await waitFor(() => {
+    const element = screen.getByRole("button", { name: "회의록.pdf" });
+    expect(element.classList.contains("ks-agent-attachment-file")).toBe(true);
+    return element;
+  });
+  expect(chip.querySelector(".ks-agent-attachment-name")?.textContent).toBe("회의록.pdf");
+  expect(chip.querySelector("img")).toBeNull();
+  fireEvent.click(chip);
+  await waitFor(() => expect(screen.getByRole("dialog").getAttribute("aria-label")).toBe("회의록.pdf"));
+  expect(screen.getByText("application/pdf")).toBeTruthy();
 });
 it("subtitle이 있는 큰 그림 트리는 들여쓰기 한 단을 그림 열 폭과 열 사이 간격의 합으로 두고, 작은 그림 트리와 그림 없는 트리는 그대로다", async () => {
   const nested = (image: boolean, subtitle: boolean) => [{

@@ -12,6 +12,11 @@
   <!-- 개인 TestFlight 동안 가로 장면만 쓴다. -->
   <key>UIRequiresFullScreen</key>
   <true/>
+  <!-- 받은 첨부가 파일 앱의 「나의 iPad › kaleidoscope」에 보이게 한다. -->
+  <key>UIFileSharingEnabled</key>
+  <true/>
+  <key>LSSupportsOpeningDocumentsInPlace</key>
+  <true/>
   <key>UISupportedInterfaceOrientations~ipad</key>
   <array>
     <string>UIInterfaceOrientationLandscapeLeft</string>

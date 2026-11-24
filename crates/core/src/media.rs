@@ -13,7 +13,7 @@ use crate::{
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use kaleidoscope_contract::{
-    data::{self, HttpMethod, MediaData, MediaRef},
+    data::{self, HttpMethod, MediaData, MediaRef, MediaSaveSource},
     errors,
     registry::ConnectionAccept,
     CoreError, ErrorCode, PermissionDecl,
@@ -528,6 +528,42 @@ pub(crate) fn get(
         inner.media_cache.put(variant, result.clone());
     }
     Ok(as_data(&result))
+}
+
+/// `data.media.save`의 결과. `location`은 호스트가 대화상자 없이 스스로 고른 위치의 표시 이름이다.
+pub(crate) struct Saved {
+    pub cancelled: bool,
+    pub location: Option<String>,
+}
+
+/// `data.media.save`. 사용자가 고른 자리에 첨부를 쓴다. 대화상자에서 취소하면 `cancelled`로 끝나고 오류가 아니다.
+pub(crate) fn save(
+    inner: &Arc<Inner>,
+    window: &str,
+    source: &MediaSaveSource,
+    suggested_name: &str,
+) -> Result<Saved, CoreError> {
+    let (mime, bytes) = match source {
+        MediaSaveSource::Media { media } => {
+            let data = get(inner, window, media, None)?;
+            let bytes = STANDARD
+                .decode(&data.data_base64)
+                .map_err(|_| errors::MEDIA_SAVE_CONTENT_INVALID())?;
+            (data.mime, bytes)
+        }
+        MediaSaveSource::Bytes { mime, data_base64 } => {
+            let bytes = STANDARD
+                .decode(data_base64)
+                .map_err(|_| errors::MEDIA_SAVE_CONTENT_INVALID())?;
+            (mime.clone(), bytes)
+        }
+    };
+    let Some(target) = inner.host.pick_save_file(suggested_name, &mime) else {
+        return Ok(Saved { cancelled: true, location: None });
+    };
+    std::fs::write(&target.path, &bytes)
+        .map_err(|error| errors::MEDIA_SAVE_WRITE_FAILED(suggested_name, &error.to_string()))?;
+    Ok(Saved { cancelled: false, location: target.location })
 }
 
 #[cfg(test)]

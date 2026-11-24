@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ownerOf, registerOverlay } from "../share/overlay-owner";
 import type { ConversationUpload, ConversationAttachment } from "../contract/contract";
+import { attachmentKind, baseMime, fileAttachmentSource, type AttachmentPreviewRequest, type AttachmentSource } from "../data/attachments";
+import { Badge } from "../components/badge";
 import { File as FileIcon, X } from "../components/icons";
 import { IconButton } from "../components/primitives";
 import { openContextMenu, writeMenuImage } from "../components/context-menu";
 
 export type DraftAttachment = { id: number; file: File; name: string };
-export type Preview = { src: string; name: string; trigger: HTMLElement };
 
 let nextDraftId = 0;
 export function makeDraftAttachment(file: File, name: string): DraftAttachment {
@@ -27,41 +27,6 @@ export function fromBase64(dataBase64: string): ArrayBuffer {
   return Uint8Array.from(atob(dataBase64), (char) => char.charCodeAt(0)).buffer;
 }
 
-export function openPayload(payload: { mime: string; bytes: ArrayBuffer }, name: string) {
-  const url = URL.createObjectURL(new Blob([payload.bytes], { type: payload.mime }));
-  const tab = window.open("about:blank", "_blank");
-  if (tab) {
-    tab.opener = null;
-    tab.location.href = url;
-  } else {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    link.rel = "noopener";
-    link.click();
-  }
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
-/* 미디어 응답은 `data:<mime>;base64,<본문>` 꼴이다. 이미지가 아닌 첨부는 칩에서 눌러 새 탭으로 연다. */
-export function openDataUrl(dataUrl: string, name: string) {
-  const comma = dataUrl.indexOf(",");
-  if (comma >= 0 && dataUrl.startsWith("data:")) {
-    const mime = dataUrl.slice("data:".length, comma).split(";", 1)[0] || "application/octet-stream";
-    try {
-      openPayload({ mime, bytes: fromBase64(dataUrl.slice(comma + 1)) }, name);
-      return;
-    } catch {
-      /* base64 디코딩 실패 시 아래 링크 다운로드로 대체 */
-    }
-  }
-  const link = document.createElement("a");
-  link.href = dataUrl;
-  link.download = name;
-  link.rel = "noopener";
-  link.click();
-}
-
 function useFileUrl(file: File): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -73,23 +38,26 @@ function useFileUrl(file: File): string | null {
   return file.type.startsWith("image/") ? url : null;
 }
 
-type OpenPreview = (preview: Preview) => void;
+type OpenPreview = (request: AttachmentPreviewRequest) => void;
 
-function AttachmentImage({ src, name, className, onPreview }: { src: string; name: string; className: string; onPreview: OpenPreview }) {
-  const open = (trigger: HTMLElement) => onPreview({ src, name, trigger });
-  return <button type="button" className={className} aria-label={name} onClick={(event) => open(event.currentTarget)} onContextMenu={(event) => {
+function ImageButton({ src, name, className, onOpen }: { src: string; name: string; className: string; onOpen: (trigger: HTMLElement) => void }) {
+  return <button type="button" className={className} aria-label={name} onClick={(event) => onOpen(event.currentTarget)} onContextMenu={(event) => {
     const trigger = event.currentTarget;
     const image = trigger.querySelector("img")!;
     openContextMenu(event, [
-      { id: "image-open", label: "크게 보기", onSelect: () => open(trigger) },
+      { id: "image-open", label: "크게 보기", onSelect: () => onOpen(trigger) },
       { id: "image-copy", label: "이미지 복사", onSelect: () => { void writeMenuImage(image, "이미지 복사"); } },
     ], { anchor: trigger });
   }}><img src={src} alt="" /></button>;
 }
 
+function AttachmentImage({ src, name, className, source, onPreview }: { src: string; name: string; className: string; source: AttachmentSource; onPreview: OpenPreview }) {
+  return <ImageButton src={src} name={name} className={className} onOpen={(trigger) => onPreview({ source, name, trigger })} />;
+}
+
 export function DraftChip({ attachment, onRemove, onPreview, disabled = false }: { attachment: DraftAttachment; onRemove: () => void; onPreview: OpenPreview; disabled?: boolean }) {
   const url = useFileUrl(attachment.file);
-  return <AttachmentChip name={attachment.name} removeLabel={`${attachment.name} 빼기`} onRemove={onRemove} disabled={disabled} preview={url ? <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-chip-preview" onPreview={onPreview} /> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>} />;
+  return <AttachmentChip name={attachment.name} removeLabel={`${attachment.name} 빼기`} onRemove={onRemove} disabled={disabled} preview={url ? <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-chip-preview" source={fileAttachmentSource(attachment.file)} onPreview={onPreview} /> : <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>} />;
 }
 
 export function AttachmentChip({ name, preview, removeLabel, onRemove, disabled = false }: { name: string; preview: ReactNode; removeLabel: string; onRemove: () => void; disabled?: boolean }) {
@@ -98,21 +66,19 @@ export function AttachmentChip({ name, preview, removeLabel, onRemove, disabled 
 
 export function PendingAttachment({ attachment, onPreview }: { attachment: DraftAttachment; onPreview: OpenPreview }) {
   const url = useFileUrl(attachment.file);
-  if (url) return <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-image" onPreview={onPreview} />;
+  if (url) return <AttachmentImage src={url} name={attachment.name} className="ks-agent-attachment-image" source={fileAttachmentSource(attachment.file)} onPreview={onPreview} />;
   return <div className="ks-agent-attachment-chip"><span className="ks-agent-attachment-chip-preview"><FileIcon /></span><span className="ks-agent-attachment-name">{attachment.name}</span></div>;
 }
 
 const attachmentCache = new Map<string, Promise<string>>();
 
-export function HistoryAttachmentView({ attachment, cacheKey, load, open, onPreview, onError }: {
+export function HistoryAttachmentView({ attachment, cacheKey, load, onPreview }: {
   attachment: ConversationAttachment; cacheKey: readonly unknown[];
   load: () => Promise<{ mime: string; data_base64: string }>;
-  open: () => Promise<void>;
-  onPreview: OpenPreview; onError: (reason: unknown) => void;
+  onPreview: (request: AttachmentPreviewRequest) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const [opening, setOpening] = useState(false);
   const loadRef = useRef(load);
   loadRef.current = load;
   const key = JSON.stringify(cacheKey);
@@ -121,7 +87,7 @@ export function HistoryAttachmentView({ attachment, cacheKey, load, open, onPrev
     let promise = attachmentCache.get(key);
     if (!promise) {
       promise = loadRef.current()
-        .then((reply) => `data:${reply.mime};base64,${reply.data_base64}`);
+        .then((reply) => `data:${baseMime(reply.mime)};base64,${reply.data_base64}`);
       attachmentCache.set(key, promise);
     }
     let active = true;
@@ -129,38 +95,41 @@ export function HistoryAttachmentView({ attachment, cacheKey, load, open, onPrev
     return () => { active = false; };
   }, [attachment.mime, key]);
 
-  const handleOpen = async () => {
-    setOpening(true);
-    try {
-      await open();
-    }
-    catch (reason) { onError(reason); }
-    finally { setOpening(false); }
-  };
-  if (attachment.mime.startsWith("image/") && !failed) {
+  const open = (trigger: HTMLElement) => onPreview({
+    source: { kind: "later", load: async () => {
+      const reply = await loadRef.current();
+      return { kind: "bytes", mime: reply.mime, data_base64: reply.data_base64 };
+    } },
+    name: attachment.name,
+    trigger,
+  });
+  const kind = attachmentKind(attachment.mime, attachment.name);
+  if (kind === "image" && !failed) {
     return src
-      ? <AttachmentImage src={src} name={attachment.name} className="ks-agent-attachment-image" onPreview={onPreview} />
+      ? <ImageButton src={src} name={attachment.name} className="ks-agent-attachment-image" onOpen={open} />
       : <div className="ks-agent-attachment-image ks-agent-attachment-placeholder" aria-label={attachment.name} />;
   }
-  return <button type="button" className="ks-agent-attachment-chip ks-agent-attachment-file" disabled={opening} onClick={() => void handleOpen()} aria-label={attachment.name}>
-    <span className="ks-agent-attachment-chip-preview"><FileIcon /></span><span className="ks-agent-attachment-name" title={attachment.name}>{attachment.name}</span>
+  return <button type="button" className="ks-agent-attachment-chip ks-agent-attachment-file" onClick={(event) => open(event.currentTarget)} aria-label={attachment.name}>
+    <span className="ks-agent-attachment-chip-preview"><FileIcon /></span>
+    {kind === "video" ? <Badge value="영상" /> : kind === "audio" ? <Badge value="소리" /> : null}
+    <span className="ks-agent-attachment-name" title={attachment.name}>{attachment.name}</span>
   </button>;
 }
 
-export function ImagePreview({ preview, onClose, children }: { preview: Preview; onClose: () => void; children?: ReactNode }) {
+/** 대화상자의 공통 동작: 바깥을 inert로 막고, 닫기 단추에 먼저 초점을 두고, Esc와 Tab을 가둔다. */
+export function useOverlayDialog({ trigger, onClose, dialog }: { trigger: HTMLElement; onClose: () => void; dialog: RefObject<HTMLDivElement | null> }) {
   const closeRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const dialog = dialogRef.current!;
-    const owner = ownerOf(preview.trigger);
-    const unregister = owner ? registerOverlay(dialog, owner, preview.trigger) : undefined;
-    const changed = Array.from(document.body.children).filter((child) => child !== dialog && !child.hasAttribute("inert"));
+    const element = dialog.current!;
+    const owner = ownerOf(trigger);
+    const unregister = owner ? registerOverlay(element, owner, trigger) : undefined;
+    const changed = Array.from(document.body.children).filter((child) => child !== element && !child.hasAttribute("inert"));
     changed.forEach((child) => child.setAttribute("inert", ""));
     closeRef.current?.querySelector("button")?.focus();
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") onClose();
       if (event.key !== "Tab") return;
-      const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+      const controls = Array.from(element.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
       const index = controls.indexOf(document.activeElement as HTMLElement);
       if (index === -1 || (event.shiftKey ? index === 0 : index === controls.length - 1)) {
         event.preventDefault();
@@ -172,11 +141,8 @@ export function ImagePreview({ preview, onClose, children }: { preview: Preview;
       unregister?.();
       document.removeEventListener("keydown", onKey);
       changed.forEach((child) => child.removeAttribute("inert"));
-      preview.trigger.focus();
+      trigger.focus();
     };
-  }, [onClose, preview.trigger]);
-  return createPortal(<div className="ks-agent-image-overlay" data-ks-overlay role="dialog" aria-modal="true" aria-label={preview.name} onClick={onClose} ref={dialogRef}>
-    {children ?? <img src={preview.src} alt={preview.name} onClick={(event) => event.stopPropagation()} />}
-    <div className="ks-agent-image-close" ref={closeRef}><IconButton aria-label="닫기" onClick={onClose}><X /></IconButton></div>
-  </div>, document.body);
+  }, [dialog, onClose, trigger]);
+  return closeRef;
 }

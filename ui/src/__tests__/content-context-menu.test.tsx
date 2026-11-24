@@ -91,7 +91,7 @@ it("대화의 원문을 복사하고 안쪽 링크가 바깥 메시지 메뉴를
 it("사용자 말의 키보드 메뉴는 원문을 복사하고 첨부 메뉴가 우선한다", async () => {
   const attachment = { id: "inside", name: "안쪽 그림", mime: "image/png" };
   const item = { id: "user", kind: "user", text: "사용자 원문\n둘째 줄", attachments: [attachment] } as never;
-  const { container } = render(<><menu.ContextMenuHost /><ChatItem item={item} renderAttachment={() => <HistoryAttachmentView key={attachment.id} attachment={attachment} cacheKey={["nested-image"]} load={async () => ({ mime: "image/png", data_base64: "aW1hZ2U=" })} open={async () => {}} onPreview={() => {}} onError={() => {}} />} /></>);
+  const { container } = render(<><menu.ContextMenuHost /><ChatItem item={item} renderAttachment={() => <HistoryAttachmentView key={attachment.id} attachment={attachment} cacheKey={["nested-image"]} load={async () => ({ mime: "image/png", data_base64: "aW1hZ2U=" })} onPreview={() => {}} />} /></>);
   const row = container.querySelector<HTMLElement>(".ks-agent-chat-user")!;
   row.focus(); fireEvent.keyDown(row, { key: "F10", shiftKey: true });
   fireEvent.click(screen.getByRole("menuitem", { name: "메시지 복사" }));
@@ -104,7 +104,7 @@ it("사용자 말의 키보드 메뉴는 원문을 복사하고 첨부 메뉴가
 
 it("첨부 그림은 크게 보기와 이미지 복사를 순서대로 제공한다", async () => {
   const preview = vi.fn();
-  const { container } = render(<><menu.ContextMenuHost /><HistoryAttachmentView attachment={{ id: "img", name: "그림", mime: "image/png" }} cacheKey={["menu-test"]} load={async () => ({ mime: "image/png", data_base64: "aW1hZ2U=" })} open={async () => {}} onPreview={preview} onError={() => {}} /></>);
+  const { container } = render(<><menu.ContextMenuHost /><HistoryAttachmentView attachment={{ id: "img", name: "그림", mime: "image/png" }} cacheKey={["menu-test"]} load={async () => ({ mime: "image/png", data_base64: "aW1hZ2U=" })} onPreview={preview} /></>);
   const button = await screen.findByRole("button", { name: "그림" });
   fireEvent.contextMenu(button.querySelector("img")!);
   expect(screen.getAllByRole("menuitem").map((x) => x.textContent)).toEqual(["크게 보기", "이미지 복사"]);

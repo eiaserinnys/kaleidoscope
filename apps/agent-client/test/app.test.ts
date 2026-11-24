@@ -3,6 +3,21 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { AppClient } from "../src/app.ts";
 
+test("시작 실패는 에이전트 오류와 클라이언트 해석 오류에 맞는 안내를 보인다", () => {
+  const views: any[] = [];
+  const client = { process: { onReady() {}, onServicesChanged() {} }, files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
+    onStorageChange() {}, onLifecycle() {}, onMessage() {}, handle() {}, publish: (view: any) => views.push(view) };
+  const app = new AppClient(client as any, []);
+  (app as any).selected = { name: "Claude Code" };
+  (app as any).stage = "session";
+  const base = { phase: "failed", items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], permissions: [], controls: [], authMethods: [],
+    sessionId: null, canListSessions: false, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false };
+  (app as any).receive({ ...base, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: "Internal error: 실행 파일 없음", fromAgent: true } });
+  assert.equal(views.at(-1).error_message, "에이전트 Claude Code에서 오류가 났습니다. 원인을 확인한 뒤 다시 시도하세요. 원인: Internal error: 실행 파일 없음");
+  (app as any).receive({ ...base, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: "JSON 해석 실패" } });
+  assert.equal(views.at(-1).error_message, "에이전트 Claude Code의 응답을 읽지 못했습니다. 에이전트 프로그램을 업데이트한 뒤 다시 시도하세요. 원인: JSON 해석 실패");
+});
+
 test("기본 에이전트 중 Antigravity만 HTTP MCP 지원을 명시한다", () => {
   const definition = JSON.parse(readFileSync(new URL("../../agent.json", import.meta.url), "utf8"));
   const agents = definition.storage.entries.find((entry: any) => entry.id === "agents").default;
