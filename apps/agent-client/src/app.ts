@@ -86,6 +86,7 @@ export class AppClient {
   private historyOpen = false;
   private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
+  private pendingDelete: { id: string; blocked: boolean; message: string } | null = null;
   /** 뒤에서 응답 중인 세션이 있을 때 확인을 기다리는 에이전트·작업 폴더·동시 세션 바꾸기. */
   private pendingChange: { kind: "agent"; id: string } | { kind: "folder" } | { kind: "parallel"; value: boolean } | null = null;
   private redrawTimer: ReturnType<typeof setTimeout> | undefined;
@@ -138,6 +139,24 @@ export class AppClient {
     client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
     client.handle("close_history", () => { this.historyOpen = false; this.historyQuery = ""; this.update(); });
     client.handle("search_history", ({ event }) => { this.historyQuery = String(event ?? ""); this.update(); });
+    client.handle("request_delete", ({ event }) => {
+      if (this.sessionLocked || !this.view?.canDeleteSessions) return;
+      const id = String(event);
+      const session = this.view.sessions.find((entry) => entry.sessionId === id);
+      if (!session) return;
+      const live = this.view.live?.find((entry) => entry.sessionId === id);
+      const blocked = !!live && (live.busy || live.permissions > 0);
+      const title = cleanTitle(session.title ?? "") || id.slice(0, 8);
+      this.pendingDelete = { id, blocked, message: `「${title}」 세션을 지웁니다. 되돌릴 수 없습니다.` };
+      this.update();
+    });
+    client.handle("cancel_delete", () => { this.pendingDelete = null; this.update(); });
+    client.handle("confirm_delete", () => {
+      const pending = this.pendingDelete;
+      this.pendingDelete = null;
+      this.update();
+      if (pending && !pending.blocked && !this.sessionLocked && this.view?.canDeleteSessions) return this.session.deleteSession(pending.id);
+    });
     client.handle("delete_session", ({ event }) => {
       if (this.sessionLocked || !this.view?.canDeleteSessions) return;
       return this.session.deleteSession(String(event));
@@ -614,6 +633,9 @@ export class AppClient {
       history_items: historyItems, history_query: this.historyQuery, history_no_match: noMatch,
       history_can_delete: canDelete && !noMatch, history_cannot_delete: !canDelete && !noMatch,
       show_waiting: chat && !!this.waitingSession(),
+      delete_blocked_open: !!this.pendingDelete?.blocked,
+      delete_confirm_open: !!this.pendingDelete && !this.pendingDelete.blocked,
+      delete_message: this.pendingDelete?.message ?? "",
       change_open: !!this.pendingChange,
       change_title: this.pendingChange?.kind === "folder" ? "작업 폴더 바꾸기" : this.pendingChange?.kind === "parallel" ? "여러 세션 동시에 바꾸기" : "에이전트 바꾸기",
       change_message: `응답 중인 세션 ${this.backgroundBusy()}개가 멈춥니다. 바꿀까요?`,

@@ -807,7 +807,13 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
+  container: ks-chat-history / scroll-state;
   padding: 0 var(--ks-space-3);
+}
+
+/* 기록이 스크롤될 때도 말풍선 끝을 입력 머리와 맞춘다. */
+@container ks-chat-history scroll-state(scrollable: block) {
+  .ks-agent-chat-content { margin-inline-end: calc(-1 * var(--ks-space-2)); }
 }
 
 .ks-agent-chat-content {

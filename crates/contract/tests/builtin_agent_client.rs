@@ -68,7 +68,7 @@ fn builtin_agent_session_lists_share_lock_value() {
         for list in &lists {
             assert_eq!(list["disabled"]["client"], "session_buttons_busy");
         }
-        let deletable: Vec<_> = lists.iter().filter(|list| list["item_menu"][0]["on_select"]["client"] == "delete_session").collect();
+        let deletable: Vec<_> = lists.iter().filter(|list| list["item_menu"][0]["on_select"]["client"] == "request_delete").collect();
         assert_eq!(deletable.len(), 1, "{width} 갈래에서 삭제 메뉴는 한 목록에만 있어야 한다");
     }
 }

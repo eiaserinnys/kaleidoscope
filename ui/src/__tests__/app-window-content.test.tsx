@@ -847,6 +847,14 @@ describe("app definition renderer", () => {
     expect(within(fixture).getByRole("button", { name: "해제" })).toBe(next);
   });
 
+  it("대화 입력 머리의 단추가 사라지면 같은 대화의 입력창으로 초점을 옮긴다", async () => {
+    const fixture = await focusFixture('<input aria-label="검색"><section class="ks-agent-chat"><div class="ks-agent-chat-input-header"><button>이동</button></div><textarea class="ks-agent-chat-input" aria-label="메시지"></textarea></section>');
+    const button = within(fixture).getByRole("button", { name: "이동" });
+    button.focus();
+    button.remove();
+    await waitFor(() => expect(document.activeElement).toBe(within(fixture).getByRole("textbox", { name: "메시지" })));
+  });
+
   it("shows an unknown block error while rendering its sibling block", async () => {
     const definition: AppDefinition = {
       ...mdEditorDefinition,

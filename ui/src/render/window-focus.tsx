@@ -30,7 +30,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let focusedDialogElement: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
-    // 사라진 조작은 연결이 끊겨 closest가 안 되므로 대화 footer 안이었는지 초점을 받을 때 기록한다.
+    // 사라진 조작은 연결이 끊겨 closest가 안 되므로 대화 입력 머리나 footer 안이었는지 기록한다.
     let focusedFooter: HTMLElement | null = null;
     let focusPath: Array<{ ancestor: HTMLElement; childIndex: number; controlIndex: number; swapIndex: number; prev: HTMLElement | null; next: HTMLElement | null }> = [];
     let bookmark = focusBookmark(null, body);
@@ -120,7 +120,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       }
       return undefined;
     };
-    // 사라진 조작이 대화 footer 안이었으면 그 대화의 입력창으로 보낸다. 본문 전체의 첫 입력창을 고르지 않는다.
+    // 사라진 조작이 대화 머리나 footer 안이었으면 그 대화의 입력창으로 보낸다.
     const chatInput = (): HTMLElement | undefined => {
       const input = focusedFooter?.closest(".ks-agent-chat")?.querySelector<HTMLElement>(".ks-agent-chat-input") ?? null;
       return usableFocus(input) && body.contains(input) ? input : undefined;
@@ -165,7 +165,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       focusedDialogElement = focusedDialog ? target.closest<HTMLElement>(".ks-dialog") : null;
       focusedRemove = target.classList.contains("ks-list-remove");
       inContent = body.contains(target);
-      focusedFooter = inContent ? target.closest<HTMLElement>(".ks-agent-chat-footer") : null;
+      focusedFooter = inContent ? target.closest<HTMLElement>(".ks-agent-chat-footer, .ks-agent-chat-input-header") : null;
       if (!inContent) return;
       if (isContentFocus(target)) lastContent = target;
       rememberWindowFocus(windowContent, target);

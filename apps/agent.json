@@ -804,15 +804,8 @@
                                     {
                                       "label": "삭제",
                                       "danger": true,
-                                      "confirm": {
-                                        "title": "세션 삭제",
-                                        "body": {
-                                          "item": "confirm"
-                                        },
-                                        "ok": "삭제"
-                                      },
                                       "on_select": {
-                                        "client": "delete_session"
+                                        "client": "request_delete"
                                       }
                                     }
                                   ],
@@ -884,7 +877,7 @@
                         "input_header": {
                             "type": "stack",
                             "direction": "column",
-                            "gap": "none",
+                            "gap": "small",
                             "children": [
                               {
                                 "type": "when",
@@ -1183,7 +1176,7 @@
                         "input_header": {
                             "type": "stack",
                             "direction": "column",
-                            "gap": "none",
+                            "gap": "small",
                             "children": [
                               {
                                 "type": "when",
@@ -1393,15 +1386,8 @@
                                     {
                                       "label": "삭제",
                                       "danger": true,
-                                      "confirm": {
-                                        "title": "세션 삭제",
-                                        "body": {
-                                          "item": "confirm"
-                                        },
-                                        "ok": "삭제"
-                                      },
                                       "on_select": {
-                                        "client": "delete_session"
+                                        "client": "request_delete"
                                       }
                                     }
                                   ],
@@ -1421,6 +1407,27 @@
             }
           ]
         }
+      },
+      {
+        "type": "dialog",
+        "open": { "client": "delete_blocked_open" },
+        "title": "세션 삭제",
+        "close_label": "닫기",
+        "child": {
+          "type": "text",
+          "value": "응답 중이거나 허용을 기다리는 세션은 지금 지울 수 없으며 응답이나 허용이 끝난 뒤 지울 수 있습니다."
+        },
+        "on_close": { "client": "cancel_delete" }
+      },
+      {
+        "type": "dialog",
+        "open": { "client": "delete_confirm_open" },
+        "title": "세션 삭제",
+        "close_label": "삭제",
+        "danger": true,
+        "child": { "type": "text", "value": { "client": "delete_message" } },
+        "on_close": { "client": "cancel_delete" },
+        "on_confirm": { "client": "confirm_delete" }
       }
     ],
     "fill": 1
@@ -1617,6 +1624,15 @@
       "show_waiting": {
         "default": false
       },
+      "delete_blocked_open": {
+        "default": false
+      },
+      "delete_confirm_open": {
+        "default": false
+      },
+      "delete_message": {
+        "default": ""
+      },
       "change_open": {
         "default": false
       },
@@ -1723,6 +1739,9 @@
       "cancel_change",
       "search_history",
       "delete_session",
+      "request_delete",
+      "cancel_delete",
+      "confirm_delete",
       "toggle_status_bar"
     ],
     "commands": {},

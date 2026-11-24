@@ -348,6 +348,28 @@ test("삭제는 능력이 있을 때만 메뉴를 보이고 잠긴 동안에는 
   assert.equal(views.at(-1).history_disabled, true);
 });
 
+test("응답과 허용 대기 세션은 안내만 열고 쉬는 세션만 지우기를 확인한다", async () => {
+  const { handlers, views, app } = makeApp();
+  (app as any).receive({ ...readyView(), parallel: true, canDeleteSessions: true,
+    sessions: ["busy", "waiting", "idle"].map((sessionId) => ({ sessionId, cwd: "/work", title: sessionId })),
+    live: [{ sessionId: "busy", busy: true, permissions: 0 }, { sessionId: "waiting", busy: false, permissions: 1 }] });
+  const deleted: string[] = [];
+  (app as any).session.deleteSession = async (id: string) => { deleted.push(id); };
+  for (const id of ["busy", "waiting"]) {
+    await handlers.get("request_delete")!({ event: id });
+    assert.equal(views.at(-1).delete_blocked_open, true);
+    assert.equal(views.at(-1).delete_confirm_open, false);
+    await handlers.get("cancel_delete")!({});
+  }
+  assert.deepEqual(deleted, []);
+  await handlers.get("request_delete")!({ event: "idle" });
+  assert.equal(views.at(-1).delete_blocked_open, false);
+  assert.equal(views.at(-1).delete_confirm_open, true);
+  assert.equal(views.at(-1).delete_message, "「idle」 세션을 지웁니다. 되돌릴 수 없습니다.");
+  await handlers.get("confirm_delete")!({});
+  assert.deepEqual(deleted, ["idle"]);
+});
+
 function stagedApp(view: any) {
   const made = makeApp();
   (made.app as any).stage = "session";

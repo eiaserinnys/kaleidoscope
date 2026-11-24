@@ -58,6 +58,36 @@ async function measureMinimum(app: Locator, label: string) {
   return values;
 }
 
+async function measureHeader(app: Locator, label: string) {
+  await app.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const values = await app.evaluate((root) => {
+    const box = (element: Element | null) => {
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    };
+    const textBox = (element: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const rect = range.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    };
+    const texts = Array.from(root.querySelectorAll<HTMLElement>(".ks-agent-chat-input-header .ks-data-text.is-meta"))
+      .filter((element) => element.offsetParent).map(textBox).sort((a, b) => a.left - b.left);
+    return {
+      notice: box(root.querySelector(".ks-agent-chat-input-header .ks-notice")),
+      texts,
+      attach: box(root.querySelector(".ks-agent-chat-input-row > .ks-icon-button")),
+      assistant: textBox(root.querySelector(".ks-agent-chat-assistant .ks-markdown-text")!),
+      user: box(root.querySelector(".ks-agent-chat-user")),
+    };
+  });
+  const line = JSON.stringify({ label, ...values });
+  console.log("입력 머리 측정 " + line);
+  if (process.env.KS_AGENT_PARALLEL_METRICS) await appendFile(process.env.KS_AGENT_PARALLEL_METRICS, line + "\n");
+  return values;
+}
+
 function assertMinimum(values: Awaited<ReturnType<typeof measureMinimum>>, shortHistory = false) {
   expect(values.body.scrollHeight).toBeLessThanOrEqual(values.body.clientHeight);
   expect(values.body.scrollWidth).toBeLessThanOrEqual(values.body.clientWidth);
@@ -86,7 +116,8 @@ async function openAgent(page: Page, agentName: string, rect = { x: 24, y: 24, w
   const opened = await core({ op: "window.open", desktop_id: desktop, app_id: "agent", rect });
   const windowId: string = opened.window.id;
   if (!agentsWritten) {
-    const written = await core({ op: "storage.write", window_id: windowId, entry: "agents", content: AGENTS });
+    const current = await core({ op: "storage.get", window_id: windowId, entry: "agents" });
+    const written = await core({ op: "storage.write", window_id: windowId, entry: "agents", content: AGENTS, expected_revision: current.result.revision });
     expect(written.op).toBe("storage.write");
     agentsWritten = true;
   }
@@ -124,7 +155,7 @@ async function send(app: Locator, text: string) {
 const STREAM = Array.from({ length: 80 }, (_, index) => `[${String(index).padStart(2, "0")}]`).join("");
 const DRIP = Array.from({ length: 20 }, (_, index) => `[${String(index).padStart(2, "0")}]`).join("");
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "default" });
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -147,6 +178,7 @@ test("응답 중에 새 세션을 열고 두 세션의 응답이 섞이지 않�
   const newSession = app.getByRole("button", { name: "새 세션", exact: true });
   await expect(newSession).toBeEnabled();
   await newSession.click();
+  await expect(app.getByRole("textbox", { name: "메시지" })).toBeFocused();
   // A(session-1)는 뒤에서 계속 돌고, 목록 줄에 "응답 중" 배지가 붙는다.
   const rowA = sessionRow(app, "session-1");
   await expect(rowA.locator(".ks-view-badges")).toContainText("응답 중");
@@ -169,6 +201,27 @@ test("응답 중에 새 세션을 열고 두 세션의 응답이 섞이지 않�
   await expect(sessionRow(app, "session-2").locator(".ks-view-badges")).toHaveCount(0);
   await shot(page, "a3-both-finished");
 });
+
+for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, height: 480, label: "narrow" }, { width: 360, height: 240, label: "minimum" }]) {
+  test(`응답 중 새 세션의 입력 초점 세 번 — ${size.label}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    const { app } = await openAgent(page, "병렬 가짜", { x: 24, y: 24, width: size.width, height: size.height });
+    const message = app.getByRole("textbox", { name: "메시지" });
+    for (let index = 0; index < 3; index += 1) {
+      await send(app, "stream");
+      await expect(app.locator(".ks-agent-chat-assistant").last()).toContainText("[02]");
+      await app.getByRole("button", { name: "새 세션", exact: true }).click();
+      await expect(message).toBeFocused();
+      await page.keyboard.type(`새 대화 ${index}`);
+      await expect(message).toHaveValue(`새 대화 ${index}`);
+      await shot(page, `focus-new-${size.label}-${index + 1}`);
+      if (size.label !== "wide") await app.getByRole("button", { name: "지난 세션", exact: true }).click();
+      await expect(page.getByPlaceholder("제목으로 찾기")).toHaveValue("");
+      if (size.label !== "wide") await page.keyboard.press("Escape");
+      await message.fill("");
+    }
+  });
+}
 
 test("다른 세션이 허용을 기다리면 배지와 안내가 보이고 이동해 답한다", async ({ page }) => {
   test.setTimeout(90_000);
@@ -197,6 +250,7 @@ test("다른 세션이 허용을 기다리면 배지와 안내가 보이고 이�
   await shot(page, "b2-waiting-notice-960x600");
   await page.setViewportSize({ width: 1440, height: 900 });
   await app.getByRole("button", { name: "이동", exact: true }).click();
+  await expect(app.getByRole("textbox", { name: "메시지" })).toBeFocused();
   await expect(sessionRow(app, selectedB!)).toHaveAttribute("aria-selected", "true");
   await expect(notice).toHaveCount(0);
   const footer = app.locator(".ks-agent-chat-footer");
@@ -311,17 +365,21 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
     };
     await setStatus(false);
     const noNotice: Awaited<ReturnType<typeof measureMinimum>>[] = [];
+    await send(app, "fresh-turn");
+    await expect(app.getByText("NEW", { exact: true })).toBeVisible();
     if (size.label === "minimum") {
-      await send(app, "fresh-turn");
-      await expect(app.getByText("NEW", { exact: true })).toBeVisible();
       noNotice.push(await measureMinimum(app, "안내 없음·상태 줄 끔"));
       await shot(page, "visual-minimum-no-notice-status-off");
-      await setStatus(true);
-      await expect(app.getByText(/20%/).first()).toBeVisible();
+    }
+    await setStatus(true);
+    await expect(app.getByText(/20%/).first()).toBeVisible();
+    const statusOnly = await measureHeader(app, `${size.label} 상태 줄만`);
+    expect(statusOnly.texts[0].left).toBeCloseTo(size.label === "wide" ? 317 : 37, 0);
+    if (size.label === "minimum") {
       noNotice.push(await measureMinimum(app, "안내 없음·상태 줄 켬"));
       await shot(page, "visual-minimum-no-notice-status-on");
-      await setStatus(false);
     }
+    await setStatus(false);
     await send(app, "permission");
     await expect(app.locator(".ks-agent-chat-footer").getByText("파일 수정", { exact: true })).toBeVisible();
     await shot(page, `visual-${size.label}-permission-before`);
@@ -333,6 +391,14 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
     const off = size.label === "minimum" ? await measureMinimum(app, "상태 줄 끔") : null;
     await setStatus(true);
     await expect(app.getByText(/70%/).first()).toBeVisible();
+    const geometry = await measureHeader(app, `${size.label} 안내와 상태 줄`);
+    const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThanOrEqual(1);
+    near(geometry.notice!.left, geometry.texts[0].left);
+    near(geometry.notice!.left, geometry.attach!.left);
+    near(geometry.notice!.left, geometry.assistant.left);
+    near(geometry.notice!.right, geometry.texts.at(-1)!.right);
+    near(geometry.notice!.right, geometry.user!.right);
+    expect(geometry.texts[0].top - geometry.notice!.bottom).toBeGreaterThanOrEqual(4);
     await shot(page, `visual-${size.label}-status-on`);
     if (size.label === "minimum") {
       const on = await measureMinimum(app, "상태 줄 켬");
@@ -361,18 +427,37 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
       await page.emulateMedia({ colorScheme: "dark" });
       await shot(page, "visual-wide-dark-permission");
       await page.emulateMedia({ colorScheme: "light" });
+      await send(app, "stream");
+      await expect(app.locator(".ks-agent-chat-assistant").last()).toContainText("[02]");
       await sessionRow(app, "session-1").click({ button: "right" });
       await page.getByRole("menuitem", { name: "삭제" }).click();
       const dialog = page.getByRole("dialog", { name: "세션 삭제" });
-      await expect(dialog).toContainText("응답 중이거나 허용을 기다리는 세션은 지울 수 없습니다");
+      await expect(dialog).toContainText("응답 중이거나 허용을 기다리는 세션은 지금 지울 수 없으며 응답이나 허용이 끝난 뒤 지울 수 있습니다");
+      await expect(dialog.getByRole("button", { name: "삭제", exact: true })).toHaveCount(0);
+      await expect(dialog.getByRole("button", { name: "닫기", exact: true })).toBeVisible();
       await shot(page, "visual-wide-delete-blocked");
-      await dialog.getByRole("button", { name: "취소" }).click();
+      await dialog.getByRole("button", { name: "닫기" }).click();
+      await expect(sessionRow(app, "session-1")).toBeFocused();
+      await expect(app.locator(".ks-agent-chat-footer").getByText("파일 수정", { exact: true })).toHaveCount(0);
+      await expect(sessionRow(app, "session-1").locator(".ks-view-badges")).toContainText("허용 필요");
+      await expect(app.getByText("세션을 지우지 못했습니다", { exact: false })).toHaveCount(0);
+      await expect(app.locator(".ks-agent-chat-assistant").last()).toContainText("[05]");
+      await sessionRow(app, "session-2").click({ button: "right" });
+      await page.getByRole("menuitem", { name: "삭제" }).click();
+      await expect(dialog.getByRole("button", { name: "삭제", exact: true })).toHaveCount(0);
+      await dialog.getByRole("button", { name: "닫기" }).click();
+      await expect(sessionRow(app, "session-2")).toBeFocused();
+      await expect(app.locator(".ks-agent-chat-assistant").last()).toContainText(STREAM, { timeout: 20_000 });
       await sessionRow(app, "session-2").click({ button: "right" });
       await page.getByRole("menuitem", { name: "삭제" }).click();
       await page.getByRole("dialog", { name: "세션 삭제" }).getByRole("button", { name: "삭제", exact: true }).click();
       await expect(sessionRow(app, "session-2")).toHaveCount(0);
       await expect(sessionRow(app, "session-3")).toHaveAttribute("aria-selected", "true");
+      await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest(".ks-list"))).toBe(true);
       await shot(page, "visual-wide-delete-after");
     }
+    await app.getByRole("button", { name: "이동", exact: true }).click();
+    await expect(app.getByRole("textbox", { name: "메시지" })).toBeFocused();
+    await shot(page, `focus-move-${size.label}`);
   });
 }
