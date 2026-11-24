@@ -95,6 +95,9 @@ async function observeDialog(page: Page, title: string, open: () => Promise<void
     await shot(page, "dialog-minimum-confirm");
     await core({ op: "window.set_rect", window_id: windowId, rect: { x: 24, y: 24, width: 1000, height: 640 } });
     await dialog.getByRole("button", { name: "취소", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    if (opener) await expect(opener).toBeFocused();
+    await record("최소 창 확인 닫기", { afterClose: await focus(page) });
   }
 }
 
