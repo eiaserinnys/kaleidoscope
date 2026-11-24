@@ -179,32 +179,38 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
         let header = &chat["input_header"];
         assert_eq!(header["type"], "when");
         assert_eq!(header["value"]["client"], "show_status_bar");
-        // 한 줄을 지키고, 칩 묶음이 남은 폭을 채워 막대들을 오른쪽 끝으로 민다.
+        // 넓은 창은 한 줄, 좁은 창은 모델·컨텍스트와 한도를 두 줄에 둔다.
         let strip = &header["child"];
         assert!(strip.get("wrap").is_none());
-        assert_eq!(strip["direction"], "row");
-        assert_eq!(strip["fill"], 0);
         let children = strip["children"].as_array().unwrap();
-        assert_eq!(children.len(), 3);
         let left = &children[0];
         assert_eq!(left["type"], "stack");
         assert_eq!(left["direction"], "row");
         // repeat의 기본 배치는 세로라 칩을 한 줄로 두려면 row를 밝힌다.
         assert_eq!(left["children"][0]["layout"], "row");
         let chips = left["children"][0]["items"]["client"].as_str().unwrap().to_string();
-        let subagents: Vec<_> = left["children"].as_array().unwrap()[1..].iter().map(|node| node["value"]["client"].as_str().unwrap()).collect();
-        // 넓은 창만 서브에이전트 칩을 두고, 좁은 창은 model 칩 하나만 남긴다.
-        assert_eq!(subagents, if chips == "status_chips" { vec!["status_has_subagents"] } else { Vec::<&str>::new() });
+        let (context, limits) = if chips == "status_chips" {
+            assert_eq!(strip["direction"], "row");
+            assert_eq!(strip["fill"], 0);
+            assert_eq!(children.len(), 3);
+            assert_eq!(left["children"][1]["value"]["client"], "status_has_subagents");
+            (&children[1], &children[2])
+        } else {
+            assert_eq!(chips, "status_chips_narrow");
+            assert_eq!(strip["direction"], "column");
+            assert_eq!(children.len(), 2);
+            assert_eq!(left["fill"], 0);
+            assert_eq!(left["children"].as_array().unwrap().len(), 2);
+            (&left["children"][1], &children[1])
+        };
         chip_lists.push(chips);
         // context 막대(사용률, 0.7과 0.9)와 session, weekly 막대 반복(0.8과 0.95).
-        let context = &children[1];
         assert_eq!(context["value"]["client"], "status_has_context");
         let mut bars = Vec::new();
         collect(context, &|node| node["type"] == "progress", &mut bars);
         assert_eq!(bars.len(), 1);
         assert_eq!(bars[0]["label"], "context");
         assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.7), Some(0.9)));
-        let limits = &children[2];
         assert_eq!(limits["type"], "repeat");
         assert_eq!(limits["items"]["client"], "status_limit_bars");
         assert_eq!(limits["layout"], "row");
