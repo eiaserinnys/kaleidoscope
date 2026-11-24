@@ -940,9 +940,10 @@
                                         "client": "status_context"
                                       },
                                       "max": 1,
-                                      "label": "context",
+                                      "label": "컨텍스트",
                                       "warning_at": 0.7,
-                                      "danger_at": 0.9
+                                      "danger_at": 0.9,
+                                      "label_position": "inline"
                                     },
                                     {
                                       "type": "text",
@@ -978,7 +979,8 @@
                                         "item": "label"
                                       },
                                       "warning_at": 0.8,
-                                      "danger_at": 0.95
+                                      "danger_at": 0.95,
+                                      "label_position": "inline"
                                     },
                                     {
                                       "type": "text",
@@ -1108,107 +1110,33 @@
                           },
                           "child": {
                             "type": "stack",
-                            "direction": "column",
+                            "direction": "row",
                             "gap": "small",
+                            "align": "center",
+                            "fill": 0,
                             "children": [
-                              {
-                                "type": "stack",
-                                "direction": "row",
-                                "gap": "small",
-                                "align": "center",
-                                "children": [
-                                  {
-                                    "type": "repeat",
-                                    "items": {
-                                      "client": "status_chips_narrow"
-                                    },
-                                    "key": "key",
-                                    "gap": "small",
-                                    "layout": "row",
-                                    "template": {
-                                      "type": "text",
-                                      "value": {
-                                        "item": "text"
-                                      },
-                                      "style": "meta"
-                                    }
-                                  },
-                                  {
-                                    "type": "when",
-                                    "value": {
-                                      "client": "status_has_context"
-                                    },
-                                    "child": {
-                                      "type": "stack",
-                                      "direction": "row",
-                                      "gap": "small",
-                                      "align": "center",
-                                      "children": [
-                                        {
-                                          "type": "progress",
-                                          "value": {
-                                            "client": "status_context"
-                                          },
-                                          "max": 1,
-                                          "label": "context",
-                                          "warning_at": 0.7,
-                                          "danger_at": 0.9
-                                        },
-                                        {
-                                          "type": "text",
-                                          "value": {
-                                            "client": "status_context_text"
-                                          },
-                                          "style": "meta"
-                                        }
-                                      ]
-                                    }
-                                  }
-                                ],
-                                "fill": 0
-                              },
                               {
                                 "type": "repeat",
                                 "items": {
-                                  "client": "status_limit_bars"
+                                  "client": "status_chips_narrow"
                                 },
                                 "key": "key",
                                 "gap": "small",
                                 "layout": "row",
                                 "template": {
-                                  "type": "stack",
-                                  "direction": "row",
-                                  "gap": "small",
-                                  "align": "center",
-                                  "children": [
-                                    {
-                                      "type": "progress",
-                                      "value": {
-                                        "item": "value"
-                                      },
-                                      "max": 1,
-                                      "label": {
-                                        "item": "label"
-                                      },
-                                      "warning_at": 0.8,
-                                      "danger_at": 0.95
-                                    },
-                                    {
-                                      "type": "text",
-                                      "value": {
-                                        "item": "text"
-                                      },
-                                      "style": "meta"
-                                    },
-                                    {
-                                      "type": "text",
-                                      "value": {
-                                        "item": "left"
-                                      },
-                                      "style": "meta"
-                                    }
-                                  ]
+                                  "type": "text",
+                                  "value": {
+                                    "item": "text"
+                                  },
+                                  "style": "meta"
                                 }
+                              },
+                              {
+                                "type": "text",
+                                "value": {
+                                  "client": "status_compact_usage"
+                                },
+                                "style": "meta"
                               }
                             ]
                           }
@@ -1302,6 +1230,7 @@
                             "direction": "column",
                             "gap": "small",
                             "fill": [
+                              1,
                               2,
                               3
                             ],
@@ -1646,6 +1575,9 @@
       },
       "status_chips_narrow": {
         "default": []
+      },
+      "status_compact_usage": {
+        "default": ""
       },
       "status_no_context": {
         "default": true

@@ -301,10 +301,11 @@ test("한도 막대: session은 5시간, weekly는 7일 창이고 다른 창은 
   const limits = [limit("seven_day", "7일", 0.3, { resetsAt: at(20, 18) }), limit("five_hour", "5시간", 0.58, { resetsAt: at(17, 15) }), limit("seven_day_opus", "Opus 7일", 0.9, { resetsAt: at(19, 0) })];
   const { views, app } = stagedApp({ ...readyView(), limits });
   assert.deepEqual(views.at(-1).status_limit_bars, [
-    { key: "session", label: "session", value: 0.58, text: "58%", left: "3시간 남음" },
-    { key: "weekly", label: "weekly", value: 0.3, text: "30%", left: "3일 남음" },
+    { key: "session", label: "5시간", value: 0.58, text: "58%", left: "3시간 남음" },
+    { key: "weekly", label: "7일", value: 0.3, text: "30%", left: "3일 남음" },
   ]);
   assert.deepEqual(views.at(-1).status_limits.map((row: any) => [row.label, row.text]), [["7일", "30% 사용, 3일 남음"], ["5시간", "58% 사용, 3시간 남음"], ["Opus 7일", "90% 사용, 1일 남음"]]);
+  assert.equal(views.at(-1).status_compact_usage, "5시간 58% · 7일 30%");
   assert.equal(views.at(-1).status_no_limits, false);
   (app as any).receive({ ...readyView(), limits: [] });
   assert.deepEqual(views.at(-1).status_limit_bars, []);
@@ -315,12 +316,14 @@ test("컨텍스트와 서브에이전트 표기", () => {
   const { views, app } = stagedApp({ ...readyView(), context: { used: 42, size: 100 }, subagents: 2, account: { label: "Claude Team", email: null } });
   assert.equal(views.at(-1).status_context, 0.42);
   assert.equal(views.at(-1).status_context_text, "42%");
+  assert.equal(views.at(-1).status_compact_usage, "컨텍스트 42%");
   assert.equal(views.at(-1).status_subagents, "서브에이전트 2");
   assert.equal(views.at(-1).status_subagents_text, "2개 실행 중");
   assert.equal(views.at(-1).status_account, "Claude Team");
   (app as any).receive(readyView());
   assert.equal(views.at(-1).status_context, null);
   assert.equal(views.at(-1).status_context_text, "아직 모름");
+  assert.equal(views.at(-1).status_compact_usage, "");
   assert.equal(views.at(-1).status_subagents, null);
   assert.equal(views.at(-1).status_subagents_text, "없음");
   assert.equal(views.at(-1).status_account, null);
@@ -353,7 +356,7 @@ test("한도 막대: 모르는 창은 빼고 설정 행은 모름, 막히면 막
   assert.equal(view.status_limits[0].text, "아직 모름");
   const resetsAt = new Date(2031, 10, 17, 5, 0).toISOString();
   const blocked = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 1, { blocked: true, resetsAt })] });
-  assert.deepEqual(blocked.views.at(-1).status_limit_bars, [{ key: "session", label: "session", value: 1, text: "막힘", left: "1시간 남음" }]);
+  assert.deepEqual(blocked.views.at(-1).status_limit_bars, [{ key: "session", label: "5시간", value: 1, text: "막힘", left: "1시간 남음" }]);
   assert.equal(blocked.views.at(-1).status_limits[0].text, "막힘, 1시간 남음");
 });
 

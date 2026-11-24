@@ -179,47 +179,44 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
         let header = &chat["input_header"];
         assert_eq!(header["type"], "when");
         assert_eq!(header["value"]["client"], "show_status_bar");
-        // 넓은 창은 한 줄, 좁은 창은 모델·컨텍스트와 한도를 두 줄에 둔다.
+        // 두 폭 모두 한 줄이다. 넓은 창은 막대를, 좁은 창은 간결한 메타 글을 쓴다.
         let strip = &header["child"];
         assert!(strip.get("wrap").is_none());
+        assert_eq!(strip["direction"], "row");
+        assert_eq!(strip["fill"], 0);
         let children = strip["children"].as_array().unwrap();
         let left = &children[0];
-        assert_eq!(left["type"], "stack");
-        assert_eq!(left["direction"], "row");
-        // repeat의 기본 배치는 세로라 칩을 한 줄로 두려면 row를 밝힌다.
-        assert_eq!(left["children"][0]["layout"], "row");
-        let chips = left["children"][0]["items"]["client"].as_str().unwrap().to_string();
-        let (context, limits) = if chips == "status_chips" {
-            assert_eq!(strip["direction"], "row");
-            assert_eq!(strip["fill"], 0);
+        let chips = if left["type"] == "stack" {
             assert_eq!(children.len(), 3);
+            assert_eq!(left["direction"], "row");
             assert_eq!(left["children"].as_array().unwrap().len(), 2);
             assert_eq!(left["children"][1]["value"]["client"], "status_has_subagents");
-            (&children[1], &children[2])
+            let chips = left["children"][0]["items"]["client"].as_str().unwrap().to_string();
+            let context = &children[1];
+            let limits = &children[2];
+            assert_eq!(context["value"]["client"], "status_has_context");
+            let mut bars = Vec::new();
+            collect(context, &|node| node["type"] == "progress", &mut bars);
+            assert_eq!(bars.len(), 1);
+            assert_eq!(bars[0]["label"], "컨텍스트");
+            assert_eq!(bars[0]["label_position"], "inline");
+            assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.7), Some(0.9)));
+            assert_eq!(limits["items"]["client"], "status_limit_bars");
+            assert_eq!(limits["layout"], "row");
+            let mut bars = Vec::new();
+            collect(limits, &|node| node["type"] == "progress", &mut bars);
+            assert_eq!(bars.len(), 1);
+            assert_eq!(bars[0]["label"]["item"], "label");
+            assert_eq!(bars[0]["label_position"], "inline");
+            assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.8), Some(0.95)));
+            chips
         } else {
-            assert_eq!(chips, "status_chips_narrow");
-            assert_eq!(strip["direction"], "column");
+            assert_eq!(left["type"], "repeat");
             assert_eq!(children.len(), 2);
-            assert_eq!(left["fill"], 0);
-            assert_eq!(left["children"].as_array().unwrap().len(), 2);
-            (&left["children"][1], &children[1])
+            assert_eq!(children[1]["value"]["client"], "status_compact_usage");
+            left["items"]["client"].as_str().unwrap().to_string()
         };
         chip_lists.push(chips);
-        // context 막대(사용률, 0.7과 0.9)와 session, weekly 막대 반복(0.8과 0.95).
-        assert_eq!(context["value"]["client"], "status_has_context");
-        let mut bars = Vec::new();
-        collect(context, &|node| node["type"] == "progress", &mut bars);
-        assert_eq!(bars.len(), 1);
-        assert_eq!(bars[0]["label"], "context");
-        assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.7), Some(0.9)));
-        assert_eq!(limits["type"], "repeat");
-        assert_eq!(limits["items"]["client"], "status_limit_bars");
-        assert_eq!(limits["layout"], "row");
-        let mut bars = Vec::new();
-        collect(limits, &|node| node["type"] == "progress", &mut bars);
-        assert_eq!(bars.len(), 1);
-        assert_eq!(bars[0]["label"]["item"], "label");
-        assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.8), Some(0.95)));
     }
     chip_lists.sort();
     assert_eq!(chip_lists, ["status_chips", "status_chips_narrow"]);

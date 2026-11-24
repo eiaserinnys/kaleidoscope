@@ -5,8 +5,8 @@ const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 
 /** 상태 줄 막대 자리. 창 id로 고정하고, 나머지 창은 설정에서만 보인다. */
 const BAR_WINDOWS = [
-  { id: "five_hour", key: "session" },
-  { id: "seven_day", key: "weekly" },
+  { id: "five_hour", key: "session", label: "5시간" },
+  { id: "seven_day", key: "weekly", label: "7일" },
 ] as const;
 
 /** 남은 시간을 재는 단위. 하루 이상이면 일, 한 시간 이상이면 시간, 그 밖에는 분. */
@@ -57,9 +57,9 @@ export function limitRow(limit: Limit, now: Date): { key: string; label: string;
 
 /** 상태 줄의 session, weekly 막대. 창이 없거나 사용률을 모르면 그 막대를 뺀다. */
 export function limitBars(limits: Limit[], now: Date): { key: string; label: string; value: number; text: string; left: string | null }[] {
-  return BAR_WINDOWS.flatMap(({ id, key }) => {
+  return BAR_WINDOWS.flatMap(({ id, key, label }) => {
     const limit = limits.find((candidate) => candidate.id === id), read = limit && reading(limit, now);
-    return read ? [{ key, label: key, ...read }] : [];
+    return read ? [{ key, label, ...read }] : [];
   });
 }
 

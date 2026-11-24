@@ -478,6 +478,11 @@ export class AppClient {
     this.scheduleRedraw(limits, now);
     const context = view?.context && view.context.size > 0 ? Math.min(1, view.context.used / view.context.size) : null;
     const subagents = view?.subagents ?? 0;
+    const bars = limitBars(limits, now);
+    const compactUsage = [
+      ...(context === null ? [] : [`컨텍스트 ${Math.round(context * 100)}%`]),
+      ...bars.map((bar) => `${bar.label} ${bar.text}`),
+    ].join(" · ");
     const output = {
       show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
@@ -499,7 +504,7 @@ export class AppClient {
       status_bar_on: this.statusBar, show_status_bar: this.statusBar && chat,
       status_chips: chips, status_chips_narrow: chips.filter((chip) => chip.key === "model"), status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
       status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,
-      status_limit_bars: limitBars(limits, now),
+      status_limit_bars: bars, status_compact_usage: compactUsage,
       status_limits: limits.map((limit) => { const row = limitRow(limit, now); return { ...row, unknown: !row.known }; }), status_no_limits: limits.length === 0,
       status_account: account, status_subagents_text: subagents > 0 ? `${subagents}개 실행 중` : "없음",
       // when 블록은 true만 열린 것으로 보므로 값이 비는 칸마다 짝 불리언을 둔다. 설정의 컨텍스트 막대는 모르면 0으로 비워 둔다.

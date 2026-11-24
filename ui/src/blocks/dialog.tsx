@@ -18,6 +18,11 @@ function stackFill(block: Extract<Block, { type: "stack" }>): number[] {
   return Array.isArray(block.fill) ? block.fill : [block.fill];
 }
 
+function isRowList(block: Block): boolean {
+  if (block.type === "when" || block.type === "anchor") return isRowList(block.child);
+  return block.type === "list";
+}
+
 function hasPicker(block: Block): boolean {
   switch (block.type) {
     case "table": return true;
@@ -25,7 +30,7 @@ function hasPicker(block: Block): boolean {
     case "stack": {
       // 채움 칸에 둔 줄 목록은 대화상자 안에서 남은 자리를 다 차지하므로 표와 같은 고르기 상자로 본다.
       const fill = stackFill(block);
-      return block.children.some((child, index) => hasPicker(child) || (fill.includes(index) && child.type === "list"));
+      return block.children.some((child, index) => hasPicker(child) || (fill.includes(index) && isRowList(child)));
     }
     case "split": return block.children.some(hasPicker);
     case "tabs": return block.tabs.some((tab) => hasPicker(tab.child));

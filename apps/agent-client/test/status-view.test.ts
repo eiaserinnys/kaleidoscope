@@ -35,13 +35,13 @@ test("limitBars: five_hour는 session, seven_day는 weekly 자리이고 없거�
     limit("five_hour", 0.58, { resetsAt: later(3 * HOUR) }),
   ];
   assert.deepEqual(limitBars(limits, now), [
-    { key: "session", label: "session", value: 0.58, text: "58%", left: "3시간 남음" },
-    { key: "weekly", label: "weekly", value: 0.3, text: "30%", left: "5일 남음" },
+    { key: "session", label: "5시간", value: 0.58, text: "58%", left: "3시간 남음" },
+    { key: "weekly", label: "7일", value: 0.3, text: "30%", left: "5일 남음" },
   ]);
   assert.deepEqual(limitBars([limit("five_hour", 0.2, { blocked: true, resetsAt: later(20 * MINUTE) }), limit("seven_day", null)], now), [
-    { key: "session", label: "session", value: 1, text: "막힘", left: "20분 남음" },
+    { key: "session", label: "5시간", value: 1, text: "막힘", left: "20분 남음" },
   ]);
-  assert.deepEqual(limitBars([limit("five_hour", 0.4)], now), [{ key: "session", label: "session", value: 0.4, text: "40%", left: null }]);
+  assert.deepEqual(limitBars([limit("five_hour", 0.4)], now), [{ key: "session", label: "5시간", value: 0.4, text: "40%", left: null }]);
   assert.deepEqual(limitBars([limit("seven_day_opus", 0.4)], now), []);
 });
 

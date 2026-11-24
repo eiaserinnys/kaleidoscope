@@ -378,10 +378,12 @@ pub const CONTRACT_VERSION: u32 = 51;
 /// - 66판: section의 끌어 옮기기(`on_move`).
 /// - 67판: 목록과 데이터 트리의 줄 앞 그림 모양(`image_shape`), 데이터 트리 항목의 그림(`TreeItem.image`)과 둘째 줄(`TreeItem.subtitle`),
 ///   dialog의 확정 단추 잠금(`confirm_disabled`).
-/// - 68판: 대화 블록의 입력창 위 고정 자리(`input_header`).
+/// - 68판: 대화 블록의 입력창 위 고정 자리(`input_header`), 진행 막대 이름표 위치(`label_position`).
 pub const BLOCK_SET_VERSION: u32 = CHAT_INPUT_HEADER_BLOCK_SET_VERSION;
 /// 대화 블록의 입력창 위 고정 자리(`input_header`)를 처음 지원하는 블록 세트 판.
 pub const CHAT_INPUT_HEADER_BLOCK_SET_VERSION: u32 = 68;
+/// 진행 막대의 이름표 위치를 처음 지원하는 블록 세트 판.
+pub const PROGRESS_LABEL_POSITION_BLOCK_SET_VERSION: u32 = 68;
 /// 목록과 데이터 트리 줄 앞 그림의 모양(`image_shape`), 데이터 트리 항목의 그림(`TreeItem.image`)과 둘째 줄(`TreeItem.subtitle`),
 /// dialog의 확정 단추 잠금(`confirm_disabled`)을 처음 지원하는 블록 세트 판.
 pub const ITEM_IMAGE_BLOCK_SET_VERSION: u32 = 67;
@@ -1839,6 +1841,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<Binding>,
+        /// (68판) 이름표 위치. 생략하면 막대 위에, inline은 옆에 메타 글로, hidden은 접근 이름에만 둔다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label_position: Option<LabelPosition>,
         /// (64판) 바를 같은 폭의 이 수만큼 나누는 칸막이를 그린다. 2 이상이어야 한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2848,6 +2854,8 @@ enum RawBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<Binding>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        label_position: Option<LabelPosition>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         segments: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         marker: Option<Binding>,
@@ -3649,6 +3657,7 @@ impl From<RawBlock> for Block {
                 value,
                 max,
                 label,
+                label_position,
                 segments,
                 marker,
                 warning_at,
@@ -3657,6 +3666,7 @@ impl From<RawBlock> for Block {
                 value,
                 max,
                 label,
+                label_position,
                 segments,
                 marker,
                 warning_at,
@@ -4373,6 +4383,7 @@ impl Block {
                 ITEM_IMAGE_BLOCK_SET_VERSION
             }
             Block::Notice { .. } => 18,
+            Block::Progress { label_position: Some(_), .. } => PROGRESS_LABEL_POSITION_BLOCK_SET_VERSION,
             Block::Progress { warning_at: Some(_), .. }
             | Block::Progress { danger_at: Some(_), .. } => PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,
             Block::Progress { segments: Some(_), .. }

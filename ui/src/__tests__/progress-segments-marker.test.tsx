@@ -31,6 +31,20 @@ function setup(ui: Block, state: Record<string, JsonValue>) {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("진행 막대 칸막이와 커서", () => {
+  it("옆 이름표는 메타 크기의 가로 배치이며 막대의 접근 이름을 유지한다", async () => {
+    setup({ type: "progress", value: 40, max: 100, label: "사용량", label_position: "inline" } as Block, {});
+    const bar = await screen.findByRole("progressbar", { name: "사용량" });
+    const field = bar.closest(".ks-data-progress-field")!;
+    expect(field.classList.contains("is-label-inline")).toBe(true);
+    expect(field.querySelector(".ks-data-progress-label")?.textContent).toBe("사용량");
+  });
+
+  it("숨긴 이름표도 막대의 접근 이름으로 남는다", async () => {
+    setup({ type: "progress", value: 40, max: 100, label: "사용량", label_position: "hidden" }, {});
+    const bar = await screen.findByRole("progressbar", { name: "사용량" });
+    expect(bar.closest(".ks-data-progress-field")?.querySelector(".ks-data-progress-label")).toBeNull();
+  });
+
   it.each([[79, ""], [80, "var(--ks-color-warning)"], [94, "var(--ks-color-warning)"], [95, "var(--ks-color-danger)"]] as const)(
     "값 %i의 기준 색을 표시한다", async (value, color) => {
       setup({ type: "progress", value, max: 100, label: "사용량", warning_at: 80, danger_at: 95 }, {});

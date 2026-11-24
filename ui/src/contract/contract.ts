@@ -401,6 +401,10 @@ max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: 
  */
 confirm_disabled?: Binding, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, 
 /**
+ * (68판) 이름표 위치. 생략하면 막대 위에, inline은 옆에 메타 글로, hidden은 접근 이름에만 둔다.
+ */
+label_position?: LabelPosition, 
+/**
  * (64판) 바를 같은 폭의 이 수만큼 나누는 칸막이를 그린다. 2 이상이어야 한다.
  */
 segments?: number, 
