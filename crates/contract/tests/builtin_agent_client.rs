@@ -193,6 +193,7 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
             assert_eq!(strip["direction"], "row");
             assert_eq!(strip["fill"], 0);
             assert_eq!(children.len(), 3);
+            assert_eq!(left["children"].as_array().unwrap().len(), 2);
             assert_eq!(left["children"][1]["value"]["client"], "status_has_subagents");
             (&children[1], &children[2])
         } else {
