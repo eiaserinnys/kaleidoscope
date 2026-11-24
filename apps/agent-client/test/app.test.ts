@@ -285,7 +285,7 @@ test("상태 줄 표시 조건: 저장소가 켜져도 채팅이 안 보이면 �
   assert.equal(views.at(-1).show_status_bar, false);
 });
 
-test("칩 순서: 계정 라벨(이메일 없이), model, thought_level, mode", () => {
+test("상태 줄 순서: 모델, 계정 라벨(이메일 없이), 추론 수준, 모드", () => {
   const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
   const { views, app } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: "a@b.c" } });
   assert.equal(views.at(-1).status_identity, "Opus 5.5 · Claude Team · 높음 · Auto");
