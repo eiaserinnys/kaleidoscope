@@ -58,6 +58,30 @@ function FocusDialog({ enabled = true, version = 0 }: { enabled?: boolean; versi
   </>;
 }
 
+function NestedDialogs({ host }: { host: HTMLElement }) {
+  const [outer, setOuter] = useState(true);
+  const [inner, setInner] = useState(false);
+  return outer ? <Dialog host={host} title="목록" ok="닫기" onCancel={() => setOuter(false)} onConfirm={() => setOuter(false)}
+    body={<><button onClick={() => setInner(true)}>행 메뉴</button>{inner ? <Dialog host={host} title="삭제 확인" ok="삭제" onCancel={() => setInner(false)} onConfirm={() => setInner(false)} /> : null}</>} /> : null;
+}
+
+it("겹친 대화상자의 Escape는 맨 위만 닫고 연 요소에 초점을 돌린다", () => {
+  const host = document.createElement("div");
+  host.innerHTML = '<div class="ks-data-window-body"><button>바깥</button></div>';
+  document.body.appendChild(host);
+  render(<NestedDialogs host={host} />);
+  const opener = screen.getByRole("button", { name: "행 메뉴" });
+  opener.focus();
+  fireEvent.click(opener);
+  const inner = screen.getByRole("dialog", { name: "삭제 확인" });
+  fireEvent.keyDown(within(inner).getByRole("button", { name: "취소" }), { key: "Escape" });
+  expect(screen.getByRole("dialog", { name: "목록" })).toBeTruthy();
+  expect(screen.queryByRole("dialog", { name: "삭제 확인" })).toBeNull();
+  expect(document.activeElement).toBe(opener);
+  cleanup();
+  host.remove();
+});
+
 it("부모가 다시 그려도 처음 연 요소로 취소 뒤 돌아간다", () => {
   const view = render(<StrictMode><FocusDialog /></StrictMode>);
   const opener = screen.getByRole("button", { name: "열기" });

@@ -3,6 +3,7 @@ import { answerPermission, enqueue, findPermission, initialState, migrateState, 
 import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
 import { cleanReplay, cleanTitle, GUIDE_TAG } from "./guide.ts";
+import type { Account, Limit } from "./status.ts";
 
 /**
  * 에이전트 실행 설정. parallel_sessions를 켜면 한 프로세스에서 세션 여러 개를 동시에 돌린다.
@@ -27,7 +28,7 @@ type SessionInfo = { sessionId: string; cwd: string; title?: string; updatedAt?:
 /** 프로세스가 들고 있는 세션 하나의 요약. 목록 배지와 다른 세션의 허용 안내에 쓴다. */
 export type LiveSession = { sessionId: string; busy: boolean; permissions: number };
 type Phase = "starting" | "login" | "ready" | "responding" | "failed";
-export type SessionView = { phase: Phase; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: SessionState["permissions"]; controls: SessionState["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; configuring: boolean; live: LiveSession[]; parallel: boolean };
+export type SessionView = { phase: Phase; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: SessionState["permissions"]; controls: SessionState["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; canDeleteSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; deleting: boolean; configuring: boolean; context: SessionState["context"]; limits: Limit[]; account: Account | null; subagents: number; live: LiveSession[]; parallel: boolean };
 export type Host = {
   process: ProcessPort;
   blobs: BlobStore;
@@ -329,6 +330,24 @@ export class AgentSession {
     });
   }
 
+  deleteSession(sessionId: string): Promise<void> {
+    return this.serial(async () => {
+      if (!this.handle || this.state.phase !== "ready" || !this.state.capabilities.delete) return;
+      this.listError = null;
+      const target = this.state.sessions[sessionId];
+      if (sessionBusy(target) || (target?.permissions.length ?? 0) > 0) {
+        const error = agentError("AGENT_SESSION_DELETE_FAILED", "응답 중이거나 허용을 기다리는 세션은 지울 수 없습니다.");
+        this.state = { ...this.state, sessionError: { id: error.id, message: error.message } };
+        this.publish();
+        return;
+      }
+      if (this.pendingKind("switch", "new_user", "delete", "configure") || (!this.parallel && (sessionBusy(this.foreground) || Object.values(this.state.pending).some((request) => request.kind !== "list")))) return;
+      this.listError = null;
+      await this.request("delete", "session/delete", { sessionId, _control: sessionId }, sessionId);
+      this.publish();
+    });
+  }
+
   private async configureNow(sessionId: string, id: string, value: string | boolean): Promise<void> {
     const params = id === "__legacy_model" ? { sessionId, modelId: value }
       : id === "__legacy_mode" ? { sessionId, modeId: value }
@@ -493,6 +512,21 @@ export class AgentSession {
           await this.syncHeld();
           this.listWanted = true;
         }
+        if (request && !message.error && request.kind === "delete") {
+          const deleted = String(request.params);
+          this.sessions = this.sessions.filter((entry) => entry.sessionId !== deleted);
+          this.pendingSessions = this.pendingSessions.filter((entry) => entry.sessionId !== deleted);
+          // 지금 세션을 지웠으면 drain이 이미 serial 안이므로 switchSession 대신 바로 새 세션을 연다.
+          const held = { ...this.state.sessions };
+          delete held[deleted];
+          this.state = { ...this.state, sessions: held };
+          if (deleted === this.state.foreground) {
+            this.state = { ...this.state, foreground: null };
+            await this.history.setForeground(null);
+            await this.request("new_user", "session/new", { cwd: this.cwd, mcpServers: this.mcpServers() });
+          }
+          await this.syncHeld();
+        }
         if (request?.kind === "prompt" && (request.params as { refreshList?: boolean } | null)?.refreshList) this.listWanted = true;
         if (request && !message.error && request.kind === "configure") {
           const control = request.params as { id: string; value: string | boolean };
@@ -638,9 +672,10 @@ export class AgentSession {
       busy: this.state.phase === "ready" && sessionBusy(foreground), tool: foreground?.tools.at(-1)?.title ?? null,
       queued: (foreground?.queue ?? []).map((item) => ({ ...item, attachments: item.attachments.map(({ id, name, mime }) => ({ id, name, mime })) })),
       permissions: foreground?.permissions ?? [], controls: foreground?.controls ?? [], authMethods: this.state.authMethods, failure: this.state.failure ?? foreground?.failure ?? null,
-      sessionId: id, canListSessions: !!this.state.capabilities.list, sessions: this.listed(),
+      sessionId: id, canListSessions: !!this.state.capabilities.list, canDeleteSessions: !!this.state.capabilities.delete, sessions: this.listed(),
       sessionsLoading: this.sessionsLoading, sessionError: this.listError ?? this.state.sessionError ?? null,
-      switching: this.pendingKind("switch", "new_user"),
+      switching: this.pendingKind("switch", "new_user"), deleting: this.pendingKind("delete"),
+      context: foreground?.context ?? null, limits: this.state.limits, account: this.state.account, subagents: (foreground?.tools ?? []).filter((tool) => tool.subagent).length,
       configuring: Object.values(this.state.pending).some((request) => request.kind === "configure" && (request.sessionId ?? id) === id),
       live: Object.entries(this.state.sessions).filter(([, session]) => session.phase !== "loading")
         .map(([sessionId, session]) => ({ sessionId, busy: this.state.phase === "ready" && sessionBusy(session), permissions: session.permissions.length })),

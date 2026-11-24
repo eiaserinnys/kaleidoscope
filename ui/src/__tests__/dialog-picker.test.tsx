@@ -28,6 +28,23 @@ async function overlayFor(child: Block) {
 
 const rowList: Block = { type: "list", layout: "rows", items: [{ key: "a", title: "첫 줄" }, { key: "b", title: "둘째 줄" }] };
 
+it("채움 칸의 조건부 줄 목록도 고르기 창으로 연다", async () => {
+  const view = await overlayFor({ type: "stack", direction: "column", fill: 1, children: [
+    { type: "text", value: "머리" }, { type: "when", value: true, child: rowList },
+  ] });
+  expect(view.overlay?.classList.contains("is-picker")).toBe(true);
+  expect(screen.getByText("첫 줄")).toBeTruthy();
+  view.store.dispose();
+});
+
+it("채움 칸 밖의 조건부 줄 목록은 내용 크기를 지킨다", async () => {
+  const view = await overlayFor({ type: "stack", direction: "column", children: [
+    { type: "when", value: true, child: rowList }, { type: "button", label: "닫기", on_click: [] },
+  ] });
+  expect(view.overlay?.classList.contains("is-picker")).toBe(false);
+  view.store.dispose();
+});
+
 it("쌓기의 fill 칸에 둔 줄 목록 대화상자는 창을 채운다", async () => {
   const view = await overlayFor({ type: "stack", direction: "column", fill: 1, children: [{ type: "text", value: "머리" }, rowList] });
   expect(view.overlay?.classList.contains("is-picker")).toBe(true);

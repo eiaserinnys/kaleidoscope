@@ -32,6 +32,7 @@ mod client_blobs_tests;
 mod client_files_tests;
 mod client_http_request_tests;
 mod media_stream_tests;
+mod media_save_tests;
 mod connection_snapshot_race_tests;
 mod file_write_tests;
 mod layout_sync_tests;
@@ -323,7 +324,7 @@ fn builtin_apps_exist_without_a_registry_and_reject_local_import() {
     let apps = snapshot(&core).shared.apps;
     for (id, version) in [
         ("profiler", 7),
-        ("agent", 18),
+        ("agent", 20),
         ("explorer", 5),
         ("md-editor", 6),
         ("html-report", 4),
@@ -717,10 +718,10 @@ fn builtin_agent_reads_defaults_before_linking() {
         .shared
         .app_versions
         .iter()
-        .find(|version| version.app_id == "agent" && version.version == 18)
+        .find(|version| version.app_id == "agent" && version.version == 20)
         .unwrap()
         .definition;
-    assert_eq!(definition.requires.blocks, 40);
+    assert_eq!(definition.requires.blocks, 68);
     assert_eq!(
         definition
             .client

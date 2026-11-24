@@ -1,4 +1,5 @@
 use super::*;
+use crate::SaveFileTarget;
 use kaleidoscope_contract::data::FileAccept;
 use std::sync::Mutex;
 
@@ -110,8 +111,15 @@ impl Host for FileHost {
     fn pick_files(&self, _: &[FileAccept], _: bool) -> Option<Vec<PathBuf>> {
         Some(vec![self.input.clone()])
     }
-    fn pick_save_file(&self, _: &str, _: &str) -> Option<PathBuf> {
-        self.output.lock().unwrap().clone()
+    fn pick_save_file(&self, _: &str, _: &str) -> Option<SaveFileTarget> {
+        self.output
+            .lock()
+            .unwrap()
+            .clone()
+            .map(|path| SaveFileTarget {
+                path,
+                location: None,
+            })
     }
 }
 

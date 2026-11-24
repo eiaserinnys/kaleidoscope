@@ -20,7 +20,8 @@ import { DataIcon } from "../components/data-icons";
 import { ICON_NAMES } from "../contract/limits";
 import { useItemScope } from "../data/item-scope";
 import { X } from "../components/icons";
-import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
+import type { AttachmentPreviewRequest } from "../data/attachments";
+import { AttachmentPreview } from "./attachment-preview";
 import { selectionRange, toggleSelection } from "../components/collection-selection";
 import { useLocalDraft } from "../data/use-local-draft";
 
@@ -98,12 +99,13 @@ function ListLoading({ block }: { block: Extract<Block, { type: "list" }> }) {
 function ListReady({ block, context, pointer, value, more }: { block: Extract<Block, { type: "list" }>; context: BlockContext; pointer: string; value: unknown; more?: BindingMore }) {
   const blockRoot = useBlockRootProps();
   const data = useWindowData();
-  const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
+  const [preview, setPreview] = useState<AttachmentPreviewRequest | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
   const menu = useItemMenu(block.item_menu, pointer);
   const grouped = useMemo(() => listGroups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
   const parentScope = useItemScope();
   const items = useMemo(() => grouped.flatMap((group) => group.items), [grouped]);
+  const hasStatus = grouped.some((group) => group.status);
   const grid = block.layout === "grid";
   const icons = block.layout === "icons";
   const [columns, setColumns] = useState(1);
@@ -281,14 +283,13 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
         if (block.on_activate) void draft.send({ keys: [item.key], item: item as unknown as JsonValue, ...(activate ? { activate: item.key } : {}) });
         else void data.act(`${pointer}/on_select`, item.key, item as unknown as JsonValue);
       } else if (activate && block.on_activate) void draft.send({ keys: [], item: item as unknown as JsonValue, select: false, activate: item.key });
-      else if (!block.on_activate && isMedia(item.image)) setPreview({ media: item.image, name: item.title, trigger: event.currentTarget });
+      else if (!block.on_activate && isMedia(item.image)) setPreview({ source: { kind: "media", media: item.image }, name: item.title, trigger: event.currentTarget });
     },
     remove: (item) => { if (!disabled && block.on_remove) void data.act(`${pointer}/on_remove`, item.key, item as unknown as JsonValue); },
     menu: (event, item) => { if (disabled) { event.preventDefault(); return; } if (!event.defaultPrevented) menu.open(event, event.currentTarget, item as unknown as JsonValue, item.key, "제목 복사", item.title); },
   };
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, useWindowVisible(context), icons ? <IconTileSkeleton count={activeColumns} /> : undefined, items.length);
-  const hasStatus = grouped.some((group) => group.status);
   if (value === null && !more) return null;
   if (!items.length && !more && !hasStatus) return <NoItems rootProps={blockRoot} />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
@@ -341,5 +342,5 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       </div>;
     })}</VirtualSurface>}
     {footer}
-  </div>{menu.dialog}{preview && <MediaPreview request={preview} onClose={closePreview} />}</>;
+  </div>{menu.dialog}{preview && <AttachmentPreview request={preview} onClose={closePreview} />}</>;
 }

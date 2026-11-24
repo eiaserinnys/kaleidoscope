@@ -1,6 +1,7 @@
 import type { InitializeResponse, NewSessionResponse, RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { agentError } from "./errors.ts";
 import { hadGuide } from "./guide.ts";
+import { isSubagentTool, mergeLimit, readAuthStatus, readClaudeRateLimits, type Account, type Limit } from "./status.ts";
 
 export type Attachment = { id: string; name: string; mime: string; key: string; size: number };
 export type Queued = { id: string; text: string; attachments: Attachment[] };
@@ -10,7 +11,7 @@ export type Pending = { kind: string; params: unknown; sessionId?: string | null
 export type Permission = { id: string; rpcId: number | string; title: string; options: { id: string; label: string; kind: string }[]; sessionId?: string };
 export type Item = { id: string; kind: "assistant" | "user" | "notice" | "error"; text: string; at: string; attachments: { id: string; name: string; mime: string }[] };
 export type RpcReply = { jsonrpc: "2.0"; id: string | number; result?: unknown; error?: { code: number; message: string } };
-export type Failure = { id: string; reason: string; code?: string; message?: string };
+export type Failure = { id: string; reason: string; code?: string; message?: string; fromAgent?: boolean };
 
 /** 세션 하나의 상태. 한 프로세스가 세션 여러 개를 들고 sessionId로 나눈다. */
 export type SessionState = {
@@ -22,7 +23,8 @@ export type SessionState = {
   queue: Queued[];
   stream: { id: string | null; text: string };
   streamKey: string | null;
-  tools: { id: string; title: string }[];
+  tools: { id: string; title: string; subagent: boolean }[];
+  context: { used: number; size: number } | null;
   permissions: Permission[];
   controls: Control[];
   guideSent: boolean;
@@ -40,7 +42,9 @@ export type State = {
   generation: string;
   nextId: number;
   pending: Record<string, Pending>;
-  capabilities: { loadSession: boolean; image: boolean; http: boolean; list: boolean };
+  capabilities: { loadSession: boolean; image: boolean; http: boolean; list: boolean; delete: boolean };
+  limits: Limit[];
+  account: Account | null;
   authMethods: { id: string; name: string; description: string }[];
   phase: "starting" | "login" | "ready" | "failed";
   foreground: string | null;
@@ -59,13 +63,13 @@ export type State = {
 };
 
 export function sessionState(): SessionState {
-  return { phase: "ready", replay: null, replayItems: [], queue: [], stream: { id: null, text: "" }, streamKey: null, tools: [], permissions: [], controls: [],
+  return { phase: "ready", replay: null, replayItems: [], queue: [], stream: { id: null, text: "" }, streamKey: null, tools: [], context: null, permissions: [], controls: [],
     guideSent: false, refreshAfterFirstPrompt: false, restoreControls: [], contextTicket: null, completed: [], failure: null };
 }
 
 export function initialState(): State {
   return { schema: 2, generation: "", nextId: 1, pending: {},
-    capabilities: { loadSession: false, image: false, http: false, list: false }, authMethods: [],
+    capabilities: { loadSession: false, image: false, http: false, list: false, delete: false }, authMethods: [], limits: [], account: null,
     phase: "starting", foreground: null, sessions: {}, carry: [], partial: [], partialKey: null, sessionError: null, needsNew: false, initialized: false, failure: null,
     outbox: [], servicesUsed: null, restartPending: false };
 }
@@ -90,7 +94,7 @@ function without(sessions: Record<string, SessionState>, id: string | null | und
 export function reserveRequest(state: State, kind: string, params: unknown, sessionId: string | null = null): [State, number] {
   const id = state.nextId;
   let next: State = { ...state, nextId: id + 1, phase: kind === "authenticate" ? "starting" : state.phase,
-    failure: kind === "prompt" ? null : state.failure, sessionError: kind === "switch" || kind === "new_user" ? null : state.sessionError,
+    failure: kind === "prompt" ? null : state.failure, sessionError: kind === "switch" || kind === "new_user" || kind === "delete" ? null : state.sessionError,
     pending: { ...state.pending, [id]: { kind, params, sessionId } } };
   if (kind === "prompt") next = patch(next, sessionId, (session) => ({ ...session, phase: "responding", failure: null }));
   if (kind === "load" && sessionId) next = { ...next, sessions: { ...next.sessions, [sessionId]: { ...(next.sessions[sessionId] ?? sessionState()), phase: "loading", replay: "drop" } } };
@@ -194,12 +198,19 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
       const controls = controlsFrom({ configOptions: update.configOptions });
       return patch(state, sessionId, (current) => ({ ...current, controls: [...controls, ...current.controls.filter((c) => c.id.startsWith("__legacy_") && !controls.some((o) => o.category === c.category))] }));
     }
+    if (update?.sessionUpdate === "usage_update") {
+      if (session.replay) return state;
+      const size = update.size;
+      const context = typeof update.used === "number" && typeof size === "number" && size > 0 ? { used: update.used, size } : null;
+      const next = { ...state, limits: readClaudeRateLimits(update._meta?.["_claude/rateLimit"]).reduce(mergeLimit, state.limits) };
+      return patch(next, sessionId, (current) => ({ ...current, context }));
+    }
     if (update?.sessionUpdate === "tool_call") {
       if (session.replay) return state;
       const terminal = update.status === "completed" || update.status === "failed";
       return patch(state, sessionId, (current) => {
         const finished = finishText(current);
-        return { ...finished, tools: terminal ? finished.tools : [...finished.tools, { id: update.toolCallId, title: update.title }] };
+        return { ...finished, tools: terminal ? finished.tools : [...finished.tools, { id: update.toolCallId, title: update.title, subagent: isSubagentTool(update) }] };
       });
     }
     if (update?.sessionUpdate === "tool_call_update") {
@@ -207,6 +218,10 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
       return patch(state, sessionId, (current) => ({ ...current, tools: terminal ? current.tools.filter((t) => t.id !== update.toolCallId) : current.tools.map((t) => t.id === update.toolCallId && update.title ? { ...t, title: update.title } : t) }));
     }
     return state;
+  }
+  if (message.method === "auth/status_update" && message.id === undefined) {
+    // 형식이 깨진 알림은 무시하고, 올바른 알림이 인증 안 됨을 알리면 계정을 숨긴다.
+    return typeof message.params === "object" && message.params !== null ? { ...state, account: readAuthStatus(message.params) } : state;
   }
   if (typeof message.method === "string") {
     return message.id === undefined ? state : { ...state, outbox: [...state.outbox, { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Method not found" } }] };
@@ -224,21 +239,31 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
       const error = agentError(active ? "AGENT_SESSION_LOAD_ACTIVE_WRITER" : request.kind === "switch" ? "AGENT_SESSION_LOAD_FAILED" : "AGENT_SESSION_NEW_FAILED", reason);
       return { ...next, sessions: request.kind === "switch" && sessionId !== state.foreground ? without(next.sessions, sessionId) : next.sessions, sessionError: { id: error.id, message: error.message } };
     }
+    if (request.kind === "delete") {
+      const error = agentError("AGENT_SESSION_DELETE_FAILED", reason);
+      return { ...next, sessionError: { id: error.id, message: error.message } };
+    }
     if ((request.kind === "new" || request.kind === "load") && message.error.code === -32000) return patch({ ...next, phase: "login" }, sessionId, (session) => ({ ...session, replay: null }));
     if (request.kind === "load") return patch({ ...next, phase: "starting", needsNew: true }, sessionId, (session) => ({ ...session, replay: null }));
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
+    const data = message.error.data;
+    const detail = typeof data === "string" ? data : typeof data?.details === "string" ? data.details : typeof data?.message === "string" ? data.message : "";
+    const trimmed = detail.trim(), characters = Array.from(trimmed);
+    const extra = characters.length > 1000 ? `${characters.slice(0, 1000).join("")}…` : trimmed;
+    const fullReason = trimmed && trimmed !== reason ? `${reason}: ${extra}` : reason;
     if (request.kind === "prompt") {
-      return patch(next, sessionId, (session) => ({ ...finishText(session), phase: "ready", replay: null, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, permissions: [], tools: [] }));
+      const limits = data?.errorKind === "rate_limit" ? readClaudeRateLimits(data.rateLimit) : [];
+      return patch({ ...next, limits: limits.reduce(mergeLimit, next.limits) }, sessionId, (session) => ({ ...finishText(session), phase: "ready", replay: null, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: fullReason, fromAgent: true }, permissions: [], tools: [] }));
     }
     const sessions = Object.fromEntries(Object.entries(next.sessions).map(([id, session]) => [id, { ...session, replay: null, permissions: [], tools: [] }]));
-    return { ...next, sessions, phase: "failed", failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason } };
+    return { ...next, sessions, phase: "failed", failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: fullReason, fromAgent: true } };
   }
   if (!message.result) return next;
   if (request.kind === "initialize") {
     const result = message.result as InitializeResponse;
     return { ...next, initialized: true, capabilities: { loadSession: result.agentCapabilities?.loadSession === true,
       image: result.agentCapabilities?.promptCapabilities?.image === true, http: result.agentCapabilities?.mcpCapabilities?.http === true,
-      list: result.agentCapabilities?.sessionCapabilities?.list != null },
+      list: result.agentCapabilities?.sessionCapabilities?.list != null, delete: result.agentCapabilities?.sessionCapabilities?.delete != null },
       authMethods: (result.authMethods ?? []).filter((method) => "id" in method && "name" in method && (method as { type?: string }).type !== "terminal").map((method) => ({ id: method.id, name: method.name, description: method.description ?? "" })) };
   }
   if (request.kind === "switch" && sessionId) {
@@ -257,7 +282,7 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     const previous = state.foreground ? next.sessions[state.foreground] : undefined;
     const base = previous ?? sessionState();
     const sessions = without(next.sessions, state.foreground);
-    sessions[result.sessionId] = { ...base, phase: "ready", replay: null, queue: [...next.carry, ...base.queue], refreshAfterFirstPrompt: true, controls: controlsFrom(result as Record<string, any>) };
+    sessions[result.sessionId] = { ...base, context: null, phase: "ready", replay: null, queue: [...next.carry, ...base.queue], refreshAfterFirstPrompt: true, controls: controlsFrom(result as Record<string, any>) };
     return { ...next, phase: "ready", needsNew: false, failure: null, foreground: result.sessionId, carry: [], sessions };
   }
   if (request.kind === "load" && sessionId) {
@@ -282,7 +307,7 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
 /** schema 1(세션 하나) 체크포인트를 schema 2로 옮긴다. 같은 프로세스에 다시 붙을 때 진행 중인 턴을 잃지 않는다. */
 export function migrateState(raw: unknown): State {
   const old = raw as Record<string, any>;
-  if (old?.schema === 2) return old as State;
+  if (old?.schema === 2) return { ...initialState(), ...old, capabilities: { ...initialState().capabilities, ...old.capabilities }, sessions: Object.fromEntries(Object.entries(old.sessions ?? {}).map(([id, session]) => [id, { ...sessionState(), ...(session as object) }])) } as State;
   const foreground: string | null = old.sessionId ?? null;
   const pendingOld = (old.pending ?? {}) as Record<string, Pending>;
   const pending: Record<string, Pending> = {};
@@ -299,7 +324,7 @@ export function migrateState(raw: unknown): State {
     ...sessionState(),
     phase: old.phase === "responding" ? "responding" : loading ? "loading" : "ready",
     replay: old.replay && loading ? "drop" : null,
-    queue: old.queue ?? [], stream: old.stream ?? { id: null, text: "" }, streamKey: old.streamKey ?? null, tools: old.tools ?? [],
+    queue: old.queue ?? [], stream: old.stream ?? { id: null, text: "" }, streamKey: old.streamKey ?? null, tools: old.tools ?? [], context: old.context ?? null,
     permissions: (old.permissions ?? []).map((permission: Permission) => ({ ...permission, ...(foreground ? { sessionId: foreground } : {}) })),
     controls: old.controls ?? [], guideSent: old.guideSent === true, refreshAfterFirstPrompt: old.refreshAfterFirstPrompt === true,
     restoreControls: old.restoreControls ?? [], contextTicket: old.contextTicket ?? null, completed: old.completed ?? [],
@@ -310,7 +335,7 @@ export function migrateState(raw: unknown): State {
   if (switchTarget && switchTarget !== foreground) sessions[switchTarget] = { ...sessionState(), phase: "loading", replay: "collect", replayItems: old.replayItems ?? [] };
   return {
     schema: 2, generation: old.generation ?? "", nextId: old.nextId ?? 1, pending,
-    capabilities: { loadSession: false, image: false, http: false, list: false, ...(old.capabilities ?? {}) }, authMethods: old.authMethods ?? [],
+    capabilities: { loadSession: false, image: false, http: false, list: false, delete: false, ...(old.capabilities ?? {}) }, authMethods: old.authMethods ?? [], limits: old.limits ?? [], account: old.account ?? null,
     phase: old.phase === "responding" ? "ready" : old.phase ?? "starting", foreground, sessions,
     carry: foreground ? [] : old.queue ?? [], partial: old.partial ?? [], partialKey: old.partialKey ?? null,
     sessionError: old.sessionError ?? null, needsNew: old.needsNew === true, initialized: old.initialized === true,

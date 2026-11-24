@@ -467,4 +467,18 @@ error_catalog! { ENTRIES;
         message: "미디어 축소 결과를 JPEG 이미지로 만들지 못했습니다. 이미지 파일을 확인한 뒤 다시 시도하세요. 미디어: {media}",
         fix: "이미지 파일을 확인하세요"
     }
+    MEDIA_SAVE_CONTENT_INVALID() {
+        class: InvalidRequest,
+        place: "첨부 저장 내용 확인",
+        cause: "저장할 내용이 base64 형식이 아니다",
+        message: "저장할 첨부 내용을 읽지 못했습니다. 첨부를 다시 열어 주세요.",
+        fix: "첨부를 다시 여세요"
+    }
+    MEDIA_SAVE_WRITE_FAILED(name, reason) {
+        class: Io,
+        place: "첨부 저장",
+        cause: "고른 자리에 파일을 쓰지 못했다",
+        message: "「{name}」을 저장하지 못했습니다. 다른 폴더를 골라 다시 시도해 주세요. 원인: {reason}",
+        fix: "다른 폴더를 골라 다시 시도하세요"
+    }
 }

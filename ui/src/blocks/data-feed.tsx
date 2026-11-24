@@ -19,7 +19,8 @@ import { MediaAttachment } from "./media-attachment";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
 import { toCoreError } from "../core/core-transport";
 import { checkAppLink } from "../data/app-link";
-import { MediaPreview, type MediaPreviewRequest } from "./media-preview";
+import type { AttachmentPreviewRequest } from "../data/attachments";
+import { AttachmentPreview } from "./attachment-preview";
 
 function asFeedEntry(value: unknown): FeedEntry | null {
   if (!isObject(value) || typeof value.key !== "string" || !(typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")))) return null;
@@ -89,7 +90,7 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
   const entry = item.entry;
   const nameColor = validColor(entry.color) ? entry.color : undefined;
   const data = useWindowData();
-  const [preview, setPreview] = useState<MediaPreviewRequest | null>(null);
+  const [preview, setPreview] = useState<AttachmentPreviewRequest | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
   const openLink = () => {
     try {
@@ -127,7 +128,7 @@ const FeedRow = memo(function FeedRow({ item, index, count, collapsed, active, f
     {!collapsed && hasMedia ? <div className="ks-feed-media">{entry.media!.map((media, index) => isMedia(media.image) &&
       <MediaAttachment key={index} media={media} name={media.alt || `그림 ${index + 1}`} onPreview={setPreview} />)}</div> : null}
     </div>
-  </article>{preview && <MediaPreview request={preview} onClose={closePreview} />}</>;
+  </article>{preview && <AttachmentPreview request={preview} onClose={closePreview} />}</>;
 });
 export function FeedBlock({ block, context, pointer }: { block: Extract<Block, { type: "feed" }>; context: BlockContext; pointer: string }) {
   const blockRoot = useBlockRootProps();
@@ -184,6 +185,27 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
     return next;
   }, [value, block.grouped, collapsedGroups, collapsedKeys]);
   const items = useMemo(() => rows.flatMap((row) => row.kind === "entry" ? [row.item.entry] : []), [rows]);
+  // 첨부만 담은 feed(모든 항목의 본문이 비고 media가 하나 이상이며 머리에 보일 것이 없는)인지 자료로 가른다.
+  // 화면에 그려진 줄만 보면 긴 feed를 굴리거나 묶음과 답글을 접고 펼 때 이 표지가 뒤집혀 쌓기 안 여백과 누른 머리가 튄다(카드 #1729 6절).
+  // 이름, 시각, 배지, 체크, 표 줄, 답글, 초상이 있는 항목은 목록으로 그려야 머리와 첨부 사이 틈이 남는다.
+  // 접기 단추(collapsible)나 묶음 제목(grouped)이 있는 feed도 화면에 보이는 머리가 있으므로 목록으로 본다(화면 검수 4회차).
+  // 초상(avatars)처럼 접힌 묶음과 답글까지 자료 전체를 본다.
+  const mediaOnly = useMemo(() => {
+    if (block.collapsible || block.grouped) return false;
+    const all = groups(value, Boolean(block.grouped), valid).flatMap((group) => {
+      const entries = group.items.map((entry) => asFeedEntry(entry)!).filter(Boolean);
+      return flattenFeedEntries(entries).map((item) => item.entry);
+    });
+    return all.length > 0
+      && all.some((entry) => entry.media?.some((media) => isMedia(media.image)))
+      && all.every((entry) => {
+        const parts = typeof entry.body === "string" ? [entry.body] : entry.body;
+        return !parts.some((part) => part.trim().length > 0);
+      })
+      && all.every((entry) => entry.name === undefined && entry.meta === undefined
+        && (entry.badges?.length ?? 0) === 0 && typeof entry.checked !== "boolean" && entry.table !== true
+        && (entry.children?.length ?? 0) === 0 && !isMedia(entry.image));
+  }, [value, block.grouped, block.collapsible]);
   const checkable = useMemo(() => items.some((entry) => typeof entry.checked === "boolean"), [items]);
   // 접힌 묶음과 답글까지 모든 항목을 본다. 보이는 줄만 세면 초상이 든 묶음을 접을 때 다른 줄의 빈 초상 칸이 사라져 글이 옮겨진다.
   const avatars = useMemo(() => groups(value, Boolean(block.grouped), valid).some((group) => {
@@ -268,11 +290,11 @@ function FeedReady({ block, context, pointer, value, more }: { block: Extract<Bl
   };
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;
   const heading = block.grouped ? rows.slice(0, first + 1).reverse().find((r) => r.kind === "heading") : undefined;
-  return <><div {...blockRoot} className="ks-data-view ks-feed" ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; const distance = el.scrollHeight - el.scrollTop - el.clientHeight; atEnd.current = distance <= line || (atEnd.current && el.scrollTop >= lastScrollTop.current); lastScrollTop.current = el.scrollTop; }}>
+  return <><div {...blockRoot} className={`ks-data-view ks-feed${mediaOnly ? " is-media-only" : ""}`} ref={scroll} role="feed" onScroll={(e) => { const el = e.currentTarget; const line = parseFloat(getComputedStyle(el).lineHeight) || 21; const distance = el.scrollHeight - el.scrollTop - el.clientHeight; atEnd.current = distance <= line || (atEnd.current && el.scrollTop >= lastScrollTop.current); lastScrollTop.current = el.scrollTop; }}>
     {heading?.kind === "heading" && first > 0 && <div className="ks-view-sticky"><GroupHeading title={heading.title} meta={heading.meta} /></div>}
     <VirtualSurface virtual={virtual}>{vrows.map((v) => {
       const row = rows[v.index];
-      return <div data-index={v.index} key={v.key} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}>
+      return <div data-index={v.index} data-last={v.index === rows.length - 1 ? "true" : undefined} key={v.key} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}>
         {row.kind === "heading" ? block.collapsible ? <div className="ks-feed-group-head" role="button" tabIndex={0} aria-expanded={!row.collapsed} onClick={() => toggleGroup(row.groupKey)} onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggleGroup(row.groupKey); }
         }}>

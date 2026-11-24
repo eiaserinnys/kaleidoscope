@@ -60,8 +60,8 @@ export function ProgressBlock({ block, pointer }: Props) {
     && typeof marker.value === "number" && Number.isFinite(marker.value)
     ? Math.max(0, Math.min(1, marker.value / block.max))
     : null;
-  return <div {...blockRoot} className="ks-data-progress-field">
-    {text ? <span className="ks-data-progress-label">{text}</span> : null}
+  return <div {...blockRoot} className={`ks-data-progress-field${block.label_position === "inline" ? " is-label-inline" : ""}`}>
+    {text && block.label_position !== "hidden" ? <span className="ks-data-progress-label">{text}</span> : null}
     {progressIndicator(current, block.max, text, { segments: block.segments ?? null, marker: markerValue, color })}
     <BindingFailureNotice value={label} />
     <BindingFailureNotice value={marker} />

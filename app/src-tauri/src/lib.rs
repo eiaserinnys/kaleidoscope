@@ -13,11 +13,16 @@ mod login_path;
 mod native_webview;
 #[cfg(windows)]
 mod shell_shortcuts;
+#[cfg(target_os = "macos")]
+mod mac_capture;
 #[cfg(not(target_os = "ios"))]
 mod updater;
 #[cfg(windows)]
 mod web_control;
 #[cfg(windows)]
+mod web_host;
+#[cfg(target_os = "macos")]
+#[path = "web_host_mac.rs"]
 mod web_host;
 
 use std::env;
@@ -29,7 +34,7 @@ use kaleidoscope_core::kaleidoscope_contract::HostFeatures;
 use kaleidoscope_core::kaleidoscope_contract::{
     errors, CoreError, CoreReply, CoreRequest, ThemePreference, TAURI_EVENT,
 };
-use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot};
+use kaleidoscope_core::{Core, CoreConfig, Host, PcRoot, SaveFileTarget};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 #[cfg(target_os = "ios")]
@@ -45,7 +50,7 @@ struct DialogHost {
     app: AppHandle,
     #[cfg(not(target_os = "ios"))]
     updater: Arc<updater::TauriUpdateHost>,
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     web: Arc<web_host::TauriWebHost>,
 }
 
@@ -122,7 +127,7 @@ impl Host for DialogHost {
         }
     }
     #[cfg(not(target_os = "ios"))]
-    fn pick_save_file(&self, suggested_name: &str, _mime: &str) -> Option<PathBuf> {
+    fn pick_save_file(&self, suggested_name: &str, _mime: &str) -> Option<SaveFileTarget> {
         let parent = self.app.get_window("main")?;
         self.app
             .dialog()
@@ -132,6 +137,19 @@ impl Host for DialogHost {
             .blocking_save_file()?
             .into_path()
             .ok()
+            .map(|path| SaveFileTarget { path, location: None })
+    }
+    /// iOS에는 저장 대화상자를 띄우지 않고 앱 Documents 폴더에 바로 쓴다. 그 폴더는 Info.ios.plist의
+    /// 파일 공유 설정으로 파일 앱의 「나의 iPad › kaleidoscope」에 보인다.
+    #[cfg(target_os = "ios")]
+    fn pick_save_file(&self, suggested_name: &str, _mime: &str) -> Option<SaveFileTarget> {
+        let folder = self.app.path().document_dir().ok()?;
+        let path = unique_save_path(&folder, suggested_name);
+        let name = path.file_name()?.to_string_lossy().into_owned();
+        Some(SaveFileTarget {
+            path,
+            location: Some(format!("파일 앱 › 나의 iPad › kaleidoscope › {name}")),
+        })
     }
     #[cfg(not(target_os = "ios"))]
     fn pc_roots(&self) -> Vec<PcRoot> {
@@ -141,7 +159,7 @@ impl Host for DialogHost {
     fn pc_roots(&self) -> Vec<PcRoot> {
         Vec::new()
     }
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "macos"))]
     fn web(&self) -> Option<&dyn kaleidoscope_core::WebHost> {
         Some(self.web.as_ref())
     }
@@ -183,6 +201,37 @@ fn release_page_origin(localhost_over_http: bool, use_https: bool) -> String {
         format!("{scheme}://tauri.localhost")
     } else {
         "tauri://localhost".into()
+    }
+}
+
+/// 앱 Documents 폴더에 같은 이름이 있으면 「이름 (2).확장자」처럼 겹치지 않는 경로를 고른다.
+#[cfg(target_os = "ios")]
+fn unique_save_path(folder: &std::path::Path, suggested_name: &str) -> PathBuf {
+    let name = std::path::Path::new(suggested_name)
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "첨부".into());
+    let first = folder.join(&name);
+    if !first.exists() {
+        return first;
+    }
+    let path = std::path::Path::new(&name);
+    let stem = path
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "첨부".into());
+    let extension = path.extension().map(|value| value.to_string_lossy().into_owned());
+    let mut index = 2u32;
+    loop {
+        let candidate = match &extension {
+            Some(extension) => folder.join(format!("{stem} ({index}).{extension}")),
+            None => folder.join(format!("{stem} ({index})")),
+        };
+        if !candidate.exists() {
+            return candidate;
+        }
+        index += 1;
     }
 }
 
@@ -433,7 +482,7 @@ pub fn run() {
             let embedded_server = None;
             #[cfg(not(target_os = "ios"))]
             let updater = Arc::new(updater::TauriUpdateHost::default());
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "macos"))]
             let web = Arc::new(web_host::TauriWebHost::new(app.handle().clone()));
             #[cfg(all(windows, feature = "e2e"))]
             app.manage(Arc::clone(&web));
@@ -464,7 +513,7 @@ pub fn run() {
                     app: app.handle().clone(),
                     #[cfg(not(target_os = "ios"))]
                     updater: Arc::clone(&updater),
-                    #[cfg(windows)]
+                    #[cfg(any(windows, target_os = "macos"))]
                     web,
                 }),
             ) {

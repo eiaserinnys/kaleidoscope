@@ -52,8 +52,11 @@ impl Host for DevHost {
         if paths.is_empty() { None } else { Some(paths) }
     }
 
-    fn pick_save_file(&self, _: &str, _: &str) -> Option<PathBuf> {
-        env::var_os("KALEIDOSCOPE_DEV_PICK_SAVE_FILE").map(PathBuf::from)
+    fn pick_save_file(&self, _: &str, _: &str) -> Option<kaleidoscope_core::SaveFileTarget> {
+        env::var_os("KALEIDOSCOPE_DEV_PICK_SAVE_FILE").map(|path| kaleidoscope_core::SaveFileTarget {
+            path: PathBuf::from(path),
+            location: None,
+        })
     }
 
     fn pc_roots(&self) -> Vec<PcRoot> {

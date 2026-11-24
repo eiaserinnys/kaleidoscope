@@ -28,6 +28,18 @@ jobs:
           if [ "$result" -eq 0 ]; then exit 1; fi
           exit "$result"
 
+      - name: Check model names
+        run: |
+          set +e
+          git grep -I -n -i -w -E 'argon|neon|carbon|hydrogen|sonnet|haiku|fable|terra|luna|astra|deepseek|kimi' -- crates app ui scripts examples ':(exclude)**/fixtures/**'
+          result=$?
+          if [ "$result" -ne 1 ]; then if [ "$result" -eq 0 ]; then exit 1; fi; exit "$result"; fi
+          git grep -I -n -i -E 'gpt-[0-9]' -- crates app ui scripts examples ':(exclude)**/fixtures/**'
+          result=$?
+          if [ "$result" -eq 1 ]; then exit 0; fi
+          if [ "$result" -eq 0 ]; then exit 1; fi
+          exit "$result"
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 

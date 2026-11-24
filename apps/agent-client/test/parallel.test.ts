@@ -363,3 +363,57 @@ test("에이전트가 제목을 아직 정하지 않은 세션은 목록에 id �
   // 프로세스가 들고 있지 않은 지난 세션은 에이전트가 준 그대로 둔다.
   assert.equal(titles.old, null);
 });
+
+test("뒤 세션의 응답과 허용은 삭제를 막고 이유를 보이며 쉬는 전경 세션은 지울 수 있다", async () => {
+  const { f, session } = await started(parallel, { loadSession: true, sessionCapabilities: { list: {}, delete: {} } });
+  const promptA = await prompt(f, session, "qa", "A 질문");
+  await session.newSession();
+  await f.reply(f.last("session/new"), { sessionId: "b" });
+  await f.emit({ jsonrpc: "2.0", id: "permission", method: "session/request_permission", params: { sessionId: "a", toolCall: { title: "쓰기" }, options: [{ optionId: "yes", name: "허용", kind: "allow_once" }] } });
+  await session.deleteSession("a");
+  assert.equal(f.count("session/delete"), 0);
+  assert.match(f.snapshots.at(-1).sessionError.message, /응답 중이거나 허용/);
+  await session.deleteSession("b");
+  assert.equal(f.last("session/delete").params.sessionId, "b");
+  await f.reply(f.last("session/delete"), {});
+  assert.equal(f.last("session/new").method, "session/new");
+  await f.reply(f.last("session/new"), { sessionId: "c" });
+  const view = f.snapshots.at(-1);
+  assert.equal(view.sessionId, "c");
+  assert.equal(view.live.find((entry: any) => entry.sessionId === "a").busy, true);
+  assert.equal(view.sessions.some((entry: any) => entry.sessionId === "b"), false);
+  assert.equal(f.getCheckpoint().sessions.b, undefined);
+  await session.loadSession("a");
+  assert.equal(f.snapshots.at(-1).permissions[0].rpcId, "permission");
+  await f.reply(promptA, { stopReason: "end_turn" });
+});
+
+test("백그라운드 사용량은 전경 값을 바꾸지 않고 되돌아가면 마지막 값을 보인다", async () => {
+  const { f, session } = await started();
+  const usage = (id: string, used: number) => f.emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId: id, update: { sessionUpdate: "usage_update", used, size: 100 } } });
+  await usage("a", 20);
+  await session.newSession();
+  await f.reply(f.last("session/new"), { sessionId: "b" });
+  await usage("b", 40);
+  await usage("a", 80);
+  assert.deepEqual(f.snapshots.at(-1).context, { used: 40, size: 100 });
+  await session.loadSession("a");
+  assert.deepEqual(f.snapshots.at(-1).context, { used: 80, size: 100 });
+});
+
+test("뒤에서 응답하는 동안 다른 쉬는 세션을 지우고 실패해도 연결은 유지한다", async () => {
+  const { f, session } = await started(parallel, { loadSession: true, sessionCapabilities: { list: {}, delete: {} } });
+  await session.newSession();
+  await f.reply(f.last("session/new"), { sessionId: "b" });
+  await session.loadSession("a");
+  await prompt(f, session, "qa", "A 질문");
+  await session.loadSession("b");
+  await session.deleteSession("b");
+  assert.equal(f.last("session/delete").params.sessionId, "b");
+  await f.emit({ jsonrpc: "2.0", id: f.last("session/delete").id, error: { code: -32603, message: "삭제 거절" } });
+  const view = f.snapshots.at(-1);
+  assert.equal(view.phase, "ready");
+  assert.match(view.sessionError.message, /삭제 거절/);
+  assert.equal(view.live.find((entry: any) => entry.sessionId === "a").busy, true);
+  assert.ok(view.sessions.some((entry: any) => entry.sessionId === "b"));
+});

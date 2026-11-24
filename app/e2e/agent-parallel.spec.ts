@@ -13,6 +13,7 @@ const shots = process.env.KS_AGENT_PARALLEL_SHOTS ?? path.join(artifactsDir, "ag
 const fakeAgent = path.join(repoRoot, "target", "debug", process.platform === "win32" ? "kaleidoscope-acp-test-agent.exe" : "kaleidoscope-acp-test-agent");
 
 const AGENTS = [
+  { id: "fake-visual", name: "화면 가짜", command: fakeAgent, args: [], env: { TEST_SCENARIO: "parallel_visual" }, parallel_sessions: true },
   { id: "fake-parallel", name: "병렬 가짜", command: fakeAgent, args: [], env: {}, parallel_sessions: true },
   { id: "fake-other", name: "다른 가짜", command: fakeAgent, args: [], env: {}, parallel_sessions: true },
   { id: "fake-single", name: "단일 가짜", command: fakeAgent, args: [], env: {} },
@@ -42,13 +43,13 @@ async function shot(page: Page, name: string) {
 let agentsWritten = false;
 
 /** 에이전트 창을 열고 에이전트와 작업 폴더를 골라 대화 화면까지 간다. */
-async function openAgent(page: Page, agentName: string): Promise<{ app: Locator; windowId: string }> {
+async function openAgent(page: Page, agentName: string, rect = { x: 24, y: 24, width: 1000, height: 640 }): Promise<{ app: Locator; windowId: string }> {
   await page.goto(`/?core=${coreUrl}`);
   await expect(page.locator(".ks-taskbar").getByRole("button", { name: "앱 열기" })).toBeVisible();
   const { snapshot } = await core({ op: "state.get" });
   const workspace = snapshot.device.active_workspace_id;
   const desktop = snapshot.device.active_desktop_ids[workspace];
-  const opened = await core({ op: "window.open", desktop_id: desktop, app_id: "agent", rect: { x: 24, y: 24, width: 1000, height: 640 } });
+  const opened = await core({ op: "window.open", desktop_id: desktop, app_id: "agent", rect });
   const windowId: string = opened.window.id;
   if (!agentsWritten) {
     const written = await core({ op: "storage.write", window_id: windowId, entry: "agents", content: AGENTS });
@@ -265,3 +266,32 @@ test("사용자가 추가한 에이전트는 동시 세션이 꺼져 있고 설�
   await expect(sessionRow(app, selected!).locator(".ks-view-badges")).toContainText("응답 중");
   await shot(page, "e3-added-agent-parallel");
 });
+
+for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, height: 480, label: "narrow" }, { width: 360, height: 240, label: "minimum" }]) {
+  test(`병렬 허용 안내와 상태 줄 화면 — ${size.label}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    const { app, windowId } = await openAgent(page, "화면 가짜", { x: 24, y: 24, width: size.width, height: size.height });
+    await send(app, "permission");
+    await expect(app.locator(".ks-agent-chat-footer").getByText("파일 수정", { exact: true })).toBeVisible();
+    await shot(page, `visual-${size.label}-permission-before`);
+    await app.getByRole("button", { name: "새 세션", exact: true }).click();
+    await expect(app.getByText("다른 세션이 허용을 기다립니다", { exact: true })).toBeVisible();
+    await shot(page, `visual-${size.label}-status-off`);
+    await core({ op: "storage.write", window_id: windowId, entry: "status_bar", content: true });
+    await send(app, "slow");
+    await expect(app.getByRole("button", { name: "멈춤", exact: true })).toBeVisible();
+    await shot(page, `visual-${size.label}-status-on`);
+    if (size.label === "wide") {
+      await expect(sessionRow(app, "session-1").locator(".ks-view-badges")).toContainText("허용 필요");
+      await page.emulateMedia({ colorScheme: "dark" });
+      await shot(page, "visual-wide-dark-permission");
+      await page.emulateMedia({ colorScheme: "light" });
+      await sessionRow(app, "session-1").click({ button: "right" });
+      await page.getByRole("menuitem", { name: "삭제" }).click();
+      const dialog = page.getByRole("dialog", { name: "세션 삭제" });
+      await expect(dialog).toContainText("응답 중이거나 허용을 기다리는 세션은 지울 수 없습니다");
+      await shot(page, "visual-wide-delete-blocked");
+      await dialog.getByRole("button", { name: "취소" }).click();
+    }
+  });
+}

@@ -399,11 +399,33 @@
     "id": "builtin-agent-client",
     "version": 11,
     "format": "javascript",
-    "sha256": "556ef81c6424c2778f3449e74a8ea0f09fa6ea554969c48dcb4df87006a2fa0c",
+    "sha256": "4a36d1dc39e1f0d75d9d5a81c4157a1bbbee887beac2a41f83522bd8ff27a887",
     "source": "apps/agent-client",
     "license": "MIT",
-    "byte_size": 60513,
-    "created_at": "2026-11-14T00:00:00Z",
+    "byte_size": 48570,
+    "created_at": "2026-11-24T00:00:00Z",
     "path": "agent/client-v11.js"
+  },
+  {
+    "id": "builtin-agent-client",
+    "version": 12,
+    "format": "javascript",
+    "sha256": "da15b7b35566e67e5a8e92f6ed19ee494fccda0d12d9e043d1698b3aff9a902f",
+    "source": "apps/agent-client",
+    "license": "MIT",
+    "byte_size": 55486,
+    "created_at": "2026-11-19T00:00:00Z",
+    "path": "agent/client-v12.js"
+  },
+  {
+    "id": "builtin-agent-client",
+    "version": 13,
+    "format": "javascript",
+    "sha256": "9236dc24ab681f058664759144205365bcbe087c9bb7a37ff9ea446d0f47821b",
+    "source": "apps/agent-client",
+    "license": "MIT",
+    "byte_size": 68698,
+    "created_at": "2026-11-24T00:00:00Z",
+    "path": "agent/client-v13.js"
   }
 ]

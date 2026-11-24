@@ -860,7 +860,20 @@
   gap: var(--ks-space-2);
 }
 
-.ks-agent-chat-footer .ks-data-stack-item > .ks-data-text { padding: 0; }
+.ks-agent-chat-footer .ks-data-stack-item > .ks-data-text,
+.ks-agent-chat-input-header .ks-data-stack-item > .ks-data-text { padding: 0; }
+.ks-agent-chat-input-header .ks-data-text.is-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-agent-chat-input-header .ks-data-stack-item.is-fill:has(> .ks-data-text.is-meta) { overflow: hidden; }
+
+/* 입력창 위 고정 자리: 기록과 함께 스크롤되지 않고, 입력 칸과 같은 좌우 여백을 쓴다. */
+.ks-agent-chat-input-header {
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: var(--ks-space-1) var(--ks-space-3);
+}
+
+/* 앱 블록이 아무것도 그리지 않으면(when이 닫힘) 여백도 남기지 않는다. */
+.ks-agent-chat-input-header:empty { display: none; }
 
 /* 세로 쌓기의 비채움 자식으로 놓인 채팅은 남는 높이를 차지하지 않고 컴포저 높이만 쓴다.
    대화가 없고 바닥글에도 고를 것이 없으면 기록 영역을 숨겨 입력창만 남긴다. */
@@ -1127,6 +1140,11 @@ button.ks-agent-attachment-chip-preview,
   background: var(--ks-color-surface-solid);
 }
 
+.ks-agent-image-overlay:has(> .ks-attachment-viewer) {
+  place-items: start center;
+  padding-block-start: 5vh;
+}
+
 .ks-agent-image-overlay > img {
   max-width: 90vw;
   max-height: 90vh;
@@ -1142,6 +1160,137 @@ button.ks-agent-attachment-chip-preview,
   right: var(--ks-space-3);
   border-radius: var(--ks-radius-small);
   background: var(--ks-color-surface-raised);
+}
+
+.ks-attachment-viewer {
+  display: flex;
+  width: min(92vw, 72rem);
+  max-height: 90vh;
+  min-width: 0;
+  flex-direction: column;
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-window);
+  background: var(--ks-color-surface-solid);
+  box-shadow: var(--ks-shadow-window);
+}
+
+.ks-attachment-viewer-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ks-space-2);
+  border-block-end: var(--ks-line-width) solid var(--ks-color-border);
+  padding: var(--ks-space-3);
+}
+
+.ks-attachment-viewer-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: var(--ks-type-title);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ks-attachment-viewer-saved {
+  border-block-end: var(--ks-line-width) solid var(--ks-color-border);
+  padding: var(--ks-space-2) var(--ks-space-3);
+  color: var(--ks-color-muted);
+  font-size: var(--ks-type-meta);
+}
+
+.ks-attachment-viewer-close {
+  flex: none;
+}
+
+.ks-attachment-viewer-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  overflow: auto;
+  padding: var(--ks-space-4);
+}
+
+.ks-attachment-viewer-state {
+  display: grid;
+  gap: var(--ks-space-3);
+  width: calc(var(--ks-control-height) * 10);
+  max-width: 100%;
+  padding: var(--ks-space-4);
+}
+
+.ks-attachment-viewer-state > .ks-button {
+  justify-self: center;
+}
+
+.ks-attachment-viewer-image {
+  display: block;
+  max-width: 100%;
+  max-height: 74vh;
+  object-fit: contain;
+  border: var(--ks-line-width) solid var(--ks-color-border);
+  border-radius: var(--ks-radius-small);
+}
+
+.ks-attachment-viewer-media {
+  width: 100%;
+  max-height: 74vh;
+}
+
+video.ks-attachment-viewer-media {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+}
+
+.ks-attachment-viewer-text {
+  display: grid;
+  width: 100%;
+  max-width: 44rem;
+  min-width: 0;
+  align-self: start;
+  gap: var(--ks-space-2);
+}
+
+.ks-attachment-viewer-plain {
+  max-width: 100%;
+  margin: 0;
+  font-family: var(--ks-font-code);
+  font-size: var(--ks-type-body);
+  line-height: var(--ks-line-body);
+  white-space: pre-wrap;
+}
+
+.ks-attachment-viewer-info {
+  display: grid;
+  width: 100%;
+  max-width: 44rem;
+  gap: var(--ks-space-2);
+  align-self: start;
+}
+
+.ks-attachment-viewer-info-row {
+  display: flex;
+  min-width: 0;
+  gap: var(--ks-space-3);
+}
+
+.ks-attachment-viewer-info-row > span:first-child {
+  flex: none;
+  min-width: calc(var(--ks-control-height) * 2);
+  color: var(--ks-color-muted);
+}
+
+.ks-attachment-viewer-info-row > :last-child {
+  min-width: 0;
+}
+
+.ks-attachment-viewer-save-error {
+  border-block-start: var(--ks-line-width) solid var(--ks-color-border);
+  padding: var(--ks-space-3);
 }
 
 .ks-share-chip-icon { color: var(--ks-color-share); }

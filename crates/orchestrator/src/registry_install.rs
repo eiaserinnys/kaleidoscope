@@ -248,6 +248,36 @@ fn validate_bundle(request: &DeviceInstallRequest) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// 기기 설치·업데이트의 게시 단계가 저장소 선언 비호환이나 자산 판 충돌로 거절하면,
+/// 쓰는 사람에게 게시자의 일을 시키지 않는 새 오류로 바꾼다. 에이전트가 직접 올리는
+/// 경로(`upload_app`)는 바꾸지 않으므로 이 변환은 설치 경로에서만 부른다.
+fn install_release_error(
+    definition_json: &str,
+    already_installed: bool,
+    error: CoreError,
+) -> CoreError {
+    let Some(cause) = error.id.as_deref() else {
+        return error;
+    };
+    if !matches!(
+        cause,
+        "STORAGE_PUBLISH_INCOMPATIBLE" | "ASSET_REGISTER_VERSION_CONFLICT"
+    ) {
+        return error;
+    }
+    let app_name = parse_app_definition(definition_json)
+        .map(|definition| definition.name)
+        .unwrap_or_else(|_| "이 앱".to_string());
+    let mut details = vec![format!("원인 코드: {cause}")];
+    details.extend(error.details.iter().cloned());
+    let rejected = if already_installed {
+        errors::REGISTRYINSTALL_UPDATE_RELEASE_REJECTED(&app_name)
+    } else {
+        errors::REGISTRYINSTALL_FIRST_RELEASE_REJECTED(&app_name)
+    };
+    rejected.and_details(details)
+}
+
 pub(super) async fn device_install(
     State(state): State<AppState>,
     Extension(device): Extension<(String, String)>,
@@ -273,12 +303,20 @@ pub(super) async fn device_install(
             connections,
             replace: request.replace,
         };
-        let (app, unchanged, _) = state.publish_install(
-            &request.definition_json,
-            &format!("device:{}", device.0),
-            &request.asset_uploads,
-            guard,
-        )?;
+        let (app, unchanged, _) = state
+            .publish_install(
+                &request.definition_json,
+                &format!("device:{}", device.0),
+                &request.asset_uploads,
+                guard,
+            )
+            .map_err(|error| {
+                install_release_error(
+                    &request.definition_json,
+                    request.expected_current_version.is_some(),
+                    error,
+                )
+            })?;
         Ok::<_, CoreError>(DeviceInstallReply { app, unchanged })
     })();
     match result {

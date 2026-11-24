@@ -213,6 +213,8 @@ fn main() {
                 // session/list는 기본으로 알리고, no_list 시나리오에서만 뺀다.
                 let session_capabilities = if scenario.contains("no_list") {
                     json!({})
+                } else if scenario.contains("parallel_visual") {
+                    json!({"list":{},"delete":{}})
                 } else {
                     json!({"list":{}})
                 };
@@ -314,6 +316,13 @@ fn main() {
                     .collect();
                 emit(json!({"jsonrpc":"2.0","id":id,"result":{"sessions":sessions}}));
             }
+            "session/delete" if scenario.contains("parallel_visual") => {
+                let session = value["params"]["sessionId"].as_str().unwrap_or("");
+                let mut state = state.lock().unwrap();
+                state.sessions.remove(session);
+                state.order.retain(|entry| entry != session);
+                emit(json!({"jsonrpc":"2.0","id":id,"result":{}}));
+            }
             "session/set_config_option" => {
                 let toggle = value["params"]["value"].as_bool().unwrap_or(false);
                 emit(
@@ -379,6 +388,13 @@ fn main() {
                         )
                         .unwrap();
                     }
+                }
+                if scenario.contains("parallel_visual") {
+                    let used = if session.ends_with("1") { 20000 } else { 70000 };
+                    update(
+                        &session,
+                        json!({"sessionUpdate":"usage_update","used":used,"size":100000}),
+                    );
                 }
                 if text.contains("end-mid-turn") {
                     chunk(&session, "종료 전 응답");

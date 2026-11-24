@@ -10,6 +10,26 @@ function ready(...ids: string[]): State {
 const chunk = (sessionId: string | undefined, text: string, kind = "agent_message_chunk", messageId?: string) =>
   ({ jsonrpc: "2.0", method: "session/update", params: { ...(sessionId ? { sessionId } : {}), update: { sessionUpdate: kind, ...(messageId ? { messageId } : {}), content: { type: "text", text } } } });
 
+test("ACP 오류의 원인 글을 종류별로 보존하고 길이를 제한한다", () => {
+  const cases: [unknown, string][] = [
+    [{ details: "  실행 파일이 없습니다  ", message: "다른 원인" }, "Internal error: 실행 파일이 없습니다"],
+    [" 경로를 찾지 못했습니다 ", "Internal error: 경로를 찾지 못했습니다"],
+    [{ message: " 세션 오류 " }, "Internal error: 세션 오류"],
+    [undefined, "Internal error"],
+    [{ details: "Internal error" }, "Internal error"],
+    [{ details: "가".repeat(1001) }, `Internal error: ${"가".repeat(1000)}…`],
+  ];
+  for (const [data, expected] of cases) {
+    for (const kind of ["initialize", "new", "configure", "prompt"]) {
+      let state = ready("s"), id: number;
+      [state, id] = reserveRequest(state, kind, {}, kind === "prompt" ? "s" : null);
+      state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32603, message: "Internal error", data } }, "unused");
+      assert.equal((kind === "prompt" ? state.sessions.s.failure : state.failure)?.reason, expected, kind);
+      assert.equal(state.phase, kind === "prompt" ? "ready" : "failed");
+    }
+  }
+});
+
 test("UTF-8 문자가 바이트 경계에서 나뉘어도 JSON 줄이 복원된다", () => {
   const bytes = new TextEncoder().encode('{"text":"안녕"}\n{"n":2}\n');
   const split = bytes.indexOf(0xec) + 1;
@@ -196,4 +216,105 @@ test("schema 1 체크포인트를 진행 중인 턴, 승인, 큐와 함께 schem
   assert.equal(switching.sessions.other.replay, "collect");
   assert.equal(switching.sessions.other.replayItems[0].text, "옛 말");
   assert.equal(switching.sessions.s.phase, "ready");
+});
+
+const update = (body: Record<string, unknown>) => ({ jsonrpc: "2.0", method: "session/update", params: { sessionId: "s", update: body } });
+const fiveHour = { status: "allowed_warning", rateLimitType: "five_hour", utilization: 0.5, resetsAt: 1763400600 };
+
+test("usage_update가 컨텍스트와 한도를 채운다", () => {
+  let state = reduceMessage(ready("s"), update({ sessionUpdate: "usage_update", used: 42000, size: 100000, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  assert.deepEqual(state.sessions.s.context, { used: 42000, size: 100000 });
+  assert.equal(state.limits.length, 1);
+  state = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 1, size: 0 }), "x");
+  assert.equal(state.sessions.s.context, null);
+  state = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 1 }), "x");
+  assert.equal(state.sessions.s.context, null);
+});
+
+test("거절된 턴의 오류가 한도를 막힘으로 기록한다", () => {
+  let state = ready("s");
+  let id: number;
+  [state, id] = reserveRequest(state, "prompt", { sessionId: "s", prompt: [] }, "s");
+  state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32000, message: "limit", data: { errorKind: "rate_limit", rateLimit: { status: "rejected", rateLimitType: "five_hour", resetsAt: 1763400600 } } } }, "x");
+  assert.equal(state.phase, "ready");
+  assert.equal(state.limits[0].blocked, true);
+});
+
+test("usage_update와 거절된 턴의 오류는 unifiedWindows의 창을 모두 합친다", () => {
+  // 2026-11-19 실제 이벤트 모양
+  const live = { status: "allowed", resetsAt: 1795062600, rateLimitType: "five_hour", unifiedWindows: {
+    five_hour: { utilization: 0.39, resetsAt: 1795062600, status: "allowed" }, seven_day: { utilization: 0.47, resetsAt: 1795219200, status: "allowed" } } };
+  let state = reduceMessage(ready("s"), update({ sessionUpdate: "usage_update", used: 48019, size: 1000000, _meta: { "_claude/rateLimit": live } }), "x");
+  assert.deepEqual(state.limits.map((l) => [l.id, l.label, l.usedRatio]), [["five_hour", "5시간", 0.39], ["seven_day", "7일", 0.47]]);
+  let id: number;
+  [state, id] = reserveRequest(state, "prompt", { sessionId: "s", prompt: [] }, "s");
+  const rejected = { ...live, status: "rejected", rateLimitType: "seven_day", unifiedWindows: { ...live.unifiedWindows, seven_day: { utilization: 1, resetsAt: 1795219200, status: "rejected" } } };
+  state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32000, message: "limit", data: { errorKind: "rate_limit", rateLimit: rejected } } }, "x");
+  assert.deepEqual(state.limits.map((l) => [l.id, l.usedRatio, l.blocked]), [["five_hour", 0.39, false], ["seven_day", 1, true]]);
+});
+
+test("계정 알림은 auth/status_update만 읽고 응답을 만들지 않는다", () => {
+  let state = reduceMessage(initialState(), { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "Claude Team", email: "a@b.c", active: true }] } }, "x");
+  assert.deepEqual(state.account, { label: "Claude Team", email: "a@b.c" });
+  state = reduceMessage(state, { jsonrpc: "2.0", method: "_auth/status_update", params: { authStatus: { state: "authenticated" } } }, "x");
+  assert.deepEqual(state.account, { label: "Claude Team", email: "a@b.c" });
+  assert.deepEqual(state.outbox, []);
+});
+
+test("서브에이전트 도구는 끝나면 사라진다", () => {
+  let state = reduceMessage(ready("s"), update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "x", status: "in_progress", _meta: { claudeCode: { toolName: "Agent" } } }), "x");
+  assert.equal(state.sessions.s.tools[0].subagent, true);
+  state = reduceMessage(state, update({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" }), "x");
+  assert.deepEqual(state.sessions.s.tools, []);
+});
+
+test("세션 전환은 컨텍스트만 비우고 한도와 계정은 남긴다", () => {
+  let state = reduceMessage(ready("s"), update({ sessionUpdate: "usage_update", used: 1, size: 10, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  state = reduceMessage(state, { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "A", active: true }] } }, "x");
+  let id: number;
+  [state, id] = reserveRequest(state, "switch", "s2", "s2");
+  state = reduceMessage(state, { jsonrpc: "2.0", id, result: {} }, "x");
+  assert.equal(state.sessions.s2.context, null);
+  assert.equal(state.limits.length, 1);
+  assert.notEqual(state.account, null);
+});
+
+test("인증이 풀렸다는 알림은 계정을 지우고, 깨진 알림은 무시한다", () => {
+  const auth = (params: unknown) => ({ jsonrpc: "2.0", method: "auth/status_update", params });
+  let state = reduceMessage(initialState(), auth({ state: "authenticated", accounts: [{ label: "A", active: true }] }), "x");
+  state = reduceMessage(state, auth(undefined), "x");
+  assert.deepEqual(state.account, { label: "A", email: null });
+  state = reduceMessage(state, auth({ state: "unauthenticated" }), "x");
+  assert.equal(state.account, null);
+});
+
+test("재생 중인 usage_update는 컨텍스트와 한도를 바꾸지 않는다", () => {
+  let state = reduceMessage(ready("s"), update({ sessionUpdate: "usage_update", used: 1, size: 10, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  [state] = reserveRequest(state, "switch", "s2", "s2");
+  const replayed = reduceMessage(state, { jsonrpc: "2.0", method: "session/update", params: { sessionId: "s2", update:{ sessionUpdate: "usage_update", used: 9, size: 10, _meta: { "_claude/rateLimit": { ...fiveHour, rateLimitType: "seven_day" } } } } }, "x");
+  assert.deepEqual(replayed.sessions.s.context, { used: 1, size: 10 });
+  assert.equal(replayed.limits.length, 1);
+});
+
+test("병렬 사용량과 서브에이전트는 세션마다 분리하고 한도는 공유한다", () => {
+  let state = ready("a", "b");
+  const usage = (id: string, used: number) => ({ jsonrpc: "2.0", method: "session/update", params: { sessionId: id, update: { sessionUpdate: "usage_update", used, size: 100, _meta: { "_claude/rateLimit": fiveHour } } } });
+  state = reduceMessage(state, usage("a", 20), "x");
+  state = reduceMessage(state, usage("b", 80), "x");
+  assert.deepEqual(state.sessions.a.context, { used: 20, size: 100 });
+  assert.deepEqual(state.sessions.b.context, { used: 80, size: 100 });
+  assert.equal(state.limits.length, 1);
+  state = reduceMessage(state, { jsonrpc: "2.0", method: "session/update", params: { sessionId: "b", update: { sessionUpdate: "tool_call", toolCallId: "t", title: "작업", _meta: { claudeCode: { toolName: "Agent" } } } } }, "x");
+  assert.equal(state.sessions.a.tools.length, 0);
+  assert.equal(state.sessions.b.tools[0].subagent, true);
+});
+
+test("schema 1의 상태 줄과 삭제 지원을 전경 세션과 연결에 복원한다", () => {
+  const old = { schema: 1, phase: "ready", sessionId: "s", context: { used: 42, size: 100 }, limits: [{ id: "five_hour" }], account: { label: "계정", email: null }, capabilities: { delete: true }, tools: [{ id: "t", title: "작업", subagent: true }] };
+  const state = migrateState(old);
+  assert.deepEqual(state.sessions.s.context, old.context);
+  assert.equal(state.sessions.s.tools[0].subagent, true);
+  assert.deepEqual(state.limits, old.limits);
+  assert.deepEqual(state.account, old.account);
+  assert.equal(state.capabilities.delete, true);
 });

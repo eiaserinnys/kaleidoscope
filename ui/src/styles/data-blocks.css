@@ -151,6 +151,7 @@
   .ks-data-tab-panel,
   .ks-agent-chat-history,
   .ks-agent-chat-footer,
+  .ks-agent-chat-input-header,
   .ks-agent-chat-input-area,
   .ks-chart,
   .ks-map,
@@ -257,6 +258,16 @@
 .ks-data-section-child > .ks-feed { padding-block-start: 0; }
 .ks-data-section-child > .ks-feed > div:not(.ks-view-sticky) > [data-index="0"] > .ks-view-group,
 .ks-data-section-child > .ks-feed > div:not(.ks-view-sticky) > [data-index="0"] > .ks-feed-group-head > .ks-view-group { padding-block-start: 0; }
+/* is-fill이 아닌 쌓기 항목으로 바로 놓인 첨부만 담은 feed는 목록용 바깥 여백(위 12, 마지막 항목 아래 12,
+   본문 없는 항목의 media 위 8)을 싣지 않는다. 같은 자리에 image 블록을 둔 때와 첨부 줄 위아래 틈이 같아진다
+   (카드 #1729 6절). 표지(is-media-only)는 머리에 보일 것이 없는 항목만 담고 접기(collapsible)나
+   묶음(grouped)이 없는 feed에만 붙는다(data-feed.tsx).
+   굴러가는 목록(is-fill)은 커멘트 탭처럼 맨 아래 12를 지켜야 하고, 묶음이나 답글을 접어도 표지가 뒤집히지
+   않도록 자료 전체로 정한다. 본문이 있는 feed와 쌓기 밖 feed는 지금 간격을 지킨다. 마지막 항목 표지는 화면에
+   그려진 마지막 줄이 아니라 자료의 마지막 줄에 붙여, 긴 feed를 굴릴 때 줄마다 아래 여백이 들락날락하지 않게 한다. */
+.ks-data-stack-item:not(.is-fill) > .ks-feed.is-media-only { padding-block-start: 0; }
+.ks-data-stack-item:not(.is-fill) > .ks-feed.is-media-only > div > [data-index][data-last] > .ks-feed-entry { margin-bottom: 0; }
+.ks-data-stack-item:not(.is-fill) > .ks-feed.is-media-only .ks-feed-content > .ks-feed-header + .ks-feed-media { margin-top: 0; }
 .ks-data-section-toggle { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--ks-space-2); border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .ks-data-section-heading { display: flex; flex: 1 1 0; flex-wrap: wrap; min-width: 0; align-items: center; gap: var(--ks-space-2); row-gap: var(--ks-space-1); }
 .ks-data-section-toggle:has(> .ks-data-section-heading) { align-items: flex-start; }
@@ -349,6 +360,9 @@
 .ks-slider-value, .ks-color-code { color: var(--ks-color-muted); font-size: var(--ks-type-meta); font-variant-numeric: tabular-nums; }
 .ks-data-progress-field { display: flex; min-width: 0; flex-direction: column; gap: var(--ks-space-1); }
 .ks-data-progress-label { color: var(--ks-color-text); font-size: var(--ks-type-body); }
+.ks-data-progress-field.is-label-inline { flex-direction: row; align-items: center; gap: var(--ks-space-2); }
+.ks-data-progress-field.is-label-inline > .ks-data-progress-label { color: var(--ks-color-muted); font-size: var(--ks-type-meta); white-space: nowrap; }
+.ks-data-progress-field.is-label-inline > :is(.ks-data-progress, .ks-data-progress-pace) { flex: 0 0 var(--ks-space-6); width: var(--ks-space-6); }
 .ks-data-progress { position: relative; width: 100%; height: var(--ks-space-2); overflow: hidden; border-radius: var(--ks-radius-small); background: var(--ks-color-border); }
 .ks-data-progress-value { display: block; width: 100%; height: 100%; transform-origin: left center; border-radius: inherit; background: var(--ks-color-accent); }
 /* 칸막이는 트랙과 채움을 함께 투명하게 오려 낸다. 칸 자리는 마스크 문자열이 정한다. */
@@ -598,6 +612,9 @@
 .ks-dialog-overlay.is-picker > .ks-dialog { width: 100%; height: 100%; }
 .ks-dialog-overlay.is-picker .ks-dialog-body { height: 100%; min-height: 0; }
 .ks-dialog-title { flex: 0 0 auto; font-size: var(--ks-type-title); font-weight: 600; }
+.ks-dialog-heading { display: flex; flex: 0 0 auto; align-items: center; gap: var(--ks-space-2); min-width: 0; }
+.ks-dialog-heading > .ks-dialog-title { flex: 1 1 auto; min-width: 0; }
+.ks-dialog-heading > .ks-dialog-confirm { flex: 0 0 auto; }
 /* 제목과의 간격은 스크롤되지 않는 바깥 여백이 맡고, 안쪽 위 여백은 맨 위 입력과 단추의 초점 고리 자리다.
    스크롤바 칸은 양쪽에 늘 비워 두고 그만큼 바깥 여백에서 내준다. 그래서 칸 상자는 대화상자 가장자리에서 좌우가 같고, 스크롤이 생겨도 본문 내용의 좌우 여백이 같다(.ks-app-settings-scroll과 같은 꼴). */
 .ks-dialog-scroll { min-height: 0; flex: 1 100000 auto; overflow: auto; scrollbar-gutter: stable both-edges; padding: var(--ks-dialog-ring); margin: calc(var(--ks-space-2) - var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring) - var(--ks-space-2)) calc(-1 * var(--ks-dialog-ring)) calc(-1 * var(--ks-dialog-ring) - var(--ks-space-2)); scroll-padding: var(--ks-dialog-ring); }
@@ -700,3 +717,8 @@
 .ks-data-section-action:empty { display: none; }
 .ks-data-section-actions:not(:has(> .ks-data-section-action:not(:empty))) { display: none; }
 .ks-data-stack.is-column > .ks-data-stack-item:not(:empty) ~ .ks-data-stack-item:not(:has(~ .ks-data-stack-item:not(:empty))) > .ks-data-toolbar { border-top: var(--ks-line-width) solid var(--ks-color-border); border-bottom: 0; }
+@container ks-data-window (max-height: 300px) {
+  .ks-dialog-overlay, .ks-dialog-overlay.is-picker { padding: var(--ks-space-2); }
+  .ks-dialog-overlay > .ks-dialog { padding: var(--ks-space-2); }
+  .ks-dialog-actions { margin-top: var(--ks-space-2); }
+}

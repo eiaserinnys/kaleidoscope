@@ -117,10 +117,10 @@ SEGMENTED_JS = """(el) => {
 }"""
 
 LONG_GROUPS = [
-    {"name": "eias-linegames-wsl", "options": [{"value": "a-opus", "label": "Claude Opus 5.5 (1M 문맥)"}, {"value": "a-argon", "label": "Argon"}]},
-    {"name": "eiaserinnys", "options": [{"value": "b-opus", "label": "Claude Opus 5.5 (1M 문맥)"}, {"value": "b-sol", "label": "Sol"}]},
+    {"name": "eias-linegames-wsl", "options": [{"value": "a-model-c", "label": "Model C 긴 이름 (1M 문맥)"}, {"value": "a-model-a", "label": "Model A"}]},
+    {"name": "eiaserinnys", "options": [{"value": "b-model-c", "label": "Model C 긴 이름 (1M 문맥)"}, {"value": "b-model-b", "label": "Model B"}]},
 ]
-LONG_LABEL = "Claude Opus 5.5 (1M 문맥)"
+LONG_LABEL = "Model C 긴 이름 (1M 문맥)"
 LONG_GROUP = "eias-linegames-wsl"
 
 
@@ -305,18 +305,18 @@ def main():
                 print(key, "FAIL " + ",".join(failed) if failed else "ok")
 
             for width, height in SIZES:
-                app = open_app(long_inline_tab, "a-opus", width, height, ".ks-select-button")
+                app = open_app(long_inline_tab, "a-model-c", width, height, ".ks-select-button")
                 record(f"long-inline-tab-{width}x{height}", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
-            app = open_app(long_inline_tab, "a-opus", 1180, 720, ".ks-select-button")
+            app = open_app(long_inline_tab, "a-model-c", 1180, 720, ".ks-select-button")
             page.set_viewport_size({"width": 360, "height": 240})
             page.wait_for_timeout(400)
             record("long-inline-tab-resize-1180-to-360", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
 
-            app = open_app(long_label_top, "a-opus", 360, 240, ".ks-select-button")
+            app = open_app(long_label_top, "a-model-c", 360, 240, ".ks-select-button")
             record("long-label-top-360x240", app.evaluate(SELECT_WIDTH_JS), lambda m: judge_value_room(m, LONG_LABEL, LONG_GROUP))
 
             for name, layout in (("long-inline-tab", long_inline_tab), ("long-label-top", long_label_top)):
-                app = open_app(layout, "a-opus", 1180, 720, ".ks-select-button")
+                app = open_app(layout, "a-model-c", 1180, 720, ".ks-select-button")
                 for width in SWEEP_WIDTHS:
                     page.set_viewport_size({"width": width, "height": 240 if width == 360 else 720})
                     page.wait_for_timeout(250)

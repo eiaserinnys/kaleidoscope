@@ -440,7 +440,7 @@ fn storage_upgrade_allows_adding_an_entry_while_workspace_values_exist() {
 }
 
 #[test]
-fn storage_upgrade_rejects_kind_key_template_and_json_type_changes() {
+fn storage_upgrade_rejects_kind_and_key_template_changes() {
     let (previous, stored) = stored_thread();
 
     let mut changed_kind = previous.clone();
@@ -460,21 +460,88 @@ fn storage_upgrade_rejects_kind_key_template_and_json_type_changes() {
         .find(|entry| entry.id == "thread")
         .unwrap()
         .key = "workspaces/{workspace_id}/conversation".into();
-    assert!(!validate_storage_upgrade(&previous, &changed_key, &[stored.clone()]).is_empty());
+    assert!(!validate_storage_upgrade(&previous, &changed_key, &[stored]).is_empty());
     assert!(!validate_storage_upgrade(&previous, &changed_key, &[]).is_empty());
+}
 
-    let mut changed_type = previous.clone();
-    changed_type
+#[test]
+fn storage_upgrade_rejects_type_replacement_and_narrowing() {
+    let (previous, _) = stored_thread();
+
+    let mut replaced = previous.clone();
+    replaced
         .entries
         .iter_mut()
-        .find(|entry| entry.id == "thread")
+        .find(|entry| entry.id == "profile")
         .unwrap()
         .schema
         .as_mut()
         .unwrap()
-        .value_type = StorageSchemaType::One(JsonValueType::Object);
-    assert!(!validate_storage_upgrade(&previous, &changed_type, &[stored]).is_empty());
-    assert!(!validate_storage_upgrade(&previous, &changed_type, &[]).is_empty());
+        .value_type = StorageSchemaType::One(JsonValueType::Number);
+    assert!(!validate_storage_upgrade(&previous, &replaced, &[]).is_empty());
+
+    let mut narrowed = previous.clone();
+    narrowed
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == "selected_model")
+        .unwrap()
+        .schema
+        .as_mut()
+        .unwrap()
+        .value_type = StorageSchemaType::One(JsonValueType::String);
+    assert!(!validate_storage_upgrade(&previous, &narrowed, &[]).is_empty());
+}
+
+#[test]
+fn storage_upgrade_allows_widening_a_type_to_its_siblings() {
+    let (previous, _) = stored_thread();
+
+    let mut widened_nullable = previous.clone();
+    widened_nullable
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == "profile")
+        .unwrap()
+        .schema
+        .as_mut()
+        .unwrap()
+        .value_type = StorageSchemaType::Many(vec![JsonValueType::String, JsonValueType::Null]);
+    assert!(validate_storage_upgrade(&previous, &widened_nullable, &[]).is_empty());
+
+    let mut widened_one_of_many = previous.clone();
+    widened_one_of_many
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == "collection")
+        .unwrap()
+        .schema
+        .as_mut()
+        .unwrap()
+        .value_type = StorageSchemaType::Many(vec![JsonValueType::String]);
+    assert!(validate_storage_upgrade(&previous, &widened_one_of_many, &[]).is_empty());
+}
+
+#[test]
+fn storage_upgrade_keeps_a_stored_string_value_through_a_type_widening() {
+    let (previous, _) = stored_thread();
+    let mut widened = previous.clone();
+    widened
+        .entries
+        .iter_mut()
+        .find(|entry| entry.id == "profile")
+        .unwrap()
+        .schema
+        .as_mut()
+        .unwrap()
+        .value_type = StorageSchemaType::Many(vec![JsonValueType::String, JsonValueType::Null]);
+    let stored = StoredStorageEntry {
+        entry_id: "profile".into(),
+        key: "settings/profile".into(),
+        kind: StorageKind::Json,
+        content: json!("김서하"),
+    };
+    assert!(validate_storage_upgrade(&previous, &widened, &[stored]).is_empty());
 }
 
 #[test]

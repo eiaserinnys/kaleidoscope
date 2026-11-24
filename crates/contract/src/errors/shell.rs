@@ -327,6 +327,13 @@ error_catalog! { ENTRIES;
         message: "이 파일의 미디어 데이터를 재생할 수 없습니다. 지원되는 파일로 다시 시도하세요.",
         fix: "지원되는 미디어 파일을 여세요"
     }
+    SHELL_ATTACHMENT_VIEWER_TOO_LARGE(limit) {
+        class: InvalidRequest,
+        place: "첨부 뷰어 크기 확인",
+        cause: "첨부 원본이 허용 크기를 넘어 미리 보거나 저장할 수 없다",
+        message: "{limit}보다 큰 첨부라 미리 보거나 저장할 수 없습니다.",
+        fix: "더 작은 첨부를 확인하세요"
+    }
     SHELL_CLIENT_SCRIPT_ASSET_INVALID() {
         class: Io,
         place: "앱 클라이언트 스크립트 읽기",
