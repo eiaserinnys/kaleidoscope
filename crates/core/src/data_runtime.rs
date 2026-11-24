@@ -241,6 +241,28 @@ impl Runtime {
             })
             .collect()
     }
+    /// refresh 진입에서 바뀐 원천: 받기를 시작한 것, 상태가 바뀐 것, source_meta가 마지막으로 보낸 것과 다른 것.
+    /// 관문에 막힌 원천은 상태가 그대로여도 message와 stale이 바뀌므로 메타를 따로 견준다.
+    fn refresh_changed(
+        &self,
+        before: &BTreeMap<String, SourceStatus>,
+        started: &[String],
+    ) -> BTreeSet<String> {
+        let mut changed: BTreeSet<String> = started.iter().cloned().collect();
+        changed.extend(
+            self.sources
+                .iter()
+                .filter(|(name, source)| before.get(*name) != Some(&source.status))
+                .map(|(name, _)| name.clone()),
+        );
+        changed.extend(
+            self.source_meta()
+                .into_iter()
+                .filter(|(name, meta)| self.last.source_meta.get(name) != Some(meta))
+                .map(|(name, _)| name),
+        );
+        changed
+    }
     fn data_meta_values(&self) -> BTreeMap<String, Value> {
         self.source_meta()
             .into_iter()
@@ -1226,15 +1248,9 @@ pub(crate) fn refresh(
         for name in runtime.compiled.source_order().to_vec() {
             runtime.apply_source_storage_status(&name);
         }
-        // 받기를 시작한 원천과 상태가 바뀐 원천에 기대는 바인딩만 계산한다.
-        let mut changed: BTreeSet<String> = pending.iter().map(|job| job.name.clone()).collect();
-        changed.extend(
-            runtime
-                .sources
-                .iter()
-                .filter(|(name, source)| before.get(*name) != Some(&source.status))
-                .map(|(name, _)| name.clone()),
-        );
+        // 받기를 시작한 원천과 상태나 메타(message, stale)가 바뀐 원천에 기대는 바인딩만 계산한다.
+        let started: Vec<String> = pending.iter().map(|job| job.name.clone()).collect();
+        let changed = runtime.refresh_changed(&before, &started);
         let selected = runtime.selected_for(&BTreeSet::new(), &changed);
         let next = runtime.view_selected(&selected);
         if let Some(view) = runtime.diff_view(next).filter(|_| runtime.attached > 0) {
@@ -1995,6 +2011,45 @@ mod freshness_tests {
         assert_eq!(incremental.sources, full.sources);
         assert_eq!(incremental.source_meta, full.source_meta);
         assert!(matches!(incremental.sources["stories"], SourceStatus::Loading { has_value: true }));
+    }
+
+    #[test]
+    fn refresh_entry_view_follows_meta_changes_of_a_source_blocked_by_a_gate() {
+        let definition = parse_app_definition(&json!({
+            "id":"gate-meta", "name":"관문 메타 시험", "requires":{"blocks":4,"modules":{"http":1}},
+            "permissions":[{"module":"http","id":"api","label":"공개 API","base_url":"https://example.test","paths":["/items"]}],
+            "state":{}, "sources":{"items":{"kind":"request","permission":"api","path":"/items"}},
+            "ui":{"type":"stack","direction":"column","children":[
+                {"type":"text","value":{"expr":"$data_meta.items.message"}},
+                {"type":"text","value":{"expr":"$data_meta.items.stale"}},
+                {"type":"text","value":"고정"}
+            ]}
+        }).to_string()).unwrap();
+        let manager = DataRuntimes::default();
+        let mut runtime = Runtime::new(1, definition.clone(), definition.state.clone(), true, false, Default::default());
+        let plan = SourcePlan::Request { permission: "api".into(), path: "/items".into(), query: BTreeMap::new() };
+        assert!(set_plan(&manager, &mut runtime, "items", plan));
+        runtime.data.insert("items".into(), json!([1]));
+        let source = runtime.sources.get_mut("items").unwrap();
+        source.last_success_at = Some(chrono::Utc::now());
+        source.status = SourceStatus::Loading { has_value: true };
+        runtime.last = runtime.view();
+
+        gates::record_limit(&manager, "example.test", Some(600));
+        let before: BTreeMap<_, _> = runtime.sources.iter().map(|(name, source)| (name.clone(), source.status.clone())).collect();
+        assert!(prepare(&manager, &mut runtime, "window", "items", true).is_none(), "관문이 받기를 막는다");
+        assert_eq!(runtime.sources["items"].status, before["items"], "상태는 그대로 Loading이다");
+
+        let changed = runtime.refresh_changed(&before, &[]);
+        assert!(changed.contains("items"), "메타만 바뀐 원천도 바뀐 것으로 센다");
+        let selected = runtime.selected_for(&BTreeSet::new(), &changed);
+        let baseline = runtime.last.values.clone();
+        let incremental = runtime.view_selected(&selected);
+        let full = runtime.view();
+        assert_eq!(incremental.values, full.values);
+        assert_eq!(incremental.source_meta, full.source_meta);
+        assert_ne!(full.values, baseline, "message와 stale에 기댄 바인딩 값이 실제로 바뀐다");
+        assert!(!selected.contains("/ui/children/2/value"));
     }
 
     #[test]
