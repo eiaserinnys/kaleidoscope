@@ -96,6 +96,9 @@ struct CachedRequest {
     fetched_at: chrono::DateTime<chrono::Utc>,
     fetched_instant: Instant,
     updated_at: Option<String>,
+    /// 쓰기가 성공한 뒤 낡았다고 표시된 항목. 지우지 않고 남겨 두어 되살아나면 값을 바로 보이고,
+    /// 강제가 아닌 받기는 이 항목을 캐시로 쓰지 않는다. (`SourceMeta.stale`과 다른 뜻이다.)
+    outdated: bool,
 }
 struct Source {
     plan: SourcePlan,
@@ -237,6 +240,28 @@ impl Runtime {
                 )
             })
             .collect()
+    }
+    /// refresh 진입에서 바뀐 원천: 받기를 시작한 것, 상태가 바뀐 것, source_meta가 마지막으로 보낸 것과 다른 것.
+    /// 관문에 막힌 원천은 상태가 그대로여도 message와 stale이 바뀌므로 메타를 따로 견준다.
+    fn refresh_changed(
+        &self,
+        before: &BTreeMap<String, SourceStatus>,
+        started: &[String],
+    ) -> BTreeSet<String> {
+        let mut changed: BTreeSet<String> = started.iter().cloned().collect();
+        changed.extend(
+            self.sources
+                .iter()
+                .filter(|(name, source)| before.get(*name) != Some(&source.status))
+                .map(|(name, _)| name.clone()),
+        );
+        changed.extend(
+            self.source_meta()
+                .into_iter()
+                .filter(|(name, meta)| self.last.source_meta.get(name) != Some(meta))
+                .map(|(name, _)| name),
+        );
+        changed
     }
     fn data_meta_values(&self) -> BTreeMap<String, Value> {
         self.source_meta()
@@ -511,10 +536,6 @@ impl Runtime {
             .any(|prefix| kaleidoscope_contract::data::pointer_under(pointer, prefix))
     }
 
-    fn diff(&mut self) -> Option<DataView> {
-        let next = self.view();
-        self.diff_view(next)
-    }
     fn diff_view(&mut self, next: DataView) -> Option<DataView> {
         let delta = DataView {
             sources: next
@@ -653,6 +674,10 @@ fn set_plan(manager: &DataRuntimes, runtime: &mut Runtime, name: &str, plan: Sou
         source.last_fetched = Some(cached.fetched_instant);
         source.last_success_at = Some(cached.fetched_at);
         source.last_success_instant = Some(cached.fetched_instant);
+        // 낡은 값은 바로 보이되 곧 한 번 새로 받는다(run_due가 알림 다시 받기와 같은 길로 받는다).
+        if cached.outdated {
+            source.watch_due = Some(Instant::now());
+        }
         source.status = SourceStatus::Ready {
             updated_at: cached
                 .updated_at
@@ -839,7 +864,8 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                     .as_ref()
                     .and_then(|key| request_cache_get(&inner.data_runtimes, key))
                     .filter(|cached| {
-                        cached.fetched_instant.elapsed() < job.ttl
+                        !cached.outdated
+                            && cached.fetched_instant.elapsed() < job.ttl
                             && source_times.is_some_and(|(started, retry_state)| {
                                 (!job.force
                                     || started.is_some_and(|at| cached.fetched_instant > at))
@@ -943,6 +969,7 @@ fn jobs(inner: &Arc<Inner>, pending: Vec<Job>) -> Vec<JoinHandle<()>> {
                                         fetched_at,
                                         fetched_instant,
                                         updated_at: Some(updated_at),
+                                        outdated: false,
                                     },
                                 );
                             }
@@ -1203,7 +1230,12 @@ pub(crate) fn refresh(
             .filter(|name| selected.contains(*name))
             .cloned()
             .collect();
-        let pending = names
+        let before: BTreeMap<String, SourceStatus> = runtime
+            .sources
+            .iter()
+            .map(|(name, source)| (name.clone(), source.status.clone()))
+            .collect();
+        let pending: Vec<Job> = names
             .iter()
             .filter_map(|name| {
                 if liveness::deps_ready(runtime, name) {
@@ -1216,7 +1248,12 @@ pub(crate) fn refresh(
         for name in runtime.compiled.source_order().to_vec() {
             runtime.apply_source_storage_status(&name);
         }
-        if let Some(view) = runtime.diff().filter(|_| runtime.attached > 0) {
+        // 받기를 시작한 원천과 상태나 메타(message, stale)가 바뀐 원천에 기대는 바인딩만 계산한다.
+        let started: Vec<String> = pending.iter().map(|job| job.name.clone()).collect();
+        let changed = runtime.refresh_changed(&before, &started);
+        let selected = runtime.selected_for(&BTreeSet::new(), &changed);
+        let next = runtime.view_selected(&selected);
+        if let Some(view) = runtime.diff_view(next).filter(|_| runtime.attached > 0) {
             let _ = inner
                 .data_runtimes
                 .events
@@ -1543,6 +1580,7 @@ pub(crate) fn connections_changed(inner: &Arc<Inner>, changed: &[String]) {
     }
 }
 
+/// 연결이 바뀌었다(로그인). 그 권한의 요청 캐시를 지운다.
 pub(crate) fn connection_changed(inner: &Inner, permission: &str) {
     inner
         .data_runtimes
@@ -1550,6 +1588,16 @@ pub(crate) fn connection_changed(inner: &Inner, permission: &str) {
         .lock()
         .unwrap()
         .retain(|(key, _)| key.permission != permission);
+}
+
+/// 그 권한으로 쓰기가 성공했다. 요청 캐시를 지우지 않고 낡았다고만 표시한다.
+/// 되살아난 낡은 값은 바로 보이고 곧 한 번 새로 받으며, 강제가 아닌 받기는 이 항목을 쓰지 않는다.
+pub(crate) fn write_succeeded(inner: &Inner, permission: &str) {
+    for (key, cached) in inner.data_runtimes.request_cache.lock().unwrap().iter_mut() {
+        if key.permission == permission {
+            cached.outdated = true;
+        }
+    }
 }
 
 pub(crate) fn refresh_login_required(inner: &Arc<Inner>, connection: &str) {
@@ -1846,6 +1894,7 @@ mod freshness_tests {
                 fetched_at,
                 fetched_instant,
                 updated_at: Some(crate::state_commands::timestamp()),
+                outdated: false,
             },
         );
     }
@@ -1935,6 +1984,93 @@ mod freshness_tests {
         let selected = runtime.selected_for(&BTreeSet::new(), &BTreeSet::from(["stories".into()]));
         let incremental = runtime.view_selected(&selected);
         assert_eq!(incremental.values, runtime.view().values);
+    }
+
+    #[test]
+    fn refresh_entry_view_matches_the_full_view_but_computes_fewer_bindings() {
+        let manager = DataRuntimes::default();
+        let mut runtime = request_runtime();
+        let request = request_plan();
+        assert!(set_plan(&manager, &mut runtime, "stories", request));
+        runtime.data.insert("stories".into(), json!({"hits":[]}));
+        runtime.sources.get_mut("stories").unwrap().status = SourceStatus::Ready {
+            updated_at: crate::state_commands::timestamp(),
+        };
+        runtime.last = runtime.view();
+
+        let job = prepare(&manager, &mut runtime, "window", "stories", true).expect("받기를 시작한다");
+        let changed = BTreeSet::from([job.name]);
+        let selected = runtime.selected_for(&BTreeSet::new(), &changed);
+        assert!(
+            selected.len() < runtime.compiled.binding_dependencies().len(),
+            "받기를 시작한 원천에 기대지 않는 바인딩은 계산하지 않는다"
+        );
+        let incremental = runtime.view_selected(&selected);
+        let full = runtime.view();
+        assert_eq!(incremental.values, full.values);
+        assert_eq!(incremental.sources, full.sources);
+        assert_eq!(incremental.source_meta, full.source_meta);
+        assert!(matches!(incremental.sources["stories"], SourceStatus::Loading { has_value: true }));
+    }
+
+    #[test]
+    fn refresh_entry_view_follows_meta_changes_of_a_source_blocked_by_a_gate() {
+        let definition = parse_app_definition(&json!({
+            "id":"gate-meta", "name":"관문 메타 시험", "requires":{"blocks":4,"modules":{"http":1}},
+            "permissions":[{"module":"http","id":"api","label":"공개 API","base_url":"https://example.test","paths":["/items"]}],
+            "state":{}, "sources":{"items":{"kind":"request","permission":"api","path":"/items"}},
+            "ui":{"type":"stack","direction":"column","children":[
+                {"type":"text","value":{"expr":"$data_meta.items.message"}},
+                {"type":"text","value":{"expr":"$data_meta.items.stale"}},
+                {"type":"text","value":"고정"}
+            ]}
+        }).to_string()).unwrap();
+        let manager = DataRuntimes::default();
+        let mut runtime = Runtime::new(1, definition.clone(), definition.state.clone(), true, false, Default::default());
+        let plan = SourcePlan::Request { permission: "api".into(), path: "/items".into(), query: BTreeMap::new() };
+        assert!(set_plan(&manager, &mut runtime, "items", plan));
+        runtime.data.insert("items".into(), json!([1]));
+        let source = runtime.sources.get_mut("items").unwrap();
+        source.last_success_at = Some(chrono::Utc::now());
+        source.status = SourceStatus::Loading { has_value: true };
+        runtime.last = runtime.view();
+
+        gates::record_limit(&manager, "example.test", Some(600));
+        let before: BTreeMap<_, _> = runtime.sources.iter().map(|(name, source)| (name.clone(), source.status.clone())).collect();
+        assert!(prepare(&manager, &mut runtime, "window", "items", true).is_none(), "관문이 받기를 막는다");
+        assert_eq!(runtime.sources["items"].status, before["items"], "상태는 그대로 Loading이다");
+
+        let changed = runtime.refresh_changed(&before, &[]);
+        assert!(changed.contains("items"), "메타만 바뀐 원천도 바뀐 것으로 센다");
+        let selected = runtime.selected_for(&BTreeSet::new(), &changed);
+        let baseline = runtime.last.values.clone();
+        let incremental = runtime.view_selected(&selected);
+        let full = runtime.view();
+        assert_eq!(incremental.values, full.values);
+        assert_eq!(incremental.source_meta, full.source_meta);
+        assert_ne!(full.values, baseline, "message와 stale에 기댄 바인딩 값이 실제로 바뀐다");
+        assert!(!selected.contains("/ui/children/2/value"));
+    }
+
+    #[test]
+    fn outdated_cache_entry_is_restored_with_a_due_refetch_and_never_used_by_plain_fetches() {
+        let manager = DataRuntimes::default();
+        let mut runtime = request_runtime();
+        let request = request_plan();
+        assert!(set_plan(&manager, &mut runtime, "stories", request.clone()));
+        seed_request_cache(&manager, &runtime, &request, json!({"hits":[{"objectID":"cached"}]}));
+        let key = request_cache_key(&runtime.definition.id, &request, SourceFormat::Json).unwrap();
+        manager.request_cache.lock().unwrap()[0].1.outdated = true;
+        assert!(set_plan(&manager, &mut runtime, "stories", SourcePlan::Idle));
+        assert!(runtime.sources["stories"].watch_due.is_none());
+
+        assert!(set_plan(&manager, &mut runtime, "stories", request));
+        assert_eq!(runtime.data["stories"]["hits"][0]["objectID"], "cached");
+        assert!(matches!(runtime.sources["stories"].status, SourceStatus::Ready { .. }));
+        assert!(runtime.sources["stories"].watch_due.is_some(), "곧 한 번 새로 받는다");
+        let job = prepare(&manager, &mut runtime, "window", "stories", false).unwrap();
+        assert!(job.force, "알림 다시 받기와 같은 길로 요청 캐시를 건너뛴다");
+        assert!(request_cache_get(&manager, &key).unwrap().outdated);
     }
 
     #[test]

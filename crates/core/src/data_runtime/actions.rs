@@ -321,7 +321,7 @@ pub(crate) fn act(
                 )?;
                 super::storage::written(inner, window_id, &entry, value, revision);
             }
-            Step::Refresh { names } => refresh(inner, window_id, &names, true, true)?,
+            Step::Refresh { names, wait } => refresh(inner, window_id, &names, wait, true)?,
             Step::Call {
                 permission,
                 method,
@@ -352,7 +352,7 @@ pub(crate) fn act(
                         .unwrap_or_else(|| "서버".into());
                     return Err(connections::response_error(&reply, &target));
                 }
-                super::connection_changed(inner, &permission);
+                super::write_succeeded(inner, &permission);
             }
         }
     }
