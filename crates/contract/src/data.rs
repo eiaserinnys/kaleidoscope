@@ -831,12 +831,16 @@ where
     Binding::deserialize(deserializer).map(Some)
 }
 
-/// 원천을 다시 받는다. 빈 배열이면 모든 원천이다. 받기를 마칠 때까지 기다린다(실패해도 동작은 이어 간다).
+/// 원천을 다시 받는다. 빈 배열이면 모든 원천이다. 기본은 받기를 마칠 때까지 기다린다(실패해도 동작은 이어 간다).
+/// `wait`가 `false`이면 받기를 시작만 하고 다음 단계와 동작 응답이 그 원천을 기다리지 않는다(블록 세트 69판).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "contract.ts")]
 pub struct RefreshAction {
     pub refresh: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub wait: Option<bool>,
 }
 
 /// 연결을 부른다. 응답이 2xx가 아니면 실패다. 응답 본문은 쓰지 않는다(바뀐 것은 `refresh`로 다시 받는다).

@@ -374,7 +374,8 @@ fn source_status_is_scoped_to_each_expression_and_actions_are_ordered() {
         app.action_step("/ui/children/0/on_select", 1, &env)
             .unwrap(),
         Step::Refresh {
-            names: vec!["a".into()]
+            names: vec!["a".into()],
+            wait: true
         }
     );
 }

@@ -79,7 +79,7 @@ pub(crate) fn request(
             }
         })?;
     if method != HttpMethod::Get && (200..300).contains(&response.status) {
-        crate::data_runtime::connection_changed(inner, permission);
+        crate::data_runtime::write_succeeded(inner, permission);
     }
     Ok(response)
 }

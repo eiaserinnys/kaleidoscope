@@ -1586,9 +1586,10 @@ export type ReceiptStatus = "accepted" | "failed" | "pending";
 export type Rect = { x: number, y: number, width: number, height: number, };
 
 /**
- * 원천을 다시 받는다. 빈 배열이면 모든 원천이다. 받기를 마칠 때까지 기다린다(실패해도 동작은 이어 간다).
+ * 원천을 다시 받는다. 빈 배열이면 모든 원천이다. 기본은 받기를 마칠 때까지 기다린다(실패해도 동작은 이어 간다).
+ * `wait`가 `false`이면 받기를 시작만 하고 다음 단계와 동작 응답이 그 원천을 기다리지 않는다(블록 세트 69판).
  */
-export type RefreshAction = { refresh: Array<string>, };
+export type RefreshAction = { refresh: Array<string>, wait?: boolean, };
 
 export type RepeatAuto = "auto";
 

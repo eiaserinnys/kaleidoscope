@@ -138,6 +138,8 @@ pub enum Step {
     },
     Refresh {
         names: Vec<String>,
+        /// 거짓이면 받기를 시작만 하고 기다리지 않는다.
+        wait: bool,
     },
     Call {
         permission: String,
@@ -857,6 +859,7 @@ impl CompiledApp {
                     }),
                     Action::Refresh(refresh) => Ok(Step::Refresh {
                         names: refresh.refresh.clone(),
+                        wait: refresh.wait.unwrap_or(true),
                     }),
                     Action::Call(call) => {
                         let path = string_path(self.binding(

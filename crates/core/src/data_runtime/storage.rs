@@ -430,6 +430,7 @@ mod freshness_tests {
                 fetched_at: fetched_at.clone(),
                 fetched_instant,
                 updated_at: Some("cached update".into()),
+                outdated: false,
             },
         );
         runtime.data.insert("item".into(), cached_value.clone());

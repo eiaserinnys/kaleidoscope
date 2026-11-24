@@ -2410,6 +2410,14 @@ fn validate_actions(
                                     .push(format!("{at}: 없는 원천을 다시 받으려 합니다: {name}"));
                             }
                         }
+                        if refresh.wait.is_some()
+                            && definition.requires.blocks < crate::REFRESH_WAIT_BLOCK_SET_VERSION
+                        {
+                            details.push(format!(
+                                "{at}: refresh의 wait는 블록 세트 {0}판이라 requires.blocks가 {0} 이상이어야 합니다",
+                                crate::REFRESH_WAIT_BLOCK_SET_VERSION
+                            ));
+                        }
                     }
                     Action::SetStorage(set_storage) => {
                         if !definition.requires.modules.contains_key("storage") {
