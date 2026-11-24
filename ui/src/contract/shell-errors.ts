@@ -101,6 +101,7 @@ export const SHELL_APP_VERSION_NOT_FOUND = (): CoreError => ({ id: "SHELL_APP_VE
 export const SHELL_WINDOW_DATA_CONTEXT_MISSING = (): CoreError => ({ id: "SHELL_WINDOW_DATA_CONTEXT_MISSING", code: "io", message: `창 데이터가 연결되지 않아 화면을 그릴 수 없습니다. 쉘을 다시 시작하세요.`, details: [] });
 export const SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING = (): CoreError => ({ id: "SHELL_CLIENT_BINDING_DATA_CONTEXT_MISSING", code: "io", message: `화면 값의 데이터 연결을 찾지 못했습니다. 에이전트에게 이 오류 코드를 전하세요.`, details: [] });
 export const SHELL_MEDIA_PLAYBACK_UNSUPPORTED = (): CoreError => ({ id: "SHELL_MEDIA_PLAYBACK_UNSUPPORTED", code: "io", message: `이 파일의 미디어 데이터를 재생할 수 없습니다. 지원되는 파일로 다시 시도하세요.`, details: [] });
+export const SHELL_ATTACHMENT_VIEWER_TOO_LARGE = (args: { limit: string }): CoreError => ({ id: "SHELL_ATTACHMENT_VIEWER_TOO_LARGE", code: "invalid_request", message: `${args.limit}보다 큰 첨부라 미리 보거나 저장할 수 없습니다.`, details: [] });
 export const SHELL_CLIENT_SCRIPT_ASSET_INVALID = (): CoreError => ({ id: "SHELL_CLIENT_SCRIPT_ASSET_INVALID", code: "io", message: `앱 실행 파일의 형식이 올바르지 않습니다. JavaScript 자산으로 앱을 다시 올리세요.`, details: [] });
 export const SHELL_CLIENT_SCRIPT_ASSET_REPLY_INVALID = (): CoreError => ({ id: "SHELL_CLIENT_SCRIPT_ASSET_REPLY_INVALID", code: "io", message: `앱 실행 파일을 읽지 못했습니다. 쉘을 업데이트한 뒤 다시 시도하세요.`, details: [] });
 export const SHELL_CLIENT_FRAME_NAVIGATED = (): CoreError => ({ id: "SHELL_CLIENT_FRAME_NAVIGATED", code: "io", message: `앱 실행 화면이 예상과 다르게 바뀌어 실행을 멈췄습니다. 다시 시작을 누르세요.`, details: [] });

@@ -60,9 +60,9 @@ test("설정 저장, 원격 충돌과 복구, 검사 거부, 기본값", async (
 
 test("선택지와 순서, 마크다운, 창 전환의 포커스", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1080 });
-  await expect(page.getByRole("button", { name: "1 argon" })).toContainText("Argon");
-  await page.getByRole("button", { name: "argon 아래로" }).click();
-  await expect(page.getByRole("button", { name: "1 opus" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "1 model-a" })).toContainText("Model A");
+  await page.getByRole("button", { name: "model-a 아래로" }).click();
+  await expect(page.getByRole("button", { name: "1 model-c" })).toBeVisible();
   await page.getByRole("button", { name: "처음 지시", exact: false }).click();
   await expect(page.locator(".ks-settings-document .cm-content").first()).toBeVisible();
   await page.screenshot({ path: `${captures}/md-wide.png` });
@@ -196,7 +196,7 @@ for (const viewport of [{ width: 1440, height: 1080, name: "wide" }, { width: 38
     const positions = await rows.evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().left));
     expect(Math.max(...positions) - Math.min(...positions)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: `${captures}/review-models-${viewport.name}.png` });
-    const opener = page.getByRole("button", { name: "1 argon" });
+    const opener = page.getByRole("button", { name: "1 model-a" });
     await opener.click();
     await expect(page.getByRole("menu")).toBeVisible();
     await page.keyboard.press("Escape");

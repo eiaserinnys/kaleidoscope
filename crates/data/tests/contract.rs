@@ -461,7 +461,7 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
         .unwrap();
     assert_eq!(dependency.storage, vec!["name"]);
 
-    let event = json!("model-sol");
+    let event = json!("model-b");
     let item = Value::Null;
     let env = Env {
         state: &state,
@@ -480,7 +480,7 @@ fn storage_values_flow_through_expressions_source_plans_and_actions() {
         Step::SetStorage {
             entry: "selection".into(),
             doc: None,
-            value: json!("model-sol")
+            value: json!("model-b")
         }
     );
 }
@@ -491,7 +491,7 @@ fn storage_choices_bindings_are_evaluated_and_track_data_and_storage_dependencie
     definition["requires"]["blocks"] = json!(6);
     definition["requires"]["modules"]["storage"] = json!(2);
     definition["storage"] = json!({"entries":[
-        {"id":"models","key":"settings/models","kind":"json","schema":{"type":"array","items":{"type":"string"}},"default":["argon"],"label":"Models","presentation":"settings","choices":{"expr":"$data.a[active=true].code"}},
+        {"id":"models","key":"settings/models","kind":"json","schema":{"type":"array","items":{"type":"string"}},"default":["model-a"],"label":"Models","presentation":"settings","choices":{"expr":"$data.a[active=true].code"}},
         {"id":"selection","key":"settings/selection","kind":"json","schema":{"type":["string","null"]},"default":null,"label":"Selection","presentation":"settings","choices":{"expr":"$storage.models"}}
     ]});
     let definition: AppDefinition = serde_json::from_value(definition).unwrap();

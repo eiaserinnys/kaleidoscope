@@ -43,6 +43,14 @@ error_catalog! { ENTRIES;
         class: Conflict, place: "설치 배포판 확인", cause: "같은 배포판의 매니페스트가 다르다",
         message: "앱 {app_id}의 같은 배포판 내용이 달라 설치하지 못했습니다. 스토어 게시자에게 확인하세요.", fix: "스토어 게시자에게 확인하세요"
     }
+    REGISTRYINSTALL_UPDATE_RELEASE_REJECTED(app_name) {
+        class: InvalidAppDefinition, place: "기기 앱 업데이트의 새 판 게시", cause: "새 판의 저장소 선언이 기존 저장값과 맞지 않거나 같은 자산 판에 다른 내용이 있다",
+        message: "{app_name}의 새 판에 문제가 있어 깔지 못했습니다. 지금 판을 그대로 씁니다.", fix: "지금 판을 그대로 사용하세요"
+    }
+    REGISTRYINSTALL_FIRST_RELEASE_REJECTED(app_name) {
+        class: InvalidAppDefinition, place: "기기 앱 첫 설치의 새 판 게시", cause: "새 판의 저장소 선언이 기존 저장값과 맞지 않거나 같은 자산 판에 다른 내용이 있다",
+        message: "{app_name}에 문제가 있어 깔지 못했습니다.", fix: "게시자가 고친 뒤 다시 설치하세요"
+    }
     REGISTRYINSTALL_RELEASE_DOWNGRADE(app_id) {
         class: Conflict, place: "설치 배포판 순서 확인", cause: "기존 배포판보다 낮다",
         message: "앱 {app_id}의 이전 배포판은 설치할 수 없습니다. 현재 판 이상의 배포판을 선택하세요.", fix: "현재 판 이상을 선택하세요"

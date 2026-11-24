@@ -111,7 +111,8 @@ pub(super) fn insert(
             kaleidoscope_contract::errors::ASSET_REGISTER_VERSION_CONFLICT(
                 &upload.id,
                 upload.version,
-            ),
+            )
+            .and_details(vec![format!("자산: {}, 판: {}", upload.id, upload.version)]),
         );
     }
     let meta = AssetMeta {

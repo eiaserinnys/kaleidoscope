@@ -7,7 +7,10 @@ import { useBinding, useChatDraft, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { ChatComposer, chatAreaPaste } from "./chat-composer";
 import { ChatHistory, messageContextMenu, type ChatPendingMessage } from "./chat-history";
-import { fromBase64, HistoryAttachmentView, ImagePreview, openPayload, PendingAttachment, type Preview } from "./agent-attachments";
+import { HistoryAttachmentView, PendingAttachment } from "./agent-attachments";
+import { AttachmentPreview } from "./attachment-preview";
+import * as shellErrors from "../contract/shell-errors";
+import type { AttachmentPreviewRequest } from "../data/attachments";
 import { useFrameCoalesced } from "./frame-coalesced";
 import { renderBlock } from "../render/render-block";
 import { toCoreError } from "../core/core-transport";
@@ -46,7 +49,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const draftKey = chat.scope ? `client:${channelName}:${chat.scope}` : `client:${channelName}`;
   const { draft, setDraft, attachments, setAttachments, error: actionError, setError: setActionError } = useChatDraft(draftKey);
   const [pending, setPending] = useState<PendingMessage | null>(null);
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [attachment, setAttachment] = useState<AttachmentPreviewRequest | null>(null);
   const [delta, setDelta] = useState("");
   const coalescedDelta = useFrameCoalesced(setDelta);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -128,29 +131,30 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
     });
   }, [channelName, data, on_attachment]);
 
-  const resolveAttachmentPayload = useCallback(async (itemId: string, attachment: ConversationAttachment): Promise<{ mime: string; bytes: ArrayBuffer; data_base64: string } | null> => {
+  const resolveAttachmentPayload = useCallback(async (itemId: string, attachment: ConversationAttachment): Promise<{ mime: string; data_base64: string } | null> => {
     const payload = await requestAttachment(itemId, attachment);
     if (!payload) return null;
     if ("media" in payload) {
       const reply = await context.store.call({ op: "data.media", window_id: context.window.id, media: payload.media });
       if (reply.op !== "data.media") return null;
-      return { mime: reply.media.mime, data_base64: reply.media.data_base64, bytes: fromBase64(reply.media.data_base64) };
+      return { mime: reply.media.mime, data_base64: reply.media.data_base64 };
     }
-    return { mime: payload.mime, bytes: payload.bytes, data_base64: toBase64(payload.bytes) };
+    return { mime: payload.mime, data_base64: toBase64(payload.bytes) };
   }, [context.store, context.window.id, requestAttachment]);
+
+  const loadAttachmentBytes = useCallback(async (itemId: string, attachment: ConversationAttachment) => {
+    const resolved = await resolveAttachmentPayload(itemId, attachment);
+    if (!resolved) throw shellErrors.SHELL_CONVERSATION_ATTACHMENT_REPLY_INVALID();
+    return resolved;
+  }, [resolveAttachmentPayload]);
 
   const renderAttachment = useCallback((attachment: ConversationAttachment, item: ConversationItem) => <HistoryAttachmentView
     key={`${item.id}:${attachment.id}`}
     attachment={attachment}
     cacheKey={["client-chat", context.window.id, channelName, chat.generation, item.id, attachment.id]}
-    load={async () => {
-      const resolved = await resolveAttachmentPayload(item.id, attachment);
-      return resolved ? { mime: resolved.mime, data_base64: resolved.data_base64 } : { mime: attachment.mime, data_base64: "" };
-    }}
-    open={async () => { const resolved = await resolveAttachmentPayload(item.id, attachment); if (resolved) openPayload({ mime: resolved.mime, bytes: resolved.bytes }, attachment.name); }}
-    onPreview={setPreview}
-    onError={(reason) => setActionError(toCoreError(reason))}
-  />, [channelName, context.window.id, chat.generation, resolveAttachmentPayload]);
+    load={() => loadAttachmentBytes(item.id, attachment)}
+    onPreview={setAttachment}
+  />, [channelName, context.window.id, chat.generation, loadAttachmentBytes]);
 
   const renderQueuedMessage = useCallback((message: ClientChatQueuedMessage) => <div data-ks-comment-key={encodeCommentKey(message.id)} className="ks-agent-chat-user is-pending" key={message.id} tabIndex={message.text ? 0 : undefined} onContextMenu={(event) => messageContextMenu(event, message.text)}>
     {message.text}
@@ -159,16 +163,11 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
         key={`${message.id}:${attachment.id}`}
         attachment={attachment}
         cacheKey={["client-chat-queued", context.window.id, channelName, chat.generation, message.id, attachment.id]}
-        load={async () => {
-          const resolved = await resolveAttachmentPayload(message.id, attachment);
-          return resolved ? { mime: resolved.mime, data_base64: resolved.data_base64 } : { mime: attachment.mime, data_base64: "" };
-        }}
-        open={async () => { const resolved = await resolveAttachmentPayload(message.id, attachment); if (resolved) openPayload({ mime: resolved.mime, bytes: resolved.bytes }, attachment.name); }}
-        onPreview={setPreview}
-        onError={(reason) => setActionError(toCoreError(reason))}
+        load={() => loadAttachmentBytes(message.id, attachment)}
+        onPreview={setAttachment}
       />)}
     </div> : null}
-  </div>, [channelName, context.window.id, chat.generation, resolveAttachmentPayload]);
+  </div>, [channelName, context.window.id, chat.generation, loadAttachmentBytes]);
 
   const send = async (returnFocus = false) => {
     const submittedDraft = draft;
@@ -225,7 +224,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       historyRef={historyRef}
       followTail={followTail}
       renderAttachment={renderAttachment}
-      renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setPreview} />}
+      renderPendingAttachment={(attachment, index) => <PendingAttachment key={index} attachment={attachment} onPreview={setAttachment} />}
       queued={chat.queued.map(renderQueuedMessage)}
       hideThinking={waitingForFooter}
       footer={footer}
@@ -243,10 +242,10 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       onCancel={chat.busy ? cancel : undefined}
       sharedWindows={[]}
       onRemoveShared={() => undefined}
-      onPreview={setPreview}
+      onPreview={setAttachment}
       error={actionError ?? chat.error}
       onError={setActionError}
     />
-    {preview ? <ImagePreview preview={preview} onClose={() => setPreview(null)} /> : null}
+    {attachment ? <AttachmentPreview request={attachment} onClose={() => setAttachment(null)} /> : null}
   </section>;
 }

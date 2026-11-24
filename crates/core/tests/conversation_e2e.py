@@ -52,7 +52,7 @@ class Provider:
         self.profile_ensures = []
         self.execution_requests = []
 
-    def thread(self, namespace, key, thread_id, profile="profile-a", model="model-argon", group="node-a", execution_id="execution-1"):
+    def thread(self, namespace, key, thread_id, profile="profile-a", model="model-a", group="node-a", execution_id="execution-1"):
         return {"id": thread_id, "external": {"namespace": namespace, "key": key},
                 "title": "작업", "model": {"id": model, "label": "Model", "group": {"id": group, "label": group}},
                 "profile": {"id": profile, "label": profile}, "execution_id": execution_id,
@@ -85,8 +85,8 @@ def serve(provider):
                     profile = query.get("profile", [""])[0]
                     provider.models_queries.append(profile)
                     models = [
-                        {"id": "model-argon", "label": "Argon", "group": {"id": "node-a", "label": "node-a"}, "available": True},
-                        {"id": "model-sol", "label": "Sol", "group": {"id": "node-a", "label": "node-a"}, "available": True},
+                        {"id": "model-a", "label": "Model A", "group": {"id": "node-a", "label": "node-a"}, "available": True},
+                        {"id": "model-b", "label": "Model B", "group": {"id": "node-a", "label": "node-a"}, "available": True},
                         {"id": "n1:node-b:preset-a", "label": "Preset A", "group": {"id": "node-b", "label": "node-b"}, "available": profile != "profile-a",
                          **({} if profile != "profile-a" else {"reason": "이 노드에 프로필 없음", "reason_code": "profile_unavailable"})},
                     ]
@@ -105,7 +105,7 @@ def serve(provider):
                 if path == "/threads/by-key":
                     if self.command == "PUT":
                         provider.profile_ensures.append(body)
-                        thread = provider.bindings.setdefault(key, provider.thread(*key, "thread-" + key[1], profile=body.get("profile", "profile-a"), model=body.get("selected_model", "model-argon")))
+                        thread = provider.bindings.setdefault(key, provider.thread(*key, "thread-" + key[1], profile=body.get("profile", "profile-a"), model=body.get("selected_model", "model-a")))
                         return self.respond(200, {"thread": thread, "created": True, "notices": ["notice"]})
                     thread = provider.bindings.get(key)
                     return self.respond(200, {"thread": thread}) if thread else self.respond(404, {"error": {"code": "not_found", "message": "missing"}})
@@ -297,17 +297,17 @@ def run(services_log_path=None):
             initial = call(url1, "conversation.get", window_id=window, profile="profile-b")
             assert initial["thread"] is None
             assert [profile["id"] for profile in initial["profiles"]] == ["profile-a", "profile-b"]
-            assert initial["start"] == {"profile": "default", "model": "model-argon"}, initial["start"]
+            assert initial["start"] == {"profile": "default", "model": "model-a"}, initial["start"]
             assert provider.models_queries[-1] == "profile-b", provider.models_queries
             draft_event = until("보존 초안 전달", lambda: (event if (not events.empty() and (event := events.get_nowait()).get("event") == "conversation.draft") else None))
             assert draft_event["request_id"] == "draft-1" and draft_event["text"] == "보존할 초안" and draft_event["failed"] is False
             revision = call(url1, "storage.write", window_id=window, entry="title_template", content="작업 {unsupported}", expected_revision=None)["revision"]
-            status, invalid = request(url1 + "/core", "POST", {"op": "conversation.create", "window_id": window, "model": "model-argon"})
+            status, invalid = request(url1 + "/core", "POST", {"op": "conversation.create", "window_id": window, "model": "model-a"})
             assert status == 400 and invalid["code"] == "invalid_request", invalid
             call(url1, "storage.reset", window_id=window, entry="title_template", expected_revision=revision)
             results = []
             def create(url):
-                results.append(call(url, "conversation.create", window_id=window, model="model-argon", profile="profile-b")["thread"]["id"])
+                results.append(call(url, "conversation.create", window_id=window, model="model-a", profile="profile-b")["thread"]["id"])
             tasks = [threading.Thread(target=create, args=(url,)) for url in (url1, url2)]
             for task in tasks: task.start()
             for task in tasks: task.join(timeout=20)
@@ -330,9 +330,9 @@ def run(services_log_path=None):
             assert switched["thread"]["id"] == results[0] and switched["thread"]["profile"]["id"] == "profile-a", switched
             assert provider.execution_requests[-1]["expected_execution_id"] == "execution-1", provider.execution_requests
             assert provider.execution_requests[-1]["profile"] == "profile-a", provider.execution_requests
-            patched = call(url1, "conversation.switch", window_id=window, profile="profile-a", model="model-sol")
-            assert patched["thread"]["id"] == results[0] and patched["thread"]["model"]["id"] == "model-sol", patched
-            assert provider.patches[-1] == (results[0], {"model": "model-sol"}), provider.patches
+            patched = call(url1, "conversation.switch", window_id=window, profile="profile-a", model="model-b")
+            assert patched["thread"]["id"] == results[0] and patched["thread"]["model"]["id"] == "model-b", patched
+            assert provider.patches[-1] == (results[0], {"model": "model-b"}), provider.patches
             call(url1, "conversation.switch", window_id=window, profile="profile-b")
             crossed = call(url1, "conversation.switch", window_id=window, model="n1:node-b:preset-a")
             assert crossed["thread"]["id"] == results[0] and crossed["thread"]["model"]["id"] == "n1:node-b:preset-a", crossed
