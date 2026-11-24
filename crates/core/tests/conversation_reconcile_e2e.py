@@ -59,12 +59,12 @@ def run():
             workspace = first["shared"]["desktops"][0]["workspace_id"]
             window = call(urls[0], "window.open", desktop_id=desktop, app_id=definition["id"])["window"]["id"]
             until("배치 업로드", lambda: sqlite3.connect(db).execute("SELECT count(*) FROM windows WHERE id=?", (window,)).fetchone()[0])
-            thread1 = call(urls[0], "conversation.create", window_id=window, model="model-argon")["thread"]["id"]
+            thread1 = call(urls[0], "conversation.create", window_id=window, model="model-a")["thread"]["id"]
             created = call(urls[0], "workspace.create", name="둘째 작업")
             workspace2, desktop2 = created["workspace"]["id"], created["desktop"]["id"]
             window2 = call(urls[0], "window.open", desktop_id=desktop2, app_id=definition["id"])["window"]["id"]
             until("둘째 작업 업로드", lambda: sqlite3.connect(db).execute("SELECT count(*) FROM windows WHERE id=?", (window2,)).fetchone()[0])
-            thread2 = call(urls[0], "conversation.create", window_id=window2, model="model-argon")["thread"]["id"]
+            thread2 = call(urls[0], "conversation.create", window_id=window2, model="model-a")["thread"]["id"]
             first_process.terminate(); first_process.wait(timeout=5)
             first_process = bridge("device-a", p1, False)
             until("로그인 없는 기기 연결", lambda: call(urls[0], "state.get")["snapshot"]["link"]["state"] == "connected")
@@ -94,7 +94,7 @@ def run():
             time.sleep(1.5)
             with provider.lock: assert provider.pages == before_moves, f"데스크톱 변경에 제공자 목록 {provider.pages - before_moves}회 조회"
             with provider.lock: patch_count_before_selected_model = len(provider.patches)
-            call(urls[1], "storage.write", window_id=window2, entry="selected_model", content="model-sol", expected_revision=None)
+            call(urls[1], "storage.write", window_id=window2, entry="selected_model", content="model-b", expected_revision=None)
             time.sleep(1.5)
             with provider.lock:
                 assert len(provider.patches) == patch_count_before_selected_model, provider.patches
@@ -115,7 +115,7 @@ def run():
             workspace3, desktop3 = third["workspace"]["id"], third["desktop"]["id"]
             window3 = call(urls[0], "window.open", desktop_id=desktop3, app_id=definition["id"])["window"]["id"]
             until("셋째 작업 업로드", lambda: sqlite3.connect(db).execute("SELECT count(*) FROM windows WHERE id=?", (window3,)).fetchone()[0])
-            call(urls[0], "conversation.create", window_id=window3, model="model-argon")
+            call(urls[0], "conversation.create", window_id=window3, model="model-a")
             call(urls[0], "window.close", window_id=window3)
             call(urls[0], "window.close", window_id=window)
             until("모든 앱 창 닫힘", lambda: not call(urls[1], "state.get")["snapshot"]["shared"]["windows"])

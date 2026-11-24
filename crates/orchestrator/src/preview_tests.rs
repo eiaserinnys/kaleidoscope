@@ -471,20 +471,20 @@ async fn preview_returns_evaluated_storage_choice_binding_values() {
         "key":"settings/model",
         "kind":"json",
         "schema":{"type":"string"},
-        "default":"argon",
+        "default":"model-a",
         "label":"Model",
         "presentation":"settings",
         "choices":{"expr":"$data.cards"}
     }]});
     let mut preview_args = args(definition);
-    preview_args.data = Some([("cards".into(), json!(["model-argon", "model-sol"]))].into());
+    preview_args.data = Some([("cards".into(), json!(["model-a", "model-b"]))].into());
 
     let value = result_value(server.preview_app_result(preview_args).await.unwrap());
 
     assert!(value["values"].as_array().unwrap().iter().any(|item| {
         item["pointer"] == "/storage/entries/0/choices"
             && item["status"] == "ready"
-            && item["value"] == r#"["model-argon","model-sol"]"#
+            && item["value"] == r#"["model-a","model-b"]"#
     }));
 }
 

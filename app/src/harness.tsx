@@ -71,7 +71,7 @@ const settingsDefinition: AppDefinition = {
   ] : [
     { id: "agent", key: "agent", kind: "json", schema: { type: "string", minLength: 1 }, default: "seosoyoung", label: "에이전트", presentation: "settings" },
     { id: "folder", key: "folder", kind: "json", schema: { type: ["string", "null"] }, default: null, label: "대화 폴더", presentation: "settings" },
-    { id: "models", key: "models", kind: "json", schema: { type: "array", items: { type: "string" }, uniqueItems: true }, default: ["argon", "opus", "sol"], label: "모델 순서", presentation: "settings", choices: { expr: "$data.models" } },
+    { id: "models", key: "models", kind: "json", schema: { type: "array", items: { type: "string" }, uniqueItems: true }, default: ["model-a", "model-c", "model-b"], label: "모델 순서", presentation: "settings", choices: { expr: "$data.models" } },
     { id: "title", key: "title", kind: "json", schema: { type: "string" }, default: "kaleidoscope · {workspace}", label: "제목 틀", presentation: "settings" },
     { id: "initial", key: "initial", kind: "md", default: "처음 지시", label: "처음 지시", presentation: "settings" },
     { id: "role", key: "role", kind: "md", default: "역할 지시", label: "역할 지시", description: "현재 대화에 적용", presentation: "settings" },
@@ -261,7 +261,7 @@ const transport: FakeTransport = createFakeTransport({
   folder: { root_path: "/fake/docs", root_name: "문서" },
   webUnavailable: new URLSearchParams(window.location.search).get("web") === "unavailable",
   updateRestartError: harnessParams.get("update-restart") === "error" ? "설치를 시작할 수 없습니다" : undefined,
-  data: settingsPreview ? { sources: { models: { value: [{ value: "argon", label: "Argon" }, { value: "opus", label: "Opus" }, { value: "sol", label: "Sol" }] } } } : undefined,
+  data: settingsPreview ? { sources: { models: { value: [{ value: "model-a", label: "Model A" }, { value: "model-c", label: "Model C" }, { value: "model-b", label: "Model B" }] } } } : undefined,
   storageWriteDelayMs: settingsPreview ? 1200 : undefined,
   storage: settingsPreview ? (settingsSample ? [
     { window_id: "settings-window", entry: "notifications", content: true },
@@ -269,7 +269,7 @@ const transport: FakeTransport = createFakeTransport({
   ] : [
     { window_id: "settings-window", entry: "agent", content: "seosoyoung" },
     { window_id: "settings-window", entry: "folder", content: "kaleidoscope" },
-    { window_id: "settings-window", entry: "models", content: ["argon", "opus", "sol"] },
+    { window_id: "settings-window", entry: "models", content: ["model-a", "model-c", "model-b"] },
     { window_id: "settings-window", entry: "role", content: "# 역할\n\n사용자의 작업을 돕는 에이전트다." },
   ]) : requestedAppWindow === "html-report" ? [{ window_id: "html-report-window", entry: "reports", content: htmlReportSample }] : undefined,
   files,

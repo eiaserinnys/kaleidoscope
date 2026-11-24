@@ -44,7 +44,7 @@
           "items": { "type": "string", "minLength": 1 },
           "uniqueItems": true
         },
-        "default": ["model-argon", "model-sol"],
+        "default": ["model-a", "model-b"],
         "label": "모델 순서",
         "presentation": "settings"
       },
