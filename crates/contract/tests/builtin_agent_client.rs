@@ -172,8 +172,12 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
         assert_eq!(footer["type"], "repeat");
         assert_eq!(footer["items"]["client"], "permissions");
         let header = &chat["input_header"];
-        assert_eq!(header["type"], "when");
-        assert_eq!(header["value"]["client"], "show_status_bar");
+        assert_eq!(header["type"], "stack");
+        let children = header["children"].as_array().unwrap();
+        let status: Vec<_> = children.iter().filter(|node| node["type"] == "when" && node["value"]["client"] == "show_status_bar").collect();
+        assert_eq!(status.len(), 1);
+        assert!(children.iter().any(|node| node["type"] == "when" && node["value"]["client"] == "show_waiting"));
+        let header = &status[0]["child"];
         let mut compact = Vec::new();
         collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_model", &mut compact);
         let mut usage = Vec::new();
