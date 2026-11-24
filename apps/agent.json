@@ -1116,20 +1116,11 @@
                             "fill": 0,
                             "children": [
                               {
-                                "type": "repeat",
-                                "items": {
-                                  "client": "status_chips_narrow"
+                                "type": "text",
+                                "value": {
+                                  "client": "status_compact_model"
                                 },
-                                "key": "key",
-                                "gap": "small",
-                                "layout": "row",
-                                "template": {
-                                  "type": "text",
-                                  "value": {
-                                    "item": "text"
-                                  },
-                                  "style": "meta"
-                                }
+                                "style": "meta"
                               },
                               {
                                 "type": "text",
@@ -1157,6 +1148,7 @@
                       "type": "stack",
                       "direction": "column",
                       "gap": "small",
+                      "fill": 4,
                       "children": [
                         {
                           "type": "when",
@@ -1573,8 +1565,8 @@
       "status_has_account": {
         "default": false
       },
-      "status_chips_narrow": {
-        "default": []
+      "status_compact_model": {
+        "default": ""
       },
       "status_compact_usage": {
         "default": ""

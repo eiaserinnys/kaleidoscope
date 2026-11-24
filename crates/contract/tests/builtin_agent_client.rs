@@ -211,20 +211,20 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
             assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.8), Some(0.95)));
             chips
         } else {
-            assert_eq!(left["type"], "repeat");
+            assert_eq!(left["type"], "text");
             assert_eq!(children.len(), 2);
             assert_eq!(children[1]["value"]["client"], "status_compact_usage");
-            left["items"]["client"].as_str().unwrap().to_string()
+            left["value"]["client"].as_str().unwrap().to_string()
         };
         chip_lists.push(chips);
     }
     chip_lists.sort();
-    assert_eq!(chip_lists, ["status_chips", "status_chips_narrow"]);
+    assert_eq!(chip_lists, ["status_chips", "status_compact_model"]);
     let screen = value["ui"]["children"].as_array().unwrap().iter().find(|state| state["value"]["client"] == "show_chat").unwrap();
     let mut narrow = Vec::new();
     collect(&screen["child"], &|node| node["type"] == "when" && node["max_width"].is_number(), &mut narrow);
     let mut inside = Vec::new();
-    collect(narrow[0], &|node| node["type"] == "repeat" && node["items"]["client"] == "status_chips_narrow", &mut inside);
+    collect(narrow[0], &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_model", &mut inside);
     assert_eq!(inside.len(), 1);
 }
 
@@ -247,7 +247,7 @@ fn builtin_agent_declares_every_status_output() {
     let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     let outputs = value["client"]["outputs"].as_object().unwrap();
     for name in [
-        "status_bar_on", "show_status_bar", "status_chips", "status_chips_narrow", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
+        "status_bar_on", "show_status_bar", "status_chips", "status_compact_model", "status_compact_usage", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
         "status_limit_bars", "status_limits", "status_no_limits", "status_account",
         "status_has_context", "status_has_subagents", "status_has_account",
     ] {

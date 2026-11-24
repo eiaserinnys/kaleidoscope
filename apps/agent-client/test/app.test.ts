@@ -375,7 +375,7 @@ test("좁은 창 칩은 model 하나만", () => {
   const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
   const { views } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: null } });
   const view = views.at(-1);
-  assert.deepEqual(view.status_chips_narrow.map((chip: any) => chip.text), ["Opus 5.5"]);
+  assert.equal(view.status_compact_model, "Opus 5.5");
   assert.equal(view.status_chips.length, 4);
   assert.equal(view.status_no_context, true);
 });
