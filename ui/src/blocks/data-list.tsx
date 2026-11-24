@@ -27,6 +27,32 @@ import { useLocalDraft } from "../data/use-local-draft";
 
 const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "status"; group: ListGroup<ListItem> } | { kind: "items"; items: ListItem[]; start: number };
+// 짧은 고르기 창에서 목록이 바깥 본문과 함께 굴러가도 가상 목록은 보이는 줄만 그린다.
+function useDialogListViewport(scroll: React.RefObject<HTMLDivElement | null>) {
+  const [viewport, setViewport] = useState<{ element: HTMLDivElement; margin: number } | null>(null);
+  useLayoutEffect(() => {
+    const root = scroll.current;
+    const overlay = root?.closest<HTMLElement>(".ks-dialog-overlay.is-picker");
+    const outer = overlay?.querySelector<HTMLDivElement>(".ks-dialog-scroll");
+    const host = overlay?.closest<HTMLElement>(".ks-data-window");
+    if (!root || !outer || !host) return;
+    const update = () => {
+      if (getComputedStyle(root).overflowY !== "visible") {
+        setViewport((previous) => previous === null ? previous : null);
+        return;
+      }
+      const margin = root.getBoundingClientRect().top - outer.getBoundingClientRect().top + outer.scrollTop - outer.clientTop;
+      setViewport((previous) => previous?.element === outer && Math.abs(previous.margin - margin) < 0.5
+        ? previous : { element: outer, margin });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(host); observer.observe(outer); observer.observe(root);
+    outer.addEventListener("scroll", update, { passive: true });
+    return () => { observer.disconnect(); outer.removeEventListener("scroll", update); };
+  }, [scroll]);
+  return viewport;
+}
 type ListHandlers = {
   focus: (index: number) => void;
   keyDown: (event: React.KeyboardEvent<HTMLElement>, index: number, item: ListItem) => void;
@@ -110,6 +136,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const [columns, setColumns] = useState(1);
   const measuredColumns = useRef<number | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
+  const viewport = useDialogListViewport(scroll);
   const iconColumns = useIconGridColumns(scroll, icons && (items.length > 0 || !!more));
   const activeColumns = icons ? iconColumns : grid ? columns : 1;
   // 격자의 칸 수는 첫 그림 전에 잰다. 칸 수가 그려진 뒤에 바뀌면 줄 묶음이 달라져 줄이 다시 만들어지고,
@@ -172,7 +199,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
     observer.observe(heading);
     return () => observer.disconnect();
   });
-  const { virtual, resizeAnchor } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, undefined, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 }, rowIds);
+  const { virtual, resizeAnchor } = useVirtualRows(rows.length, grid ? 220 : icons ? DEFAULT_VIRTUAL_ROW_ESTIMATE * 3 : DEFAULT_VIRTUAL_ROW_ESTIMATE, scroll, false, undefined, viewport, rowKeys, { start: block.grouped ? headingHeight : 0, end: 0 }, rowIds);
   const rowOf = (index: number) => Math.max(0, rows.findIndex((row) => row.kind === "items" && index >= row.start && index < row.start + row.items.length));
   const selectedValue = useBinding(`${pointer}/selected`, block.selected ?? null);
   const currentValue = useBinding(`${pointer}/current`, block.current ?? null);
@@ -323,7 +350,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
       const rowStyle = entry.kind === "items" && icons
         ? { gridTemplateColumns: `repeat(${activeColumns}, minmax(0, 1fr))` } as React.CSSProperties
         : undefined;
-      return <div className={entry.kind === "status" ? "ks-load-more ks-list-group-row" : entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} data-row-key={entry.kind === "status" ? entry.group.key ?? entry.group.title : undefined} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start}px)`, ...rowStyle }}>
+      return <div className={entry.kind === "status" ? "ks-load-more ks-list-group-row" : entry.kind === "items" ? grid ? "ks-list-grid-row" : icons ? "ks-icon-grid ks-list-icon-row" : undefined : undefined} key={row.key} data-index={row.index} data-row-key={entry.kind === "status" ? entry.group.key ?? entry.group.title : undefined} ref={virtual.measureElement} style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${row.start - (viewport?.margin ?? 0)}px)`, ...rowStyle }}>
         {entry.kind === "heading" ? <GroupHeading title={entry.title} meta={entry.meta} /> : entry.kind === "status" ? (() => {
           const { group } = entry; const status = group.status!;
           const index = block.group_actions?.findIndex((action) => action.key === group.action) ?? -1;

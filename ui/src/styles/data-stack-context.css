@@ -47,3 +47,11 @@
     > .ks-data-section-child { flex: 1 1 auto; min-height: 0; }
   }
 }
+
+/* 짧은 고르기 창은 찾기와 목록을 대화상자 본문 한 곳에서 함께 굴린다. */
+@container ks-data-window (max-height: 300px) {
+  .ks-dialog-overlay.is-picker .ks-dialog-body { height: auto; }
+  .ks-dialog-overlay.is-picker .ks-dialog-body .ks-data-stack.is-column { height: auto; min-height: 0; }
+  .ks-dialog-overlay.is-picker .ks-dialog-body .ks-data-stack.is-column > .ks-data-stack-item.is-fill:not(.ks-stack-scroll) { flex: 0 0 auto; min-height: 0; overflow: visible; }
+  .ks-dialog-overlay.is-picker .ks-dialog-body .ks-list { height: auto; min-height: 0; overflow: visible; }
+}
