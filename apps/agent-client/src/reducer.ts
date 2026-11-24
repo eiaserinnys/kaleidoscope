@@ -33,7 +33,7 @@ export type State = {
   sessionError: { id: string; message: string } | null;
   needsNew: boolean;
   initialized: boolean;
-  failure: { id: string; reason: string; code?: string; message?: string } | null;
+  failure: { id: string; reason: string; code?: string; message?: string; fromAgent?: boolean } | null;
   completed: Item[];
   outbox: RpcReply[];
   servicesUsed: string | null;
@@ -160,8 +160,14 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     if ((request.kind === "new" || request.kind === "load") && message.error.code === -32000) return { ...next, phase: "login", replay: false };
     if (request.kind === "load") return { ...next, phase: "starting", replay: false, needsNew: true };
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
+    const data = message.error.data;
+    const detail = typeof data === "string" ? data : typeof data?.details === "string" ? data.details : typeof data?.message === "string" ? data.message : "";
+    const trimmed = detail.trim();
+    const characters = Array.from(trimmed);
+    const extra = characters.length > 1000 ? `${characters.slice(0, 1000).join("")}…` : trimmed;
+    const fullReason = trimmed && trimmed !== reason ? `${reason}: ${extra}` : reason;
     const finished = request.kind === "prompt" ? finishText(next) : next;
-    return { ...finished, phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason }, permissions: [], tools: [] };
+    return { ...finished, phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: fullReason, fromAgent: true }, permissions: [], tools: [] };
   }
   if (!message.result) return next;
   if (request.kind === "initialize") {

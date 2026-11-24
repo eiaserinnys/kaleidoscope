@@ -398,6 +398,8 @@ export class AppClient {
   private failureMessage(failure: NonNullable<SessionView["failure"]>): string {
     return failure.message ?? (failure.id === "AGENT_LOGIN_AUTHENTICATE_FAILED"
       ? `에이전트 ${this.selected?.name ?? ""} 로그인이 완료되지 않았습니다. 에이전트에서 로그인을 마친 뒤 다시 시도하세요. 원인: ${failure.reason}`
+      : failure.fromAgent
+      ? `에이전트 ${this.selected?.name ?? ""}에서 오류가 났습니다. 원인을 확인한 뒤 다시 시도하세요. 원인: ${failure.reason}`
       : `에이전트 ${this.selected?.name ?? ""}의 응답을 읽지 못했습니다. 에이전트 프로그램을 업데이트한 뒤 다시 시도하세요. 원인: ${failure.reason}`);
   }
 

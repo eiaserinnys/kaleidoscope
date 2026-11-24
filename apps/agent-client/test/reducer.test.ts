@@ -3,6 +3,26 @@ import { strict as assert } from "node:assert";
 import { initialState, reduceMessage, reserveRequest, enqueue, answerPermission } from "../src/reducer.ts";
 import { decodeLines } from "../src/transport.ts";
 
+test("ACP 오류의 원인 글을 종류별로 보존하고 길이를 제한한다", () => {
+  const cases: [unknown, string][] = [
+    [{ details: "  실행 파일이 없습니다  ", message: "다른 원인" }, "Internal error: 실행 파일이 없습니다"],
+    [" 경로를 찾지 못했습니다 ", "Internal error: 경로를 찾지 못했습니다"],
+    [{ message: " 세션 오류 " }, "Internal error: 세션 오류"],
+    [undefined, "Internal error"],
+    [{ details: "Internal error" }, "Internal error"],
+    [{ details: "가".repeat(1001) }, `Internal error: ${"가".repeat(1000)}…`],
+  ];
+  for (const [data, expected] of cases) {
+    for (const kind of ["initialize", "new", "configure", "prompt"]) {
+      let state = initialState(), id: number;
+      [state, id] = reserveRequest(state, kind, {});
+      state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32603, message: "Internal error", data } }, "unused");
+      assert.equal(state.failure?.reason, expected, kind);
+      assert.equal(state.phase, kind === "prompt" ? "ready" : "failed");
+    }
+  }
+});
+
 test("UTF-8 문자가 바이트 경계에서 나뉘어도 JSON 줄이 복원된다", () => {
   const bytes = new TextEncoder().encode('{"text":"안녕"}\n{"n":2}\n');
   const split = bytes.indexOf(0xec) + 1;
