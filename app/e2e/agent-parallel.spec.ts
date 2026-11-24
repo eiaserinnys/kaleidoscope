@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, appendFile } from "node:fs/promises";
 import path from "node:path";
 import { coreUrl, pathsFor, repoRoot, requiredRuntimeDir } from "./runtime.ts";
 
@@ -38,6 +38,40 @@ async function core(request: Record<string, unknown>): Promise<Reply> {
 async function shot(page: Page, name: string) {
   await mkdir(shots, { recursive: true });
   await page.screenshot({ path: path.join(shots, `${name}.png`) });
+}
+
+async function measureMinimum(app: Locator, label: string) {
+  const values = await app.evaluate((root) => {
+    const body = root.querySelector<HTMLElement>(".ks-data-window-body")!;
+    const input = root.querySelector<HTMLElement>(".ks-agent-chat-input-area")!;
+    const history = root.querySelector<HTMLElement>(".ks-agent-chat-history")!;
+    const header = root.querySelector<HTMLElement>(".ks-agent-chat-input-header")!;
+    const message = history.querySelector<HTMLElement>(".ks-agent-chat-assistant .ks-markdown-text")!;
+    const rect = (element: Element) => { const r = element.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, bottom: r.bottom }; };
+    const ancestors = []; let node: HTMLElement | null = input.parentElement;
+    while (node && node !== body) { ancestors.push({ class: node.className, scrollHeight: node.scrollHeight, clientHeight: node.clientHeight, rect: rect(node), minHeight: getComputedStyle(node).minHeight }); node = node.parentElement; }
+    return { body: { ...rect(body), scrollHeight: body.scrollHeight, clientHeight: body.clientHeight, scrollWidth: body.scrollWidth, clientWidth: body.clientWidth }, input: rect(input), header: rect(header), history: { ...rect(history), scrollHeight: history.scrollHeight, clientHeight: history.clientHeight, lineHeight: parseFloat(getComputedStyle(message).lineHeight) }, ancestors };
+  });
+  const line = JSON.stringify({ label, ...values });
+  console.log("최소 창 측정 " + line);
+  if (process.env.KS_AGENT_PARALLEL_METRICS) await appendFile(process.env.KS_AGENT_PARALLEL_METRICS, line + "\n");
+  return values;
+}
+
+function assertMinimum(values: Awaited<ReturnType<typeof measureMinimum>>, shortHistory = false) {
+  expect(values.body.scrollHeight).toBeLessThanOrEqual(values.body.clientHeight);
+  expect(values.body.scrollWidth).toBeLessThanOrEqual(values.body.clientWidth);
+  for (const ancestor of values.ancestors.filter((item) => item.class.split(" ").includes("ks-data-stack-item"))) {
+    expect(ancestor.scrollHeight, `넘친 쌓기 칸: ${ancestor.class}`).toBeLessThanOrEqual(ancestor.clientHeight);
+  }
+  expect(values.input.y).toBeGreaterThanOrEqual(values.body.y);
+  expect(values.input.bottom).toBeLessThanOrEqual(values.body.bottom);
+  if (shortHistory) {
+    expect(values.history.height).toBeGreaterThan(0);
+    expect(values.history.scrollHeight).toBeGreaterThan(values.history.clientHeight);
+  } else {
+    expect(values.history.height).toBeGreaterThanOrEqual(values.history.lineHeight);
+  }
 }
 
 let agentsWritten = false;
@@ -276,17 +310,41 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
       await core({ op: "storage.write", window_id: windowId, entry: "status_bar", content, expected_revision: current.result.revision });
     };
     await setStatus(false);
+    const noNotice: Awaited<ReturnType<typeof measureMinimum>>[] = [];
+    if (size.label === "minimum") {
+      await send(app, "fresh-turn");
+      await expect(app.getByText("NEW", { exact: true })).toBeVisible();
+      noNotice.push(await measureMinimum(app, "안내 없음·상태 줄 끔"));
+      await shot(page, "visual-minimum-no-notice-status-off");
+      await setStatus(true);
+      await expect(app.getByText(/20%/).first()).toBeVisible();
+      noNotice.push(await measureMinimum(app, "안내 없음·상태 줄 켬"));
+      await shot(page, "visual-minimum-no-notice-status-on");
+      await setStatus(false);
+    }
     await send(app, "permission");
     await expect(app.locator(".ks-agent-chat-footer").getByText("파일 수정", { exact: true })).toBeVisible();
     await shot(page, `visual-${size.label}-permission-before`);
     await app.getByRole("button", { name: "새 세션", exact: true }).click();
     await expect(app.getByText("다른 세션이 허용을 기다립니다", { exact: true })).toBeVisible();
-    await shot(page, `visual-${size.label}-status-off`);
-    await setStatus(true);
     await send(app, "fresh-turn");
     await expect(app.getByText("NEW", { exact: true })).toBeVisible();
+    await shot(page, `visual-${size.label}-status-off`);
+    const off = size.label === "minimum" ? await measureMinimum(app, "상태 줄 끔") : null;
+    await setStatus(true);
     await expect(app.getByText(/70%/).first()).toBeVisible();
     await shot(page, `visual-${size.label}-status-on`);
+    if (size.label === "minimum") {
+      const on = await measureMinimum(app, "상태 줄 켬");
+      expect(noNotice[0].header.height).toBe(0);
+      expect(noNotice[0].history.height).toBe(100);
+      for (const values of noNotice) assertMinimum(values);
+      assertMinimum(off!);
+      assertMinimum(on, true);
+      const history = app.locator(".ks-agent-chat-history");
+      const scroll = await history.evaluate((element) => { element.scrollTop = 0; element.scrollTop = element.scrollHeight; return element.scrollTop; });
+      expect(scroll).toBeGreaterThan(0);
+    }
     if (size.label !== "wide") {
       await app.getByRole("button", { name: "지난 세션", exact: true }).click();
       const picker = page.getByRole("dialog", { name: "이어 갈 세션 고르기" });

@@ -25,6 +25,12 @@ const nestedColumn = (explicit: boolean, split: boolean) => ({
 });
 
 export const previewGridFixtures = [
+  { ...common, id: "short-nested-fill", name: "짧은 창 중첩 채움", ui: {
+    type: "stack", direction: "column", gap: "none", fill: 1, children: [
+      { type: "toolbar", start: [{ type: "button", label: "새 항목", on_click: [] }] },
+      { type: "stack", direction: "column", gap: "none", fill: 0, children: [{ type: "text", value: longText }] },
+    ],
+  } },
   { ...common, id: "slider-fill", name: "채움 슬라이더", requires: { blocks: 21, modules: {} }, ui: {
     type: "stack", direction: "row", fill: 1, children: [
       { type: "button", label: "고정 도구 단추", on_click: [] },

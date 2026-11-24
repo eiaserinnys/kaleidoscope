@@ -55,6 +55,10 @@
 
 /* 짧은 고르기는 그림 옆에 이름을 두어 항목 전체를 읽고 고를 수 있게 한다. */
 @container ks-data-window (max-height: 300px) {
+  /* 내용 칸은 짧은 창에서 줄이되, 자체 크기 계약이 있는 화면 부품은 그대로 둔다. */
+  :is(.ks-data-stack-item.is-fill:not(.ks-stack-scroll) > .ks-data-stack.is-column.has-explicit-fill, .ks-data-stack-item.is-fill:not(.ks-stack-scroll) > .ks-data-stack.is-column.has-explicit-fill > .ks-stack-scroll > .ks-stack-scroll-content) > .ks-data-stack-item.is-fill:not(.ks-stack-scroll):not(:has(> :is(.ks-data-tabs, .ks-table-scroll, .ks-table-with-notice, .ks-split, .ks-chart, .ks-map, .ks-canvas, .ks-data-input, .ks-input-field))):where(:not(.ks-dialog-overlay *)) {
+    min-height: min(var(--ks-pane-min-size), calc(var(--ks-control-height) * 4));
+  }
   .ks-dialog-overlay.is-picker .ks-list.is-grid { --ks-repeat-grid-item-width-small: var(--ks-pane-min-size); }
   .ks-dialog-overlay.is-picker .ks-list-card { flex-direction: row; align-items: center; gap: var(--ks-space-2); }
   .ks-dialog-overlay.is-picker .ks-list-card .ks-media-thumbnail { width: var(--ks-control-height); height: var(--ks-control-height); aspect-ratio: auto; }

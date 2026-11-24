@@ -45,7 +45,7 @@ function fixture() {
   const count = (method: string) => writes.filter((entry) => entry.method === method).length;
   const chunk = (sessionId: string, text: string, kind = "agent_message_chunk", messageId?: string) =>
     emit({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: { sessionUpdate: kind, ...(messageId ? { messageId } : {}), content: { type: "text", text } } } });
-  return { host, writes, snapshots, emit, reply, last, count, chunk, revokeTools, getCheckpoint: () => checkpoint as any, setCheckpoint: (value: unknown) => { checkpoint = value; } };
+  return { host, writes, snapshots, emit, reply, last, count, chunk, revokeTools, readBlob: (key: string) => blobs.get(key), getCheckpoint: () => checkpoint as any, setCheckpoint: (value: unknown) => { checkpoint = value; } };
 }
 
 /** 세션 a를 연 뒤 목록을 받은 상태. */
@@ -369,6 +369,13 @@ test("뒤 세션의 응답과 허용은 삭제를 막고 이유를 보이며 쉬
   const promptA = await prompt(f, session, "qa", "A 질문");
   await session.newSession();
   await f.reply(f.last("session/new"), { sessionId: "b" });
+  const promptB = await prompt(f, session, "qb", "B 기록");
+  await f.reply(promptB, { stopReason: "end_turn" });
+  const manifestBefore = JSON.parse(decoder.decode(f.readBlob("record/manifest.json")!));
+  const recordB = manifestBefore.sessions.b;
+  assert.ok(recordB.pages > 0);
+  const pageB = recordB.ns ? `record/${recordB.ns}/page-0.json` : "record/page-0.json";
+  assert.ok(f.readBlob(pageB));
   await f.emit({ jsonrpc: "2.0", id: "permission", method: "session/request_permission", params: { sessionId: "a", toolCall: { title: "쓰기" }, options: [{ optionId: "yes", name: "허용", kind: "allow_once" }] } });
   await session.deleteSession("a");
   assert.equal(f.count("session/delete"), 0);
@@ -383,6 +390,9 @@ test("뒤 세션의 응답과 허용은 삭제를 막고 이유를 보이며 쉬
   assert.equal(view.live.find((entry: any) => entry.sessionId === "a").busy, true);
   assert.equal(view.sessions.some((entry: any) => entry.sessionId === "b"), false);
   assert.equal(f.getCheckpoint().sessions.b, undefined);
+  const manifestAfter = JSON.parse(decoder.decode(f.readBlob("record/manifest.json")!));
+  assert.equal(manifestAfter.sessions.b, undefined);
+  assert.equal(f.readBlob(pageB), undefined);
   await session.loadSession("a");
   assert.equal(f.snapshots.at(-1).permissions[0].rpcId, "permission");
   await f.reply(promptA, { stopReason: "end_turn" });

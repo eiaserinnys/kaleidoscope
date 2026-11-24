@@ -873,7 +873,8 @@
 }
 
 /* 앱 블록이 아무것도 그리지 않으면(when이 닫힘) 여백도 남기지 않는다. */
-.ks-agent-chat-input-header:empty { display: none; }
+.ks-agent-chat-input-header:empty,
+.ks-agent-chat-input-header:has(> .ks-data-stack):not(:has(> .ks-data-stack > .ks-data-stack-item:not(:empty))) { display: none; }
 
 /* 세로 쌓기의 비채움 자식으로 놓인 채팅은 남는 높이를 차지하지 않고 컴포저 높이만 쓴다.
    대화가 없고 바닥글에도 고를 것이 없으면 기록 영역을 숨겨 입력창만 남긴다. */

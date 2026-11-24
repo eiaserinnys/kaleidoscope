@@ -40,6 +40,13 @@
 .ks-data-stack.is-column:where(:not(.has-explicit-fill)) > .ks-data-stack-item:where(.is-fill):has(> .ks-chart) {
   min-height: min-content;
 }
+/* 짧은 창에서 일반 채움은 내용의 최소 높이를 유지하되, 채팅 입력과 고정 머리에 자리를 준다. */
+@container ks-data-window (max-height: 300px) {
+  .ks-data-stack.is-column:where(:not(.has-explicit-fill)) > .ks-data-stack-item.is-fill:not(:has(> :is(.ks-chart, .ks-map, .ks-canvas, .ks-split, .ks-data-tabs, .ks-table-scroll, .ks-table-with-notice, .ks-data-input, .ks-input-field))) {
+    min-height: min-content;
+    min-height: calc-size(min-content, min(size, min(var(--ks-pane-min-size), calc(var(--ks-control-height) * 4))));
+  }
+}
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-data-input > textarea),
 .ks-data-stack.is-column > .ks-data-stack-item.is-fill:has(> .ks-input-field > .ks-data-input > textarea) { min-height: min-content; }
 .ks-data-stack-item:has(> .ks-data-stack.is-center) { flex: 1 1 auto; }

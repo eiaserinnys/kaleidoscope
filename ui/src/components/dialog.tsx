@@ -96,7 +96,9 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // 다른 대화상자 안에서 열었다면 닫을 때 그 안의 연 요소로 돌아간다.
     const parentDialog = previous?.closest<HTMLElement>(".ks-dialog");
-    const content = parentDialog && host.contains(parentDialog) ? parentDialog : host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
+    // 앱 설정은 창 본문의 형제이므로 설정에서 연 대화상자는 설정 안에서 연 요소를 찾는다.
+    const settings = ownerAnchor?.closest<HTMLElement>(".ks-app-settings");
+    const content = parentDialog && host.contains(parentDialog) ? parentDialog : settings && host.contains(settings) ? settings : host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
     if (!windowModal && !opener.current) opener.current = focusBookmark(previous === document.body ? lastFocusInWindow(host) : previous, content);
     const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
