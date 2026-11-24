@@ -1108,10 +1108,8 @@
                           },
                           "child": {
                             "type": "stack",
-                            "direction": "row",
+                            "direction": "column",
                             "gap": "small",
-                            "align": "center",
-                            "fill": 0,
                             "children": [
                               {
                                 "type": "stack",
@@ -1134,39 +1132,40 @@
                                       },
                                       "style": "meta"
                                     }
-                                  }
-                                ]
-                              },
-                              {
-                                "type": "when",
-                                "value": {
-                                  "client": "status_has_context"
-                                },
-                                "child": {
-                                  "type": "stack",
-                                  "direction": "row",
-                                  "gap": "small",
-                                  "align": "center",
-                                  "children": [
-                                    {
-                                      "type": "progress",
-                                      "value": {
-                                        "client": "status_context"
-                                      },
-                                      "max": 1,
-                                      "label": "context",
-                                      "warning_at": 0.7,
-                                      "danger_at": 0.9
+                                  },
+                                  {
+                                    "type": "when",
+                                    "value": {
+                                      "client": "status_has_context"
                                     },
-                                    {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_context_text"
-                                      },
-                                      "style": "meta"
+                                    "child": {
+                                      "type": "stack",
+                                      "direction": "row",
+                                      "gap": "small",
+                                      "align": "center",
+                                      "children": [
+                                        {
+                                          "type": "progress",
+                                          "value": {
+                                            "client": "status_context"
+                                          },
+                                          "max": 1,
+                                          "label": "context",
+                                          "warning_at": 0.7,
+                                          "danger_at": 0.9
+                                        },
+                                        {
+                                          "type": "text",
+                                          "value": {
+                                            "client": "status_context_text"
+                                          },
+                                          "style": "meta"
+                                        }
+                                      ]
                                     }
-                                  ]
-                                }
+                                  }
+                                ],
+                                "fill": 0
                               },
                               {
                                 "type": "repeat",
