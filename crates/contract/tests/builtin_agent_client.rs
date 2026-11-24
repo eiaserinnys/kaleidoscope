@@ -166,66 +166,41 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
     let mut chats = Vec::new();
     collect(&value["ui"], &|node| node["type"] == "chat", &mut chats);
     assert_eq!(chats.len(), 2);
-    let mut chip_lists = Vec::new();
+    let mut scoped = 0;
     for chat in chats {
-        // footer는 기록 흐름 안의 권한 요청 반복만 남는다.
         let footer = &chat["footer"];
         assert_eq!(footer["type"], "repeat");
         assert_eq!(footer["items"]["client"], "permissions");
-        let mut gates = Vec::new();
-        collect(footer, &|node| node["type"] == "when" && node["value"]["client"] == "show_status_bar", &mut gates);
-        assert!(gates.is_empty());
-        // 상태 줄은 입력창 위 고정 자리에 둔다.
         let header = &chat["input_header"];
         assert_eq!(header["type"], "when");
         assert_eq!(header["value"]["client"], "show_status_bar");
-        // 두 폭 모두 한 줄이다. 넓은 창은 막대를, 좁은 창은 간결한 메타 글을 쓴다.
-        let strip = &header["child"];
-        assert!(strip.get("wrap").is_none());
-        assert_eq!(strip["direction"], "row");
-        assert_eq!(strip["fill"], 0);
-        let children = strip["children"].as_array().unwrap();
-        let left = &children[0];
-        let chips = if left["type"] == "stack" {
-            assert_eq!(children.len(), 3);
-            assert_eq!(left["direction"], "row");
-            assert_eq!(left["children"].as_array().unwrap().len(), 2);
-            assert_eq!(left["children"][1]["value"]["client"], "status_has_subagents");
-            let chips = left["children"][0]["items"]["client"].as_str().unwrap().to_string();
-            let context = &children[1];
-            let limits = &children[2];
-            assert_eq!(context["value"]["client"], "status_has_context");
+        let mut compact = Vec::new();
+        collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_model", &mut compact);
+        assert_eq!(compact.len(), 1);
+        let mut usage = Vec::new();
+        collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_usage", &mut usage);
+        assert_eq!(usage.len(), 1);
+        let mut wide = Vec::new();
+        collect(header, &|node| node["type"] == "when" && node["width_scope"] == "container", &mut wide);
+        if !wide.is_empty() {
+            scoped += 1;
+            assert_eq!(wide.len(), 2);
+            assert_eq!(wide[0]["min_width"], 620);
+            assert_eq!(wide[1]["max_width"], 619);
+            let strip = &wide[0]["child"];
+            assert_eq!(strip["gap"], "medium");
+            assert_eq!(strip["children"][0]["value"]["client"], "status_identity");
             let mut bars = Vec::new();
-            collect(context, &|node| node["type"] == "progress", &mut bars);
-            assert_eq!(bars.len(), 1);
+            collect(strip, &|node| node["type"] == "progress", &mut bars);
+            assert_eq!(bars.len(), 2);
             assert_eq!(bars[0]["label"], "컨텍스트");
             assert_eq!(bars[0]["label_position"], "inline");
-            assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.7), Some(0.9)));
-            assert_eq!(limits["items"]["client"], "status_limit_bars");
-            assert_eq!(limits["layout"], "row");
-            let mut bars = Vec::new();
-            collect(limits, &|node| node["type"] == "progress", &mut bars);
-            assert_eq!(bars.len(), 1);
-            assert_eq!(bars[0]["label"]["item"], "label");
-            assert_eq!(bars[0]["label_position"], "inline");
-            assert_eq!((bars[0]["warning_at"].as_f64(), bars[0]["danger_at"].as_f64()), (Some(0.8), Some(0.95)));
-            chips
-        } else {
-            assert_eq!(left["type"], "text");
-            assert_eq!(children.len(), 2);
-            assert_eq!(children[1]["value"]["client"], "status_compact_usage");
-            left["value"]["client"].as_str().unwrap().to_string()
-        };
-        chip_lists.push(chips);
+            assert_eq!(bars[1]["label"]["item"], "label");
+            assert_eq!(bars[1]["label_position"], "inline");
+            assert_eq!(strip["children"][2]["gap"], "medium");
+        }
     }
-    chip_lists.sort();
-    assert_eq!(chip_lists, ["status_chips", "status_compact_model"]);
-    let screen = value["ui"]["children"].as_array().unwrap().iter().find(|state| state["value"]["client"] == "show_chat").unwrap();
-    let mut narrow = Vec::new();
-    collect(&screen["child"], &|node| node["type"] == "when" && node["max_width"].is_number(), &mut narrow);
-    let mut inside = Vec::new();
-    collect(narrow[0], &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_model", &mut inside);
-    assert_eq!(inside.len(), 1);
+    assert_eq!(scoped, 1);
 }
 
 #[test]
@@ -247,7 +222,7 @@ fn builtin_agent_declares_every_status_output() {
     let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
     let outputs = value["client"]["outputs"].as_object().unwrap();
     for name in [
-        "status_bar_on", "show_status_bar", "status_chips", "status_compact_model", "status_compact_usage", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
+        "status_bar_on", "show_status_bar", "status_identity", "status_compact_model", "status_compact_usage", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
         "status_limit_bars", "status_limits", "status_no_limits", "status_account",
         "status_has_context", "status_has_subagents", "status_has_account",
     ] {

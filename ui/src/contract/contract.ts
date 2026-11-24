@@ -395,7 +395,7 @@ min_width?: number,
 /**
  * (19판) 창 본문 너비가 CSS px 기준으로 이 값 이하일 때 자식을 그린다.
  */
-max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, 
+max_width?: number, width_scope?: WhenWidthScope, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, 
 /**
  * (67판) 참이면 확정 단추가 잠기고 Enter로도 확정되지 않는다. 취소, 닫기, Esc는 그대로다. `button.disabled`와 같은 바인딩이다.
  */
@@ -2215,6 +2215,11 @@ title: string,
  * 페이지를 읽는 중인가.
  */
 loading: boolean, can_go_back: boolean, can_go_forward: boolean, };
+
+/**
+ * 폭 조건이 사용할 범위. 생략하면 기존 창 폭을 쓴다.
+ */
+export type WhenWidthScope = "container";
 
 export type WindowAction = { "kind": "click", target: number, gesture?: PointGesture, } | { "kind": "type", target: number, text: string, mode: TextMode, } | { "kind": "select", target: number, choice: WindowChoice, } | { "kind": "scroll", target?: number, direction: Direction, amount: number, } | { "kind": "key", target?: number, key: string, } | { "kind": "point", x: number, y: number, gesture: PointGesture, };
 

@@ -288,11 +288,11 @@ test("상태 줄 표시 조건: 저장소가 켜져도 채팅이 안 보이면 �
 test("칩 순서: 계정 라벨(이메일 없이), model, thought_level, mode", () => {
   const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
   const { views, app } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: "a@b.c" } });
-  assert.deepEqual(views.at(-1).status_chips.map((chip: any) => chip.text), ["Claude Team", "Opus 5.5", "높음", "Auto"]);
+  assert.equal(views.at(-1).status_identity, "Opus 5.5 · Claude Team · 높음 · Auto");
   // 설정의 계정 줄은 이메일까지 보인다
   assert.equal(views.at(-1).status_account, "Claude Team, a@b.c");
   (app as any).receive({ ...readyView(), controls, account: null });
-  assert.deepEqual(views.at(-1).status_chips.map((chip: any) => chip.text), ["Opus 5.5", "높음", "Auto"]);
+  assert.equal(views.at(-1).status_identity, "Opus 5.5 · 높음 · Auto");
 });
 
 test("한도 막대: session은 5시간, weekly는 7일 창이고 다른 창은 설정에서만 보인다", (t) => {
@@ -376,7 +376,7 @@ test("좁은 창 칩은 model 하나만", () => {
   const { views } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: null } });
   const view = views.at(-1);
   assert.equal(view.status_compact_model, "Opus 5.5");
-  assert.equal(view.status_chips.length, 4);
+  assert.equal(view.status_identity, "Opus 5.5 · Claude Team · 높음 · Auto");
   assert.equal(view.status_no_context, true);
 });
 

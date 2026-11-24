@@ -88,3 +88,16 @@ fn chat_without_input_header_keeps_its_old_block_set_and_wire_shape() {
         .get("input_header")
         .is_none());
 }
+
+#[test]
+fn when_container_width_scope_is_block_set_68_and_round_trips() {
+    let ui = json!({"type": "when", "min_width": 620, "width_scope": "container", "child": {"type": "text", "value": "넓음"}});
+    let app = definition(68, ui.clone());
+    let parsed = parse_app_definition(&app.to_string()).unwrap();
+    assert_eq!(parsed.ui.introduced_in(), 68);
+    assert_eq!(serde_json::to_value(parsed).unwrap()["ui"]["width_scope"], "container");
+    assert!(parse_app_definition(&definition(67, ui).to_string()).is_err());
+    let old = definition(19, json!({"type":"when", "min_width":620, "child":{"type":"text", "value":"넓음"}}));
+    let parsed = parse_app_definition(&old.to_string()).unwrap();
+    assert!(serde_json::to_value(parsed).unwrap()["ui"].get("width_scope").is_none());
+}

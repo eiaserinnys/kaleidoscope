@@ -378,7 +378,7 @@ pub const CONTRACT_VERSION: u32 = 51;
 /// - 66판: section의 끌어 옮기기(`on_move`).
 /// - 67판: 목록과 데이터 트리의 줄 앞 그림 모양(`image_shape`), 데이터 트리 항목의 그림(`TreeItem.image`)과 둘째 줄(`TreeItem.subtitle`),
 ///   dialog의 확정 단추 잠금(`confirm_disabled`).
-/// - 68판: 대화 블록의 입력창 위 고정 자리(`input_header`), 진행 막대 이름표 위치(`label_position`).
+/// - 68판: 대화 블록의 입력창 위 고정 자리(`input_header`), 진행 막대 이름표 위치(`label_position`), when의 폭 기준(`width_scope`).
 pub const BLOCK_SET_VERSION: u32 = CHAT_INPUT_HEADER_BLOCK_SET_VERSION;
 /// 대화 블록의 입력창 위 고정 자리(`input_header`)를 처음 지원하는 블록 세트 판.
 pub const CHAT_INPUT_HEADER_BLOCK_SET_VERSION: u32 = 68;
@@ -1797,6 +1797,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         max_width: Option<u32>,
+        // (68판) `container`는 창 대신 가장 가까운 폭 범위(채팅 입력창 위 영역)를 잰다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        width_scope: Option<WhenWidthScope>,
         child: Box<Block>,
     },
     Dialog {
@@ -2817,6 +2821,8 @@ enum RawBlock {
         min_width: Option<u32>,
         #[serde(default)]
         max_width: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width_scope: Option<WhenWidthScope>,
         child: Box<Block>,
     },
     Dialog {
@@ -3609,11 +3615,13 @@ impl From<RawBlock> for Block {
                 value,
                 min_width,
                 max_width,
+                width_scope,
                 child,
             } => Block::When {
                 value,
                 min_width,
                 max_width,
+                width_scope,
                 child,
             },
             RawBlock::Dialog {
@@ -4383,6 +4391,7 @@ impl Block {
                 ITEM_IMAGE_BLOCK_SET_VERSION
             }
             Block::Notice { .. } => 18,
+            Block::When { width_scope: Some(_), .. } => CHAT_INPUT_HEADER_BLOCK_SET_VERSION,
             Block::Progress { label_position: Some(_), .. } => PROGRESS_LABEL_POSITION_BLOCK_SET_VERSION,
             Block::Progress { warning_at: Some(_), .. }
             | Block::Progress { danger_at: Some(_), .. } => PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,
@@ -4893,6 +4902,14 @@ pub enum LabelPosition {
     Inline,
     Top,
     Hidden,
+}
+
+/// 폭 조건이 사용할 범위. 생략하면 기존 창 폭을 쓴다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum WhenWidthScope {
+    Container,
 }
 
 fn is_inline(value: &LabelPosition) -> bool {

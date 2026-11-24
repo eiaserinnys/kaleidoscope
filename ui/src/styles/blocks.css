@@ -863,6 +863,7 @@
 .ks-agent-chat-footer .ks-data-stack-item > .ks-data-text,
 .ks-agent-chat-input-header .ks-data-stack-item > .ks-data-text { padding: 0; }
 .ks-agent-chat-input-header .ks-data-text.is-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-agent-chat-input-header .ks-data-stack-item.is-fill:has(> .ks-data-text.is-meta) { overflow: hidden; }
 
 /* 입력창 위 고정 자리: 기록과 함께 스크롤되지 않고, 입력 칸과 같은 좌우 여백을 쓴다. */
 .ks-agent-chat-input-header {

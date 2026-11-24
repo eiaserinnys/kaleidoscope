@@ -150,6 +150,43 @@ it("input_header는 기록 밖 입력창 바로 위에 그리고 footer는 기�
   }
 });
 
+it("입력창 위 폭 조건은 창이 그대로여도 입력칸 너비가 바뀌면 갈래를 바꾼다", async () => {
+  vi.spyOn(ClientRuntime.prototype, "start").mockResolvedValue(undefined);
+  let available = 700;
+  const originalRect = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    if (this.classList.contains("ks-agent-chat-input-header")) return { width: available, height: 26 } as DOMRect;
+    if (this.classList.contains("ks-data-window")) return { width: 900, height: 680 } as DOMRect;
+    return originalRect.call(this);
+  });
+  const observers: Array<() => void> = [];
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      if (target.classList.contains("ks-agent-chat-input-header")) observers.push(() => this.callback([{ target, contentRect: { width: available, height: 26 } } as ResizeObserverEntry], this as unknown as ResizeObserver));
+    }
+    unobserve() {}
+    disconnect() {}
+  });
+  const conditional = { type: "when", min_width: 620, width_scope: "container", child: { type: "text", value: "넓은 상태" } } as unknown as NonNullable<ClientChatBlockData["input_header"]>;
+  const headed: ClientChatBlockData = { ...block, input_header: conditional };
+  const headedApp: AppDefinition = { ...app, ui: headed };
+  const seed = makeTestSnapshot({ definitions: [headedApp] });
+  const store = createShellStore(createFakeTransport({ snapshot: seed, folder: null, files: {} }));
+  const window = seed.shared.windows[0];
+  function Chat() { return <ClientChatBlock block={headed} context={{ store, window, definition: headedApp }} pointer="/ui" />; }
+  const view = render(<div className="ks-data-window" data-window-id={window.id}><WindowDataProvider store={store} windowId={window.id} definition={headedApp}><Chat /></WindowDataProvider></div>);
+  try {
+    expect(await screen.findByText("넓은 상태")).toBeTruthy();
+    expect(observers.length).toBeGreaterThan(0);
+    available = 500;
+    act(() => observers.forEach((notify) => notify()));
+    await waitFor(() => expect(screen.queryByText("넓은 상태")).toBeNull());
+  } finally {
+    view.unmount(); store.dispose(); vi.unstubAllGlobals();
+  }
+});
+
 /* CSS 원문은 여러 줄로 접혀 있다. 공백을 하나로 눌러 선택자와 본문을 함께 찾는다. */
 function cssRule(css: string, marker: string) {
   const text = css.replace(/\s+/g, " ");

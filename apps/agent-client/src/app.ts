@@ -478,6 +478,8 @@ export class AppClient {
     this.scheduleRedraw(limits, now);
     const context = view?.context && view.context.size > 0 ? Math.min(1, view.context.used / view.context.size) : null;
     const subagents = view?.subagents ?? 0;
+    const model = chips.find((chip) => chip.key === "model")?.text ?? "";
+    const identity = [model, ...chips.filter((chip) => chip.key !== "model").map((chip) => chip.text), ...(subagents > 0 ? [`서브에이전트 ${subagents}`] : [])].filter(Boolean).join(" · ");
     const bars = limitBars(limits, now);
     const compactUsage = [
       ...(context === null ? [] : [`컨텍스트 ${Math.round(context * 100)}%`]),
@@ -502,7 +504,7 @@ export class AppClient {
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
       status_bar_on: this.statusBar, show_status_bar: this.statusBar && chat,
-      status_chips: chips, status_compact_model: chips.find((chip) => chip.key === "model")?.text ?? "", status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
+      status_identity: identity, status_compact_model: model, status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
       status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,
       status_limit_bars: bars, status_compact_usage: compactUsage,
       status_limits: limits.map((limit) => { const row = limitRow(limit, now); return { ...row, unknown: !row.known }; }), status_no_limits: limits.length === 0,
