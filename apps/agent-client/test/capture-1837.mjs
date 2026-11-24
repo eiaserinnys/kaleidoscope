@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "../../..");
 const output = resolve(root, ".local/card1837/shots");
 const port = process.env.KS_E2E_PORT ?? "15183";
-const server = spawn("node", ["harness/e2e-server.mjs"], { cwd: resolve(root, "ui"), env: { ...process.env, KS_E2E_PORT: port }, stdio: "ignore" });
+const server = spawn("node", ["harness/e2e-server.mjs"], { cwd: resolve(root, "ui"), env: { ...process.env, KS_E2E_PORT: port }, stdio: ["pipe", "inherit", "inherit"] });
 const definition = JSON.parse(await readFile(resolve(root, "apps/agent.json"), "utf8"));
 const reason = String.raw`Internal error: Claude Code native binary not found at C:\Users\홍승현\AppData\Local\npm-cache\_npx\a1b2c3\node_modules\@anthropic-ai\claude-agent-sdk-win32-x64\claude.exe. Please ensure Claude Code is installed via native installer or specify a valid path with options.pathToClaudeCodeExecutable.`;
 const messages = {
@@ -22,7 +22,7 @@ try {
     await new Promise((done) => setTimeout(done, 250));
   }
   await mkdir(output, { recursive: true });
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, executablePath: process.env.KS_CHROMIUM_PATH });
   for (const width of [1280, 420]) {
     for (const [stage, message] of Object.entries(messages)) {
       const page = await browser.newPage({ viewport: { width, height: 800 } });
