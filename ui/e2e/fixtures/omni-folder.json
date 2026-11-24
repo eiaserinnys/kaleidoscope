@@ -1,0 +1,154 @@
+{
+  "type": "dialog",
+  "open": {
+    "state": "files_open"
+  },
+  "title": "폴더",
+  "close_label": "닫기",
+  "child": {
+    "type": "stack",
+    "direction": "column",
+    "gap": "none",
+    "fill": [
+      1,
+      2,
+      3
+    ],
+    "children": [
+      {
+        "type": "when",
+        "value": {
+          "client": "has_grant"
+        },
+        "child": {
+          "type": "toolbar",
+          "start": [
+            {
+              "type": "button",
+              "icon": "arrow-up",
+              "icon_only": true,
+              "variant": "ghost",
+              "label": "위로",
+              "on_click": {
+                "client": "go_up"
+              },
+              "disabled": {
+                "client": "at_root"
+              }
+            },
+            {
+              "type": "text",
+              "value": {
+                "client": "folder_name"
+              }
+            }
+          ],
+          "end": [
+            {
+              "type": "text",
+              "style": "meta",
+              "value": {
+                "client": "files_meta"
+              }
+            },
+            {
+              "type": "button",
+              "icon": "folder-open",
+              "icon_only": true,
+              "variant": "ghost",
+              "label": "폴더 바꾸기",
+              "on_click": {
+                "client": "change_folder"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "when",
+        "value": {
+          "expr": "$count($state.outside) = 0"
+        },
+        "child": {
+          "type": "list",
+          "layout": "grid",
+          "item_width": "small",
+          "selection": "multiple",
+          "selected": {
+            "state": "picked"
+          },
+          "current": {
+            "state": "focus"
+          },
+          "disabled": {
+            "client": "files_locked"
+          },
+          "on_select": {
+            "client": "select_file"
+          },
+          "on_activate": {
+            "client": "activate"
+          },
+          "items": {
+            "expr": "$count($data.pics) = 0 ? null : [$data.pics.{ \"key\": path, \"title\": name, \"path\": path, \"dir\": kind = 'dir',\n  \"icon\": kind = 'dir' ? 'folder' : undefined,\n  \"selectable\": kind = 'dir' ? false : true,\n  \"image\": kind = 'dir' ? undefined : { \"permission\": \"pictures\", \"path\": path },\n  \"badges\": path in $state.edited ? ['적용함'] : [] }]"
+          }
+        }
+      },
+      {
+        "type": "when",
+        "value": {
+          "expr": "$count($state.outside) > 0"
+        },
+        "child": {
+          "type": "list",
+          "layout": "grid",
+          "item_width": "small",
+          "selection": "multiple",
+          "selected": {
+            "state": "picked"
+          },
+          "current": {
+            "state": "focus"
+          },
+          "disabled": {
+            "client": "files_locked"
+          },
+          "on_select": {
+            "client": "select_file"
+          },
+          "on_activate": {
+            "client": "activate"
+          },
+          "grouped": true,
+          "items": {
+            "expr": "[{ \"title\": '연 파일', \"items\": [$state.outside.{ \"key\": key, \"title\": title, \"icon\": 'image',\n  \"badges\": key in $state.edited ? ['적용함'] : [] }] }, { \"title\": $state.folder_name != '' ? $state.folder_name : '폴더', \"items\": [$data.pics.{ \"key\": path, \"title\": name, \"path\": path, \"dir\": kind = 'dir',\n  \"icon\": kind = 'dir' ? 'folder' : undefined,\n  \"selectable\": kind = 'dir' ? false : true,\n  \"image\": kind = 'dir' ? undefined : { \"permission\": \"pictures\", \"path\": path },\n  \"badges\": path in $state.edited ? ['적용함'] : [] }] }]"
+          }
+        }
+      },
+      {
+        "type": "when",
+        "value": {
+          "expr": "$count($state.outside) = 0 and $count($data.pics) = 0"
+        },
+        "child": {
+          "type": "stack",
+          "direction": "column",
+          "place": "center",
+          "children": [
+            {
+              "type": "text",
+              "style": "meta",
+              "value": "이 폴더에 그림 없음"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "on_close": [
+    {
+      "set_state": "files_open",
+      "value": false
+    }
+  ]
+}

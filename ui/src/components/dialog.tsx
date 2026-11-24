@@ -82,7 +82,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); if (!busyRef.current) onCancelRef.current(); return; }
     if (event.key !== "Tab" || !root.current) return;
     // 브라우저 Tab 순서와 같게 스크롤 칸과 details 요약도 초점 대상으로 센다.
-    const focusable = [...root.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])')];
+    const focusable = [...root.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]')].filter((element) => element.tabIndex >= 0);
     if (!focusable.length) { event.preventDefault(); return; }
     const first = focusable[0]; const last = focusable[focusable.length - 1];
     if (event.shiftKey && (document.activeElement === first || (windowModal && document.activeElement === root.current))) { event.preventDefault(); last.focus(windowModal ? { preventScroll: true } : undefined); }

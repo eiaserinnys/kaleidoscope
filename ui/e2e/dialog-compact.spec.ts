@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+
+const omniFolder = JSON.parse(readFileSync(new URL("./fixtures/omni-folder.json", import.meta.url), "utf8"));
 
 async function setApp(page: Page, confirm: boolean) {
   const dialog = {
@@ -193,4 +195,167 @@ test("고르기는 창 높이가 바뀌어도 찾기를 고정하고 목록만 �
     if (width === 620 && height === 400) await app.screenshot({ path: test.info().outputPath("picker-620x400.png") });
   }
   writeFileSync(test.info().outputPath("picker-heights.json"), JSON.stringify(measurements, null, 2));
+});
+
+async function pickerFixture(page: Page, count: number, emptyList = false) {
+  const rows = Array.from({ length: count }, (_, i) => ({ key: String(i), title: `세션 ${i + 1}` }));
+  const list = { type: "list", items: rows, selected: { state: "selected" }, on_select: { set_state: "selected" } };
+  const ui = { type: "dialog", title: "세션 고르기", open: true, on_close: [], child: {
+    type: "stack", direction: "column", fill: 1, children: [
+      { type: "when", value: false, child: { type: "text", value: "오류" } },
+      { type: "when", value: true, child: { type: "stack", direction: "column", gap: "small", fill: [1, 2, 3], children: [
+        { type: "input", kind: "search", placeholder: "제목으로 찾기", value: { state: "query" }, on_change: { set_state: "query" } },
+        { type: "when", value: count === 0 && !emptyList, child: { type: "notice", kind: "info", message: "일치하는 세션이 없습니다" } },
+        { type: "when", value: count > 0 || emptyList, child: list },
+        { type: "when", value: false, child: list },
+      ] } },
+    ],
+  } };
+  await page.evaluate(async (ui) => {
+    const harness = (window as any).__ksHarness;
+    const { snapshot } = await harness.call({ op: "state.get" });
+    const app = snapshot.shared.app_versions.find((v: any) => v.app_id === "data-controls");
+    app.definition.ui = ui; app.definition.state = { query: "", selected: "" }; app.version += 1;
+    const win = snapshot.shared.windows.find((w: any) => w.app_id === "data-controls");
+    win.app_version = app.version; win.state = { query: "", selected: "" };
+    harness.emit({ event: "state.changed", snapshot });
+  }, ui);
+}
+
+test("고르기의 빈 결과와 목록은 찾기를 고정하고 바깥을 스크롤하지 않는다", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 850 });
+  await page.goto("/?preview=data-controls");
+  await page.addStyleTag({ content: ".ks-harness-dev-panel { display: none !important; }" });
+  const app = page.getByTestId("app-window-data-controls");
+  const measurements = [];
+  for (const [width, height] of [[360, 240], [620, 680]]) {
+    await app.evaluate((element, size) => { element.style.width = `${size[0]}px`; element.style.height = `${size[1]}px`; }, [width, height]);
+    const positions = [];
+    for (const [count, emptyList] of [[0, false], [0, true], [1, false], [4, false]] as const) {
+      await pickerFixture(page, count, emptyList);
+      const dialog = app.getByRole("dialog", { name: "세션 고르기" });
+      const search = dialog.getByPlaceholder("제목으로 찾기");
+      await expect(search).toBeVisible();
+      if (count === 0 && emptyList) await expect(dialog.locator(".ks-no-items")).toBeVisible();
+      else if (count === 0) await expect(dialog.getByText("일치하는 세션이 없습니다")).toBeVisible();
+      else await expect(dialog.getByRole("option")).toHaveCount(count);
+      const result = await dialog.evaluate((element) => {
+        const input = element.querySelector<HTMLElement>('input[placeholder="제목으로 찾기"]')!;
+        const outer = element.querySelector<HTMLElement>(".ks-dialog-scroll")!;
+        const before = input.getBoundingClientRect().top;
+        const scrollers = [...element.querySelectorAll<HTMLElement>("*")].filter(e => /^(auto|scroll)$/.test(getComputedStyle(e).overflowY) && e.clientHeight > 0 && e.scrollHeight > e.clientHeight + 1);
+        const owners = scrollers.map(e => e.className);
+        scrollers.forEach(e => { e.scrollTop = e.scrollHeight; });
+        return { before, after: input.getBoundingClientRect().top, outerHeight: outer.clientHeight, outerScrollHeight: outer.scrollHeight, owners };
+      });
+      measurements.push({ width, height, count, emptyList, ...result });
+      if (!emptyList) positions.push(result.before);
+      expect.soft(Math.abs(result.before - result.after), `${width}×${height}, ${count}건, 찾기 고정`).toBeLessThanOrEqual(1);
+      expect.soft(result.outerScrollHeight, `${width}×${height}, ${count}건, 바깥 스크롤`).toBeLessThanOrEqual(result.outerHeight + 1);
+      expect.soft(result.owners.filter(name => !String(name).includes("ks-list")), `${width}×${height}, ${count}건, 스크롤 주인`).toEqual([]);
+      if (count === 0 && !emptyList) await app.screenshot({ path: test.info().outputPath(`picker-empty-${width}x${height}.png`) });
+    }
+    expect.soft(Math.max(...positions) - Math.min(...positions), `${width}×${height}, 결과 수에 따른 찾기 위치`).toBeLessThanOrEqual(1);
+  }
+  writeFileSync(test.info().outputPath("picker-empty-measurements.json"), JSON.stringify(measurements, null, 2));
+});
+
+test("고르기의 Tab과 Shift+Tab은 닫기를 포함해 대화상자 안에서 돈다", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 850 });
+  await page.goto("/?preview=data-controls");
+  await page.addStyleTag({ content: ".ks-harness-dev-panel { display: none !important; }" });
+  const app = page.getByTestId("app-window-data-controls");
+  const sequences = [];
+  for (const [width, height] of [[360, 240], [620, 680]]) {
+    await app.evaluate((element, size) => { element.style.width = `${size[0]}px`; element.style.height = `${size[1]}px`; }, [width, height]);
+    await pickerFixture(page, 14);
+    const dialog = app.getByRole("dialog", { name: "세션 고르기" });
+    const search = dialog.getByPlaceholder("제목으로 찾기");
+    await search.focus();
+    await expect(search).toBeFocused();
+    const seq = [];
+    for (const key of ["Tab", "Tab", "Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab"]) {
+      await page.keyboard.press(key);
+      seq.push(await dialog.evaluate((element) => {
+        const active = document.activeElement as HTMLElement;
+        return { inside: element.contains(active), name: active.getAttribute("aria-label") || active.getAttribute("placeholder") || active.textContent?.trim(), role: active.getAttribute("role") };
+      }));
+    }
+    sequences.push({ width, height, seq });
+    expect.soft(seq.map(item => item.inside), `${width}×${height}, 대화상자 안`).toEqual([true, true, true, true, true, true]);
+    expect.soft(seq.map(item => item.name), `${width}×${height}, 화면 순서`).toEqual(["세션 1", "닫기", "제목으로 찾기", "닫기", "세션 1", "제목으로 찾기"]);
+  }
+  writeFileSync(test.info().outputPath("picker-tabs.json"), JSON.stringify(sequences, null, 2));
+});
+
+test("폴더 격자 대화상자는 두 크기에서 마지막 항목까지 한 곳으로 스크롤한다", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 850 });
+  await page.goto("/?preview=data-controls");
+  await page.addStyleTag({ content: ".ks-harness-dev-panel { display: none !important; }" });
+  const app = page.getByTestId("app-window-data-controls");
+  const observations = [];
+  for (const grouped of [false, true]) {
+    // 앱 정의의 대화상자 트리를 그대로 두고, 로컬 시험에 없는 client·자료 바인딩만 채운다.
+    const folder = structuredClone(omniFolder) as any;
+    folder.open = true;
+    folder.on_close = [];
+    const children = folder.child.children;
+    children[0].value = true;
+    const toolbar = children[0].child;
+    toolbar.start[0].on_click = []; toolbar.start[0].disabled = false;
+    toolbar.start[1].value = "그림 폴더"; toolbar.end[0].value = "그림 48개";
+    toolbar.end[1].on_click = [];
+    const rows = Array.from({ length: 48 }, (_, i) => ({ key: String(i), title: `그림 ${i + 1}`, icon: "image", badges: i === 47 ? ["적용함"] : [] }));
+    for (const index of [1, 2]) {
+      children[index].value = grouped ? index === 2 : index === 1;
+      const list = children[index].child;
+      list.items = index === 1 ? rows : [{ title: "연 파일", items: rows.slice(0, 8) }, { title: "폴더", items: rows.slice(8) }];
+      list.selected = { state: "picked" }; list.current = { state: "current" };
+      list.disabled = false; list.on_select = []; list.on_activate = [];
+    }
+    children[3].value = false;
+    await page.evaluate(async (ui) => {
+      const harness = (window as any).__ksHarness;
+      const { snapshot } = await harness.call({ op: "state.get" });
+      const app = snapshot.shared.app_versions.find((v: any) => v.app_id === "data-controls");
+      app.definition.ui = ui; app.definition.state = { picked: [], current: null }; app.version += 1;
+      const win = snapshot.shared.windows.find((w: any) => w.app_id === "data-controls");
+      win.app_version = app.version; win.state = { picked: [], current: null };
+      harness.emit({ event: "state.changed", snapshot });
+    }, folder);
+    for (const [width, height] of [[620, 680], [360, 240]]) {
+      await app.evaluate((element, size) => { element.style.width = `${size[0]}px`; element.style.height = `${size[1]}px`; }, [width, height]);
+      const dialog = app.getByRole("dialog", { name: "폴더" });
+      const list = dialog.locator(".ks-list.is-grid");
+      await expect(list).toBeVisible();
+      const scrolls = await dialog.evaluate((element) => [...element.querySelectorAll<HTMLElement>("*")]
+        .filter(e => /^(auto|scroll)$/.test(getComputedStyle(e).overflowY) && e.clientHeight > 0 && e.scrollHeight > e.clientHeight + 1)
+        .map(e => ({ name: e.className, height: e.clientHeight, scrollHeight: e.scrollHeight })));
+      await list.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+      await page.waitForTimeout(350);
+      const last = dialog.getByRole("option", { name: "그림 48", exact: true });
+      const visible = await last.count() ? await last.evaluate((element) => {
+        const row = element.getBoundingClientRect();
+        let top = -Infinity, bottom = Infinity;
+        for (let parent = element.parentElement; parent && parent.getAttribute("role") !== "dialog"; parent = parent.parentElement) {
+          if (/^(auto|scroll|hidden|clip)$/.test(getComputedStyle(parent).overflowY)) {
+            const r = parent.getBoundingClientRect(); top = Math.max(top, r.top); bottom = Math.min(bottom, r.bottom);
+          }
+        }
+        const title = element.querySelector<HTMLElement>(".ks-list-title")!;
+        const badge = element.querySelector<HTMLElement>(".ks-badge");
+        return { top: row.top, bottom: row.bottom, clipTop: top, clipBottom: bottom, full: row.top >= top - 1 && row.bottom <= bottom + 1,
+          titleWidth: title.clientWidth, titleScrollWidth: title.scrollWidth, badge: badge?.innerText };
+      }) : null;
+      const result = { grouped, width, height, scrolls, last: visible };
+      observations.push(result);
+      console.log("폴더 격자", JSON.stringify(result));
+      expect.soft(scrolls.map(s => s.name), `${width}×${height}, 묶음 ${grouped}, 스크롤 주인`).toEqual([expect.stringContaining("ks-list")]);
+      expect.soft(visible?.full, `${width}×${height}, 묶음 ${grouped}, 마지막 항목`).toBe(true);
+      expect.soft(visible && visible.titleScrollWidth <= visible.titleWidth + 1, `${width}×${height}, 묶음 ${grouped}, 이름 전체`).toBe(true);
+      expect.soft(visible?.badge, `${width}×${height}, 묶음 ${grouped}, 마지막 항목 배지`).toBe("적용함");
+      await app.screenshot({ path: test.info().outputPath(`omni-${grouped ? "grouped" : "folder"}-${width}x${height}.png`) });
+    }
+  }
+  writeFileSync(test.info().outputPath("omni-measurements.json"), JSON.stringify(observations, null, 2));
 });
