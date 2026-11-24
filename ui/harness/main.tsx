@@ -277,7 +277,7 @@ function withRealNames(conversation: FakeConversation | undefined): FakeConversa
   const place = <T extends { id: string; label: string } | undefined>(group: T): T => group?.id === "eiaserinnys" ? { ...group, label: "eias-linegames-wsl" } : group;
   return {
     ...conversation,
-    models: conversation.models.map((model) => ({ ...model, label: model.id === "sol" ? "Garnet - 4 Argon" : model.label, group: place(model.group) })),
+    models: conversation.models.map((model) => ({ ...model, label: model.id === "model-b" ? "Garnet - 4 Model A" : model.label, group: place(model.group) })),
     adoptable: conversation.adoptable?.map((candidate, index) => index === 0 ? { ...candidate, title: "서소영 영구 세션", profile: candidate.profile && { ...candidate.profile, label: "서소영 (PAS)" } } : candidate),
   };
 }
@@ -322,7 +322,7 @@ const fakeTransport = createFakeTransport({
   saveLocation: params.get("ios-save") === "1" ? "파일 앱 › 나의 iPad › kaleidoscope › 회의록.md" : undefined,
   folder: { root_path: "/fake/docs", root_name: "문서" },
   conversation: withRealNames(conversationMode || pasMode ? {
-    thread: ["start", "login-start", "attach-start", "attach-own"].includes(conversationMode ?? "") || pasMode === "empty" ? null : conversationMode === "attach-attached" ? { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록 2026년 11월", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
+    thread: ["start", "login-start", "attach-start", "attach-own"].includes(conversationMode ?? "") || pasMode === "empty" ? null : conversationMode === "attach-attached" ? { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록 2026년 11월", model: { id: "model-b", label: "Model B", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : { id: "fake-thread", external: { namespace: "test", key: "workspace-1" }, title: "작업", model: { id: "model-b", label: "Model B", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false },
     items: chatAttachments
       ? [{ id: "chat-attach", kind: "user", text: "첨부를 보냈습니다", at: timestamp, attachments: [
         { id: "img", name: "카드 화면.png", mime: "image/png" },
@@ -337,11 +337,11 @@ const fakeTransport = createFakeTransport({
     } : undefined,
     olderPages: [[{ id: "0", kind: "user", text: "이전 기록", at: timestamp, attachments: [] }], [{ id: "older", kind: "assistant", text: "더 이전 기록", at: timestamp, attachments: [] }]],
     profiles: [{ id: "profile-a", label: "서소영", available: true }, { id: "profile-b", label: "키키", available: true }],
-    start: { profile: "profile-a", model: "sol" },
+    start: { profile: "profile-a", model: "model-b" },
     models: [
-      { id: "argon", label: "Argon", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), group: { id: "eiaserinnys", label: "eiaserinnys" } },
-      { id: "sol", label: "Sol", available: true, group: { id: "eiaserinnys", label: "eiaserinnys" } },
-      { id: "n1:eias-linegames:argon", label: "Argon", available: true, group: { id: "eias-linegames", label: "eias-linegames" } },
+      { id: "model-a", label: "Model A", available: false, reason: "한도 거부 중", reason_code: "limit_rejected", resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), group: { id: "eiaserinnys", label: "eiaserinnys" } },
+      { id: "model-b", label: "Model B", available: true, group: { id: "eiaserinnys", label: "eiaserinnys" } },
+      { id: "n1:eias-linegames:model-a", label: "Model A", available: true, group: { id: "eias-linegames", label: "eias-linegames" } },
     ],
     loginRequired: conversationMode === "login" || conversationMode === "login-start", conflict: conversationMode === "conflict", delayMs: pasMode === "loading" ? 5000 : historyCount !== null ? 0 : conversationMode ? Number(params.get("conversation-delay")) || 350 : 0,
     getError: pasMode === "load-error" ? "작업 PAS를 불러오지 못했습니다" : undefined,
@@ -352,7 +352,7 @@ const fakeTransport = createFakeTransport({
     startError: params.get("start-error") ? { code: "conflict", id: "CONV_ATTACH_CONFLICT", message: "고른 대화가 이미 다른 곳에 연결되어 있습니다. 대화 목록을 다시 열고 다른 대화를 고르세요.", details: [] } : undefined,
     draft: conversationMode === "draft" ? { request_id: "draft-id", text: "복원된 초안", attachments: [{ name: "메모.txt", mime: "text/plain", data_base64: "aGVsbG8=" }], failed: false } : undefined,
     attached: conversationMode === "attach-attached",
-    own: conversationMode === "attach-own" ? { id: "session-own", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록", model: { id: "sol", label: "Sol", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : null,
+    own: conversationMode === "attach-own" ? { id: "session-own", external: { namespace: "test", key: "workspace-1" }, title: "서소영 PAS — 카드 운영 기록", model: { id: "model-b", label: "Model B", group: { id: "eiaserinnys", label: "eiaserinnys" } }, profile: { id: "profile-a", label: "서소영" }, created_at: timestamp, archived: false } : null,
     adoptable: conversationMode === "attach-start" || conversationMode === "attach-own" ? [
       { id: "session-1", title: "서소영 PAS — 카드 운영과 배포 기록", profile: { id: "profile-a", label: "서소영" }, updated_at: "2026-11-08T09:00:00Z" },
       { id: "session-2", title: "엠버 앤 블레이드 밸런스 회의", profile: { id: "profile-b", label: "키키" }, updated_at: "2026-11-07T09:00:00Z" },

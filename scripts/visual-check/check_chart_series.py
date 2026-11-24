@@ -111,7 +111,7 @@ def stacked_166_series():
 
 
 def long_name_series():
-    long_names = ["claude-opus-4-1-20250805-long-preview", "claude-sonnet", "gpt-5", "gemini-2.5-pro",
+    long_names = ["model-a-long-preview-name", "model-b", "model-c", "model-d",
                   "모델 다섯", "모델 여섯", "모델 일곱", "모델 여덟"]
     labels = ["1월", "2월", "3월"]
     return [{"key": f"p{index}", "name": long_names[index],
