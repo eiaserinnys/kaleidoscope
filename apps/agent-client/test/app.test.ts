@@ -317,6 +317,17 @@ test("토글 쓰기: toggle_status_bar는 저장소 status_bar에 쓴다", async
   assert.deepEqual(writes, [["status_bar", true]]);
 });
 
+test("같은 창에서 상태 표시를 켜고 끄면 저장 뒤 화면에도 바로 반영한다", async () => {
+  const { handlers, views, storage } = stagedApp(readyView());
+  storage.get("status_bar")!(false);
+  await handlers.get("toggle_status_bar")!({ event: true });
+  assert.equal(views.at(-1).status_bar_on, true);
+  assert.equal(views.at(-1).show_status_bar, true);
+  await handlers.get("toggle_status_bar")!({ event: false });
+  assert.equal(views.at(-1).status_bar_on, false);
+  assert.equal(views.at(-1).show_status_bar, false);
+});
+
 test("한도 막대: 모르는 창은 빼고 설정 행은 모름, 막히면 막힘과 남은 시간", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 4, 0) });
   const unknown = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", null)] });

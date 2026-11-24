@@ -107,7 +107,12 @@ export class AppClient {
     client.handle("cancel", () => this.session.cancel());
     client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
     client.handle("attachment", ({ event }) => this.attachment(event));
-    client.handle("toggle_status_bar", ({ event }) => this.client.setStorage("status_bar", event === true));
+    client.handle("toggle_status_bar", async ({ event }) => {
+      const checked = event === true;
+      await this.client.setStorage("status_bar", checked);
+      this.statusBar = checked;
+      this.update();
+    });
     client.handle("new_session", () => this.switchSession(null));
     client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
     client.handle("close_history", () => { this.historyOpen = false; this.historyQuery = ""; this.update(); });

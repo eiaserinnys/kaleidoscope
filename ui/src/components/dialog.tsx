@@ -52,6 +52,9 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
       }
     }
     if (native.isTrusted === false && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
+    // 같은 창에 대화상자가 겹치면 문서 키를 맨 위 대화상자만 처리한다.
+    const dialogs = [...host.children].filter((element) => element.classList.contains("ks-dialog-overlay"));
+    if (dialogs.at(-1) !== overlay.current) return;
     if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); if (!busyRef.current) onCancelRef.current(); return; }
     if (event.key !== "Tab" || !root.current) return;
     // 브라우저 Tab 순서와 같게 스크롤 칸과 details 요약도 초점 대상으로 센다.
@@ -67,7 +70,9 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   }, [host, windowId, ownerAnchor]);
   useLayoutEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const content = host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
+    // 다른 대화상자 안에서 열었다면 닫을 때 그 안의 연 요소로 돌아간다.
+    const parentDialog = previous?.closest<HTMLElement>(".ks-dialog");
+    const content = parentDialog && host.contains(parentDialog) ? parentDialog : host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
     if (!windowModal && !opener.current) opener.current = focusBookmark(previous === document.body ? lastFocusInWindow(host) : previous, content);
     const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
