@@ -105,6 +105,7 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   const grouped = useMemo(() => listGroups(value, Boolean(block.grouped), validItem), [value, block.grouped]);
   const parentScope = useItemScope();
   const items = useMemo(() => grouped.flatMap((group) => group.items), [grouped]);
+  const hasStatus = grouped.some((group) => group.status);
   const grid = block.layout === "grid";
   const icons = block.layout === "icons";
   const [columns, setColumns] = useState(1);
@@ -289,7 +290,6 @@ function ListReady({ block, context, pointer, value, more }: { block: Extract<Bl
   };
   const virtualRows = virtual.getVirtualItems();
   const footer = useLoadMore(more, rows.length, virtualRows.at(-1)?.index ?? -1, data, useWindowVisible(context), icons ? <IconTileSkeleton count={activeColumns} /> : undefined, items.length);
-  const hasStatus = grouped.some((group) => group.status);
   if (value === null && !more) return null;
   if (!items.length && !more && !hasStatus) return <NoItems rootProps={blockRoot} />;
   const first = virtual.getVirtualItemForOffset(virtual.scrollOffset ?? 0)?.index ?? 0;

@@ -125,3 +125,81 @@ test("로그인 요청을 보내는 동안에는 시작 상태이고 실패하�
   state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32603, message: "failed" } }, "unused");
   assert.equal(state.phase, "login");
 });
+
+const update = (body: Record<string, unknown>) => ({ jsonrpc: "2.0", method: "session/update", params: { sessionId: "s", update: body } });
+const fiveHour = { status: "allowed_warning", rateLimitType: "five_hour", utilization: 0.5, resetsAt: 1763400600 };
+
+test("usage_update가 컨텍스트와 한도를 채운다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 42000, size: 100000, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  assert.deepEqual(state.context, { used: 42000, size: 100000 });
+  assert.equal(state.limits.length, 1);
+  state = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 1, size: 0 }), "x");
+  assert.equal(state.context, null);
+  state = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 1 }), "x");
+  assert.equal(state.context, null);
+});
+
+test("거절된 턴의 오류가 한도를 막힘으로 기록한다", () => {
+  let state = initialState();
+  let id: number;
+  [state, id] = reserveRequest(state, "prompt", { sessionId: "s", prompt: [] });
+  state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32000, message: "limit", data: { errorKind: "rate_limit", rateLimit: { status: "rejected", rateLimitType: "five_hour", resetsAt: 1763400600 } } } }, "x");
+  assert.equal(state.phase, "ready");
+  assert.equal(state.limits[0].blocked, true);
+});
+
+test("usage_update와 거절된 턴의 오류는 unifiedWindows의 창을 모두 합친다", () => {
+  // 2026-11-19 실제 이벤트 모양
+  const live = { status: "allowed", resetsAt: 1795062600, rateLimitType: "five_hour", unifiedWindows: {
+    five_hour: { utilization: 0.39, resetsAt: 1795062600, status: "allowed" }, seven_day: { utilization: 0.47, resetsAt: 1795219200, status: "allowed" } } };
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 48019, size: 1000000, _meta: { "_claude/rateLimit": live } }), "x");
+  assert.deepEqual(state.limits.map((l) => [l.id, l.label, l.usedRatio]), [["five_hour", "5시간", 0.39], ["seven_day", "7일", 0.47]]);
+  let id: number;
+  [state, id] = reserveRequest(state, "prompt", { sessionId: "s", prompt: [] });
+  const rejected = { ...live, status: "rejected", rateLimitType: "seven_day", unifiedWindows: { ...live.unifiedWindows, seven_day: { utilization: 1, resetsAt: 1795219200, status: "rejected" } } };
+  state = reduceMessage(state, { jsonrpc: "2.0", id, error: { code: -32000, message: "limit", data: { errorKind: "rate_limit", rateLimit: rejected } } }, "x");
+  assert.deepEqual(state.limits.map((l) => [l.id, l.usedRatio, l.blocked]), [["five_hour", 0.39, false], ["seven_day", 1, true]]);
+});
+
+test("계정 알림은 auth/status_update만 읽고 응답을 만들지 않는다", () => {
+  let state = reduceMessage(initialState(), { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "Claude Team", email: "a@b.c", active: true }] } }, "x");
+  assert.deepEqual(state.account, { label: "Claude Team", email: "a@b.c" });
+  state = reduceMessage(state, { jsonrpc: "2.0", method: "_auth/status_update", params: { authStatus: { state: "authenticated" } } }, "x");
+  assert.deepEqual(state.account, { label: "Claude Team", email: "a@b.c" });
+  assert.deepEqual(state.outbox, []);
+});
+
+test("서브에이전트 도구는 끝나면 사라진다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "tool_call", toolCallId: "t1", title: "x", status: "in_progress", _meta: { claudeCode: { toolName: "Agent" } } }), "x");
+  assert.equal(state.tools[0].subagent, true);
+  state = reduceMessage(state, update({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" }), "x");
+  assert.deepEqual(state.tools, []);
+});
+
+test("세션 전환은 컨텍스트만 비우고 한도와 계정은 남긴다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 1, size: 10, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  state = reduceMessage(state, { jsonrpc: "2.0", method: "auth/status_update", params: { state: "authenticated", accounts: [{ label: "A", active: true }] } }, "x");
+  let id: number;
+  [state, id] = reserveRequest(state, "switch", "s2");
+  state = reduceMessage(state, { jsonrpc: "2.0", id, result: {} }, "x");
+  assert.equal(state.context, null);
+  assert.equal(state.limits.length, 1);
+  assert.notEqual(state.account, null);
+});
+
+test("인증이 풀렸다는 알림은 계정을 지우고, 깨진 알림은 무시한다", () => {
+  const auth = (params: unknown) => ({ jsonrpc: "2.0", method: "auth/status_update", params });
+  let state = reduceMessage(initialState(), auth({ state: "authenticated", accounts: [{ label: "A", active: true }] }), "x");
+  state = reduceMessage(state, auth(undefined), "x");
+  assert.deepEqual(state.account, { label: "A", email: null });
+  state = reduceMessage(state, auth({ state: "unauthenticated" }), "x");
+  assert.equal(state.account, null);
+});
+
+test("재생 중인 usage_update는 컨텍스트와 한도를 바꾸지 않는다", () => {
+  let state = reduceMessage(initialState(), update({ sessionUpdate: "usage_update", used: 1, size: 10, _meta: { "_claude/rateLimit": fiveHour } }), "x");
+  [state] = reserveRequest(state, "switch", "s2");
+  const replayed = reduceMessage(state, update({ sessionUpdate: "usage_update", used: 9, size: 10, _meta: { "_claude/rateLimit": { ...fiveHour, rateLimitType: "seven_day" } } }), "x");
+  assert.deepEqual(replayed.context, { used: 1, size: 10 });
+  assert.equal(replayed.limits.length, 1);
+});

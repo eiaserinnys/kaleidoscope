@@ -1,13 +1,15 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useContext, useLayoutEffect, useRef, useState } from "react";
 import type { Block } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useBinding, useDormant } from "../data/window-data";
 import { renderBlock } from "../render/render-block";
+import { WidthScope } from "./width-scope";
 
 export type WhenBlockData = Extract<Block, { type: "when" }>;
 
 export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; context: BlockContext; pointer: string }) {
   const value = useBinding(`${pointer}/value`, block.value ?? null);
+  const scopedElement = useContext(WidthScope);
   const hasWidthCondition = block.min_width !== undefined || block.max_width !== undefined;
   const [widthMatches, setWidthMatches] = useState(!hasWidthCondition);
   const widthMatchesRef = useRef(!hasWidthCondition);
@@ -19,10 +21,12 @@ export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; c
     }
     const host = Array.from(document.querySelectorAll<HTMLElement>(".ks-data-window[data-window-id]"))
       .find((element) => element.dataset.windowId === context.window.id);
-    const content = host;
+    const content = block.width_scope === "container" && scopedElement !== undefined ? scopedElement : host;
     const update = (width: number) => {
-      const matches = (block.min_width === undefined || width >= block.min_width)
-        && (block.max_width === undefined || width <= block.max_width);
+      // 나란히 둔 정수 폭 조건 사이에 소수점 폭의 빈 구간이 생기지 않게 한다.
+      const measured = block.width_scope === "container" ? Math.floor(width) : width;
+      const matches = (block.min_width === undefined || measured >= block.min_width)
+        && (block.max_width === undefined || measured <= block.max_width);
       if (widthMatchesRef.current === matches) return;
       widthMatchesRef.current = matches;
       setWidthMatches(matches);
@@ -31,11 +35,11 @@ export function WhenBlock({ block, context, pointer }: { block: WhenBlockData; c
     update(content.getBoundingClientRect().width);
     const observer = new ResizeObserver((entries) => {
       const entry = entries.find((candidate) => candidate.target === content);
-      if (entry) update(entry.contentRect.width);
+      if (entry) update(block.width_scope === "container" ? content.getBoundingClientRect().width : entry.contentRect.width);
     });
     observer.observe(content);
     return () => observer.disconnect();
-  }, [block.max_width, block.min_width, context.window.id, hasWidthCondition]);
+  }, [block.max_width, block.min_width, block.width_scope, context.window.id, hasWidthCondition, scopedElement]);
   // 코어의 갈래 판정(crates/contract/src/data.rs when_open)과 같은 규칙이다. 여기를 고치면 코어도 고친다.
   const valueMatches = block.value === undefined || (value.status === "ready" && value.value === true);
   const visible = valueMatches && widthMatches;

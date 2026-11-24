@@ -108,19 +108,31 @@ test("초기 저장소 오류는 가운데에 보이고 다시 읽기에 실패�
   assert.equal(views.at(-1).error_id, null);
 });
 
-test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 이유를 표시한다", () => {
+function makeApp() {
   const handlers = new Map<string, (context: any) => unknown>();
   const views: any[] = [];
+  const storage = new Map<string, (value: unknown) => void>(), writes: [string, unknown][] = [];
   const client = {
     process: { onReady() {}, onServicesChanged() {} },
     files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
-    onStorageChange() {}, onLifecycle() {}, onMessage() {},
+    onStorageChange: (entry: string, fn: any) => { storage.set(entry, fn); }, onLifecycle() {}, onMessage() {},
+    setStorage: async (entry: string, value: unknown) => { writes.push([entry, value]); },
     handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
   };
-  const app = new AppClient(client as any, []);
-  (app as any).receive({ phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null,
+  return { handlers, views, storage, writes, app: new AppClient(client as any, []) };
+}
+
+function readyView() {
+  return { phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null,
     queued: [], permissions: [], controls: [], authMethods: [], failure: null,
-    sessionId: "current", canListSessions: false, sessions: [], sessionsLoading: false, sessionError: null, switching: false });
+    sessionId: "current", canListSessions: true, canDeleteSessions: false, sessions: [], sessionsLoading: false, sessionError: null,
+    switching: false, deleting: false, configuring: false,
+    context: null, limits: [], account: null, subagents: 0 };
+}
+
+test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 이유를 표시한다", () => {
+  const { views, app } = makeApp();
+  (app as any).receive({ ...readyView(), canListSessions: false });
   assert.equal(views.at(-1).history_disabled, true);
   assert.equal(views.at(-1).history_description, "이 에이전트는 지난 세션 목록을 주지 않습니다");
   assert.equal(views.at(-1).history_unsupported, true);
@@ -187,4 +199,226 @@ test("세션 전환 중 대화를 숨기고 실패하면 대화상자와 오류�
   assert.equal(views.at(-1).history_open, true);
   assert.equal(views.at(-1).session_switching, false);
   assert.equal(views.at(-1).history_error_message, "오류");
+});
+
+test("제목 검색은 표시 제목을 대소문자 없이 거르고 대화상자를 닫으면 비운다", async () => {
+  const { handlers, views, app } = makeApp();
+  (app as any).receive({ ...readyView(), sessions: [
+    { sessionId: "a1", cwd: "/work", title: "Fix Login" },
+    { sessionId: "b2", cwd: "/work", title: "배포 정리" },
+    { sessionId: "zz998877665544", cwd: "/work" },
+  ] });
+  await handlers.get("search_history")!({ event: "  login " });
+  assert.deepEqual(views.at(-1).history_items.map((i: any) => i.key), ["a1"]);
+  assert.equal(views.at(-1).history_query, "  login ");
+  await handlers.get("search_history")!({ event: "ZZ9988" });
+  assert.deepEqual(views.at(-1).history_items.map((i: any) => i.key), ["zz998877665544"]);
+  await handlers.get("search_history")!({ event: "없는 제목" });
+  assert.deepEqual(views.at(-1).history_items, []);
+  assert.equal(views.at(-1).history_no_match, true);
+  assert.equal(views.at(-1).history_has_items, true);
+  await handlers.get("search_history")!({ event: "정리" });
+  (app as any).receive({ ...(app as any).view, sessions: [{ sessionId: "a1", cwd: "/work", title: "Fix Login" }] });
+  assert.deepEqual(views.at(-1).history_items, []);
+  assert.equal(views.at(-1).history_query, "정리");
+  await handlers.get("close_history")!({});
+  assert.equal(views.at(-1).history_query, "");
+  assert.deepEqual(views.at(-1).history_items.map((i: any) => i.key), ["a1"]);
+  assert.equal(views.at(-1).history_no_match, false);
+});
+
+test("삭제는 능력이 있을 때만 메뉴를 보이고 잠긴 동안에는 보내지 않는다", async () => {
+  const { handlers, views, app } = makeApp();
+  (app as any).receive({ ...readyView(), sessions: [{ sessionId: "a1", cwd: "/work", title: "Fix Login" }] });
+  assert.equal(views.at(-1).history_can_delete, false);
+  assert.equal(views.at(-1).history_cannot_delete, true);
+  assert.equal(views.at(-1).history_items[0].confirm, "「Fix Login」 세션을 지웁니다. 되돌릴 수 없습니다.");
+  await handlers.get("search_history")!({ event: "없는 제목" });
+  assert.equal(views.at(-1).history_no_match, true);
+  assert.equal(views.at(-1).history_can_delete, false);
+  assert.equal(views.at(-1).history_cannot_delete, false);
+  await handlers.get("search_history")!({ event: "" });
+  assert.equal(views.at(-1).history_cannot_delete, true);
+  const deleted: string[] = [];
+  (app as any).session.deleteSession = async (id: string) => { deleted.push(id); };
+  await handlers.get("delete_session")!({ event: "a1" });
+  assert.deepEqual(deleted, []);
+  (app as any).receive({ ...(app as any).view, canDeleteSessions: true });
+  assert.equal(views.at(-1).history_can_delete, true);
+  await handlers.get("search_history")!({ event: "없는 제목" });
+  assert.equal(views.at(-1).history_can_delete, false);
+  assert.equal(views.at(-1).history_cannot_delete, false);
+  await handlers.get("search_history")!({ event: "" });
+  assert.equal(views.at(-1).history_can_delete, true);
+  assert.equal(views.at(-1).history_cannot_delete, false);
+  (app as any).receive({ ...(app as any).view, busy: true });
+  await handlers.get("delete_session")!({ event: "a1" });
+  assert.deepEqual(deleted, []);
+  (app as any).receive({ ...(app as any).view, busy: false });
+  await handlers.get("delete_session")!({ event: "a1" });
+  assert.deepEqual(deleted, ["a1"]);
+  (app as any).receive({ ...(app as any).view, deleting: true });
+  assert.equal(views.at(-1).session_buttons_busy, true);
+  assert.equal(views.at(-1).history_disabled, true);
+});
+
+function stagedApp(view: any) {
+  const made = makeApp();
+  (made.app as any).stage = "session";
+  (made.app as any).receive(view);
+  return made;
+}
+const control = (id: string, category: string, value: string, label: string) => ({ id, label: id, category, kind: "select" as const, value, options: [{ value, label }] });
+const limit = (id: string, label: string, usedRatio: number | null, extra: any = {}) => ({ id, label, usedRatio, resetsAt: null, blocked: false, ...extra });
+
+test("상태 줄 표시 조건: 저장소가 켜져도 채팅이 안 보이면 숨긴다", () => {
+  const { views, storage, app } = makeApp();
+  storage.get("status_bar")!(true);
+  (app as any).stage = "session";
+  (app as any).receive({ ...readyView(), phase: "starting" });
+  assert.equal(views.at(-1).status_bar_on, true);
+  assert.equal(views.at(-1).show_status_bar, false);
+  (app as any).receive({ ...readyView(), phase: "ready" });
+  assert.equal(views.at(-1).show_status_bar, true);
+  storage.get("status_bar")!(false);
+  assert.equal(views.at(-1).status_bar_on, false);
+  assert.equal(views.at(-1).show_status_bar, false);
+});
+
+test("상태 줄 순서: 모델, 계정 라벨(이메일 없이), 추론 수준, 모드", () => {
+  const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
+  const { views, app } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: "a@b.c" } });
+  assert.equal(views.at(-1).status_identity, "Opus 5.5 · Claude Team · 높음 · Auto");
+  // 설정의 계정 줄은 이메일까지 보인다
+  assert.equal(views.at(-1).status_account, "Claude Team, a@b.c");
+  (app as any).receive({ ...readyView(), controls, account: null });
+  assert.equal(views.at(-1).status_identity, "Opus 5.5 · 높음 · Auto");
+});
+
+test("한도 막대: session은 5시간, weekly는 7일 창이고 다른 창은 설정에서만 보인다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 12, 0) });
+  const at = (day: number, hour: number) => new Date(2031, 10, day, hour, 0).toISOString();
+  const limits = [limit("seven_day", "7일", 0.3, { resetsAt: at(20, 18) }), limit("five_hour", "5시간", 0.58, { resetsAt: at(17, 15) }), limit("seven_day_opus", "Opus 7일", 0.9, { resetsAt: at(19, 0) })];
+  const { views, app } = stagedApp({ ...readyView(), limits });
+  assert.deepEqual(views.at(-1).status_limit_bars, [
+    { key: "session", label: "5시간", value: 0.58, text: "58%", left: "3시간 남음" },
+    { key: "weekly", label: "7일", value: 0.3, text: "30%", left: "3일 남음" },
+  ]);
+  assert.deepEqual(views.at(-1).status_limits.map((row: any) => [row.label, row.text]), [["7일", "30% 사용, 3일 남음"], ["5시간", "58% 사용, 3시간 남음"], ["Opus 7일", "90% 사용, 1일 남음"]]);
+  assert.equal(views.at(-1).status_compact_usage, "5시간 58% · 7일 30%");
+  assert.equal(views.at(-1).status_tight_usage, "58%·30%");
+  assert.equal(views.at(-1).status_no_limits, false);
+  (app as any).receive({ ...readyView(), limits: [] });
+  assert.deepEqual(views.at(-1).status_limit_bars, []);
+  assert.equal(views.at(-1).status_no_limits, true);
+});
+
+test("컨텍스트와 서브에이전트 표기", () => {
+  const { views, app } = stagedApp({ ...readyView(), context: { used: 42, size: 100 }, subagents: 2, account: { label: "Claude Team", email: null } });
+  assert.equal(views.at(-1).status_context, 0.42);
+  assert.equal(views.at(-1).status_context_text, "42%");
+  assert.equal(views.at(-1).status_compact_usage, "컨텍스트 42%");
+  assert.equal(views.at(-1).status_subagents, "서브에이전트 2");
+  assert.equal(views.at(-1).status_subagents_text, "2개 실행 중");
+  assert.equal(views.at(-1).status_account, "Claude Team");
+  (app as any).receive(readyView());
+  assert.equal(views.at(-1).status_context, null);
+  assert.equal(views.at(-1).status_context_text, "아직 모름");
+  assert.equal(views.at(-1).status_compact_usage, "");
+  assert.equal(views.at(-1).status_subagents, null);
+  assert.equal(views.at(-1).status_subagents_text, "없음");
+  assert.equal(views.at(-1).status_account, null);
+});
+
+test("토글 쓰기: toggle_status_bar는 저장소 status_bar에 쓴다", async () => {
+  const { handlers, writes } = makeApp();
+  await handlers.get("toggle_status_bar")!({ event: true });
+  assert.deepEqual(writes, [["status_bar", true]]);
+});
+
+test("같은 창에서 상태 표시를 켜고 끄면 저장 뒤 화면에도 바로 반영한다", async () => {
+  const { handlers, views, storage } = stagedApp(readyView());
+  storage.get("status_bar")!(false);
+  await handlers.get("toggle_status_bar")!({ event: true });
+  assert.equal(views.at(-1).status_bar_on, true);
+  assert.equal(views.at(-1).show_status_bar, true);
+  await handlers.get("toggle_status_bar")!({ event: false });
+  assert.equal(views.at(-1).status_bar_on, false);
+  assert.equal(views.at(-1).show_status_bar, false);
+});
+
+test("한도 막대: 모르는 창은 빼고 설정 행은 모름, 막히면 막힘과 남은 시간", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 4, 0) });
+  const unknown = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", null)] });
+  const view = unknown.views.at(-1);
+  assert.deepEqual(view.status_limit_bars, []);
+  assert.equal(view.status_limits.length, 1);
+  assert.equal(view.status_limits[0].known, false);
+  assert.equal(view.status_limits[0].text, "아직 모름");
+  const resetsAt = new Date(2031, 10, 17, 5, 0).toISOString();
+  const blocked = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 1, { blocked: true, resetsAt })] });
+  assert.deepEqual(blocked.views.at(-1).status_limit_bars, [{ key: "session", label: "5시간", value: 1, text: "막힘", left: "1시간 남음" }]);
+  assert.equal(blocked.views.at(-1).status_limits[0].text, "막힘, 1시간 남음");
+});
+
+test("상태 줄 칸 표시 여부: when은 참인 불리언만 보므로 값이 있는 칸마다 짝 필드가 있다", () => {
+  const { views, app } = stagedApp({ ...readyView(), context: { used: 42, size: 100 }, subagents: 2, account: { label: "Claude Team", email: null } });
+  let view = views.at(-1);
+  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_account], [true, true, true]);
+  assert.equal(view.status_context_bar, 0.42);
+  assert.equal(view.status_tight_usage, "42%");
+  (app as any).receive(readyView());
+  view = views.at(-1);
+  assert.deepEqual([view.status_has_context, view.status_has_subagents, view.status_has_account], [false, false, false]);
+  assert.equal(view.status_context_bar, 0);
+});
+
+test("좁은 창 칩은 model 하나만", () => {
+  const controls = [control("mode", "mode", "auto", "Auto"), control("model", "model", "opus", "Opus 5.5"), control("t", "thought_level", "high", "높음")];
+  const { views } = stagedApp({ ...readyView(), controls, account: { label: "Claude Team", email: null } });
+  const view = views.at(-1);
+  assert.equal(view.status_compact_model, "Opus 5.5");
+  assert.equal(view.status_identity, "Opus 5.5 · Claude Team · 높음 · Auto");
+  assert.equal(view.status_no_context, true);
+});
+
+test("다시 차는 시각이 지나면 그 막대를 빼고 설정 행은 아직 모름으로 다시 그린다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 4, 59, 30) });
+  const soon = new Date(2031, 10, 17, 5, 0).toISOString(), later = new Date(2031, 10, 18, 18, 0).toISOString();
+  const { views } = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 1, { blocked: true, resetsAt: soon }), limit("seven_day", "7일", 0.3, { resetsAt: later })] });
+  assert.deepEqual(views.at(-1).status_limit_bars.map((bar: any) => [bar.key, bar.text, bar.left]), [["session", "막힘", "1분 남음"], ["weekly", "30%", "1일 남음"]]);
+  t.mock.timers.tick(30_000);
+  assert.equal(views.at(-1).status_limit_bars.length, 2);
+  t.mock.timers.tick(1);
+  const view = views.at(-1);
+  assert.deepEqual(view.status_limit_bars.map((bar: any) => bar.key), ["weekly"]);
+  assert.deepEqual(view.status_limits.map((row: any) => [row.text, row.unknown]), [["아직 모름", true], ["30% 사용, 1일 남음", false]]);
+});
+
+test("남은 시간 글은 단위 경계마다 다시 그리고, 먼 경계는 1시간마다 다시 잰다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 3, 0) });
+  const resetsAt = new Date(2031, 10, 17, 5, 30).toISOString();
+  const { views } = stagedApp({ ...readyView(), limits: [limit("five_hour", "5시간", 0.5, { resetsAt })] });
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2시간 남음");
+  // 꼭 2시간 남은 때는 아직 2시간이고, 1ms 뒤에 1시간으로 바뀐다
+  t.mock.timers.tick(30 * 60_000);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2시간 남음");
+  t.mock.timers.tick(1);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "1시간 남음");
+  t.mock.timers.tick(60 * 60_000);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "59분 남음");
+  t.mock.timers.tick(60 * 60_000);
+  assert.deepEqual(views.at(-1).status_limit_bars, []);
+  assert.equal(views.at(-1).status_limits[0].text, "아직 모름");
+});
+
+test("하루가 넘게 남은 창은 다음 경계가 멀어도 1시간 뒤에 다시 잰다", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: new Date(2031, 10, 17, 3, 0) });
+  const resetsAt = new Date(2031, 10, 20, 2, 0).toISOString();
+  const { views } = stagedApp({ ...readyView(), limits: [limit("seven_day", "7일", 0.5, { resetsAt })] });
+  const published = views.length;
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2일 남음");
+  t.mock.timers.tick(60 * 60_000);
+  assert.equal(views.length, published);
+  assert.equal(views.at(-1).status_limit_bars[0].left, "2일 남음");
 });

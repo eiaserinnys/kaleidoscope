@@ -17,7 +17,31 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   const rememberedFocus = useRef<HTMLElement | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const [scrollable, setScrollable] = useState(false);
+  const [compactClose, setCompactClose] = useState(() => !showCancel && host.classList.contains("ks-data-window") && host.clientHeight > 0 && host.clientHeight <= 300);
+  const compactCloseRef = useRef(compactClose);
+  const restoreCloseFocus = useRef(false);
   const hasContent = body != null;
+  // 제목 줄의 닫기는 실제 DOM 순서도 바꿔 Tab이 보이는 순서대로 움직이게 한다.
+  useLayoutEffect(() => {
+    if (showCancel || !host.classList.contains("ks-data-window")) return;
+    const update = (height: number) => {
+      const next = height > 0 && height <= 300;
+      if (next === compactCloseRef.current) return;
+      compactCloseRef.current = next;
+      restoreCloseFocus.current = Boolean(root.current?.querySelector(".ks-dialog-confirm")?.contains(document.activeElement));
+      setCompactClose(next);
+    };
+    update(host.clientHeight);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => update(entries[0].contentRect.height));
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [host, showCancel]);
+  useLayoutEffect(() => {
+    if (!restoreCloseFocus.current) return;
+    restoreCloseFocus.current = false;
+    root.current?.querySelector<HTMLElement>(".ks-dialog-confirm button")?.focus({ preventScroll: true });
+  }, [compactClose]);
   // 보이는 높이가 있고 내용이 넘칠 때만 스크롤 칸이 Tab 초점을 받는다. 높이 0인 칸에서 Tab이 멈추면 고리가 보이지 않는다.
   useLayoutEffect(() => {
     const element = scroll.current;
@@ -52,10 +76,13 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
       }
     }
     if (native.isTrusted === false && targetOwner && windowActionActive(targetOwner) && targetOwner !== owner) return;
+    // 같은 창에 대화상자가 겹치면 문서 키를 맨 위 대화상자만 처리한다.
+    const dialogs = [...host.children].filter((element) => element.classList.contains("ks-dialog-overlay"));
+    if (dialogs.at(-1) !== overlay.current) return;
     if (event.key === "Escape") { event.preventDefault(); if (windowModal) event.stopPropagation(); if (!busyRef.current) onCancelRef.current(); return; }
     if (event.key !== "Tab" || !root.current) return;
     // 브라우저 Tab 순서와 같게 스크롤 칸과 details 요약도 초점 대상으로 센다.
-    const focusable = [...root.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])')];
+    const focusable = [...root.current.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]')].filter((element) => element.tabIndex >= 0);
     if (!focusable.length) { event.preventDefault(); return; }
     const first = focusable[0]; const last = focusable[focusable.length - 1];
     if (event.shiftKey && (document.activeElement === first || (windowModal && document.activeElement === root.current))) { event.preventDefault(); last.focus(windowModal ? { preventScroll: true } : undefined); }
@@ -67,7 +94,9 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   }, [host, windowId, ownerAnchor]);
   useLayoutEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const content = host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
+    // 다른 대화상자 안에서 열었다면 닫을 때 그 안의 연 요소로 돌아간다.
+    const parentDialog = previous?.closest<HTMLElement>(".ks-dialog");
+    const content = parentDialog && host.contains(parentDialog) ? parentDialog : host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
     if (!windowModal && !opener.current) opener.current = focusBookmark(previous === document.body ? lastFocusInWindow(host) : previous, content);
     const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
@@ -113,6 +142,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     }
   }, [busy, host, windowModal]);
   const heading = <div className="ks-dialog-title" id={titleId} title={windowModal ? title : undefined}>{title}</div>;
+  const confirm = <span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button aria-disabled={busy || undefined} aria-label={ok} aria-busy={busy || undefined} className={busy ? "is-progress" : undefined} disabled={confirmDisabled} onClick={(event) => { if (!busyRef.current && !confirmDisabled) onConfirm(event); }} variant={danger ? "default" : "emphasis"}><span>{ok}</span>{busy ? <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span> : null}</Button></span>;
   const content = body != null ? <div className="ks-dialog-body" id={windowModal ? bodyId : undefined}>{body}</div> : null;
   return createPortal(<div className={`ks-dialog-overlay ${overlayClassName}`} data-ks-overlay data-ks-user-consent={userConsent || undefined} ref={overlay}
     onMouseDown={(event) => {
@@ -138,9 +168,9 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
       if (element?.isConnected && window.getSelection()?.isCollapsed) element.focus({ preventScroll: true });
     }}>
     <div {...rootProps} className="ks-dialog" role="dialog" aria-modal={windowModal ? active : true} aria-labelledby={titleId} aria-describedby={windowModal && body != null ? bodyId : undefined} tabIndex={windowModal ? -1 : undefined} onKeyDown={windowModal ? onKey : undefined} ref={root}>
-      {heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={scrollable ? 0 : undefined} ref={scroll}>{content}</div> : null}
+      {compactClose ? <div className="ks-dialog-heading">{heading}{confirm}</div> : heading}{content != null ? <div className="ks-dialog-scroll" tabIndex={scrollable ? 0 : undefined} ref={scroll}>{content}</div> : null}
       {noticeSlotRef ? <div className="ks-dialog-notice-slot" ref={noticeSlotRef} /> : null}
-      <div className="ks-dialog-actions">{showCancel ? <Button aria-disabled={busy || undefined} onClick={() => { if (!busyRef.current) onCancel(); }}>{cancelLabel}</Button> : null}<span className={`ks-dialog-confirm${danger ? " is-danger" : ""}`}><Button aria-disabled={busy || undefined} aria-label={ok} aria-busy={busy || undefined} className={busy ? "is-progress" : undefined} disabled={confirmDisabled} onClick={(event) => { if (!busyRef.current && !confirmDisabled) onConfirm(event); }} variant={danger ? "default" : "emphasis"}><span>{ok}</span>{busy ? <span className="ks-button-progress" aria-hidden="true"><LoaderCircle size="control" /></span> : null}</Button></span></div>
+      {!compactClose ? <div className="ks-dialog-actions">{showCancel ? <Button aria-disabled={busy || undefined} onClick={() => { if (!busyRef.current) onCancel(); }}>{cancelLabel}</Button> : null}{confirm}</div> : null}
     </div>
   </div>, host);
 }

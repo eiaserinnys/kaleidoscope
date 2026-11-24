@@ -1,6 +1,11 @@
 import { AgentSession, type Host, type SendInput, type SessionView, type Spec } from "./session.ts";
 import { agentError } from "./errors.ts";
 import { cleanTitle } from "./guide.ts";
+import { controlLabel, limitBars, limitRow, limitsAt, nextRedraw } from "./status-view.ts";
+
+const CHIP_CATEGORIES = ["model", "thought_level", "mode"];
+// 남은 시간 글이 바뀌는 때를 기다리는 타이머의 최소, 최대 대기(ms). 먼 시각은 시계가 어긋나도 맞도록 한 시간마다 다시 잰다.
+const REDRAW_WAIT = { min: 1_000, max: 3_600_000 };
 
 type Agent = Spec & { id: string };
 type Program = { name: string; winget: string; url: string };
@@ -61,8 +66,11 @@ export class AppClient {
   private lastStream = "";
   private lastActivity = "";
   private lastOutputs = "";
+  private statusBar = false;
   private historyOpen = false;
+  private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
+  private redrawTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(client: Bridge, defaults: Agent[]) {
     this.client = client;
@@ -81,6 +89,7 @@ export class AppClient {
     };
     this.session = new AgentSession(host);
     client.onStorageChange("programs", (value) => { this.programs = value as Record<string, Program>; this.update(); });
+    client.onStorageChange("status_bar", (value) => { this.statusBar = value === true; this.update(); });
     client.onStorageChange("agents", (value) => { void this.acceptAgents(value).finally(() => this.finishInitial()); }, (error) => { this.storageFailure = true; this.showError(error); this.finishInitial(); });
     client.onLifecycle((event) => { if (event.phase === "ready") this.update(); });
     client.files.on_grant("work", (folder) => { this.folder = folder; this.update(); if (folder && this.restoring && !this.choosingFolder) void this.startRestore(); });
@@ -98,17 +107,33 @@ export class AppClient {
     client.handle("cancel", () => this.session.cancel());
     client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
     client.handle("attachment", ({ event }) => this.attachment(event));
+    client.handle("toggle_status_bar", async ({ event }) => {
+      const checked = event === true;
+      await this.client.setStorage("status_bar", checked);
+      this.statusBar = checked;
+      this.update();
+    });
     client.handle("new_session", () => this.switchSession(null));
     client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
-    client.handle("close_history", () => { this.historyOpen = false; this.update(); });
+    client.handle("close_history", () => { this.historyOpen = false; this.historyQuery = ""; this.update(); });
+    client.handle("search_history", ({ event }) => { this.historyQuery = String(event ?? ""); this.update(); });
+    client.handle("delete_session", ({ event }) => {
+      if (this.sessionLocked || !this.view?.canDeleteSessions) return;
+      return this.session.deleteSession(String(event));
+    });
     client.handle("select_session", ({ event }) => {
       if (event === this.view?.sessionId) { this.historyOpen = false; this.update(); return; }
       return this.switchSession(String(event));
     });
   }
 
+  // 응답, 전환, 설정, 삭제 중에는 세션을 바꾸거나 지우지 않는다
+  private get sessionLocked(): boolean {
+    return !this.view || this.view.busy || this.view.switching || this.view.configuring || this.view.deleting || !!this.switchRequested;
+  }
+
   private switchSession(id: string | null): Promise<void> {
-    if (!this.view || this.view.busy || this.view.switching || this.view.configuring || this.switchRequested) return Promise.resolve();
+    if (this.sessionLocked) return Promise.resolve();
     this.historyOpen = false;
     this.switchRequested = id ? "load" : "new";
     this.update();
@@ -410,6 +435,13 @@ export class AppClient {
     this.update();
   }
 
+  private scheduleRedraw(limits: SessionView["limits"], now: Date): void {
+    clearTimeout(this.redrawTimer);
+    const next = nextRedraw(limits, now);
+    this.redrawTimer = next === null ? undefined
+      : setTimeout(() => this.update(), Math.min(REDRAW_WAIT.max, Math.max(REDRAW_WAIT.min, next - now.getTime())));
+  }
+
   private update(): void {
     const phase = this.view?.phase;
     const chat = this.stage === "session" && (phase === "ready" || phase === "responding");
@@ -423,6 +455,40 @@ export class AppClient {
       ? agentError("AGENT_INSTALL_UNSUPPORTED_PLATFORM", this.selected!.name, program.name, program.url).message
       : `${this.selected?.name} 에이전트를 시작하려면 ${program.name} 프로그램이 필요합니다.`;
     const controls = (this.view?.controls ?? []).map((control) => ({ ...control, is_select: control.kind === "select", is_boolean: control.kind === "boolean", checked: control.value === true }));
+    // 검색어는 표시 제목에 대고 대소문자 없이 거른다
+    const sessions = this.view?.sessions ?? [], query = this.historyQuery.trim().toLocaleLowerCase();
+    const historyItems = sessions.map((session) => {
+      const title = cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8);
+      return { key: session.sessionId, title, meta: sessionTime(session.updatedAt), confirm: `「${title}」 세션을 지웁니다. 되돌릴 수 없습니다.` };
+    }).filter((item) => !query || item.title.toLocaleLowerCase().includes(query));
+    // 일치가 없으면 안내 문구 하나만 보이도록 삭제 가능 여부로 갈린 두 목록을 모두 숨긴다(목록 블록의 빈 상태가 겹치지 않게)
+    const noMatch = sessions.length > 0 && query !== "" && historyItems.length === 0, canDelete = !!this.view?.canDeleteSessions;
+    const now = new Date(), view = this.view;
+    const account = view?.account ? (view.account.email ? `${view.account.label}, ${view.account.email}` : view.account.label) : null;
+    const chips = [
+      ...(view?.account ? [{ key: "account", text: view.account.label }] : []),
+      ...CHIP_CATEGORIES.flatMap((category) => {
+        const control = view?.controls.find((candidate) => candidate.category === category);
+        const text = control && controlLabel(control);
+        return text ? [{ key: category, text }] : [];
+      }),
+    ];
+    // 다시 차는 시각이 지난 창은 모름으로 보고, 남은 시간 글이 바뀌는 다음 때에 한 번 더 그린다.
+    const limits = limitsAt(view?.limits ?? [], now);
+    this.scheduleRedraw(limits, now);
+    const context = view?.context && view.context.size > 0 ? Math.min(1, view.context.used / view.context.size) : null;
+    const subagents = view?.subagents ?? 0;
+    const model = chips.find((chip) => chip.key === "model")?.text ?? "";
+    const identity = [model, ...chips.filter((chip) => chip.key !== "model").map((chip) => chip.text), ...(subagents > 0 ? [`서브에이전트 ${subagents}`] : [])].filter(Boolean).join(" · ");
+    const bars = limitBars(limits, now);
+    const compactUsage = [
+      ...(context === null ? [] : [`컨텍스트 ${Math.round(context * 100)}%`]),
+      ...bars.map((bar) => `${bar.label} ${bar.text}`),
+    ].join(" · ");
+    const tightUsage = [
+      ...(context === null ? [] : [`${Math.round(context * 100)}%`]),
+      ...bars.map((bar) => bar.text),
+    ].join("·");
     const output = {
       show_start: !chat,
       show_loading: this.stage === "loading", show_agents: this.stage === "agents" && this.agents.length > 0,
@@ -441,10 +507,19 @@ export class AppClient {
       selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
       settings_available: chat, busy: !!this.view?.busy, controls,
-      history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested),
-      history_disabled: !!(this.view?.busy || this.view?.switching || this.view?.configuring || this.switchRequested || !this.view?.canListSessions),
+      status_bar_on: this.statusBar, show_status_bar: this.statusBar && chat,
+      status_identity: identity, status_compact_model: model, status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
+      status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,
+      status_limit_bars: bars, status_compact_usage: compactUsage, status_tight_usage: tightUsage,
+      status_limits: limits.map((limit) => { const row = limitRow(limit, now); return { ...row, unknown: !row.known }; }), status_no_limits: limits.length === 0,
+      status_account: account, status_subagents_text: subagents > 0 ? `${subagents}개 실행 중` : "없음",
+      // when 블록은 true만 열린 것으로 보므로 값이 비는 칸마다 짝 불리언을 둔다. 설정의 컨텍스트 막대는 모르면 0으로 비워 둔다.
+      status_has_context: context !== null, status_no_context: context === null, status_has_subagents: subagents > 0, status_has_account: account !== null, status_context_bar: context ?? 0,
+      history_open: this.historyOpen, session_switching: !!(this.switchRequested || this.view?.switching), session_ready: !(this.switchRequested || this.view?.switching), session_buttons_busy: this.sessionLocked,
+      history_disabled: this.sessionLocked || !this.view?.canListSessions,
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
-      history_items: (this.view?.sessions ?? []).map((session) => ({ key: session.sessionId, title: cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8), meta: sessionTime(session.updatedAt) })),
+      history_items: historyItems, history_query: this.historyQuery, history_no_match: noMatch,
+      history_can_delete: canDelete && !noMatch, history_cannot_delete: !canDelete && !noMatch,
       history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading && !this.view.sessions.length,
       history_unsupported: !!this.view && !this.view.canListSessions,
       history_empty: !!this.view && this.view.canListSessions && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,

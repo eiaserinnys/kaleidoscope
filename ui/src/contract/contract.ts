@@ -395,11 +395,15 @@ min_width?: number,
 /**
  * (19판) 창 본문 너비가 CSS px 기준으로 이 값 이하일 때 자식을 그린다.
  */
-max_width?: number, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, 
+max_width?: number, width_scope?: WhenWidthScope, child: Block, } | { "type": "dialog", open: Binding, title: Binding, close_label?: Binding, cancel_label?: Binding, on_confirm?: Actions, 
 /**
  * (67판) 참이면 확정 단추가 잠기고 Enter로도 확정되지 않는다. 취소, 닫기, Esc는 그대로다. `button.disabled`와 같은 바인딩이다.
  */
 confirm_disabled?: Binding, danger?: boolean, child: Block, on_close: Actions, } | { "type": "tour", open: Binding, step: Binding, steps: Array<TourStep>, labels?: TourLabels, on_step: Actions, on_close: Actions, } | { "type": "anchor", id: string, child: Block, } | { "type": "progress", value: Binding, max: number, label?: Binding, 
+/**
+ * (68판) 이름표 위치. 생략하면 막대 위에, inline은 옆에 메타 글로, hidden은 접근 이름에만 둔다.
+ */
+label_position?: LabelPosition, 
 /**
  * (64판) 바를 같은 폭의 이 수만큼 나누는 칸막이를 그린다. 2 이상이어야 한다.
  */
@@ -485,7 +489,12 @@ client?: ChatClient,
 /**
  * (블록 세트 18판) 기록과 입력 사이에 그릴 앱 정의 블록.
  */
-footer?: Block, } | { "type": "web_view", 
+footer?: Block, 
+/**
+ * (블록 세트 68판) 입력창 바로 위에 고정해 그릴 앱 정의 블록. 기록과 함께 스크롤되지 않고 늘 보인다.
+ * `chat.client`가 있어야 한다.
+ */
+input_header?: Block, } | { "type": "web_view", 
 /**
  * 열 주소. 상태에서 읽거나(`{ "state": "url" }`) 정의에 적는다(`"https://example.com"`).
  */
@@ -2206,6 +2215,11 @@ title: string,
  * 페이지를 읽는 중인가.
  */
 loading: boolean, can_go_back: boolean, can_go_forward: boolean, };
+
+/**
+ * 폭 조건이 사용할 범위. 생략하면 기존 창 폭을 쓴다.
+ */
+export type WhenWidthScope = "container";
 
 export type WindowAction = { "kind": "click", target: number, gesture?: PointGesture, } | { "kind": "type", target: number, text: string, mode: TextMode, } | { "kind": "select", target: number, choice: WindowChoice, } | { "kind": "scroll", target?: number, direction: Direction, amount: number, } | { "kind": "key", target?: number, key: string, } | { "kind": "point", x: number, y: number, gesture: PointGesture, };
 

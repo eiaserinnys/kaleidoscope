@@ -1,6 +1,7 @@
 import type { InitializeResponse, NewSessionResponse, RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { agentError } from "./errors.ts";
 import { hadGuide } from "./guide.ts";
+import { isSubagentTool, mergeLimit, readAuthStatus, readClaudeRateLimits, type Account, type Limit } from "./status.ts";
 
 export type Attachment = { id: string; name: string; mime: string; key: string; size: number };
 export type Queued = { id: string; text: string; attachments: Attachment[] };
@@ -15,13 +16,16 @@ export type State = {
   nextId: number;
   pending: Record<string, Pending>;
   sessionId: string | null;
-  capabilities: { loadSession: boolean; image: boolean; http: boolean; list: boolean };
+  capabilities: { loadSession: boolean; image: boolean; http: boolean; list: boolean; delete: boolean };
   authMethods: { id: string; name: string; description: string }[];
   controls: Control[];
   permissions: Permission[];
   queue: Queued[];
   stream: { id: string | null; text: string };
-  tools: { id: string; title: string }[];
+  tools: { id: string; title: string; subagent: boolean }[];
+  context: { used: number; size: number } | null;
+  limits: Limit[];
+  account: Account | null;
   partial: number[];
   partialKey: string | null;
   streamKey: string | null;
@@ -44,8 +48,8 @@ export type State = {
 
 export function initialState(): State {
   return { schema: 1, generation: "", nextId: 1, pending: {}, sessionId: null,
-    capabilities: { loadSession: false, image: false, http: false, list: false }, authMethods: [], controls: [], permissions: [], queue: [],
-    stream: { id: null, text: "" }, tools: [], partial: [], partialKey: null, streamKey: null, guideSent: false,
+    capabilities: { loadSession: false, image: false, http: false, list: false, delete: false }, authMethods: [], controls: [], permissions: [], queue: [],
+    stream: { id: null, text: "" }, tools: [], context: null, limits: [], account: null, partial: [], partialKey: null, streamKey: null, guideSent: false,
     phase: "starting", replay: false, replayItems: [], sessionError: null, needsNew: false, initialized: false, failure: null,
     completed: [], outbox: [], servicesUsed: null, restartPending: false, contextTicket: null, restoreControls: [] };
 }
@@ -54,7 +58,7 @@ export function reserveRequest(state: State, kind: string, params: unknown): [St
   const id = state.nextId;
   return [{ ...state, nextId: id + 1, phase: kind === "prompt" ? "responding" : kind === "authenticate" ? "starting" : state.phase,
     failure: kind === "prompt" ? null : state.failure, replay: kind === "load" || kind === "switch" ? true : state.replay,
-    replayItems: kind === "switch" ? [] : state.replayItems, sessionError: kind === "switch" || kind === "new_user" ? null : state.sessionError,
+    replayItems: kind === "switch" ? [] : state.replayItems, sessionError: kind === "switch" || kind === "new_user" || kind === "delete" ? null : state.sessionError,
     pending: { ...state.pending, [id]: { kind, params } } }, id];
 }
 
@@ -130,17 +134,28 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
       const controls = controlsFrom({ configOptions: update.configOptions });
       return { ...state, controls: [...controls, ...state.controls.filter((c) => c.id.startsWith("__legacy_") && !controls.some((o) => o.category === c.category))] };
     }
+    if (update?.sessionUpdate === "usage_update") {
+      if (state.replay) return state;
+      const size = update.size;
+      return { ...state,
+        context: typeof update.used === "number" && typeof size === "number" && size > 0 ? { used: update.used, size } : null,
+        limits: readClaudeRateLimits(update._meta?.["_claude/rateLimit"]).reduce(mergeLimit, state.limits) };
+    }
     if (update?.sessionUpdate === "tool_call") {
       if (state.replay) return state;
       const terminal = update.status === "completed" || update.status === "failed";
       const finished = finishText(state);
-      return { ...finished, tools: terminal ? finished.tools : [...finished.tools, { id: update.toolCallId, title: update.title }] };
+      return { ...finished, tools: terminal ? finished.tools : [...finished.tools, { id: update.toolCallId, title: update.title, subagent: isSubagentTool(update) }] };
     }
     if (update?.sessionUpdate === "tool_call_update") {
       const terminal = update.status === "completed" || update.status === "failed";
       return { ...state, tools: terminal ? state.tools.filter((t) => t.id !== update.toolCallId) : state.tools.map((t) => t.id === update.toolCallId && update.title ? { ...t, title: update.title } : t) };
     }
     return state;
+  }
+  if (message.method === "auth/status_update" && message.id === undefined) {
+    // 형식이 깨진 알림은 무시하고, 올바른 알림이 인증 안 됨을 알리면 계정을 숨긴다.
+    return typeof message.params === "object" && message.params !== null ? { ...state, account: readAuthStatus(message.params) } : state;
   }
   if (typeof message.method === "string") {
     return message.id === undefined ? state : { ...state, outbox: [...state.outbox, { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Method not found" } }] };
@@ -157,6 +172,10 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
       const error = agentError(active ? "AGENT_SESSION_LOAD_ACTIVE_WRITER" : request.kind === "switch" ? "AGENT_SESSION_LOAD_FAILED" : "AGENT_SESSION_NEW_FAILED", reason);
       return { ...next, replay: false, replayItems: [], sessionError: { id: error.id, message: error.message } };
     }
+    if (request.kind === "delete") {
+      const error = agentError("AGENT_SESSION_DELETE_FAILED", reason);
+      return { ...next, sessionError: { id: error.id, message: error.message } };
+    }
     if ((request.kind === "new" || request.kind === "load") && message.error.code === -32000) return { ...next, phase: "login", replay: false };
     if (request.kind === "load") return { ...next, phase: "starting", replay: false, needsNew: true };
     if (request.kind === "authenticate") return { ...next, phase: "login", failure: { id: "AGENT_LOGIN_AUTHENTICATE_FAILED", reason } };
@@ -167,24 +186,25 @@ export function reduceMessage(state: State, raw: unknown, streamId: string): Sta
     const extra = characters.length > 1000 ? `${characters.slice(0, 1000).join("")}…` : trimmed;
     const fullReason = trimmed && trimmed !== reason ? `${reason}: ${extra}` : reason;
     const finished = request.kind === "prompt" ? finishText(next) : next;
-    return { ...finished, phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: fullReason, fromAgent: true }, permissions: [], tools: [] };
+    const limits = request.kind === "prompt" && message.error.data?.errorKind === "rate_limit" ? readClaudeRateLimits(message.error.data.rateLimit) : [];
+    return { ...finished, limits: limits.reduce(mergeLimit, finished.limits), phase: request.kind === "prompt" ? "ready" : "failed", replay: false, failure: { id: "AGENT_ACP_PROTOCOL_FAILED", reason: fullReason, fromAgent: true }, permissions: [], tools: [] };
   }
   if (!message.result) return next;
   if (request.kind === "initialize") {
     const result = message.result as InitializeResponse;
     return { ...next, initialized: true, capabilities: { loadSession: result.agentCapabilities?.loadSession === true,
       image: result.agentCapabilities?.promptCapabilities?.image === true, http: result.agentCapabilities?.mcpCapabilities?.http === true,
-      list: result.agentCapabilities?.sessionCapabilities?.list != null },
+      list: result.agentCapabilities?.sessionCapabilities?.list != null, delete: result.agentCapabilities?.sessionCapabilities?.delete != null },
       authMethods: (result.authMethods ?? []).filter((method) => "id" in method && "name" in method && (method as { type?: string }).type !== "terminal").map((method) => ({ id: method.id, name: method.name, description: method.description ?? "" })) };
   }
   if (request.kind === "switch" || request.kind === "new_user") {
     const result = message.result as NewSessionResponse;
     return { ...next, sessionId: request.kind === "switch" ? String(request.params) : result.sessionId,
-      replay: false, replayItems: [], sessionError: null, guideSent: request.kind === "switch" && hadGuide(state.replayItems ?? []), refreshAfterFirstPrompt: request.kind === "new_user", controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
+      replay: false, replayItems: [], context: null, sessionError: null, guideSent: request.kind === "switch" && hadGuide(state.replayItems ?? []), refreshAfterFirstPrompt: request.kind === "new_user", controls: controlsFrom(result as Record<string, any>), restoreControls: [] };
   }
   if (request.kind === "new" || request.kind === "load") {
     const result = message.result as NewSessionResponse;
-    return { ...next, phase: "ready", replay: false, needsNew: false, failure: null, sessionId: request.kind === "new" ? result.sessionId : state.sessionId, refreshAfterFirstPrompt: request.kind === "new", controls: controlsFrom(result as Record<string, any>) };
+    return { ...next, phase: "ready", replay: false, needsNew: false, failure: null, context: request.kind === "new" ? null : state.context, sessionId: request.kind === "new" ? result.sessionId : state.sessionId, refreshAfterFirstPrompt: request.kind === "new", controls: controlsFrom(result as Record<string, any>) };
   }
   if (request.kind === "authenticate") return { ...next, phase: "starting", failure: null };
   if (request.kind === "prompt") return { ...finishText(next), phase: "ready", permissions: [], tools: [] };

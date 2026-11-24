@@ -13,6 +13,7 @@ import * as shellErrors from "../contract/shell-errors";
 import type { AttachmentPreviewRequest } from "../data/attachments";
 import { useFrameCoalesced } from "./frame-coalesced";
 import { renderBlock } from "../render/render-block";
+import { WidthScope } from "./width-scope";
 import { toCoreError } from "../core/core-transport";
 
 export type ClientChatBlockData = Extract<Block, { type: "chat" }> & { client: ChatClient };
@@ -56,6 +57,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   const [waitingForFooter, setWaitingForFooter] = useState(false);
+  const [inputHeader, setInputHeader] = useState<HTMLDivElement | null>(null);
   const followTail = useRef(true);
   const [sending, setSending] = useState(false);
 
@@ -230,6 +232,7 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
       footer={footer}
       state={historyState}
     />
+    {block.input_header ? <div ref={setInputHeader} className="ks-agent-chat-input-header"><WidthScope.Provider value={inputHeader}>{renderBlock(block.input_header, context, `${pointer}/input_header`)}</WidthScope.Provider></div> : null}
     <ChatComposer
       draft={draft}
       onDraft={setDraft}

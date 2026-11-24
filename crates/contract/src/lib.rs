@@ -378,7 +378,12 @@ pub const CONTRACT_VERSION: u32 = 51;
 /// - 66판: section의 끌어 옮기기(`on_move`).
 /// - 67판: 목록과 데이터 트리의 줄 앞 그림 모양(`image_shape`), 데이터 트리 항목의 그림(`TreeItem.image`)과 둘째 줄(`TreeItem.subtitle`),
 ///   dialog의 확정 단추 잠금(`confirm_disabled`).
-pub const BLOCK_SET_VERSION: u32 = ITEM_IMAGE_BLOCK_SET_VERSION;
+/// - 68판: 대화 블록의 입력창 위 고정 자리(`input_header`), 진행 막대 이름표 위치(`label_position`), when의 폭 기준(`width_scope`).
+pub const BLOCK_SET_VERSION: u32 = CHAT_INPUT_HEADER_BLOCK_SET_VERSION;
+/// 대화 블록의 입력창 위 고정 자리(`input_header`)를 처음 지원하는 블록 세트 판.
+pub const CHAT_INPUT_HEADER_BLOCK_SET_VERSION: u32 = 68;
+/// 진행 막대의 이름표 위치를 처음 지원하는 블록 세트 판.
+pub const PROGRESS_LABEL_POSITION_BLOCK_SET_VERSION: u32 = 68;
 /// 목록과 데이터 트리 줄 앞 그림의 모양(`image_shape`), 데이터 트리 항목의 그림(`TreeItem.image`)과 둘째 줄(`TreeItem.subtitle`),
 /// dialog의 확정 단추 잠금(`confirm_disabled`)을 처음 지원하는 블록 세트 판.
 pub const ITEM_IMAGE_BLOCK_SET_VERSION: u32 = 67;
@@ -1792,6 +1797,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         max_width: Option<u32>,
+        // (68판) `container`는 창 대신 가장 가까운 폭 범위(채팅 입력창 위 영역)를 잰다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        width_scope: Option<WhenWidthScope>,
         child: Box<Block>,
     },
     Dialog {
@@ -1836,6 +1845,10 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         label: Option<Binding>,
+        /// (68판) 이름표 위치. 생략하면 막대 위에, inline은 옆에 메타 글로, hidden은 접근 이름에만 둔다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        label_position: Option<LabelPosition>,
         /// (64판) 바를 같은 폭의 이 수만큼 나누는 칸막이를 그린다. 2 이상이어야 한다.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2165,6 +2178,11 @@ pub enum Block {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         footer: Option<Box<Block>>,
+        /// (블록 세트 68판) 입력창 바로 위에 고정해 그릴 앱 정의 블록. 기록과 함께 스크롤되지 않고 늘 보인다.
+        /// `chat.client`가 있어야 한다.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        input_header: Option<Box<Block>>,
     },
     /// (블록 세트 3판) 웹 페이지 하나를 띄우는 웹 화면. `requires.modules`에 `web`이 있어야 하고 정의에
     /// 하나까지 둘 수 있다. 위에 뒤로, 앞으로, 새로고침 단추와 페이지 제목 줄이 있고, `address_bar`면 제목 자리에
@@ -2803,6 +2821,8 @@ enum RawBlock {
         min_width: Option<u32>,
         #[serde(default)]
         max_width: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        width_scope: Option<WhenWidthScope>,
         child: Box<Block>,
     },
     Dialog {
@@ -2839,6 +2859,8 @@ enum RawBlock {
         max: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<Binding>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label_position: Option<LabelPosition>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         segments: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3060,6 +3082,8 @@ enum RawBlock {
         client: Option<client::ChatClient>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         footer: Option<Box<RawBlock>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input_header: Option<Box<RawBlock>>,
     },
     /// (블록 세트 3판) 웹 페이지 하나를 띄우는 웹 화면. `requires.modules`에 `web`이 있어야 하고 정의에
     /// 하나까지 둘 수 있다. 위에 뒤로, 앞으로, 새로고침 단추와 페이지 제목 줄이 있고, `address_bar`면 제목 자리에
@@ -3591,11 +3615,13 @@ impl From<RawBlock> for Block {
                 value,
                 min_width,
                 max_width,
+                width_scope,
                 child,
             } => Block::When {
                 value,
                 min_width,
                 max_width,
+                width_scope,
                 child,
             },
             RawBlock::Dialog {
@@ -3639,6 +3665,7 @@ impl From<RawBlock> for Block {
                 value,
                 max,
                 label,
+                label_position,
                 segments,
                 marker,
                 warning_at,
@@ -3647,6 +3674,7 @@ impl From<RawBlock> for Block {
                 value,
                 max,
                 label,
+                label_position,
                 segments,
                 marker,
                 warning_at,
@@ -3842,10 +3870,16 @@ impl From<RawBlock> for Block {
                 selected_revision,
                 on_select_revision,
             },
-            RawBlock::Chat { loading, client, footer } => Block::Chat {
+            RawBlock::Chat {
+                loading,
+                client,
+                footer,
+                input_header,
+            } => Block::Chat {
                 loading,
                 client,
                 footer: footer.map(|child| Box::new((*child).into())),
+                input_header: input_header.map(|child| Box::new((*child).into())),
             },
             RawBlock::WebView {
                 url,
@@ -4298,6 +4332,7 @@ impl From<RawBlock> for Block {
                 loading: None,
                 client: None,
                 footer: None,
+                input_header: None,
             },
             RawBlock::Keypad {
                 columns,
@@ -4356,6 +4391,8 @@ impl Block {
                 ITEM_IMAGE_BLOCK_SET_VERSION
             }
             Block::Notice { .. } => 18,
+            Block::When { width_scope: Some(_), .. } => CHAT_INPUT_HEADER_BLOCK_SET_VERSION,
+            Block::Progress { label_position: Some(_), .. } => PROGRESS_LABEL_POSITION_BLOCK_SET_VERSION,
             Block::Progress { warning_at: Some(_), .. }
             | Block::Progress { danger_at: Some(_), .. } => PROGRESS_THRESHOLDS_BLOCK_SET_VERSION,
             Block::Progress { segments: Some(_), .. }
@@ -4389,6 +4426,10 @@ impl Block {
             Block::List { disabled: Some(_), .. } => LIST_DISABLED_BLOCK_SET_VERSION,
             Block::Input { max_rows: Some(_), .. } => INPUT_MAX_ROWS_BLOCK_SET_VERSION,
             Block::Input { disabled: Some(_), .. } => INPUT_DISABLED_BLOCK_SET_VERSION,
+            Block::Chat {
+                input_header: Some(_),
+                ..
+            } => CHAT_INPUT_HEADER_BLOCK_SET_VERSION,
             Block::Chat { loading: Some(_), .. } => CHAT_LOADING_BLOCK_SET_VERSION,
             Block::Chat {
                 client: Some(_), ..
@@ -4861,6 +4902,14 @@ pub enum LabelPosition {
     Inline,
     Top,
     Hidden,
+}
+
+/// 폭 조건이 사용할 범위. 생략하면 기존 창 폭을 쓴다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "contract.ts")]
+pub enum WhenWidthScope {
+    Container,
 }
 
 fn is_inline(value: &LabelPosition) -> bool {

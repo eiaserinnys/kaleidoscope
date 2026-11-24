@@ -2,6 +2,7 @@ import { History, type BlobStore } from "./history.ts";
 import { answerPermission, enqueue, initialState, reduceMessage, reserveRequest, type Attachment, type Item, type State } from "./reducer.ts";
 import { decodeLines, encodeMessage } from "./transport.ts";
 import { agentError } from "./errors.ts";
+import type { Account, Limit } from "./status.ts";
 import { cleanReplay, GUIDE_TAG } from "./guide.ts";
 
 export type Spec = { name: string; command: string; args: string[]; env: Record<string, string>; auth_methods?: string[]; assume_http_mcp?: boolean };
@@ -20,7 +21,7 @@ type ProcessPort = {
 };
 type Prepared = { text: string | null; images: { name: string; mime: string; bytes: Uint8Array }[]; ticket: string };
 type SessionInfo = { sessionId: string; cwd: string; title?: string; updatedAt?: string };
-export type SessionView = { phase: State["phase"]; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: State["permissions"]; controls: State["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; configuring: boolean };
+export type SessionView = { phase: State["phase"]; items: Item[]; stream_id: string | null; text: string; busy: boolean; tool: string | null; queued: { id: string; text: string; attachments: { id: string; name: string; mime: string }[] }[]; permissions: State["permissions"]; controls: State["controls"]; authMethods: State["authMethods"]; failure: State["failure"]; sessionId: string | null; canListSessions: boolean; canDeleteSessions: boolean; sessions: SessionInfo[]; sessionsLoading: boolean; sessionError: State["sessionError"]; switching: boolean; deleting: boolean; configuring: boolean; context: State["context"]; limits: Limit[]; account: Account | null; subagents: number };
 export type Host = {
   process: ProcessPort;
   blobs: BlobStore;
@@ -99,7 +100,8 @@ export class AgentSession {
       this.after = process.after;
       this.cwd = process.cwd;
       this.tools = process.services.tools ?? null;
-      this.state = (process.checkpoint as State | null) ?? { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
+      // 이전 판 체크포인트에 없는 필드는 초기값으로 채운다
+      this.state = process.checkpoint ? { ...initialState(), ...(process.checkpoint as State) } : { ...initialState(), generation: this.host.uuid(), sessionId: this.history.sessionId };
       this.sessionsLoading = Object.values(this.state.pending).some((request) => request.kind === "list");
       this.listWanted = !this.sessionsLoading;
       this.checkpointKeys = [this.state.streamKey, this.state.partialKey].filter((key): key is string => !!key);
@@ -278,6 +280,15 @@ export class AgentSession {
     });
   }
 
+  deleteSession(sessionId: string): Promise<void> {
+    return this.serial(async () => {
+      if (!this.handle || this.state.phase !== "ready" || !this.state.capabilities.delete || this.state.queue.length || Object.values(this.state.pending).some((request) => request.kind !== "list")) return;
+      this.listError = null;
+      await this.request("delete", "session/delete", { sessionId, _control: sessionId });
+      this.publish();
+    });
+  }
+
   private async configureNow(id: string, value: string | boolean): Promise<void> {
     const params = id === "__legacy_model" ? { sessionId: this.state.sessionId, modelId: value }
       : id === "__legacy_mode" ? { sessionId: this.state.sessionId, modeId: value }
@@ -405,6 +416,13 @@ export class AgentSession {
           await this.history.replace(this.state.sessionId, request.kind === "switch" ? cleanReplay(replayItems) : []);
           this.listWanted = true;
         }
+        if (request && !message.error && request.kind === "delete") {
+          const deleted = String(request.params);
+          this.sessions = this.sessions.filter((entry) => entry.sessionId !== deleted);
+          this.pendingSessions = this.pendingSessions.filter((entry) => entry.sessionId !== deleted);
+          // 지금 세션을 지웠으면 drain이 이미 serial 안이므로 switchSession 대신 바로 새 세션을 연다.
+          if (deleted === this.state.sessionId) await this.request("new_user", "session/new", { cwd: this.cwd, mcpServers: this.mcpServers() });
+        }
         if (request?.kind === "prompt" && (request.params as { refreshList?: boolean } | null)?.refreshList) this.listWanted = true;
         if (request && !message.error && request.kind === "configure") {
           const control = request.params as { id: string; value: string | boolean };
@@ -507,9 +525,11 @@ export class AgentSession {
       busy: this.state.phase === "responding" || (this.state.phase === "ready" && this.state.queue.length > 0), tool: this.state.tools.at(-1)?.title ?? null,
       queued: this.state.queue.map((item) => ({ ...item, attachments: item.attachments.map(({ id, name, mime }) => ({ id, name, mime })) })),
       permissions: this.state.permissions, controls: this.state.controls, authMethods: this.state.authMethods, failure: this.state.failure,
-      sessionId: this.state.sessionId, canListSessions: !!this.state.capabilities.list, sessions: this.sessions,
+      sessionId: this.state.sessionId, canListSessions: !!this.state.capabilities.list, canDeleteSessions: !!this.state.capabilities.delete, sessions: this.sessions,
       sessionsLoading: this.sessionsLoading, sessionError: this.listError ?? this.state.sessionError ?? null,
       switching: Object.values(this.state.pending).some((request) => request.kind === "switch" || request.kind === "new_user"),
-      configuring: Object.values(this.state.pending).some((request) => request.kind === "configure") });
+      deleting: Object.values(this.state.pending).some((request) => request.kind === "delete"),
+      configuring: Object.values(this.state.pending).some((request) => request.kind === "configure"),
+      context: this.state.context, limits: this.state.limits, account: this.state.account, subagents: this.state.tools.filter((tool) => tool.subagent).length });
   }
 }

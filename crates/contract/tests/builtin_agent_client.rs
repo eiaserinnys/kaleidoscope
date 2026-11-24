@@ -1,4 +1,4 @@
-use kaleidoscope_contract::{validate::parse_app_definition, LIST_DISABLED_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
+use kaleidoscope_contract::{validate::parse_app_definition, CHAT_INPUT_HEADER_BLOCK_SET_VERSION, RECEIVE_MESSAGE_CLIENT_VERSION};
 use serde_json::Value;
 
 #[test]
@@ -23,7 +23,7 @@ fn builtin_agent_assumes_http_mcp_for_one_default() {
 fn builtin_agent_declares_client_process_and_settings() {
     let json = include_str!("../../../apps/agent.json");
     let value: Value = serde_json::from_str(json).unwrap();
-    assert_eq!(value["requires"]["blocks"], LIST_DISABLED_BLOCK_SET_VERSION);
+    assert_eq!(value["requires"]["blocks"], CHAT_INPUT_HEADER_BLOCK_SET_VERSION);
     assert_eq!(value["requires"]["modules"]["process"], 1);
     assert_eq!(value["requires"]["modules"]["client"], RECEIVE_MESSAGE_CLIENT_VERSION);
     assert_eq!(value["client"]["device_storage"]["scope"], "window");
@@ -63,8 +63,13 @@ fn builtin_agent_locks_both_session_lists_while_busy() {
         let branch = branches.iter().find(|branch| branch["type"] == "when" && branch[width].is_number()).unwrap();
         let mut lists = Vec::new();
         find_session_lists(&branch["child"], &mut lists);
-        assert_eq!(lists.len(), 1, "{width} 갈래에는 세션 목록이 하나 있어야 한다");
-        assert_eq!(lists[0]["disabled"]["client"], "session_buttons_busy");
+        // 지울 수 있는 제공자와 없는 제공자를 위한 두 갈래이며, 어느 쪽이든 바쁜 동안 잠긴다.
+        assert_eq!(lists.len(), 2, "{width} 갈래에는 삭제 가능, 불가 세션 목록이 하나씩 있어야 한다");
+        for list in &lists {
+            assert_eq!(list["disabled"]["client"], "session_buttons_busy");
+        }
+        let deletable: Vec<_> = lists.iter().filter(|list| list["item_menu"][0]["on_select"]["client"] == "delete_session").collect();
+        assert_eq!(deletable.len(), 1, "{width} 갈래에서 삭제 메뉴는 한 목록에만 있어야 한다");
     }
 }
 
@@ -119,4 +124,113 @@ fn builtin_agent_shows_indeterminate_progress_while_starting() {
     assert_eq!(group["children"][0]["type"], "progress");
     assert!(group["children"][0]["value"].is_null());
     assert_eq!(group["children"][1]["value"]["client"], "show_install_label");
+}
+
+#[test]
+fn builtin_agent_declares_status_bar_storage() {
+    let json = include_str!("../../../apps/agent.json");
+    let value: Value = serde_json::from_str(json).unwrap();
+    let declared = value["storage"]["entries"].as_array().unwrap().iter().find(|entry| entry["id"] == "status_bar").unwrap();
+    assert_eq!(declared["key"], "settings/status_bar");
+    assert_eq!(declared["default"], false);
+    assert!(value["client"]["storage_entries"].as_array().unwrap().iter().any(|id| id == "status_bar"));
+    let app = parse_app_definition(json).unwrap();
+    let entry = app.storage.unwrap().entries.into_iter().find(|entry| entry.id == "status_bar").unwrap();
+    kaleidoscope_contract::app_storage::validate_storage_content(&entry, &declared["default"]).unwrap();
+    kaleidoscope_contract::app_storage::validate_storage_content(&entry, &Value::Bool(true)).unwrap();
+    assert!(kaleidoscope_contract::app_storage::validate_storage_content(&entry, &Value::String("true".into())).is_err());
+}
+
+fn collect<'a>(node: &'a Value, matches: &dyn Fn(&Value) -> bool, found: &mut Vec<&'a Value>) {
+    match node {
+        Value::Object(fields) => {
+            if matches(node) {
+                found.push(node);
+            }
+            for child in fields.values() {
+                collect(child, matches, found);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect(item, matches, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[test]
+fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let mut chats = Vec::new();
+    collect(&value["ui"], &|node| node["type"] == "chat", &mut chats);
+    assert_eq!(chats.len(), 2);
+    let mut scoped = 0;
+    for chat in chats {
+        let footer = &chat["footer"];
+        assert_eq!(footer["type"], "repeat");
+        assert_eq!(footer["items"]["client"], "permissions");
+        let header = &chat["input_header"];
+        assert_eq!(header["type"], "when");
+        assert_eq!(header["value"]["client"], "show_status_bar");
+        let mut compact = Vec::new();
+        collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_model", &mut compact);
+        let mut usage = Vec::new();
+        collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_usage", &mut usage);
+        assert_eq!(usage.len(), 1);
+        let mut wide = Vec::new();
+        collect(header, &|node| node["type"] == "when" && node["width_scope"] == "container", &mut wide);
+        if !wide.is_empty() {
+            scoped += 1;
+            assert_eq!(compact.len(), 2);
+            assert_eq!(wide.len(), 3);
+            assert_eq!(wide[0]["min_width"], 620);
+            assert_eq!(wide[1]["max_width"], 619);
+            assert_eq!(wide[1]["min_width"], 260);
+            assert_eq!(wide[2]["max_width"], 259);
+            assert_eq!(wide[2]["child"]["children"][1]["value"]["client"], "status_tight_usage");
+            let strip = &wide[0]["child"];
+            assert_eq!(strip["gap"], "medium");
+            assert_eq!(strip["children"][0]["value"]["client"], "status_identity");
+            let mut bars = Vec::new();
+            collect(strip, &|node| node["type"] == "progress", &mut bars);
+            assert_eq!(bars.len(), 2);
+            assert_eq!(bars[0]["label"], "컨텍스트");
+            assert_eq!(bars[0]["label_position"], "inline");
+            assert_eq!(bars[1]["label"]["item"], "label");
+            assert_eq!(bars[1]["label_position"], "inline");
+            assert_eq!(strip["children"][2]["gap"], "medium");
+        } else {
+            assert_eq!(compact.len(), 1);
+        }
+    }
+    assert_eq!(scoped, 1);
+}
+
+#[test]
+fn builtin_agent_settings_has_status_toggle() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let mut toggles = Vec::new();
+    collect(&value["settings"]["ui"], &|node| node["type"] == "toggle" && node["on_change"]["client"] == "toggle_status_bar", &mut toggles);
+    assert_eq!(toggles.len(), 1);
+    assert_eq!(toggles[0]["value"]["client"], "status_bar_on");
+    assert_eq!(toggles[0]["label"], "창에 상태 항상 보기");
+    assert!(value["client"]["actions"].as_array().unwrap().iter().any(|id| id == "toggle_status_bar"));
+    let mut limits = Vec::new();
+    collect(&value["settings"]["ui"], &|node| node["type"] == "repeat" && node["items"]["client"] == "status_limits", &mut limits);
+    assert_eq!(limits.len(), 1);
+}
+
+#[test]
+fn builtin_agent_declares_every_status_output() {
+    let value: Value = serde_json::from_str(include_str!("../../../apps/agent.json")).unwrap();
+    let outputs = value["client"]["outputs"].as_object().unwrap();
+    for name in [
+        "status_bar_on", "show_status_bar", "status_identity", "status_compact_model", "status_compact_usage", "status_tight_usage", "status_no_context", "status_subagents", "status_subagents_text", "status_context", "status_context_text", "status_context_bar",
+        "status_limit_bars", "status_limits", "status_no_limits", "status_account",
+        "status_has_context", "status_has_subagents", "status_has_account",
+    ] {
+        assert!(outputs.contains_key(name), "{name} 출력이 선언되지 않았다");
+    }
 }
