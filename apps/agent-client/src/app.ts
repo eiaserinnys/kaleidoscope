@@ -82,6 +82,7 @@ export class AppClient {
   private lastActivity = "";
   private lastOutputs = "";
   private statusBar = false;
+  private changingParallel = false;
   private historyOpen = false;
   private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
@@ -223,10 +224,11 @@ export class AppClient {
       if (!agent) return;
       this.selected = agent;
       if (this.stage !== "session") { this.update(); return; }
+      this.changingParallel = true;
       this.view = null;
       this.update();
-      if (!await this.session.replace(agent)) { this.stage = "folder"; this.retry = true; this.update(); }
-    } catch (error) { this.showError(error); }
+      if (!await this.session.replace(agent)) { this.changingParallel = false; this.stage = "folder"; this.retry = true; this.update(); }
+    } catch (error) { this.changingParallel = false; this.showError(error); }
   }
 
   private async acceptAgents(value: unknown): Promise<void> {
@@ -471,6 +473,7 @@ export class AppClient {
   private receive(view: SessionView): void {
     const previous = this.view;
     this.view = view;
+    if (this.changingParallel && view.phase !== "starting") this.changingParallel = false;
     if (previous?.switching && !view.switching) {
       if (this.switchRequested === "load" && view.sessionError) this.historyOpen = true;
       this.switchRequested = null;
@@ -596,7 +599,7 @@ export class AppClient {
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),
       selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "", parallel_sessions: this.selected?.parallel_sessions === true,
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
-      settings_available: chat, busy: !!this.view?.busy, controls,
+      settings_available: chat || this.changingParallel, busy: !!this.view?.busy, controls,
       status_bar_on: this.statusBar, show_status_bar: this.statusBar && chat,
       status_identity: identity, status_compact_model: model, status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
       status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,

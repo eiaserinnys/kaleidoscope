@@ -271,16 +271,33 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
   test(`병렬 허용 안내와 상태 줄 화면 — ${size.label}`, async ({ page }) => {
     test.setTimeout(90_000);
     const { app, windowId } = await openAgent(page, "화면 가짜", { x: 24, y: 24, width: size.width, height: size.height });
+    const setStatus = async (content: boolean) => {
+      const current = await core({ op: "storage.get", window_id: windowId, entry: "status_bar" });
+      await core({ op: "storage.write", window_id: windowId, entry: "status_bar", content, expected_revision: current.result.revision });
+    };
+    await setStatus(false);
     await send(app, "permission");
     await expect(app.locator(".ks-agent-chat-footer").getByText("파일 수정", { exact: true })).toBeVisible();
     await shot(page, `visual-${size.label}-permission-before`);
     await app.getByRole("button", { name: "새 세션", exact: true }).click();
     await expect(app.getByText("다른 세션이 허용을 기다립니다", { exact: true })).toBeVisible();
     await shot(page, `visual-${size.label}-status-off`);
-    await core({ op: "storage.write", window_id: windowId, entry: "status_bar", content: true });
-    await send(app, "slow");
-    await expect(app.getByRole("button", { name: "멈춤", exact: true })).toBeVisible();
+    await setStatus(true);
+    await send(app, "fresh-turn");
+    await expect(app.getByText("NEW", { exact: true })).toBeVisible();
+    await expect(app.getByText(/70%/).first()).toBeVisible();
     await shot(page, `visual-${size.label}-status-on`);
+    if (size.label !== "wide") {
+      await app.getByRole("button", { name: "지난 세션", exact: true }).click();
+      const picker = page.getByRole("dialog", { name: "이어 갈 세션 고르기" });
+      await expect(picker).toBeVisible();
+      await shot(page, `visual-${size.label}-history`);
+      await page.keyboard.press("Escape");
+      await expect(picker).toHaveCount(0);
+      await app.getByRole("button", { name: "앱 설정" }).click();
+      await shot(page, `visual-${size.label}-settings`);
+      await app.getByRole("button", { name: "앱으로 돌아가기" }).click();
+    }
     if (size.label === "wide") {
       await expect(sessionRow(app, "session-1").locator(".ks-view-badges")).toContainText("허용 필요");
       await page.emulateMedia({ colorScheme: "dark" });
@@ -292,6 +309,12 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
       await expect(dialog).toContainText("응답 중이거나 허용을 기다리는 세션은 지울 수 없습니다");
       await shot(page, "visual-wide-delete-blocked");
       await dialog.getByRole("button", { name: "취소" }).click();
+      await sessionRow(app, "session-2").click({ button: "right" });
+      await page.getByRole("menuitem", { name: "삭제" }).click();
+      await page.getByRole("dialog", { name: "세션 삭제" }).getByRole("button", { name: "삭제", exact: true }).click();
+      await expect(sessionRow(app, "session-2")).toHaveCount(0);
+      await expect(sessionRow(app, "session-3")).toHaveAttribute("aria-selected", "true");
+      await shot(page, "visual-wide-delete-after");
     }
   });
 }

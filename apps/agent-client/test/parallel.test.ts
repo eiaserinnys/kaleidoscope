@@ -417,3 +417,19 @@ test("뒤에서 응답하는 동안 다른 쉬는 세션을 지우고 실패해�
   assert.equal(view.live.find((entry: any) => entry.sessionId === "a").busy, true);
   assert.ok(view.sessions.some((entry: any) => entry.sessionId === "b"));
 });
+
+test("동시 세션 설정을 바꾸고 재시작하는 동안 설정 화면을 유지한다", async () => {
+  const { app, handlers, views, base } = appFixture({ parallel_sessions: false });
+  app.stored = [...app.agents];
+  app.client.setStorage = async () => {};
+  app.session.replace = async () => {
+    assert.equal(views.at(-1).settings_available, true);
+    app.receive({ ...base, phase: "starting", busy: false });
+    assert.equal(views.at(-1).settings_available, true);
+    app.receive({ ...base, phase: "ready", busy: false });
+    return true;
+  };
+  app.receive({ ...base, phase: "ready", busy: false });
+  await handlers.get("set_parallel")!({ event: true });
+  assert.equal(views.at(-1).settings_available, true);
+});
