@@ -79,6 +79,9 @@
               },
               "assume_http_mcp": {
                 "type": "boolean"
+              },
+              "parallel_sessions": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -100,7 +103,8 @@
               "-y",
               "@agentclientprotocol/claude-agent-acp"
             ],
-            "env": {}
+            "env": {},
+            "parallel_sessions": true
           },
           {
             "id": "codex",
@@ -113,7 +117,8 @@
             "env": {},
             "auth_methods": [
               "chat-gpt"
-            ]
+            ],
+            "parallel_sessions": true
           },
           {
             "id": "gemini",
@@ -127,7 +132,8 @@
             "env": {},
             "auth_methods": [
               "oauth-personal"
-            ]
+            ],
+            "parallel_sessions": true
           },
           {
             "id": "antigravity",
@@ -140,7 +146,8 @@
             "auth_methods": [
               "oauth-personal"
             ],
-            "assume_http_mcp": true
+            "assume_http_mcp": true,
+            "parallel_sessions": true
           }
         ]
       },
@@ -797,15 +804,8 @@
                                     {
                                       "label": "삭제",
                                       "danger": true,
-                                      "confirm": {
-                                        "title": "세션 삭제",
-                                        "body": {
-                                          "item": "confirm"
-                                        },
-                                        "ok": "삭제"
-                                      },
                                       "on_select": {
-                                        "client": "delete_session"
+                                        "client": "request_delete"
                                       }
                                     }
                                   ],
@@ -875,112 +875,24 @@
                           }
                         },
                         "input_header": {
-                          "type": "when",
-                          "value": {
-                            "client": "show_status_bar"
-                          },
-                          "child": {
                             "type": "stack",
-                            "direction": "row",
-                            "gap": "none",
-                            "fill": [
-                              0,
-                              1,
-                              2
-                            ],
+                            "direction": "column",
+                            "gap": "small",
                             "children": [
                               {
                                 "type": "when",
-                                "width_scope": "container",
-                                "min_width": 620,
+                                "value": {
+                                  "client": "show_waiting"
+                                },
                                 "child": {
-                                  "type": "stack",
-                                  "direction": "row",
-                                  "gap": "medium",
-                                  "align": "center",
-                                  "fill": 0,
-                                  "children": [
+                                  "type": "notice",
+                                  "kind": "info",
+                                  "message": "다른 세션이 허용을 기다립니다",
+                                  "actions": [
                                     {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_identity"
-                                      },
-                                      "style": "meta"
-                                    },
-                                    {
-                                      "type": "when",
-                                      "value": {
-                                        "client": "status_has_context"
-                                      },
-                                      "child": {
-                                        "type": "stack",
-                                        "direction": "row",
-                                        "gap": "small",
-                                        "align": "center",
-                                        "children": [
-                                          {
-                                            "type": "progress",
-                                            "value": {
-                                              "client": "status_context"
-                                            },
-                                            "max": 1,
-                                            "label": "컨텍스트",
-                                            "warning_at": 0.7,
-                                            "danger_at": 0.9,
-                                            "label_position": "inline"
-                                          },
-                                          {
-                                            "type": "text",
-                                            "value": {
-                                              "client": "status_context_text"
-                                            },
-                                            "style": "meta"
-                                          }
-                                        ]
-                                      }
-                                    },
-                                    {
-                                      "type": "repeat",
-                                      "items": {
-                                        "client": "status_limit_bars"
-                                      },
-                                      "key": "key",
-                                      "gap": "medium",
-                                      "layout": "row",
-                                      "template": {
-                                        "type": "stack",
-                                        "direction": "row",
-                                        "gap": "small",
-                                        "align": "center",
-                                        "children": [
-                                          {
-                                            "type": "progress",
-                                            "value": {
-                                              "item": "value"
-                                            },
-                                            "max": 1,
-                                            "label": {
-                                              "item": "label"
-                                            },
-                                            "warning_at": 0.8,
-                                            "danger_at": 0.95,
-                                            "label_position": "inline"
-                                          },
-                                          {
-                                            "type": "text",
-                                            "value": {
-                                              "item": "text"
-                                            },
-                                            "style": "meta"
-                                          },
-                                          {
-                                            "type": "text",
-                                            "value": {
-                                              "item": "left"
-                                            },
-                                            "style": "meta"
-                                          }
-                                        ]
+                                      "label": "이동",
+                                      "on_click": {
+                                        "client": "open_waiting"
                                       }
                                     }
                                   ]
@@ -988,64 +900,178 @@
                               },
                               {
                                 "type": "when",
-                                "width_scope": "container",
-                                "max_width": 619,
-                                "child": {
-                                  "type": "stack",
-                                  "direction": "row",
-                                  "gap": "small",
-                                  "align": "center",
-                                  "fill": 0,
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_compact_model"
-                                      },
-                                      "style": "meta"
-                                    },
-                                    {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_compact_usage"
-                                      },
-                                      "style": "meta"
-                                    }
-                                  ]
+                                "value": {
+                                  "client": "show_status_bar"
                                 },
-                                "min_width": 260
-                              },
-                              {
-                                "type": "when",
-                                "width_scope": "container",
-                                "max_width": 259,
                                 "child": {
                                   "type": "stack",
                                   "direction": "row",
-                                  "gap": "small",
-                                  "align": "center",
-                                  "fill": 0,
+                                  "gap": "none",
+                                  "fill": [
+                                    0,
+                                    1,
+                                    2
+                                  ],
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_compact_model"
-                                      },
-                                      "style": "meta"
+                                      "type": "when",
+                                      "width_scope": "container",
+                                      "min_width": 620,
+                                      "child": {
+                                        "type": "stack",
+                                        "direction": "row",
+                                        "gap": "medium",
+                                        "align": "center",
+                                        "fill": 0,
+                                        "children": [
+                                          {
+                                            "type": "text",
+                                            "value": {
+                                              "client": "status_identity"
+                                            },
+                                            "style": "meta"
+                                          },
+                                          {
+                                            "type": "when",
+                                            "value": {
+                                              "client": "status_has_context"
+                                            },
+                                            "child": {
+                                              "type": "stack",
+                                              "direction": "row",
+                                              "gap": "small",
+                                              "align": "center",
+                                              "children": [
+                                                {
+                                                  "type": "progress",
+                                                  "value": {
+                                                    "client": "status_context"
+                                                  },
+                                                  "max": 1,
+                                                  "label": "컨텍스트",
+                                                  "warning_at": 0.7,
+                                                  "danger_at": 0.9,
+                                                  "label_position": "inline"
+                                                },
+                                                {
+                                                  "type": "text",
+                                                  "value": {
+                                                    "client": "status_context_text"
+                                                  },
+                                                  "style": "meta"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          {
+                                            "type": "repeat",
+                                            "items": {
+                                              "client": "status_limit_bars"
+                                            },
+                                            "key": "key",
+                                            "gap": "medium",
+                                            "layout": "row",
+                                            "template": {
+                                              "type": "stack",
+                                              "direction": "row",
+                                              "gap": "small",
+                                              "align": "center",
+                                              "children": [
+                                                {
+                                                  "type": "progress",
+                                                  "value": {
+                                                    "item": "value"
+                                                  },
+                                                  "max": 1,
+                                                  "label": {
+                                                    "item": "label"
+                                                  },
+                                                  "warning_at": 0.8,
+                                                  "danger_at": 0.95,
+                                                  "label_position": "inline"
+                                                },
+                                                {
+                                                  "type": "text",
+                                                  "value": {
+                                                    "item": "text"
+                                                  },
+                                                  "style": "meta"
+                                                },
+                                                {
+                                                  "type": "text",
+                                                  "value": {
+                                                    "item": "left"
+                                                  },
+                                                  "style": "meta"
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        ]
+                                      }
                                     },
                                     {
-                                      "type": "text",
-                                      "value": {
-                                        "client": "status_tight_usage"
+                                      "type": "when",
+                                      "width_scope": "container",
+                                      "max_width": 619,
+                                      "child": {
+                                        "type": "stack",
+                                        "direction": "row",
+                                        "gap": "small",
+                                        "align": "center",
+                                        "fill": 0,
+                                        "children": [
+                                          {
+                                            "type": "text",
+                                            "value": {
+                                              "client": "status_compact_model"
+                                            },
+                                            "style": "meta"
+                                          },
+                                          {
+                                            "type": "text",
+                                            "value": {
+                                              "client": "status_compact_usage"
+                                            },
+                                            "style": "meta"
+                                          }
+                                        ]
                                       },
-                                      "style": "meta"
+                                      "min_width": 260
+                                    },
+                                    {
+                                      "type": "when",
+                                      "width_scope": "container",
+                                      "max_width": 259,
+                                      "child": {
+                                        "type": "stack",
+                                        "direction": "row",
+                                        "gap": "small",
+                                        "align": "center",
+                                        "fill": 0,
+                                        "children": [
+                                          {
+                                            "type": "text",
+                                            "value": {
+                                              "client": "status_compact_model"
+                                            },
+                                            "style": "meta"
+                                          },
+                                          {
+                                            "type": "text",
+                                            "value": {
+                                              "client": "status_tight_usage"
+                                            },
+                                            "style": "meta"
+                                          }
+                                        ]
+                                      }
                                     }
                                   ]
                                 }
                               }
                             ]
                           }
-                        }
                       }
                     ]
                   }
@@ -1148,34 +1174,60 @@
                           }
                         },
                         "input_header": {
-                          "type": "when",
-                          "value": {
-                            "client": "show_status_bar"
-                          },
-                          "child": {
                             "type": "stack",
-                            "direction": "row",
+                            "direction": "column",
                             "gap": "small",
-                            "align": "center",
-                            "fill": 0,
                             "children": [
                               {
-                                "type": "text",
+                                "type": "when",
                                 "value": {
-                                  "client": "status_compact_model"
+                                  "client": "show_waiting"
                                 },
-                                "style": "meta"
+                                "child": {
+                                  "type": "notice",
+                                  "kind": "info",
+                                  "message": "다른 세션이 허용을 기다립니다",
+                                  "actions": [
+                                    {
+                                      "label": "이동",
+                                      "on_click": {
+                                        "client": "open_waiting"
+                                      }
+                                    }
+                                  ]
+                                }
                               },
                               {
-                                "type": "text",
+                                "type": "when",
                                 "value": {
-                                  "client": "status_compact_usage"
+                                  "client": "show_status_bar"
                                 },
-                                "style": "meta"
+                                "child": {
+                                  "type": "stack",
+                                  "direction": "row",
+                                  "gap": "small",
+                                  "align": "center",
+                                  "fill": 0,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_compact_model"
+                                      },
+                                      "style": "meta"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "value": {
+                                        "client": "status_compact_usage"
+                                      },
+                                      "style": "meta"
+                                    }
+                                  ]
+                                }
                               }
                             ]
                           }
-                        }
                       }
                     ]
                   },
@@ -1334,15 +1386,8 @@
                                     {
                                       "label": "삭제",
                                       "danger": true,
-                                      "confirm": {
-                                        "title": "세션 삭제",
-                                        "body": {
-                                          "item": "confirm"
-                                        },
-                                        "ok": "삭제"
-                                      },
                                       "on_select": {
-                                        "client": "delete_session"
+                                        "client": "request_delete"
                                       }
                                     }
                                   ],
@@ -1362,6 +1407,27 @@
             }
           ]
         }
+      },
+      {
+        "type": "dialog",
+        "open": { "client": "delete_blocked_open" },
+        "title": "세션 삭제",
+        "close_label": "닫기",
+        "child": {
+          "type": "text",
+          "value": "응답 중이거나 허용을 기다리는 세션은 지금 지울 수 없으며 응답이나 허용이 끝난 뒤 지울 수 있습니다."
+        },
+        "on_close": { "client": "cancel_delete" }
+      },
+      {
+        "type": "dialog",
+        "open": { "client": "delete_confirm_open" },
+        "title": "세션 삭제",
+        "close_label": "삭제",
+        "danger": true,
+        "child": { "type": "text", "value": { "client": "delete_message" } },
+        "on_close": { "client": "cancel_delete" },
+        "on_confirm": { "client": "confirm_delete" }
       }
     ],
     "fill": 1
@@ -1379,14 +1445,14 @@
     { "id": "builtin-icon-agent", "version": 2 },
     {
       "id": "builtin-agent-client",
-      "version": 12
+      "version": 13
     }
   ],
   "client": {
     "runtime": "javascript",
     "entry": {
       "id": "builtin-agent-client",
-      "version": 12
+      "version": 13
     },
     "inputs": {},
     "outputs": {
@@ -1449,6 +1515,9 @@
       },
       "agent_label": {
         "default": ""
+      },
+      "parallel_sessions": {
+        "default": false
       },
       "folder_label": {
         "default": "폴더 선택"
@@ -1552,6 +1621,27 @@
       "history_other_error": {
         "default": false
       },
+      "show_waiting": {
+        "default": false
+      },
+      "delete_blocked_open": {
+        "default": false
+      },
+      "delete_confirm_open": {
+        "default": false
+      },
+      "delete_message": {
+        "default": ""
+      },
+      "change_open": {
+        "default": false
+      },
+      "change_title": {
+        "default": ""
+      },
+      "change_message": {
+        "default": ""
+      },
       "history_query": {
         "default": ""
       },
@@ -1634,6 +1724,7 @@
       "authenticate",
       "configure",
       "settings_agent",
+      "set_parallel",
       "answer",
       "cancel",
       "send",
@@ -1643,8 +1734,14 @@
       "open_history",
       "close_history",
       "select_session",
+      "open_waiting",
+      "confirm_change",
+      "cancel_change",
       "search_history",
       "delete_session",
+      "request_delete",
+      "cancel_delete",
+      "confirm_delete",
       "toggle_status_bar"
     ],
     "commands": {},
@@ -1964,6 +2061,31 @@
             },
             {
               "type": "stack",
+              "direction": "column",
+              "gap": "none",
+              "children": [
+                {
+                  "type": "toggle",
+                  "label": "여러 세션 동시에",
+                  "value": {
+                    "client": "parallel_sessions"
+                  },
+                  "disabled": {
+                    "client": "busy"
+                  },
+                  "on_change": {
+                    "client": "set_parallel"
+                  }
+                },
+                {
+                  "type": "text",
+                  "value": "응답 중에도 다른 세션에서 대화합니다. 에이전트가 지원할 때만 켜세요.",
+                  "style": "meta"
+                }
+              ]
+            },
+            {
+              "type": "stack",
               "direction": "row",
               "gap": "medium",
               "children": [
@@ -1988,6 +2110,29 @@
               ]
             }
           ]
+        },
+        {
+          "type": "dialog",
+          "open": {
+            "client": "change_open"
+          },
+          "title": {
+            "client": "change_title"
+          },
+          "close_label": "바꾸기",
+          "danger": true,
+          "child": {
+            "type": "text",
+            "value": {
+              "client": "change_message"
+            }
+          },
+          "on_close": {
+            "client": "cancel_change"
+          },
+          "on_confirm": {
+            "client": "confirm_change"
+          }
         }
       ]
     }

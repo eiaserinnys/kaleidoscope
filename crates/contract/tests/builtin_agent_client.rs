@@ -35,7 +35,7 @@ fn builtin_agent_declares_client_process_and_settings() {
 }
 
 #[test]
-fn builtin_agent_locks_both_session_lists_while_busy() {
+fn builtin_agent_session_lists_share_lock_value() {
     fn find_session_lists<'a>(node: &'a Value, lists: &mut Vec<&'a Value>) {
         match node {
             Value::Object(fields) => {
@@ -68,7 +68,7 @@ fn builtin_agent_locks_both_session_lists_while_busy() {
         for list in &lists {
             assert_eq!(list["disabled"]["client"], "session_buttons_busy");
         }
-        let deletable: Vec<_> = lists.iter().filter(|list| list["item_menu"][0]["on_select"]["client"] == "delete_session").collect();
+        let deletable: Vec<_> = lists.iter().filter(|list| list["item_menu"][0]["on_select"]["client"] == "request_delete").collect();
         assert_eq!(deletable.len(), 1, "{width} 갈래에서 삭제 메뉴는 한 목록에만 있어야 한다");
     }
 }
@@ -172,8 +172,12 @@ fn builtin_agent_pins_status_bar_above_both_chat_inputs() {
         assert_eq!(footer["type"], "repeat");
         assert_eq!(footer["items"]["client"], "permissions");
         let header = &chat["input_header"];
-        assert_eq!(header["type"], "when");
-        assert_eq!(header["value"]["client"], "show_status_bar");
+        assert_eq!(header["type"], "stack");
+        let children = header["children"].as_array().unwrap();
+        let status: Vec<_> = children.iter().filter(|node| node["type"] == "when" && node["value"]["client"] == "show_status_bar").collect();
+        assert_eq!(status.len(), 1);
+        assert!(children.iter().any(|node| node["type"] == "when" && node["value"]["client"] == "show_waiting"));
+        let header = &status[0]["child"];
         let mut compact = Vec::new();
         collect(header, &|node| node["type"] == "text" && node["value"]["client"] == "status_compact_model", &mut compact);
         let mut usage = Vec::new();

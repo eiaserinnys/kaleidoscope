@@ -54,9 +54,9 @@ test("fill을 생략한 중첩 stack은 자연 높이를 유지한다", async ({
   expect(sizes.overflow).toBe("visible");
 });
 
-test("고정 내용이 창보다 커도 명시 fill의 최소 높이를 남기고 바깥 fill이 스크롤된다", async ({ page }) => {
+test("높이가 300px을 넘는 창에서는 명시 fill의 160px 최소 높이를 남기고 바깥 fill이 스크롤된다", async ({ page }) => {
   const { app, inner } = await open(page, "nested-fill");
-  await app.locator(".ks-data-window").evaluate((el) => { (el as HTMLElement).style.height = "200px"; });
+  await app.locator(".ks-data-window").evaluate((el) => { (el as HTMLElement).style.height = "400px"; });
   await inner.locator(":scope > .ks-data-stack-item").first().evaluate((el) => {
     Object.assign((el as HTMLElement).style, { height: "350px", flex: "0 0 350px" });
   });
@@ -73,6 +73,24 @@ test("고정 내용이 창보다 커도 명시 fill의 최소 높이를 남기�
   await page.mouse.wheel(0, 500);
   await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   await capture(page, "nested-overflow");
+});
+
+test("가장 짧은 창의 중첩 명시 fill은 고정 머리와 함께 바깥 칸에 들어간다", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 240 });
+  await page.goto("/?preview=short-nested-fill");
+  await page.addStyleTag({ content: "body { padding: 0; } .ks-harness { display: block; } .ks-harness-header { display: none; } .ks-harness-apps.is-preview { height: 100%; }" });
+  const app = page.getByTestId("app-window-short-nested-fill");
+  const inner = app.locator(".ks-data-window-body > .ks-data-stack > .ks-data-stack-item.is-fill > .ks-data-stack");
+  await expect(inner).toBeVisible();
+  const fill = inner.locator(":scope > .ks-data-stack-item.is-fill");
+  const sizes = await fill.evaluate((element) => {
+    const parent = element.parentElement!.parentElement!;
+    return { minimum: parseFloat(getComputedStyle(element).minHeight), client: parent.clientHeight, scroll: parent.scrollHeight };
+  });
+  expect(sizes.minimum).toBeGreaterThan(0);
+  expect(sizes.minimum).toBeLessThan(160);
+  expect(sizes.scroll).toBeLessThanOrEqual(sizes.client);
+  await capture(page, "nested-short-fill");
 });
 
 for (const [width, height] of [[1000, 700], [360, 480], [360, 240]]) test(`${width}×${height} 폭의 기본 표가 최소 높이를 갖고 fill 휠로 보이고 도구 막대는 고정된다`, async ({ page }) => {

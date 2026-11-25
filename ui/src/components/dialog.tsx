@@ -8,12 +8,13 @@ import { bookmarkTarget, dialogActionFocus, dialogFirstFocus, focusBookmark, foc
 
 const interactiveSelector = 'button, a[href], input, textarea, select, label, summary, iframe, [tabindex], [contenteditable], .cm-editor';
 
-export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, surfaceFocus = false, windowId, busy = false, confirmDisabled = false, rootProps, ownerAnchor, noticeSlotRef }: { ownerAnchor?: Element | null; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; surfaceFocus?: boolean; windowId?: string; busy?: boolean; /** 확정 단추를 잠근다. 누르기와 Enter가 막히고 취소, 닫기, Esc는 그대로다. */ confirmDisabled?: boolean }) {
+export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, surfaceFocus = false, windowId, busy = false, confirmDisabled = false, rootProps, ownerAnchor, noticeSlotRef, openerRef }: { ownerAnchor?: Element | null; /** 대화상자를 연 요소를 받는다. 닫은 뒤에도 남는다. */ openerRef?: { current: HTMLElement | null }; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; surfaceFocus?: boolean; windowId?: string; busy?: boolean; /** 확정 단추를 잠근다. 누르기와 Enter가 막히고 취소, 닫기, Esc는 그대로다. */ confirmDisabled?: boolean }) {
   const titleId = useId();
   const bodyId = useId();
   const root = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const opener = useRef<FocusBookmark | null>(null);
+  const openerRow = useRef<{ list: HTMLElement; index: number } | null>(null);
   const rememberedFocus = useRef<HTMLElement | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const [scrollable, setScrollable] = useState(false);
@@ -96,8 +97,17 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     // 다른 대화상자 안에서 열었다면 닫을 때 그 안의 연 요소로 돌아간다.
     const parentDialog = previous?.closest<HTMLElement>(".ks-dialog");
-    const content = parentDialog && host.contains(parentDialog) ? parentDialog : host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
-    if (!windowModal && !opener.current) opener.current = focusBookmark(previous === document.body ? lastFocusInWindow(host) : previous, content);
+    // 앱 설정은 창 본문의 형제이므로 설정에서 연 대화상자는 설정 안에서 연 요소를 찾는다.
+    const settings = ownerAnchor?.closest<HTMLElement>(".ks-app-settings");
+    const content = parentDialog && host.contains(parentDialog) ? parentDialog : settings && host.contains(settings) ? settings : host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
+    if (!windowModal && !opener.current) {
+      const target = previous === document.body ? lastFocusInWindow(host) : previous;
+      opener.current = focusBookmark(target, content);
+      if (openerRef) openerRef.current = target;
+      const row = target?.closest<HTMLElement>('[role="option"][data-focus-index]');
+      const list = row?.closest<HTMLElement>('.ks-list[role="listbox"]');
+      if (row && list && content.contains(list)) openerRow.current = { list, index: Number(row.dataset.focusIndex) };
+    }
     const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
     const owner = windowId ?? ownerOf(host);
@@ -118,7 +128,12 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
           target?.focus({ preventScroll: true });
         }
       } else if (opener.current && (focusedInside || document.activeElement === document.body)) {
-        focusRescued(bookmarkTarget(opener.current, content), { preventScroll: true });
+        const row = openerRow.current;
+        const neighbor = !opener.current.element?.isConnected && row?.list.isConnected && content.contains(row.list)
+          ? row.list.querySelector<HTMLElement>(`[role="option"][data-focus-index="${row.index}"]`)
+            ?? row.list.querySelector<HTMLElement>(`[role="option"][data-focus-index="${row.index - 1}"]`)
+          : null;
+        focusRescued(neighbor && !neighbor.matches(":disabled") ? neighbor : bookmarkTarget(opener.current, content), { preventScroll: true });
       }
     };
   }, [host, inertSelector, windowModal]);

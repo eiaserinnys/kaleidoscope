@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
-import { AppClient } from "../src/app.ts";
+import { AppClient, resolveParallel } from "../src/app.ts";
 
 test("시작 실패는 에이전트 오류와 클라이언트 해석 오류에 맞는 안내를 보인다", () => {
   const views: any[] = [];
@@ -25,6 +25,92 @@ test("기본 에이전트 중 Antigravity만 HTTP MCP 지원을 명시한다", (
   for (const id of ["claude", "codex", "gemini"]) {
     assert.equal(Object.hasOwn(agents.find((agent: any) => agent.id === id), "assume_http_mcp"), false);
   }
+});
+
+test("기본 에이전트 네 개는 모두 동시 세션을 켠다", () => {
+  const definition = JSON.parse(readFileSync(new URL("../../agent.json", import.meta.url), "utf8"));
+  const agents = definition.storage.entries.find((entry: any) => entry.id === "agents").default;
+  assert.deepEqual(agents.map((agent: any) => agent.id), ["claude", "codex", "gemini", "antigravity"]);
+  for (const agent of agents) assert.equal(agent.parallel_sessions, true, agent.id);
+});
+
+const DEFAULTS = [
+  { id: "claude", name: "Claude Code", command: "npx", args: [], env: {}, parallel_sessions: true },
+  { id: "antigravity", name: "Antigravity", command: "agy", args: ["acp"], env: {}, parallel_sessions: true },
+];
+
+test("저장된 기본 에이전트에 값이 없으면 기본값을 따르고, 저장한 거짓은 지키며, 추가한 에이전트는 끈다", () => {
+  assert.equal(resolveParallel({ id: "antigravity", name: "Antigravity", command: "agy", args: ["acp"], env: {} }, DEFAULTS).parallel_sessions, true);
+  assert.equal(resolveParallel({ id: "claude", name: "Claude Code", command: "npx", args: [], env: {}, parallel_sessions: false }, DEFAULTS).parallel_sessions, false);
+  assert.equal(resolveParallel({ id: "mine", name: "내 에이전트", command: "mine", args: [], env: {} }, DEFAULTS).parallel_sessions, false);
+  assert.equal(resolveParallel({ id: "mine", name: "내 에이전트", command: "mine", args: [], env: {}, parallel_sessions: true }, DEFAULTS).parallel_sessions, true);
+});
+
+/** 저장소 한 칸을 흉내 내는 가짜 다리. setStorage는 바로 변경 알림을 보낸다. */
+function storageClient(initial: any[]) {
+  const handlers = new Map<string, (context: any) => any>(), views: any[] = [], writes: any[] = [];
+  let storage: any, lifecycle: any;
+  const client = {
+    process: { onReady() {}, onServicesChanged() {}, attach: async () => null, start: async () => ({ status: "cancelled" }) },
+    files: { grant: () => null, on_grant() {}, pick_folder: async () => null }, blobs: { open: async () => null }, host: {}, context: {}, chat: { publish() {} },
+    getStorage: async () => initial, setStorage: async (_entry: string, value: any) => { writes.push(value); await storage(value); },
+    getState: () => null, setState() {}, onStorageChange: (entry: string, fn: any) => { if (entry === "agents") storage = fn; }, onLifecycle: (fn: any) => { lifecycle = fn; },
+    onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view),
+  };
+  return { client, handlers, views, writes, storage: (value: any) => storage(value), ready: () => lifecycle({ phase: "ready" }) };
+}
+
+test("고른 에이전트의 동시 세션 스위치는 저장값을 따르고, 바꾸면 그 에이전트 항목만 고쳐 저장한다", async () => {
+  const saved = [
+    { id: "antigravity", name: "Antigravity", command: "agy", args: ["acp"], env: {} },
+    { id: "mine", name: "내 에이전트", command: "mine", args: [], env: {} },
+  ];
+  const { client, handlers, views, writes, storage, ready } = storageClient(saved);
+  new AppClient(client as any, DEFAULTS as any);
+  await ready();
+  await storage(saved);
+  await handlers.get("choose_agent")!({ item: { id: "antigravity" } });
+  assert.equal(views.at(-1).parallel_sessions, true);
+  await handlers.get("choose_agent")!({ item: { id: "mine" } });
+  assert.equal(views.at(-1).parallel_sessions, false);
+  await handlers.get("set_parallel")!({ event: true });
+  assert.equal(writes.length, 1);
+  // 기본 에이전트 항목은 손대지 않아 기본값을 계속 따른다.
+  assert.deepEqual(writes[0], [saved[0], { ...saved[1], parallel_sessions: true }]);
+  assert.equal(views.at(-1).parallel_sessions, true);
+  await handlers.get("set_parallel")!({ event: true });
+  assert.equal(writes.length, 1);
+  await handlers.get("choose_agent")!({ item: { id: "antigravity" } });
+  await handlers.get("set_parallel")!({ event: false });
+  assert.deepEqual(writes[1][0], { ...saved[0], parallel_sessions: false });
+  assert.equal(views.at(-1).parallel_sessions, false);
+});
+
+test("대화 중에 스위치를 바꾸면 새 값으로 에이전트를 다시 시작하고, 뒤에서 응답 중이면 먼저 묻는다", async () => {
+  const saved = [{ id: "mine", name: "내 에이전트", command: "mine", args: [], env: {} }];
+  const { client, handlers, views, writes, storage, ready } = storageClient(saved);
+  const app = new AppClient(client as any, DEFAULTS as any);
+  await ready();
+  await storage(saved);
+  const replaced: any[] = [];
+  (app as any).session.replace = async (spec: any) => { replaced.push(spec); return true; };
+  const base = { phase: "ready", items: [], stream_id: null, text: "", busy: false, tool: null, queued: [], permissions: [], controls: [], authMethods: [], failure: null,
+    sessionId: "current", canListSessions: true, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false, parallel: true };
+  (app as any).stage = "session";
+  (app as any).receive({ ...base, live: [{ sessionId: "current", busy: false, permissions: 0 }, { sessionId: "back", busy: true, permissions: 0 }] });
+  await handlers.get("set_parallel")!({ event: true });
+  assert.equal(writes.length, 0);
+  assert.equal(views.at(-1).change_open, true);
+  assert.equal(views.at(-1).change_title, "여러 세션 동시에 바꾸기");
+  await handlers.get("cancel_change")!({});
+  assert.equal(views.at(-1).change_open, false);
+  assert.equal(views.at(-1).parallel_sessions, false);
+  await handlers.get("set_parallel")!({ event: true });
+  await handlers.get("confirm_change")!({});
+  assert.equal(writes.length, 1);
+  assert.equal(replaced.length, 1);
+  assert.equal(replaced[0].parallel_sessions, true);
+  assert.equal(views.at(-1).parallel_sessions, true);
 });
 
 test("여러 에이전트는 가운데 선택을 거쳐 폴더를 고르고, 실행 취소 뒤 다시 시도한다", async () => {
@@ -150,14 +236,14 @@ test("목록 능력이 없는 에이전트의 지난 세션 단추는 잠기고 
   assert.equal(views.at(-1).session_buttons_busy, true);
 });
 
-test("응답 중에는 목록 행을 눌러도 세션을 바꾸지 않는다", async () => {
+test("동시 세션을 끈 에이전트는 응답 중에 목록 행을 눌러도 세션을 바꾸지 않는다", async () => {
   const handlers = new Map<string, (context: any) => any>(), views: any[] = [];
   const client = { process: { onReady() {}, onServicesChanged() {} }, files: { on_grant() {} }, blobs: {}, host: {}, context: {}, chat: { publish() {} },
     onStorageChange() {}, onLifecycle() {}, onMessage() {}, handle: (name: string, fn: any) => handlers.set(name, fn), publish: (view: any) => views.push(view) };
   const app = new AppClient(client as any, []);
   (app as any).receive({ phase: "responding", items: [], stream_id: null, text: "", busy: true, tool: null,
     queued: [], permissions: [], controls: [], authMethods: [], failure: null, sessionId: "current",
-    canListSessions: true, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false });
+    canListSessions: true, sessions: [], sessionsLoading: false, sessionError: null, switching: false, configuring: false, live: [], parallel: false });
   let loads = 0;
   (app as any).session.loadSession = async () => { loads++; };
   await handlers.get("select_session")!({ event: "other" });
@@ -260,6 +346,28 @@ test("삭제는 능력이 있을 때만 메뉴를 보이고 잠긴 동안에는 
   (app as any).receive({ ...(app as any).view, deleting: true });
   assert.equal(views.at(-1).session_buttons_busy, true);
   assert.equal(views.at(-1).history_disabled, true);
+});
+
+test("응답과 허용 대기 세션은 안내만 열고 쉬는 세션만 지우기를 확인한다", async () => {
+  const { handlers, views, app } = makeApp();
+  (app as any).receive({ ...readyView(), parallel: true, canDeleteSessions: true,
+    sessions: ["busy", "waiting", "idle"].map((sessionId) => ({ sessionId, cwd: "/work", title: sessionId })),
+    live: [{ sessionId: "busy", busy: true, permissions: 0 }, { sessionId: "waiting", busy: false, permissions: 1 }] });
+  const deleted: string[] = [];
+  (app as any).session.deleteSession = async (id: string) => { deleted.push(id); };
+  for (const id of ["busy", "waiting"]) {
+    await handlers.get("request_delete")!({ event: id });
+    assert.equal(views.at(-1).delete_blocked_open, true);
+    assert.equal(views.at(-1).delete_confirm_open, false);
+    await handlers.get("cancel_delete")!({});
+  }
+  assert.deepEqual(deleted, []);
+  await handlers.get("request_delete")!({ event: "idle" });
+  assert.equal(views.at(-1).delete_blocked_open, false);
+  assert.equal(views.at(-1).delete_confirm_open, true);
+  assert.equal(views.at(-1).delete_message, "「idle」 세션을 지웁니다. 되돌릴 수 없습니다.");
+  await handlers.get("confirm_delete")!({});
+  assert.deepEqual(deleted, ["idle"]);
 });
 
 function stagedApp(view: any) {
@@ -421,4 +529,16 @@ test("하루가 넘게 남은 창은 다음 경계가 멀어도 1시간 뒤에 �
   t.mock.timers.tick(60 * 60_000);
   assert.equal(views.length, published);
   assert.equal(views.at(-1).status_limit_bars[0].left, "2일 남음");
+});
+
+test("병렬 목록은 진행과 허용 배지를 지우기 확인과 검색에 함께 보존한다", () => {
+  const { views, app } = makeApp();
+  (app as any).receive({ ...readyView(), parallel: true, canDeleteSessions: true,
+    sessions: [{ sessionId: "a", cwd: "/work", title: "허용 대기" }, { sessionId: "b", cwd: "/work", title: "응답" }],
+    live: [{ sessionId: "a", busy: true, permissions: 1 }, { sessionId: "b", busy: true, permissions: 0 }] });
+  const items = views.at(-1).history_items;
+  assert.deepEqual(items[0].badges, [{ text: "허용 필요", color: "#315da8" }]);
+  assert.deepEqual(items[1].badges, ["응답 중"]);
+  assert.match(items[0].confirm, /지울 수 없습니다/);
+  assert.equal(views.at(-1).session_buttons_busy, false);
 });

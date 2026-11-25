@@ -67,8 +67,8 @@ jobs:
             ~/.cargo/git
             target
           key: app-e2e-rust-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain*') }}
-      - name: 개발용 다리 빌드
-        run: cargo build --locked -p kaleidoscope-devbridge
+      - name: 개발용 다리와 가짜 ACP 에이전트 빌드
+        run: cargo build --locked -p kaleidoscope-devbridge -p kaleidoscope-acp-test-agent
       - name: Rust 캐시 저장
         if: steps.rust-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

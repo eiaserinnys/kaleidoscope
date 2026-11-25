@@ -15,6 +15,8 @@ import { useFrameCoalesced } from "./frame-coalesced";
 import { renderBlock } from "../render/render-block";
 import { WidthScope } from "./width-scope";
 import { toCoreError } from "../core/core-transport";
+import { isWindowTop } from "../data/window-state";
+import { useChatResetFocus } from "./chat-reset-focus";
 
 export type ClientChatBlockData = Extract<Block, { type: "chat" }> & { client: ChatClient };
 type PendingMessage = ChatPendingMessage & { requestId: string; generation: number; knownIds: Set<string> };
@@ -60,6 +62,9 @@ export function ClientChatBlock({ block, context, pointer }: { block: ClientChat
   const [inputHeader, setInputHeader] = useState<HTMLDivElement | null>(null);
   const followTail = useRef(true);
   const [sending, setSending] = useState(false);
+
+  useChatResetFocus(inputRef, chat.generation, chat.items.length === 0 && !chat.busy && chat.queued.length === 0,
+    !disabled, () => isWindowTop(data.store.getSnapshot(), data.windowId));
 
   useLayoutEffect(() => {
     const footer = footerRef.current;

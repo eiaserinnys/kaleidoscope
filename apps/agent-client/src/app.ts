@@ -8,7 +8,19 @@ const CHIP_CATEGORIES = ["model", "thought_level", "mode"];
 const REDRAW_WAIT = { min: 1_000, max: 3_600_000 };
 
 type Agent = Spec & { id: string };
+/** 허용을 기다리는 세션 배지의 색. 목록에서 눈에 띄게 한다. */
+const ACCENT = "#315da8";
 type Program = { name: string; winget: string; url: string };
+
+/**
+ * 저장된 에이전트의 동시 세션 여부를 정한다. 사용자가 스위치로 저장한 값이 있으면 그 값을 따른다.
+ * 값이 없으면 같은 id의 기본 에이전트(agent.json 기본 목록) 값을 따르고, 기본 목록에 없는 에이전트는 끈다.
+ * 동시 세션을 넣기 전에 저장해 둔 목록에도 기본 에이전트만 켜지게 하려는 것이다.
+ */
+export function resolveParallel(agent: Agent, defaults: readonly Agent[]): Agent {
+  if (typeof agent.parallel_sessions === "boolean") return agent;
+  return { ...agent, parallel_sessions: defaults.find((entry) => entry.id === agent.id)?.parallel_sessions === true };
+}
 type Action = { event?: any; item?: any; parent_item?: any };
 type MessageInput = { request_id: string; text: string };
 type MessageResult = { status: "accepted" } | { status: "not_ready"; reason: string };
@@ -43,6 +55,9 @@ export class AppClient {
   private readonly client: Bridge;
   private readonly defaults: Agent[];
   private readonly session: AgentSession;
+  /** 저장소에 있는 그대로의 목록. 스위치는 이 목록에서 고른 에이전트 하나만 바꿔 저장한다. */
+  private stored: Agent[] = [];
+  /** 동시 세션 여부를 정한 목록. 화면과 실행은 이 목록을 쓴다. */
   private agents: Agent[] = [];
   private programs: Record<string, Program> = {};
   private installing = false;
@@ -67,9 +82,13 @@ export class AppClient {
   private lastActivity = "";
   private lastOutputs = "";
   private statusBar = false;
+  private changingParallel = false;
   private historyOpen = false;
   private historyQuery = "";
   private switchRequested: "new" | "load" | null = null;
+  private pendingDelete: { id: string; blocked: boolean; message: string } | null = null;
+  /** 뒤에서 응답 중인 세션이 있을 때 확인을 기다리는 에이전트·작업 폴더·동시 세션 바꾸기. */
+  private pendingChange: { kind: "agent"; id: string } | { kind: "folder" } | { kind: "parallel"; value: boolean } | null = null;
   private redrawTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(client: Bridge, defaults: Agent[]) {
@@ -96,13 +115,16 @@ export class AppClient {
     client.onMessage((message) => this.receiveMessage(message));
     client.handle("choose_agent", ({ item }) => this.chooseAgent(String(item?.id ?? "")));
     client.handle("back_agent", () => this.backAgent());
-    client.handle("pick_folder", () => this.pickFolder());
+    client.handle("pick_folder", () => this.stage === "session" ? this.requestChange({ kind: "folder" }) : this.pickFolder());
     client.handle("retry", () => this.retryStart());
     client.handle("install", () => this.install());
     client.handle("reset_agents", () => this.resetAgents());
     client.handle("authenticate", ({ item }) => this.session.authenticate(String(item?.id ?? "")));
     client.handle("configure", ({ item, event }) => this.session.configure(String(item?.id ?? ""), event));
-    client.handle("settings_agent", ({ event }) => this.settingsAgent(String(event ?? "")));
+    client.handle("settings_agent", ({ event }) => this.requestChange({ kind: "agent", id: String(event ?? "") }));
+    client.handle("set_parallel", ({ event }) => this.requestChange({ kind: "parallel", value: event === true }));
+    client.handle("confirm_change", () => this.confirmChange());
+    client.handle("cancel_change", () => { this.pendingChange = null; this.update(); });
     client.handle("answer", ({ item, parent_item }) => this.session.answer(parent_item?.rpcId, item?.id ?? null));
     client.handle("cancel", () => this.session.cancel());
     client.handle("send", ({ event }) => this.submit({ id: event.request_id, text: event.text, attachments: event.attachments.map((file: any) => ({ name: file.name, mime: file.mime, bytes: new Uint8Array(file.bytes) })) }));
@@ -117,6 +139,24 @@ export class AppClient {
     client.handle("open_history", () => { this.historyOpen = true; this.update(); return this.session.listSessions(); });
     client.handle("close_history", () => { this.historyOpen = false; this.historyQuery = ""; this.update(); });
     client.handle("search_history", ({ event }) => { this.historyQuery = String(event ?? ""); this.update(); });
+    client.handle("request_delete", ({ event }) => {
+      if (this.sessionLocked || !this.view?.canDeleteSessions) return;
+      const id = String(event);
+      const session = this.view.sessions.find((entry) => entry.sessionId === id);
+      if (!session) return;
+      const live = this.view.live?.find((entry) => entry.sessionId === id);
+      const blocked = !!live && (live.busy || live.permissions > 0);
+      const title = cleanTitle(session.title ?? "") || id.slice(0, 8);
+      this.pendingDelete = { id, blocked, message: `「${title}」 세션을 지웁니다. 되돌릴 수 없습니다.` };
+      this.update();
+    });
+    client.handle("cancel_delete", () => { this.pendingDelete = null; this.update(); });
+    client.handle("confirm_delete", () => {
+      const pending = this.pendingDelete;
+      this.pendingDelete = null;
+      this.update();
+      if (pending && !pending.blocked && !this.sessionLocked && this.view?.canDeleteSessions) return this.session.deleteSession(pending.id);
+    });
     client.handle("delete_session", ({ event }) => {
       if (this.sessionLocked || !this.view?.canDeleteSessions) return;
       return this.session.deleteSession(String(event));
@@ -125,28 +165,96 @@ export class AppClient {
       if (event === this.view?.sessionId) { this.historyOpen = false; this.update(); return; }
       return this.switchSession(String(event));
     });
+    client.handle("open_waiting", () => {
+      const waiting = this.waitingSession();
+      return waiting ? this.switchSession(waiting) : undefined;
+    });
   }
 
-  // 응답, 전환, 설정, 삭제 중에는 세션을 바꾸거나 지우지 않는다
+  /** 동시 세션을 쓰는 에이전트는 응답 중에도 세션을 바꾼다. 앞 세션은 뒤에서 계속 돈다. */
   private get sessionLocked(): boolean {
-    return !this.view || this.view.busy || this.view.switching || this.view.configuring || this.view.deleting || !!this.switchRequested;
+    const view = this.view;
+    return !view || (!view.parallel && view.busy) || view.switching || view.configuring || view.deleting || !!this.switchRequested;
   }
+
 
   private switchSession(id: string | null): Promise<void> {
     if (this.sessionLocked) return Promise.resolve();
     this.historyOpen = false;
     this.switchRequested = id ? "load" : "new";
     this.update();
-    return (id ? this.session.loadSession(id) : this.session.newSession()).catch((error) => {
+    return (id ? this.session.loadSession(id) : this.session.newSession()).then(() => {
+      // 이미 들고 있는 세션으로 화면만 바꾸면 전환 요청 없이 끝난다.
+      if (!this.view?.switching) { this.switchRequested = null; this.update(); }
+    }, (error) => {
       this.switchRequested = null;
       this.update();
       throw error;
     });
   }
 
+  private backgroundBusy(): number {
+    return (this.view?.live ?? []).filter((entry) => entry.busy && entry.sessionId !== this.view?.sessionId).length;
+  }
+
+  private waitingSession(): string | null {
+    return (this.view?.live ?? []).find((entry) => entry.permissions > 0 && entry.sessionId !== this.view?.sessionId)?.sessionId ?? null;
+  }
+
+  /** 뒤에서 응답 중인 세션은 에이전트, 작업 폴더, 동시 세션을 바꾸면 멈추므로 먼저 묻는다. */
+  private requestChange(change: NonNullable<AppClient["pendingChange"]>): Promise<void> {
+    if (change.kind === "agent" && (!this.agents.some((entry) => entry.id === change.id) || change.id === this.selected?.id)) return Promise.resolve();
+    if (change.kind === "parallel" && (!this.selected || this.selected.parallel_sessions === change.value)) return Promise.resolve();
+    if (this.backgroundBusy() > 0) { this.pendingChange = change; this.update(); return Promise.resolve(); }
+    return this.applyChange(change);
+  }
+
+  private confirmChange(): Promise<void> {
+    const change = this.pendingChange;
+    this.pendingChange = null;
+    this.update();
+    if (!change) return Promise.resolve();
+    return this.applyChange(change);
+  }
+
+  private applyChange(change: NonNullable<AppClient["pendingChange"]>): Promise<void> {
+    if (change.kind === "agent") return this.settingsAgent(change.id);
+    if (change.kind === "parallel") return this.setParallel(change.value);
+    return this.pickFolder();
+  }
+
+  private setAgents(value: Agent[]): void {
+    this.stored = value;
+    this.agents = value.map((agent) => resolveParallel(agent, this.defaults));
+  }
+
+  /**
+   * 고른 에이전트의 동시 세션 여부를 저장하고 에이전트를 다시 시작한다.
+   * 이미 든 세션을 그대로 두고 방식만 바꾸면 끌 때 뒤에서 도는 세션이 남으므로 새 프로세스에서 전경 세션을 다시 연다.
+   */
+  private async setParallel(value: boolean): Promise<void> {
+    const id = this.selected?.id;
+    if (!id || this.selected!.parallel_sessions === value) return;
+    try {
+      const next = this.stored.map((entry) => entry.id === id ? { ...entry, parallel_sessions: value } : entry);
+      await this.client.setStorage("agents", next);
+      this.setAgents(next);
+      const agent = this.agents.find((entry) => entry.id === id);
+      if (!agent) return;
+      this.selected = agent;
+      if (this.stage !== "session") { this.update(); return; }
+      this.changingParallel = true;
+      this.view = null;
+      this.update();
+      if (!await this.session.replace(agent)) { this.changingParallel = false; this.stage = "folder"; this.retry = true; this.update(); }
+    } catch (error) { this.changingParallel = false; this.showError(error); }
+  }
+
   private async acceptAgents(value: unknown): Promise<void> {
-    this.agents = value as Agent[];
+    this.setAgents(value as Agent[]);
     if (this.storageReady) {
+      // 다른 곳에서 목록을 고쳐도 고른 에이전트의 표시는 새 값을 따른다. 실행 중인 프로세스는 다시 시작할 때 반영된다.
+      if (this.selected) this.selected = this.agents.find((agent) => agent.id === this.selected!.id) ?? this.selected;
       if (this.storageFailure) {
         this.storageFailure = false;
         this.error = null;
@@ -384,6 +492,7 @@ export class AppClient {
   private receive(view: SessionView): void {
     const previous = this.view;
     this.view = view;
+    if (this.changingParallel && view.phase !== "starting") this.changingParallel = false;
     if (previous?.switching && !view.switching) {
       if (this.switchRequested === "load" && view.sessionError) this.historyOpen = true;
       this.switchRequested = null;
@@ -412,7 +521,7 @@ export class AppClient {
         id: view.failure.id, code: view.failure.code ?? "local_agent_failed", message: this.failureMessage(view.failure), details: [],
       } });
     }
-    if (view.failure && view.phase === "ready" && previous?.phase === "responding") {
+    if (view.failure && view.phase === "ready" && previous?.phase === "responding" && previous.sessionId === view.sessionId) {
       this.client.chat.publish("conversation", { kind: "error", error: {
         id: view.failure.id, code: view.failure.code ?? "local_agent_failed", message: `에이전트 응답을 받지 못했습니다. 다시 보내세요. 원인: ${view.failure.reason}`, details: [],
       } });
@@ -459,7 +568,10 @@ export class AppClient {
     const sessions = this.view?.sessions ?? [], query = this.historyQuery.trim().toLocaleLowerCase();
     const historyItems = sessions.map((session) => {
       const title = cleanTitle(session.title ?? "") || session.sessionId.slice(0, 8);
-      return { key: session.sessionId, title, meta: sessionTime(session.updatedAt), confirm: `「${title}」 세션을 지웁니다. 되돌릴 수 없습니다.` };
+      const live = this.view?.live?.find((entry) => entry.sessionId === session.sessionId);
+      const badges = session.sessionId === this.view?.sessionId ? [] : live?.permissions ? [{ text: "허용 필요", color: ACCENT }] : live?.busy ? ["응답 중"] : [];
+      const blocked = live && (live.busy || live.permissions > 0);
+      return { key: session.sessionId, title, meta: sessionTime(session.updatedAt), confirm: blocked ? "응답 중이거나 허용을 기다리는 세션은 지울 수 없습니다." : `「${title}」 세션을 지웁니다. 되돌릴 수 없습니다.`, ...(badges.length ? { badges } : {}) };
     }).filter((item) => !query || item.title.toLocaleLowerCase().includes(query));
     // 일치가 없으면 안내 문구 하나만 보이도록 삭제 가능 여부로 갈린 두 목록을 모두 숨긴다(목록 블록의 빈 상태가 겹치지 않게)
     const noMatch = sessions.length > 0 && query !== "" && historyItems.length === 0, canDelete = !!this.view?.canDeleteSessions;
@@ -504,9 +616,9 @@ export class AppClient {
       show_login_error: phase === "login" && !!failure,
       show_pick_folder: this.stage === "folder" && !this.retry,
       agents: this.agents.map(({ id, name }) => ({ id, label: name })), agent_options: this.agents.map(({ id, name }) => ({ value: id, label: name })),
-      selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "",
+      selected: this.selected?.id ?? null, agent_label: this.selected?.name ?? "", parallel_sessions: this.selected?.parallel_sessions === true,
       folder_label: this.folder ?? "폴더 선택", window_title: chat ? this.selected?.name ?? "에이전트" : "에이전트", window_meta: chat ? this.folder : null,
-      settings_available: chat, busy: !!this.view?.busy, controls,
+      settings_available: chat || this.changingParallel, busy: !!this.view?.busy, controls,
       status_bar_on: this.statusBar, show_status_bar: this.statusBar && chat,
       status_identity: identity, status_compact_model: model, status_subagents: subagents > 0 ? `서브에이전트 ${subagents}` : null,
       status_context: context, status_context_text: context === null ? "아직 모름" : `${Math.round(context * 100)}%`,
@@ -520,6 +632,13 @@ export class AppClient {
       history_description: this.view?.canListSessions ? null : "이 에이전트는 지난 세션 목록을 주지 않습니다",
       history_items: historyItems, history_query: this.historyQuery, history_no_match: noMatch,
       history_can_delete: canDelete && !noMatch, history_cannot_delete: !canDelete && !noMatch,
+      show_waiting: chat && !!this.waitingSession(),
+      delete_blocked_open: !!this.pendingDelete?.blocked,
+      delete_confirm_open: !!this.pendingDelete && !this.pendingDelete.blocked,
+      delete_message: this.pendingDelete?.message ?? "",
+      change_open: !!this.pendingChange,
+      change_title: this.pendingChange?.kind === "folder" ? "작업 폴더 바꾸기" : this.pendingChange?.kind === "parallel" ? "여러 세션 동시에 바꾸기" : "에이전트 바꾸기",
+      change_message: `응답 중인 세션 ${this.backgroundBusy()}개가 멈춥니다. 바꿀까요?`,
       history_selected: this.view?.sessionId ?? null, history_loading: !!this.view?.sessionsLoading && !this.view.sessions.length,
       history_unsupported: !!this.view && !this.view.canListSessions,
       history_empty: !!this.view && this.view.canListSessions && !this.view.sessionsLoading && !this.view.sessionError && this.view.sessions.length === 0,
