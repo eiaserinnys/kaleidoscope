@@ -226,6 +226,35 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
   });
 }
 
+for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, height: 480, label: "narrow" }, { width: 360, height: 240, label: "minimum" }]) {
+  test(`선택한 쉬는 세션을 확인창으로 지우면 초점이 목록 행에 간다 — ${size.label}`, async ({ page }) => {
+    test.setTimeout(90_000);
+    const { app } = await openAgent(page, "화면 가짜", { x: 24, y: 24, width: size.width, height: size.height });
+    await send(app, "fresh-turn");
+    await expect(app.getByText("NEW", { exact: true })).toBeVisible();
+    await app.getByRole("button", { name: "새 세션", exact: true }).click();
+    await expect(app.locator(".ks-agent-chat-assistant")).toHaveCount(0);
+    await send(app, "fresh-turn");
+    await expect(app.getByText("NEW", { exact: true })).toBeVisible();
+    if (size.label !== "wide") await app.getByRole("button", { name: "지난 세션", exact: true }).click();
+    const selected = app.locator('.ks-list [aria-selected="true"]');
+    await expect(selected).toHaveCount(1);
+    const deleted = await selected.getAttribute("data-row-key");
+    await sessionRow(app, deleted!).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "삭제" }).click();
+    await page.getByRole("dialog", { name: "세션 삭제" }).getByRole("button", { name: "삭제", exact: true }).click();
+    await expect(sessionRow(app, deleted!)).toHaveCount(0);
+    await expect(selected).toHaveCount(1);
+    await expect(selected).not.toHaveAttribute("data-row-key", deleted!);
+    // 찾기 칸으로 가면 친 글이 찾기에 들어가 목록이 빈다.
+    await expect(app.locator('.ks-list [role="option"]:focus')).toHaveCount(1);
+    await page.keyboard.type("x");
+    await expect(page.getByPlaceholder("제목으로 찾기")).toHaveValue("");
+    await expect(app.locator('.ks-list [role="option"]')).not.toHaveCount(0);
+    if (test.info().repeatEachIndex === 0) await shot(page, `delete-focus-${size.label}`);
+  });
+}
+
 test("다른 세션이 허용을 기다리면 배지와 안내가 보이고 이동해 답한다", async ({ page }) => {
   test.setTimeout(90_000);
   const { app } = await openAgent(page, "병렬 가짜");

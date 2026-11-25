@@ -4,24 +4,14 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { openContextMenu, writeMenuClipboard } from "../components/context-menu";
 import { Dialog } from "../components/dialog";
 import { DataState } from "../components/data-state";
-import { isUnclaimedFocus } from "../components/focus-rescue";
 import type { MenuEntry } from "../components/menu";
 import { ItemScopeProvider, useItemScope } from "../data/item-scope";
 import { useBinding, useWindowData } from "../data/window-data";
+import { restoreRowFocusAfter } from "./action-row-focus";
 
 type Pending = { entry: ItemMenuEntry; index: number; item: JsonValue | undefined; key: string; anchor: HTMLElement; container: HTMLElement | null; rowIndex: string | undefined; tree: boolean };
 /** 데이터 트리와 구역 머리의 메뉴는 같은 장치를 쓰고 동작 포인터의 갈래만 다르다. */
 type MenuSegment = "item_menu" | "menu";
-
-function restoreAfterAction({ anchor, container, rowIndex, tree }: Pending) {
-  // 동작을 기다리는 사이 사용자가 옮긴 초점은 그대로 둔다.
-  if (!isUnclaimedFocus(document.activeElement) || !container?.isConnected) return;
-  const row = (index: number) => container.querySelector<HTMLElement>(tree
-    ? `[role="treeitem"][data-index="${index}"]`
-    : `[data-focus-index="${index}"]`);
-  const target = anchor.isConnected ? anchor : rowIndex === undefined ? null : row(Number(rowIndex)) ?? row(Number(rowIndex) - 1);
-  target?.focus({ preventScroll: true });
-}
 
 function Confirmation({ pending, pointer, segment, onCancel, onConfirm }: { pending: Pending; pointer: string; segment: MenuSegment; onCancel: () => void; onConfirm: () => void }) {
   const body = useBinding(`${pointer}/${segment}/${pending.index}/confirm/body`, pending.entry.confirm?.body ?? null);
@@ -81,32 +71,7 @@ export function useItemMenu(entries: ItemMenuEntry[] | undefined, pointer: strin
   const confirm = useCallback(() => {
     if (!pending) return;
     stopRestore.current();
-    let stopped = false;
-    let frame: number | undefined;
-    let observer: MutationObserver | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const stop = () => {
-      stopped = true;
-      if (frame !== undefined) cancelAnimationFrame(frame);
-      observer?.disconnect();
-      clearTimeout(timer);
-    };
-    stopRestore.current = stop;
-    void run(pending).then(() => {
-      if (stopped) return;
-      frame = requestAnimationFrame(() => {
-        restoreAfterAction(pending);
-        if (!pending.anchor.isConnected || !pending.container?.isConnected) { stop(); return; }
-        // 명령 응답보다 상태 이벤트가 늦으면 실제 행 제거를 한 번 기다린다.
-        observer = new MutationObserver(() => {
-          if (pending.anchor.isConnected) return;
-          stop();
-          restoreAfterAction(pending);
-        });
-        observer.observe(pending.container, { childList: true, subtree: true });
-        timer = setTimeout(stop, 3000);
-      });
-    });
+    stopRestore.current = restoreRowFocusAfter(pending, run(pending));
     restoreAnchor.current = pending.anchor;
     setPending(null);
   }, [pending, run]);

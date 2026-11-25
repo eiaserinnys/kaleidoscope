@@ -8,6 +8,7 @@ import { Dialog } from "../components/dialog";
 import { BindingFailureNotice } from "../components/data-state";
 import { BUTTON_PROGRESS_DELAY_MS, BUTTON_PROGRESS_MIN_MS } from "./data-input";
 import { renderBlock } from "../render/render-block";
+import { actionRow, restoreRowFocusAfter } from "./action-row-focus";
 
 export type DialogBlockData = Extract<Block, { type: "dialog" }>;
 
@@ -68,6 +69,8 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
   const progressShownAt = useRef<number | null>(null);
   const runId = useRef(0);
   const mounted = useRef(true);
+  const opener = useRef<HTMLElement | null>(null);
+  const stopRestore = useRef<() => void>(() => {});
 
   useDormant(childPointer, !isOpen);
 
@@ -77,7 +80,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; if (progressTimer.current) clearTimeout(progressTimer.current); };
+    return () => { mounted.current = false; stopRestore.current(); if (progressTimer.current) clearTimeout(progressTimer.current); };
   }, []);
 
   useLayoutEffect(() => {
@@ -103,9 +106,14 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
     // 지난 실패를 다시 보내는 것이면 결과를 기다리지 않고 바로 진행을 보인다. 처음 누름은 지금처럼 잠시 기다린다.
     if (data.hasActionFailure(`${pointer}/on_confirm`)) setBusy(true);
     else progressTimer.current = setTimeout(() => { progressTimer.current = null; setBusy(true); }, BUTTON_PROGRESS_DELAY_MS);
+    const done = data.act(`${pointer}/on_confirm`, null);
+    // 목록이나 트리의 행에서 연 확인창이면 확정 동작이 그 행을 지운 뒤 같은 자리 행으로 돌아간다. 행 메뉴의 확인과 같다.
+    stopRestore.current();
+    const row = opener.current ? actionRow(opener.current) : null;
+    stopRestore.current = row?.container && row.rowIndex !== undefined ? restoreRowFocusAfter(row, done) : () => {};
     void (async () => {
       try {
-        await data.act(`${pointer}/on_confirm`, null);
+        await done;
       } finally {
         if (!mounted.current || runId.current !== id) return;
         if (progressTimer.current) { clearTimeout(progressTimer.current); progressTimer.current = null; }
@@ -127,6 +135,7 @@ export function DialogBlock({ block, context, pointer }: { block: DialogBlockDat
     {isOpen && host ? <Dialog
       rootProps={blockRoot}
       ownerAnchor={root.current}
+      openerRef={opener}
       noticeSlotRef={data.setNoticeSlot}
       host={host}
       overlayClassName={hasPicker(block.child) ? "is-picker" : ""}

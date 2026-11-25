@@ -30,6 +30,8 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
     let focusedDialogElement: HTMLElement | null = null;
     let focusedItem: HTMLElement | null = null;
     let focusedRemove = false;
+    // 초점을 쥔 목록 행의 키와 그 행이 든 모음. 사라진 행은 closest가 안 되므로 초점을 받을 때 기록한다.
+    let focusedRow: { key: string; collection: HTMLElement | null } | null = null;
     // 사라진 조작은 연결이 끊겨 closest가 안 되므로 대화 입력 머리나 footer 안이었는지 기록한다.
     let focusedFooter: HTMLElement | null = null;
     let focusPath: Array<{ ancestor: HTMLElement; childIndex: number; controlIndex: number; swapIndex: number; prev: HTMLElement | null; next: HTMLElement | null }> = [];
@@ -140,6 +142,13 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       }
       return undefined;
     };
+    // 초점을 쥔 행이 같은 키로 다시 그려졌으면(위에 행이 끼어 자리가 바뀐 가상 목록 등) 그 행이 사용자가 보던 행이다.
+    const rowAgain = (): HTMLElement | undefined => {
+      const row = focusedRow;
+      if (!row?.collection?.isConnected || !scope.contains(row.collection)) return undefined;
+      return Array.from(row.collection.querySelectorAll<HTMLElement>("[data-row-key]"))
+        .find((element) => element.dataset.rowKey === row.key && element.matches(rowSelector) && !element.matches(":disabled") && !element.closest("[hidden], [inert]"));
+    };
     const rescuePane = () => bookmark.pane && bookmark.pane.isConnected && body.contains(bookmark.pane) ? bookmark.pane : body;
     const stopWaiting = () => { waiting.current = null; };
     const onPointer = (event: PointerEvent) => {
@@ -164,6 +173,9 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       focusedDialog = Boolean(target.closest(".ks-dialog-overlay"));
       focusedDialogElement = focusedDialog ? target.closest<HTMLElement>(".ks-dialog") : null;
       focusedRemove = target.classList.contains("ks-list-remove");
+      focusedRow = target.dataset.rowKey !== undefined && target.matches(rowSelector)
+        ? { key: target.dataset.rowKey, collection: target.parentElement?.closest<HTMLElement>('[role="listbox"], [role="list"], [role="table"], [role="grid"], [role="tree"], [role="treegrid"]') ?? null }
+        : null;
       inContent = body.contains(target);
       focusedFooter = inContent ? target.closest<HTMLElement>(".ks-agent-chat-footer, .ks-agent-chat-input-header") : null;
       if (!inContent) return;
@@ -271,7 +283,7 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
           // 초점을 쥔 조작이 연결이 끊겼을 때만 새 규칙(대화 입력창, 이웃, pane 임시 초점)을 쓴다.
           // disabled나 hidden이 된 조작은 지금 경로를 그대로 쓴다.
           const gone = focused !== null && !focused.isConnected;
-          const swap = inContent ? swapTarget() : undefined;
+          const swap = (gone ? rowAgain() : undefined) ?? (inContent ? swapTarget() : undefined);
           let target = swap;
           let stay: boolean | undefined = swap ? true : undefined;
           let restore = true;
@@ -303,8 +315,9 @@ export function WindowFocus({ host, store, windowId }: { host: RefObject<HTMLDiv
       if (onTop && focused && focusedDialog && !focused.isConnected && focusedDialogElement?.isConnected) {
         const lost = active === document.body || active === focused || (active instanceof Element && scope.contains(active) && isUnclaimedFocus(active));
         if (lost && !preserveWindowActionFocus(windowId)) {
-          const target = dialogActionFocus(focusedDialogElement);
-          if (usableFocus(target ?? null)) {
+          const again = rowAgain();
+          const target = again ?? dialogActionFocus(focusedDialogElement);
+          if (again || usableFocus(target ?? null)) {
             focused = null;
             focusedDialog = false;
             focusedDialogElement = null;

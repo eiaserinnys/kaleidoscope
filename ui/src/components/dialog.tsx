@@ -8,7 +8,7 @@ import { bookmarkTarget, dialogActionFocus, dialogFirstFocus, focusBookmark, foc
 
 const interactiveSelector = 'button, a[href], input, textarea, select, label, summary, iframe, [tabindex], [contenteditable], .cm-editor';
 
-export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, surfaceFocus = false, windowId, busy = false, confirmDisabled = false, rootProps, ownerAnchor, noticeSlotRef }: { ownerAnchor?: Element | null; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; surfaceFocus?: boolean; windowId?: string; busy?: boolean; /** 확정 단추를 잠근다. 누르기와 Enter가 막히고 취소, 닫기, Esc는 그대로다. */ confirmDisabled?: boolean }) {
+export function Dialog({ host, title, body, ok, danger, showCancel = true, cancelLabel = "취소", onCancel, onConfirm, overlayClassName = "", inertSelector = ":scope > .ks-data-window-body, :scope > .ks-data-window-notice", windowModal = false, active = true, userConsent = false, surfaceFocus = false, windowId, busy = false, confirmDisabled = false, rootProps, ownerAnchor, noticeSlotRef, openerRef }: { ownerAnchor?: Element | null; /** 대화상자를 연 요소를 받는다. 닫은 뒤에도 남는다. */ openerRef?: { current: HTMLElement | null }; rootProps?: import("../comments/block-root").BlockRootProps; noticeSlotRef?: (element: HTMLDivElement | null) => void; host: HTMLElement; title: string; body?: ReactNode; ok: string; danger?: boolean; showCancel?: boolean; cancelLabel?: string; onCancel: () => void; onConfirm: (event: MouseEvent<HTMLButtonElement>) => void; overlayClassName?: string; inertSelector?: string; windowModal?: boolean; active?: boolean; userConsent?: boolean; surfaceFocus?: boolean; windowId?: string; busy?: boolean; /** 확정 단추를 잠근다. 누르기와 Enter가 막히고 취소, 닫기, Esc는 그대로다. */ confirmDisabled?: boolean }) {
   const titleId = useId();
   const bodyId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -103,6 +103,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     if (!windowModal && !opener.current) {
       const target = previous === document.body ? lastFocusInWindow(host) : previous;
       opener.current = focusBookmark(target, content);
+      if (openerRef) openerRef.current = target;
       const row = target?.closest<HTMLElement>('[role="option"][data-focus-index]');
       const list = row?.closest<HTMLElement>('.ks-list[role="listbox"]');
       if (row && list && content.contains(list)) openerRow.current = { list, index: Number(row.dataset.focusIndex) };
