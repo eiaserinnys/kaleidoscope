@@ -14,6 +14,7 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
   const root = useRef<HTMLDivElement>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const opener = useRef<FocusBookmark | null>(null);
+  const openerRow = useRef<{ list: HTMLElement; index: number } | null>(null);
   const rememberedFocus = useRef<HTMLElement | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const [scrollable, setScrollable] = useState(false);
@@ -99,7 +100,13 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
     // 앱 설정은 창 본문의 형제이므로 설정에서 연 대화상자는 설정 안에서 연 요소를 찾는다.
     const settings = ownerAnchor?.closest<HTMLElement>(".ks-app-settings");
     const content = parentDialog && host.contains(parentDialog) ? parentDialog : settings && host.contains(settings) ? settings : host.querySelector<HTMLElement>(":scope > .ks-data-window-body") ?? host;
-    if (!windowModal && !opener.current) opener.current = focusBookmark(previous === document.body ? lastFocusInWindow(host) : previous, content);
+    if (!windowModal && !opener.current) {
+      const target = previous === document.body ? lastFocusInWindow(host) : previous;
+      opener.current = focusBookmark(target, content);
+      const row = target?.closest<HTMLElement>('[role="option"][data-focus-index]');
+      const list = row?.closest<HTMLElement>('.ks-list[role="listbox"]');
+      if (row && list && content.contains(list)) openerRow.current = { list, index: Number(row.dataset.focusIndex) };
+    }
     const background = host.querySelectorAll<HTMLElement>(inertSelector);
     background.forEach((element) => { element.setAttribute("inert", ""); });
     const owner = windowId ?? ownerOf(host);
@@ -120,7 +127,12 @@ export function Dialog({ host, title, body, ok, danger, showCancel = true, cance
           target?.focus({ preventScroll: true });
         }
       } else if (opener.current && (focusedInside || document.activeElement === document.body)) {
-        focusRescued(bookmarkTarget(opener.current, content), { preventScroll: true });
+        const row = openerRow.current;
+        const neighbor = !opener.current.element?.isConnected && row?.list.isConnected && content.contains(row.list)
+          ? row.list.querySelector<HTMLElement>(`[role="option"][data-focus-index="${row.index}"]`)
+            ?? row.list.querySelector<HTMLElement>(`[role="option"][data-focus-index="${row.index - 1}"]`)
+          : null;
+        focusRescued(neighbor && !neighbor.matches(":disabled") ? neighbor : bookmarkTarget(opener.current, content), { preventScroll: true });
       }
     };
   }, [host, inertSelector, windowModal]);

@@ -99,6 +99,39 @@ it("확정으로 닫으면 연 요소로 돌아간다", () => {
   expect(document.activeElement).toBe(opener);
 });
 
+it.each([
+  ["가", "나"],
+  ["나", "가"],
+])("목록에서 연 확인창이 닫힐 때 %s 행이 사라졌으면 이웃 %s 행으로 돌아간다", (removed, neighbor) => {
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  host.innerHTML = '<div class="ks-data-window-body"><input aria-label="찾기"><div class="ks-data-view ks-list" role="listbox"><button role="option" data-focus-index="0">가</button><button role="option" data-focus-index="1">나</button></div></div>';
+  document.body.appendChild(host);
+  const row = within(host).getByRole("option", { name: removed });
+  row.focus();
+  const view = render(<Dialog host={host} title="확인" ok="확정" onCancel={() => {}} onConfirm={() => {}} />);
+  row.remove();
+  const next = within(host).getByRole("option", { name: neighbor });
+  next.dataset.focusIndex = "0";
+  view.unmount();
+  expect(document.activeElement).toBe(next);
+  host.remove();
+});
+
+it("확인창을 연 마지막 목록 행이 사라지면 본문의 다른 입력으로 돌아간다", () => {
+  const host = document.createElement("div");
+  host.className = "ks-data-window";
+  host.innerHTML = '<div class="ks-data-window-body"><input aria-label="찾기"><div class="ks-data-view ks-list" role="listbox"><button role="option" data-focus-index="0">가</button></div></div>';
+  document.body.appendChild(host);
+  const row = within(host).getByRole("option", { name: "가" });
+  row.focus();
+  const view = render(<Dialog host={host} title="확인" ok="확정" onCancel={() => {}} onConfirm={() => {}} />);
+  row.remove();
+  view.unmount();
+  expect(document.activeElement).toBe(within(host).getByRole("textbox", { name: "찾기" }));
+  host.remove();
+});
+
 it("조건부 부모와 함께 사라져도 연 요소로 돌아간다", () => {
   const view = render(<FocusDialog />);
   const opener = screen.getByRole("button", { name: "열기" });

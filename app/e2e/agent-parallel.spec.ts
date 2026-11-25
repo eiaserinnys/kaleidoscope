@@ -217,7 +217,10 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
       await shot(page, `focus-new-${size.label}-${index + 1}`);
       if (size.label !== "wide") await app.getByRole("button", { name: "지난 세션", exact: true }).click();
       await expect(page.getByPlaceholder("제목으로 찾기")).toHaveValue("");
-      if (size.label !== "wide") await page.keyboard.press("Escape");
+      if (size.label !== "wide") {
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog", { name: "이어 갈 세션 고르기" })).toHaveCount(0);
+      }
       await message.fill("");
     }
   });
@@ -453,7 +456,9 @@ for (const size of [{ width: 1000, height: 640, label: "wide" }, { width: 520, h
       await page.getByRole("dialog", { name: "세션 삭제" }).getByRole("button", { name: "삭제", exact: true }).click();
       await expect(sessionRow(app, "session-2")).toHaveCount(0);
       await expect(sessionRow(app, "session-3")).toHaveAttribute("aria-selected", "true");
-      await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest(".ks-list"))).toBe(true);
+      await expect(app.locator('.ks-list [role="option"]:focus')).toHaveCount(1);
+      await page.keyboard.type("x");
+      await expect(page.getByPlaceholder("제목으로 찾기")).toHaveValue("");
       await shot(page, "visual-wide-delete-after");
     }
     await app.getByRole("button", { name: "이동", exact: true }).click();
