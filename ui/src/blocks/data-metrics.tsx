@@ -5,10 +5,11 @@ import { Badge, isBadge } from "../components/badge";
 import { DataState } from "../components/data-state";
 import { isMedia, MediaThumbnail } from "../components/media-thumbnail";
 import { useBinding } from "../data/window-data";
-import { asArray, isObject, NoItems } from "./data-view-common";
+import { asArray, NoItems } from "./data-view-common";
+import { isRecord } from "../core/value-guards";
 
 function isMetric(value: unknown): value is MetricItem {
-  return isObject(value) && typeof value.label === "string" &&
+  return isRecord(value) && typeof value.label === "string" &&
     (typeof value.value === "string" || (typeof value.value === "number" && Number.isFinite(value.value)));
 }
 

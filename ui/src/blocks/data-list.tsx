@@ -14,7 +14,7 @@ import { useLoadMore } from "./load-more";
 import type { BindingMore } from "../contract/contract";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
-import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, listGroups, isObject, keepRovingRow, useRoving, useScrollbarFlapHold, useVirtualRows, type ListGroup } from "./data-view-common";
+import { Badges, DEFAULT_VIRTUAL_ROW_ESTIMATE, GroupHeading, NoItems, VirtualSurface, listGroups, keepRovingRow, useRoving, useScrollbarFlapHold, useVirtualRows, type ListGroup } from "./data-view-common";
 import { Button, EmptyState, ErrorId, IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
 import { ICON_NAMES } from "../contract/limits";
@@ -24,8 +24,9 @@ import type { AttachmentPreviewRequest } from "../data/attachments";
 import { AttachmentPreview } from "./attachment-preview";
 import { selectionRange, toggleSelection } from "../components/collection-selection";
 import { useLocalDraft } from "../data/use-local-draft";
+import { isRecord } from "../core/value-guards";
 
-const validItem = (v: unknown): v is ListItem => isObject(v) && typeof v.key === "string" && typeof v.title === "string";
+const validItem = (v: unknown): v is ListItem => isRecord(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "status"; group: ListGroup<ListItem> } | { kind: "items"; items: ListItem[]; start: number };
 type ListHandlers = {
   focus: (index: number) => void;

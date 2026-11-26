@@ -4,9 +4,9 @@ import type { JsonValue } from "../contract/serde_json/JsonValue";
 import type { TreeRowModel } from "../components/tree/tree-model";
 
 /** 데이터 트리 전용 끌기 표식. 폴더 트리의 것과 섞이지 않게 이름을 따로 둔다. */
-export const TREE_ITEM_MIME = "application/x-kaleidoscope-tree-item";
+const TREE_ITEM_MIME = "application/x-kaleidoscope-tree-item";
 
-export type TreeDropPosition = "before" | "after" | "inside" | "end";
+type TreeDropPosition = "before" | "after" | "inside" | "end";
 
 interface DragPayload {
   window: string;

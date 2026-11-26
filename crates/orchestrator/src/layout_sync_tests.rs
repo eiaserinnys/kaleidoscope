@@ -38,6 +38,7 @@ fn insert_wallpaper_asset(state: &AppState, id: &str, version: u32) {
 }
 
 // 판 15 연결이 받는 배치 모양. 배경 필드가 오면 거부한다.
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct V15Changes {
@@ -59,6 +60,7 @@ struct V15Changes {
     deleted_desktop_shortcuts: Vec<String>,
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 #[serde(tag = "event", deny_unknown_fields)]
 enum V15LayoutEvent {

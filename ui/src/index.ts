@@ -53,12 +53,6 @@ export { resolveScreen, type ScreenContext, type ScreenResult } from "./comments
 export { encodeCommentKey, decodeCommentKey } from "./comments/key";
 export { TextInput, type TextInputProps } from "./components/text-input";
 export { createHttpTransport } from "./core/http-transport";
-export {
-  createFakeTransport,
-  type FakeTransport,
-  type FakeTransportSeed,
-  type FakeWebViewSnapshot,
-} from "./core/fake-transport";
 export { createShellStore, useShellSelector, type InstallConsent, type ShellInstallConsent, type ShellStore } from "./core/shell-store";
 export { messageReceiver, messageApps, defaultMessageApp, useDefaultMessageApp, type MessageReceiver, type MessageApp } from "./shell/message-target";
 export { sendToDefaultAgent } from "./shell/send-message";

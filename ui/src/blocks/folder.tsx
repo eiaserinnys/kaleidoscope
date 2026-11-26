@@ -8,13 +8,9 @@ import { patchWindowState, useWindowStateValue, useWindowVisible } from "../data
 import type { BlockContext } from "./block-context";
 import { createCollectionFolderBackend } from "./folder-backend";
 import { FileBrowserTree } from "./file-browser-tree";
+import { extensionOf } from "./file-path";
 
 type FolderBlockData = Extract<Block, { type: "folder" }> & { legacyTreeRoot?: boolean };
-
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-}
 
 export function FolderBlock({ block, context, pointer }: { block: FolderBlockData; context: BlockContext; pointer: string }) {
   const rootProps = useBlockRootProps();

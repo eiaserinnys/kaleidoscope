@@ -9,10 +9,10 @@ import { ownerOf } from "../share/overlay-owner";
 import { preserveWindowActionFocus } from "../share/action-context";
 
 export const optionValue = (option: SelectOption): JsonValue => typeof option === "string" ? option : option.value;
-export const optionLabel = (option: SelectOption) => typeof option === "string" ? option : option.label;
+const optionLabel = (option: SelectOption) => typeof option === "string" ? option : option.label;
 export const equalOption = (a: JsonValue | undefined, b: JsonValue) => JSON.stringify(a) === JSON.stringify(b);
 
-export interface SelectChoice {
+interface SelectChoice {
   value: JsonValue;
   label: string;
   disabled?: boolean;

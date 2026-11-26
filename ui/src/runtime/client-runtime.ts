@@ -17,6 +17,7 @@ import { ClientRealtime } from "./client-realtime";
 import { prepareShareForSend } from "../share/share-view";
 import * as shellErrors from "../contract/shell-errors";
 import { trackWindowAction, windowActionActive } from "../share/action-context";
+import { escapePointer } from "../core/json-pointer";
 
 type Client = NonNullable<AppDefinition["client"]>;
 function acceptsFile(spec: PickFilesSpec, file: File): boolean {
@@ -33,7 +34,6 @@ function acceptedFormats(spec: PickFilesSpec): string {
   const extensions = [...new Set(spec.accept.flatMap((item) => item.extensions.map((extension) => extension.replace(/^\./, "").toUpperCase())))];
   return extensions.length >= 5 ? `${extensions.slice(0, 4).join(", ")} 등 ${extensions.length}가지 형식의` : extensions.join(", ");
 }
-const escapePointer = (value: string) => value.replace(/~/g, "~0").replace(/\//g, "~1");
 const runtimes = new WeakMap<ShellStore, Map<string, ClientRuntime>>();
 
 type RuntimeWaiter = (windowId: string, closed: boolean) => void;

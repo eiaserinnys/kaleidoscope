@@ -7,7 +7,7 @@ import { describeTarget, type TargetDescription } from "./target";
 
 type Index = { digest: string; entries: DefinitionIndex };
 const indexes = new WeakMap<AppDefinition, Promise<Index>>();
-export function definitionIndex(definition: AppDefinition): Promise<Index> {
+function definitionIndex(definition: AppDefinition): Promise<Index> {
   let index = indexes.get(definition);
   if (!index) { index = buildDefinitionIndex(definition); indexes.set(definition, index); }
   return index;

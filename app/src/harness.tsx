@@ -2,13 +2,11 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Button,
-  createFakeTransport,
   createShellStore,
   installShellDragGuard,
-  type FakeTransport,
-  type FakeWebViewSnapshot,
   type CoreRequest,
 } from "@kaleidoscope/ui";
+import { createFakeTransport, type FakeTransport, type FakeWebViewSnapshot } from "@kaleidoscope/ui/fake";
 import { Shell } from "./shell/shell";
 import { describeVisible } from "../../ui/src/share/visible";
 import type { AccountPreferences, App, AppDefinition, AppVersion, AppWindow, LinkStatus, ShellSnapshot } from "../../ui/src/contract/contract";

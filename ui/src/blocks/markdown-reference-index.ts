@@ -1,7 +1,7 @@
 import { syntaxTree } from "@codemirror/language";
 import { type EditorState, type Transaction } from "@codemirror/state";
 
-export function normalizeReference(label: string): string {
+function normalizeReference(label: string): string {
   return label.trim().replace(/\s+/g, " ").toLowerCase();
 }
 

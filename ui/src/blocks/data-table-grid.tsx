@@ -4,9 +4,10 @@ import type { Column } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { Badge, isBadge } from "../components/badge";
 import { useLoadMore } from "./load-more";
-import { keepRovingRow, NoItems, useVirtualRows, VirtualSurface, isObject } from "./data-view-common";
+import { keepRovingRow, NoItems, useVirtualRows, VirtualSurface } from "./data-view-common";
 import { cellValue, formattedCell, numericColumn, useFontsReady, width, type Row, type TableViewProps } from "./data-table";
 import { contentCellError } from "./data-table-cell";
+import { isRecord } from "../core/value-guards";
 
 type Address = { row: string; column: string };
 type GridHandlers = {
@@ -23,7 +24,7 @@ export const GridCell = memo(function GridCell({ raw, column, rowKey, rowLabel, 
 }) {
   const press = useRef<{ x: number; y: number } | null>(null);
   const text = cellValue(raw, column);
-  const title = column.format === "content" && isObject(raw) && typeof raw.title === "string" ? raw.title : text;
+  const title = column.format === "content" && isRecord(raw) && typeof raw.title === "string" ? raw.title : text;
   const error = column.format === "content" ? contentCellError(raw, column) : null;
   return <span role="gridcell" aria-label={`${rowLabel}, ${column.label}, ${error ? `오류: ${error.message}, ${error.id}` : raw == null ? "빈 칸" : title}`} aria-selected={selected} aria-colindex={columnIndex + 1} data-focus-index={index}
     tabIndex={focused ? 0 : -1} className={`ks-table-cell ks-grid-cell${numericColumn(column) ? " is-numeric" : ""}${selected ? " is-selected" : ""}`}

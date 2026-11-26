@@ -22,7 +22,7 @@ export function markContextMenuOpened(event: Event): void {
   if (longPressEvents.has(event)) openedMenus.add(event);
 }
 
-export function isEditableTarget(target: EventTarget | null): boolean {
+function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(EDITABLE));
 }
 

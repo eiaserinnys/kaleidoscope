@@ -1,9 +1,9 @@
 import type { HtmlAnchor } from "../html-bridge/frame-protocol";
 
-export type CommentStatus = "needs_agent_review" | "needs_user_reply" | "resolved";
-export interface Reply { id: string; role: "user" | "agent"; rev: number; body: string; created_at: string }
+type CommentStatus = "needs_agent_review" | "needs_user_reply" | "resolved";
+interface Reply { id: string; role: "user" | "agent"; rev: number; body: string; created_at: string }
 export interface Comment { id: string; rev: number; anchor_rev?: number; status: CommentStatus; anchor: HtmlAnchor; comment: string; created_at: string; resolved_rev: number | null; replies: Reply[] }
-export interface RevisionMeta { title?: string; note?: string; author: "user" | "agent"; base_rev: number; edits: unknown[] }
+interface RevisionMeta { title?: string; note?: string; author: "user" | "agent"; base_rev: number; edits: unknown[] }
 export interface Thread { revisions: Record<string, RevisionMeta>; comments: Comment[] }
 export type ThreadChange =
   | { kind: "add"; comment: Comment }

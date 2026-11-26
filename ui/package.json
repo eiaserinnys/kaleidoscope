@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./fake": "./src/fake.ts",
     "./styles.css": "./src/styles/index.css"
   },
   "peerDependencies": {
@@ -60,7 +61,7 @@
   },
   "scripts": {
     "dev": "vite --config vite.config.ts --host 127.0.0.1 --port 5173",
-    "test": "vitest run --maxWorkers=2 --testTimeout=60000",
+    "test": "vitest run --testTimeout=60000",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test",
     "e2e:netns": "bash ./e2e/run-netns.sh"

@@ -27,7 +27,6 @@ serde_json = "1"
 semver = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt", "time", "process", "io-util", "sync", "net", "fs"] }
-tokio-util = { version = "0.7", features = ["compat"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
 which = "8"
 uuid = { version = "1", features = ["v4"] }

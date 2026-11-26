@@ -2,7 +2,7 @@ import type { MediaRef } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 
 /** 뷰어가 그릴 첨부의 원천. 미디어 참조나 이미 받아 둔 바이트, 또는 누를 때 받아 올 함수다. */
-export type AttachmentContent =
+type AttachmentContent =
   | { kind: "media"; media: MediaRef }
   | { kind: "bytes"; mime: string; data_base64: string };
 
@@ -14,7 +14,7 @@ export type AttachmentKind = "image" | "video" | "audio" | "markdown" | "text" |
 export type AttachmentPreviewRequest = { source: AttachmentSource; name: string; trigger: HTMLElement };
 
 /** 글은 앞 1MiB만 보여 준다. 그보다 큰 첨부는 받기로 저장해 확인한다. */
-export const ATTACHMENT_TEXT_MAX_BYTES = 1024 * 1024;
+const ATTACHMENT_TEXT_MAX_BYTES = 1024 * 1024;
 
 const EXTENSION_MIME: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
@@ -45,7 +45,7 @@ export function baseMime(mime: string): string {
   return mime.split(";", 1)[0].trim().toLowerCase();
 }
 
-export function mimeFromName(name: string): string {
+function mimeFromName(name: string): string {
   const extension = name.match(/\.([a-z0-9]{1,10})$/i)?.[1]?.toLowerCase();
   return extension ? EXTENSION_MIME[extension] ?? "" : "";
 }
@@ -62,7 +62,7 @@ export function attachmentKind(mime: string, name: string): AttachmentKind {
 }
 
 /** 저장 대화상자에 넣을 제안 이름. 표시 이름이 비었을 때만 받은 형식의 확장자를 붙인다. */
-export function suggestedAttachmentName(name: string, mime: string): string {
+function suggestedAttachmentName(name: string, mime: string): string {
   const base = name.trim() || "첨부";
   if (/\.[a-z0-9]{1,10}$/i.test(base)) return base;
   const value = baseMime(mime);

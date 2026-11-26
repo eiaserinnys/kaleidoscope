@@ -14,20 +14,21 @@ import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
 import { useDataTreeDrag } from "./data-tree-drag";
-import { Badges, NoItems, asArray, isObject } from "./data-view-common";
+import { Badges, NoItems, asArray } from "./data-view-common";
 import { useWindowStateValue } from "../data/window-state";
+import { isRecord } from "../core/value-guards";
 
 export type DataTreeBlockData = Extract<Block, { type: "tree" }> & { items: Binding };
 
 function valid(value: unknown, byPath: boolean): value is TreeItem {
-  if (!isObject(value) || typeof value.key !== "string") return false;
+  if (!isRecord(value) || typeof value.key !== "string") return false;
   if (value.title != null && typeof value.title !== "string") return false;
   if (value.subtitle != null && typeof value.subtitle !== "string") return false;
   if (byPath ? typeof value.path !== "string" : value.path != null && typeof value.path !== "string") return false;
   if (value.meta != null && typeof value.meta !== "string") return false;
   if (value.checked != null && typeof value.checked !== "boolean") return false;
   if (value.editing != null && typeof value.editing !== "boolean") return false;
-  if (value.children != null && !Array.isArray(value.children) && !isObject(value.children)) return false;
+  if (value.children != null && !Array.isArray(value.children) && !isRecord(value.children)) return false;
   return asArray(value.badges).every((badge) => isBadge(badge) && (typeof badge === "string" || badge.color == null || typeof badge.color === "string"));
 }
 

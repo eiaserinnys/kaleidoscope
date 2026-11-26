@@ -1,12 +1,12 @@
 import type { AppCommentAnchor, AppDefinition, Block } from "../contract/contract";
 import { normalizeBlock } from "../render/render-block";
+import { escapePointer } from "../core/json-pointer";
 
 export type DefinitionEntry = { type: string; own_fingerprint: string; parent_child_types: string[]; meaningful: boolean; empty_fingerprint: string };
 export type DefinitionIndex = Map<string, DefinitionEntry>;
 export type DefinitionResult = { kind: "exact" | "moved"; pointer: string } | { kind: "orphan" };
 
 type Child = { path: string; block: Block };
-const escapePointer = (part: string) => part.replace(/~/g, "~0").replace(/\//g, "~1");
 function children(block: Block): Child[] {
   switch (block.type) {
     case "split": case "stack": return block.children.map((child, i) => ({ path: `children/${i}`, block: child }));

@@ -15,6 +15,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 pub(crate) use storage::changed as storage_changed;
 
+#[cfg(test)]
 pub(crate) fn binding_value(
     inner: &Inner,
     window: &str,

@@ -61,7 +61,7 @@ export interface FakeTransportSeed {
   wallpaperMediaError?: string;
 }
 
-export interface FakeConversationSeed {
+interface FakeConversationSeed {
   thread: ConversationThread | null;
   items: ConversationItem[];
   older?: ConversationItem[];

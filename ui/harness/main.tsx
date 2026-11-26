@@ -5,14 +5,13 @@ import type { WindowData } from "../src/data/window-data";
 import {
   AppWindowContent,
   ContextMenuHost,
-  createFakeTransport,
   createHttpTransport,
   TooltipProvider,
   createShellStore,
   installShellDragGuard,
   useShellSelector,
-  type FakeTransport,
 } from "@kaleidoscope/ui";
+import { createFakeTransport, type FakeTransport } from "../src/fake";
 import "@kaleidoscope/ui/styles.css";
 import "./harness.css";
 import galleryJson from "../../examples/block-gallery.json";

@@ -25,7 +25,7 @@ export function dateObject(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
   return utcDate(year, month, day);
 }
-export function dateISO(date: Date): string { return iso(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()); }
+function dateISO(date: Date): string { return iso(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()); }
 export function todayISO(): string { const d = new Date(); return iso(d.getFullYear(), d.getMonth() + 1, d.getDate()); }
 export function addDays(value: string, days: number): string {
   const date = dateObject(value); date.setUTCDate(date.getUTCDate() + days); return dateISO(date);

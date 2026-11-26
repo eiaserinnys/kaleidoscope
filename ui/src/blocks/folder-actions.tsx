@@ -18,6 +18,7 @@ import type { FolderBackend, FolderItem } from "./folder-backend";
 import { editorRevision, flushEditors } from "./file-editor-session";
 import { clipboardListeners, getClipboard, setClipboard, type ShellClipboard } from "./folder-clipboard";
 import { markContextMenuOpened } from "../components/touch-gestures";
+import { extensionOf } from "./file-path";
 
 function parentPath(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -26,11 +27,6 @@ function parentPath(path: string): string {
 
 function failureMessage(path: string, message: string): string {
   return message.includes(path) ? message : `${path}: ${message}`;
-}
-
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
 function itemFromRow(row: TreeRowModel | null): FolderItem | null {
@@ -75,7 +71,7 @@ export interface FolderInlineEdit {
   attempt: number;
 }
 
-export function FolderInlineRow({ edit, onCommit, onCancel }: {
+function FolderInlineRow({ edit, onCommit, onCancel }: {
   edit: FolderInlineEdit;
   onCommit: (name: string) => void;
   onCancel: (reason?: TextInputCancelReason) => void;
