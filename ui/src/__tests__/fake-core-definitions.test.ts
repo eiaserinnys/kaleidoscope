@@ -7,6 +7,7 @@ import type { AppDefinition } from "../contract/contract";
 import { fillDefinitionDefaults } from "../core/app-defaults";
 import { createFakeTransport } from "../core/fake-transport";
 import { makeTestSeed } from "./fixtures";
+import { isRecord } from "../core/value-guards";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -31,10 +32,6 @@ function definitionFiles(): string[] {
     path.join(repoRoot, "tests", "fixtures", "fake-core-parity.json"),
     ...fromEnvironment,
   ].filter((file, index, files) => files.indexOf(file) === index);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /// 식 바인딩만 고른다. state·client·item 같은 바인딩은 jsonata로 컴파일하지 않는다.

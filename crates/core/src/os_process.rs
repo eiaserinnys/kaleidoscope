@@ -96,16 +96,8 @@ mod path_tests {
 }
 
 pub(crate) enum SpawnFailure {
-    Resolve(io::Error),
+    Resolve,
     Spawn(io::Error),
-}
-
-impl SpawnFailure {
-    pub(crate) fn into_io(self) -> io::Error {
-        match self {
-            Self::Resolve(error) | Self::Spawn(error) => error,
-        }
-    }
 }
 
 pub(crate) fn spawn(
@@ -123,8 +115,7 @@ pub(crate) fn spawn(
     };
     #[cfg(not(windows))]
     let resolved = which::which(command);
-    let path =
-        resolved.map_err(|e| SpawnFailure::Resolve(io::Error::new(io::ErrorKind::NotFound, e)))?;
+    let path = resolved.map_err(|_| SpawnFailure::Resolve)?;
     let mut command = Command::new(path);
     command.args(args).envs(env);
     #[cfg(windows)]
@@ -152,7 +143,7 @@ pub(crate) fn spawn(
 
 #[cfg(all(test, windows))]
 mod windows_path_tests {
-    use super::spawn;
+    use super::{spawn, SpawnFailure};
     use std::{collections::BTreeMap, fs, io};
     use winreg::{
         enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_EXPAND_SZ},
@@ -217,7 +208,10 @@ mod windows_path_tests {
             .unwrap();
         runtime.block_on(async {
             let mut child = spawn(&format!("{name}.cmd"), &[], &BTreeMap::new(), temp.path())
-                .unwrap_or_else(|error| panic!("프로세스 시작 실패: {}", error.into_io()));
+                .unwrap_or_else(|failure| match failure {
+                    SpawnFailure::Resolve => panic!("프로세스 시작 실패: 명령을 찾지 못했습니다"),
+                    SpawnFailure::Spawn(error) => panic!("프로세스 시작 실패: {error}"),
+                });
             let status = tokio::time::timeout(std::time::Duration::from_secs(30), child.wait())
                 .await
                 .expect("프로세스 종료 시간 초과")

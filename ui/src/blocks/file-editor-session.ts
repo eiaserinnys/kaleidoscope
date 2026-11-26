@@ -3,7 +3,7 @@ import { SHELL_EDITOR_ITEM_DELETED, SHELL_FILE_MARKDOWN_STORAGE_INVALID } from "
 import { toCoreError, type CoreTransport } from "../core/core-transport";
 import type { ShellStore } from "../core/shell-store";
 
-export type EditorStatus = "saved" | "saving" | "unsaved";
+type EditorStatus = "saved" | "saving" | "unsaved";
 
 export interface FileEditorSnapshot {
   path: string | null;
@@ -27,7 +27,7 @@ export interface EditorTarget {
   readonly conflictMessage: string;
 }
 
-export function createFileEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, permission: string): EditorTarget {
+function createFileEditorTarget(transport: Pick<CoreTransport, "call">, windowId: string, permission: string): EditorTarget {
   return {
     windowId,
     allowsMissingRevision: false,

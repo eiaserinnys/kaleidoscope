@@ -3,10 +3,11 @@ import type { Column } from "../contract/contract";
 import { badgeForeground, validColor } from "../components/badge";
 import { Notice } from "../components/primitives";
 import { SHELL_TABLE_CELL_CONTENT_INVALID } from "../contract/shell-errors";
-import { Badges, isObject } from "./data-view-common";
+import { Badges } from "./data-view-common";
+import { isRecord } from "../core/value-guards";
 
 function parseContent(value: unknown) {
-  return value == null ? null : isObject(value) && typeof value.title === "string" &&
+  return value == null ? null : isRecord(value) && typeof value.title === "string" &&
     (value.subtitle == null || typeof value.subtitle === "string") &&
     (value.color == null || typeof value.color === "string") &&
     (value.muted == null || typeof value.muted === "boolean") ? value : undefined;

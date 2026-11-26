@@ -49,7 +49,7 @@ export function rulerStep(seconds: number, zoom: number, viewportControls = fals
   return RULER_STEPS.find((step) => step >= target) ?? Math.ceil(target / 86400) * 86400;
 }
 
-export function rulerTime(seconds: number): string {
+function rulerTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   return `${String(minutes).padStart(2, "0")}:${(seconds - minutes * 60).toFixed(1).padStart(4, "0")}`;
 }

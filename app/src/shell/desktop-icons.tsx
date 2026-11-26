@@ -13,6 +13,7 @@ import {
   type DesktopIconCell, type DesktopIconPlacement, type DesktopIconShortcut,
 } from "./desktop-icon-layout";
 import { DESKTOP_USABLE_PADDING, usableWindowArea } from "./window-geometry";
+import { clamp } from "./clamp";
 
 const DRAG_THRESHOLD = 4;
 const DRAG_CLICK_SUPPRESS_MS = 400;
@@ -131,8 +132,8 @@ export const DesktopIcons = memo(function DesktopIcons({ store, desktopId, area,
     event.preventDefault();
     setDrag({
       id: current.id,
-      dx: clampBetween(event.clientX - current.startX, current.minDx, current.maxDx),
-      dy: clampBetween(event.clientY - current.startY, current.minDy, current.maxDy),
+      dx: clamp(event.clientX - current.startX, current.minDx, current.maxDx),
+      dy: clamp(event.clientY - current.startY, current.minDy, current.maxDy),
     });
   }, []);
   const pointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -375,10 +376,6 @@ const DesktopIconEntry = memo(function DesktopIconEntry({ store, app, placement,
     tabIndex={tabIndex}
   />;
 });
-
-function clampBetween(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
 
 function readGridMetrics(grid: HTMLElement, rowHeight: number) {
   const style = getComputedStyle(grid);

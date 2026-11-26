@@ -1,4 +1,5 @@
 import { SHELL_WINDOW_GEOMETRY_TOKEN_INVALID, type Rect, type ShellSnapshot, type WindowSize } from "@kaleidoscope/ui";
+import { clamp } from "./clamp";
 
 const RESIZE_CORNER_SIZE = 12;
 /** 바탕 영역 가장자리에서 창과 아이콘이 비켜서는 안쪽 여백. */
@@ -142,8 +143,4 @@ export function resizeWindowRect(
     height = bottomEnd - y;
   }
   return { x, y, width, height };
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }

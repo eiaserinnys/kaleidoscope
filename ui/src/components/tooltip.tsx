@@ -1,8 +1,8 @@
 import { cloneElement, createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from "react";
 import { AnchoredOverlay } from "./anchored-overlay";
 
-export const TOOLTIP_OPEN_DELAY_MS = 500;
-export const TOOLTIP_SKIP_DELAY_MS = 300;
+const TOOLTIP_OPEN_DELAY_MS = 500;
+const TOOLTIP_SKIP_DELAY_MS = 300;
 
 type Manager = { active: (() => void) | null; lastClosed: number };
 const TooltipContext = createContext<Manager | null>(null);

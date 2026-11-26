@@ -42,12 +42,12 @@ export function useHtmlFramePoint(frame: RefObject<HTMLIFrameElement | null>, so
 
 const tokenNames = ["--ks-color-accent", "--ks-color-accent-contrast", "--ks-color-selection", "--ks-color-text", "--ks-color-focus", "--ks-color-scroll-thumb", "--ks-color-warning", "--ks-type-meta", "--ks-type-body", "--ks-line-body", "--ks-font-family", "--ks-space-1", "--ks-space-2", "--ks-space-4", "--ks-space-5", "--ks-line-width", "--ks-focus-width", "--ks-focus-offset", "--ks-radius-small", "--ks-radius-large"];
 
-export function htmlViewTokens(): Record<string, string> {
+function htmlViewTokens(): Record<string, string> {
   const styles = getComputedStyle(document.documentElement);
   return Object.fromEntries(tokenNames.map((name) => [name, styles.getPropertyValue(name)]));
 }
 
-export function sanitizeHtml(root: Document | DocumentFragment): void {
+function sanitizeHtml(root: Document | DocumentFragment): void {
   root.querySelectorAll("script, iframe, frame, object, embed, base, meta[http-equiv]").forEach((element) => element.remove());
   root.querySelectorAll("*").forEach((element) => {
     const srcHash = sourceHash(element.getAttribute("src"));

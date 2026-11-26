@@ -9,9 +9,10 @@ import { useBinding, useWindowData } from "../data/window-data";
 import { useShareDescriber } from "../share/visible";
 import { capturePointer } from "../share/pointer-capture";
 import type { BlockContext } from "./block-context";
-import { asArray, isObject, NoItems } from "./data-view-common";
+import { asArray, NoItems } from "./data-view-common";
 import { WORLD_LAND } from "./world-land";
 import { useWindowStateValue } from "../data/window-state";
+import { isRecord } from "../core/value-guards";
 
 type MapBlockType = Extract<Block, { type: "map" }>;
 type Point = MapPoint & { [key: string]: JsonValue | undefined };
@@ -88,7 +89,7 @@ const longitude = (lng: number) => Array.from({ length: 37 }, (_, i) => ({ lat: 
 
 function normalize(value: unknown): Point[] {
   return asArray(value).flatMap((item) => {
-    if (!isObject(item)) return [];
+    if (!isRecord(item)) return [];
     const key = typeof item.key === "string" ? item.key : typeof item.key === "number" && Number.isFinite(item.key) ? String(item.key) : "";
     if (!key.trim() || typeof item.lat !== "number" || !Number.isFinite(item.lat) || Math.abs(item.lat) > 90 || typeof item.lng !== "number" || !Number.isFinite(item.lng) || Math.abs(item.lng) > 180) return [];
     return [{ ...item, key, lat: item.lat, lng: item.lng } as Point];

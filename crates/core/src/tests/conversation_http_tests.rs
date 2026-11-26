@@ -801,7 +801,7 @@ fn reconcile_moves_a_thread_only_when_the_stored_collection_changes() {
     core.inner.connections.lock().unwrap()[0].base_url = base;
     let definition: AppDefinition = serde_json::from_str(&pas_definition(None)).unwrap();
     let mut applied = crate::conversation_reconcile::Applied::default();
-    let mut reconcile = |applied: &mut crate::conversation_reconcile::Applied| {
+    let reconcile = |applied: &mut crate::conversation_reconcile::Applied| {
         crate::conversation_reconcile::reconcile_app(
             &core.inner,
             &definition,
@@ -1072,7 +1072,7 @@ fn reconcile_does_not_move_threads_when_another_setting_changes() {
     core.inner.connections.lock().unwrap()[0].base_url = base;
     let definition: AppDefinition = serde_json::from_str(&pas_definition(None)).unwrap();
     let mut applied = crate::conversation_reconcile::Applied::default();
-    let mut reconcile = |applied: &mut crate::conversation_reconcile::Applied| {
+    let reconcile = |applied: &mut crate::conversation_reconcile::Applied| {
         crate::conversation_reconcile::reconcile_app(
             &core.inner,
             &definition,

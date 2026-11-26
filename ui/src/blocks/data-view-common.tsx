@@ -4,20 +4,20 @@ import type { Badge as BadgeValue, Group } from "../contract/contract";
 import { Badge, isBadge } from "../components/badge";
 import { DataIcon } from "../components/data-icons";
 import { EmptyState } from "../components/primitives";
+import { isRecord } from "../core/value-guards";
 
-export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 export const DEFAULT_VIRTUAL_ROW_ESTIMATE = 40;
 export function asArray(value: unknown): unknown[] { return value == null ? [] : Array.isArray(value) ? value : [value]; }
 export function groups<T>(value: unknown, grouped: boolean, valid: (item: unknown) => item is T): Group<T>[] {
   const values = asArray(value);
   if (!grouped) return [{ title: "", items: values.filter(valid) }];
-  return values.filter((g): g is Record<string, unknown> => isObject(g) && typeof g.title === "string" && "items" in g).map((g) => ({ title: g.title as string, meta: typeof g.meta === "string" ? g.meta : undefined, items: asArray(g.items).filter(valid) }));
+  return values.filter((g): g is Record<string, unknown> => isRecord(g) && typeof g.title === "string" && "items" in g).map((g) => ({ title: g.title as string, meta: typeof g.meta === "string" ? g.meta : undefined, items: asArray(g.items).filter(valid) }));
 }
 export type ListGroup<T> = Group<T> & { original?: Record<string, unknown>; status?: { state: "loading" | "empty" | "error"; message?: string; code?: string }; action?: string; key?: string };
 export function listGroups<T>(value: unknown, grouped: boolean, valid: (item: unknown) => item is T): ListGroup<T>[] {
   if (!grouped) return groups(value, false, valid);
-  return asArray(value).filter((g): g is Record<string, unknown> => isObject(g) && typeof g.title === "string" && "items" in g).map((g) => {
-    const status: ListGroup<T>["status"] = isObject(g.status) && (g.status.state === "loading" || g.status.state === "empty" || g.status.state === "error") ? {
+  return asArray(value).filter((g): g is Record<string, unknown> => isRecord(g) && typeof g.title === "string" && "items" in g).map((g) => {
+    const status: ListGroup<T>["status"] = isRecord(g.status) && (g.status.state === "loading" || g.status.state === "empty" || g.status.state === "error") ? {
       state: g.status.state, message: typeof g.status.message === "string" ? g.status.message : undefined, code: typeof g.status.code === "string" ? g.status.code : undefined,
     } : undefined;
     return { title: g.title as string, meta: typeof g.meta === "string" ? g.meta : undefined, items: asArray(g.items).filter(valid), original: g, status, action: typeof g.action === "string" ? g.action : undefined, key: typeof g.key === "string" ? g.key : undefined };

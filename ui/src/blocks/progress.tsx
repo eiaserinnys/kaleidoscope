@@ -12,7 +12,7 @@ interface PaceOptions { segments?: number | null; marker?: number | null; color?
  * 바를 같은 폭의 `segments`칸으로 나누는 칸막이의 마스크. 칸막이마다 트랙과 채움을 함께
  * 투명하게 오려 내고, 틈은 `--ks-line-width`다. 칸 수가 2 미만이면 마스크를 쓰지 않는다.
  */
-export function progressDividerMask(segments: number) {
+function progressDividerMask(segments: number) {
   if (!Number.isInteger(segments) || segments < 2) return null;
   const stops: string[] = [];
   for (let index = 1; index < segments; index += 1) {

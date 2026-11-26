@@ -3,7 +3,7 @@ import type { Actions, AppDefinition, AppWindow, Binding, BindingMore, BindingVa
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { BLOCK_SLOTS } from "../contract/block-slots";
 
-export interface FakePageSeed { value?: JsonValue; error?: string; id?: string; delayMs?: number }
+interface FakePageSeed { value?: JsonValue; error?: string; id?: string; delayMs?: number }
 export interface FakeSourceSeed { value?: JsonValue; error?: string; login?: string; delayMs?: number; waitForFirstPage?: () => Promise<void>; pages?: FakePageSeed[] }
 export interface FakeDataSeed { sources?: Record<string, FakeSourceSeed>; callError?: string }
 type Context = { window: AppWindow; definition: AppDefinition; view: DataView; values: Record<string, JsonValue>; inputs: Record<string, string>; pages: Record<string, { next: number; received: number; more?: BindingMore }>; timers: Array<ReturnType<typeof setInterval>>; attached: boolean };

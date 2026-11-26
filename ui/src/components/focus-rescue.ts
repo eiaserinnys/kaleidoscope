@@ -21,7 +21,7 @@ document.addEventListener("pointerdown", () => { keyboardInput = false; }, true)
 
 type FocusOptionsWithVisibility = FocusOptions & { focusVisible?: boolean };
 
-export const writableControlSelector = 'textarea:not(:disabled):not([readonly]), input:not(:disabled):not([readonly]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="file"]), select:not(:disabled), [contenteditable]:not([contenteditable="false"])';
+const writableControlSelector = 'textarea:not(:disabled):not([readonly]), input:not(:disabled):not([readonly]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="range"]):not([type="color"]):not([type="file"]), select:not(:disabled), [contenteditable]:not([contenteditable="false"])';
 
 const controlSelector = 'button, input:not([type="hidden"]), textarea, select, a[href], [tabindex], [contenteditable], iframe, canvas';
 const contentSelector = `[role="option"][tabindex="0"], [role="treeitem"][tabindex="0"], [role="row"][tabindex="0"], [role="gridcell"][tabindex="0"], ${writableControlSelector}, iframe, canvas[tabindex]`;
@@ -74,7 +74,7 @@ export function holdsUserFocus(element: Element | null): boolean {
 }
 
 /** 대화상자 본문에서 첫 초점을 받을 입력 후보: 쓰기 입력과 잠기지 않은 select 블록 단추(기본 select가 아니라 단추로 그린다). 문서 차례다. */
-export const dialogInputSelector = `${writableControlSelector}, button.ks-select-button:not(:disabled)`;
+const dialogInputSelector = `${writableControlSelector}, button.ks-select-button:not(:disabled)`;
 
 /** 대화상자가 열리거나 다시 초점을 받을 때 갈 곳: 본문의 첫 입력 후보, 없으면 바닥 단추. */
 export function dialogFirstFocus(root: HTMLElement): HTMLElement | null {

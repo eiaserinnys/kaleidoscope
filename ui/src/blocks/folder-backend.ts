@@ -3,8 +3,9 @@ import { SHELL_FILE_COPY_REPLY_INVALID, SHELL_FILE_LIST_REPLY_INVALID, SHELL_FIL
 import { toCoreError } from "../core/core-transport";
 import type { ShellStore } from "../core/shell-store";
 import type { EditorAddress } from "./file-editor-session";
+import { extensionOf } from "./file-path";
 
-export interface FolderCapabilities {
+interface FolderCapabilities {
   createFile: boolean;
   createDirectory: boolean;
   rename: boolean;
@@ -18,7 +19,7 @@ export interface FolderCapabilities {
   relativePath: boolean;
   properties: boolean;
 }
-export interface FolderOperationResult {
+interface FolderOperationResult {
   path: string;
   error?: CoreError;
 }
@@ -27,7 +28,7 @@ export interface FolderItem extends FolderEntry {
   revision?: string;
 }
 
-export interface FolderActions {
+interface FolderActions {
   createFile?: (parent: string, name: string) => Promise<void>;
   createDirectory?: (parent: string, name: string) => Promise<void>;
   rename?: (item: FolderItem, name: string) => Promise<void>;
@@ -81,11 +82,6 @@ function asResults(results: FileOpResult[]): FolderOperationResult[] {
 
 function makeBackend(args: Omit<FolderBackend, "capabilities">): FolderBackend {
   return { ...args, capabilities: capabilities(args.actions) };
-}
-
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
 export function createFileFolderBackend({

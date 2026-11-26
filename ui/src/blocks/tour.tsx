@@ -23,11 +23,11 @@ interface TourPlacement {
   targetHeight: number;
 }
 
-export function moveTourStep(data: ReturnType<typeof useWindowData>, pointer: string, key: string) {
+function moveTourStep(data: ReturnType<typeof useWindowData>, pointer: string, key: string) {
   return data.act(`${pointer}/on_step`, key);
 }
 
-export function closeTour(data: ReturnType<typeof useWindowData>, pointer: string, result: TourCloseResult) {
+function closeTour(data: ReturnType<typeof useWindowData>, pointer: string, result: TourCloseResult) {
   return data.act(`${pointer}/on_close`, result);
 }
 

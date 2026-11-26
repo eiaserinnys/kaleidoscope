@@ -23,10 +23,6 @@ export function readUpload({ file, name }: DraftAttachment): Promise<Conversatio
   });
 }
 
-export function fromBase64(dataBase64: string): ArrayBuffer {
-  return Uint8Array.from(atob(dataBase64), (char) => char.charCodeAt(0)).buffer;
-}
-
 function useFileUrl(file: File): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {

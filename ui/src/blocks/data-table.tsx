@@ -14,13 +14,14 @@ import { useWindowVisible } from "../data/window-state";
 import { useLoadMore } from "./load-more";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
-import { NoItems, VirtualSurface, asArray, dateText, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
+import { NoItems, VirtualSurface, asArray, dateText, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 import * as shellErrors from "../contract/shell-errors";
 import { TableGrid } from "./data-table-grid";
 import { ContentCell } from "./data-table-cell";
+import { isRecord } from "../core/value-guards";
 
 export type Row = Record<string, JsonValue> & { key: string };
-const validRow = (item: unknown): item is Row => isObject(item) && typeof item.key === "string";
+const validRow = (item: unknown): item is Row => isRecord(item) && typeof item.key === "string";
 // 고른 칸을 지역 값으로 쥐려고 주소를 원시 값 하나로 만든다. 행 키에는 0x00이 들어오지 않는다.
 const cellKey = (cell: TableCellAddress | null) => cell ? `${cell.row}\u0000${cell.column}` : "";
 const cellAddress = (key: string): TableCellAddress | null => {
@@ -123,12 +124,12 @@ function normalizeColumns(value: unknown, rowHeader?: string, cell = false): { c
   const values = asArray(value);
   const fields = new Set<string>();
   for (const [index, column] of values.entries()) {
-    if (!isObject(column) || Object.keys(column).some((key) => !["field", "label", "width", "format", "max_lines", "sort_field"].includes(key)) || typeof column.field !== "string" || typeof column.label !== "string" ||
+    if (!isRecord(column) || Object.keys(column).some((key) => !["field", "label", "width", "format", "max_lines", "sort_field"].includes(key)) || typeof column.field !== "string" || typeof column.label !== "string" ||
         (column.width !== undefined && (typeof column.width !== "string" || !["narrow", "medium", "wide", "fill"].includes(column.width))) ||
         (column.sort_field !== undefined && typeof column.sort_field !== "string") ||
         (column.format !== undefined && (typeof column.format !== "string" || !["text", "number", "date", "badge", "delta", "sparkline", "content"].includes(column.format))) ||
         (column.max_lines !== undefined && (!Number.isInteger(column.max_lines) || Number(column.max_lines) < 1 || Number(column.max_lines) > 3 || column.format !== "content"))) {
-      const field = isObject(column) && typeof column.field === "string" ? column.field : `${index + 1}번째`;
+      const field = isRecord(column) && typeof column.field === "string" ? column.field : `${index + 1}번째`;
       return { columns: [], error: shellErrors.SHELL_TABLE_COLUMNS_VALUE_INVALID({ field }) };
     }
     if (fields.has(column.field)) return { columns: [], error: shellErrors.SHELL_TABLE_COLUMNS_FIELD_DUPLICATE({ field: column.field }) };
@@ -158,7 +159,7 @@ function TableReady({ block, context, pointer, value, columnsValue, more }: { bl
   const selected = selectedValue.status === "ready" ? selectedValue.value : null;
   const visible = useWindowVisible(context);
   const choose = (row: Row) => { if (block.on_select) void data.act(`${pointer}/on_select`, row.key, row); };
-  const selectedCell = isObject(selected) && typeof selected.row === "string" && typeof selected.column === "string" ? { row: selected.row, column: selected.column } : null;
+  const selectedCell = isRecord(selected) && typeof selected.row === "string" && typeof selected.column === "string" ? { row: selected.row, column: selected.column } : null;
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   // 칸 고르기는 키 반복으로 들어온다. 고른 칸은 지역 값으로 바로 그리고 보내기는 합쳐서 하며, keyup에서 남은 값을 바로 내보낸다.

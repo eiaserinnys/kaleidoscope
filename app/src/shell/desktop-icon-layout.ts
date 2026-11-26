@@ -1,3 +1,5 @@
+import { clamp } from "./clamp";
+
 export interface DesktopIconShortcut {
   id: string;
   desktop_id: string;
@@ -120,10 +122,6 @@ function nextCell(cell: DesktopIconCell, columns: number): DesktopIconCell {
 
 function cellKey(cell: DesktopIconCell): string {
   return `${cell.column}:${cell.row}`;
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function compareIds(left: string, right: string): number {

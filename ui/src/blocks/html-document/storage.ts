@@ -2,10 +2,10 @@ import * as shellErrors from "../../contract/shell-errors";
 import type { ShellStore } from "../../core/shell-store";
 import { toCoreError } from "../../core/core-transport";
 import { applyThreadChange, type Thread, type ThreadChange } from "./thread";
+import { isRecord } from "../../core/value-guards";
 
 export const emptyThread = (): Thread => ({ revisions: {}, comments: [] });
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const invalidThread = (name: string) => shellErrors.SHELL_THREAD_READ_INVALID({ name });
 
 function parseThread(content: string, name: string): Thread {

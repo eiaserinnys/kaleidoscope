@@ -4,17 +4,18 @@ import type { Block } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { DataState } from "../components/data-state";
 import { useBinding, useWindowData } from "../data/window-data";
-import { asArray, isObject, NoItems } from "./data-view-common";
+import { asArray, NoItems } from "./data-view-common";
 import { buildChartGeometry, createNumberFormatter, type PlotPoint, type PlotSeries } from "./chart-geometry";
+import { isRecord } from "../core/value-guards";
 
 type ChartBlockType = Extract<Block, { type: "chart" }>;
 const finite = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
 const seriesColor = (color: string) => ({ "--ks-chart-series-color": color }) as CSSProperties;
 function seriesFrom(value: unknown, candle: boolean): PlotSeries[] {
   return asArray(value).flatMap((series) => {
-    if (!isObject(series) || typeof series.key !== "string" || typeof series.name !== "string" || !Array.isArray(series.points)) return [];
+    if (!isRecord(series) || typeof series.key !== "string" || typeof series.name !== "string" || !Array.isArray(series.points)) return [];
     const points: PlotPoint[] = series.points.flatMap((point) => {
-      if (!isObject(point) || typeof point.x !== "string" || (point.label !== undefined && typeof point.label !== "string")) return [];
+      if (!isRecord(point) || typeof point.x !== "string" || (point.label !== undefined && typeof point.label !== "string")) return [];
       const open = finite(point.open), high = finite(point.high), low = finite(point.low), close = finite(point.close);
       return [{ x: point.x, y: finite(point.y) ?? (candle ? close : null), ...(open === null ? {} : { open }), ...(high === null ? {} : { high }), ...(low === null ? {} : { low }), ...(close === null ? {} : { close }), ...(typeof point.label === "string" ? { label: point.label } : {}) }];
     });

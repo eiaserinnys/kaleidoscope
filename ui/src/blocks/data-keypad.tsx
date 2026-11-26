@@ -8,10 +8,11 @@ import { Button } from "../components/primitives";
 import { useBinding, useWindowData } from "../data/window-data";
 import { registerGridShortcuts } from "../runtime/shortcuts";
 import type { BlockContext } from "./block-context";
-import { asArray, isObject, NoItems } from "./data-view-common";
+import { asArray, NoItems } from "./data-view-common";
+import { isRecord } from "../core/value-guards";
 
 function isButton(value: unknown): value is KeypadButton {
-  return isObject(value) && typeof value.key === "string" && value.key.length > 0 && typeof value.label === "string";
+  return isRecord(value) && typeof value.key === "string" && value.key.length > 0 && typeof value.label === "string";
 }
 
 export function DataKeypadBlock({ block, context, pointer }: { block: Extract<Block, { type: "button_grid" }>; context: BlockContext; pointer: string }) {

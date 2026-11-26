@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { createFakeTransport, createShellStore } from "../src/index";
+import { createShellStore } from "../src/index";
+import { createFakeTransport } from "../src/fake";
 import type { AppDefinition, CoreRequest, ProcessSpec } from "../src/contract/contract";
 import { makeTestSeed } from "../src/__tests__/fixtures";
 import { BrandMark } from "../../app/src/shell/brand-mark";

@@ -16,6 +16,7 @@ import { useFolderActions } from "./folder-actions";
 import { useFolderDrag } from "./folder-drag";
 import { FileGrant } from "./file-grant";
 import { focusContainer, focusRescued, focusRetryContainer } from "../components/focus-rescue";
+import { extensionOf } from "./file-path";
 
 interface CreatingFile {
   directory: string;
@@ -49,21 +50,16 @@ export interface FileBrowserTreeProps {
   selectedStateKey?: string;
 }
 
-function extensionOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-}
-
 const defaultFileIcon = (_entry: FolderEntry) => <FileText size="inline" />;
 
-export function FolderTreeHeader({ label, children }: { label: string; children?: ReactNode }) {
+function FolderTreeHeader({ label, children }: { label: string; children?: ReactNode }) {
   return <div className="ks-file-tree-header">
     <span className="ks-file-tree-root-name" title={label}>{label}</span>
     {children}
   </div>;
 }
 
-export function FolderTreeError({ error }: { error: CoreError }) {
+function FolderTreeError({ error }: { error: CoreError }) {
   return <span className="ks-inline-error" role="alert">{error.message}{error.id ? <> <ErrorId id={error.id} /></> : null}</span>;
 }
 

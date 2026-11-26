@@ -9,6 +9,7 @@ import { useRoving } from "./data-view-common";
 import { IconTile, useIconGridColumns } from "../components/icon-tile";
 import type { BlockContext } from "./block-context";
 import { focusRetryContainer } from "../components/focus-rescue";
+import { extensionOf } from "./file-path";
 
 type ExplorerRow = Row & { kind: "dir" | "file" };
 const columns: Column[] = [
@@ -18,14 +19,12 @@ const columns: Column[] = [
   { field: "size", label: "크기", format: "number", width: "narrow" },
 ];
 
-function extensionOf(path: string) {
-  const name = path.slice(path.lastIndexOf("/") + 1);
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+function entryExtension(path: string) {
+  return extensionOf(path.slice(path.lastIndexOf("/") + 1));
 }
 
 function fileIcon(entry: FileEntry, size: "inline" | "tile" = "inline") {
-  const extension = extensionOf(entry.path);
+  const extension = entryExtension(entry.path);
   if (["md", "txt"].includes(extension)) return <FileText size={size} />;
   if (["json", "yaml", "yml", "toml", "js", "ts", "tsx", "rs", "py", "html", "css"].includes(extension)) return <FileCode size={size} />;
   if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)) return <FileImage size={size} />;
@@ -36,7 +35,7 @@ function typeLabel(entry: FileEntry) {
   if (entry.root_kind === "known") return "폴더";
   if (entry.root_kind === "volume") return "드라이브";
   if (entry.kind === "dir") return "폴더";
-  const extension = extensionOf(entry.path);
+  const extension = entryExtension(entry.path);
   return extension ? `${extension.toUpperCase()} 파일` : "파일";
 }
 

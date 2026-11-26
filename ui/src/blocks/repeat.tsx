@@ -11,8 +11,9 @@ import { DataState } from "../components/data-state";
 import { shareStructure } from "../core/shell-store";
 import { renderBlock } from "../render/render-block";
 import type { BlockContext } from "./block-context";
-import { asArray, DEFAULT_VIRTUAL_ROW_ESTIMATE, isObject, useVirtualRows } from "./data-view-common";
+import { asArray, DEFAULT_VIRTUAL_ROW_ESTIMATE, useVirtualRows } from "./data-view-common";
 import { nearestScrollable, revealIn } from "./scroll-nearest";
+import { isRecord } from "../core/value-guards";
 
 type Repeat = Extract<Block, { type: "repeat" }>;
 type Entry = { item: JsonValue; key: string | number; index: { current: number } };
@@ -28,7 +29,7 @@ export function RepeatBlock({ block, context, pointer }: { block: Repeat; contex
   const previous = useRef(new Map<string | number, Entry>());
   const entries = useMemo(() => {
     const result = value.status !== "ready" ? [] : asArray(value.value).flatMap((item, index) => {
-      if (!isObject(item)) return [];
+      if (!isRecord(item)) return [];
       const key = item[block.key];
       if (typeof key !== "string" && typeof key !== "number") return [];
       const old = previous.current.get(key);

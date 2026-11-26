@@ -4,3 +4,8 @@ export function resolveFilePath(file: FileRef, stateValue: unknown): string | nu
   if (typeof file.path === "string") return file.path;
   return typeof stateValue === "string" ? stateValue : null;
 }
+
+export function extensionOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}

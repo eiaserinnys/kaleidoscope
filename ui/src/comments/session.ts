@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { AppCommentImage } from "../contract/contract";
 import type { TargetDescription } from "./target";
 
-export type CommentDraft = { version: number; text: string; target: TargetDescription | null; image?: AppCommentImage; includeImage: boolean; targetChanged: boolean };
+type CommentDraft = { version: number; text: string; target: TargetDescription | null; image?: AppCommentImage; includeImage: boolean; targetChanged: boolean };
 
 class CommentSession {
   private active = false;

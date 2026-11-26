@@ -10,7 +10,7 @@ import { useBinding, useWindowData } from "../data/window-data";
 import type { BlockContext } from "./block-context";
 import { useItemMenu } from "./item-menu";
 import { MarkdownText } from "./markdown-text";
-import { Badges, GroupHeading, NoItems, VirtualSurface, asArray, asBadges, groups, isObject, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
+import { Badges, GroupHeading, NoItems, VirtualSurface, asArray, asBadges, groups, keepRovingRow, useRoving, useVirtualRows } from "./data-view-common";
 import { IconButton } from "../components/primitives";
 import { DataIcon } from "../components/data-icons";
 import { useWindowStateValue, useWindowVisible } from "../data/window-state";
@@ -21,9 +21,10 @@ import { toCoreError } from "../core/core-transport";
 import { checkAppLink } from "../data/app-link";
 import type { AttachmentPreviewRequest } from "../data/attachments";
 import { AttachmentPreview } from "./attachment-preview";
+import { isRecord } from "../core/value-guards";
 
 function asFeedEntry(value: unknown): FeedEntry | null {
-  if (!isObject(value) || typeof value.key !== "string" || !(typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")))) return null;
+  if (!isRecord(value) || typeof value.key !== "string" || !(typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")))) return null;
   const entry = { ...value, key: value.key, body: value.body as FeedEntry["body"] } as FeedEntry;
   const name = typeof value.name === "string" ? value.name : typeof value.author === "string" ? value.author : undefined;
   const meta = typeof value.meta === "string" ? value.meta : typeof value.timestamp === "string" ? value.timestamp : undefined;
@@ -39,7 +40,7 @@ function asFeedEntry(value: unknown): FeedEntry | null {
   else delete entry.children;
   return entry;
 }
-const valid = (value: unknown): value is FeedEntry => isObject(value) && typeof value.key === "string" && (typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")));
+const valid = (value: unknown): value is FeedEntry => isRecord(value) && typeof value.key === "string" && (typeof value.body === "string" || (Array.isArray(value.body) && value.body.every((part) => typeof part === "string")));
 type FlattenedFeedItem = { entry: FeedEntry; depth: number; replyCount: number };
 function flattenFeedEntries(entries: FeedEntry[]): FlattenedFeedItem[] {
   const flattened: FlattenedFeedItem[] = [];

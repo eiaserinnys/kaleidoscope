@@ -1,12 +1,12 @@
 import type { Rect } from "../contract/contract";
 import type { ShellStore } from "../core/shell-store";
 
-export interface WebSurfaceOccluder {
+interface WebSurfaceOccluder {
   bounds: Rect;
   visible: boolean;
 }
 
-export interface WebSurfaceWindow extends WebSurfaceOccluder {
+interface WebSurfaceWindow extends WebSurfaceOccluder {
   zIndex: number;
 }
 
@@ -38,7 +38,7 @@ export function evaluateWebSurface(probe: WebSurfaceProbe): WebSurfaceKind {
   return "live";
 }
 
-export function rectanglesOverlap(left: Rect, right: Rect): boolean {
+function rectanglesOverlap(left: Rect, right: Rect): boolean {
   const leftX = Math.round(left.x);
   const leftY = Math.round(left.y);
   const leftRight = leftX + Math.round(left.width);
