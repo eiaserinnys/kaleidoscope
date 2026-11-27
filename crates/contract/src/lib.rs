@@ -381,7 +381,10 @@ pub const CONTRACT_VERSION: u32 = 51;
 /// - 68판: 대화 블록의 입력창 위 고정 자리(`input_header`), 진행 막대 이름표 위치(`label_position`), when의 폭 기준(`width_scope`).
 /// - 69판: refresh 동작의 `wait`(거짓이면 받기를 시작만 하고 기다리지 않음).
 /// - 70판: 목록 줄 보기(`rows`)의 상태 점과 항목 `dot`의 점 색(의미 색 문자열).
-pub const BLOCK_SET_VERSION: u32 = LIST_DOT_TONE_BLOCK_SET_VERSION;
+/// - 71판: `request` 원천의 `optional`(값이 없어도 그 원천을 읽는 식이 기다리거나 실패하지 않음).
+pub const BLOCK_SET_VERSION: u32 = OPTIONAL_SOURCE_BLOCK_SET_VERSION;
+/// `request` 원천의 `optional`을 처음 지원하는 블록 세트 판.
+pub const OPTIONAL_SOURCE_BLOCK_SET_VERSION: u32 = 71;
 /// 목록 줄 보기의 상태 점과 점 색(`ListItem.dot`의 의미 색)을 처음 지원하는 블록 세트 판.
 pub const LIST_DOT_TONE_BLOCK_SET_VERSION: u32 = 70;
 /// refresh 동작의 `wait`를 처음 지원하는 블록 세트 판.

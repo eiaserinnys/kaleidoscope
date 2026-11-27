@@ -1726,8 +1726,19 @@ fn validate_sources(definition: &AppDefinition, details: &mut Vec<String>) {
                 for (field, binding) in data::source_bindings(source) { validate_binding_shape(binding, definition, details, &format!("{at}/{field}")); }
             }
             SourceDecl::Request {
-                path, query, page, ..
+                path,
+                query,
+                page,
+                optional,
+                ..
             } => {
+                if *optional && definition.requires.blocks < crate::OPTIONAL_SOURCE_BLOCK_SET_VERSION {
+                    details.push(format!(
+                        "{at}/optional: 선택 원천은 블록 세트 {}판이라 requires.blocks가 {} 이상이어야 합니다",
+                        crate::OPTIONAL_SOURCE_BLOCK_SET_VERSION,
+                        crate::OPTIONAL_SOURCE_BLOCK_SET_VERSION
+                    ));
+                }
                 if let Some(page) = page {
                     if definition.requires.blocks < 22 {
                         details.push(format!("{at}/page: 쪽 넘김은 블록 세트 22판이라 requires.blocks가 22 이상이어야 합니다"));

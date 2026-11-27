@@ -16,6 +16,7 @@ import { trackWindowAction } from "../share/action-context";
 import { checkAppLink } from "./app-link";
 import { DefaultFolderPreparation } from "./default-folder";
 import { PickFolderAvailableContext, WebViewAvailableContext } from "./host-features";
+import { isNoticeFailure, isRetainedLoading } from "./source-failure";
 import { runSavedTransition } from "../lifecycle/window-transition";
 
 const loading: BindingValue = { status: "loading" };
@@ -485,8 +486,8 @@ export class WindowData {
       for (const [name, source] of Object.entries(view.sources)) {
         const previous = noticeSources[name];
         // 받은 값으로 화면을 유지하는 재수신 중에는 실패 안내도 유지한다.
-        noticeSources[name] = previous?.state === "failed" && previous.has_value
-          && ((source.state === "loading" && source.has_value)
+        noticeSources[name] = isNoticeFailure(this.definition, name, previous)
+          && (isRetainedLoading(this.definition, name, source)
             || (this.noticeRetrying && this.noticeRetrySources.includes(name) && source.state === "ready")) ? previous : source;
       }
       this.noticeSources = noticeSources;
@@ -805,7 +806,7 @@ export class WindowData {
   };
   private reopenSourceFailure(sources: string[]) {
     const retriedFailure = Object.entries(this.noticeSources).some(([name, source]) =>
-      source.state === "failed" && source.has_value && (!sources.length || sources.includes(name)));
+      isNoticeFailure(this.definition, name, source) && (!sources.length || sources.includes(name)));
     if (retriedFailure) { this.sourceRetrySequence += 1; this.sourceListeners.forEach((listener) => listener()); }
   }
   refresh = async (sources: string[], manual = true) => {
