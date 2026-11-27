@@ -380,7 +380,10 @@ pub const CONTRACT_VERSION: u32 = 51;
 ///   dialog의 확정 단추 잠금(`confirm_disabled`).
 /// - 68판: 대화 블록의 입력창 위 고정 자리(`input_header`), 진행 막대 이름표 위치(`label_position`), when의 폭 기준(`width_scope`).
 /// - 69판: refresh 동작의 `wait`(거짓이면 받기를 시작만 하고 기다리지 않음).
-pub const BLOCK_SET_VERSION: u32 = REFRESH_WAIT_BLOCK_SET_VERSION;
+/// - 70판: 목록 줄 보기(`rows`)의 상태 점과 항목 `dot`의 점 색(의미 색 문자열).
+pub const BLOCK_SET_VERSION: u32 = LIST_DOT_TONE_BLOCK_SET_VERSION;
+/// 목록 줄 보기의 상태 점과 점 색(`ListItem.dot`의 의미 색)을 처음 지원하는 블록 세트 판.
+pub const LIST_DOT_TONE_BLOCK_SET_VERSION: u32 = 70;
 /// refresh 동작의 `wait`를 처음 지원하는 블록 세트 판.
 pub const REFRESH_WAIT_BLOCK_SET_VERSION: u32 = 69;
 /// 대화 블록의 입력창 위 고정 자리(`input_header`)를 처음 지원하는 블록 세트 판.
@@ -4379,11 +4382,34 @@ fn tree_items_have_subtitle(value: &serde_json::Value) -> bool {
     serde_json::from_value::<Vec<data::TreeItem>>(value.clone()).is_ok_and(|items| any(&items))
 }
 
+/// 리터럴로 적은 목록 항목에 새 판이 필요한 점이 하나라도 있는지.
+/// 의미 색 점은 어느 배치에서든, 켠 점(`true`)은 줄 보기에서만 새 판이다(아이콘 격자의 켠 점은 옛 판부터 있다).
+fn list_items_need_dot_set(value: &serde_json::Value, rows: bool) -> bool {
+    fn item_needs(item: &serde_json::Value, rows: bool) -> bool {
+        match serde_json::from_value::<data::ListItem>(item.clone()).ok().and_then(|item| item.dot) {
+            Some(data::ListDot::Tone(_)) => true,
+            Some(data::ListDot::On(true)) => rows,
+            _ => false,
+        }
+    }
+    value.as_array().is_some_and(|entries| {
+        entries.iter().any(|entry| match entry.get("items").and_then(|items| items.as_array()) {
+            Some(grouped) if entry.get("key").is_none() => grouped.iter().any(|item| item_needs(item, rows)),
+            _ => item_needs(entry, rows),
+        })
+    })
+}
+
 impl Block {
     /// 이 블록이 처음 생긴 블록 세트 판. 정의의 `requires.blocks`는 쓴 블록의 이 값 이상이어야 한다.
     pub fn introduced_in(&self) -> u32 {
         match self {
             Block::Section { on_move: Some(_), .. } => SECTION_MOVE_BLOCK_SET_VERSION,
+            Block::List {
+                items: Binding::Literal(value),
+                layout,
+                ..
+            } if list_items_need_dot_set(value, *layout == ListLayout::Rows) => LIST_DOT_TONE_BLOCK_SET_VERSION,
             Block::List { image_shape: Some(_), .. }
             | Block::Tree { image_shape: Some(_), .. }
             | Block::Dialog { confirm_disabled: Some(_), .. } => ITEM_IMAGE_BLOCK_SET_VERSION,
@@ -8819,7 +8845,7 @@ mod tests {
         )
         .expect("블록이 받는 모양은 모르는 필드를 넘긴다");
         assert_eq!(item.badges.len(), 2);
-        assert_eq!(item.dot, Some(true));
+        assert_eq!(item.dot, Some(data::ListDot::On(true)));
         let actions: data::Actions = serde_json::from_str(r#"{"set_state":"card"}"#).unwrap();
         assert!(matches!(actions, data::Actions::One(_)));
         let actions: data::Actions = serde_json::from_str(

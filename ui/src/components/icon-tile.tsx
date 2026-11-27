@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentPropsWithRef, type ReactNode, type RefObject } from "react";
 import { ICON_SIZE } from "./icons";
+import type { MetricTone } from "../contract/contract";
 import { CountBadge } from "./badge";
 
 type IconTileProps = Omit<ComponentPropsWithRef<"button">, "children"> & {
@@ -8,12 +9,13 @@ type IconTileProps = Omit<ComponentPropsWithRef<"button">, "children"> & {
   selected?: boolean;
   badge?: number;
   dot?: boolean;
+  dotTone?: MetricTone;
 };
 
-export function IconTile({ icon, name, selected, badge = 0, dot = false, className = "", ...props }: IconTileProps) {
+export function IconTile({ icon, name, selected, badge = 0, dot = false, dotTone, className = "", ...props }: IconTileProps) {
   const label = props["aria-label"] ?? name;
   return <button type="button" {...props} aria-label={badge >= 1 ? `${label}, 알림 ${badge}개` : props["aria-label"]} className={`ks-icon-tile${selected ? " is-selected" : ""} ${className}`}>
-    <span className="ks-icon-tile-icon ks-badge-anchor">{icon}<CountBadge count={badge >= 1 ? badge : dot ? 1 : 0} dot={badge < 1 && dot} /></span><span className="ks-icon-tile-name">{name}</span>
+    <span className="ks-icon-tile-icon ks-badge-anchor">{icon}<CountBadge count={badge >= 1 ? badge : dot ? 1 : 0} dot={badge < 1 && dot} tone={dotTone} /></span><span className="ks-icon-tile-name">{name}</span>
   </button>;
 }
 

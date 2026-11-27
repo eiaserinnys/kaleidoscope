@@ -24,6 +24,16 @@
 .ks-badge { display: inline-block; flex: 0 0 auto; padding-inline: var(--ks-space-2); border-radius: var(--ks-radius-large); background: var(--ks-color-hover); color: var(--ks-color-text); font-size: var(--ks-type-meta); line-height: var(--ks-line-body); white-space: nowrap; }
 .ks-badge.is-count { box-sizing: border-box; min-width: calc(var(--ks-type-meta) * var(--ks-line-body)); padding-inline: var(--ks-space-1); border-radius: var(--ks-radius-bar); background: var(--ks-color-danger); color: var(--ks-color-danger-contrast); text-align: center; font-variant-numeric: tabular-nums; }
 .ks-badge.is-count.is-dot { min-width: 0; width: var(--ks-space-2); height: var(--ks-space-2); padding: 0; }
+.ks-badge.is-count.is-dot.tone-default, .ks-list-dot.tone-default { background: var(--ks-color-text); }
+.ks-badge.is-count.is-dot.tone-muted, .ks-list-dot.tone-muted { background: var(--ks-color-muted); }
+.ks-badge.is-count.is-dot.tone-positive, .ks-list-dot.tone-positive { background: var(--ks-color-positive); }
+.ks-badge.is-count.is-dot.tone-warning, .ks-list-dot.tone-warning { background: color-mix(in srgb, var(--ks-color-danger) 65%, var(--ks-color-muted)); }
+.ks-badge.is-count.is-dot.tone-negative, .ks-badge.is-count.is-dot.tone-error, .ks-list-dot.tone-negative, .ks-list-dot.tone-error { background: var(--ks-color-danger); }
+.ks-list-dot { flex: none; width: var(--ks-space-2); height: var(--ks-space-2); border-radius: var(--ks-radius-large); }
+.ks-list-lead { position: relative; display: inline-grid; flex: none; place-items: center; }
+.ks-list-lead > .ks-list-dot { position: absolute; inset-block-end: calc(-1 * var(--ks-space-1)); inset-inline-end: calc(-1 * var(--ks-space-1)); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-surface-solid); }
+.ks-list-lead.is-circle > .ks-list-dot { inset-block-end: 0; inset-inline-end: 0; }
+.ks-list-title-line { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); }
 .ks-badge-anchor { position: relative; display: inline-flex; }
 .ks-badge-anchor > .is-count { position: absolute; inset-block-start: calc(-1 * var(--ks-space-2)); inset-inline-start: calc(100% - var(--ks-space-3)); }
 .ks-badge-anchor > .is-dot { inset-block-start: 0; inset-inline-start: 100%; transform: translate(-50%, -50%); }

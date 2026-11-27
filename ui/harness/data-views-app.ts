@@ -2,6 +2,7 @@ import type { AppDefinition, Block } from "../src/contract/contract";
 
 const entries = Array.from({ length: 35 }, (_, index) => ({ key: String(index), name: "기록", body: `내용 ${index + 1}` }));
 const items = Array.from({ length: 1000 }, (_, index) => ({ key: String(index), title: `항목 ${index + 1}`, url: `https://example.com/${index + 1}` }));
+const longTitle = "창 폭을 넘도록 아주 긴 제목 ".repeat(30);
 const grid = Array.from({ length: 24 }, (_, index) => ({ key: String(index), title: `그림 ${index + 1}`, image: { permission: "media", path: index % 2 ? "shapes.png" : "landscape.png" } }));
 const iconNames = ["계산기 플러스", "날씨 보드", "해커뉴스 읽기", "시세와 환율", "2026 마일스톤", "EB 치트 커맨더", "JIZURA", "주사위 쟁반", "바둑판", "끝말잇기", "뽀모도로", "로그 보기"];
 const icons = iconNames.map((title, index) => ({ key: String(index), title, image: { permission: "media", path: `tile-${index % 4}.svg` }, url: `https://example.com/${index}` }));
@@ -73,6 +74,13 @@ export const dataViewsApp: AppDefinition = {
     { label: "열 불러오기", child: { type: "table", rows: [{ key: "a", label: "첫 항목" }], columns: { expr: '$data.sample.message ? [{"field":"label","label":"이름"}] : []' } } },
     { label: "칸 오류", child: { type: "table", rows: [{ key: "a", label: "제작", day: ["잘못된 내용"], next: { title: "정상 일정" } }], columns: [{ field: "label", label: "항목" }, { field: "day", label: "첫째 날", format: "content" }, { field: "next", label: "둘째 날", format: "content" }], selection: "cell", row_header: "label", selected: { state: "schedule_choice" }, on_select: { set_state: "schedule_choice" } } },
     { label: "아이콘 시험", child: { type: "list", layout: "icons", items: icons, selected: { state: "choice" }, on_select: { set_state: "choice" }, item_menu: [{ label: "주소 복사", on_select: { copy_text: { item: "url" } } }] } },
+    { label: "점 시험", child: { type: "list", image_shape: "circle", items: [
+      { key: "1", title: `원형 그림과 초록 점이 있는 항목 ${longTitle}`, image: { permission: "media", path: "shapes.png" }, dot: "positive" },
+      { key: "2", title: "원형 그림과 점 없음", image: { permission: "media", path: "shapes.png" } },
+      { key: "3", title: "원형 그림과 주의 점", image: { permission: "media", path: "shapes.png" }, dot: true },
+      { key: "4", title: `그림 없이 경고 점이 있는 항목 ${longTitle}`, dot: "warning" },
+      { key: "5", title: "그림 없이 점 없음" },
+    ] } },
     { label: "빈 아이콘", child: { type: "list", layout: "icons", items: [] } },
     { label: "잘못된 행 시험", child: { type: "table", rows: [{ key: "good", label: "정상 행" }, { label: "빠진 행" }], columns: [{ field: "label", label: "이름" }] } },
   ] },

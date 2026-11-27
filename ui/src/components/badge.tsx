@@ -1,4 +1,4 @@
-import type { Badge as BadgeValue } from "../contract/contract";
+import type { Badge as BadgeValue, MetricTone } from "../contract/contract";
 import { Tooltip } from "./tooltip";
 
 export function validColor(color: unknown): color is string {
@@ -28,7 +28,7 @@ export function Badge({ value, tooltip = false }: { value: BadgeValue; tooltip?:
   return tooltip ? <Tooltip content={text}>{badge}</Tooltip> : badge;
 }
 
-export function CountBadge({ count, dot = false }: { count: number; dot?: boolean }) {
+export function CountBadge({ count, dot = false, tone }: { count: number; dot?: boolean; tone?: MetricTone }) {
   if (count < 1) return null;
-  return <span className={`ks-badge is-count${dot ? " is-dot" : ""}`} aria-hidden="true">{dot ? null : count >= 100 ? "99+" : count}</span>;
+  return <span className={`ks-badge is-count${dot ? ` is-dot${tone ? ` tone-${tone}` : ""}` : ""}`} aria-hidden="true">{dot ? null : count >= 100 ? "99+" : count}</span>;
 }
