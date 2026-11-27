@@ -1269,10 +1269,20 @@ pub struct ListItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub image: Option<MediaRef>,
-    /// 아이콘 격자 보기(`layout: "icons"`)에서 아이콘 오른쪽 위에 빨간 점을 표시한다.
+    /// 상태 점. `icons`에서는 아이콘 오른쪽 위에, `rows`에서는 줄 앞 그림의 오른쪽 아래(그림이 없으면 제목 뒤)에 그린다.
+    /// `true`는 주의(빨간) 점이고 tone 문자열은 그 의미 색이다. `grid`는 점을 그리지 않는다.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub dot: Option<bool>,
+    pub dot: Option<ListDot>,
+}
+
+/// `list` 항목의 상태 점 값. 켜고 끄는 불리언이거나 점 색을 고르는 의미 색이다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(untagged)]
+#[ts(export, export_to = "contract.ts")]
+pub enum ListDot {
+    On(bool),
+    Tone(MetricTone),
 }
 
 /// 묶음 하나(`grouped`인 `list`와 `feed`). 머리에 제목과 부가 정보(개수 등)를 보인다.

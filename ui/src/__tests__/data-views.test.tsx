@@ -1493,3 +1493,46 @@ it("그림 트리의 이름 바꾸기 줄은 보통 줄과 같은 열 차례(화
   expect(editRow.querySelector(".ks-media-thumbnail")).toBeNull();
   expect(editRow.classList.contains("is-large-image")).toBe(false);
 });
+it("줄 목록은 그림이 있는 행의 점을 그림을 감싸는 요소 안에 의미 색 클래스로 그린다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  setup({ type: "list", image_shape: "circle", items: [{ key: "a", title: "그림 행", image: { asset: "photo" }, dot: "positive" }, { key: "b", title: "아이콘 행", icon: "crop", dot: true }] } as unknown as Block);
+  const row = await screen.findByRole("option", { name: "그림 행" });
+  const dot = row.querySelector(".ks-list-lead > .ks-list-dot.tone-positive");
+  expect(dot).not.toBeNull();
+  expect(dot?.getAttribute("aria-hidden")).toBe("true");
+  expect(dot?.closest(".ks-media-thumbnail")).toBeNull();
+  expect(dot?.parentElement?.querySelector(":scope > .ks-media-thumbnail.is-circle")).not.toBeNull();
+  expect(dot?.parentElement?.classList.contains("is-circle")).toBe(true);
+  const iconRow = await screen.findByRole("option", { name: "아이콘 행" });
+  expect(iconRow.querySelector(".ks-list-lead > .lucide-crop")).not.toBeNull();
+  expect(iconRow.querySelector(".ks-list-lead > .ks-list-dot.tone-negative")).not.toBeNull();
+  vi.unstubAllGlobals();
+});
+it("줄 목록은 그림이 없는 행의 점을 제목 바로 뒤에 그린다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  setup({ type: "list", items: [{ key: "a", title: "점 행", color: "#abcdef", dot: "warning" }] } as unknown as Block);
+  const row = await screen.findByRole("option", { name: "점 행" });
+  const line = row.querySelector(".ks-list-content > .ks-list-title-line");
+  expect(line?.firstElementChild?.classList.contains("ks-list-title")).toBe(true);
+  expect(line?.lastElementChild?.classList.contains("tone-warning")).toBe(true);
+  expect(row.querySelector(".ks-list-lead")).toBeNull();
+  vi.unstubAllGlobals();
+});
+it.each([false, undefined] as const)("줄 목록은 dot이 %s이면 점도 감싸는 요소도 만들지 않는다", async (dot) => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  setup({ type: "list", items: [{ key: "a", title: "그림 행", image: { asset: "photo" }, dot }, { key: "b", title: "글 행", dot }] } as unknown as Block);
+  const withImage = await screen.findByRole("option", { name: "그림 행" });
+  const plain = await screen.findByRole("option", { name: "글 행" });
+  for (const row of [withImage, plain]) {
+    expect(row.querySelector(".ks-list-dot")).toBeNull();
+    expect(row.querySelector(".ks-list-lead, .ks-list-title-line")).toBeNull();
+  }
+  vi.unstubAllGlobals();
+});
+it("아이콘 목록은 점의 의미 색을 점 클래스로 전한다", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  setup({ type: "list", layout: "icons", items: [{ key: "a", title: "초록", dot: "positive" }] } as unknown as Block, {});
+  const tile = await screen.findByRole("option", { name: "초록" });
+  expect(tile.querySelector(".ks-badge.is-count.is-dot.tone-positive")).not.toBeNull();
+  vi.unstubAllGlobals();
+});

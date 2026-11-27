@@ -1293,6 +1293,11 @@ user_code: string, expires_at: string, } | { "state": "connected", mode: ServerM
 reason: CoreError | null, } | { "state": "revoked", server_url: string, };
 
 /**
+ * `list` 항목의 상태 점 값. 켜고 끄는 불리언이거나 점 색을 고르는 의미 색이다.
+ */
+export type ListDot = boolean | MetricTone;
+
+/**
  * 목록 전용 묶음 데이터. `action`은 앱 정의에 선언된 슬롯 키다.
  */
 export type ListGroup<T> = { title: string, meta?: string, items: Array<T>, key?: string, status?: ListGroupStatus, action?: string, };
@@ -1329,9 +1334,10 @@ color?: string, badges?: Array<Badge>,
  */
 image?: MediaRef, 
 /**
- * 아이콘 격자 보기(`layout: "icons"`)에서 아이콘 오른쪽 위에 빨간 점을 표시한다.
+ * 상태 점. `icons`에서는 아이콘 오른쪽 위에, `rows`에서는 줄 앞 그림의 오른쪽 아래(그림이 없으면 제목 뒤)에 그린다.
+ * `true`는 주의(빨간) 점이고 tone 문자열은 그 의미 색이다. `grid`는 점을 그리지 않는다.
  */
-dot?: boolean, };
+dot?: ListDot, };
 
 export type ListLayout = "rows" | "grid" | "icons";
 

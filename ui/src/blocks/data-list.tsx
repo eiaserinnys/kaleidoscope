@@ -1,7 +1,7 @@
 import { encodeCommentKey } from "../comments/key";
 import { useBlockRootProps } from "../comments/block-root";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Block, ListItem } from "../contract/contract";
+import type { Block, ListItem, MetricTone } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { DataState } from "../components/data-state";
 import { validColor } from "../components/badge";
@@ -26,6 +26,14 @@ import { selectionRange, toggleSelection } from "../components/collection-select
 import { useLocalDraft } from "../data/use-local-draft";
 import { isRecord } from "../core/value-guards";
 
+const DOT_TONES: readonly string[] = ["default", "muted", "positive", "negative", "warning", "error"] satisfies MetricTone[];
+function dotTone(dot: unknown): MetricTone | null {
+  if (dot === true) return "negative";
+  return typeof dot === "string" && DOT_TONES.includes(dot) ? dot as MetricTone : null;
+}
+function ListDotMark({ tone }: { tone: MetricTone }) {
+  return <i className={`ks-list-dot tone-${tone}`} aria-hidden="true" />;
+}
 const validItem = (v: unknown): v is ListItem => isRecord(v) && typeof v.key === "string" && typeof v.title === "string";
 type Row = { kind: "heading"; title: string; meta?: string } | { kind: "status"; group: ListGroup<ListItem> } | { kind: "items"; items: ListItem[]; start: number };
 type ListHandlers = {
@@ -69,11 +77,15 @@ const ListRow = memo(function ListRow({ item, index, length, active, current, fo
     return () => observer.disconnect();
   }, [item, grid, icons]);
   const icon = typeof item.icon === "string" && (ICON_NAMES as readonly string[]).includes(item.icon) ? item.icon : undefined;
-  const row = icons ? <IconTile name={item.title} dot={item.dot === true} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} icon fallback={icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} /> : icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} selected={active}
+  const itemTone = dotTone(item.dot);
+  const rowTone = grid || icons ? null : itemTone;
+  const lead = grid || icons ? null : icon ? <DataIcon name={icon} size="inline" /> : isMedia(item.image) ? <MediaThumbnail media={item.image} className={circle ? "is-circle" : ""} /> : null;
+  const title = <span className="ks-list-title">{item.title}</span>;
+  const row = icons ? <IconTile name={item.title} dot={itemTone !== null} dotTone={itemTone ?? undefined} icon={isMedia(item.image) ? <MediaThumbnail media={item.image} icon fallback={icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} /> : icon ? <DataIcon name={icon} size="tile" /> : <LayoutGrid size="tile" />} selected={active}
     role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable || item.selectable === false ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1}
     onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event)} onContextMenu={(event) => handlers.current.menu(event, item)} /> : <button ref={ref} type="button" role={removable ? "button" : "option"} aria-disabled={disabled || undefined} aria-setsize={removable ? undefined : length} aria-posinset={removable ? undefined : index + 1} aria-selected={removable || item.selectable === false ? undefined : active} aria-pressed={removable ? active : undefined} aria-label={item.title} data-row-key={item.key} data-ks-comment-key={removable ? undefined : encodeCommentKey(item.key)} data-ks-share-readonly={readOnly || undefined} data-focus-index={index} tabIndex={focused ? 0 : -1} className={`${grid ? "ks-list-card" : "ks-row ks-list-row"}${active ? " is-selected" : ""}${grid && current ? " is-current" : ""}`} onFocus={() => handlers.current.focus(index)} onKeyDown={(event) => handlers.current.keyDown(event, index, item)} onClick={(event) => handlers.current.choose(item, event)} onContextMenu={(event) => handlers.current.menu(event, item)}>
-    {grid ? isMedia(item.image) || !icon ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} className={circle ? "is-circle" : ""} /> : <span className="ks-media-thumbnail ks-list-grid-icon"><DataIcon name={icon} size="empty" /></span> : icon ? <DataIcon name={icon} size="inline" /> : isMedia(item.image) ? <MediaThumbnail media={item.image} className={circle ? "is-circle" : ""} /> : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
-    <span className="ks-list-content"><span className="ks-list-title">{item.title}</span>{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
+    {grid ? isMedia(item.image) || !icon ? <MediaThumbnail media={isMedia(item.image) ? item.image : null} className={circle ? "is-circle" : ""} /> : <span className="ks-media-thumbnail ks-list-grid-icon"><DataIcon name={icon} size="empty" /></span> : lead ? rowTone ? <span className={`ks-list-lead${circle && !icon ? " is-circle" : ""}`}>{lead}<ListDotMark tone={rowTone} /></span> : lead : validColor(item.color) ? <span className="ks-list-color" style={{ background: item.color }} /> : null}
+    <span className="ks-list-content">{rowTone && !lead ? <span className="ks-list-title-line">{title}<ListDotMark tone={rowTone} /></span> : title}{typeof item.subtitle === "string" && <span className="ks-view-meta">{item.subtitle}</span>}</span>
     {!grid && <Badges values={item.badges} />}{typeof item.meta === "string" && <span className="ks-view-meta">{item.meta}</span>}{grid && <Badges values={item.badges} />}
   </button>;
   return removable ? <div data-ks-comment-key={encodeCommentKey(item.key)} role="listitem" onFocus={() => handlers.current.focus(index)} data-list-index={index} className={`ks-list-item${grid || icons ? " is-grid" : ""}${active ? " is-selected" : ""}${disabled ? " is-disabled" : ""}`}>{row}<IconButton className="ks-list-remove" disabled={disabled} aria-label={`${item.title} 빼기`} onClick={() => handlers.current.remove(item)}><X /></IconButton></div> : row;
