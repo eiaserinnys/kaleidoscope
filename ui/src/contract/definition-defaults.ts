@@ -936,7 +936,7 @@ export const DEFINITION_DEFAULTS_SAMPLE: unknown = {
   "id": "sample",
   "name": "sample",
   "requires": {
-    "blocks": 70,
+    "blocks": 71,
     "modules": {
       "files": 4,
       "agent": 5,
@@ -1419,7 +1419,7 @@ export const DEFINITION_DEFAULTS_RESULT: unknown = {
   "id": "sample",
   "name": "sample",
   "requires": {
-    "blocks": 70,
+    "blocks": 71,
     "modules": {
       "agent": 5,
       "assets": 1,

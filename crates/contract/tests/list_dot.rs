@@ -50,9 +50,9 @@ fn dot_rejects_strings_that_are_not_a_tone() {
 }
 
 #[test]
-fn block_set_is_70() {
+fn list_dot_set_is_70_and_the_current_set_is_71() {
     assert_eq!(N, 70);
-    assert_eq!(BLOCK_SET_VERSION, 70);
+    assert_eq!(BLOCK_SET_VERSION, 71);
 }
 
 #[test]

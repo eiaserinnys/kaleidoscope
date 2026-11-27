@@ -4,6 +4,7 @@ import { LoaderCircle, X } from "../components/icons";
 import { Button, ErrorId, IconButton, Notice } from "../components/primitives";
 import { LinkedText } from "../components/external-link";
 import { useWindowData } from "./window-data";
+import { isNoticeFailure } from "./source-failure";
 
 export function ClientShareSignal() {
   const data = useWindowData();
@@ -27,7 +28,8 @@ export function WindowNotice() {
   const [details, setDetails] = useState({ key: "", expanded: false });
   const detailsId = useId();
 
-  const failed = Object.entries(sources).filter(([, value]) => value.state === "failed" && value.has_value).map(([name]) => name);
+  const failed = Object.entries(sources).filter(([name, value]) => isNoticeFailure(data.definition, name, value)).map(([name]) => name);
+  const stale = failed.filter((name) => { const source = sources[name]; return source.state === "failed" && source.has_value; });
   const failureKey = JSON.stringify([...failed].sort().map((name) => {
     const source = sources[name];
     return source.state === "failed" ? [name, source.id, source.message, source.details] : [];
@@ -41,9 +43,9 @@ export function WindowNotice() {
     })
     .find((id) => id !== undefined);
   const firstFailed = sources[failed[0]];
-  const sourceSummary = failed.length > 1 ? `화면 ${failed.length}곳이 이전에 받은 내용을 보이고 있습니다.` : "이전에 받은 내용을 보이고 있습니다.";
+  const sourceSummary = stale.length === 0 ? "" : stale.length > 1 ? `화면 ${stale.length}곳이 이전에 받은 내용을 보이고 있습니다.` : "이전에 받은 내용을 보이고 있습니다.";
   const sourceMessage = firstFailed?.state === "failed"
-    ? `${sourceSummary} ${firstFailed.message}`
+    ? `${sourceSummary} ${firstFailed.message}`.trim()
     : "";
   // 흐름 알림의 접힌 줄은 첫 실패 원천의 등록부 문구 하나다. 실패와 시각은 앱 머리가 말하므로
   // 셸은 까닭과 할 일만 남긴다. 원천이 여럿이면 앞에 몇 곳인지만 붙인다.

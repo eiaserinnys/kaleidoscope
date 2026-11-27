@@ -2,6 +2,7 @@ import jsonata from "jsonata";
 import type { Actions, AppDefinition, AppWindow, Binding, BindingMore, BindingValue, Block, DataView, SourceStatus } from "../contract/contract";
 import type { JsonValue } from "../contract/serde_json/JsonValue";
 import { BLOCK_SLOTS } from "../contract/block-slots";
+import { isOptionalSource } from "../data/source-failure";
 
 interface FakePageSeed { value?: JsonValue; error?: string; id?: string; delayMs?: number }
 export interface FakeSourceSeed { value?: JsonValue; error?: string; login?: string; delayMs?: number; waitForFirstPage?: () => Promise<void>; pages?: FakePageSeed[] }
@@ -92,7 +93,7 @@ export function createFakeData(seed: FakeDataSeed, getWindow: (id: string) => Ap
       const expr = expression(binding);
       if (expr === undefined) continue;
       const names = [...expr.matchAll(/\$data\.([a-z][a-z0-9_]*)/g)].map((match) => match[1]);
-      const missing = names.filter((name) => !Object.hasOwn(context.values, name));
+      const missing = names.filter((name) => !Object.hasOwn(context.values, name) && !isOptionalSource(context.definition, name));
       const statuses = missing.map((name) => context.view.sources[name]).filter(Boolean);
       const login = statuses.find((status) => status.state === "login_required");
       const failed = statuses.find((status) => status.state === "failed");

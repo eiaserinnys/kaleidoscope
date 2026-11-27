@@ -228,6 +228,11 @@ impl CompiledApp {
         self.plan_source_with_data_and_storage(name, state, &BTreeMap::new(), storage, storage_meta)
     }
 
+    /// 값이 없어도 그 원천을 읽는 식이 기다리거나 실패하지 않는 원천인지.
+    fn is_optional_source(&self, name: &str) -> bool {
+        matches!(self.sources.get(name), Some(SourceDecl::Request { optional: true, .. }))
+    }
+
     pub fn source_order(&self) -> &[String] {
         &self.source_order
     }
@@ -504,7 +509,7 @@ impl CompiledApp {
                 let missing: Vec<_> = binding
                     .data
                     .iter()
-                    .filter(|name| !data.contains_key(*name))
+                    .filter(|name| !data.contains_key(*name) && !self.is_optional_source(name))
                     .collect();
                 let login = missing.iter().find_map(|name| match statuses.get(*name) {
                     Some(SourceStatus::LoginRequired { permission }) => Some(permission.clone()),

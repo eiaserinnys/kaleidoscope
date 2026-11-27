@@ -31,8 +31,18 @@
 .ks-badge.is-count.is-dot.tone-negative, .ks-badge.is-count.is-dot.tone-error, .ks-list-dot.tone-negative, .ks-list-dot.tone-error { background: var(--ks-color-danger); }
 .ks-list-dot { flex: none; width: var(--ks-space-2); height: var(--ks-space-2); border-radius: var(--ks-radius-large); }
 .ks-list-lead { position: relative; display: inline-grid; flex: none; place-items: center; }
-.ks-list-lead > .ks-list-dot { position: absolute; inset-block-end: calc(-1 * var(--ks-space-1)); inset-inline-end: calc(-1 * var(--ks-space-1)); box-shadow: 0 0 0 var(--ks-line-width) var(--ks-color-surface-solid); }
+.ks-list-lead > .ks-list-dot { position: absolute; inset-block-end: calc(-1 * var(--ks-space-1)); inset-inline-end: calc(-1 * var(--ks-space-1)); }
 .ks-list-lead.is-circle > .ks-list-dot { inset-block-end: 0; inset-inline-end: 0; }
+/* 점 둘레 틈은 칠한 고리 대신 그림을 점 자리만큼 도려내 그 행의 바탕이 비치게 한다. 점 중심은 네모와 아이콘이면 그림 모서리, 원형이면 모서리에서 space-1 안쪽이다. */
+.ks-list-lead > :not(.ks-list-dot) {
+  --ks-dot-gap: calc(var(--ks-space-1) + var(--ks-line-width));
+  --ks-dot-hole: radial-gradient(circle at 100% 100%, transparent var(--ks-dot-gap), var(--ks-color-surface-solid) calc(var(--ks-dot-gap) + var(--ks-line-width)));
+  -webkit-mask: var(--ks-dot-hole);
+  mask: var(--ks-dot-hole);
+}
+.ks-list-lead.is-circle > :not(.ks-list-dot) {
+  --ks-dot-hole: radial-gradient(circle at calc(100% - var(--ks-space-1)) calc(100% - var(--ks-space-1)), transparent var(--ks-dot-gap), var(--ks-color-surface-solid) calc(var(--ks-dot-gap) + var(--ks-line-width)));
+}
 .ks-list-title-line { display: flex; min-width: 0; align-items: center; gap: var(--ks-space-2); }
 .ks-badge-anchor { position: relative; display: inline-flex; }
 .ks-badge-anchor > .is-count { position: absolute; inset-block-start: calc(-1 * var(--ks-space-2)); inset-inline-start: calc(100% - var(--ks-space-3)); }

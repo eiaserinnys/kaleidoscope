@@ -44,9 +44,11 @@
 //! - 다시 받는 때: 입력이 바뀜, `refresh` 동작, `data.refresh`, `refresh_secs`마다(창이 이어져 있는 동안만),
 //!   `file`과 `folder`는 쉘 창이 포커스를 다시 얻을 때도. `request` 원천은 `watch`를 선언하면 상류 스트림의
 //!   알림이 올 때도 다시 받는다(계약 48판). 스트림은 `streams`가 정본이고, 알림 내용은 값으로 쓰지 않는다.
+//!   `optional`을 켠 `request` 원천은 값이 없어도(첫 받기 전, 첫 받기 실패) 그 원천을 읽는 식을 기다리게 하거나
+//!   실패시키지 않고 그 원천을 없는 값으로 읽게 한다(계약 71판). 실패는 원천 상태와 창 알림으로 그대로 알린다.
 //! - 식의 값([`BindingValue`]): 기대는 원천에 값이 있으면(다시 받는 중이거나 다시 받다 실패했어도) 그 값으로 계산해
 //!   `ready`다. 값이 없는 원천이 있으면 `login_required`, `failed`, `loading` 순으로 그 원천의 상태를 따른다.
-//!   `idle` 원천은 값 없이(undefined) 계산한다.
+//!   `idle` 원천과 값이 없는 `optional` 원천은 값 없이(undefined) 계산한다.
 //! - 이미 값이 있는 원천을 다시 받다 실패하면 값은 그대로 두고 원천 상태만 `failed`가 된다. 화면은 창 아래에
 //!   오류 한 줄과 다시 받기를 보인다.
 
@@ -357,6 +359,11 @@ pub enum SourceDecl {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         watch: Option<WatchDecl>,
+        /// (계약 71판) 켜면 값이 없는 동안(첫 받기 전, 첫 받기 실패) 그 원천을 읽는 식이 기다리거나 실패하지 않고
+        /// 그 원천을 없는 값으로 읽는다. 첫 받기가 실패하면 창 알림과 다시 받기는 그대로 나온다.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[ts(optional, as = "Option<bool>")]
+        optional: bool,
     },
     /// 정적 스토어의 색인 또는 앱 상세를 읽는다.
     Store(StoreSource),

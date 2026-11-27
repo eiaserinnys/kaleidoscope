@@ -1750,7 +1750,12 @@ export type SourceDecl = { "kind": "request", permission: string, path: Binding,
 /**
  * (계약 48판) 이 원천을 다시 받을 때를 정하는 상류 스트림의 알림 규칙.
  */
-watch?: WatchDecl, } | { "kind": "store" } & StoreSource | { "kind": "file", permission: string, path: Binding, format?: SourceFormat, refresh_secs?: number, } | { "kind": "folder", permission: string, dir?: Binding, recursive?: boolean, extensions?: Array<string>, refresh_secs?: number, };
+watch?: WatchDecl, 
+/**
+ * (계약 71판) 켜면 값이 없는 동안(첫 받기 전, 첫 받기 실패) 그 원천을 읽는 식이 기다리거나 실패하지 않고
+ * 그 원천을 없는 값으로 읽는다. 첫 받기가 실패하면 창 알림과 다시 받기는 그대로 나온다.
+ */
+optional?: boolean, } | { "kind": "store" } & StoreSource | { "kind": "file", permission: string, path: Binding, format?: SourceFormat, refresh_secs?: number, } | { "kind": "folder", permission: string, dir?: Binding, recursive?: boolean, extensions?: Array<string>, refresh_secs?: number, };
 
 /**
  * 원천이 받은 것을 읽는 방법.
